@@ -22,6 +22,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -384,10 +385,14 @@ public final class LevelRealizer {
         // the answer rather than being told apart by a caught exception.
         return switch (Count.number(from).exactly().plus(apart)) {
             case ExactAnswer.Unheld<ExactRatio> unheld -> new MovedTo(null, unheld.why());
-            case ExactAnswer.Held<ExactRatio> held -> {
-                Count at = Count.at(held.value());
-                yield new MovedTo(at == null ? null : carrier.onTheGrid(at), null);
-            }
+            // And the count put on the carrier: a host with no room to write it out composed
+            // nothing from `from` either, and says so the same way.
+            case ExactAnswer.Held<ExactRatio> held -> switch (Count.written(held.value())) {
+                case ExactAnswer.Unheld<Optional<Count>> unheldCount ->
+                        new MovedTo(null, unheldCount.why());
+                case ExactAnswer.Held<Optional<Count>> written ->
+                        new MovedTo(written.value().map(carrier::onTheGrid).orElse(null), null);
+            };
         };
     }
 
@@ -774,6 +779,22 @@ public final class LevelRealizer {
          * reported as every value having been tried. Nothing being left is proved by the rules, so
          * stepping past it takes nothing out of a walk that reaches the end.
          */
+        private Reached tryingRatio(int i, ExactRatio x, ExactRatio owed, ExactRatio coef,
+                                    SearchRegion here) {
+            // A value the host has no room to write out is a value this walk cannot try, which is
+            // not a proof the rules leave nothing there: the third vocabulary and `INCOMPLETE`.
+            return switch (x.writtenDecimal()) {
+                case ExactAnswer.Unheld<Optional<BigDecimal>> unheldValue -> {
+                    unheld.add(new CompositionCapacity(
+                            CompositionCapacity.Where.VALUES_OF_A_PROGRESSION_WALKED_TO,
+                            unheldValue.why()));
+                    yield Reached.INCOMPLETE;
+                }
+                case ExactAnswer.Held<Optional<BigDecimal>> written ->
+                        trying(i, written.value().orElse(null), owed, coef, here);
+            };
+        }
+
         private Reached trying(int i, BigDecimal x, ExactRatio owed,
                                ExactRatio coef, SearchRegion here) {
             SearchRegion next =
@@ -883,7 +904,7 @@ public final class LevelRealizer {
                                        SearchRegion here) {
             ExactRatio x = ExactRatio.of(every.first());
             ExactRatio last = ExactRatio.of(every.last());
-            Reached reached = trying(i, x.asWrittenDecimal(), owed, coef, here);
+            Reached reached = tryingRatio(i, x, owed, coef, here);
             if (reached == Reached.FOUND) {
                 return Reached.FOUND;
             }
@@ -915,7 +936,7 @@ public final class LevelRealizer {
                     return Reached.INCOMPLETE;
                 }
                 x = next.orNull();
-                Reached reached = trying(i, x.asWrittenDecimal(), owed, coef, here);
+                Reached reached = tryingRatio(i, x, owed, coef, here);
                 if (reached == Reached.FOUND) {
                     return Reached.FOUND;
                 }
@@ -1039,9 +1060,20 @@ public final class LevelRealizer {
                     }
                 }
             } else {
-                solved = quotient.asWrittenDecimal();
-                if (solved == null) {
-                    return Reached.EXHAUSTED;
+                switch (quotient.writtenDecimal()) {
+                    case ExactAnswer.Held<Optional<BigDecimal>> written -> {
+                        // No decimal is the quotient, so no value of a dense position is.
+                        if (written.value().isEmpty()) {
+                            return Reached.EXHAUSTED;
+                        }
+                        solved = written.value().get();
+                    }
+                    case ExactAnswer.Unheld<Optional<BigDecimal>> unheldQuotient -> {
+                        unheld.add(new CompositionCapacity(
+                                CompositionCapacity.Where.VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO,
+                                unheldQuotient.why()));
+                        return Reached.INCOMPLETE;
+                    }
                 }
             }
             // Held against the ends themselves, which say whether they are their own values. A bound
@@ -1181,9 +1213,13 @@ public final class LevelRealizer {
          * it is past where the rules stop rather than short of it.
          */
         private static Count written(ExactRatio at, java.math.RoundingMode towards) {
-            Count exactly = Count.at(at);
-            if (exactly != null) {
-                return exactly;
+            // No end where the host has no room to write the count out: the end is dropped and the
+            // range is wider, which is sound for the reason above.
+            if (!(Count.written(at) instanceof ExactAnswer.Held<Optional<Count>> exactly)) {
+                return null;
+            }
+            if (exactly.value().isPresent()) {
+                return exactly.value().get();
             }
             BigDecimal outward =
                     at.asDecimal(towards, DIGITS_A_DERIVED_END_KEEPS).orNull();
@@ -1464,8 +1500,12 @@ public final class LevelRealizer {
         if (moved == null) {
             return null;
         }
-        Count at = Count.at(moved);
-        return at == null ? null : new Endpoint(at, end.inclusive());
+        // And none where the host has no room to write the count out, for the same reason.
+        return switch (Count.written(moved)) {
+            case ExactAnswer.Held<Optional<Count>> written ->
+                    written.value().map(at -> new Endpoint(at, end.inclusive())).orElse(null);
+            case ExactAnswer.Unheld<Optional<Count>> _ -> null;
+        };
     }
 
     /**

@@ -898,8 +898,13 @@ public sealed interface AnotherLineTheRowsAllow {
             Carrier carrier = boundary.of().carrierOf(each.getKey());
             // Where the step lands is a value of the position or it is nowhere, which is the same
             // edge a row is written at: a place the carrier has no count for is no place at all.
-            Count count = Count.at(at);
-            Place there = carrier == null || count == null ? null : carrier.onTheGrid(count);
+            // A count the host has no room to write out is the same: this input was not composed.
+            Place there = switch (Count.written(at)) {
+                case ExactAnswer.Held<Optional<Count>> written -> carrier == null
+                        || written.value().isEmpty() ? null
+                        : carrier.onTheGrid(written.value().get());
+                case ExactAnswer.Unheld<Optional<Count>> _ -> null;
+            };
             if (there == null) {
                 return null;
             }

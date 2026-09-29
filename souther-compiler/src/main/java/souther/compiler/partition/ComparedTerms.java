@@ -9,6 +9,9 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
+
+import java.util.Optional;
 
 
 /**
@@ -166,8 +169,14 @@ record ComparedTerms(TermOrders on, TermOrders against, Count stepsApart) {
         // that is not a whole number of them — which two decimals a rule holds half apart give —
         // was an exception thrown out of the measure. A distance no decimal is belongs to no
         // carrier's counts at all, and this shape declines it the way a line on one position does.
-        Count apart = Count.at(read.cut());
-        return apart == null ? null : new ComparedTerms(hereOn, thereOn, apart);
+        // And the same where the host has no room to write the count out, which the form holds
+        // exactly without digits.
+        return switch (Count.written(read.cut())) {
+            case ExactAnswer.Held<Optional<Count>> held -> held.value()
+                    .map(apart -> new ComparedTerms(hereOn, thereOn, apart))
+                    .orElse(null);
+            case ExactAnswer.Unheld<Optional<Count>> _ -> null;
+        };
     }
 
 }

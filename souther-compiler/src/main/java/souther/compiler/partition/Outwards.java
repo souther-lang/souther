@@ -9,10 +9,10 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.values.ValueSet;
-import souther.exact.ExactFailure;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * The values of a run tried in order, from one of them outward.
@@ -221,15 +221,21 @@ final class Outwards {
             }
             above = steppedAbove.orNull();
             below = steppedBelow.orNull();
-            Place[] neighbours;
-            try {
-                neighbours = new Place[] {
-                        onTheCarrier(above, carrier), onTheCarrier(below, carrier)};
-            } catch (ExactFailure failure) {
+            ExactAnswer<Optional<Place>> placeAbove = onTheCarrier(above, carrier);
+            ExactAnswer<Optional<Place>> placeBelow = onTheCarrier(below, carrier);
+            if (placeAbove instanceof ExactAnswer.Unheld<Optional<Place>> unheldAbove) {
                 ended = Ended.AT_A_PLACE_IT_COULD_NOT_HOLD;
-                unheld = UnheldNumber.of(failure);
+                unheld = unheldAbove.why();
                 break;
             }
+            if (placeBelow instanceof ExactAnswer.Unheld<Optional<Place>> unheldBelow) {
+                ended = Ended.AT_A_PLACE_IT_COULD_NOT_HOLD;
+                unheld = unheldBelow.why();
+                break;
+            }
+            Place[] neighbours = {
+                    ((ExactAnswer.Held<Optional<Place>>) placeAbove).value().orElse(null),
+                    ((ExactAnswer.Held<Optional<Place>>) placeBelow).value().orElse(null)};
             boolean took = false;
             for (Place next : neighbours) {
                 if (next == null || !within.admits(next)) {
@@ -268,10 +274,10 @@ final class Outwards {
         return new Walked(out, ended, unheld);
     }
 
-    /** The place a number is on the carrier, or null where the carrier holds none there. */
-    private static Place onTheCarrier(ExactRatio at, Carrier carrier) {
-        Count count = Count.at(at);
-        return count == null ? null : carrier.onTheGrid(count);
+    /** The place a number is on the carrier, empty where the carrier holds none there, and unheld
+     *  where the host had no room to write the count out. */
+    private static ExactAnswer<Optional<Place>> onTheCarrier(ExactRatio at, Carrier carrier) {
+        return Count.written(at).map(count -> count.map(carrier::onTheGrid));
     }
 
     /**

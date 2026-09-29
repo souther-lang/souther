@@ -100,7 +100,13 @@ public final class ResultRange {
                 instanceof ExactAnswer.Held<ExactRatio> held)) {
             return null;
         }
-        return Count.of(held.value().asWrittenDecimal());
+        // And the same null where the host has no room to write the end out, as where no decimal is
+        // it: a bound this could not place is one it says nothing about.
+        return switch (held.value().writtenDecimal()) {
+            case ExactAnswer.Held<Optional<BigDecimal>> written ->
+                    written.value().map(Count::new).orElse(null);
+            case ExactAnswer.Unheld<Optional<BigDecimal>> _ -> null;
+        };
     }
 
     private ResultRange() {}

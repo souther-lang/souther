@@ -15,6 +15,7 @@ import souther.compiler.semantics.TakenAs;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.Objects;
+import java.util.Optional;
 
 import souther.compiler.inputs.NumericTerm.Reading;
 import souther.unicode.ScalarValues;
@@ -258,10 +259,13 @@ final class TermReading {
             }
             total = ((ExactAnswer.Held<ExactRatio>) summed).value();
         }
-        BigDecimal written = total.asWrittenDecimal();
-        return written == null
-                ? new Reading.NotWorkedOut(UnheldNumber.NO_REPRESENTATION_EXISTS)
-                : new Reading.Number(new Count(written));
+        return switch (total.writtenDecimal()) {
+            case ExactAnswer.Unheld<Optional<BigDecimal>> unheld ->
+                    new Reading.NotWorkedOut(unheld.why());
+            case ExactAnswer.Held<Optional<BigDecimal>> held -> held.value().isEmpty()
+                    ? new Reading.NotWorkedOut(UnheldNumber.NO_REPRESENTATION_EXISTS)
+                    : new Reading.Number(new Count(held.value().get()));
+        };
     }
 
     /**

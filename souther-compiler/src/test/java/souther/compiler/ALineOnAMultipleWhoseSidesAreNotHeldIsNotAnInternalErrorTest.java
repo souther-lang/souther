@@ -2,6 +2,11 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.CompileException;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
+import souther.compiler.report.AdequacyReport;
+
+import java.util.Map;
 
 /**
  * A rule that writes a multiple of a position is read on the order of the written form, and the
@@ -47,12 +52,27 @@ class ALineOnAMultipleWhoseSidesAreNotHeldIsNotAnInternalErrorTest {
                 | "one" : (H { a = A(50.0m) }) -> No
             """;
 
-    /** Compiles the source, or is told why it does not: a diagnostic is an answer. */
+    /**
+     * Compiles the source and measures it as a report does, or is told why it cannot: a diagnostic
+     * is an answer.
+     *
+     * <p>Both, because the two reach different readers of the line. Compiling reads the rule; the
+     * measurement reads the values beside its line, which is where a count too wide for the host
+     * was written out.
+     */
     private static void isAnsweredWithoutAnInternalError(String source) {
         try {
             Compiler.compile(source);
         } catch (CompileException reported) {
             // A diagnostic about the model, which is what a phase that cannot say more owes.
+        }
+        try {
+            Compilation compilation = Compilation.ofSource(source, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            AdequacyReport.of(compilation, Map.of());
+        } catch (CompileException reported) {
+            // The same.
         }
     }
 

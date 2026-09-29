@@ -6,6 +6,8 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 
+import java.util.Optional;
+
 /**
  * One value of a {@link BorderQuantity}.
  *
@@ -182,23 +184,28 @@ public sealed interface Level {
     default Place asAPlace() {
         return switch (this) {
             case OnACarrier on -> on.at();
-            case OfTheQuantity(ExactRatio at) -> Count.number(at);
+            case OfTheQuantity(ExactRatio at) -> Count.written(at)
+                    .orFail("a level of the quantity was asked for its place, and the host has no"
+                            + " room to write the count of " + at)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "no count on any carrier's order is this number: " + at));
         };
     }
 
     /**
-     * The same question asked rather than established: this level as a place, or null where no
-     * order counts to the number it is.
+     * The same question asked rather than established: this level as a place, empty where no order
+     * counts to the number it is, and unheld where the host had no room to write the count out.
      *
-     * <p>The pair {@link Count#at} and {@link Count#number} are, one step out. A reader that means
-     * to write the level down is asking whether there is anything to write — a quantity reaching a
-     * third has a level there and no order has a value at it — and an absence is the answer to
-     * that, not a premise it broke.
+     * <p>A reader that means to write the level down is asking whether there is anything to write —
+     * a quantity reaching a third has a level there and no order has a value at it — and an absence
+     * is the answer to that, not a premise it broke. A count the host cannot write is a third
+     * answer, and it says nothing about which values the order has.
      */
-    default Place asAPlaceOrNothing() {
+    default ExactAnswer<Optional<Place>> asAPlaceOrNothing() {
         return switch (this) {
-            case OnACarrier on -> on.at();
-            case OfTheQuantity(ExactRatio at) -> Count.at(at);
+            case OnACarrier on -> ExactAnswer.held(Optional.of(on.at()));
+            case OfTheQuantity(ExactRatio at) ->
+                    Count.written(at).map(count -> count.<Place>map(place -> place));
         };
     }
 

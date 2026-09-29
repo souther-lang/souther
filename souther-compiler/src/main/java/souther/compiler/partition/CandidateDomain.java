@@ -140,19 +140,47 @@ sealed interface CandidateDomain {
                 return new NotWorkedOut(first.unheld());
             }
             if (least.at().compareTo(most.at()) == 0) {
-                return new One(new Count(first.at().asWrittenDecimal()));
+                ExactAnswer<BigDecimal> only = decimalOf(first.at());
+                return only instanceof ExactAnswer.Unheld<BigDecimal> unheld
+                        ? new NotWorkedOut(unheld.why())
+                        : new One(new Count(((ExactAnswer.Held<BigDecimal>) only).value()));
             }
             Multiplied last = at(from, by, most.at());
-            return last.unheld() != null
-                    ? new NotWorkedOut(last.unheld())
-                    : new Walking(first.at().asWrittenDecimal(), by.asWrittenDecimal(),
-                            last.at().asWrittenDecimal());
+            if (last.unheld() != null) {
+                return new NotWorkedOut(last.unheld());
+            }
+            return or(decimalOf(first.at()).flatMap(start ->
+                    decimalOf(by).flatMap(step ->
+                    decimalOf(last.at()).map(end -> new Walking(start, step, end)))));
         }
         ExactRatio start = least.at() != null ? least.at() : most.at() != null ? most.at() : ExactRatio.ZERO;
         Multiplied startingAt = at(from, by, start);
-        return startingAt.unheld() != null
-                ? new NotWorkedOut(startingAt.unheld())
-                : new Outward(startingAt.at().asWrittenDecimal(), by.asWrittenDecimal(), within);
+        if (startingAt.unheld() != null) {
+            return new NotWorkedOut(startingAt.unheld());
+        }
+        return or(decimalOf(startingAt.at()).flatMap(begin ->
+                decimalOf(by).map(step -> new Outward(begin, step, within))));
+    }
+
+    /**
+     * A number the coset holds, as the decimal it is.
+     *
+     * <p>Whole plus whole times a decimal is a decimal, so no decimal at all is this compiler having
+     * broken the premise the coset stands on. The host having no room to write it out is not: that
+     * is the run's, and it leaves as a domain this could not work out.
+     */
+    private static ExactAnswer<BigDecimal> decimalOf(ExactRatio number) {
+        return number.writtenDecimal().map(written -> written.orElseThrow(() ->
+                new IllegalStateException("a member of a coset of decimals is no decimal: "
+                        + number)));
+    }
+
+    /** The domain built, or which way the host could not write out what it is built from. */
+    private static CandidateDomain or(ExactAnswer<? extends CandidateDomain> built) {
+        if (built instanceof ExactAnswer.Unheld<? extends CandidateDomain> unheld) {
+            return new NotWorkedOut(unheld.why());
+        }
+        return ((ExactAnswer.Held<? extends CandidateDomain>) built).value();
     }
 
     /**
@@ -254,8 +282,13 @@ sealed interface CandidateDomain {
                 return new None();
             }
             Multiplied one = at(from, by, least.at());
-            return one.unheld() != null ? new NotWorkedOut(one.unheld())
-                    : new One(new Count(one.at().asWrittenDecimal()));
+            if (one.unheld() != null) {
+                return new NotWorkedOut(one.unheld());
+            }
+            ExactAnswer<BigDecimal> only = decimalOf(one.at());
+            return only instanceof ExactAnswer.Unheld<BigDecimal> unheldOnly
+                    ? new NotWorkedOut(unheldOnly.why())
+                    : new One(new Count(((ExactAnswer.Held<BigDecimal>) only).value()));
         }
         Multiplied inside = between(least.at(), leastIsItsOwn, most.at());
         return inside.unheld() != null
@@ -265,7 +298,7 @@ sealed interface CandidateDomain {
     private static CandidateDomain somewhere(ExactRatio from, ExactRatio by, ExactRatio multiplier) {
         Multiplied member = at(from, by, multiplier);
         return member.unheld() != null ? new NotWorkedOut(member.unheld())
-                : new Somewhere(new Count(member.at().asWrittenDecimal()));
+                : or(decimalOf(member.at()).map(some -> new Somewhere(new Count(some))));
     }
 
     /** A value the arithmetic held, or which way it could not hold one — never both, and neither

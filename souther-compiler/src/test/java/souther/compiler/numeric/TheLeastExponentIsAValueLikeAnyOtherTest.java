@@ -135,6 +135,6 @@ class TheLeastExponentIsAValueLikeAnyOtherTest {
 
         assertTrue(at.terminates());
         assertFalse(at.fitsWrittenDecimal());
-        assertNull(at.asWrittenDecimal());
+        assertNull(WrittenDecimals.of(at));
     }
 }

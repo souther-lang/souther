@@ -14,7 +14,6 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -67,7 +66,7 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
 
     @Test
     void theDecimalThatComesBackIsTheOneThatWentInAndIsAsCompact() {
-        BigDecimal back = ExactRatio.of(A_MILLIONTH_OF_A_MILLIONTH).asWrittenDecimal();
+        BigDecimal back = WrittenDecimals.of(ExactRatio.of(A_MILLIONTH_OF_A_MILLIONTH));
         assertEquals(0, A_MILLIONTH_OF_A_MILLIONTH.compareTo(back));
         assertEquals(WIDE, back.scale());
         assertTrue(back.unscaledValue().bitLength() < FEW,
@@ -120,8 +119,8 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
                 third.dividedBy(half).orNull());
         assertEquals("1/3", third.spelled());
         assertEquals("0.5", half.spelled());
-        assertNull(third.asWrittenDecimal());
-        assertEquals(new BigDecimal("0.5"), half.asWrittenDecimal().stripTrailingZeros());
+        assertNull(WrittenDecimals.of(third));
+        assertEquals(new BigDecimal("0.5"), WrittenDecimals.of(half).stripTrailingZeros());
         assertEquals(BigInteger.ZERO, third.floor().orNull());
         assertEquals(BigInteger.ONE, third.ceiling().orNull());
         assertEquals(BigInteger.ZERO, third.truncated().orNull());
@@ -163,7 +162,7 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
     void takingADecimalInAndHandingItBackDoesNotCostWhatItsScaleSays() {
         assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
             ExactRatio embedded = ExactRatio.of(A_MILLIONTH_OF_A_MILLIONTH);
-            assertEquals(0, A_MILLIONTH_OF_A_MILLIONTH.compareTo(embedded.asWrittenDecimal()));
+            assertEquals(0, A_MILLIONTH_OF_A_MILLIONTH.compareTo(WrittenDecimals.of(embedded)));
             assertEquals(ExactRatio.ONE, embedded.unitsRemoved());
             assertTrue(embedded.compareTo(ExactRatio.ONE) < 0);
         });
@@ -278,7 +277,7 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
         ExactRatio ratio = ExactRatio.of(written);
 
         assertTrue(ratio.fitsWrittenDecimal());
-        BigDecimal back = ratio.asWrittenDecimal();
+        BigDecimal back = WrittenDecimals.of(ratio);
         assertNotNull(back);
         assertEquals(0, written.compareTo(back));
         assertEquals(Integer.MIN_VALUE, back.scale());
@@ -302,7 +301,7 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
         for (BigDecimal each : written) {
             ExactRatio ratio = ExactRatio.of(each);
             assertTrue(ratio.fitsWrittenDecimal(), () -> "a decimal is this value: " + each.scale());
-            BigDecimal back = ratio.asWrittenDecimal();
+            BigDecimal back = WrittenDecimals.of(ratio);
             assertNotNull(back, () -> "and one comes back for it: " + each.scale());
             assertEquals(0, each.compareTo(back), () -> "the same value at scale " + each.scale());
         }
@@ -311,7 +310,7 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
         ExactRatio past = new ExactRatio(BigInteger.ONE, BigInteger.ONE,
                 -3_000_000_000L, -3_000_000_000L);
         assertFalse(past.fitsWrittenDecimal());
-        assertNull(past.asWrittenDecimal());
+        assertNull(WrittenDecimals.of(past));
 
         // And a whole number whose digits are past what this host addresses. That is a decimal, and
         // saying otherwise would be a machine's room deciding what a set contains — so the question
@@ -319,7 +318,7 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
         ExactRatio tall = new ExactRatio(BigInteger.ONE, BigInteger.ONE, 3_000_000_000L, 0);
         assertTrue(tall.terminates());
         assertTrue(tall.fitsWrittenDecimal(), "a whole number is a decimal however many digits");
-        assertThrows(ArithmeticException.class, tall::asWrittenDecimal);
+        assertFalse(tall.writtenDecimal().isHeld());
     }
 
     /**
@@ -387,7 +386,7 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
     void aSumOfExponentsPastALongIsRefusedAndNotWrapped() {
         ExactRatio wide = new ExactRatio(BigInteger.ONE, BigInteger.ONE, Long.MAX_VALUE, -1);
         assertTrue(wide.fitsWrittenDecimal(), "a whole number times a power of two is a decimal");
-        assertThrows(ArithmeticException.class, wide::asWrittenDecimal);
+        assertFalse(wide.writtenDecimal().isHeld());
     }
 
     /**
@@ -454,7 +453,7 @@ class ADecimalEntersExactArithmeticAsCompactlyAsItWasWrittenTest {
                 -3_000_000_000L, -3_000_000_000L);
         assertTrue(past.terminates(), "a millionth of a millionth of a millionth is a decimal");
         assertFalse(past.fitsWrittenDecimal(), "and no decimal here is written at that scale");
-        assertNull(past.asWrittenDecimal());
+        assertNull(WrittenDecimals.of(past));
 
         assertTrue(TOO_WIDE_TO_SPELL.terminates());
         assertTrue(TOO_WIDE_TO_SPELL.fitsWrittenDecimal());

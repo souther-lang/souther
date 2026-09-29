@@ -5,6 +5,7 @@ import souther.compiler.core.Core;
 import souther.compiler.core.IntNegation;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
@@ -32,6 +33,7 @@ import souther.compiler.values.ValueSet;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -754,15 +756,24 @@ public sealed interface Carrier extends ValueOrder {
      * composing nothing — never the range holding nothing.
      */
     private static Count oneFrom(Count at, ExactRatio by) {
-        return at.exactly().plus(by).orNull() instanceof ExactRatio at1 ? Count.at(at1) : null;
+        return composed(at.exactly().plus(by));
     }
 
     /** The count halfway between two, or null where this could not hold it, for the same reason
      *  as {@link #oneFrom}. Exact, since half a decimal is a decimal. */
     private static Count halfway(Count low, Count high) {
-        ExactRatio summed = low.exactly().plus(high.exactly()).orNull();
-        ExactRatio half = summed == null ? null : summed.dividedBy(ExactRatio.of(2)).orNull();
-        return half == null ? null : Count.at(half);
+        return composed(low.exactly().plus(high.exactly())
+                .flatMap(summed -> summed.dividedBy(ExactRatio.of(2))));
+    }
+
+    /** The count a number is, or null where the arithmetic could not hold the number or the host
+     *  had no room to write its count out: this composing nothing, which is what every caller here
+     *  reads null as, and never the range holding nothing. */
+    private static Count composed(ExactAnswer<ExactRatio> number) {
+        return switch (number.flatMap(Count::written)) {
+            case ExactAnswer.Held<Optional<Count>> held -> held.value().orElse(null);
+            case ExactAnswer.Unheld<Optional<Count>> _ -> null;
+        };
     }
 
     /**
