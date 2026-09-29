@@ -172,11 +172,11 @@ public sealed interface Level {
      *
      * <p>The carrier edge for a level, and the one of them: a place on a carrier is already one, and
      * a number the quantity counts to is a place exactly where a carrier's order could count to it
-     * ({@link Count#at}). Written out at each reader instead, four of them had the same two lines
-     * and none of them said what happens to a number no order counts to.
+     * ({@link Count#written}). Written out at each reader instead, four of them had the same two
+     * lines and none of them said what happens to a number no order counts to.
      *
-     * <p>Refused rather than answered with a rounding, which is {@link Count#number(ExactRatio)}'s
-     * to say. Every caller here is holding a level it has established is a place — an end of a run
+     * <p>Refused rather than answered with a rounding, which is not this edge's to do. Every caller
+     * here is holding a level it has established is a place — an end of a run
      * on a carrier, a line a place is compared against — and a level at a third reaching one of them
      * is this compiler having mixed two orders. A reader that means to ask whether a line is a value
      * of something asks {@link CutPosition#asAValueOf}, which answers.

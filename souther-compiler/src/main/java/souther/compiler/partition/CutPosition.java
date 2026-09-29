@@ -210,8 +210,8 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
      * are lines of an order whose values are the even numbers.
      *
      * <p>The carrier edge for a line: an exact place becomes a value here or is none
-     * ({@link Count#at}). A third is no count at all, and a count the carrier's own values step past
-     * is no value of it either.
+     * ({@link Count#written}). A third is no count at all, and a count the carrier's own values step
+     * past is no value of it either.
      */
     public ExactAnswer<Optional<Place>> asAValueOf(souther.compiler.check.Carrier carrier) {
         if (carrier == null) {
