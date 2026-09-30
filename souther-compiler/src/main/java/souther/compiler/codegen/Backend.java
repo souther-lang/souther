@@ -1463,13 +1463,20 @@ public final class Backend {
      * for {@code java.util.regex}. A class emitted under version 35 calls a
      * {@code Strings.matches} that takes a string, which this runtime no longer has.
      *
-     * <p>Version 37 changes which text a {@code String.matches} pattern is. The hex digits of an
-     * escape are the ASCII ones, a U+0000 written in the pattern stands for itself, and a backslash
-     * before a letter or a decimal digit is refused whichever plane the character is on. A reader
-     * built under version 36 admits a carried body whose pattern spells an escape with a fullwidth
-     * digit or puts a backslash before such a letter past the basic plane or such a digit outside
-     * ASCII, all of which this reader refuses, and refuses one whose pattern writes U+0000, which
-     * this reader admits.
+     * <p>Version 37 changes which text a {@code String.matches} pattern is, what a behavior's class
+     * is called, and which imports a module's metadata carries, and takes each from Unicode data
+     * the language fixes rather than from the JDK a compile runs on. The hex digits of an escape
+     * are the ASCII ones, a U+0000 written in the pattern stands for itself, and a backslash before
+     * a letter or a decimal digit of Unicode 18.0.0 is refused whichever plane the character is on.
+     * A reader built under version 36 admits a carried body whose pattern spells an escape with a
+     * fullwidth digit, or puts a backslash before a letter past the basic plane or a digit its
+     * JDK's tables do not know, all of which this reader refuses, and refuses one whose pattern
+     * writes U+0000, which this reader admits. A behavior's class is capitalized by Unicode 18.0.0's
+     * simple uppercase mapping of its first character, so a class emitted under version 36 for a
+     * behavior beginning past the basic plane, or with a letter its JDK had no mapping for, is
+     * called something this compiler does not link against. And a module's metadata carries the
+     * import a name holding a character past the basic plane needs, which a writer under version
+     * 36 left out.
      *
      * <p>That is also where this number stops. It says whether a jar and this compiler agree on
      * what the metadata says and on the rules a declaration is turned into JVM facts by — a

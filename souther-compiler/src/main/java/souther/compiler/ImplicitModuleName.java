@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.cst.IdentifierAlphabet;
+
 /**
  * What a lone source with no {@code module} header is called.
  *
@@ -26,23 +28,17 @@ public final class ImplicitModuleName {
      * What a header-less source read from {@code fileName} is called: the name up to its first dot.
      *
      * <p>Canonicalized before it is judged, not after: a file delivered by macOS carries its name
-     * decomposed, and a combining mark is not a letter or a digit, so the same file would be
-     * {@code main} on one machine and its own name on another.
+     * decomposed, so the same file would otherwise be judged as two spellings on two machines.
+     *
+     * <p>A stem is usable where it is a name as the language spells one ({@link IdentifierAlphabet}),
+     * so what a module may be called does not depend on whether it was named by a header or by its
+     * file, nor on which JDK the compile ran on.
      *
      * @param fileName the file's own name, with no directory in front of it
      */
     public static String ofFileName(String fileName) {
         int dot = fileName.indexOf('.');
         String stem = CanonicalNames.name(dot < 0 ? fileName : fileName.substring(0, dot));
-        if (stem.isEmpty() || !Character.isLetter(stem.charAt(0))) {
-            return OF_AN_UNUSABLE_STEM;
-        }
-        for (int i = 1; i < stem.length(); i++) {
-            char ch = stem.charAt(i);
-            if (!Character.isLetterOrDigit(ch) && ch != '_') {
-                return OF_AN_UNUSABLE_STEM;
-            }
-        }
-        return stem;
+        return IdentifierAlphabet.isName(stem) ? stem : OF_AN_UNUSABLE_STEM;
     }
 }

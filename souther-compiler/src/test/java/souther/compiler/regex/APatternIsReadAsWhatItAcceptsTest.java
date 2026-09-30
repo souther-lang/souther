@@ -207,6 +207,15 @@ class APatternIsReadAsWhatItAcceptsTest {
         assertEquals("\\" + gothic, refusal("a\\" + gothic).construct(),
                 "the refusal quotes the whole character and not half of it");
 
+        // The classification is Unicode 18.0.0's and not the running JDK's. U+A7DD is a letter
+        // from 18.0.0 on, and U+11DE0 a decimal digit from 17.0.0 on; a JDK of an earlier Unicode
+        // calls either nothing.
+        assertEquals("18.0.0", PatternAlphabet.unicodeVersion());
+        assertEquals(PatternRead.Refusal.AN_ESCAPE_THIS_DOES_NOT_READ, refused("\\꟝"));
+        String tolongSikiZero = new String(Character.toChars(0x11DE0));
+        assertEquals(PatternRead.Refusal.AN_ESCAPE_THIS_DOES_NOT_READ,
+                refused("\\" + tolongSikiZero));
+
         String grinning = new String(Character.toChars(0x1F600));
         assertEquals(CodePoints.of(0x1F600),
                 assertInstanceOf(PatternMeaning.Symbols.class, read("\\" + grinning)).held());

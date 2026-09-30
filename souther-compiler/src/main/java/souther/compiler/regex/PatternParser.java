@@ -319,20 +319,12 @@ public final class PatternParser {
                 // An escaped literal — `\.`, `\+`, `\\`, `\-`. A letter or a decimal digit with no
                 // meaning is refused rather than read as itself: read as itself, one given a
                 // meaning later would change which strings an old pattern accepts.
-                if (isReservedAfterABackslash(kind)) {
+                if (PatternAlphabet.isKeptAfterABackslash(kind)) {
                     throw refusedAfter(PatternRead.Refusal.AN_ESCAPE_THIS_DOES_NOT_READ);
                 }
                 yield CodePoints.of(literal());
             }
         };
-    }
-
-    /**
-     * Whether a backslash before {@code symbol} is kept for an escape the grammar may one day
-     * name: a letter or a decimal digit, as Unicode classifies the whole character.
-     */
-    private static boolean isReservedAfterABackslash(int symbol) {
-        return Character.isLetter(symbol) || Character.isDigit(symbol);
     }
 
     /** The refusal of the escape whose kind is the character here, quoting it with that
