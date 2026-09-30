@@ -38,16 +38,11 @@ public final class Language {
      */
     private final Automaton machine;
 
-    /** The machine's steps as sorted runs, which is what {@link #has} walks. Made once, as long
-     *  as the table making the machine already paid for. */
-    private final int[][] runs;
-
     Language(Automaton canonical) {
         if (canonical == null) {
             throw new IllegalArgumentException("a language is some machine");
         }
         this.machine = canonical;
-        this.runs = canonical.runsByState();
     }
 
     /**
@@ -69,37 +64,11 @@ public final class Language {
     /**
      * Whether the whole of {@code value} is in it. A walk over the value, which builds nothing.
      *
-     * <p>One state at a time, since the machine is canonical, and each symbol found among the
-     * state's runs by a search: a value costs its length whatever the machine holds. A symbol no run
-     * holds is half a surrogate pair, which is in no language.
+     * <p>One state at a time, since the machine is canonical, and each symbol found by a search: a
+     * value costs its length whatever the machine holds.
      */
     public boolean has(String value) {
-        int state = Automaton.START;
-        int at = 0;
-        while (at < value.length()) {
-            int symbol = value.codePointAt(at);
-            at += Character.charCount(symbol);
-            int[] out = runs[state];
-            int low = 0;
-            int high = out.length / 3 - 1;
-            int next = -1;
-            while (low <= high) {
-                int mid = (low + high) >>> 1;
-                if (out[mid * 3 + 1] < symbol) {
-                    low = mid + 1;
-                } else if (out[mid * 3] > symbol) {
-                    high = mid - 1;
-                } else {
-                    next = out[mid * 3 + 2];
-                    break;
-                }
-            }
-            if (next < 0) {
-                return false;
-            }
-            state = next;
-        }
-        return machine.stopsAt(state);
+        return machine.walks(value);
     }
 
     /**

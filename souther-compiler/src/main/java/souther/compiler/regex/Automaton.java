@@ -46,13 +46,25 @@ final class Automaton {
     /** The states a walk may stop at. */
     private final BitSet accepting;
 
+    /**
+     * For a machine made one where a walk is only ever in one state, each state's steps as runs
+     * sorted by where they begin — {@code from, to, target} for each — and null for any other.
+     *
+     * <p>Made where such a machine is made and nowhere else, since the steps are what it is read
+     * off and they do not change. What it is for is {@link #walks}: where a symbol leads is found by
+     * a search, so a value costs its length and not its length times how finely the machine cuts
+     * the symbols.
+     */
+    private final int[][] runs;
+
     /** One step, and what it costs to take. */
     record Step(CodePoints over, int to) {}
 
-    private Automaton(List<List<Step>> steps, List<int[]> free, BitSet accepting) {
+    private Automaton(List<List<Step>> steps, List<int[]> free, BitSet accepting, int[][] runs) {
         this.steps = steps;
         this.free = free;
         this.accepting = accepting;
+        this.runs = runs;
     }
 
     /** How many states it has, which is what a caller bounding its work counts. */
@@ -77,7 +89,7 @@ final class Automaton {
         for (int at = 0; at < steps.size(); at++) {
             free.add(new int[0]);
         }
-        return new Automaton(steps, free, accepting);
+        return new Automaton(steps, free, accepting, null);
     }
 
     /**
@@ -163,7 +175,7 @@ final class Automaton {
             int accept = building.build(meaning, start);
             BitSet accepting = new BitSet();
             accepting.set(accept);
-            return new Automaton(building.frozenSteps(), building.frozenFree(), accepting);
+            return new Automaton(building.frozenSteps(), building.frozenFree(), accepting, null);
         } catch (TooMany _) {
             return null;
         }
@@ -213,16 +225,49 @@ final class Automaton {
     }
 
     /**
-     * For a machine that is only ever in one state, each state's steps as runs sorted by where they
-     * begin: {@code from, to, target} for each.
+     * Whether the whole of {@code value} is accepted, walked one state at a time.
      *
-     * <p>What lets a walk over such a machine find where a symbol leads by a search rather than by
-     * trying every step out of the state, so a value costs its length and not its length times how
-     * finely the machine cuts the symbols.
+     * <p>Asked only of a machine made one where a walk is only ever in one state ({@link #runs}),
+     * and a symbol found among the state's runs by a search. A symbol no run holds is half a
+     * surrogate pair, which is in no language.
      */
-    int[][] runsByState() {
-        int[][] out = new int[size()][];
-        for (int state = 0; state < size(); state++) {
+    boolean walks(String value) {
+        if (runs == null) {
+            throw new IllegalStateException("a walk one state at a time is over a machine made"
+                    + " deterministic");
+        }
+        int state = START;
+        int at = 0;
+        while (at < value.length()) {
+            int symbol = value.codePointAt(at);
+            at += Character.charCount(symbol);
+            int[] out = runs[state];
+            int low = 0;
+            int high = out.length / 3 - 1;
+            int next = -1;
+            while (low <= high) {
+                int mid = (low + high) >>> 1;
+                if (out[mid * 3 + 1] < symbol) {
+                    low = mid + 1;
+                } else if (out[mid * 3] > symbol) {
+                    high = mid - 1;
+                } else {
+                    next = out[mid * 3 + 2];
+                    break;
+                }
+            }
+            if (next < 0) {
+                return false;
+            }
+            state = next;
+        }
+        return accepting.get(state);
+    }
+
+    /** Each state's steps as runs sorted by where they begin — see {@link #runs}. */
+    private static int[][] runsOf(List<List<Step>> steps) {
+        int[][] out = new int[steps.size()][];
+        for (int state = 0; state < steps.size(); state++) {
             List<int[]> each = new ArrayList<>();
             for (Step step : steps.get(state)) {
                 for (CodePoints.Range range : step.over().ranges()) {
@@ -276,7 +321,7 @@ final class Automaton {
             // stop at rather than a state of its own.
             accepting.set(at);
         }
-        return new Automaton(steps, free, accepting);
+        return new Automaton(steps, free, accepting, null);
     }
 
     /**
@@ -301,7 +346,7 @@ final class Automaton {
         BitSet accepting = new BitSet();
         shiftInto(accepting, this.accepting, 1);
         shiftInto(accepting, other.accepting, 1 + mine);
-        return new Automaton(steps, free, accepting);
+        return new Automaton(steps, free, accepting, null);
     }
 
     /**
@@ -369,7 +414,7 @@ final class Automaton {
                     accepting.set(at);
                 }
             }
-            return new Automaton(steps, free, accepting);
+            return new Automaton(steps, free, accepting, null);
         } catch (TooMany _) {
             return null;
         }
@@ -490,7 +535,8 @@ final class Automaton {
                     steps.get(at).add(new Step(each.over(), each.to()));
                 }
             }
-            return new Automaton(steps, free, accepting);
+            // Deterministic and complete, as what the subsets are always is.
+            return new Automaton(steps, free, accepting, runsOf(steps));
         } catch (TooMany _) {
             return null;
         }
@@ -545,7 +591,9 @@ final class Automaton {
         BitSet stops = new BitSet();
         stops.set(0, size());
         stops.andNot(accepting);
-        return new Automaton(steps, free, stops);
+        // Asked only of a machine every symbol leads one way through, so the steps are runs a
+        // search can read, and the ones already read off them are these.
+        return new Automaton(steps, free, stops, runs != null ? runs : runsOf(steps));
     }
 
     /**
@@ -782,7 +830,7 @@ final class Automaton {
             steps.add(out);
             free.add(new int[0]);
         }
-        return new Automaton(steps, free, stops);
+        return new Automaton(steps, free, stops, runsOf(steps));
     }
 
     /**
