@@ -188,6 +188,27 @@ class ARowNameIsUniqueWithinItsBehaviorTest {
     }
 
     /**
+     * Whitespace is String whitespace, the language's fixed set, and not the running JDK's.
+     *
+     * <p>A no-break space is String whitespace and no whitespace to {@code String.isBlank}, so a name
+     * of one was admitted. U+001C is the other way round: the JDK calls it whitespace and the
+     * language does not, so a row named with it is a name — and the identity the compiler builds
+     * for the row holds it too, rather than refusing a name the parser admitted.
+     */
+    @Test
+    void whatNamesNothingIsStringWhitespaceAndNotTheJdks() {
+        String source = MODEL + """
+
+                example submit
+                    | "%s" : (Draft { cost = Amount(200) }) -> Rejected
+                """.formatted("  ");
+
+        assertTrue(all(source).stream().anyMatch(d -> d.said() instanceof ParseMessage.ARowNameSaysNothing),
+                "a no-break space and a figure space are String whitespace");
+        assertEquals("\u001C", new RowIdentity.Named("\u001C").name());
+    }
+
+    /**
      * The two are held apart in the type as well. Writing no name and writing one that names nothing
      * are different things, and reading the second as the first would turn a row the compiler refused
      * into an unnamed row and carry it past the refusal.

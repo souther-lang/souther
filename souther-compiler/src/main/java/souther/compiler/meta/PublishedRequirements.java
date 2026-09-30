@@ -49,8 +49,7 @@ final class PublishedRequirements {
     static String counted(String entry, int[] at) {
         int from = at[0];
         int colon = from;
-        while (colon < entry.length() && Character.isDigit(entry.charAt(colon))
-                && entry.charAt(colon) < 128) {
+        while (colon < entry.length() && entry.charAt(colon) >= '0' && entry.charAt(colon) <= '9') {
             colon++;
         }
         if (colon == from || colon - from > 9 || colon >= entry.length()

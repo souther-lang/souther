@@ -4,6 +4,7 @@ import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.msg.Reported;
 import souther.compiler.diag.msg.ParseMessage;
+import souther.compiler.text.StringWhitespace;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -745,8 +746,9 @@ public final class CstParser {
             // A row's name is what says which row it is from outside the file, so a name written
             // here is held to naming something. Said where the name is written, on the text of the
             // literal rather than on its spelling: `"\t"` is written with two characters and names
-            // as little as `""` does.
-            if (CstLexer.textOf(tokenText(mi(0))).isBlank()) {
+            // as little as `""` does. Whitespace is the language's String whitespace, and not the
+            // running JDK's idea of it.
+            if (StringWhitespace.isBlank(CstLexer.textOf(tokenText(mi(0))))) {
                 error(new ParseMessage.ARowNameSaysNothing());
             }
             bump();   // "name"

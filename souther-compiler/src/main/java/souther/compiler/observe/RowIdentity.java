@@ -1,5 +1,7 @@
 package souther.compiler.observe;
 
+import souther.compiler.text.StringWhitespace;
+
 /**
  * What an {@code example} row names itself.
  *
@@ -35,8 +37,10 @@ public sealed interface RowIdentity {
      */
     record Named(String name) implements RowIdentity {
 
+        /** Held to what the grammar refuses a row's name for, String whitespace and nothing else,
+         *  so that a name the parser admitted is one this holds. */
         public Named {
-            if (name == null || name.isBlank()) {
+            if (name == null || StringWhitespace.isBlank(name)) {
                 throw new IllegalArgumentException("a row's name is text that names something");
             }
         }

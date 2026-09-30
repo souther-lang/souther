@@ -28,6 +28,9 @@ public final class PatternParser {
      */
     public static final int DEEPEST = 200;
 
+    /** What {@link #peek()} answers past the last unit, outside every value a unit has. */
+    private static final int END = -1;
+
     private final String regex;
     private int at;
     private int depth;
@@ -149,7 +152,7 @@ public final class PatternParser {
 
     private WrittenPattern atom() {
         construct = at;
-        char c = peek();
+        int c = peek();
         return switch (c) {
             case '(' -> group();
             case '[' -> {
@@ -182,7 +185,7 @@ public final class PatternParser {
                 take();
                 throw refused(PatternRead.Refusal.SOMETHING_UNCLOSED);
             }
-            case 0 -> throw refused(PatternRead.Refusal.SOMETHING_UNCLOSED);
+            case END -> throw refused(PatternRead.Refusal.SOMETHING_UNCLOSED);
             default -> symbols(CodePoints.of(literal()));
         };
     }
@@ -286,7 +289,9 @@ public final class PatternParser {
         if (done()) {
             throw refused(PatternRead.Refusal.AN_ESCAPE_THIS_DOES_NOT_READ);
         }
-        char kind = peek();
+        // The whole character after the backslash, so that one past the basic plane is classified
+        // as the character it is rather than by the first half of its pair.
+        int kind = regex.codePointAt(at);
         return switch (kind) {
             // The shorthands, as the language defines them: the digits are the ten ASCII ones, a
             // word character is ASCII with the underscore, and the whitespace is six characters.
@@ -311,10 +316,10 @@ public final class PatternParser {
             case 'k', '1', '2', '3', '4', '5', '6', '7', '8', '9' ->
                     throw refusedAfter(PatternRead.Refusal.A_BACK_REFERENCE);
             default -> {
-                // An escaped literal — `\.`, `\+`, `\\`, `\-`. A letter with no meaning is refused
-                // rather than read as itself: read as itself, a letter one day given a meaning
-                // would change which strings an old pattern accepts.
-                if (Character.isLetter(kind)) {
+                // An escaped literal — `\.`, `\+`, `\\`, `\-`. A letter or a decimal digit with no
+                // meaning is refused rather than read as itself: read as itself, one given a
+                // meaning later would change which strings an old pattern accepts.
+                if (PatternAlphabet.isKeptAfterABackslash(kind)) {
                     throw refusedAfter(PatternRead.Refusal.AN_ESCAPE_THIS_DOES_NOT_READ);
                 }
                 yield CodePoints.of(literal());
@@ -322,9 +327,10 @@ public final class PatternParser {
         };
     }
 
-    /** The refusal of the escape whose kind is the unit here, quoting it with that unit. */
+    /** The refusal of the escape whose kind is the character here, quoting it with that
+     *  character whole. */
     private Refused refusedAfter(PatternRead.Refusal why) {
-        take();
+        at += Character.charCount(regex.codePointAt(at));
         return refused(why);
     }
 
@@ -413,10 +419,15 @@ public final class PatternParser {
         return at >= regex.length();
     }
 
-    /** The unit here, or {@code 0} at the end. Read as a unit rather than as a symbol, because what
-     *  the grammar branches on is punctuation and all of it is one unit wide. */
-    private char peek() {
-        return done() ? 0 : regex.charAt(at);
+    /**
+     * The unit here, or {@link #END} past the last one. Read as a unit rather than as a symbol,
+     * because what the grammar branches on is punctuation and all of it is one unit wide.
+     *
+     * <p>The end is a value no unit has. U+0000 is a character a pattern may write, and stands for
+     * itself like any other.
+     */
+    private int peek() {
+        return done() ? END : regex.charAt(at);
     }
 
     private char take() {

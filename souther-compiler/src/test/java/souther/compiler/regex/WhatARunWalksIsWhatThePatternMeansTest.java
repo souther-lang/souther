@@ -34,7 +34,7 @@ class WhatARunWalksIsWhatThePatternMeansTest {
     private static final List<String> LEAVES = List.of(
             "a", "1", ".", "[ab]", "[^a]", "\\d", "\\s", "\\W", "^", "$", "",
             "\\-", "\\.", "\\\\", "[\\]\\^\\-]", " ", "\\x{10330}", "[^\\x{0}-\\x{10FFFF}]",
-            "\\n", "\\x{85}");
+            "\\n", "\\x{85}", "\0");
 
     private static List<String> around(String one, String other) {
         return List.of(one + other, one + "|" + other, "(?:" + one + ")" + other,
@@ -48,7 +48,7 @@ class WhatARunWalksIsWhatThePatternMeansTest {
     private static List<String> strings() {
         List<String> out = new ArrayList<>(List.of(
                 "", "a", "1", "aa", "a1", "1a", "11", "ab", "b", "bb", "ba", " ", "  ", "a ",
-                "-", ".", "\\", "]", "^", "-.", "\n", "\r", "a\n", "\n\n", "\t", "é",
+                "-", ".", "\\", "]", "^", "-.", "\n", "\r", "a\n", "\n\n", "\t", "é", "\0", "\0a",
                 String.valueOf((char) 0x85), String.valueOf((char) 0x2028)));
         out.add(new String(Character.toChars(0x10330)));
         out.add(new String(Character.toChars(0x10330)) + "a");
@@ -74,6 +74,20 @@ class WhatARunWalksIsWhatThePatternMeansTest {
 
     private static Meter plenty() {
         return new Meter(100_000, 10_000_000, 1_000_000_000L);
+    }
+
+    /**
+     * Every piece is a pattern.
+     *
+     * <p>The walk below asks only what the reader reads, and passes over what it refuses. A piece
+     * the reader wrongly refused would leave every pattern built from it out of the walk, and the
+     * walk would stay green having asked nothing about it.
+     */
+    @Test
+    void everyPieceIsRead() {
+        for (String leaf : LEAVES) {
+            assertInstanceOf(PatternRead.Read.class, PatternParser.read(leaf), shown(leaf));
+        }
     }
 
     @Test
@@ -140,6 +154,33 @@ class WhatARunWalksIsWhatThePatternMeansTest {
         assertTrue(run.matches("xa" + "b".repeat(20)));
         assertFalse(run.matches("xa" + "b".repeat(19)));
         assertFalse(run.matches("x".repeat(40)));
+    }
+
+    /**
+     * A deterministic machine whose ASCII characters are all told apart, and whose states are many,
+     * is past the table a walk looks ASCII up in, and walks by its runs with the same answers.
+     *
+     * <p>Every ASCII character written in turn, five times over: each character is a kind of its
+     * own and there is a state for each place in the text.
+     */
+    @Test
+    void aMachineTooWideForItsAsciiTableAnswersByItsRuns() {
+        StringBuilder regex = new StringBuilder();
+        StringBuilder text = new StringBuilder();
+        for (int copy = 0; copy < 5; copy++) {
+            for (int c = 0; c < 128; c++) {
+                regex.append(String.format("\\x{%X}", c));
+                text.append((char) c);
+            }
+        }
+        PatternMeaning meaning = ((PatternRead.Read) PatternParser.read(regex.toString())).meaning();
+        StringPattern run = StringPattern.of(PatternImage.deterministic(meaning, plenty()));
+        String whole = text.toString();
+
+        assertTrue(run.matches(whole));
+        assertFalse(run.matches(whole.substring(0, whole.length() - 1)));
+        assertFalse(run.matches(whole.substring(0, 300) + "é" + whole.substring(301)));
+        assertFalse(run.matches(whole.substring(0, 300) + "a" + whole.substring(301)));
     }
 
     /** Past what a class runs as its shape, there is no machine and nothing else runs it. */
