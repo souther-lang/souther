@@ -1,5 +1,7 @@
 package souther.runtime;
 
+import org.jspecify.annotations.Nullable;
+
 import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -62,6 +64,19 @@ public final class StringPattern implements Predicate<String> {
     /** For each state, the states a walk is also in for no character. */
     private final int[][] free;
 
+    /**
+     * The most entries an {@link Ascii} table holds. A deterministic machine whose table would be
+     * larger walks every character by its runs.
+     *
+     * <p>The table is held for as long as the class holding the pattern, beside the image it was
+     * read from. The machines an invariant writes take a few hundred entries.
+     */
+    private static final int MOST_ASCII_ENTRIES = 1 << 16;
+
+    /** Where an ASCII character leads from each state of a deterministic machine, or null where
+     *  there is no such table. */
+    private final @Nullable Ascii ascii;
+
     private StringPattern(boolean deterministic, boolean[] accepting, int[][] runs,
                           int[][][] over, int[][] target, int[][] free) {
         this.deterministic = deterministic;
@@ -71,7 +86,68 @@ public final class StringPattern implements Predicate<String> {
         this.target = target;
         this.free = free;
         this.live = live(accepting, target, free);
+        this.ascii = deterministic ? ascii(runs, live) : null;
     }
+
+    /**
+     * A deterministic machine's steps over ASCII, one lookup a character.
+     *
+     * <p>Most text a pattern is asked about is ASCII, and a run over it is otherwise a search over a
+     * state's runs for every character, which for a class such as {@code \w} or {@code .} is several
+     * comparisons. The characters are put into kinds first: two characters no run tells apart step
+     * every state to the same state, so the table is as wide as the kinds and not as the characters.
+     *
+     * @param kind  for each ASCII character, the kind it is in
+     * @param kinds how many kinds there are
+     * @param steps for each state and kind, at {@code state * kinds + kind}, the state it leads to,
+     *              or -1 where it leads nowhere or to a state from which no walk is accepted
+     */
+    private record Ascii(byte[] kind, int kinds, int[] steps) {}
+
+    /** The {@link Ascii} table of a deterministic machine, or null where it would hold more than
+     *  {@link #MOST_ASCII_ENTRIES}. */
+    private static @Nullable Ascii ascii(int[][] runs, boolean[] live) {
+        // A kind begins at 0 and wherever a run begins or ends inside ASCII.
+        boolean[] begins = new boolean[ASCII + 1];
+        begins[0] = true;
+        for (int[] each : runs) {
+            for (int at = 0; at < each.length; at += 3) {
+                if (each[at] < ASCII) {
+                    begins[each[at]] = true;
+                }
+                if (each[at + 1] + 1 < ASCII) {
+                    begins[each[at + 1] + 1] = true;
+                }
+            }
+        }
+        byte[] kind = new byte[ASCII];
+        int kinds = 0;
+        for (int c = 0; c < ASCII; c++) {
+            if (begins[c]) {
+                kinds++;
+            }
+            kind[c] = (byte) (kinds - 1);
+        }
+        if ((long) runs.length * kinds > MOST_ASCII_ENTRIES) {
+            return null;
+        }
+        // Each kind is asked by its first character, which steps every state as the rest of it does.
+        int[] first = new int[kinds];
+        for (int c = ASCII - 1; c >= 0; c--) {
+            first[kind[c]] = c;
+        }
+        int[] steps = new int[runs.length * kinds];
+        for (int state = 0; state < runs.length; state++) {
+            for (int each = 0; each < kinds; each++) {
+                int to = next(runs[state], first[each]);
+                steps[state * kinds + each] = to >= 0 && live[to] ? to : -1;
+            }
+        }
+        return new Ascii(kind, kinds, steps);
+    }
+
+    /** How many characters ASCII is. */
+    private static final int ASCII = 128;
 
     /** Whether the whole of {@code value} is one of the strings. */
     public boolean matches(String value) {
@@ -192,17 +268,31 @@ public final class StringPattern implements Predicate<String> {
         return out;
     }
 
-    /** One state at a time, over a machine that is deterministic. */
+    /**
+     * One state at a time, over a machine that is deterministic.
+     *
+     * <p>An ASCII character is one lookup in the {@link Ascii} table where the machine has one, and
+     * every other character a search of the state's runs. The table leads nowhere rather than to a
+     * state no walk is accepted from, so a walk stops at the same character either way.
+     */
     private boolean walk(String value) {
+        @Nullable Ascii table = ascii;
         int state = 0;
         int at = 0;
-        while (at < value.length()) {
-            if (!live[state]) {
-                return false;
+        int length = value.length();
+        while (at < length) {
+            char unit = value.charAt(at);
+            if (table != null && unit < ASCII) {
+                state = table.steps()[state * table.kinds() + table.kind()[unit]];
+                at++;
+            } else {
+                if (!live[state]) {
+                    return false;
+                }
+                int symbol = value.codePointAt(at);
+                at += Character.charCount(symbol);
+                state = next(runs[state], symbol);
             }
-            int symbol = value.codePointAt(at);
-            at += Character.charCount(symbol);
-            state = next(runs[state], symbol);
             if (state < 0) {
                 return false;
             }

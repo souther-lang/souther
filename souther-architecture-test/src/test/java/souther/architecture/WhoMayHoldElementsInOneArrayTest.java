@@ -61,8 +61,9 @@ class WhoMayHoldElementsInOneArrayTest {
      * as a host list the members of an external form already arrived in, which may hold {@code null}
      * that no {@code List} of the language holds: {@code Representations.sortedMembers}. As long as
      * the machine a pattern's image writes, whose states and characters the compiler that wrote it
-     * bounded, or the states of one such machine a walk is in: {@code StringPattern} and its
-     * {@code Writer}.
+     * bounded, or the states of one such machine a walk is in, or its steps over the ASCII
+     * characters, which {@code StringPattern} keeps only under a bound of its own:
+     * {@code StringPattern} and its {@code Writer}.
      */
     private static final List<String> MAY_HOLD_ONE_ARRAY = List.of(
             "souther/exact/ExactOrder#allWrittenOut new java/math/BigInteger[]",
@@ -85,6 +86,7 @@ class WhoMayHoldElementsInOneArrayTest {
                     + " java/util/List.sort(Ljava/util/Comparator;)V",
             "souther/runtime/Sorting$Slots#<init> new [Ljava/lang/Object;[]",
             "souther/runtime/Sorting$Slots#<init> new java/lang/Object[]",
+            "souther/runtime/StringPattern#ascii new I[]",
             "souther/runtime/StringPattern#live java/util/ArrayList.<init>()V",
             "souther/runtime/StringPattern#live java/util/ArrayList.<init>(I)V",
             "souther/runtime/StringPattern#live new I[]",
