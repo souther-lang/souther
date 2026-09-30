@@ -33,6 +33,19 @@ class WorkspaceTest {
     }
 
     @Test
+    void aSourceThatIsALinkToAFileElsewhereIsNotRead() throws Exception {
+        Path dir = Files.createTempDirectory("ws");
+        Path elsewhere = Files.writeString(Files.createTempFile("secret", ".txt"), "top secret");
+        Path link = dir.resolve("link.sou");
+        Files.createSymbolicLink(link, elsewhere);
+
+        Workspace ws = new Workspace();
+        ws.setRoots(List.of(dir.toUri().toString()));
+
+        assertEquals(0, ws.snapshot(Map.of()).uris().size(), "a link is not followed out of the workspace");
+    }
+
+    @Test
     void snapshotFindsSourcesInNestedDirectories() throws Exception {
         Path dir = Files.createTempDirectory("ws");
         Path nested = Files.createDirectories(dir.resolve("src/main/souther"));

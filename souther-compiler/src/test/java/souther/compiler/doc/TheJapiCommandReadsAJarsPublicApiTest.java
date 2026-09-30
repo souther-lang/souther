@@ -252,6 +252,196 @@ class TheJapiCommandReadsAJarsPublicApiTest {
     }
 
     @Test
+    void aConfinedRunDoesNotReadThroughALinkInsideAnEntryThatIsUnderTheRoot() throws Exception {
+        Path base = Files.createTempDirectory("japi-confined");
+        Path outside = Files.createDirectories(base.resolve("outside/acme"));
+        Path secret = outside.resolve("Secret.java");
+        Files.writeString(secret, """
+                package acme;
+
+                public final class Secret {
+                    public static final String VALUE = "s3cr3t";
+                }
+                """);
+        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, OutputStream.nullOutputStream(),
+                OutputStream.nullOutputStream(), "-proc:none", "-d", base.resolve("outside").toString(),
+                secret.toString()));
+        Path workspace = Files.createDirectories(base.resolve("workspace"));
+        Path classes = Files.createDirectories(workspace.resolve("classes"));
+        try {
+            Files.createSymbolicLink(classes.resolve("acme"), base.resolve("outside/acme"));
+        } catch (UnsupportedOperationException | java.io.IOException e) {
+            assumeTrue(false, "symbolic links cannot be made here: " + e);
+        }
+
+        Answer unconfined = run("acme.Secret", "-cp", classes.toString());
+        Answer confined = runConfined(workspace, "acme.Secret", "-cp", classes.toString());
+        Answer listing = runConfined(workspace, "acme", "-cp", classes.toString());
+
+        assertTrue(unconfined.out().contains("s3cr3t"), "the fixture is readable when nothing confines it: " + unconfined);
+        assertFalse((confined.out() + confined.err()).contains("s3cr3t"), "the value behind the link is not shown: " + confined);
+        assertEquals(2, confined.code(), confined.err());
+        assertFalse(listing.out().contains("acme.Secret"), "nor is the class listed: " + listing);
+    }
+
+    /**
+     * The types a source names are resolved by javac, which searches a class path with its own file
+     * access. A confined run has to resolve them through the same confinement as everything else:
+     * the class asked for is inside the root, and the type it mentions is only behind a link or
+     * outside it.
+     */
+    @Test
+    void aTypeTheSourceNamesIsNotResolvedThroughALinkOrFromOutsideTheRoot() throws Exception {
+        Path base = Files.createTempDirectory("japi-types");
+        Path extSource = Files.createDirectories(base.resolve("outside/src/ext")).resolve("Ext.java");
+        Files.writeString(extSource, "package ext;\npublic final class Ext {}\n");
+        Path outsideClasses = Files.createDirectories(base.resolve("outside/classes"));
+        JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
+        assertEquals(0, javac.run(null, OutputStream.nullOutputStream(), OutputStream.nullOutputStream(),
+                "-proc:none", "-d", outsideClasses.toString(), extSource.toString()));
+
+        Path workspace = Files.createDirectories(base.resolve("workspace"));
+        Path widgetSource = Files.createDirectories(base.resolve("widget/src/acme")).resolve("Widget.java");
+        Files.writeString(widgetSource, """
+                package acme;
+
+                import ext.Ext;
+
+                public final class Widget {
+                    /** Takes the outside type. */
+                    public void take(Ext outside) {}
+                }
+                """);
+        Path widgetClasses = Files.createDirectories(base.resolve("widget/classes"));
+        assertEquals(0, javac.run(null, OutputStream.nullOutputStream(), OutputStream.nullOutputStream(),
+                "-proc:none", "-cp", outsideClasses.toString(), "-d", widgetClasses.toString(),
+                widgetSource.toString()));
+        Path widgetJar = workspace.resolve("widget-1.0.jar");
+        try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(widgetJar))) {
+            out.putNextEntry(new JarEntry("acme/Widget.class"));
+            out.write(Files.readAllBytes(widgetClasses.resolve("acme/Widget.class")));
+        }
+        try (JarOutputStream out = new JarOutputStream(
+                Files.newOutputStream(workspace.resolve("widget-1.0-sources.jar")))) {
+            out.putNextEntry(new JarEntry("acme/Widget.java"));
+            out.write(Files.readAllBytes(widgetSource));
+        }
+        Path linked = Files.createDirectories(workspace.resolve("classes"));
+        try {
+            Files.createSymbolicLink(linked.resolve("ext"), outsideClasses.resolve("ext"));
+        } catch (UnsupportedOperationException | java.io.IOException e) {
+            assumeTrue(false, "symbolic links cannot be made here: " + e);
+        }
+        String behindALink = widgetJar + java.io.File.pathSeparator + linked;
+        String outsideTheRoot = widgetJar + java.io.File.pathSeparator + outsideClasses;
+
+        Answer control = run("acme.Widget", "-cp", behindALink);
+        Answer throughALink = runConfined(workspace, "acme.Widget", "-cp", behindALink);
+        Answer fromOutside = runConfined(workspace, "acme.Widget", "-cp", outsideTheRoot);
+
+        assertTrue(control.out().contains("Takes the outside type."),
+                "the fixture documents the method when nothing confines javac: " + control);
+        for (Answer confined : new Answer[]{throughALink, fromOutside}) {
+            assertEquals(0, confined.code(), confined.err());
+            assertTrue(confined.out().contains("acme.Widget"), "the class inside the root is still described: " + confined);
+            assertFalse(confined.out().contains("Takes the outside type."),
+                    "the type behind the link, or outside the root, was not resolved: " + confined);
+        }
+    }
+
+    /**
+     * A source names as many packages as its author writes, and javac asks the class path about each.
+     * What a request may look at is a budget for the whole of it, so the cost is the size of the
+     * archive once and not once for every package a source names.
+     */
+    @Test
+    void aSourceNamingManyPackagesCostsTheSizeOfTheJarOnceAndNotOncePerPackage() throws Exception {
+        Path base = Files.createTempDirectory("japi-budget");
+        Path workspace = Files.createDirectories(base.resolve("workspace"));
+        // The parameter is of a type that is only in the jar, in the package javac asks about last,
+        // so it is resolved only if the fiftieth question is still answered.
+        Path namedSource = Files.createDirectories(base.resolve("real/pkg49")).resolve("Named49.java");
+        Files.writeString(namedSource, "package pkg49;\npublic final class Named49 {}\n");
+        Path realSource = Files.createDirectories(base.resolve("real/acme")).resolve("Widget.java");
+        Files.writeString(realSource, """
+                package acme;
+
+                import pkg49.Named49;
+
+                public final class Widget {
+                    public void take(Named49 named) {}
+                }
+                """);
+        Path classes = Files.createDirectories(base.resolve("classes"));
+        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, OutputStream.nullOutputStream(),
+                OutputStream.nullOutputStream(), "-proc:none", "-d", classes.toString(),
+                namedSource.toString(), realSource.toString()));
+        Path widgetJar = workspace.resolve("widget-1.0.jar");
+        try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(widgetJar))) {
+            out.putNextEntry(new JarEntry("acme/Widget.class"));
+            out.write(Files.readAllBytes(classes.resolve("acme/Widget.class")));
+            out.putNextEntry(new JarEntry("pkg49/Named49.class"));
+            out.write(Files.readAllBytes(classes.resolve("pkg49/Named49.class")));
+            for (int i = 0; i < 300; i++) {
+                out.putNextEntry(new JarEntry("filler/F" + i + ".txt"));
+                out.write(new byte[]{1});
+            }
+        }
+        StringBuilder imports = new StringBuilder();
+        for (int i = 0; i < 50; i++) {
+            imports.append("import pkg").append(i).append(".Named").append(i).append(";\n");
+        }
+        try (JarOutputStream out = new JarOutputStream(
+                Files.newOutputStream(workspace.resolve("widget-1.0-sources.jar")))) {
+            out.putNextEntry(new JarEntry("acme/Widget.java"));
+            out.write(("package acme;\n\n" + imports + """
+
+                    public final class Widget {
+                        /** Takes a string. */
+                        public void take(Named49 named) {}
+                    }
+                    """).getBytes(StandardCharsets.UTF_8));
+        }
+
+        Answer enough = runConfinedWithin(workspace, 2_000, "acme.Widget", "-cp", widgetJar.toString());
+        Answer tooLittle = runConfinedWithin(workspace, 100, "acme.Widget", "-cp", widgetJar.toString());
+
+        assertTrue(enough.out().contains("Takes a string."),
+                "fifty packages named in the source do not cost fifty looks through the jar: " + enough);
+        assertEquals(2, tooLittle.code(), tooLittle.toString());
+        assertTrue(tooLittle.err().contains("in one request"), "the budget is what stopped it: " + tooLittle);
+    }
+
+    private Answer runConfinedWithin(Path root, long mostEntries, String... args) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        int code = JapiCommand.runConfined(args,
+                new PrintStream(out, true, StandardCharsets.UTF_8),
+                new PrintStream(err, true, StandardCharsets.UTF_8), root, mostEntries);
+        return new Answer(code, out.toString(StandardCharsets.UTF_8), err.toString(StandardCharsets.UTF_8));
+    }
+
+    private Answer runConfined(Path root, String... args) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        int code = JapiCommand.runConfined(args,
+                new PrintStream(out, true, StandardCharsets.UTF_8),
+                new PrintStream(err, true, StandardCharsets.UTF_8), root);
+        return new Answer(code, out.toString(StandardCharsets.UTF_8), err.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void aNameThatWouldLeaveTheClassPathEntryIsRefused() {
+        for (String name : new String[]{"...", "../../etc", "acme/Greeter", "acme\\Greeter", "acme..Greeter",
+                ".acme", "acme.", "#member"}) {
+            Answer answer = run(name, "-cp", jar.toString());
+
+            assertEquals(2, answer.code(), name + ": " + answer.out() + answer.err());
+            assertTrue(answer.err().contains("not a fully qualified"), name + ": " + answer.err());
+        }
+    }
+
+    @Test
     void aClassPathEntryThatIsNotAnArchiveIsSaidAsSuchAndTheRestIsStillSearched() throws Exception {
         Path notAJar = Files.createTempFile("not-a", ".jar");
         Files.writeString(notAJar, "this is not a zip archive");

@@ -14,6 +14,12 @@ import java.nio.charset.StandardCharsets;
  */
 public final class MessageConnection {
 
+    /** The largest message body read; the length comes off the wire, so it is bounded before it sizes a buffer. */
+    static final int MAX_MESSAGE_BYTES = 64 * 1024 * 1024;
+
+    /** The longest header line read. */
+    static final int MAX_HEADER_LINE_CHARS = 8 * 1024;
+
     private final InputStream in;
     private final OutputStream out;
 
@@ -36,7 +42,7 @@ public final class MessageConnection {
                 }
                 int colon = line.indexOf(':');
                 if (colon >= 0 && line.substring(0, colon).trim().equalsIgnoreCase("Content-Length")) {
-                    contentLength = Integer.parseInt(line.substring(colon + 1).trim());
+                    contentLength = parseContentLength(line.substring(colon + 1).trim());
                 }
             }
             if (contentLength < 0) {
@@ -71,7 +77,11 @@ public final class MessageConnection {
         if (c == -1) {
             return null;
         }
+        int consumed = 0;   // what was read, a carriage return included, and not only what is kept
         while (c != -1 && c != '\n') {
+            if (++consumed > MAX_HEADER_LINE_CHARS) {
+                throw new IllegalStateException("message header line is longer than " + MAX_HEADER_LINE_CHARS);
+            }
             if (c != '\r') {
                 sb.append((char) c);
             }
@@ -80,16 +90,26 @@ public final class MessageConnection {
         return sb.toString();
     }
 
+    private static int parseContentLength(String value) {
+        int length;
+        try {
+            length = Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            throw new IllegalStateException("Content-Length is not a number: " + value, e);
+        }
+        if (length < 0 || length > MAX_MESSAGE_BYTES) {
+            throw new IllegalStateException("Content-Length " + length + " is outside 0.." + MAX_MESSAGE_BYTES);
+        }
+        return length;
+    }
+
     private byte[] readExactly(int n) throws IOException {
-        byte[] buf = new byte[n];
-        int read = 0;
-        while (read < n) {
-            int r = in.read(buf, read, n - read);
-            if (r == -1) {
-                throw new IllegalStateException("stream ended mid-message: wanted " + n
-                        + " bytes, got " + read);
-            }
-            read += r;
+        // Grown as the bytes arrive: the length is the sender's claim, and a buffer of that size is
+        // not allocated for a body that never comes.
+        byte[] buf = in.readNBytes(n);
+        if (buf.length < n) {
+            throw new IllegalStateException("stream ended mid-message: wanted " + n
+                    + " bytes, got " + buf.length);
         }
         return buf;
     }

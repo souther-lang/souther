@@ -1,5 +1,6 @@
 package souther.compiler.doc;
 
+import souther.compiler.io.LimitExceededException;
 import souther.compiler.meta.ModuleMetadata;
 
 import tools.jackson.databind.DeserializationFeature;
@@ -17,6 +18,7 @@ import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -301,8 +303,17 @@ public final class McpServer {
         PrintWriter writer = new PrintWriter(out, true, StandardCharsets.UTF_8);
         Session session = new Session(loader);
         try {
-            String line;
-            while ((line = reader.readLine()) != null) {
+            while (true) {
+                String line;
+                try {
+                    line = readLine(reader);
+                } catch (LimitExceededException _) {
+                    writer.println(JSON.writeValueAsString(error(null, -32700, "request line is too long")));
+                    continue;
+                }
+                if (line == null) {
+                    break;
+                }
                 if (line.isBlank()) {
                     continue;
                 }
@@ -488,7 +499,9 @@ public final class McpServer {
                 String[] args = classpath.isEmpty()
                         ? new String[]{argument(arguments, "name")}
                         : new String[]{argument(arguments, "name"), "-cp", classpath};
-                yield JapiCommand.run(args, stream, stream);
+                // The argument comes from a client that may be an agent reading untrusted text, so
+                // it does not choose which part of the disk is read.
+                yield JapiCommand.runConfined(args, stream, stream, Path.of("."));
             }
             default -> {
                 stream.println("no tool `" + tool + "`");
@@ -558,6 +571,30 @@ public final class McpServer {
         content.put("text", said);
         result.put("isError", true);
         return result;
+    }
+
+    /** The longest request line read, in characters. */
+    private static final int LONGEST_REQUEST_LINE = 16 * 1024 * 1024;
+
+    /**
+     * One line, or {@code null} at end of input. A line past the limit is read to its end without
+     * being kept, so that the one after it is read from where it starts.
+     *
+     * @throws LimitExceededException when the line was longer than the limit
+     */
+    private static String readLine(BufferedReader reader) throws IOException {
+        StringBuilder line = new StringBuilder();
+        long length = 0;
+        int c;
+        while ((c = reader.read()) != -1 && c != '\n') {
+            if (++length <= LONGEST_REQUEST_LINE) {
+                line.append((char) c);
+            }
+        }
+        if (length > LONGEST_REQUEST_LINE) {
+            throw new LimitExceededException("request line of more than " + LONGEST_REQUEST_LINE);
+        }
+        return c == -1 && length == 0 ? null : line.toString();
     }
 
     private static String argument(JsonNode arguments, String name) {

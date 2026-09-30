@@ -1,5 +1,10 @@
 package souther.compiler.doc;
 
+import souther.compiler.io.BoundedRead;
+import souther.compiler.io.ConfinedTree;
+import souther.compiler.io.ConfinementException;
+import souther.compiler.io.LimitExceededException;
+import souther.compiler.io.WorkBudget;
 import souther.compiler.jvm.JvmClassName;
 import souther.compiler.check.Suggest;
 
@@ -22,9 +27,13 @@ import java.lang.constant.MethodTypeDesc;
 import java.lang.reflect.AccessFlag;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.jar.JarEntry;
@@ -47,10 +56,53 @@ public final class JapiCommand {
     /** How many names a miss is answered with. */
     private static final int MOST_SUGGESTIONS = 3;
 
+    /** How deep the search for names to suggest walks one directory entry. */
+    private static final int DEEPEST_WALK = 32;
+
     private JapiCommand() {}
 
     public static int run(String[] args, PrintStream out, PrintStream err) {
         return run(args, out, err, System.getProperty("java.class.path", ""));
+    }
+
+    /**
+     * The same run, reading only what is under {@code root}: an entry outside it, or a link met on
+     * the way to a file, is refused rather than followed. For a caller whose class path is not its
+     * own to choose.
+     */
+    public static int runConfined(String[] args, PrintStream out, PrintStream err, Path root) {
+        return runConfined(args, out, err, root, BoundedRead.MOST_ENTRIES_PER_REQUEST);
+    }
+
+    /**
+     * Where a run reads from: anywhere its caller says, or only under one root.
+     *
+     * <p>Every path this command opens is made by joining a name onto a class path entry, and the
+     * name comes out of the argument, a class file or a jar, so each of them is passed through here
+     * on its way to a file. There is no other way to a file in this class.
+     */
+    private record Disk(ConfinedTree confinedTo) {
+
+        static final Disk OPEN = new Disk(null);
+
+        Path path(Path wanted) throws IOException {
+            if (confinedTo == null) {
+                return wanted;
+            }
+            Path root = confinedTo.root();
+            Path absolute = wanted.toAbsolutePath().normalize();
+            if (!absolute.startsWith(root)) {
+                throw new ConfinementException("is not under " + root);
+            }
+            return absolute.equals(root) ? root : confinedTo.resolve(root.relativize(absolute).toString());
+        }
+
+        byte[] read(Path file) throws IOException {
+            try (java.io.InputStream in = confinedTo == null
+                    ? Files.newInputStream(file) : Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS)) {
+                return BoundedRead.bytes(in, BoundedRead.CLASS_FILE_BYTES);
+            }
+        }
     }
 
     /**
@@ -66,6 +118,22 @@ public final class JapiCommand {
 
     /** The same run, over the class path to fall back on when the caller names none. */
     static int run(String[] args, PrintStream out, PrintStream err, String defaultClassPath) {
+        return run(args, out, err, defaultClassPath, Disk.OPEN, WorkBudget.of(BoundedRead.MOST_ENTRIES_PER_REQUEST));
+    }
+
+    /** The same confined run, with {@code mostEntries} as everything one request may look at. */
+    static int runConfined(String[] args, PrintStream out, PrintStream err, Path root, long mostEntries) {
+        return run(args, out, err, System.getProperty("java.class.path", ""),
+                new Disk(ConfinedTree.at(root)), WorkBudget.of(mostEntries));
+    }
+
+    /**
+     * The same run, reading what the caller names through {@code disk}, and looking at no more than
+     * {@code work} allows in all. The class path to fall back on is this command's own and is read
+     * from wherever it is.
+     */
+    private static int run(String[] args, PrintStream out, PrintStream err, String defaultClassPath,
+                           Disk disk, WorkBudget work) {
         String name = null;
         List<Entry> entries = new ArrayList<>();
         for (int i = 0; i < args.length; i++) {
@@ -76,7 +144,7 @@ public final class JapiCommand {
                         return 2;
                     }
                     for (String p : args[++i].split(java.io.File.pathSeparator)) {
-                        entries.add(new Entry(Path.of(p), true));
+                        entries.add(new Entry(Path.of(p), true, disk, work));
                     }
                 }
                 default -> name = args[i];
@@ -89,7 +157,7 @@ public final class JapiCommand {
         if (entries.isEmpty()) {
             for (String p : defaultClassPath.split(java.io.File.pathSeparator)) {
                 if (!p.isEmpty()) {
-                    entries.add(new Entry(Path.of(p), false));
+                    entries.add(new Entry(Path.of(p), false, Disk.OPEN, work));
                 }
             }
         }
@@ -100,13 +168,21 @@ public final class JapiCommand {
             member = name.substring(hash + 1);
             name = name.substring(0, hash);
         }
+        if (!isQualifiedName(name)) {
+            err.println("`" + name + "` is not a fully qualified class or package name");
+            return 2;
+        }
 
         String classPath = entries.stream().map(e -> e.path().toString())
                 .collect(java.util.stream.Collectors.joining(java.io.File.pathSeparator));
         Skipped skipped = new Skipped(err, new java.util.HashSet<>());
         Found found = findClass(name, entries, skipped);
         if (found != null) {
-            return print(found, name, member, out, err, classPath);
+            try (ClassLookup lookup = lookupFor(entries)) {
+                return print(found, name, member, out, err, classPath, lookup);
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
         }
         if (member != null) {
             err.println("no class `" + name + "` on the class path:");
@@ -129,7 +205,22 @@ public final class JapiCommand {
      * says nothing a reader can act on and is not theirs to be handed, so it is named by the file it
      * is.
      */
-    private record Entry(Path path, boolean given) {
+    private record Entry(Path path, boolean given, Disk disk, WorkBudget work) {
+
+        /** This entry's own path, as its disk allows it to be opened. */
+        Path file() throws IOException {
+            return disk.path(path);
+        }
+
+        /** The path {@code relative} names under this entry, as its disk allows it to be opened. */
+        Path below(String relative) throws IOException {
+            return disk.path(path.resolve(relative));
+        }
+
+        /** The path {@code name} names beside this entry, as its disk allows it to be opened. */
+        Path beside(String name) throws IOException {
+            return disk.path(path.resolveSibling(name));
+        }
 
         /** What this entry is called when a message names it. */
         String shown() {
@@ -187,14 +278,23 @@ public final class JapiCommand {
         List<String> names = new ArrayList<>();
         for (Entry entry : entries) {
             try {
-                if (Files.isDirectory(entry.path())) {
-                    try (var files = Files.walk(entry.path())) {
-                        files.filter(Files::isRegularFile).forEach(f -> add(names,
-                                entry.path().relativize(f).toString().replace(java.io.File.separatorChar, '/')));
+                Path at = entry.file();
+                if (Files.isDirectory(at)) {
+                    try (var files = Files.walk(at, DEEPEST_WALK)) {
+                        for (Iterator<Path> walked = files.iterator(); walked.hasNext();) {
+                            Path f = walked.next();
+                            entry.work().spend(1);
+                            if (Files.isRegularFile(f)) {
+                                add(names, at.relativize(f).toString().replace(java.io.File.separatorChar, '/'));
+                            }
+                        }
                     }
-                } else if (Files.isRegularFile(entry.path())) {
-                    try (JarFile jar = versioned(entry.path())) {
-                        jar.versionedStream().forEach(e -> add(names, e.getName()));
+                } else if (Files.isRegularFile(at)) {
+                    try (JarFile jar = openJar(entry, at); var all = jar.versionedStream()) {
+                        for (Iterator<JarEntry> listed = all.iterator(); listed.hasNext();) {
+                            entry.work().spend(1);
+                            add(names, listed.next().getName());
+                        }
                     }
                 }
             } catch (IOException e) {
@@ -226,23 +326,38 @@ public final class JapiCommand {
 
     /** A class's bytes and the classpath entry they came from — kept together because the
      *  sources jar, and with it the javadoc, is found from the entry. */
-    private record Found(byte[] bytes, Path entry) {}
+    private record Found(byte[] bytes, Entry entry) {}
+
+    /** A dotted run of Java identifiers. The name becomes a path under each class path entry, so a
+     *  `..` segment, a separator or an empty segment would reach outside it. */
+    private static boolean isQualifiedName(String name) {
+        if (name.isEmpty()) {
+            return false;
+        }
+        for (String segment : name.split("\\.", -1)) {
+            if (segment.isEmpty() || !Character.isJavaIdentifierStart(segment.codePointAt(0))
+                    || !segment.codePoints().allMatch(Character::isJavaIdentifierPart)) {
+                return false;
+            }
+        }
+        return true;
+    }
 
     private static Found findClass(String binaryName, List<Entry> entries, Skipped skipped) {
         String resource = JvmClassName.classFile(binaryName);
         for (Entry entry : entries) {
-            Path path = entry.path();
             try {
+                Path path = entry.file();
                 if (Files.isDirectory(path)) {
-                    Path f = path.resolve(resource);
+                    Path f = entry.below(resource);
                     if (Files.isRegularFile(f)) {
-                        return new Found(Files.readAllBytes(f), path);
+                        return new Found(entry.disk().read(f), entry);
                     }
                 } else if (Files.isRegularFile(path)) {
-                    try (JarFile jar = versioned(path)) {
+                    try (JarFile jar = openJar(entry, path)) {
                         ZipEntry e = jar.getEntry(resource);
                         if (e != null) {
-                            return new Found(jar.getInputStream(e).readAllBytes(), path);
+                            return new Found(jarEntryBytes(jar, e, BoundedRead.CLASS_FILE_BYTES), entry);
                         }
                     }
                 }
@@ -282,35 +397,46 @@ public final class JapiCommand {
         String prefix = packageName.replace('.', '/') + "/";
         List<String> classes = new ArrayList<>();
         for (Entry entry : entries) {
-            Path path = entry.path();
             try {
+                Path path = entry.file();
                 if (Files.isDirectory(path)) {
-                    Path dir = path.resolve(packageName.replace('.', '/'));
+                    String packageDirectory = packageName.replace('.', '/');
+                    Path dir = entry.below(packageDirectory);
                     if (Files.isDirectory(dir)) {
+                        List<String> names = new ArrayList<>();
                         try (var files = Files.list(dir)) {
-                            for (Path f : files.toList()) {
-                                String simple = topLevelName(f.getFileName().toString());
-                                if (simple != null && isPublic(Files.readAllBytes(f))) {
-                                    classes.add(packageName + "." + simple);
-                                }
+                            for (Iterator<Path> listed = files.iterator(); listed.hasNext();) {
+                                entry.work().spend(1);
+                                names.add(listed.next().getFileName().toString());
+                            }
+                        }
+                        for (String fileName : names) {
+                            String simple = topLevelName(fileName);
+                            if (simple != null
+                                    && isPublic(entry.disk().read(entry.below(packageDirectory + "/" + fileName)))) {
+                                classes.add(packageName + "." + simple);
                             }
                         }
                     }
                 } else if (Files.isRegularFile(path)) {
-                    try (JarFile jar = versioned(path)) {
-                        for (JarEntry e : jar.versionedStream().toList()) {
-                            String name = e.getName();
-                            if (!name.startsWith(prefix)) {
-                                continue;
+                    try (JarFile jar = openJar(entry, path)) {
+                        List<JarEntry> underPackage = new ArrayList<>();
+                        try (var all = jar.versionedStream()) {
+                            for (Iterator<JarEntry> listed = all.iterator(); listed.hasNext();) {
+                                entry.work().spend(1);
+                                JarEntry e = listed.next();
+                                if (e.getName().startsWith(prefix)) {
+                                    underPackage.add(e);
+                                }
                             }
-                            String simple = topLevelName(name.substring(prefix.length()));
+                        }
+                        for (JarEntry e : underPackage) {
+                            String simple = topLevelName(e.getName().substring(prefix.length()));
                             if (simple == null || simple.contains("/")) {
                                 continue;
                             }
-                            try (java.io.InputStream in = jar.getInputStream(e)) {
-                                if (isPublic(in.readAllBytes())) {
-                                    classes.add(packageName + "." + simple);
-                                }
+                            if (isPublic(jarEntryBytes(jar, e, BoundedRead.CLASS_FILE_BYTES))) {
+                                classes.add(packageName + "." + simple);
                             }
                         }
                     }
@@ -320,6 +446,179 @@ public final class JapiCommand {
             }
         }
         return classes.stream().distinct().sorted().toList();
+    }
+
+    /**
+     * The lookup javac resolves types through when every entry is confined, or {@code null} when the
+     * class path is the caller's own and javac may search it itself.
+     *
+     * <p>A class path string handed to javac is searched with javac's own file access, which follows
+     * a link inside an entry however the entry was checked. So a confined run gives javac no class
+     * path: it asks for one package at a time and is answered from the same entries, read the same
+     * way as every other file of the run.
+     */
+    private static ClassLookup lookupFor(List<Entry> entries) {
+        if (entries.stream().anyMatch(e -> e.disk().confinedTo() == null)) {
+            return null;
+        }
+        return new EntryClasses(entries);
+    }
+
+    /**
+     * The classes of one request's entries, by package.
+     *
+     * <p>javac asks for one package at a time, as many times as the source names packages, and a
+     * source is somebody else's text. Every question answered by looking through an archive again
+     * would make the cost of a request the number of packages named times the size of the archive.
+     * So an archive is opened once, kept open for as long as this lives, and listed once into an
+     * index of its classes by package; after that a package is answered from the index and a class
+     * is read from the archive that is already open. The listing is spent from the request's budget
+     * like every other look at an entry, and so is what it holds in memory.
+     */
+    private static final class EntryClasses implements ClassLookup {
+
+        private final List<Entry> entries;
+        private final Map<Path, JarFile> jars = new HashMap<>();
+        private final Map<Path, Map<String, List<String>>> indexes = new HashMap<>();
+
+        /** An archive that could not be opened or listed, so the question is not asked of it again. */
+        private final Map<Path, IOException> unreadable = new HashMap<>();
+
+        EntryClasses(List<Entry> entries) {
+            this.entries = entries;
+        }
+
+        @Override
+        public List<Held> classesIn(String packageName) {
+            List<Held> held = new ArrayList<>();
+            for (Entry entry : entries) {
+                try {
+                    held.addAll(heldBy(entry, packageName));
+                } catch (IOException _) {
+                    // An entry that cannot be read holds no classes, as it does for the search.
+                }
+            }
+            return held;
+        }
+
+        @Override
+        public void close() throws IOException {
+            IOException failed = null;
+            for (JarFile jar : jars.values()) {
+                try {
+                    jar.close();
+                } catch (IOException e) {
+                    failed = e;
+                }
+            }
+            jars.clear();
+            if (failed != null) {
+                throw failed;
+            }
+        }
+
+        private List<Held> heldBy(Entry entry, String packageName) throws IOException {
+            String directory = packageName.replace('.', '/');
+            Path at = entry.file();
+            List<Held> held = new ArrayList<>();
+            if (Files.isDirectory(at)) {
+                Path dir = directory.isEmpty() ? at : entry.below(directory);
+                if (!Files.isDirectory(dir)) {
+                    return held;
+                }
+                try (var files = Files.list(dir)) {
+                    for (Iterator<Path> listed = files.iterator(); listed.hasNext();) {
+                        entry.work().spend(1);
+                        String name = listed.next().getFileName().toString();
+                        if (isClassFile(name)) {
+                            String relative = directory.isEmpty() ? name : directory + "/" + name;
+                            held.add(new Held(binaryNameOf(packageName, name),
+                                    () -> entry.disk().read(entry.below(relative))));
+                        }
+                    }
+                }
+            } else if (Files.isRegularFile(at)) {
+                for (String name : indexOf(entry, at).getOrDefault(directory, List.of())) {
+                    String resource = directory.isEmpty() ? name : directory + "/" + name;
+                    held.add(new Held(binaryNameOf(packageName, name), () -> bytesOf(entry, at, resource)));
+                }
+            }
+            return held;
+        }
+
+        private JarFile jarOf(Entry entry, Path at) throws IOException {
+            JarFile jar = jars.get(at);
+            if (jar == null) {
+                jar = openJar(entry, at);
+                jars.put(at, jar);
+            }
+            return jar;
+        }
+
+        private Map<String, List<String>> indexOf(Entry entry, Path at) throws IOException {
+            IOException before = unreadable.get(at);
+            if (before != null) {
+                throw before;
+            }
+            Map<String, List<String>> index = indexes.get(at);
+            if (index != null) {
+                return index;
+            }
+            try {
+                index = new HashMap<>();
+                try (var all = jarOf(entry, at).versionedStream()) {
+                    for (Iterator<JarEntry> listed = all.iterator(); listed.hasNext();) {
+                        entry.work().spend(1);
+                        String name = listed.next().getName();
+                        int slash = name.lastIndexOf('/');
+                        String fileName = name.substring(slash + 1);
+                        if (isClassFile(fileName)) {
+                            index.computeIfAbsent(slash < 0 ? "" : name.substring(0, slash),
+                                    _ -> new ArrayList<>()).add(fileName);
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                unreadable.put(at, e);
+                throw e;
+            }
+            indexes.put(at, index);
+            return index;
+        }
+
+        private byte[] bytesOf(Entry entry, Path at, String resource) throws IOException {
+            JarFile jar = jarOf(entry, at);
+            ZipEntry found = jar.getEntry(resource);
+            if (found == null) {
+                throw new java.io.FileNotFoundException(resource);
+            }
+            return jarEntryBytes(jar, found, BoundedRead.CLASS_FILE_BYTES);
+        }
+    }
+
+    /**
+     * An archive opened at the version this JVM runs at, having spent its number of entries from
+     * the request's budget. Opening one reads its whole directory, so what a request opens counts
+     * as looking at it even when it then asks for a single entry.
+     */
+    private static JarFile openJar(Entry entry, Path at) throws IOException {
+        JarFile jar = versioned(at);
+        try {
+            entry.work().spend(jar.size());
+        } catch (LimitExceededException e) {
+            jar.close();
+            throw e;
+        }
+        return jar;
+    }
+
+    private static boolean isClassFile(String fileName) {
+        return fileName.endsWith(".class") && !fileName.equals("module-info.class");
+    }
+
+    private static String binaryNameOf(String packageName, String classFileName) {
+        String simple = classFileName.substring(0, classFileName.length() - ".class".length());
+        return packageName.isEmpty() ? simple : packageName + "." + simple;
     }
 
     /** The simple name of a top-level class file, or null for a nested type or a descriptor. */
@@ -349,14 +648,14 @@ public final class JapiCommand {
     // ---- rendering ----
 
     private static int print(Found found, String binaryName, String member, PrintStream out,
-                             PrintStream err, String classPath) {
+                             PrintStream err, String classPath, ClassLookup lookup) {
         ClassModel cm = ClassFile.of().parse(found.bytes());
         String simpleName = binaryName.substring(binaryName.lastIndexOf('.') + 1);
         // A constructor is named for its own type. `Outer$Inner` is how the class file spells the
         // type, and `Inner` is what the source calls the constructor.
         String constructorName = simpleName.substring(simpleName.lastIndexOf('$') + 1);
         String source = sourceOf(found.entry(), binaryName);
-        SourceDoc doc = source == null ? SourceDoc.NONE : SourceDoc.of(source, binaryName, classPath);
+        SourceDoc doc = source == null ? SourceDoc.NONE : SourceDoc.of(source, binaryName, classPath, lookup);
         if (!cm.flags().flags().contains(AccessFlag.PUBLIC)) {
             // Asked for by name, so it is answered — but a caller outside its package cannot name
             // it, and this command's subject is what a dependency publishes.
@@ -697,34 +996,52 @@ public final class JapiCommand {
      * taken from some other copy of a library must not be described by the copy this tool happens
      * to carry.
      */
-    private static String sourceOf(Path entry, String binaryName) {
+    private static String sourceOf(Entry entry, String binaryName) {
         String path = binaryName.split("\\$")[0].replace('.', '/') + ".java";
         String beside = besideJar(entry, path);
         return beside != null ? beside : carriedInside(entry, "META-INF/souther-sources/" + path);
     }
 
-    private static String besideJar(Path entry, String path) {
-        String file = entry.getFileName().toString();
+    private static String besideJar(Entry entry, String path) {
+        String file = entry.path().getFileName().toString();
         if (!file.endsWith(".jar")) {
             return null;
         }
-        return readFrom(entry.resolveSibling(file.substring(0, file.length() - 4) + "-sources.jar"), path);
+        try {
+            return readFrom(entry, entry.beside(file.substring(0, file.length() - 4) + "-sources.jar"), path);
+        } catch (ConfinementException _) {
+            return null;   // a sources jar this run may not open is a jar that has no sources
+        } catch (IOException ex) {
+            throw new UncheckedIOException(ex);
+        }
     }
 
-    private static String carriedInside(Path entry, String path) {
-        return readFrom(entry, path);
+    private static String carriedInside(Entry entry, String path) {
+        try {
+            return readFrom(entry, entry.file(), path);
+        } catch (ConfinementException _) {
+            return null;
+        } catch (IOException ex) {
+            throw new UncheckedIOException(ex);
+        }
     }
 
-    private static String readFrom(Path jar, String path) {
+    private static String readFrom(Entry entry, Path jar, String path) throws IOException {
         if (!Files.isRegularFile(jar) || !jar.getFileName().toString().endsWith(".jar")) {
             return null;
         }
-        try (JarFile open = versioned(jar)) {
+        try (JarFile open = openJar(entry, jar)) {
             ZipEntry e = open.getEntry(path);
             return e == null ? null
-                    : new String(open.getInputStream(e).readAllBytes(), StandardCharsets.UTF_8);
-        } catch (IOException ex) {
-            throw new UncheckedIOException(ex);
+                    : new String(jarEntryBytes(open, e, BoundedRead.SOURCE_FILE_BYTES), StandardCharsets.UTF_8);
+        } catch (LimitExceededException _) {
+            return null;   // a source larger than a run reads is not read
+        }
+    }
+
+    private static byte[] jarEntryBytes(JarFile jar, ZipEntry entry, long mostBytes) throws IOException {
+        try (java.io.InputStream in = jar.getInputStream(entry)) {
+            return BoundedRead.bytes(in, mostBytes);
         }
     }
 }

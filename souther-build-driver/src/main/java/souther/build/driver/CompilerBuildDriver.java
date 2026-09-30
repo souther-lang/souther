@@ -13,12 +13,15 @@ import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
+import souther.compiler.io.ConfinedTree;
+import souther.compiler.io.ConfinementException;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -27,7 +30,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Stream;
 
 /** Drives the compiler for a build plugin. */
 public final class CompilerBuildDriver implements SoutherBuildDriver {
@@ -79,11 +81,7 @@ public final class CompilerBuildDriver implements SoutherBuildDriver {
         List<SourceFile> sources = new ArrayList<>();
         for (Path sourcePath : sourcePaths) {
             if (Files.isDirectory(sourcePath)) {
-                try (Stream<Path> walk = Files.walk(sourcePath)) {
-                    for (Path file : walk.filter(p -> p.toString().endsWith(".sou")).sorted().toList()) {
-                        sources.add(new SourceFile(file.toString(), Files.readString(file)));
-                    }
-                }
+                sources.addAll(CompilationSources.readTree(sourcePath));
             } else {
                 sources.add(new SourceFile(sourcePath.toString(), Files.readString(sourcePath)));
             }
@@ -106,49 +104,49 @@ public final class CompilerBuildDriver implements SoutherBuildDriver {
      */
     private static void write(Map<String, ClassFileImage> classes, Path outputDirectory,
                               Path stateDirectory) throws IOException {
+        ConfinedTree output = ConfinedTree.at(outputDirectory);
+        ConfinedTree state = ConfinedTree.at(stateDirectory);
         Set<String> written = new LinkedHashSet<>();
         for (Map.Entry<String, ClassFileImage> entry : classes.entrySet()) {
             String relative = entry.getKey().replace('.', '/') + ".class";
-            Path file = outputDirectory.resolve(relative);
-            Files.createDirectories(file.getParent());
-            Files.write(file, entry.getValue().bytes());
+            output.write(relative, entry.getValue().bytes());
             written.add(relative);
         }
-        remove(generatedBefore(stateDirectory), written, outputDirectory);
-        Files.createDirectories(stateDirectory);
-        Files.write(stateDirectory.resolve(GENERATED), written);
+        remove(generatedBefore(state), written, output);
+        state.write(GENERATED, String.join("\n", written).concat("\n").getBytes(StandardCharsets.UTF_8));
     }
 
     /** What the compile before this one wrote, or nothing when there was none. */
-    private static List<String> generatedBefore(Path stateDirectory) throws IOException {
-        Path record = stateDirectory.resolve(GENERATED);
-        return Files.exists(record) ? Files.readAllLines(record) : List.of();
+    private static List<String> generatedBefore(ConfinedTree state) throws IOException {
+        return state.isRegularFile(GENERATED)
+                ? state.readString(GENERATED, MOST_BYTES_OF_THE_RECORD).lines().toList() : List.of();
     }
 
-    private static void remove(List<String> before, Set<String> written, Path outputDirectory)
+    /**
+     * Takes back what an earlier compile wrote and this one did not.
+     *
+     * <p>The record is a file on disk, so a line in it names a file only as far as the output tree
+     * agrees: a line that goes outside the tree, or through a link in it, is skipped and deletes
+     * nothing.
+     */
+    private static void remove(List<String> before, Set<String> written, ConfinedTree output)
             throws IOException {
         for (String previous : before) {
             if (previous.isBlank() || written.contains(previous)) {
                 continue;
             }
-            Path stale = outputDirectory.resolve(previous);
-            Files.deleteIfExists(stale);
-            emptyParents(stale.getParent(), outputDirectory);
+            takeBack(previous, output);
         }
     }
 
-    /** Up from a removed class, while a directory is left with nothing in it. */
-    private static void emptyParents(Path from, Path outputDirectory) throws IOException {
-        Path directory = from;
-        while (directory != null && !directory.equals(outputDirectory)
-                && directory.startsWith(outputDirectory) && Files.isDirectory(directory)) {
-            try (Stream<Path> held = Files.list(directory)) {
-                if (held.findAny().isPresent()) {
-                    return;
-                }
-            }
-            Files.delete(directory);
-            directory = directory.getParent();
+    private static void takeBack(String previous, ConfinedTree output) throws IOException {
+        try {
+            output.deleteIfExists(previous);
+            output.deleteEmptyParents(previous);
+        } catch (ConfinementException _) {
+            // A line that names something outside the output tree deletes nothing.
         }
     }
+
+    private static final long MOST_BYTES_OF_THE_RECORD = 64L * 1024 * 1024;
 }

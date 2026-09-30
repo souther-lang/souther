@@ -24,6 +24,7 @@ import souther.compiler.doc.JapiCommand;
 import souther.compiler.doc.McpServer;
 import souther.compiler.fmt.Deviations;
 import souther.compiler.fmt.Formatter;
+import souther.compiler.io.ConfinedTree;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
@@ -1088,12 +1089,10 @@ public final class Main {
     /** Writes each class under {@code outDir}, and answers with the paths written, in order. */
     static List<Path> writeClasses(Map<String, ClassFileImage> classes, Path outDir)
             throws IOException {
+        ConfinedTree output = ConfinedTree.at(outDir);
         List<Path> written = new ArrayList<>();
         for (Map.Entry<String, ClassFileImage> entry : classes.entrySet()) {
-            Path file = outDir.resolve(JvmClassName.classFile(entry.getKey()));
-            Files.createDirectories(file.getParent());
-            Files.write(file, entry.getValue().bytes());
-            written.add(file);
+            written.add(output.write(JvmClassName.classFile(entry.getKey()), entry.getValue().bytes()));
         }
         return written;
     }
