@@ -60,7 +60,10 @@ final class ConfinedClassPath extends ForwardingJavaFileManager<StandardJavaFile
 
     @Override
     public boolean isSameFile(FileObject a, FileObject b) {
-        return a instanceof HeldClass || b instanceof HeldClass ? a == b : super.isSameFile(a, b);
+        if (a instanceof HeldClass || b instanceof HeldClass) {
+            return a == b;
+        }
+        return super.isSameFile(a, b);
     }
 
     @Override
