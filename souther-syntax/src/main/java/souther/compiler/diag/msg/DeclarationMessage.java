@@ -157,7 +157,12 @@ public sealed interface DeclarationMessage extends Message {
     @Code(DiagnosticCode.E2103)
     record AClassRefersPastTheConstantPool(String owner, String refersTo, String holds) implements DeclarationMessage, Reported {}
 
+    @Code(DiagnosticCode.E2103)
+    record AClassHoldsATextLongerThanAConstant(String owner, String holds) implements DeclarationMessage, Reported {}
+
     record MoveTheTableOutOfTheSource() implements DeclarationMessage, Supporting {}
+
+    record ShortenTheTextOrSplitWhatIsWritten() implements DeclarationMessage, Supporting {}
 
     record RemoveItAndCallItDirectly(String dependency) implements DeclarationMessage, Supporting {}
 

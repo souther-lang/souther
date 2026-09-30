@@ -534,7 +534,9 @@ public final class Backend {
         if (!recHelpers.isEmpty()) {
             // The helpers share one class, so the writer names a method rather than a definition: a
             // method it would not write is the helper whose name it is, and a pool it would not hold
-            // belongs to all of them and so to the module.
+            // belongs to all of them and so to the module. So does a text too long for a constant:
+            // one writer refuses it as the method is written and another only as the class is, and
+            // the definition it is said at may not turn on which JDK runs this.
             try {
                 out.put(new GeneratedClass.Helpers(module.name()), b.generateRecursiveHelpers(recHelpers));
             } catch (IllegalArgumentException e) {
@@ -589,9 +591,15 @@ public final class Backend {
         }
     }
 
-    /** The refusal as the diagnostic for {@code name}, or unchanged where it names no limit this
-     *  compiler answers for. */
-    private static RuntimeException asLimit(IllegalArgumentException e, WrittenName written) {
+    /**
+     * The refusal as the diagnostic for {@code written}, or unchanged where it names no limit this
+     * compiler answers for.
+     *
+     * <p>Open to what writes onto a class after the backend has emitted it. What a module carries
+     * for its readers is written onto its classes afterwards, and the class file refuses that by the
+     * same rules as anything emitted here.
+     */
+    public static RuntimeException asLimit(IllegalArgumentException e, WrittenName written) {
         JvmLimits.Exceeded exceeded = JvmLimits.exceeded(e);
         return exceeded == null ? e : JvmLimits.tooLarge(exceeded, written);
     }

@@ -3,6 +3,7 @@ package souther.compiler.meta;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
+import souther.compiler.ast.WrittenName;
 import souther.compiler.check.CarriedDefinitions;
 import souther.compiler.check.Preserved;
 import souther.compiler.check.ValueEntries;
@@ -97,9 +98,10 @@ public final class ModuleMetadata {
         List<String> types = new ArrayList<>();
         for (Ast.Def def : module.defs()) {
             types.add(def.name());
-            add(out, new GeneratedClass.Value(TypeSymbols.declared(def.declaredKey())),
+            writing(def.written(), () -> add(out,
+                    new GeneratedClass.Value(TypeSymbols.declared(def.declaredKey())),
                     Annotation.of(DATA_ANN,
-                            AnnotationElement.ofString("value", slices.defs().get(def.name()))));
+                            AnnotationElement.ofString("value", slices.defs().get(def.name())))));
         }
         List<String> behaviors = new ArrayList<>();
         for (Ast.BehaviorDef b : module.behaviors()) {
@@ -124,21 +126,38 @@ public final class ModuleMetadata {
                         + implementation.written() + " and reached publication requiring "
                         + required);
             }
-            add(out, new GeneratedClass.BehaviorInterface(module.name(), b.name()),
+            writing(b.written(), () -> add(out,
+                    new GeneratedClass.BehaviorInterface(module.name(), b.name()),
                     Annotation.of(BEHAVIOR_ANN,
                             AnnotationElement.ofString("signature", signature),
                             AnnotationElement.ofString("signatureFrom", from.written()),
                             AnnotationElement.ofString("implementation", implementation.written()),
-                            strings("requirements", PublishedRequirements.written(required))));
+                            strings("requirements", PublishedRequirements.written(required)))));
         }
-        out.put(new GeneratedClass.ModuleDeclarations(module.name()),
+        // The header and what the module carries as a whole belong to no one declaration, so a text
+        // too long among them is the module's.
+        writing(WrittenName.synthetic(module.name(), module.pos()), () -> out.put(
+                new GeneratedClass.ModuleDeclarations(module.name()),
                 Backend.moduleClass(module.name(), moduleAnnotation(module, resolved, slices, types,
                         behaviors, ValueAnswers.written(module.name(),
                                 ValueEntries.publishedValues(resolved), settledValues),
                         PublishedLinkages.written(out.provides()),
                         PublishedLinkages.written(out.requires()),
                         PublishedCopies.written(out.copies().provides()),
-                        PublishedCopies.written(out.copies().requires()))));
+                        PublishedCopies.written(out.copies().requires())))));
+    }
+
+    /**
+     * Writes what {@code write} writes as {@code written}'s, saying a text the class file will not
+     * hold as that declaration's. A declaration is carried as the source it was written as, and the
+     * source may be longer than one constant of a class file holds.
+     */
+    private static void writing(WrittenName written, Runnable write) {
+        try {
+            write.run();
+        } catch (IllegalArgumentException e) {
+            throw Backend.asLimit(e, written);
+        }
     }
 
     /**
