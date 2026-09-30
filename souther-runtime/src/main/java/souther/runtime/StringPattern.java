@@ -70,7 +70,7 @@ public final class StringPattern implements Predicate<String> {
         this.over = over;
         this.target = target;
         this.free = free;
-        this.live = live(accepting, over, target, free);
+        this.live = live(accepting, target, free);
     }
 
     /** Whether the whole of {@code value} is one of the strings. */
@@ -158,8 +158,7 @@ public final class StringPattern implements Predicate<String> {
     }
 
     /** Which states reach one a walk may stop at, walked back from those. */
-    private static boolean[] live(boolean[] accepting, int[][][] over, int[][] target,
-                                  int[][] free) {
+    private static boolean[] live(boolean[] accepting, int[][] target, int[][] free) {
         int states = accepting.length;
         List<List<Integer>> back = new ArrayList<>(states);
         for (int state = 0; state < states; state++) {
