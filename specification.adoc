@@ -7595,8 +7595,8 @@ Reported at the field (<<a-field-does-not-collide-with-an-object-method>>). `+eq
 
 [,text]
 ----
-The pattern `(a{1000}){100}` is run as a machine of its repetitions written out one copy after
-another, and that machine has more than 50000 states, which is the most a generated class runs for
+The pattern `(a{1000}){1000}` is run as a machine of its repetitions written out one copy after
+another, and that machine has more than 250000 states, which is the most a generated class runs for
 one pattern.
 Hint: A repetition counts as many copies of what it repeats as its larger count, and a repetition
 inside another counts the two multiplied. Write the counts smaller, or state the length apart from

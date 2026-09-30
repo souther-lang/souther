@@ -10,8 +10,9 @@ import souther.runtime.StringPattern;
  * {@code String.matches} call, a decoder's format constraint — asks here, so which machine a class
  * runs and how it is written are decided once.
  *
- * <p>The deterministic machine where making it stays within {@link PatternPlan.Budget#OF_A_DETERMINISTIC_RUN}
- * and its image within {@link #MOST_CHARACTERS}; otherwise the machine the pattern's shape builds,
+ * <p>The deterministic machine where the shape's machine and making it both stay within
+ * {@link PatternPlan.Budget#OF_A_DETERMINISTIC_RUN} and its image within {@link #MOST_CHARACTERS};
+ * otherwise the machine the pattern's shape builds,
  * steps for nothing and all. Both accept the same strings, so which one a class holds decides how
  * fast a run is and nothing about its answer. Only the shape's machine can refuse a pattern: past
  * {@link PatternPlan.Budget#OF_A_RUN}, or past the characters a class is given for one image, there
@@ -26,7 +27,7 @@ public sealed interface PatternImage {
      * strings each a class holds ({@link StringPattern#CHUNK}), and this keeps the number of those
      * small beside the constants the rest of the class refers to.
      */
-    int MOST_CHARACTERS = 1 << 20;
+    int MOST_CHARACTERS = 1 << 22;
 
     /** The image, as the strings the class holds it in. */
     record Written(List<String> strings) implements PatternImage {
@@ -48,7 +49,13 @@ public sealed interface PatternImage {
         if (shaped == null) {
             return new MoreStates(PatternPlan.Budget.OF_A_RUN.mostStates());
         }
-        Automaton one = shaped.canonical(PatternPlan.Budget.OF_A_DETERMINISTIC_RUN.meter());
+        // Not tried from a shape larger than the deterministic machine may be. Each state of that
+        // is a set of the shape's states worked out over every symbol, so what trying costs grows
+        // with the shape as well as with the machine, and a shape this large is the pattern a
+        // faster run was never going to be worth that for.
+        int most = PatternPlan.Budget.OF_A_DETERMINISTIC_RUN.mostStates();
+        Automaton one = shaped.size() > most ? null
+                : shaped.canonical(PatternPlan.Budget.OF_A_DETERMINISTIC_RUN.meter());
         if (one != null) {
             List<String> image = written(one, true);
             if (fits(image)) {

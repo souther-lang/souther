@@ -186,8 +186,13 @@ public final class PatternPlan {
          * what the compiler answers: past it the pattern is refused as larger than this backend
          * writes, where every other budget here leaves a question unanswered and the program as it
          * was. One machine and nothing thrown away, so the two numbers are the same.
+         *
+         * <p>Well above every budget a reading of the rules is allowed. A pattern the reading
+         * declines to build is left unanswered and the program stands, and a program that stands
+         * is one a class has to run; were this the same figure, the first pattern past the reading
+         * would be refused here instead.
          */
-        public static final Budget OF_A_RUN = new Budget(50_000, 50_000);
+        public static final Budget OF_A_RUN = new Budget(250_000, 250_000);
 
         /**
          * What making the machine a class runs deterministic is allowed to cost.

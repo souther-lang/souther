@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class APatternLargerThanAClassRunsIsRefusedWhereItIsWrittenTest {
 
-    private static final String TOO_LARGE = "(a{1000}){100}";
+    private static final String TOO_LARGE = "(a{1000}){1000}";
 
     @Test
     void aCallsPatternIsRefusedAtThePattern() {
@@ -59,6 +59,22 @@ class APatternLargerThanAClassRunsIsRefusedWhereItIsWrittenTest {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
         assertEquals("E2109", e.code(), e.getMessage());
         assertTrue(rendered(e, src).contains("demo.sou:2:"), rendered(e, src));
+    }
+
+    /**
+     * A pattern past what a reading of the rules builds is left unanswered by the reading, and the
+     * program stands; so a class runs it. {@code a{60000}} is the pattern the tests of those
+     * readings use to go past them.
+     */
+    @Test
+    void aPatternTheReadingLeavesUnansweredIsOneAClassRuns() throws Exception {
+        ClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+                data Code = String invariant String.matches("a{60000}", value)
+                """), getClass().getClassLoader());
+        Decoder<Object, ?> code = Codecs.decoder(loader, "demo.Code");
+        assertInstanceOf(Ok.class, code.decode("a".repeat(60_000), Path.ROOT));
+        assertInstanceOf(Err.class, code.decode("a".repeat(59_999), Path.ROOT));
     }
 
     /** And a class loads it and runs it: the decoder holds its value to it. */

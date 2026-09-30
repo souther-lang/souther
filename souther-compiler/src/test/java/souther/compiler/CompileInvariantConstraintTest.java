@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.DecoderKind;
 import net.unit8.raoh.Issue;
 import net.unit8.raoh.Path;
@@ -11,6 +12,11 @@ import net.unit8.raoh.decode.builtin.ListDecoder;
 import net.unit8.raoh.decode.builtin.RecordDecoder;
 import org.junit.jupiter.api.Test;
 
+import java.lang.classfile.ClassFile;
+import java.lang.classfile.ClassModel;
+import java.lang.classfile.constantpool.ConstantDynamicEntry;
+import java.lang.classfile.constantpool.PoolEntry;
+import java.lang.constant.ClassDesc;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -190,25 +196,30 @@ class CompileInvariantConstraintTest {
     }
 
     @Test
-    void aPatternIsCompiledOncePerDecoderNotPerDecode() throws Exception {
-        // The constraint chain is rebuilt on every decode call, so a regex compiled there would be
-        // recompiled per value; it is held in a static field of the decoder instead.
-        ClassLoader loader = new BytesClassLoader(Compiler.compile("""
+    void aPatternIsBuiltOncePerDecoderNotPerDecode() {
+        // The constraint chain is rebuilt on every decode call, so a machine built there would be
+        // built again per value; it is a dynamic constant of the decoder, which the JVM resolves
+        // once and answers from its pool after that.
+        Map<String, ClassFileImage> classes = Compiler.compile("""
                 module demo
 
                 data V = String
                     invariant String.matches("[0-9]{3}", value)
-                """), getClass().getClassLoader());
-        Class<?> dec = loader.loadClass(Emitted.decoder("demo", "V", DecoderKind.VALUE));
-        long patterns = java.util.Arrays.stream(dec.getDeclaredFields())
-                .filter(f -> f.getType() == java.util.regex.Pattern.class)
-                .filter(f -> java.lang.reflect.Modifier.isStatic(f.getModifiers()))
-                .count();
-        assertEquals(1, patterns, "the invariant's regex is a static field of the decoder");
+                """);
+        ClassModel dec = ClassFile.of().parse(
+                classes.get(Emitted.decoder("demo", "V", DecoderKind.VALUE)).bytes());
+        int patterns = 0;
+        for (PoolEntry entry : dec.constantPool()) {
+            if (entry instanceof ConstantDynamicEntry constant
+                    && constant.typeSymbol().equals(ClassDesc.of("souther.runtime.StringPattern"))) {
+                patterns++;
+            }
+        }
+        assertEquals(1, patterns, "the invariant's pattern is one dynamic constant of the decoder");
     }
 
-    /** Two patterns are two fields, whatever their texts: `Aa` and `BB` hash alike, and so does any
-     *  regex written from them the same way. */
+    /** Two patterns are two constants, whatever their texts: `Aa` and `BB` hash alike, and so would
+     *  any text written from them the same way. */
     @Test
     void twoPatternsAreKeptApartThoughTheirTextsHashAlike() throws Exception {
         Issue issue = soleIssue("""

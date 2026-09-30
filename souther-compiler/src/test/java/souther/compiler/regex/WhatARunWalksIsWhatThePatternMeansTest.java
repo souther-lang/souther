@@ -145,7 +145,7 @@ class WhatARunWalksIsWhatThePatternMeansTest {
     /** Past what a class runs as its shape, there is no machine and nothing else runs it. */
     @Test
     void aPatternWhoseShapeIsLargerThanAClassRunsHasNoImage() {
-        PatternMeaning meaning = ((PatternRead.Read) PatternParser.read("(a{1000}){100}")).meaning();
+        PatternMeaning meaning = ((PatternRead.Read) PatternParser.read("(a{1000}){1000}")).meaning();
         assertEquals(new PatternImage.MoreStates(PatternPlan.Budget.OF_A_RUN.mostStates()),
                 PatternImage.of(meaning));
     }
