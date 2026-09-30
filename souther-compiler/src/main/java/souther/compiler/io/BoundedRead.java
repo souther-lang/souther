@@ -12,14 +12,20 @@ import java.io.InputStream;
  */
 public final class BoundedRead {
 
-    /** The most bytes read of one class file, whoever wrote it. */
+    /** The most bytes read of one class file that was found on a class path. */
     public static final long CLASS_FILE_BYTES = 16L * 1024 * 1024;
 
-    /** The most bytes read of one source file, whoever wrote it. */
+    /**
+     * The most bytes read of one source file that was found under a root or inside an archive. A
+     * file the caller names directly is the caller's own and is read as it is.
+     */
     public static final long SOURCE_FILE_BYTES = 16L * 1024 * 1024;
 
-    /** The most entries of one directory tree or one archive that a walk or a listing looks at. */
+    /** The most entries of one directory tree or one archive that a single walk or listing looks at. */
     public static final long MOST_ENTRIES = 1_000_000;
+
+    /** The most entries all the scans of one request look at together; see {@link WorkBudget}. */
+    public static final long MOST_ENTRIES_PER_REQUEST = 4 * MOST_ENTRIES;
 
     private BoundedRead() {}
 

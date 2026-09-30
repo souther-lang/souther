@@ -4,11 +4,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystems;
 import java.nio.file.FileVisitOption;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardOpenOption;
@@ -16,6 +18,9 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * A directory, and the files below it that a name found there may reach.
@@ -36,6 +41,17 @@ import java.util.List;
 public final class ConfinedTree {
 
     private final Path root;
+
+    /** What the root resolves to, worked out once and only after the root exists. */
+    private Path realRoot;
+
+    /**
+     * Directories below the root found not to be links, so that a walk that reads many files under
+     * the same directories does not look at each directory again for every file. It is what this
+     * instance has seen: an instance is for one operation, and is not kept across the time in which
+     * a directory could be replaced.
+     */
+    private final Set<Path> checked = ConcurrentHashMap.newKeySet();
 
     private ConfinedTree(Path root) {
         this.root = root;
@@ -96,6 +112,34 @@ public final class ConfinedTree {
         }
         try (InputStream in = Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS)) {
             return BoundedRead.bytes(in, maxBytes);
+        }
+    }
+
+    /**
+     * What the file {@code relative} holds, or nothing when there is no such regular file to read —
+     * because there is none, because it is not a regular file, or because its name is refused. One
+     * resolution of the name, for a caller that would otherwise ask whether the file is there and
+     * then read it.
+     *
+     * @throws LimitExceededException when it holds more than {@code maxBytes}
+     */
+    public Optional<byte[]> readIfPresent(String relative, long maxBytes) throws IOException {
+        Path file;
+        try {
+            file = resolve(relative);
+        } catch (ConfinementException _) {
+            return Optional.empty();
+        }
+        try {
+            if (!Files.readAttributes(file, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS)
+                    .isRegularFile()) {
+                return Optional.empty();
+            }
+            try (InputStream in = Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS)) {
+                return Optional.of(BoundedRead.bytes(in, maxBytes));
+            }
+        } catch (NoSuchFileException _) {
+            return Optional.empty();
         }
     }
 
@@ -216,11 +260,18 @@ public final class ConfinedTree {
         Path at = root;
         for (int i = 0; i < names.size(); i++) {
             at = at.resolve(names.get(i));
+            boolean directory = i < names.size() - 1;
+            if (directory && checked.contains(at)) {
+                continue;
+            }
             if (Files.isSymbolicLink(at)) {
                 throw new ConfinementException(relative + " goes through a link");
             }
-            if (create && i < names.size() - 1 && !Files.exists(at, LinkOption.NOFOLLOW_LINKS)) {
+            if (create && directory && !Files.exists(at, LinkOption.NOFOLLOW_LINKS)) {
                 Files.createDirectory(at);
+            }
+            if (directory && Files.isDirectory(at, LinkOption.NOFOLLOW_LINKS)) {
+                checked.add(at);
             }
         }
         requireInsideRoot(at, relative);
@@ -233,17 +284,38 @@ public final class ConfinedTree {
      * nor a plain directory on a platform, such as a junction.
      */
     private void requireInsideRoot(Path at, String relative) throws IOException {
-        if (!Files.exists(root)) {
+        if (LINKS_ARE_THE_ONLY_REDIRECT) {
+            return;
+        }
+        Path realRoot = realRoot();
+        if (realRoot == null) {
             return;
         }
         Path present = at;
         while (present != null && !Files.exists(present, LinkOption.NOFOLLOW_LINKS)) {
             present = present.getParent();
         }
-        if (present != null && !present.toRealPath().startsWith(root.toRealPath())) {
+        if (present != null && !present.toRealPath().startsWith(realRoot)) {
             throw new ConfinementException(relative + " resolves outside " + root);
         }
     }
+
+    /** What the root resolves to, once it exists; {@code null} until then. */
+    private Path realRoot() throws IOException {
+        if (realRoot == null && Files.exists(root)) {
+            realRoot = root.toRealPath();
+        }
+        return realRoot;
+    }
+
+    /**
+     * Whether a link is the one way a component of a path can lead elsewhere. On a POSIX file system
+     * it is, and the walk over components has already refused it; asking the file system where the
+     * path really goes would repeat that at the price of resolving every path in full. Windows has
+     * junctions, which are not links, so it is asked there.
+     */
+    private static final boolean LINKS_ARE_THE_ONLY_REDIRECT =
+            FileSystems.getDefault().supportedFileAttributeViews().contains("posix");
 
     private static List<String> names(String relative) throws ConfinementException {
         if (relative.isEmpty() || relative.indexOf('\0') >= 0) {

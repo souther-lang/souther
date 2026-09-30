@@ -11,7 +11,11 @@ import java.util.List;
  * what the caller allows to be read. Given this instead, it asks for the classes of one package at
  * a time and gets bytes that were read the way every other file of the run is read.
  */
-interface ClassLookup {
+interface ClassLookup extends AutoCloseable {
+
+    /** Lets go of whatever the lookup holds open. */
+    @Override
+    void close() throws IOException;
 
     /** The classes directly in {@code packageName}, from every entry, in class path order. */
     List<Held> classesIn(String packageName) throws IOException;

@@ -115,7 +115,7 @@ public interface ModulePath {
                 // The resource is a name a source file chose, and the directory may be a project's
                 // class output that somebody else wrote; neither is allowed to reach past it.
                 ConfinedTree classes = ConfinedTree.at(entry);
-                return classes.isRegularFile(resource) ? classes.read(resource, BoundedRead.CLASS_FILE_BYTES) : null;
+                return classes.readIfPresent(resource, BoundedRead.CLASS_FILE_BYTES).orElse(null);
             }
             if (!Files.isRegularFile(entry)) {
                 return null;

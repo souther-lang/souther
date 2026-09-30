@@ -349,6 +349,78 @@ class TheJapiCommandReadsAJarsPublicApiTest {
         }
     }
 
+    /**
+     * A source names as many packages as its author writes, and javac asks the class path about each.
+     * What a request may look at is a budget for the whole of it, so the cost is the size of the
+     * archive once and not once for every package a source names.
+     */
+    @Test
+    void aSourceNamingManyPackagesCostsTheSizeOfTheJarOnceAndNotOncePerPackage() throws Exception {
+        Path base = Files.createTempDirectory("japi-budget");
+        Path workspace = Files.createDirectories(base.resolve("workspace"));
+        // The parameter is of a type that is only in the jar, in the package javac asks about last,
+        // so it is resolved only if the fiftieth question is still answered.
+        Path namedSource = Files.createDirectories(base.resolve("real/pkg49")).resolve("Named49.java");
+        Files.writeString(namedSource, "package pkg49;\npublic final class Named49 {}\n");
+        Path realSource = Files.createDirectories(base.resolve("real/acme")).resolve("Widget.java");
+        Files.writeString(realSource, """
+                package acme;
+
+                import pkg49.Named49;
+
+                public final class Widget {
+                    public void take(Named49 named) {}
+                }
+                """);
+        Path classes = Files.createDirectories(base.resolve("classes"));
+        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, OutputStream.nullOutputStream(),
+                OutputStream.nullOutputStream(), "-proc:none", "-d", classes.toString(),
+                namedSource.toString(), realSource.toString()));
+        Path widgetJar = workspace.resolve("widget-1.0.jar");
+        try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(widgetJar))) {
+            out.putNextEntry(new JarEntry("acme/Widget.class"));
+            out.write(Files.readAllBytes(classes.resolve("acme/Widget.class")));
+            out.putNextEntry(new JarEntry("pkg49/Named49.class"));
+            out.write(Files.readAllBytes(classes.resolve("pkg49/Named49.class")));
+            for (int i = 0; i < 300; i++) {
+                out.putNextEntry(new JarEntry("filler/F" + i + ".txt"));
+                out.write(new byte[]{1});
+            }
+        }
+        StringBuilder imports = new StringBuilder();
+        for (int i = 0; i < 50; i++) {
+            imports.append("import pkg").append(i).append(".Named").append(i).append(";\n");
+        }
+        try (JarOutputStream out = new JarOutputStream(
+                Files.newOutputStream(workspace.resolve("widget-1.0-sources.jar")))) {
+            out.putNextEntry(new JarEntry("acme/Widget.java"));
+            out.write(("package acme;\n\n" + imports + """
+
+                    public final class Widget {
+                        /** Takes a string. */
+                        public void take(Named49 named) {}
+                    }
+                    """).getBytes(StandardCharsets.UTF_8));
+        }
+
+        Answer enough = runConfinedWithin(workspace, 2_000, "acme.Widget", "-cp", widgetJar.toString());
+        Answer tooLittle = runConfinedWithin(workspace, 100, "acme.Widget", "-cp", widgetJar.toString());
+
+        assertTrue(enough.out().contains("Takes a string."),
+                "fifty packages named in the source do not cost fifty looks through the jar: " + enough);
+        assertEquals(2, tooLittle.code(), tooLittle.toString());
+        assertTrue(tooLittle.err().contains("in one request"), "the budget is what stopped it: " + tooLittle);
+    }
+
+    private Answer runConfinedWithin(Path root, long mostEntries, String... args) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        int code = JapiCommand.runConfined(args,
+                new PrintStream(out, true, StandardCharsets.UTF_8),
+                new PrintStream(err, true, StandardCharsets.UTF_8), root, mostEntries);
+        return new Answer(code, out.toString(StandardCharsets.UTF_8), err.toString(StandardCharsets.UTF_8));
+    }
+
     private Answer runConfined(Path root, String... args) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ByteArrayOutputStream err = new ByteArrayOutputStream();
