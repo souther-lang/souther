@@ -7,7 +7,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
-import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -60,9 +60,10 @@ public record HelperGraph(Map<ReachName.Declaration, Set<ReachName.Declaration>>
             callsOf.put(e.getKey(), HelperEdges.in(table.library(),
                     e.getValue().definition().writtenBody(), table.reachable()).calls());
         }
+        Map<ReachName.Declaration, Set<ReachName.Declaration>> onACycle = Cycles.groups(callsOf);
         List<ReachName.Declaration> recursive = new ArrayList<>();
         for (ReachName.Declaration reference : table.reachable().keySet()) {
-            if (reaches(callsOf, reference, reference, new HashSet<>())) {
+            if (onACycle.containsKey(reference)) {
                 recursive.add(reference);
             }
         }
@@ -91,30 +92,42 @@ public record HelperGraph(Map<ReachName.Declaration, Set<ReachName.Declaration>>
     }
 
     /**
-     * The declarations on a call cycle with {@code reference}: those it reaches through calls that
-     * reach it back, itself among them. Empty where it does not recurse.
+     * Each declaration on a call cycle, mapped to the declarations on it: those it reaches through
+     * calls that reach it back, itself among them. A declaration that does not recurse is not a key.
      *
-     * <p>Membership is asked with the predicate {@link #of} decides {@code recursive} with, and
-     * {@code reference} is a member exactly when it reaches itself — which is that predicate asked
-     * of it. So a declaration {@link #recurses} holds is on the cycle this answers for it, and one it
-     * does not hold has no cycle, by the one computation and not by two that happen to agree. A
-     * reader that relies on this — a group proven total is a group of no graphs where it is empty —
-     * still holds it to that ({@link TotalityChecker}).
+     * <p>The groups are the ones {@link #of} decides {@code recursive} with. So a declaration
+     * {@link #recurses} holds has a cycle here, and one it does not hold has none, by the one
+     * computation and not by two that happen to agree. A reader that relies on this — a group proven
+     * total is a group of no graphs where it is empty — still holds it to that
+     * ({@link TotalityChecker}).
      *
-     * <p>In the order the table holds them, which is the order they were declared. Worked out of the
-     * edges when asked rather than kept beside them: a graph's {@code equals} is what an answer built
-     * on it is compared by, and a second statement of the same edges would be a component that could
-     * only agree with them or be wrong.
+     * <p>Each cycle in the order the table holds its members, which is the order they were declared,
+     * and one list shared by every member of it. All of them at once, because a reader asking for
+     * one declaration's cycle asks for the next one's after it, and each answer is a walk of the
+     * whole graph. Worked out of the edges when asked rather than kept beside them: a graph's
+     * {@code equals} is what an answer built on it is compared by, and a second statement of the same
+     * edges would be a component that could only agree with them or be wrong.
      */
-    public List<ReachName.Declaration> callCycleOf(ReachName.Declaration reference) {
-        List<ReachName.Declaration> cycle = new ArrayList<>();
+    public Map<ReachName.Declaration, List<ReachName.Declaration>> callCycles() {
+        Map<ReachName.Declaration, Set<ReachName.Declaration>> groups = Cycles.groups(callsOf);
+        // By identity: every member of a group maps to the one set, and a set's own equals would
+        // read the whole group for each member.
+        Map<Set<ReachName.Declaration>, List<ReachName.Declaration>> declared = new IdentityHashMap<>();
         for (ReachName.Declaration member : callsOf.keySet()) {
-            if (reaches(callsOf, reference, member, new HashSet<>())
-                    && reaches(callsOf, member, reference, new HashSet<>())) {
-                cycle.add(member);
+            Set<ReachName.Declaration> group = groups.get(member);
+            if (group != null) {
+                declared.computeIfAbsent(group, _ -> new ArrayList<>()).add(member);
             }
         }
-        return List.copyOf(cycle);
+        declared.replaceAll((_, members) -> List.copyOf(members));
+        Map<ReachName.Declaration, List<ReachName.Declaration>> cycles = new LinkedHashMap<>();
+        for (ReachName.Declaration member : callsOf.keySet()) {
+            Set<ReachName.Declaration> group = groups.get(member);
+            if (group != null) {
+                cycles.put(member, declared.get(group));
+            }
+        }
+        return Collections.unmodifiableMap(cycles);
     }
 
     /** What {@code reference}'s body calls directly, or an empty set where it calls nothing this
@@ -135,25 +148,5 @@ public record HelperGraph(Map<ReachName.Declaration, Set<ReachName.Declaration>>
             }
         }
         return reached;
-    }
-
-    /** Whether {@code target} is reachable from {@code from}. The library's helpers never call a module's
-     * own helpers, so a cycle stays within the module's own helpers. */
-    private static boolean reaches(Map<ReachName.Declaration, Set<ReachName.Declaration>> callsOf,
-                                   ReachName.Declaration from, ReachName.Declaration target,
-                                   Set<ReachName.Declaration> seen) {
-        Set<ReachName.Declaration> called = callsOf.get(from);
-        if (called == null) {
-            return false;
-        }
-        for (ReachName.Declaration c : called) {
-            if (c.equals(target)) {
-                return true;
-            }
-            if (seen.add(c) && reaches(callsOf, c, target, seen)) {
-                return true;
-            }
-        }
-        return false;
     }
 }

@@ -3,9 +3,13 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.ValueName;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.SequencedSet;
 import java.util.Set;
@@ -84,21 +88,34 @@ public final class CarriedDefinitions {
      *
      * <p>One set does for both visited and reached: a helper is added the first time it is seen, and
      * nothing is ever taken out, so a second sighting stops the walk by itself.
+     *
+     * <p>On a stack of its own. A helper reached is walked into, so the walk is as deep as helpers
+     * call one another, and a module chains them as long as it likes. What is reached from a helper
+     * is walked before what stands after the name that reached it, which is the order the answer is
+     * in.
      */
-    private static void reach(Hir.Expr e, Map<String, Hir.FnDef> own, Set<String> reached) {
-        // What a name reaches, read off the name rather than off its spelling. A clause is written
-        // among bindings — a data's fields, a behavior's parameters, `value` — and one of those
-        // spelled like a helper is not a use of that helper. Answered by spelling, a parameter
-        // called `positive` carried the module's `positive` across the boundary, and one called
-        // like a behavior carried that behavior's implementation.
-        String named = e instanceof Hir.Var.Denoting var
-                && var.denotes() instanceof ValueName.Helper helper ? helper.name() : null;
-        if (named != null && own.containsKey(named) && reached.add(named)) {
+    private static void reach(Hir.Expr from, Map<String, Hir.FnDef> own, Set<String> reached) {
+        Deque<Hir.Expr> left = new ArrayDeque<>();
+        left.push(from);
+        while (!left.isEmpty()) {
+            Hir.Expr e = left.pop();
+            List<Hir.Expr> children = new ArrayList<>();
+            Hir.forEachChild(e, children::add);
+            for (Hir.Expr child : children.reversed()) {
+                left.push(child);
+            }
+            // What a name reaches, read off the name rather than off its spelling. A clause is
+            // written among bindings — a data's fields, a behavior's parameters, `value` — and one of
+            // those spelled like a helper is not a use of that helper. Answered by spelling, a
+            // parameter called `positive` carried the module's `positive` across the boundary, and
+            // one called like a behavior carried that behavior's implementation.
+            String named = e instanceof Hir.Var.Denoting var
+                    && var.denotes() instanceof ValueName.Helper helper ? helper.name() : null;
             // an `intrinsic` helper is a name with nothing to walk into
-            if (own.get(named).body() instanceof Hir.FnBody.Written w) {
-                reach(w.expr(), own, reached);
+            if (named != null && own.containsKey(named) && reached.add(named)
+                    && own.get(named).body() instanceof Hir.FnBody.Written w) {
+                left.push(w.expr());
             }
         }
-        Hir.forEachChild(e, c -> reach(c, own, reached));
     }
 }
