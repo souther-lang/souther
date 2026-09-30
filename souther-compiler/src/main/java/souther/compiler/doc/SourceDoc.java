@@ -136,8 +136,9 @@ final class SourceDoc {
                 return source;
             }
         };
+        // A class path may carry an annotation processor; reading documentation must not run one.
         List<String> options = classPath == null || classPath.isBlank()
-                ? List.of() : List.of("-classpath", classPath);
+                ? List.of("-proc:none") : List.of("-proc:none", "-classpath", classPath);
         JavacTask task = (JavacTask) compiler.getTask(
                 java.io.Writer.nullWriter(), null, diagnostic -> { }, options, List.of(), List.of(file));
 

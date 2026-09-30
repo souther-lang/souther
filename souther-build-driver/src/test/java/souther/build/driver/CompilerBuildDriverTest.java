@@ -77,6 +77,26 @@ class CompilerBuildDriverTest {
                 "what this compile did not write is not this compile's to remove");
     }
 
+    @Test
+    void aLineInTheGeneratedRecordThatNamesSomethingOutsideTheOutputIsNotDeleted(@TempDir Path dir)
+            throws IOException {
+        Path sources = Files.createDirectories(dir.resolve("src"));
+        Files.writeString(sources.resolve("money.sou"), """
+                module shared.money exposing ( Amount )
+                data Amount = Int
+                    invariant value >= 0
+                """);
+        Path classes = dir.resolve("classes");
+        Path state = Files.createDirectories(dir.resolve("state"));
+        Path victim = Files.writeString(dir.resolve("victim.txt"), "keep");
+        Files.write(state.resolve("generated"),
+                List.of("../victim.txt", victim.toAbsolutePath().toString()));
+
+        compiled(sources, classes, state);
+
+        assertTrue(Files.exists(victim), "the record is a file on disk and does not choose what is deleted");
+    }
+
     private static void compiled(Path sources, Path classes, Path state) {
         BuildResult result = new CompilerBuildDriver().compile(
                 new BuildRequest(List.of(sources), List.of(), classes, state, "en"));

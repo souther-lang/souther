@@ -14,6 +14,12 @@ import java.nio.charset.StandardCharsets;
  */
 public final class MessageConnection {
 
+    /** The largest message body read; the length comes off the wire, so it is bounded before it sizes a buffer. */
+    static final int MAX_MESSAGE_BYTES = 64 * 1024 * 1024;
+
+    /** The longest header line read. */
+    static final int MAX_HEADER_LINE_CHARS = 8 * 1024;
+
     private final InputStream in;
     private final OutputStream out;
 
@@ -36,7 +42,7 @@ public final class MessageConnection {
                 }
                 int colon = line.indexOf(':');
                 if (colon >= 0 && line.substring(0, colon).trim().equalsIgnoreCase("Content-Length")) {
-                    contentLength = Integer.parseInt(line.substring(colon + 1).trim());
+                    contentLength = parseContentLength(line.substring(colon + 1).trim());
                 }
             }
             if (contentLength < 0) {
@@ -72,12 +78,28 @@ public final class MessageConnection {
             return null;
         }
         while (c != -1 && c != '\n') {
+            if (sb.length() >= MAX_HEADER_LINE_CHARS) {
+                throw new IllegalStateException("message header line is longer than " + MAX_HEADER_LINE_CHARS);
+            }
             if (c != '\r') {
                 sb.append((char) c);
             }
             c = in.read();
         }
         return sb.toString();
+    }
+
+    private static int parseContentLength(String value) {
+        int length;
+        try {
+            length = Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            throw new IllegalStateException("Content-Length is not a number: " + value, e);
+        }
+        if (length < 0 || length > MAX_MESSAGE_BYTES) {
+            throw new IllegalStateException("Content-Length " + length + " is outside 0.." + MAX_MESSAGE_BYTES);
+        }
+        return length;
     }
 
     private byte[] readExactly(int n) throws IOException {

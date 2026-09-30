@@ -252,6 +252,69 @@ class TheJapiCommandReadsAJarsPublicApiTest {
     }
 
     @Test
+    void aNameThatWouldLeaveTheClassPathEntryIsRefused() {
+        for (String name : new String[]{"...", "../../etc", "acme/Greeter", "acme\\Greeter", "acme..Greeter",
+                ".acme", "acme.", "#member"}) {
+            Answer answer = run(name, "-cp", jar.toString());
+
+            assertEquals(2, answer.code(), name + ": " + answer.out() + answer.err());
+            assertTrue(answer.err().contains("not a fully qualified"), name + ": " + answer.err());
+        }
+    }
+
+    @Test
+    void anAnnotationProcessorOnTheClassPathIsNotRunToReadTheDocumentation() throws Exception {
+        Path dir = Files.createTempDirectory("japi-processor");
+        Path marker = dir.resolve("ran");
+        Path processorSource = dir.resolve("spy/Spy.java");
+        Files.createDirectories(processorSource.getParent());
+        Files.writeString(processorSource, """
+                package spy;
+
+                import java.util.Set;
+                import javax.annotation.processing.AbstractProcessor;
+                import javax.annotation.processing.RoundEnvironment;
+                import javax.lang.model.element.TypeElement;
+
+                public class Spy extends AbstractProcessor {
+                    @Override
+                    public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment round) {
+                        try {
+                            java.nio.file.Files.writeString(java.nio.file.Path.of("%s"), "ran");
+                        } catch (java.io.IOException e) {
+                            throw new java.io.UncheckedIOException(e);
+                        }
+                        return false;
+                    }
+
+                    @Override
+                    public Set<String> getSupportedAnnotationTypes() {
+                        return Set.of("*");
+                    }
+
+                    @Override
+                    public javax.lang.model.SourceVersion getSupportedSourceVersion() {
+                        return javax.lang.model.SourceVersion.latestSupported();
+                    }
+                }
+                """.formatted(marker.toString().replace("\\", "\\\\")));
+        Path processors = dir.resolve("classes");
+        Files.createDirectories(processors);
+        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, OutputStream.nullOutputStream(),
+                OutputStream.nullOutputStream(), "-proc:none", "-d", processors.toString(),
+                processorSource.toString()));
+        Path service = processors.resolve("META-INF/services/javax.annotation.processing.Processor");
+        Files.createDirectories(service.getParent());
+        Files.writeString(service, "spy.Spy\n");
+
+        Answer answer = run("acme.Greeter", "-cp", jar + java.io.File.pathSeparator + processors);
+
+        assertEquals(0, answer.code(), answer.err());
+        assertTrue(answer.out().contains("Says the greeting"), "the documentation is still read: " + answer.out());
+        assertFalse(Files.exists(marker), "the processor on the class path ran");
+    }
+
+    @Test
     void aClassPathEntryThatIsNotAnArchiveIsSaidAsSuchAndTheRestIsStillSearched() throws Exception {
         Path notAJar = Files.createTempFile("not-a", ".jar");
         Files.writeString(notAJar, "this is not a zip archive");

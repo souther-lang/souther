@@ -9,6 +9,7 @@ import tools.jackson.databind.node.ObjectNode;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -17,6 +18,7 @@ import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -302,7 +304,7 @@ public final class McpServer {
         Session session = new Session(loader);
         try {
             String line;
-            while ((line = reader.readLine()) != null) {
+            while ((line = readLine(reader)) != null) {
                 if (line.isBlank()) {
                     continue;
                 }
@@ -485,6 +487,13 @@ public final class McpServer {
                     new String[]{"--source", argument(arguments, "name")}, stream, stream, Caller.MCP);
             case "jar_api" -> {
                 String classpath = argument(arguments, "classpath");
+                String outside = entryOutsideWorkingDirectory(classpath);
+                if (outside != null) {
+                    stream.println("`classpath` entry `" + outside
+                            + "` is not under the working directory; only jars and class directories"
+                            + " inside it can be searched");
+                    yield 2;
+                }
                 String[] args = classpath.isEmpty()
                         ? new String[]{argument(arguments, "name")}
                         : new String[]{argument(arguments, "name"), "-cp", classpath};
@@ -558,6 +567,53 @@ public final class McpServer {
         content.put("text", said);
         result.put("isError", true);
         return result;
+    }
+
+    /**
+     * The first entry of {@code classpath} that is not under the working directory, or {@code null}.
+     * The argument comes from a client that may be an agent reading untrusted text, so it does not
+     * choose which part of the disk is read.
+     */
+    static String entryOutsideWorkingDirectory(String classpath) {
+        Path root = Path.of(".").toAbsolutePath().normalize();
+        for (String entry : classpath.split(File.pathSeparator)) {
+            if (entry.isEmpty()) {
+                continue;
+            }
+            Path path = Path.of(entry).toAbsolutePath().normalize();
+            try {
+                path = path.toRealPath();
+                root = root.toRealPath();
+            } catch (IOException _) {
+                // An entry that does not exist is judged by where it says it is.
+            }
+            if (!path.startsWith(root)) {
+                return entry;
+            }
+        }
+        return null;
+    }
+
+    /** The longest request line read, in characters. */
+    private static final int LONGEST_REQUEST_LINE = 16 * 1024 * 1024;
+
+    /** One line, or {@code null} at end of input; a line past the limit is skipped to its end and
+     *  answered as one that does not parse. */
+    private static String readLine(BufferedReader reader) throws IOException {
+        StringBuilder line = new StringBuilder();
+        boolean tooLong = false;
+        int c;
+        while ((c = reader.read()) != -1 && c != '\n') {
+            if (line.length() < LONGEST_REQUEST_LINE) {
+                line.append((char) c);
+            } else {
+                tooLong = true;
+            }
+        }
+        if (c == -1 && line.isEmpty() && !tooLong) {
+            return null;
+        }
+        return tooLong ? "{" : line.toString();
     }
 
     private static String argument(JsonNode arguments, String name) {

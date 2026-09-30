@@ -71,6 +71,10 @@ if ($From) {
     $Version = $latest.tag_name -replace '^v', ''
 }
 
+if ($Version -notmatch '^\d+\.\d+\.\d+([-.+][0-9A-Za-z.]+)?$') {
+    throw "version '$Version' is not a release version such as 1.2.3"
+}
+
 $archive = if ($Nojdk) { "souther-$Version-windows-x64-nojdk.zip" } else { "souther-$Version-windows-x64.zip" }
 
 $work = Join-Path ([IO.Path]::GetTempPath()) ("souther-install-" + [Guid]::NewGuid())

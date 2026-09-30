@@ -4,7 +4,9 @@ import souther.compiler.examples.Deadline;
 import souther.compiler.execute.EvaluationPolicy;
 
 import java.time.Duration;
+import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
@@ -49,6 +51,16 @@ public final class JvmDeadlines {
      * this, which is why it is not among the terms a run is held to.
      */
     private static final long DEFAULT_WORKER_STACK_BYTES = 64L * 1024 * 1024;
+
+    /**
+     * Workers that overran their deadline and are still running. Interrupting a worker does not
+     * stop code that reaches no interrupt point, so an abandoned worker goes on spending CPU and
+     * heap; a long-lived process that keeps starting runs would accumulate them until it ran out
+     * of memory. Past {@link #MOST_ABANDONED} of them, a new run is refused.
+     */
+    private static final Set<Thread> ABANDONED = ConcurrentHashMap.newKeySet();
+
+    private static final int MOST_ABANDONED = 8;
 
     /** The stack this JVM's settings ask a worker to be given, on the terms
      *  {@link EvaluationPolicy#fromSettings} states: a setting that is missing, unreadable or not
@@ -114,6 +126,12 @@ public final class JvmDeadlines {
                             + " what a run within a run is held to, and where its applications go,"
                             + " is not decided");
                 }
+                ABANDONED.removeIf(thread -> !thread.isAlive());
+                if (ABANDONED.size() >= MOST_ABANDONED) {
+                    return new Deadline.Outcome.Threw<>(new IllegalStateException(
+                            MOST_ABANDONED + " runs that overran their deadline are still running in this JVM;"
+                                    + " reading " + work.target() + " would add another"));
+                }
                 Handoff handoff = new Handoff();
                 FutureTask<T> task = new FutureTask<>(() -> handoff.installedFor(body));
                 // A daemon, because work that overran is asked to stop and cannot be made to: a
@@ -129,6 +147,7 @@ public final class JvmDeadlines {
                         return new Deadline.Outcome.Overran<>(() -> {
                             handoff.abandon();
                             task.cancel(true);
+                            ABANDONED.add(worker);
                         });
                     }
                     return new Deadline.Outcome.Finished<>(task.get());

@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Abandonment;
@@ -244,7 +245,8 @@ public final class Workspace {
                 // spends its time on, and how many of them end in `.sou` says nothing about that.
                 walk.forEach(path -> {
                     abandonment.stopIfAsked();
-                    if (Files.isRegularFile(path) && path.getFileName().toString().endsWith(SUFFIX)) {
+                    if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
+                            && path.getFileName().toString().endsWith(SUFFIX)) {
                         sources.put(path.toUri().toString(), readOrEmpty(path));
                     }
                 });
@@ -255,8 +257,14 @@ public final class Workspace {
         return sources;
     }
 
+    /** The largest source file the scan reads; a bigger one contributes nothing. */
+    private static final long LARGEST_SOURCE_BYTES = 16L * 1024 * 1024;
+
     private static String readOrEmpty(Path p) {
         try {
+            if (Files.size(p) > LARGEST_SOURCE_BYTES) {
+                return "";
+            }
             return Files.readString(p);
         } catch (IOException _) {
             return "";   // a file that cannot be read contributes nothing, but never crashes the scan

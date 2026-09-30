@@ -47,6 +47,10 @@ public final class JapiCommand {
     /** How many names a miss is answered with. */
     private static final int MOST_SUGGESTIONS = 3;
 
+    /** How deep, and through how many files, the search for names to suggest walks one directory entry. */
+    private static final int DEEPEST_WALK = 32;
+    private static final long MOST_FILES_WALKED = 100_000;
+
     private JapiCommand() {}
 
     public static int run(String[] args, PrintStream out, PrintStream err) {
@@ -99,6 +103,10 @@ public final class JapiCommand {
         if (hash >= 0) {
             member = name.substring(hash + 1);
             name = name.substring(0, hash);
+        }
+        if (!isQualifiedName(name)) {
+            err.println("`" + name + "` is not a fully qualified class or package name");
+            return 2;
         }
 
         String classPath = entries.stream().map(e -> e.path().toString())
@@ -188,8 +196,8 @@ public final class JapiCommand {
         for (Entry entry : entries) {
             try {
                 if (Files.isDirectory(entry.path())) {
-                    try (var files = Files.walk(entry.path())) {
-                        files.filter(Files::isRegularFile).forEach(f -> add(names,
+                    try (var files = Files.walk(entry.path(), DEEPEST_WALK)) {
+                        files.limit(MOST_FILES_WALKED).filter(Files::isRegularFile).forEach(f -> add(names,
                                 entry.path().relativize(f).toString().replace(java.io.File.separatorChar, '/')));
                     }
                 } else if (Files.isRegularFile(entry.path())) {
@@ -227,6 +235,21 @@ public final class JapiCommand {
     /** A class's bytes and the classpath entry they came from — kept together because the
      *  sources jar, and with it the javadoc, is found from the entry. */
     private record Found(byte[] bytes, Path entry) {}
+
+    /** A dotted run of Java identifiers. The name becomes a path under each class path entry, so a
+     *  `..` segment, a separator or an empty segment would reach outside it. */
+    private static boolean isQualifiedName(String name) {
+        if (name.isEmpty()) {
+            return false;
+        }
+        for (String segment : name.split("\\.", -1)) {
+            if (segment.isEmpty() || !Character.isJavaIdentifierStart(segment.codePointAt(0))
+                    || !segment.codePoints().allMatch(Character::isJavaIdentifierPart)) {
+                return false;
+            }
+        }
+        return true;
+    }
 
     private static Found findClass(String binaryName, List<Entry> entries, Skipped skipped) {
         String resource = JvmClassName.classFile(binaryName);

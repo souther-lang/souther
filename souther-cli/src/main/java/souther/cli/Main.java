@@ -1090,7 +1090,10 @@ public final class Main {
             throws IOException {
         List<Path> written = new ArrayList<>();
         for (Map.Entry<String, ClassFileImage> entry : classes.entrySet()) {
-            Path file = outDir.resolve(JvmClassName.classFile(entry.getKey()));
+            Path file = outDir.resolve(JvmClassName.classFile(entry.getKey())).normalize();
+            if (!file.startsWith(outDir.normalize())) {
+                throw new IOException("class `" + entry.getKey() + "` would be written outside " + outDir);
+            }
             Files.createDirectories(file.getParent());
             Files.write(file, entry.getValue().bytes());
             written.add(file);

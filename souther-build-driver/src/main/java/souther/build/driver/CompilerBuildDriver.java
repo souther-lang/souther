@@ -109,7 +109,11 @@ public final class CompilerBuildDriver implements SoutherBuildDriver {
         Set<String> written = new LinkedHashSet<>();
         for (Map.Entry<String, ClassFileImage> entry : classes.entrySet()) {
             String relative = entry.getKey().replace('.', '/') + ".class";
-            Path file = outputDirectory.resolve(relative);
+            Path file = outputDirectory.resolve(relative).normalize();
+            if (!file.startsWith(outputDirectory.normalize())) {
+                throw new IOException("class `" + entry.getKey() + "` would be written outside "
+                        + outputDirectory);
+            }
             Files.createDirectories(file.getParent());
             Files.write(file, entry.getValue().bytes());
             written.add(relative);
@@ -131,7 +135,12 @@ public final class CompilerBuildDriver implements SoutherBuildDriver {
             if (previous.isBlank() || written.contains(previous)) {
                 continue;
             }
-            Path stale = outputDirectory.resolve(previous);
+            // The record is a file on disk, so a line in it is not trusted to name something under
+            // the output directory.
+            Path stale = outputDirectory.resolve(previous).normalize();
+            if (!stale.startsWith(outputDirectory.normalize())) {
+                continue;
+            }
             Files.deleteIfExists(stale);
             emptyParents(stale.getParent(), outputDirectory);
         }
