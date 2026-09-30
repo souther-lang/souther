@@ -89,6 +89,17 @@ final class Automaton {
         return steps.get(state);
     }
 
+    /**
+     * The states a walk at {@code state} is also in without spending a symbol.
+     *
+     * <p>For a reader in this package writing the machine out as it is, steps for nothing included:
+     * a run walks those as they are, and removing them would copy each step after one into every
+     * state before it.
+     */
+    int[] freeFrom(int state) {
+        return free.get(state).clone();
+    }
+
     /** Whether a walk may stop at {@code state}. */
     boolean stopsAt(int state) {
         return accepting.get(state);

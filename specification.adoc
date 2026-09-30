@@ -5032,6 +5032,8 @@ Two more come from names rather than sizes:
 
 The first is decided at the declaration, before anything is emitted. The other two are not known until the code is written, and are reported as the definition being emitted when the limit was met.
 
+[[a-pattern-runs-as-a-machine-a-class-holds]]A pattern (<<string-patterns>>) is run as a machine the compiler builds from what the pattern means and writes into the class, and that machine MUST be within what a generated class runs for one pattern (<<e2109>>). A class holds no pattern text and hands none to an engine, so whether a string is one of a pattern's strings is answered by walking the machine over the string once: for a given pattern the time is proportional to the string's length and no stack grows with it. Where the compiler can afford to make the machine deterministic a character costs one step, and where it cannot the class runs the machine the pattern's shape builds instead, which answers the same. Which of the two a class holds is not a limit: only the machine the shape builds can put a pattern past this one, and that machine is the pattern's repetitions written out one copy after another.
+
 [#target-jdk]
 === Target JDK
 
@@ -7587,6 +7589,21 @@ the same name, and `hashCode()` is already a method every class has.
 ----
 
 Reported at the field (<<a-field-does-not-collide-with-an-object-method>>). `+equals+` is not among them: `+equals()+` and `+equals(Object)+` are different methods, and Java allows it as a component name.
+
+[#e2109]
+=== A pattern's machine is larger than a class runs
+
+[,text]
+----
+The pattern `(a{1000}){100}` is run as a machine of its repetitions written out one copy after
+another, and that machine has more than 50000 states, which is the most a generated class runs for
+one pattern.
+Hint: A repetition counts as many copies of what it repeats as its larger count, and a repetition
+inside another counts the two multiplied. Write the counts smaller, or state the length apart from
+the pattern with `String.length`.
+----
+
+Reported where a pattern is lowered to the machine a class runs (<<a-pattern-runs-as-a-machine-a-class-holds>>): at the pattern of a `+String.matches+` call, and at the `+data+` whose clause a decoder's format constraint was read from. What is counted is the pattern's repetitions written out, so it turns on the counts a pattern writes and not on how long its text is. The same machine written into the class may instead be longer than a class is given for one pattern, and that is reported under this code too, with the number of characters.
 
 [#e2301]
 === A declaration is not written in its form

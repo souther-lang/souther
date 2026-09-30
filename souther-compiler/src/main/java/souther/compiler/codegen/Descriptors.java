@@ -8,6 +8,7 @@ import java.lang.classfile.attribute.RuntimeVisibleAnnotationsAttribute;
 import java.lang.classfile.attribute.SourceFileAttribute;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
+import java.lang.constant.DirectMethodHandleDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.util.function.Consumer;
 
@@ -207,10 +208,15 @@ final class Descriptors {
     static final ClassDesc CD_Instant = ClassDesc.of("java.time.Instant");
     static final ClassDesc CD_Lists = ClassDesc.of("souther.runtime.Lists");
     static final ClassDesc CD_Strings = ClassDesc.of("souther.runtime.Strings");
-    /** {@code Strings.matches(String subject, String pattern)}: whether the whole of the subject
-     *  matches a pattern the compiler wrote. */
+    static final ClassDesc CD_StringPattern = ClassDesc.of("souther.runtime.StringPattern");
+    /** {@code Strings.matches(String subject, StringPattern pattern)}: whether the whole of the
+     *  subject is one of the strings the pattern's machine accepts. */
     static final MethodTypeDesc MTD_strings_matches =
-            MethodTypeDesc.of(ConstantDescs.CD_boolean, ConstantDescs.CD_String, ConstantDescs.CD_String);
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, ConstantDescs.CD_String, CD_StringPattern);
+    /** {@code StringPattern.read(Lookup, String, Class, String...)}: the bootstrap of the constant a
+     *  pattern's machine is loaded as, handed the strings its image was cut into. */
+    static final DirectMethodHandleDesc BSM_stringPattern = ConstantDescs.ofConstantBootstrap(
+            CD_StringPattern, "read", CD_StringPattern, ConstantDescs.CD_String.arrayType());
     static final ClassDesc CD_Maps = ClassDesc.of("souther.runtime.Maps");
     static final ClassDesc CD_Sets = ClassDesc.of("souther.runtime.Sets");
     static final ClassDesc CD_Representations = ClassDesc.of("souther.runtime.Representations");
@@ -469,11 +475,7 @@ final class Descriptors {
      *  decoder itself, so the parse still chains off it. */
     static final MethodTypeDesc MTD_refineString =
             MethodTypeDesc.of(CD_StringDecoder, CD_Predicate, CD_String, CD_String);
-    static final ClassDesc CD_Pattern = ClassDesc.of("java.util.regex.Pattern");
-    static final MethodTypeDesc MTD_patternCompile = MethodTypeDesc.of(CD_Pattern, CD_String);
     static final MethodTypeDesc MTD_strLengthBound = MethodTypeDesc.of(CD_StringDecoder, ConstantDescs.CD_int);
-    /** {@code Pattern.asMatchPredicate()}: whether the whole of a string matches. */
-    static final MethodTypeDesc MTD_asMatchPredicate = MethodTypeDesc.of(CD_Predicate);
     /** {@code StringDecoder.refine(Predicate, BiFunction)}: the failure built by the caller, and the
      *  string decoder itself back so the chain of string constraints goes on. */
     static final MethodTypeDesc MTD_refineStringFailing =

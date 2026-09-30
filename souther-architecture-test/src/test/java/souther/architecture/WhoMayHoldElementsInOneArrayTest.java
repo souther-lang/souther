@@ -59,7 +59,10 @@ class WhoMayHoldElementsInOneArrayTest {
      * as the marks of one combining run of such a string, since no mark that decomposes stands in
      * one ({@code AMarkThatDecomposesIsNeverItsOwnNfcTest}): {@code Normalization.Composing}. As long
      * as a host list the members of an external form already arrived in, which may hold {@code null}
-     * that no {@code List} of the language holds: {@code Representations.sortedMembers}.
+     * that no {@code List} of the language holds: {@code Representations.sortedMembers}. As long as
+     * the machine a pattern's image writes, whose states and characters the compiler that wrote it
+     * bounded, or the states of one such machine a walk is in: {@code StringPattern} and its
+     * {@code Writer}.
      */
     private static final List<String> MAY_HOLD_ONE_ARRAY = List.of(
             "souther/exact/ExactOrder#allWrittenOut new java/math/BigInteger[]",
@@ -82,6 +85,24 @@ class WhoMayHoldElementsInOneArrayTest {
                     + " java/util/List.sort(Ljava/util/Comparator;)V",
             "souther/runtime/Sorting$Slots#<init> new [Ljava/lang/Object;[]",
             "souther/runtime/Sorting$Slots#<init> new java/lang/Object[]",
+            "souther/runtime/StringPattern#live java/util/ArrayList.<init>()V",
+            "souther/runtime/StringPattern#live java/util/ArrayList.<init>(I)V",
+            "souther/runtime/StringPattern#live new I[]",
+            "souther/runtime/StringPattern#live new Z[]",
+            "souther/runtime/StringPattern#of new I[]",
+            "souther/runtime/StringPattern#of new Z[]",
+            "souther/runtime/StringPattern#of new [I[]",
+            "souther/runtime/StringPattern#of new [[I[]",
+            "souther/runtime/StringPattern#runs java/util/ArrayList.<init>()V",
+            "souther/runtime/StringPattern#runs java/util/List.sort(Ljava/util/Comparator;)V",
+            "souther/runtime/StringPattern#runs new I[]",
+            "souther/runtime/StringPattern#runs new [I[]",
+            "souther/runtime/StringPattern#spread new I[]",
+            "souther/runtime/StringPattern$Writer#<init> java/util/ArrayList.<init>()V",
+            "souther/runtime/StringPattern$Writer#image java/util/ArrayList.<init>()V",
+            "souther/runtime/StringPattern$Writer#image"
+                    + " java/util/List.copyOf(Ljava/util/Collection;)Ljava/util/List;",
+            "souther/runtime/StringPattern$Writer#state java/util/ArrayList.<init>()V",
             "souther/runtime/Strings#mapCase java/util/stream/IntStream.toArray()[I",
             "souther/unicode/Normalization#<clinit> java/util/stream/IntStream.toArray()[I",
             "souther/unicode/Normalization#<clinit> java/util/stream/LongStream.toArray()[J",
