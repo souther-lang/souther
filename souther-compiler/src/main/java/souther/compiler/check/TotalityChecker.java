@@ -63,7 +63,9 @@ final class TotalityChecker {
         inliner.held().values().forEach(
                 entry -> own.put(entry.address().text(), entry.definition()));
         Set<ReachName.Declaration> handled = new HashSet<>();
-        Map<ReachName.Declaration, List<ReachName.Declaration>> cycles = inliner.callCycles();
+        // Asked of the whole graph, prelude included, so only once a group of this module's own is
+        // there to be checked.
+        Map<ReachName.Declaration, List<ReachName.Declaration>> cycles = null;
         for (ReachName.Declaration reference : inliner.recursiveHelpers()) {
             // What the inliner answers is what this module holds, so each has an address here. One
             // without is refused rather than passed over: passed over, it is a recursion nobody
@@ -84,6 +86,9 @@ final class TotalityChecker {
             }
             if (!handled.add(reference)) {
                 continue;   // a sibling of an already-analyzed group
+            }
+            if (cycles == null) {
+                cycles = inliner.callCycles();
             }
             Map<ReachName.Declaration, String> group = groupOf(reference,
                     cycles.getOrDefault(reference, List.of()), inliner, own);

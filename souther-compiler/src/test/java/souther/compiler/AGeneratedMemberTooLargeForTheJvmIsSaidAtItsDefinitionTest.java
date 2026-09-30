@@ -106,14 +106,17 @@ class AGeneratedMemberTooLargeForTheJvmIsSaidAtItsDefinitionTest {
 
     @Test
     void aHeaderLongerThanOneConstantHoldsIsSaidAtTheModule() {
+        // Few declarations with long names: what is measured is the header's text, and a
+        // declaration costs the compile far more than the length of its name does.
+        String longName = "T" + "x".repeat(400);
         StringBuilder src = new StringBuilder("module demo exposing ( ");
-        int names = 5000;
+        int names = 170;
         for (int i = 0; i < names; i++) {
-            src.append(i == 0 ? "" : ", ").append("ATypeWithALongishName").append(i);
+            src.append(i == 0 ? "" : ", ").append(longName).append(i);
         }
         src.append(" )\n\n");
         for (int i = 0; i < names; i++) {
-            src.append("data ATypeWithALongishName").append(i).append(" = Int\n");
+            src.append("data ").append(longName).append(i).append(" = Int\n");
         }
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compile(src.toString()));

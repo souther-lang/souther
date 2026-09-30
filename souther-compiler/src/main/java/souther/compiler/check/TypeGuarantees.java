@@ -240,6 +240,7 @@ final class TypeGuarantees {
         // On a stack of its own, because what is under a type is as deep as its declarations chain.
         Set<TypeSymbol> seen = new HashSet<>();
         Deque<Type> left = new ArrayDeque<>();
+        List<Type> under = new ArrayList<>();
         left.push(type);
         while (!left.isEmpty()) {
             ValueReading written = ValueReading.of(left.pop(), inners(), kinds(), symbols,
@@ -253,11 +254,12 @@ final class TypeGuarantees {
                 }
             }
             // Pushed last first, so what is under here is read in the order it is written.
-            List<Type> under = new ArrayList<>(written.named().values());
+            under.addAll(written.named().values());
             under.addAll(written.handedOn());
             for (Type each : under.reversed()) {
                 left.push(each);
             }
+            under.clear();
         }
         return false;
     }

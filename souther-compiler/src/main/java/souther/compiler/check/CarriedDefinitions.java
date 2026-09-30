@@ -96,14 +96,17 @@ public final class CarriedDefinitions {
      */
     private static void reach(Hir.Expr from, Map<String, Hir.FnDef> own, Set<String> reached) {
         Deque<Hir.Expr> left = new ArrayDeque<>();
+        // One list for every node's children, emptied as each is pushed: they are pushed last first
+        // so that the first is walked first.
+        List<Hir.Expr> children = new ArrayList<>();
         left.push(from);
         while (!left.isEmpty()) {
             Hir.Expr e = left.pop();
-            List<Hir.Expr> children = new ArrayList<>();
             Hir.forEachChild(e, children::add);
             for (Hir.Expr child : children.reversed()) {
                 left.push(child);
             }
+            children.clear();
             // What a name reaches, read off the name rather than off its spelling. A clause is
             // written among bindings — a data's fields, a behavior's parameters, `value` — and one of
             // those spelled like a helper is not a use of that helper. Answered by spelling, a
