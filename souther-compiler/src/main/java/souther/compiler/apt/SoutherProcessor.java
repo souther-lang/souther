@@ -2,6 +2,7 @@ package souther.compiler.apt;
 
 import souther.compiler.CompilationSources;
 import souther.compiler.CompilationSources.SourceFile;
+import souther.compiler.io.BoundedRead;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.HumanRenderer;
@@ -155,7 +156,7 @@ public final class SoutherProcessor extends AbstractProcessor {
             String simple = binaryName.substring(lastDot + 1) + ".class";
             try (InputStream in = filer.getResource(StandardLocation.CLASS_PATH, pkg, simple)
                     .openInputStream()) {
-                return in.readAllBytes();
+                return BoundedRead.bytes(in, BoundedRead.CLASS_FILE_BYTES);
             } catch (IOException | IllegalArgumentException | UnsupportedOperationException _) {
                 return null;
             }

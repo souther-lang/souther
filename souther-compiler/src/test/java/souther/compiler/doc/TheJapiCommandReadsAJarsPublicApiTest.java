@@ -284,6 +284,71 @@ class TheJapiCommandReadsAJarsPublicApiTest {
         assertFalse(listing.out().contains("acme.Secret"), "nor is the class listed: " + listing);
     }
 
+    /**
+     * The types a source names are resolved by javac, which searches a class path with its own file
+     * access. A confined run has to resolve them through the same confinement as everything else:
+     * the class asked for is inside the root, and the type it mentions is only behind a link or
+     * outside it.
+     */
+    @Test
+    void aTypeTheSourceNamesIsNotResolvedThroughALinkOrFromOutsideTheRoot() throws Exception {
+        Path base = Files.createTempDirectory("japi-types");
+        Path extSource = Files.createDirectories(base.resolve("outside/src/ext")).resolve("Ext.java");
+        Files.writeString(extSource, "package ext;\npublic final class Ext {}\n");
+        Path outsideClasses = Files.createDirectories(base.resolve("outside/classes"));
+        JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
+        assertEquals(0, javac.run(null, OutputStream.nullOutputStream(), OutputStream.nullOutputStream(),
+                "-proc:none", "-d", outsideClasses.toString(), extSource.toString()));
+
+        Path workspace = Files.createDirectories(base.resolve("workspace"));
+        Path widgetSource = Files.createDirectories(base.resolve("widget/src/acme")).resolve("Widget.java");
+        Files.writeString(widgetSource, """
+                package acme;
+
+                import ext.Ext;
+
+                public final class Widget {
+                    /** Takes the outside type. */
+                    public void take(Ext outside) {}
+                }
+                """);
+        Path widgetClasses = Files.createDirectories(base.resolve("widget/classes"));
+        assertEquals(0, javac.run(null, OutputStream.nullOutputStream(), OutputStream.nullOutputStream(),
+                "-proc:none", "-cp", outsideClasses.toString(), "-d", widgetClasses.toString(),
+                widgetSource.toString()));
+        Path widgetJar = workspace.resolve("widget-1.0.jar");
+        try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(widgetJar))) {
+            out.putNextEntry(new JarEntry("acme/Widget.class"));
+            out.write(Files.readAllBytes(widgetClasses.resolve("acme/Widget.class")));
+        }
+        try (JarOutputStream out = new JarOutputStream(
+                Files.newOutputStream(workspace.resolve("widget-1.0-sources.jar")))) {
+            out.putNextEntry(new JarEntry("acme/Widget.java"));
+            out.write(Files.readAllBytes(widgetSource));
+        }
+        Path linked = Files.createDirectories(workspace.resolve("classes"));
+        try {
+            Files.createSymbolicLink(linked.resolve("ext"), outsideClasses.resolve("ext"));
+        } catch (UnsupportedOperationException | java.io.IOException e) {
+            assumeTrue(false, "symbolic links cannot be made here: " + e);
+        }
+        String behindALink = widgetJar + java.io.File.pathSeparator + linked;
+        String outsideTheRoot = widgetJar + java.io.File.pathSeparator + outsideClasses;
+
+        Answer control = run("acme.Widget", "-cp", behindALink);
+        Answer throughALink = runConfined(workspace, "acme.Widget", "-cp", behindALink);
+        Answer fromOutside = runConfined(workspace, "acme.Widget", "-cp", outsideTheRoot);
+
+        assertTrue(control.out().contains("Takes the outside type."),
+                "the fixture documents the method when nothing confines javac: " + control);
+        for (Answer confined : new Answer[]{throughALink, fromOutside}) {
+            assertEquals(0, confined.code(), confined.err());
+            assertTrue(confined.out().contains("acme.Widget"), "the class inside the root is still described: " + confined);
+            assertFalse(confined.out().contains("Takes the outside type."),
+                    "the type behind the link, or outside the root, was not resolved: " + confined);
+        }
+    }
+
     private Answer runConfined(Path root, String... args) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ByteArrayOutputStream err = new ByteArrayOutputStream();

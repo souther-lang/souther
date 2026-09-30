@@ -115,7 +115,7 @@ public interface ModulePath {
                 // The resource is a name a source file chose, and the directory may be a project's
                 // class output that somebody else wrote; neither is allowed to reach past it.
                 ConfinedTree classes = ConfinedTree.at(entry);
-                return classes.isRegularFile(resource) ? classes.read(resource, mostBytesOfAClass()) : null;
+                return classes.isRegularFile(resource) ? classes.read(resource, BoundedRead.CLASS_FILE_BYTES) : null;
             }
             if (!Files.isRegularFile(entry)) {
                 return null;
@@ -126,16 +126,10 @@ public interface ModulePath {
                     return null;
                 }
                 try (InputStream in = jar.getInputStream(found)) {
-                    return BoundedRead.bytes(in, mostBytesOfAClass());
+                    return BoundedRead.bytes(in, BoundedRead.CLASS_FILE_BYTES);
                 }
             }
         } catch (IOException e) {
             throw new IllegalStateException("cannot read " + resource + " from " + entry, e);
         }
-    }
-
-    /** The most bytes read of one class file. */
-    private static long mostBytesOfAClass() {
-        return 16L * 1024 * 1024;
-    }
-}
+    }}

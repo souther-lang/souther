@@ -5,6 +5,7 @@ import souther.compiler.diag.SourceContext;
 import souther.compiler.diag.SourceContextResolver;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.SourceNames;
+import souther.compiler.io.BoundedRead;
 import souther.compiler.io.ConfinedTree;
 import souther.compiler.io.LimitExceededException;
 import souther.compiler.meta.ModulePath;
@@ -48,10 +49,6 @@ public final class CompilationSources {
      */
     public record SourceFile(String path, String text) {}
 
-    /** The most bytes read of one source file, and the most entries walked under one source root. */
-    private static final long MOST_BYTES_OF_A_SOURCE = 16L * 1024 * 1024;
-    private static final long MOST_ENTRIES_OF_A_TREE = 1_000_000;
-
     /**
      * Every {@code .sou} under {@code root}, read, path-sorted.
      *
@@ -65,7 +62,7 @@ public final class CompilationSources {
     public static List<SourceFile> readTree(Path root) throws IOException {
         ConfinedTree tree = ConfinedTree.at(root);
         List<String> found = new ArrayList<>();
-        boolean complete = tree.walk(MOST_ENTRIES_OF_A_TREE, new ConfinedTree.Entries() {
+        boolean complete = tree.walk(BoundedRead.MOST_ENTRIES, new ConfinedTree.Entries() {
             @Override
             public void regularFile(String relative) {
                 if (relative.endsWith(SUFFIX)) {
@@ -81,13 +78,13 @@ public final class CompilationSources {
             }
         });
         if (!complete) {
-            throw new LimitExceededException("more than " + MOST_ENTRIES_OF_A_TREE + " entries under " + root);
+            throw new LimitExceededException("more than " + BoundedRead.MOST_ENTRIES + " entries under " + root);
         }
         found.sort(Comparator.comparing(Path::of));
         List<SourceFile> sources = new ArrayList<>();
         for (String relative : found) {
             sources.add(new SourceFile(root.resolve(relative).toString(),
-                    tree.readString(relative, MOST_BYTES_OF_A_SOURCE)));
+                    tree.readString(relative, BoundedRead.SOURCE_FILE_BYTES)));
         }
         return sources;
     }

@@ -1,6 +1,7 @@
 package souther.compiler.examples;
 
 import souther.compiler.check.Sig;
+import souther.compiler.io.BoundedRead;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.meta.ClassFileDeclarations;
@@ -265,7 +266,7 @@ final class BoundImplementation implements Answerer {
         String resource = binaryName.replace('.', '/') + ".class";
         ClassLoader from = loader == null ? ClassLoader.getSystemClassLoader() : loader;
         try (InputStream in = from.getResourceAsStream(resource)) {
-            return in == null ? null : in.readAllBytes();
+            return in == null ? null : BoundedRead.bytes(in, BoundedRead.CLASS_FILE_BYTES);
         } catch (IOException _) {
             return null;
         }

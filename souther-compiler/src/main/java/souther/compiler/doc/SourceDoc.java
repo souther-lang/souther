@@ -20,8 +20,10 @@ import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import javax.tools.JavaCompiler;
+import javax.tools.JavaFileManager;
 import javax.tools.JavaFileObject;
 import javax.tools.SimpleJavaFileObject;
+import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.MethodTypeDesc;
@@ -70,14 +72,16 @@ final class SourceDoc {
 
     /**
      * Reads {@code source} for what it says about {@code binaryName}, resolving the types it names
-     * against {@code classPath} — the same path the class file itself was found on.
+     * against {@code classPath} — the same path the class file itself was found on. When
+     * {@code confined} is given the types are found through it instead, and {@code classPath} is not
+     * handed to javac at all.
      */
-    static SourceDoc of(String source, String binaryName, String classPath) {
+    static SourceDoc of(String source, String binaryName, String classPath, ClassLookup confined) {
         if (ToolProvider.getSystemJavaCompiler() == null) {
             return NONE;
         }
         try {
-            return read(source, binaryName, classPath);
+            return read(source, binaryName, classPath, confined);
         } catch (RuntimeException | LinkageError | java.io.IOException e) {
             // A source that will not parse, or a runtime with no front end in it, leaves the API
             // readable and undocumented, which is the failure this can afford.
@@ -124,7 +128,7 @@ final class SourceDoc {
 
     // ---- reading ----
 
-    private static SourceDoc read(String source, String binaryName, String classPath)
+    private static SourceDoc read(String source, String binaryName, String classPath, ClassLookup confined)
             throws java.io.IOException {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         String simple = binaryName.substring(binaryName.lastIndexOf('.') + 1);
@@ -139,11 +143,22 @@ final class SourceDoc {
         // Only the trees and their types are wanted, so no processor is asked for. The class path is
         // a caller's and may carry one; parse and analyze do not run a processor on this JDK, and
         // this keeps that from depending on it.
+        if (confined != null) {
+            // The types are found through the lookup and javac is given no class path of its own,
+            // so it opens nothing the caller did not allow.
+            try (StandardJavaFileManager standard = compiler.getStandardFileManager(null, null, null);
+                 JavaFileManager manager = new ConfinedClassPath(standard, confined)) {
+                return collected((JavacTask) compiler.getTask(java.io.Writer.nullWriter(), manager,
+                        diagnostic -> { }, List.of("-proc:none"), List.of(), List.of(file)), simple);
+            }
+        }
         List<String> options = classPath == null || classPath.isBlank()
                 ? List.of("-proc:none") : List.of("-proc:none", "-classpath", classPath);
-        JavacTask task = (JavacTask) compiler.getTask(
-                java.io.Writer.nullWriter(), null, diagnostic -> { }, options, List.of(), List.of(file));
+        return collected((JavacTask) compiler.getTask(
+                java.io.Writer.nullWriter(), null, diagnostic -> { }, options, List.of(), List.of(file)), simple);
+    }
 
+    private static SourceDoc collected(JavacTask task, String simple) throws java.io.IOException {
         Iterable<? extends CompilationUnitTree> units = task.parse();
         // Types are wanted, not just trees: a name in a source file means whatever this file's
         // imports and this class path make it mean, and only the front end knows which.

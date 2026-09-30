@@ -6,6 +6,7 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import souther.compiler.io.BoundedRead;
 import souther.compiler.io.ConfinedTree;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Abandonment;
@@ -247,7 +248,7 @@ public final class Workspace {
             try {
                 // A workspace is somebody else's repository: what is under it is read only as a
                 // regular file of bounded size, and a link is not followed out of it.
-                tree.walk(MOST_ENTRIES, new ConfinedTree.Entries() {
+                tree.walk(BoundedRead.MOST_ENTRIES, new ConfinedTree.Entries() {
                     // Every entry, not only the sources: the walk is what a workspace of a hundred
                     // thousand files spends its time on, and how many of them end in `.sou` says
                     // nothing about that.
@@ -271,13 +272,9 @@ public final class Workspace {
         return sources;
     }
 
-    /** The largest source file the scan reads, and the most entries it walks under one root. */
-    private static final long LARGEST_SOURCE_BYTES = 16L * 1024 * 1024;
-    private static final long MOST_ENTRIES = 1_000_000;
-
     private static String readOrEmpty(ConfinedTree tree, String relative) {
         try {
-            return tree.readString(relative, LARGEST_SOURCE_BYTES);
+            return tree.readString(relative, BoundedRead.SOURCE_FILE_BYTES);
         } catch (IOException _) {
             return "";   // a file that cannot be read contributes nothing, but never crashes the scan
         }

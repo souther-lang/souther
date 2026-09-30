@@ -12,6 +12,15 @@ import java.io.InputStream;
  */
 public final class BoundedRead {
 
+    /** The most bytes read of one class file, whoever wrote it. */
+    public static final long CLASS_FILE_BYTES = 16L * 1024 * 1024;
+
+    /** The most bytes read of one source file, whoever wrote it. */
+    public static final long SOURCE_FILE_BYTES = 16L * 1024 * 1024;
+
+    /** The most entries of one directory tree or one archive that a walk or a listing looks at. */
+    public static final long MOST_ENTRIES = 1_000_000;
+
     private BoundedRead() {}
 
     /**
