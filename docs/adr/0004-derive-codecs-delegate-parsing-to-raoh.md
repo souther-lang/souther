@@ -1,6 +1,22 @@
 # ADR-0004: Derive decoders/encoders from data shape; delegate external representation to Raoh
 
-Status: Accepted
+Status: Accepted. Revised 2026-09-30 — see *Revision*.
+
+## Revision (2026-09-30, a pattern is Souther's and only its report is Raoh's)
+
+The Consequences below say `String.matches(p, value)` is emitted as Raoh's `pattern(p)`. That is
+no longer what a decoder runs. The pattern language is Souther's (`[#string-patterns]`) and the
+compiler is the only reader of its text, so no decoder hands the text to Raoh or to any engine to
+read again. A decoder runs `refine` with the machine the compiler built from what the pattern
+means, loaded as a constant of the class, and a value the machine refuses fails with the issue
+Raoh's `pattern` constraint reports: the code and message key `invalid_format`, and the pattern as
+the author wrote it under `pattern` in the metadata.
+
+What is kept is the reason the Consequences give. A resolver keyed on Raoh's codes needs nothing from
+Souther, because the issue is Raoh's in code, message key and metadata. What is replaced is who
+reads the text: which strings a pattern admits is decided by the specification and read by the
+compiler, and Raoh's matcher takes no part in it. A carrier other than the JVM runs the same meaning
+and reports the same issue.
 
 ## Context
 
