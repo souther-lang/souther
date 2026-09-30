@@ -323,20 +323,47 @@ public final class StringPattern implements Predicate<String> {
      * <p>A set is written once however many steps are over it. The machine a pattern's shape builds
      * writes a repetition out as copies, and each copy steps over the same set, so a class written
      * large is not written again for every copy.
+     *
+     * <p>Bounded as it is written and not after. Every state, step and set added counts the
+     * characters it comes to in the image, and a writer past its limit says so ({@link #holds}) so
+     * that whoever is writing stops there, rather than an image being made whole and then found too
+     * large. Counted exactly, but for the two counts at the front, which are taken at their widest:
+     * a limit counted loosely would refuse machines the image holds.
      */
     public static final class Writer {
 
         private final boolean deterministic;
+        private final long mostCharacters;
+        private long characters;
         private final List<String> sets = new ArrayList<>();
         private final Map<String, Integer> known = new HashMap<>();
         private final List<Boolean> accepting = new ArrayList<>();
         private final List<List<int[]>> steps = new ArrayList<>();
         private final List<List<Integer>> free = new ArrayList<>();
 
-        /** @param deterministic whether the machine is only ever in one state, and so steps nowhere
-         *                      for no character */
-        public Writer(boolean deterministic) {
+        /**
+         * @param deterministic  whether the machine is only ever in one state, and so steps nowhere
+         *                       for no character
+         * @param mostCharacters the most characters the image may take
+         */
+        public Writer(boolean deterministic, long mostCharacters) {
             this.deterministic = deterministic;
+            this.mostCharacters = mostCharacters;
+            // The kind, and the two counts written before what they count, at their widest.
+            this.characters = 2 + 2 * NUMBER;
+        }
+
+        /** The most characters one number of an image takes, its comma included. */
+        private static final int NUMBER = 11;
+
+        /** The characters {@code value} is written in, its comma included. */
+        private static int written(int value) {
+            return Integer.toString(value).length() + 1;
+        }
+
+        /** Whether what has been added so far still fits the image's limit. */
+        public boolean holds() {
+            return characters <= mostCharacters;
         }
 
         /**
@@ -359,6 +386,7 @@ public final class StringPattern implements Predicate<String> {
             }
             sets.add(written);
             known.put(written, sets.size() - 1);
+            characters += written.length() + 1;
             return sets.size() - 1;
         }
 
@@ -368,12 +396,21 @@ public final class StringPattern implements Predicate<String> {
             accepting.add(stops);
             steps.add(new ArrayList<>());
             free.add(new ArrayList<>());
+            // Whether it stops, and its two counts while they are nought.
+            characters += 6;
             return accepting.size() - 1;
         }
 
         /** A step from {@code from} over the set numbered {@code set}, to {@code to}. */
         public void step(int from, int set, int to) {
-            steps.get(from).add(new int[] {set, to});
+            List<int[]> out = steps.get(from);
+            out.add(new int[] {set, to});
+            characters += written(set) + written(to) + grown(out.size());
+        }
+
+        /** The character a count takes on where it has just grown by a digit. */
+        private static int grown(int count) {
+            return written(count) - written(count - 1);
         }
 
         /** A step from {@code from} to {@code to} that takes no character. */
@@ -382,11 +419,17 @@ public final class StringPattern implements Predicate<String> {
                 throw new IllegalArgumentException(
                         "a deterministic machine steps nowhere for no character");
             }
-            free.get(from).add(to);
+            List<Integer> out = free.get(from);
+            out.add(to);
+            characters += written(to) + grown(out.size());
         }
 
-        /** The image, cut into strings a class can hold ({@link #CHUNK}). */
+        /** The image, cut into strings a class can hold ({@link #CHUNK}). Asked of a writer that
+         *  {@link #holds}. */
         public List<String> image() {
+            if (!holds()) {
+                throw new IllegalStateException("an image past its limit is not written out");
+            }
             StringBuilder out = new StringBuilder();
             out.append(deterministic ? 1 : 0).append(',').append(sets.size());
             for (String each : sets) {

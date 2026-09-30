@@ -351,11 +351,13 @@ final class ConstantAlgebra {
 
     /**
      * Whether {@code s} is one of the strings {@code meaning} denotes, or empty where the machine for
-     * it is more than a fold may build — which leaves the match to the run time.
+     * it is more than a fold may build, or walking {@code s} over it more than a fold may look at —
+     * either of which leaves the match to the run time.
      */
     static Optional<Object> matching(PatternMeaning meaning, String s) {
         return RECOGNIZERS.computeIfAbsent(meaning, ConstantAlgebra::recognizerOf)
-                .map(recognizer -> recognizer.accepts(s));
+                .flatMap(recognizer -> recognizer.accepts(s, PatternPlan.Budget.OF_A_FOLD.meter()))
+                .map(Object.class::cast);
     }
 
     private static Optional<Recognizer> recognizerOf(PatternMeaning meaning) {

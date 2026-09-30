@@ -145,7 +145,7 @@ class EveryNotReadReasonIsWrittenBySomeCompilationTest {
             ReadAs.THE_COMPILATION_DOES.dnfExpansionLimit(),
             ReadAs.THE_COMPILATION_DOES.scalePlacesLimit(),
             AsACompilationAllows.admittedValues(),
-            new PatternPlan.Budget(1, 1));
+            new PatternPlan.Budget(1, 1, 1_000_000_000L));
 
     /** The answers, and the units a behavior over them is written to return. */
     private static final String ANSWER = """
@@ -217,7 +217,7 @@ class EveryNotReadReasonIsWrittenBySomeCompilationTest {
                 %s
                 behavior route : (code: String) -> Answer
                 let route (code) = if String.startsWith("JP", code) then Yes else No
-                """.formatted(ANSWER), new PatternPlan.Budget(1, 1)));
+                """.formatted(ANSWER), new PatternPlan.Budget(1, 1, 1_000_000_000L)));
         // Values no line can be drawn on: two booleans are equal or they are not, and neither is
         // above the other.
         out.put(UndividedPosition.Reason.UNSUPPORTED_DOMAIN, of("""

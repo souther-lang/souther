@@ -3,9 +3,12 @@ package souther.compiler.regex;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The strings a pattern accepts, as states to walk between.
@@ -167,19 +170,32 @@ final class Automaton {
     }
 
     /**
-     * Whether the whole of {@code value} is accepted.
+     * Whether the whole of {@code value} is accepted, or null where walking it would look at more
+     * than {@code meter} allows.
      *
      * <p>Walked a symbol at a time, where a symbol is a scalar value — a pair of units is one. Read
      * a unit at a time, a pattern naming a character past the basic plane would want two steps for
      * what the pattern takes in one. Text holding half a pair is no {@code String} and is accepted by
      * nothing: no step is over a surrogate.
+     *
+     * <p>Every state the machine may be in is walked at once, so a symbol costs the steps out of all
+     * of them, and a long value over a wide machine is their product. That is charged a symbol at a
+     * time, before the steps are looked at.
      */
-    boolean accepts(String value) {
+    Boolean accepts(String value, Meter meter) {
+        Meter.Making making = meter.making();
         BitSet here = closure(only(START));
         int at = 0;
         while (at < value.length()) {
             int symbol = value.codePointAt(at);
             at += Character.charCount(symbol);
+            long look = 1;
+            for (int state = here.nextSetBit(0); state >= 0; state = here.nextSetBit(state + 1)) {
+                look += 1 + steps.get(state).size() + free.get(state).length;
+            }
+            if (!making.work(look)) {
+                return null;
+            }
             BitSet next = new BitSet();
             for (int state = here.nextSetBit(0); state >= 0; state = here.nextSetBit(state + 1)) {
                 for (Step each : steps.get(state)) {
@@ -194,6 +210,33 @@ final class Automaton {
             here = closure(next);
         }
         return here.intersects(accepting);
+    }
+
+    /**
+     * For a machine that is only ever in one state, each state's steps as runs sorted by where they
+     * begin: {@code from, to, target} for each.
+     *
+     * <p>What lets a walk over such a machine find where a symbol leads by a search rather than by
+     * trying every step out of the state, so a value costs its length and not its length times how
+     * finely the machine cuts the symbols.
+     */
+    int[][] runsByState() {
+        int[][] out = new int[size()][];
+        for (int state = 0; state < size(); state++) {
+            List<int[]> each = new ArrayList<>();
+            for (Step step : steps.get(state)) {
+                for (CodePoints.Range range : step.over().ranges()) {
+                    each.add(new int[] {range.from(), range.to(), step.to()});
+                }
+            }
+            each.sort((one, other) -> Integer.compare(one[0], other[0]));
+            int[] flat = new int[each.size() * 3];
+            for (int i = 0; i < each.size(); i++) {
+                System.arraycopy(each.get(i), 0, flat, i * 3, 3);
+            }
+            out[state] = flat;
+        }
+        return out;
     }
 
     /**
@@ -284,7 +327,8 @@ final class Automaton {
      */
     Automaton and(Automaton other, Meter meter) {
         try {
-            Pairs pairs = new Pairs(other.size(), meter.making());
+            Meter.Making making = meter.making();
+            Pairs pairs = new Pairs(other.size(), making);
             List<List<Step>> steps = new ArrayList<>();
             List<int[]> free = new ArrayList<>();
             BitSet accepting = new BitSet();
@@ -294,6 +338,11 @@ final class Automaton {
             for (int at = 0; at < pairs.count(); at++) {
                 int mine = pairs.mine(at);
                 int theirs = pairs.theirs(at);
+                // Every step of one side against every step of the other, and each meeting of two
+                // labels as long as the runs of both: asked for before any of them is met.
+                if (!making.work(meeting(this.steps.get(mine), other.steps.get(theirs)))) {
+                    throw new TooMany();
+                }
                 List<Step> out = new ArrayList<>();
                 for (Step one : this.steps.get(mine)) {
                     for (Step two : other.steps.get(theirs)) {
@@ -324,6 +373,19 @@ final class Automaton {
         } catch (TooMany _) {
             return null;
         }
+    }
+
+    /** What meeting every step of {@code one} with every step of {@code other} looks at. */
+    private static long meeting(List<Step> one, List<Step> other) {
+        long runsOfOne = 0;
+        for (Step each : one) {
+            runsOfOne += 1 + each.over().ranges().size();
+        }
+        long runsOfOther = 0;
+        for (Step each : other) {
+            runsOfOther += each.over().ranges().size();
+        }
+        return 1 + runsOfOne * other.size() + runsOfOther * one.size();
     }
 
     /**
@@ -457,12 +519,13 @@ final class Automaton {
             }
         }
         for (int at = 0; at < steps.size(); at++) {
-            CodePoints together = CodePoints.NONE;
+            List<CodePoints.Range> runs = new ArrayList<>();
             long apart = 0;
             for (Step each : steps.get(at)) {
-                together = together.or(each.over());
+                runs.addAll(each.over().ranges());
                 apart += each.over().size();
             }
+            CodePoints together = new CodePoints(runs);
             if (!together.isEverything() || apart != together.size()) {
                 return false;
             }
@@ -531,83 +594,142 @@ final class Automaton {
      * Which states of a complete machine no string tells apart, as a block per state.
      *
      * <p>Told apart to begin with by whether a walk may stop there, and after that by where the
-     * symbols lead: two states in one block that step into different blocks are two states, and
-     * asking that over and over until nothing moves is what leaves the blocks a string could tell
-     * apart and no others.
+     * symbols lead: a block some of whose states step on one symbol into a given block and some of
+     * whose states do not is two blocks. Asked that way of every block and symbol that could still
+     * split something, until none can, what is left is the blocks a string could tell apart and no
+     * others.
      *
-     * <p>What a round asks of a state is a row — the block it is in, and then the block each symbol
-     * leads to — and what it groups is the states whose rows are equal. A row is as wide as the runs
-     * the labels cut, and two rows are equal exactly when their cells are, so the grouping is an
-     * open table read off those cells: the hash below is the cells, and a collision is settled by
-     * comparing them.
+     * <p>Split from what leads into a block and not by comparing rows. Comparing every state's row
+     * once a round costs a round per state in a chain of them, so a machine a few thousand states
+     * long took the square of that; working from a block's predecessors under one symbol touches
+     * only the states the split is about. And of the two halves a split leaves, only the smaller
+     * needs asking about again where the block was not already waiting: whatever the larger half
+     * would split is what the block and the smaller half split together. So a state is asked about
+     * again only when the block it is in has at least halved, and the whole of it is the table's
+     * cells times the logarithm of the states, where the table is what making it already paid for.
      *
-     * <p>What is kept is a row per block and not a row per state. Every row a state is compared
-     * against is the first row of some block, so a row per state would be holding what the grouping
-     * has already brought together — as many rows as the machine has states, each as wide as its
-     * alphabet. A state's row is written where the next block's would begin and stays there only if
-     * it opened one, which is why nothing is copied to keep it. The table of slots is the one thing
-     * sized for the states there are, because a round can put that many rows in it, and it never
-     * grows.
-     *
-     * <p>Blocks are numbered in the order a row is first seen; which numbers they get is nothing
+     * <p>Blocks are numbered in the order they are made; which numbers they get is nothing
      * {@link #numbered} reads, since it renames them by walking the machine.
      */
     private static int[] smallest(List<int[]> table, BitSet accepting) {
         int states = table.size();
-        int width = 1 + table.get(0).length;
-        int[] block = new int[states];
+        int width = table.get(0).length;
+        // Who leads into each state on each symbol, kept as one run per symbol and state.
+        int[] into = new int[width * (states + 1) + 1];
         for (int state = 0; state < states; state++) {
-            block[state] = accepting.get(state) ? 1 : 0;
+            int[] out = table.get(state);
+            for (int over = 0; over < width; over++) {
+                into[over * (states + 1) + out[over] + 1]++;
+            }
         }
-        int[] shown = new int[width];
-        int[] next = new int[states];
-        // A power of two, so a hash is brought into range by masking, and twice the rows a round
-        // can have, so the slots a probe walks past stay few.
-        int slots = 4;
-        while (slots < states * 2) {
-            slots <<= 1;
+        for (int at = 1; at < into.length; at++) {
+            into[at] += into[at - 1];
         }
-        int[] seen = new int[slots];
-        for (int blocks = 2, was = 0; blocks != was;) {
-            was = blocks;
-            Arrays.fill(seen, 0);
-            int found = 0;
+        int[] from = new int[states * width];
+        int[] filled = Arrays.copyOf(into, into.length);
+        for (int state = 0; state < states; state++) {
+            int[] out = table.get(state);
+            for (int over = 0; over < width; over++) {
+                from[filled[over * (states + 1) + out[over]]++] = state;
+            }
+        }
+        // The states in block order: a block is a run of this, its marked states at the front.
+        int[] member = new int[states];
+        int[] place = new int[states];
+        int[] block = new int[states];
+        int[] begins = new int[states];
+        int[] ends = new int[states];
+        int[] marked = new int[states];
+        int blocks = 0;
+        int placed = 0;
+        for (boolean stops : new boolean[] {false, true}) {
+            int opened = placed;
             for (int state = 0; state < states; state++) {
-                if (shown.length < (found + 1) * width) {
-                    shown = Arrays.copyOf(shown, shown.length * 2);
-                }
-                int at = found * width;
-                shown[at] = block[state];
-                int[] out = table.get(state);
-                for (int over = 0; over < out.length; over++) {
-                    shown[at + 1 + over] = block[out[over]];
-                }
-                int hash = 1;
-                for (int cell = at; cell < at + width; cell++) {
-                    hash = 31 * hash + shown[cell];
-                }
-                int probe = (hash ^ (hash >>> 16)) & (slots - 1);
-                while (true) {
-                    // A slot holds the block whose first row is there, counted from one so that
-                    // nought is a slot nothing has been put in.
-                    int held = seen[probe];
-                    if (held == 0) {
-                        seen[probe] = found + 1;
-                        next[state] = found++;
-                        break;
-                    }
-                    if (Arrays.equals(shown, (held - 1) * width, held * width,
-                            shown, at, at + width)) {
-                        next[state] = held - 1;
-                        break;
-                    }
-                    probe = (probe + 1) & (slots - 1);
+                if (accepting.get(state) == stops) {
+                    member[placed] = state;
+                    place[state] = placed++;
+                    block[state] = blocks;
                 }
             }
-            System.arraycopy(next, 0, block, 0, states);
-            blocks = found;
+            if (placed > opened) {
+                begins[blocks] = opened;
+                ends[blocks] = placed;
+                marked[blocks] = opened;
+                blocks++;
+            }
+        }
+        BitSet waiting = new BitSet();
+        int[] asked = new int[Math.max(16, blocks * width)];
+        int count = 0;
+        for (int each = 0; each < blocks; each++) {
+            for (int over = 0; over < width; over++) {
+                waiting.set(each * width + over);
+                asked = pushed(asked, count++, each * width + over);
+            }
+        }
+        int[] splitter = new int[states];
+        int[] touched = new int[states];
+        while (count > 0) {
+            int pair = asked[--count];
+            waiting.clear(pair);
+            int splitting = pair / width;
+            int over = pair % width;
+            // What is in the block now, copied out before any state moves.
+            int size = ends[splitting] - begins[splitting];
+            System.arraycopy(member, begins[splitting], splitter, 0, size);
+            int reached = 0;
+            for (int i = 0; i < size; i++) {
+                int to = splitter[i];
+                int row = over * (states + 1) + to;
+                for (int at = into[row]; at < into[row + 1]; at++) {
+                    int state = from[at];
+                    int in = block[state];
+                    if (place[state] >= marked[in]) {
+                        if (marked[in] == begins[in]) {
+                            touched[reached++] = in;
+                        }
+                        int swapWith = member[marked[in]];
+                        member[place[state]] = swapWith;
+                        place[swapWith] = place[state];
+                        member[marked[in]] = state;
+                        place[state] = marked[in]++;
+                    }
+                }
+            }
+            for (int i = 0; i < reached; i++) {
+                int split = touched[i];
+                if (marked[split] == ends[split]) {
+                    marked[split] = begins[split];
+                    continue;
+                }
+                int made = blocks++;
+                begins[made] = begins[split];
+                ends[made] = marked[split];
+                marked[made] = begins[made];
+                begins[split] = ends[made];
+                marked[split] = begins[split];
+                for (int at = begins[made]; at < ends[made]; at++) {
+                    block[member[at]] = made;
+                }
+                boolean madeSmaller = ends[made] - begins[made] <= ends[split] - begins[split];
+                for (int symbol = 0; symbol < width; symbol++) {
+                    int next = waiting.get(split * width + symbol) || madeSmaller
+                            ? made : split;
+                    if (!waiting.get(next * width + symbol)) {
+                        waiting.set(next * width + symbol);
+                        asked = pushed(asked, count++, next * width + symbol);
+                    }
+                }
+            }
         }
         return block;
+    }
+
+    /** {@code value} put at {@code at}, the array grown where it is full. */
+    private static int[] pushed(int[] stack, int at, int value) {
+        int[] out = at < stack.length ? stack : Arrays.copyOf(stack, stack.length * 2);
+        out[at] = value;
+        return out;
     }
 
     /**
@@ -647,13 +769,16 @@ final class Automaton {
             if (accepting.get(first[order.get(at)])) {
                 stops.set(at);
             }
-            // Gathered by where they lead, so that what a step is over is as wide as it can be.
-            java.util.Map<Integer, CodePoints> leading = new java.util.LinkedHashMap<>();
+            // Gathered by where they lead, so that what a step is over is as wide as it can be. The
+            // runs are collected and put in order once per step: joined one run at a time, each
+            // join would order everything before it again, and a row would cost its width squared.
+            java.util.TreeMap<Integer, List<CodePoints.Range>> leading = new java.util.TreeMap<>();
             for (int over = 0; over < row.length; over++) {
-                leading.merge(renamed[block[row[over]]], alphabet.get(over), CodePoints::or);
+                leading.computeIfAbsent(renamed[block[row[over]]], to -> new ArrayList<>())
+                        .addAll(alphabet.get(over).ranges());
             }
             List<Step> out = new ArrayList<>();
-            new java.util.TreeMap<>(leading).forEach((to, over) -> out.add(new Step(over, to)));
+            leading.forEach((to, runs) -> out.add(new Step(new CodePoints(runs), to)));
             steps.add(out);
             free.add(new int[0]);
         }
@@ -790,52 +915,77 @@ final class Automaton {
      *
      * <p>Walked a length at a time, so the first accepting state met is met by a shortest string.
      * A state is kept the first time it is reached and not again: another way to the same state is
-     * no shorter, and what follows it is the same either way.
+     * no shorter, and what follows it is the same either way. Which way is kept is the first one
+     * met, over the states in the order they were reached and their steps in order.
+     *
+     * <p>What each state holds is where it was reached from and on which symbol, and the string is
+     * read back from the state that stops only once it is found. A string per state would be a copy
+     * of its predecessor's with one symbol more, and over a machine as long as the string it
+     * answers, that is the square of the length.
      */
     private String shortest(CodePoints these, int mostSymbols) {
-        java.util.Map<Integer, String> reached = new java.util.LinkedHashMap<>();
+        int[] cameFrom = new int[size()];
+        int[] on = new int[size()];
         BitSet seen = closure(only(START));
+        int[] reached = new int[size()];
+        int count = 0;
         for (int state = seen.nextSetBit(0); state >= 0; state = seen.nextSetBit(state + 1)) {
-            reached.put(state, "");
+            cameFrom[state] = -1;
+            reached[count++] = state;
         }
         int walked = 0;
-        while (!reached.isEmpty()) {
-            for (java.util.Map.Entry<Integer, String> each : reached.entrySet()) {
-                if (accepting.get(each.getKey())) {
-                    return each.getValue();
+        int[] next = new int[size()];
+        while (count > 0) {
+            for (int i = 0; i < count; i++) {
+                if (accepting.get(reached[i])) {
+                    return readBack(reached[i], cameFrom, on);
                 }
             }
             if (mostSymbols >= 0 && walked == mostSymbols) {
                 return null;
             }
             walked++;
-            java.util.Map<Integer, String> next = new java.util.LinkedHashMap<>();
-            for (java.util.Map.Entry<Integer, String> each : reached.entrySet()) {
-                for (Step step : steps.get(each.getKey())) {
+            int found = 0;
+            for (int i = 0; i < count; i++) {
+                int here = reached[i];
+                for (Step step : steps.get(here)) {
                     CodePoints over = step.over().and(these);
                     if (over.isEmpty()) {
                         continue;
                     }
-                    String said = each.getValue() + new String(Character.toChars(over.least()));
                     BitSet after = closure(only(step.to()));
                     for (int state = after.nextSetBit(0); state >= 0;
                             state = after.nextSetBit(state + 1)) {
-                        next.putIfAbsent(state, said);
+                        // Every state met at any shorter length, or earlier at this one, is one
+                        // nothing here improves on.
+                        if (!seen.get(state)) {
+                            seen.set(state);
+                            cameFrom[state] = here;
+                            on[state] = over.least();
+                            next[found++] = state;
+                        }
                     }
                 }
             }
-            // Every state met at any shorter length is one nothing longer improves on, so a walk
-            // that came back to one has nothing left to find down that way. Held over the whole
-            // walk and not over the step before it: a state first met three symbols ago is no less
-            // met for the step between.
-            next.keySet().removeIf(seen::get);
-            if (next.isEmpty()) {
-                return null;
-            }
-            next.keySet().forEach(seen::set);
+            int[] was = reached;
             reached = next;
+            next = was;
+            count = found;
         }
         return null;
+    }
+
+    /** The string the walk took to {@code state}, read back through where each state came from. */
+    private static String readBack(int state, int[] cameFrom, int[] on) {
+        List<Integer> symbols = new ArrayList<>();
+        for (int at = state; cameFrom[at] >= 0; at = cameFrom[at]) {
+            symbols.add(on[at]);
+        }
+        StringBuilder out = new StringBuilder();
+        for (int i = symbols.size() - 1; i >= 0; i--) {
+            out.appendCodePoint(symbols.get(i));
+        }
+        return out.toString();
     }
 
     /** The states reachable from {@code from} without spending a symbol, those included. */
@@ -911,6 +1061,10 @@ final class Automaton {
     private final class Subsets {
 
         private final List<CodePoints> alphabet = new ArrayList<>();
+
+        /** Where each run of the alphabet begins, in order: every run is one range, since the
+         *  alphabet is cut at both ends of the hole the surrogates leave. */
+        private int[] starts;
         private final List<BitSet> subsets = new ArrayList<>();
         private final java.util.Map<BitSet, Integer> known = new java.util.HashMap<>();
         private final List<List<Move>> moves = new ArrayList<>();
@@ -943,9 +1097,22 @@ final class Automaton {
             at(reached(only(START)));
         }
 
-        /** The subset a walk is in, having got to {@code these}. */
+        /**
+         * The subset a walk is in, having got to {@code these}.
+         *
+         * <p>The closure is charged for once it is known how far it went, which is the one place
+         * work is counted after it is done: how many states a step for nothing reaches is what the
+         * walk finds out, and it is never more than the machine.
+         */
         private BitSet reached(BitSet these) {
-            return anyFree ? closure(these) : these;
+            if (!anyFree) {
+                return these;
+            }
+            BitSet out = closure(these);
+            if (!making.work(out.cardinality())) {
+                throw new TooMany();
+            }
+            return out;
         }
 
         int count() {
@@ -970,20 +1137,69 @@ final class Automaton {
             }
             List<Move> out = new ArrayList<>();
             BitSet here = subsets.get(state);
-            for (CodePoints run : alphabet) {
-                int symbol = run.least();
-                BitSet next = new BitSet();
-                for (int one = here.nextSetBit(0); one >= 0; one = here.nextSetBit(one + 1)) {
-                    for (Step each : steps.get(one)) {
-                        if (each.over().has(symbol)) {
-                            next.set(each.to());
+            // A row: every run of the alphabet, and for each step out of the subset the runs its
+            // label covers. Asked for before any of it is looked at, as a state is.
+            long look = alphabet.size();
+            for (int one = here.nextSetBit(0); one >= 0; one = here.nextSetBit(one + 1)) {
+                for (Step each : steps.get(one)) {
+                    for (CodePoints.Range range : each.over().ranges()) {
+                        look += 1 + firstRunFrom(range.to() + 1) - firstRunFrom(range.from());
+                    }
+                }
+            }
+            if (!making.work(look)) {
+                throw new TooMany();
+            }
+            // Where each run leads, found from the labels rather than by asking every label about
+            // every run: a run no label covers leads where nothing does, which is one subset for
+            // the whole row.
+            BitSet[] next = new BitSet[alphabet.size()];
+            for (int one = here.nextSetBit(0); one >= 0; one = here.nextSetBit(one + 1)) {
+                for (Step each : steps.get(one)) {
+                    for (CodePoints.Range range : each.over().ranges()) {
+                        int past = firstRunFrom(range.to() + 1);
+                        for (int run = firstRunFrom(range.from()); run < past; run++) {
+                            if (next[run] == null) {
+                                next[run] = new BitSet();
+                            }
+                            next[run].set(each.to());
                         }
                     }
                 }
-                out.add(new Move(run, at(reached(next))));
+            }
+            int nowhere = -1;
+            for (int run = 0; run < next.length; run++) {
+                if (next[run] == null) {
+                    if (nowhere < 0) {
+                        nowhere = at(reached(new BitSet()));
+                    }
+                    out.add(new Move(alphabet.get(run), nowhere));
+                } else {
+                    // Finding the subset already met is a look at a set as wide as the machine.
+                    if (!making.work(1L + (next[run].length() >> 6))) {
+                        throw new TooMany();
+                    }
+                    out.add(new Move(alphabet.get(run), at(reached(next[run]))));
+                }
             }
             moves.set(state, out);
             return out;
+        }
+
+        /** The first run of the alphabet beginning at or after {@code symbol}, or how many runs
+         *  there are where none does. */
+        private int firstRunFrom(int symbol) {
+            int low = 0;
+            int high = starts.length;
+            while (low < high) {
+                int mid = (low + high) >>> 1;
+                if (starts[mid] < symbol) {
+                    low = mid + 1;
+                } else {
+                    high = mid;
+                }
+            }
+            return low;
         }
 
         private int at(BitSet subset) {
@@ -992,8 +1208,9 @@ final class Automaton {
                 return had;
             }
             // Where making a machine deterministic runs away with itself, and so where it is
-            // stopped. A subset already met costs nothing; a new one is a state.
-            if (!making.state()) {
+            // stopped. A subset already met costs nothing; a new one is a state, and is kept as a
+            // set as wide as the machine it was cut from.
+            if (!making.state() || !making.work(1L + (subset.length() >> 6))) {
                 throw new TooMany();
             }
             int made = subsets.size();
@@ -1011,13 +1228,23 @@ final class Automaton {
          * of them — which is what makes a deterministic machine over the whole of Unicode a small
          * thing. What lies between the universe's runs is the surrogates, which are no symbol, and
          * no run of the alphabet is cut there.
+         *
+         * <p>A label is read once however many steps are over it. A repetition is built as copies
+         * that share the set they step over, so reading it per step would be reading one class as
+         * many times as it was repeated; and the runs of the labels read are charged for.
          */
         private void cutTheAlphabet() {
             java.util.TreeSet<Integer> cuts = new java.util.TreeSet<>();
             List<CodePoints.Range> labels = new ArrayList<>(CodePoints.EVERYTHING.ranges());
+            Set<CodePoints> read = Collections.newSetFromMap(new IdentityHashMap<>());
             for (List<Step> out : steps) {
                 for (Step each : out) {
-                    labels.addAll(each.over().ranges());
+                    if (read.add(each.over())) {
+                        if (!making.work(1L + each.over().ranges().size())) {
+                            throw new TooMany();
+                        }
+                        labels.addAll(each.over().ranges());
+                    }
                 }
             }
             for (CodePoints.Range run : labels) {
@@ -1034,6 +1261,10 @@ final class Automaton {
                 }
                 int to = i + 1 < starts.size() ? starts.get(i + 1) - 1 : CodePoints.LAST;
                 alphabet.add(CodePoints.between(from, to));
+            }
+            this.starts = new int[alphabet.size()];
+            for (int run = 0; run < alphabet.size(); run++) {
+                this.starts[run] = alphabet.get(run).least();
             }
         }
     }

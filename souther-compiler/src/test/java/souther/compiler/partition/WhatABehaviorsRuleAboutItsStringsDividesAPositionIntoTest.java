@@ -46,7 +46,7 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
 
     /** Enough for the two sides of one of the rules written below, and not for two of them. The
      *  two assertions that say so are beside the one test this is for. */
-    private static final PatternPlan.Budget ONE_RULE = new PatternPlan.Budget(1000, 60);
+    private static final PatternPlan.Budget ONE_RULE = new PatternPlan.Budget(1000, 60, 1_000_000_000L);
 
     @Test
     void aRuleAboutTheStringsDividesThePositionIntoWhatItAdmitsAndTheRest() {
@@ -250,7 +250,7 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
                 """,
                 // One state is fewer than the smallest of these rules needs, so the group is
                 // refused where reading each of them was fine.
-                new PatternPlan.Budget(1, 1));
+                new PatternPlan.Budget(1, 1, 1_000_000_000L));
 
         assertEquals(List.of(), read.statements(), "neither rule divides the position");
         assertEquals(List.of(new BlockReason.BehaviorDistinctionsTooCostly(),
@@ -279,13 +279,13 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
         BehaviorSetStatements.Read read = readingsOf("""
                 behavior f : (code: String) -> Answer
                 let f (code) = if String.matches("[a-z]+", code) then Yes else No
-                """, new PatternPlan.Budget(100, 100));
+                """, new PatternPlan.Budget(100, 100, 1_000_000_000L));
         assertEquals(1, read.statements().size(), "the rule was read and both its sides were built");
         assertEquals(List.of(), read.blocked(), "so nothing was held open before this point");
 
         // And composed under one that does not afford meeting them with what the position holds.
         Allowance<NumericTerm.FromOnePosition> spent =
-                Allowance.of(new PatternPlan.Budget(1, 1));
+                Allowance.of(new PatternPlan.Budget(1, 1, 1_000_000_000L));
         Classing.Result answered = Classing.of(read.statements().get(0).at(), read.statements(),
                 List.of(), new souther.compiler.check.Carrier.Text(),
                 // A position whose own declarations leave it a language, which is what an

@@ -73,7 +73,7 @@ class WhatARunWalksIsWhatThePatternMeansTest {
     }
 
     private static Meter plenty() {
-        return new Meter(100_000, 10_000_000);
+        return new Meter(100_000, 10_000_000, 1_000_000_000L);
     }
 
     @Test
@@ -90,7 +90,7 @@ class WhatARunWalksIsWhatThePatternMeansTest {
             StringPattern shaped = StringPattern.of(PatternImage.shaped(read.meaning(), plenty()));
             asked++;
             for (String value : STRINGS) {
-                boolean mine = meant.accepts(value);
+                boolean mine = meant.accepts(value, plenty()).orElseThrow();
                 if (deterministic.matches(value) != mine) {
                     apart.add(regex + " over " + shown(value) + ": the meaning says " + mine
                             + ", the deterministic machine does not");
@@ -115,7 +115,7 @@ class WhatARunWalksIsWhatThePatternMeansTest {
         String half = String.valueOf((char) 0xD800);
         PatternMeaning any = ((PatternRead.Read) PatternParser.read("[\\x{0}-\\x{10FFFF}]*"))
                 .meaning();
-        assertFalse(Recognizer.of(any, plenty()).accepts(half));
+        assertFalse(Recognizer.of(any, plenty()).accepts(half, plenty()).orElseThrow());
         assertFalse(StringPattern.of(PatternImage.deterministic(any, plenty())).matches(half));
         assertFalse(StringPattern.of(PatternImage.shaped(any, plenty())).matches(half));
     }

@@ -43,7 +43,7 @@ class TheFirstRefusalStopsAConstructionAndIsWhatItIsToldTest {
     void nothingIsBuiltAfterAStepIsRefusedAndTheReasonIsTheFirstOne() {
         // Room for the left side to be refused for being one machine too large — it spends four
         // hundred getting there — and less than the right side needs left over afterwards.
-        Meter meter = new Meter(400, 600);
+        Meter meter = new Meter(400, 600, 1_000_000_000L);
         PatternPlan plan = of("a{500}").and(of("b{300}"));
 
         assertNull(plan.compile(meter), "the left side does not fit, so the meet is not built");
@@ -62,7 +62,7 @@ class TheFirstRefusalStopsAConstructionAndIsWhatItIsToldTest {
      */
     @Test
     void aMeterKeepsTheFirstRefusalAndNotTheLast() {
-        Meter meter = new Meter(10, 30);
+        Meter meter = new Meter(10, 30, 1_000_000_000L);
         meter.starting();
 
         assertFalse(meter.making().states(20), "more than one machine may be");
@@ -82,7 +82,7 @@ class TheFirstRefusalStopsAConstructionAndIsWhatItIsToldTest {
     /** And a build that comes back with nothing is not told what refused an earlier one. */
     @Test
     void whatRefusedAnEarlierConstructionIsNotThisOnesReason() {
-        Meter meter = new Meter(400, 100_000);
+        Meter meter = new Meter(400, 100_000, 1_000_000_000L);
         assertNull(of("a{500}").compile(meter), "larger than a machine may be");
         assertEquals(Meter.Stopped.ONE_MACHINE, meter.stoppedBy());
 

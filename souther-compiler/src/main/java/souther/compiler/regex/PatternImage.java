@@ -1,6 +1,8 @@
 package souther.compiler.regex;
 
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import souther.runtime.StringPattern;
 
 /**
@@ -10,9 +12,9 @@ import souther.runtime.StringPattern;
  * {@code String.matches} call, a decoder's format constraint — asks here, so which machine a class
  * runs and how it is written are decided once.
  *
- * <p>The deterministic machine where the shape's machine and making it both stay within
- * {@link PatternPlan.Budget#OF_A_DETERMINISTIC_RUN} and its image within {@link #MOST_CHARACTERS};
- * otherwise the machine the pattern's shape builds,
+ * <p>The deterministic machine where making it stays within
+ * {@link PatternPlan.Budget#OF_A_DETERMINISTIC_RUN} — its states and the work of making them — and
+ * its image within {@link #MOST_CHARACTERS}; otherwise the machine the pattern's shape builds,
  * steps for nothing and all. Both accept the same strings, so which one a class holds decides how
  * fast a run is and nothing about its answer. Only the shape's machine can refuse a pattern: past
  * {@link PatternPlan.Budget#OF_A_RUN}, or past the characters a class is given for one image, there
@@ -26,8 +28,13 @@ public sealed interface PatternImage {
      * <p>What a class is given for it, and not a limit of the class file's: the image is cut into
      * strings each a class holds ({@link StringPattern#CHUNK}), and this keeps the number of those
      * small beside the constants the rest of the class refers to.
+     *
+     * <p>Above what the largest machine {@link PatternPlan.Budget#OF_A_RUN} lets the shape build
+     * takes where its steps are over sets a pattern writes once — a repetition written out, which is
+     * what makes a shape large. So what this refuses is a pattern whose sets are themselves large,
+     * and never one the state limit already let through for its size alone.
      */
-    int MOST_CHARACTERS = 1 << 22;
+    int MOST_CHARACTERS = 1 << 23;
 
     /** The image, as the strings the class holds it in. */
     record Written(List<String> strings) implements PatternImage {
@@ -49,21 +56,15 @@ public sealed interface PatternImage {
         if (shaped == null) {
             return new MoreStates(PatternPlan.Budget.OF_A_RUN.mostStates());
         }
-        // Not tried from a shape larger than the deterministic machine may be. Each state of that
-        // is a set of the shape's states worked out over every symbol, so what trying costs grows
-        // with the shape as well as with the machine, and a shape this large is the pattern a
-        // faster run was never going to be worth that for.
-        int most = PatternPlan.Budget.OF_A_DETERMINISTIC_RUN.mostStates();
-        Automaton one = shaped.size() > most ? null
-                : shaped.canonical(PatternPlan.Budget.OF_A_DETERMINISTIC_RUN.meter());
-        if (one != null) {
-            List<String> image = written(one, true);
-            if (fits(image)) {
-                return new Written(image);
-            }
+        // Trying costs what the meter counts — the rows, as wide as the symbols the shape tells
+        // apart and as deep as the subsets they are worked out from — and stops where that runs
+        // out, so a shape nothing deterministic is worth making is given up on early.
+        Automaton one = shaped.canonical(PatternPlan.Budget.OF_A_DETERMINISTIC_RUN.meter());
+        List<String> image = one == null ? null : written(one, true);
+        if (image == null) {
+            image = written(shaped, false);
         }
-        List<String> image = written(shaped, false);
-        return fits(image) ? new Written(image) : new MoreCharacters(MOST_CHARACTERS);
+        return image == null ? new MoreCharacters(MOST_CHARACTERS) : new Written(image);
     }
 
     /**
@@ -85,33 +86,42 @@ public sealed interface PatternImage {
         return shaped == null ? null : written(shaped, false);
     }
 
-    private static boolean fits(List<String> image) {
-        long characters = 0;
-        for (String each : image) {
-            characters += each.length();
-        }
-        return characters <= MOST_CHARACTERS;
-    }
-
+    /**
+     * {@code machine}'s image, or null where it would take more than {@link #MOST_CHARACTERS}.
+     *
+     * <p>Stopped where the writer says it is past its limit, which is before the next state is
+     * written: what is refused here is never written out first. A label is handed to the writer once
+     * however many steps share it.
+     */
     private static List<String> written(Automaton machine, boolean deterministic) {
-        StringPattern.Writer out = new StringPattern.Writer(deterministic);
-        for (int state = 0; state < machine.size(); state++) {
+        StringPattern.Writer out = new StringPattern.Writer(deterministic, MOST_CHARACTERS);
+        for (int state = 0; state < machine.size() && out.holds(); state++) {
             out.state(machine.stopsAt(state));
         }
-        for (int state = 0; state < machine.size(); state++) {
+        Map<CodePoints, Integer> sets = new IdentityHashMap<>();
+        for (int state = 0; state < machine.size() && out.holds(); state++) {
             for (Automaton.Step each : machine.stepsFrom(state)) {
-                List<CodePoints.Range> ranges = each.over().ranges();
-                int[] pairs = new int[ranges.size() * 2];
-                for (int at = 0; at < ranges.size(); at++) {
-                    pairs[at * 2] = ranges.get(at).from();
-                    pairs[at * 2 + 1] = ranges.get(at).to();
+                Integer set = sets.get(each.over());
+                if (set == null) {
+                    set = out.set(pairs(each.over()));
+                    sets.put(each.over(), set);
                 }
-                out.step(state, out.set(pairs), each.to());
+                out.step(state, set, each.to());
             }
             for (int to : machine.freeFrom(state)) {
                 out.free(state, to);
             }
         }
-        return out.image();
+        return out.holds() ? out.image() : null;
+    }
+
+    private static int[] pairs(CodePoints over) {
+        List<CodePoints.Range> ranges = over.ranges();
+        int[] out = new int[ranges.size() * 2];
+        for (int at = 0; at < ranges.size(); at++) {
+            out[at * 2] = ranges.get(at).from();
+            out[at * 2 + 1] = ranges.get(at).to();
+        }
+        return out;
     }
 }

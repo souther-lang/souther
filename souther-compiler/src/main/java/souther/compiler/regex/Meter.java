@@ -18,6 +18,15 @@ package souther.compiler.regex;
  * will hold, and a great many small ones may be more than it will do in all — a plan of cheap meets
  * is affordable at every step and not as a whole.
  *
+ * <p><b>And the work beside the states, because a state does not cost one thing.</b> A state of a
+ * deterministic machine is a row as wide as the runs of symbols the machine tells apart, worked out
+ * by looking at every state of the subset it stands for; a state of a meet is the steps of one side
+ * against the steps of the other. Counted by states alone, a machine of few states over a wide
+ * alphabet is as cheap as one over a narrow one, and it is not. So what a construction looks at is
+ * counted too, against its own limit, at the place it is looked at. Refusing on it says the same
+ * two things the states do: this machine is more than one may be, or this answer has spent what it
+ * was given.
+ *
  * <p><b>And which of them refused is kept, because they are not the same fact.</b> One machine over
  * the first limit is a machine somebody wrote and can write differently; a build stopped by the
  * second is one this answer had already spent its allowance on, and the same machine asked for
@@ -38,24 +47,32 @@ public final class Meter {
 
     private final int mostStates;
     private int left;
+    private final long mostWork;
+    private long workLeft;
     private Stopped stopped;
 
     /**
      * @param mostStates how many states one machine may hold
      * @param mostBuilt how many states everything this meter is for may make between them, the
      *                  machines thrown away on the way included
+     * @param mostWork how much looking everything this meter is for may do between them, and so
+     *                 how much one machine may take on its own
      */
-    public Meter(int mostStates, int mostBuilt) {
-        if (mostStates <= 0 || mostBuilt <= 0) {
+    public Meter(int mostStates, int mostBuilt, long mostWork) {
+        if (mostStates <= 0 || mostBuilt <= 0 || mostWork <= 0) {
             throw new IllegalArgumentException("a meter allows something");
         }
         this.mostStates = mostStates;
         this.left = mostBuilt;
+        this.mostWork = mostWork;
+        this.workLeft = mostWork;
     }
 
     private Meter() {
         this.mostStates = 0;
         this.left = 0;
+        this.mostWork = 0;
+        this.workLeft = 0;
     }
 
     /**
@@ -130,10 +147,35 @@ public final class Meter {
     final class Making {
 
         private int mine;
+        private long looked;
 
         /** Whether one more state may be made, and it is counted where the answer is yes. */
         boolean state() {
             return states(1);
+        }
+
+        /**
+         * Whether {@code much} more may be looked at in making this machine, counted where the
+         * answer is yes.
+         *
+         * <p>Asked before the looking, as a state is asked for before it is made. Attributed the
+         * way states are: past what one machine may take, whatever else is true, is this machine.
+         */
+        boolean work(long much) {
+            if (much < 0) {
+                throw new IllegalArgumentException("no construction looks at less than nothing");
+            }
+            if (much > mostWork - looked) {
+                refused(Stopped.ONE_MACHINE);
+                return false;
+            }
+            if (much > workLeft) {
+                refused(Stopped.THE_ANSWER);
+                return false;
+            }
+            looked += much;
+            workLeft -= much;
+            return true;
         }
 
         /**

@@ -109,19 +109,19 @@ class APositionThatDidNotBuildItsStringsSaysSoRatherThanNothingTest {
      */
     private static final ReadingPolicy WITH_NO_ROOM = new ReadingPolicy(
             WITH_ROOM.dnfExpansionLimit(), WITH_ROOM.scalePlacesLimit(),
-            new PatternPlan.Budget(1, 1),
+            new PatternPlan.Budget(1, 1, 1_000_000_000L),
             souther.compiler.values.AsACompilationAllows.whatARuleLeaves());
 
     /** And one with room for the answer and none for handing the rules on. */
     private static final ReadingPolicy WITH_NOTHING_TO_HAND_ON_WITH = new ReadingPolicy(
             WITH_ROOM.dnfExpansionLimit(), WITH_ROOM.scalePlacesLimit(),
             souther.compiler.values.AsACompilationAllows.admittedValues(),
-            new PatternPlan.Budget(1, 1));
+            new PatternPlan.Budget(1, 1, 1_000_000_000L));
 
     /** And the pair the other way round, which is the one nothing may be published under. */
     private static final ReadingPolicy ROOM_TO_HAND_ON_AND_NONE_TO_ANSWER = new ReadingPolicy(
             WITH_ROOM.dnfExpansionLimit(), WITH_ROOM.scalePlacesLimit(),
-            new PatternPlan.Budget(1, 1),
+            new PatternPlan.Budget(1, 1, 1_000_000_000L),
             souther.compiler.values.AsACompilationAllows.whatARuleLeaves());
 
     @Test

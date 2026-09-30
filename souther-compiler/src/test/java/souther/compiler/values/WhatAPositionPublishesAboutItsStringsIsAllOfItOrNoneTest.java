@@ -48,7 +48,7 @@ class WhatAPositionPublishesAboutItsStringsIsAllOfItOrNoneTest {
     }
 
     private static PatternPlan.Budget budget(int states) {
-        return new PatternPlan.Budget(states, states);
+        return new PatternPlan.Budget(states, states, 1_000_000_000L);
     }
 
     @Test

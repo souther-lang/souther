@@ -28,7 +28,7 @@ class TheAlgebraOfLanguagesAgreesWithTheEngineTest {
     /** More than anything here asks for, so that what is measured is the algebra and never the
      *  allowance. A fresh one each time, since a meter is spent as it is used. */
     private static Meter plenty() {
-        return new Meter(100_000, 10_000_000);
+        return new Meter(100_000, 10_000_000, 1_000_000_000L);
     }
 
     private static final List<String> PATTERNS = List.of(
@@ -78,7 +78,7 @@ class TheAlgebraOfLanguagesAgreesWithTheEngineTest {
             for (String two : PATTERNS) {
                 Automaton met = and(machine(one), machine(two));
                 for (String value : STRINGS) {
-                    boolean said = met.accepts(value);
+                    boolean said = met.accepts(value, plenty());
                     boolean both = engineTakes(one, value) && engineTakes(two, value);
                     if (said != both) {
                         apart.add(one + " and " + two + " over \"" + value + "\"");
@@ -97,7 +97,7 @@ class TheAlgebraOfLanguagesAgreesWithTheEngineTest {
             for (String two : PATTERNS) {
                 Automaton joined = or(machine(one), machine(two));
                 for (String value : STRINGS) {
-                    boolean said = joined.accepts(value);
+                    boolean said = joined.accepts(value, plenty());
                     boolean either = engineTakes(one, value) || engineTakes(two, value);
                     if (said != either) {
                         apart.add(one + " or " + two + " over \"" + value + "\"");
@@ -115,7 +115,7 @@ class TheAlgebraOfLanguagesAgreesWithTheEngineTest {
         for (String one : PATTERNS) {
             Automaton left = not(machine(one));
             for (String value : STRINGS) {
-                boolean said = left.accepts(value);
+                boolean said = left.accepts(value, plenty());
                 if (said == engineTakes(one, value)) {
                     apart.add("not " + one + " over \"" + value + "\"");
                 }
@@ -193,7 +193,7 @@ class TheAlgebraOfLanguagesAgreesWithTheEngineTest {
                     assertNull(said, one + " and " + two);
                 } else {
                     assertNotNull(said, one + " and " + two + " holds something");
-                    assertTrue(met.accepts(said), said + " is one of them");
+                    assertTrue(met.accepts(said, plenty()), said + " is one of them");
                     assertTrue(engineTakes(one, said) && engineTakes(two, said),
                             "\"" + said + "\" is taken by both " + one + " and " + two);
                 }
