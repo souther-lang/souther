@@ -1,5 +1,6 @@
 package souther.compiler.doc;
 
+import souther.compiler.io.LimitExceededException;
 import souther.compiler.meta.ModuleMetadata;
 
 import tools.jackson.databind.DeserializationFeature;
@@ -9,7 +10,6 @@ import tools.jackson.databind.node.ObjectNode;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -303,8 +303,17 @@ public final class McpServer {
         PrintWriter writer = new PrintWriter(out, true, StandardCharsets.UTF_8);
         Session session = new Session(loader);
         try {
-            String line;
-            while ((line = readLine(reader)) != null) {
+            while (true) {
+                String line;
+                try {
+                    line = readLine(reader);
+                } catch (LimitExceededException _) {
+                    writer.println(JSON.writeValueAsString(error(null, -32700, "request line is too long")));
+                    continue;
+                }
+                if (line == null) {
+                    break;
+                }
                 if (line.isBlank()) {
                     continue;
                 }
@@ -487,17 +496,12 @@ public final class McpServer {
                     new String[]{"--source", argument(arguments, "name")}, stream, stream, Caller.MCP);
             case "jar_api" -> {
                 String classpath = argument(arguments, "classpath");
-                String outside = entryOutsideWorkingDirectory(classpath);
-                if (outside != null) {
-                    stream.println("`classpath` entry `" + outside
-                            + "` is not under the working directory; only jars and class directories"
-                            + " inside it can be searched");
-                    yield 2;
-                }
                 String[] args = classpath.isEmpty()
                         ? new String[]{argument(arguments, "name")}
                         : new String[]{argument(arguments, "name"), "-cp", classpath};
-                yield JapiCommand.run(args, stream, stream);
+                // The argument comes from a client that may be an agent reading untrusted text, so
+                // it does not choose which part of the disk is read.
+                yield JapiCommand.runConfined(args, stream, stream, Path.of("."));
             }
             default -> {
                 stream.println("no tool `" + tool + "`");
@@ -569,51 +573,28 @@ public final class McpServer {
         return result;
     }
 
-    /**
-     * The first entry of {@code classpath} that is not under the working directory, or {@code null}.
-     * The argument comes from a client that may be an agent reading untrusted text, so it does not
-     * choose which part of the disk is read.
-     */
-    static String entryOutsideWorkingDirectory(String classpath) {
-        Path root = Path.of(".").toAbsolutePath().normalize();
-        for (String entry : classpath.split(File.pathSeparator)) {
-            if (entry.isEmpty()) {
-                continue;
-            }
-            Path path = Path.of(entry).toAbsolutePath().normalize();
-            try {
-                path = path.toRealPath();
-                root = root.toRealPath();
-            } catch (IOException _) {
-                // An entry that does not exist is judged by where it says it is.
-            }
-            if (!path.startsWith(root)) {
-                return entry;
-            }
-        }
-        return null;
-    }
-
     /** The longest request line read, in characters. */
     private static final int LONGEST_REQUEST_LINE = 16 * 1024 * 1024;
 
-    /** One line, or {@code null} at end of input; a line past the limit is skipped to its end and
-     *  answered as one that does not parse. */
+    /**
+     * One line, or {@code null} at end of input. A line past the limit is read to its end without
+     * being kept, so that the one after it is read from where it starts.
+     *
+     * @throws LimitExceededException when the line was longer than the limit
+     */
     private static String readLine(BufferedReader reader) throws IOException {
         StringBuilder line = new StringBuilder();
-        boolean tooLong = false;
+        long length = 0;
         int c;
         while ((c = reader.read()) != -1 && c != '\n') {
-            if (line.length() < LONGEST_REQUEST_LINE) {
+            if (++length <= LONGEST_REQUEST_LINE) {
                 line.append((char) c);
-            } else {
-                tooLong = true;
             }
         }
-        if (c == -1 && line.isEmpty() && !tooLong) {
-            return null;
+        if (length > LONGEST_REQUEST_LINE) {
+            throw new LimitExceededException("request line of more than " + LONGEST_REQUEST_LINE);
         }
-        return tooLong ? "{" : line.toString();
+        return c == -1 && length == 0 ? null : line.toString();
     }
 
     private static String argument(JsonNode arguments, String name) {

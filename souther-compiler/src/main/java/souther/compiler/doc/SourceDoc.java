@@ -136,7 +136,9 @@ final class SourceDoc {
                 return source;
             }
         };
-        // A class path may carry an annotation processor; reading documentation must not run one.
+        // Only the trees and their types are wanted, so no processor is asked for. The class path is
+        // a caller's and may carry one; parse and analyze do not run a processor on this JDK, and
+        // this keeps that from depending on it.
         List<String> options = classPath == null || classPath.isBlank()
                 ? List.of("-proc:none") : List.of("-proc:none", "-classpath", classPath);
         JavacTask task = (JavacTask) compiler.getTask(

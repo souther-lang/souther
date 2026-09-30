@@ -6,6 +6,7 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import souther.compiler.io.ConfinedTree;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Abandonment;
 import java.util.ArrayList;
@@ -209,13 +210,15 @@ public final class Workspace {
                 // this would read to the end after being told to stop.
                 walk.forEach(project -> {
                     abandonment.stopIfAsked();
-                    if (!Files.isDirectory(project)) {
+                    // A link is not a project, and a class output that is one is not read: the
+                    // repository is somebody else's, and where a link leads is not part of it.
+                    if (!Files.isDirectory(project, LinkOption.NOFOLLOW_LINKS)) {
                         return;
                     }
+                    ConfinedTree tree = ConfinedTree.at(project);
                     for (Path layout : CLASS_OUTPUTS) {
-                        Path output = project.resolve(layout);
-                        if (Files.isDirectory(output)) {
-                            outputs.add(output);
+                        if (tree.isDirectory(layout.toString())) {
+                            outputs.add(project.resolve(layout));
                         }
                     }
                 });
@@ -240,14 +243,25 @@ public final class Workspace {
             if (!Files.isDirectory(root)) {
                 continue;
             }
-            try (Stream<Path> walk = Files.walk(root)) {
-                // Every path, as above: the walk is what a workspace of a hundred thousand files
-                // spends its time on, and how many of them end in `.sou` says nothing about that.
-                walk.forEach(path -> {
-                    abandonment.stopIfAsked();
-                    if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
-                            && path.getFileName().toString().endsWith(SUFFIX)) {
-                        sources.put(path.toUri().toString(), readOrEmpty(path));
+            ConfinedTree tree = ConfinedTree.at(root);
+            try {
+                // A workspace is somebody else's repository: what is under it is read only as a
+                // regular file of bounded size, and a link is not followed out of it.
+                tree.walk(MOST_ENTRIES, new ConfinedTree.Entries() {
+                    // Every entry, not only the sources: the walk is what a workspace of a hundred
+                    // thousand files spends its time on, and how many of them end in `.sou` says
+                    // nothing about that.
+                    @Override
+                    public void visited() {
+                        abandonment.stopIfAsked();
+                    }
+
+                    @Override
+                    public void regularFile(String relative) {
+                        if (relative.endsWith(SUFFIX)) {
+                            sources.put(tree.root().resolve(relative).toUri().toString(),
+                                    readOrEmpty(tree, relative));
+                        }
                     }
                 });
             } catch (IOException e) {
@@ -257,15 +271,13 @@ public final class Workspace {
         return sources;
     }
 
-    /** The largest source file the scan reads; a bigger one contributes nothing. */
+    /** The largest source file the scan reads, and the most entries it walks under one root. */
     private static final long LARGEST_SOURCE_BYTES = 16L * 1024 * 1024;
+    private static final long MOST_ENTRIES = 1_000_000;
 
-    private static String readOrEmpty(Path p) {
+    private static String readOrEmpty(ConfinedTree tree, String relative) {
         try {
-            if (Files.size(p) > LARGEST_SOURCE_BYTES) {
-                return "";
-            }
-            return Files.readString(p);
+            return tree.readString(relative, LARGEST_SOURCE_BYTES);
         } catch (IOException _) {
             return "";   // a file that cannot be read contributes nothing, but never crashes the scan
         }

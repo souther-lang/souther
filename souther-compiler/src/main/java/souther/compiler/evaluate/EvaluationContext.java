@@ -57,6 +57,7 @@ public final class EvaluationContext {
         if (state == null) {
             return;
         }
+        stopIfAbandoned();
         if (--state.remainingSteps < 0) {
             throw StepLimitExceeded.INSTANCE;
         }
@@ -75,11 +76,27 @@ public final class EvaluationContext {
         if (state == null) {
             return;
         }
+        stopIfAbandoned();
         if (++state.depth > state.depthLimit) {
             throw DepthLimitExceeded.INSTANCE;
         }
         if (--state.remainingSteps < 0) {
             throw StepLimitExceeded.INSTANCE;
+        }
+    }
+
+    /**
+     * Stops the evaluated code when whoever is waiting for it has given up.
+     *
+     * <p>The wait for a row is on the clock, and what it does when it runs out is interrupt the
+     * worker. An interrupt is only a request, and evaluated code that reaches no blocking call
+     * never sees it, so a worker whose row was given up on would go on spending CPU and heap for as
+     * long as the JVM lives. The counted points are the one place every evaluation passes through,
+     * so the request is read here.
+     */
+    private static void stopIfAbandoned() {
+        if (Thread.currentThread().isInterrupted()) {
+            throw EvaluationAbandoned.INSTANCE;
         }
     }
 
@@ -115,7 +132,8 @@ public final class EvaluationContext {
      * something that is not wrong.
      */
     public static boolean overspending(Throwable thrown) {
-        return thrown instanceof StepLimitExceeded || thrown instanceof DepthLimitExceeded;
+        return thrown instanceof StepLimitExceeded || thrown instanceof DepthLimitExceeded
+                || thrown instanceof EvaluationAbandoned;
     }
 
     private EvaluationContext() {}

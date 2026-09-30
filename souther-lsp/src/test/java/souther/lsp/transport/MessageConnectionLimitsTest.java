@@ -44,4 +44,11 @@ class MessageConnectionLimitsTest {
 
         assertThrows(IllegalStateException.class, () -> reading(endless).read());
     }
+
+    @Test
+    void carriageReturnsCountTowardsTheLimitEvenThoughTheyAreNotKept() {
+        String endless = "\r".repeat(MessageConnection.MAX_HEADER_LINE_CHARS + 1);
+
+        assertThrows(IllegalStateException.class, () -> reading(endless).read());
+    }
 }

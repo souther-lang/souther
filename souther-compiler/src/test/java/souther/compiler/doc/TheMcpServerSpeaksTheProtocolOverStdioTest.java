@@ -143,7 +143,7 @@ class TheMcpServerSpeaksTheProtocolOverStdioTest {
 
         JsonNode result = answers.getFirst().get("result");
         assertTrue(result.get("isError").asBoolean());
-        assertTrue(result.toString().contains("not under the working directory"), result.toString());
+        assertTrue(result.toString().contains("is not under"), result.toString());
     }
 
     @Test

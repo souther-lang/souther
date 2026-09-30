@@ -5,12 +5,17 @@ import souther.compiler.diag.SourceContext;
 import souther.compiler.diag.SourceContextResolver;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.SourceNames;
+import souther.compiler.io.ConfinedTree;
+import souther.compiler.io.LimitExceededException;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.source.SourceId;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +47,52 @@ public final class CompilationSources {
      * @param text what the file says
      */
     public record SourceFile(String path, String text) {}
+
+    /** The most bytes read of one source file, and the most entries walked under one source root. */
+    private static final long MOST_BYTES_OF_A_SOURCE = 16L * 1024 * 1024;
+    private static final long MOST_ENTRIES_OF_A_TREE = 1_000_000;
+
+    /**
+     * Every {@code .sou} under {@code root}, read, path-sorted.
+     *
+     * <p>The root is the caller's own. What is found below it is not, so it is read only if it is a
+     * regular file of a bounded size: a link found under the root is an error and is not followed,
+     * because what it points at may be something that was never meant to be a source, and a report
+     * quotes the source it is about.
+     *
+     * @throws ConfinementException when a {@code .sou} under the root is a link
+     */
+    public static List<SourceFile> readTree(Path root) throws IOException {
+        ConfinedTree tree = ConfinedTree.at(root);
+        List<String> found = new ArrayList<>();
+        boolean complete = tree.walk(MOST_ENTRIES_OF_A_TREE, new ConfinedTree.Entries() {
+            @Override
+            public void regularFile(String relative) {
+                if (relative.endsWith(SUFFIX)) {
+                    found.add(relative);
+                }
+            }
+
+            @Override
+            public void link(String relative) {
+                if (relative.endsWith(SUFFIX)) {
+                    found.add(relative);
+                }
+            }
+        });
+        if (!complete) {
+            throw new LimitExceededException("more than " + MOST_ENTRIES_OF_A_TREE + " entries under " + root);
+        }
+        found.sort(Comparator.comparing(Path::of));
+        List<SourceFile> sources = new ArrayList<>();
+        for (String relative : found) {
+            sources.add(new SourceFile(root.resolve(relative).toString(),
+                    tree.readString(relative, MOST_BYTES_OF_A_SOURCE)));
+        }
+        return sources;
+    }
+
+    private static final String SUFFIX = ".sou";
 
     private final List<String> texts;
 

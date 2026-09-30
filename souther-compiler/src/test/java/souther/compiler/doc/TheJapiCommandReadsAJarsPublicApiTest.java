@@ -252,6 +252,48 @@ class TheJapiCommandReadsAJarsPublicApiTest {
     }
 
     @Test
+    void aConfinedRunDoesNotReadThroughALinkInsideAnEntryThatIsUnderTheRoot() throws Exception {
+        Path base = Files.createTempDirectory("japi-confined");
+        Path outside = Files.createDirectories(base.resolve("outside/acme"));
+        Path secret = outside.resolve("Secret.java");
+        Files.writeString(secret, """
+                package acme;
+
+                public final class Secret {
+                    public static final String VALUE = "s3cr3t";
+                }
+                """);
+        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, OutputStream.nullOutputStream(),
+                OutputStream.nullOutputStream(), "-proc:none", "-d", base.resolve("outside").toString(),
+                secret.toString()));
+        Path workspace = Files.createDirectories(base.resolve("workspace"));
+        Path classes = Files.createDirectories(workspace.resolve("classes"));
+        try {
+            Files.createSymbolicLink(classes.resolve("acme"), base.resolve("outside/acme"));
+        } catch (UnsupportedOperationException | java.io.IOException e) {
+            assumeTrue(false, "symbolic links cannot be made here: " + e);
+        }
+
+        Answer unconfined = run("acme.Secret", "-cp", classes.toString());
+        Answer confined = runConfined(workspace, "acme.Secret", "-cp", classes.toString());
+        Answer listing = runConfined(workspace, "acme", "-cp", classes.toString());
+
+        assertTrue(unconfined.out().contains("s3cr3t"), "the fixture is readable when nothing confines it: " + unconfined);
+        assertFalse((confined.out() + confined.err()).contains("s3cr3t"), "the value behind the link is not shown: " + confined);
+        assertEquals(2, confined.code(), confined.err());
+        assertFalse(listing.out().contains("acme.Secret"), "nor is the class listed: " + listing);
+    }
+
+    private Answer runConfined(Path root, String... args) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        int code = JapiCommand.runConfined(args,
+                new PrintStream(out, true, StandardCharsets.UTF_8),
+                new PrintStream(err, true, StandardCharsets.UTF_8), root);
+        return new Answer(code, out.toString(StandardCharsets.UTF_8), err.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
     void aNameThatWouldLeaveTheClassPathEntryIsRefused() {
         for (String name : new String[]{"...", "../../etc", "acme/Greeter", "acme\\Greeter", "acme..Greeter",
                 ".acme", "acme.", "#member"}) {
@@ -260,58 +302,6 @@ class TheJapiCommandReadsAJarsPublicApiTest {
             assertEquals(2, answer.code(), name + ": " + answer.out() + answer.err());
             assertTrue(answer.err().contains("not a fully qualified"), name + ": " + answer.err());
         }
-    }
-
-    @Test
-    void anAnnotationProcessorOnTheClassPathIsNotRunToReadTheDocumentation() throws Exception {
-        Path dir = Files.createTempDirectory("japi-processor");
-        Path marker = dir.resolve("ran");
-        Path processorSource = dir.resolve("spy/Spy.java");
-        Files.createDirectories(processorSource.getParent());
-        Files.writeString(processorSource, """
-                package spy;
-
-                import java.util.Set;
-                import javax.annotation.processing.AbstractProcessor;
-                import javax.annotation.processing.RoundEnvironment;
-                import javax.lang.model.element.TypeElement;
-
-                public class Spy extends AbstractProcessor {
-                    @Override
-                    public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment round) {
-                        try {
-                            java.nio.file.Files.writeString(java.nio.file.Path.of("%s"), "ran");
-                        } catch (java.io.IOException e) {
-                            throw new java.io.UncheckedIOException(e);
-                        }
-                        return false;
-                    }
-
-                    @Override
-                    public Set<String> getSupportedAnnotationTypes() {
-                        return Set.of("*");
-                    }
-
-                    @Override
-                    public javax.lang.model.SourceVersion getSupportedSourceVersion() {
-                        return javax.lang.model.SourceVersion.latestSupported();
-                    }
-                }
-                """.formatted(marker.toString().replace("\\", "\\\\")));
-        Path processors = dir.resolve("classes");
-        Files.createDirectories(processors);
-        assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, OutputStream.nullOutputStream(),
-                OutputStream.nullOutputStream(), "-proc:none", "-d", processors.toString(),
-                processorSource.toString()));
-        Path service = processors.resolve("META-INF/services/javax.annotation.processing.Processor");
-        Files.createDirectories(service.getParent());
-        Files.writeString(service, "spy.Spy\n");
-
-        Answer answer = run("acme.Greeter", "-cp", jar + java.io.File.pathSeparator + processors);
-
-        assertEquals(0, answer.code(), answer.err());
-        assertTrue(answer.out().contains("Says the greeting"), "the documentation is still read: " + answer.out());
-        assertFalse(Files.exists(marker), "the processor on the class path ran");
     }
 
     @Test
