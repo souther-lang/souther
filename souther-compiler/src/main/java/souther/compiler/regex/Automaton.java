@@ -713,7 +713,7 @@ final class Automaton {
                 }
                 boolean madeSmaller = ends[made] - begins[made] <= ends[split] - begins[split];
                 for (int symbol = 0; symbol < width; symbol++) {
-                    int next = waiting.get(split * width + symbol) || madeSmaller
+                    int next = (waiting.get(split * width + symbol) || madeSmaller)
                             ? made : split;
                     if (!waiting.get(next * width + symbol)) {
                         waiting.set(next * width + symbol);
