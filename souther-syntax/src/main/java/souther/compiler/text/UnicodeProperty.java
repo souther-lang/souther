@@ -110,7 +110,7 @@ public final class UnicodeProperty {
 
     /** Whether {@code codePoint} is in the set. */
     public boolean has(int codePoint) {
-        return codePoint >= 0 && codePoint < ASCII ? ascii[codePoint] : search(codePoint);
+        return (codePoint >= 0 && codePoint < ASCII) ? ascii[codePoint] : search(codePoint);
     }
 
     /** The set as sorted, non-overlapping {@code [from, to]} pairs, flattened. */

@@ -140,7 +140,7 @@ public final class StringPattern implements Predicate<String> {
         for (int state = 0; state < runs.length; state++) {
             for (int each = 0; each < kinds; each++) {
                 int to = next(runs[state], first[each]);
-                steps[state * kinds + each] = to >= 0 && live[to] ? to : -1;
+                steps[state * kinds + each] = (to >= 0 && live[to]) ? to : -1;
             }
         }
         return new Ascii(kind, kinds, steps);
