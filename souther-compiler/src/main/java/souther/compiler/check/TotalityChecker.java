@@ -63,6 +63,9 @@ final class TotalityChecker {
         inliner.held().values().forEach(
                 entry -> own.put(entry.address().text(), entry.definition()));
         Set<ReachName.Declaration> handled = new HashSet<>();
+        // Asked of the whole graph, prelude included, so only once a group of this module's own is
+        // there to be checked.
+        Map<ReachName.Declaration, List<ReachName.Declaration>> cycles = null;
         for (ReachName.Declaration reference : inliner.recursiveHelpers()) {
             // What the inliner answers is what this module holds, so each has an address here. One
             // without is refused rather than passed over: passed over, it is a recursion nobody
@@ -84,7 +87,11 @@ final class TotalityChecker {
             if (!handled.add(reference)) {
                 continue;   // a sibling of an already-analyzed group
             }
-            Map<ReachName.Declaration, String> group = groupOf(reference, inliner, own);
+            if (cycles == null) {
+                cycles = inliner.callCycles();
+            }
+            Map<ReachName.Declaration, String> group = groupOf(reference,
+                    cycles.getOrDefault(reference, List.of()), inliner, own);
             handled.addAll(group.keySet());
             Set<String> names = new LinkedHashSet<>(group.values());
             // `partial` opts out; a `partial` anywhere in a mutual group opts the whole group out.
@@ -104,10 +111,10 @@ final class TotalityChecker {
     }
 
     /**
-     * The group {@code reference} is checked in: the call cycle it is on, each member at the address
-     * this module holds it.
+     * The group {@code reference} is checked in: {@code cycle}, the call cycle it is on, each member
+     * at the address this module holds it.
      *
-     * <p>The cycle is the one the call graph answers ({@link HelperInliner#callCycleOf}), which is the
+     * <p>The cycle is the one the call graph answers ({@link HelperInliner#callCycles}), which is the
      * graph that said {@code reference} recurses. The size-change criterion holds of no graphs at all,
      * so a group that came out without {@code reference} would be proven total without its calls ever
      * being read. The graph answers the two with one predicate; this still refuses a cycle that does
@@ -118,9 +125,9 @@ final class TotalityChecker {
      * own: nothing it reaches — an import, the library — calls back into it.
      */
     private static Map<ReachName.Declaration, String> groupOf(ReachName.Declaration reference,
+                                                           List<ReachName.Declaration> cycle,
                                                            HelperInliner inliner,
                                                            Map<String, Hir.FnDef> own) {
-        List<ReachName.Declaration> cycle = inliner.callCycleOf(reference);
         if (!cycle.contains(reference)) {
             throw new IllegalStateException("`" + reference.rendered()
                     + "` recurses and is not on the call cycle answered for it");

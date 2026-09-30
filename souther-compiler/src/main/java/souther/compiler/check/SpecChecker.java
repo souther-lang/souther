@@ -98,11 +98,16 @@ public final class SpecChecker {
             }
             edges.put(new ValueName.Behavior(module.name(), b.name()), out);
         }
+        // Which behaviors lie on a cycle, worked out once over the whole graph; the way round is
+        // found for the one that is reported.
+        Set<ValueName.Behavior> onACycle = Cycles.groups(edges).keySet();
         for (Hir.BehaviorDef b : module.behaviors()) {
             ValueName.Behavior self = new ValueName.Behavior(module.name(), b.name());
-            List<ValueName.Behavior> path = new ArrayList<>();
-            if (reaches(self, self, edges, path, new HashSet<>())) {
-                path.add(self);
+            if (!onACycle.contains(self)) {
+                continue;
+            }
+            List<ValueName.Behavior> path = Cycles.roundFrom(self, edges);
+            if (!path.isEmpty()) {
                 List<String> written = new ArrayList<>();
                 for (ValueName.Behavior each : path) {
                     written.add(each.name());
@@ -112,25 +117,6 @@ public final class SpecChecker {
                                 .hint(new DeclarationMessage.ABehaviorDoesNotRecurse()).say(new DeclarationMessage.ABehaviorReachesItself(b.name(), String.join(" -> ", written))).build());
             }
         }
-    }
-
-    /** Whether {@code target} is reachable from {@code from}, recording the way there in
-     *  {@code path}. {@code path} starts with {@code from} and ends at the last step before
-     *  {@code target}. */
-    private static boolean reaches(ValueName.Behavior from, ValueName.Behavior target,
-                                   Map<ValueName.Behavior, List<ValueName.Behavior>> edges,
-                                   List<ValueName.Behavior> path, Set<ValueName.Behavior> seen) {
-        if (!seen.add(from)) {
-            return false;
-        }
-        path.add(from);
-        for (ValueName.Behavior next : edges.getOrDefault(from, List.of())) {
-            if (next.equals(target) || reaches(next, target, edges, path, seen)) {
-                return true;
-            }
-        }
-        path.remove(path.size() - 1);
-        return false;
     }
 
     /**

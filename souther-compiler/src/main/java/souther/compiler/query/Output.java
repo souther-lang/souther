@@ -348,9 +348,11 @@ public final class Output {
          * every example of the module something to establish again. What an edit does to the
          * positions under it is another matter and reaches an evaluation either way.
          *
-         * <p>Nothing here can fail in a way worth reporting. A module with no source of its own was
-         * read off the path, and its jar was stamped where it was built; and the declarations are
-         * only asked for once the module has checked, so they are there.
+         * <p>What is asked for here is there. A module with no source of its own was read off the
+         * path, and its jar was stamped where it was built; and the declarations are only asked for
+         * once the module has checked. What can still fail is the writing: a declaration's text may
+         * be longer than one constant of a class file holds, and that is said as the declaration's
+         * like any other limit of the class file.
          */
         private void publishDeclarations(Db db, Emissions classes) {
             Front.Layout.Of layout = db.ask(new Front.Layout()).value();

@@ -70,6 +70,19 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
     }
 
     /**
+     * How {@code type} is read where the step that takes a name off ({@link TypeOps#outermost})
+     * found none on it.
+     *
+     * <p>That step is the first one {@link TypeOps#newtypeSpine} takes, so a type it found no name
+     * on has an empty spine, and this is what {@link #of} answers for it. For a reader that has
+     * already taken the step: asked through {@link #of}, the same question would be put to the
+     * declarations a second time.
+     */
+    static TypeView wearingNoName(Type type, Symbols symbols, PublishedDeclarations published) {
+        return new TypeView(type, List.of(), shapeOf(type, symbols, published));
+    }
+
+    /**
      * The same, for a reader that holds the declarations rather than the compilation's answer.
      *
      * <p>What a position is, is read off the declarations either way — the shape under the names

@@ -13,6 +13,7 @@ import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -65,6 +66,66 @@ class AGeneratedMemberTooLargeForTheJvmIsSaidAtItsDefinitionTest {
         assertEquals("E2102", e.code(), e.getMessage());
         assertTrue(e.getMessage().contains("spin"),
                 "the helper, not the $Fns class the helpers share: " + e.getMessage());
+    }
+
+    /**
+     * A text one constant does not hold is the same diagnostic whichever JDK runs this: one writer
+     * says how long the text was and another does not, and one refuses it as a method is written and
+     * another only as the class is. A value is emitted on the class the module's helpers share, so it
+     * is said at the module, as a pool those helpers fill is.
+     */
+    @Test
+    void aLiteralLongerThanOneConstantHoldsIsSaidTheSameOnEveryWriter() {
+        assertDoesNotThrow(() -> Compiler.compile(aValueOfText("a".repeat(1000))));
+
+        // Past the limit in modified UTF-8 and not in characters: each of these takes three bytes.
+        String src = aValueOfText("あ".repeat(21846));
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertEquals("E2103", e.code(), e.getMessage());
+        String said = new HumanRenderer(false).render(e.diagnostic(),
+                new SourceContext("demo.sou", src, SourceLayout.of(src)), Locale.ENGLISH);
+        assertTrue(e.getMessage().contains("`demo`"), e.getMessage());
+        assertTrue(said.contains("65535"), "the limit it went past: " + said);
+        assertFalse(said.contains("65538"), "not how far past, which not every writer says: " + said);
+    }
+
+    @Test
+    void aDeclarationWhoseSourceIsLongerThanOneConstantHoldsIsSaidAtTheDeclaration() {
+        // Each rule is short and a construction checks them all, so what grows is the text the
+        // declaration is carried as.
+        StringBuilder src = new StringBuilder("module demo exposing ( Code )\n\ndata Code = String\n");
+        for (int i = 0; i < 120; i++) {
+            src.append("    invariant String.length(value) <= ").append(1000 + i).append(" // ")
+                    .append("x".repeat(600)).append('\n');
+        }
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compile(src.toString()));
+        assertEquals("E2103", e.code(), e.getMessage());
+        assertTrue(e.getMessage().contains("`Code`"), e.getMessage());
+    }
+
+    @Test
+    void aHeaderLongerThanOneConstantHoldsIsSaidAtTheModule() {
+        // Few declarations with long names: what is measured is the header's text, and a
+        // declaration costs the compile far more than the length of its name does.
+        String longName = "T" + "x".repeat(400);
+        StringBuilder src = new StringBuilder("module demo exposing ( ");
+        int names = 170;
+        for (int i = 0; i < names; i++) {
+            src.append(i == 0 ? "" : ", ").append(longName).append(i);
+        }
+        src.append(" )\n\n");
+        for (int i = 0; i < names; i++) {
+            src.append("data ").append(longName).append(i).append(" = Int\n");
+        }
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compile(src.toString()));
+        assertEquals("E2103", e.code(), e.getMessage());
+        assertTrue(e.getMessage().contains("`demo`"), e.getMessage());
+    }
+
+    private static String aValueOfText(String text) {
+        return "module demo exposing ( greeting )\n\nlet greeting : String = \"" + text + "\"\n";
     }
 
     private static String listOf(int n) {

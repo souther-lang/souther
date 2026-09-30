@@ -613,10 +613,10 @@ public final class HelperInliner {
         return List.copyOf(result);
     }
 
-    /** The call cycle {@code reference} is on, as the graph that answers {@link #recursiveHelpers}
-     *  has it ({@link HelperGraph#callCycleOf}). */
-    public List<ReachName.Declaration> callCycleOf(ReachName.Declaration reference) {
-        return graph.callCycleOf(reference);
+    /** The call cycle each recursion is on, as the graph that answers {@link #recursiveHelpers} has
+     *  it ({@link HelperGraph#callCycles}). */
+    public Map<ReachName.Declaration, List<ReachName.Declaration>> callCycles() {
+        return graph.callCycles();
     }
 
     /** The declaration {@code call} applies as the call graph reads it — what a sugar is written out

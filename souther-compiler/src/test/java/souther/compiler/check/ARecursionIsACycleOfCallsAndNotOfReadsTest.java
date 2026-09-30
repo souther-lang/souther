@@ -74,7 +74,7 @@ class ARecursionIsACycleOfCallsAndNotOfReadsTest {
 
         assertFalse(graph.recurses(own("f")));
         assertFalse(graph.recurses(own("seed")));
-        assertEquals(List.of(), graph.callCycleOf(own("f")));
+        assertFalse(graph.callCycles().containsKey(own("f")));
     }
 
     /** A helper that takes arguments, written where a value goes, becomes a function there. Nothing
@@ -104,8 +104,8 @@ class ARecursionIsACycleOfCallsAndNotOfReadsTest {
                 let pong (n: Int) : Int = ping(n)
                 """));
 
-        assertEquals(List.of(own("ping"), own("pong")), graph.callCycleOf(own("ping")));
-        assertEquals(List.of(own("ping"), own("pong")), graph.callCycleOf(own("pong")));
+        assertEquals(List.of(own("ping"), own("pong")), graph.callCycles().get(own("ping")));
+        assertEquals(List.of(own("ping"), own("pong")), graph.callCycles().get(own("pong")));
     }
 
     /** Reaching a cycle is not being on it. */
@@ -120,7 +120,7 @@ class ARecursionIsACycleOfCallsAndNotOfReadsTest {
                 """));
 
         assertFalse(graph.recurses(own("caller")));
-        assertEquals(List.of(), graph.callCycleOf(own("caller")));
+        assertFalse(graph.callCycles().containsKey(own("caller")));
         assertTrue(graph.recurses(own("ping")));
     }
 }
