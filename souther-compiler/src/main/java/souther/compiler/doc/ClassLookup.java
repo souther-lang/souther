@@ -10,6 +10,10 @@ import java.util.List;
  * <p>javac given a class path string searches it with its own file access, which knows nothing of
  * what the caller allows to be read. Given this instead, it asks for the classes of one package at
  * a time and gets bytes that were read the way every other file of the run is read.
+ *
+ * <p>Whoever makes a lookup closes it. The archives it opened stay open for as long as it lives, so
+ * that a question about a package is answered from what is already open, and {@link SourceDoc} and
+ * {@link ConfinedClassPath} only borrow it for the length of one read.
  */
 interface ClassLookup extends AutoCloseable {
 

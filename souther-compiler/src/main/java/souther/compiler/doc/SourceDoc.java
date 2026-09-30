@@ -74,7 +74,7 @@ final class SourceDoc {
      * Reads {@code source} for what it says about {@code binaryName}, resolving the types it names
      * against {@code classPath} — the same path the class file itself was found on. When
      * {@code confined} is given the types are found through it instead, and {@code classPath} is not
-     * handed to javac at all.
+     * handed to javac at all. The lookup is the caller's: it is used for this read and not closed.
      */
     static SourceDoc of(String source, String binaryName, String classPath, ClassLookup confined) {
         if (ToolProvider.getSystemJavaCompiler() == null) {
