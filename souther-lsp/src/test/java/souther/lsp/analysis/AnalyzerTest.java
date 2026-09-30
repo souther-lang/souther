@@ -11,6 +11,7 @@ import souther.lsp.protocol.Range;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -423,6 +424,21 @@ class AnalyzerTest {
         assertTrue(!diags.get("file:///a.sou").isEmpty(), "the broken file shows its own syntax error");
         assertEquals(List.of(), diags.get("file:///b.sou"),
                 "the importer is not told the (broken but present) module is unknown");
+    }
+
+    /** The broken file's header is read as the compile names a module: through the lexer's
+     *  alphabet and to NFC, so an importer spelling it composed finds a header spelling it apart. */
+    @Test
+    void aBrokenModuleIsNamedAsTheCompileWouldNameIt() {
+        String a = "module café exposing ( N )\ndata N = { name String }\n";
+        String b = "module b\nimport café ( N )\nbehavior f : (n: N) -> N\nlet f (n) = n\n";
+        ModuleGraph graph = ModuleGraph.of(Map.of("file:///a.sou", a, "file:///b.sou", b));
+
+        Map<String, List<LspDiagnostic>> diags = analyzer.diagnostics(graph);
+
+        assertTrue(!diags.get("file:///a.sou").isEmpty(), "the broken file shows its own syntax error");
+        assertEquals(List.of(), diags.get("file:///b.sou"),
+                "the importer is not told the module it names is unknown");
     }
 
     @Test

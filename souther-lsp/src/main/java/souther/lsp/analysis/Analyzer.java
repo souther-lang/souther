@@ -74,6 +74,7 @@ import souther.compiler.cst.SyntaxToken;
 import souther.compiler.cst.TopLevelForm;
 import souther.compiler.fmt.Formatter;
 import souther.compiler.fmt.Skeleton;
+import souther.compiler.frontend.AstBuilder;
 import souther.compiler.frontend.CstFrontend;
 import souther.lsp.protocol.CodeAction;
 import souther.lsp.protocol.CodeLens;
@@ -313,7 +314,7 @@ public final class Analyzer {
             if (readable && syntax.isEmpty()) {
                 compileSet.put(uri, text);   // a syntactically broken file cannot join the compile
             } else {
-                String name = Compiler.moduleNameFromHeader(text);
+                String name = readingOf(uri, text).declares();
                 if (name != null) {
                     brokenModules.add(name);   // present but unparseable; importers skip, not cascade
                 }
@@ -453,9 +454,9 @@ public final class Analyzer {
 
 
     /**
-     * What one document was found to be: whether it can join a compile, and — where it cannot — the
-     * module its header names, which is what keeps an importer from being told the module is
-     * unknown.
+     * What one document was found to be: whether it can join a compile, and the module its header
+     * names. Where it cannot join, that name is what keeps an importer from being told the module
+     * is unknown; the name is read off the same parse either way.
      *
      * <p>Kept with the text it was read from. Every request that arrives with the workspace sorts it
      * into what can be compiled and what cannot, and a request arrives for each keystroke while
@@ -475,14 +476,14 @@ public final class Analyzer {
         if (had != null && had.text().equals(text)) {
             return had;
         }
-        boolean parses;
+        Reading now;
         try {
-            parses = CstParser.parse(text).errors().isEmpty();
+            CstParser.Result parsed = CstParser.parse(text);
+            now = new Reading(text, parsed.errors().isEmpty(),
+                    AstBuilder.headerModuleName(parsed.root()));
         } catch (RuntimeException | StackOverflowError e) {
-            parses = false;
+            now = new Reading(text, false, null);
         }
-        Reading now = new Reading(text, parses,
-                parses ? null : Compiler.moduleNameFromHeader(text));
         readings.put(uri, now);
         return now;
     }
@@ -641,7 +642,7 @@ public final class Analyzer {
             return known;
         }
         String text = graph.text(uri);
-        return text == null ? null : Compiler.moduleNameFromHeader(text);
+        return text == null ? null : readingOf(uri, text).declares();
     }
 
     /**
@@ -2582,7 +2583,8 @@ public final class Analyzer {
         }
         for (String uri : graph.uris()) {
             abandonment.stopIfAsked();
-            if (moduleName.equals(Compiler.moduleNameFromHeader(graph.text(uri)))) {
+            String text = graph.text(uri);
+            if (text != null && moduleName.equals(readingOf(uri, text).declares())) {
                 return uri;
             }
         }
