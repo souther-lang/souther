@@ -135,12 +135,16 @@ public final class CompilerBuildDriver implements SoutherBuildDriver {
             if (previous.isBlank() || written.contains(previous)) {
                 continue;
             }
-            try {
-                output.deleteIfExists(previous);
-                output.deleteEmptyParents(previous);
-            } catch (ConfinementException _) {
-                continue;
-            }
+            takeBack(previous, output);
+        }
+    }
+
+    private static void takeBack(String previous, ConfinedTree output) throws IOException {
+        try {
+            output.deleteIfExists(previous);
+            output.deleteEmptyParents(previous);
+        } catch (ConfinementException _) {
+            // A line that names something outside the output tree deletes nothing.
         }
     }
 
