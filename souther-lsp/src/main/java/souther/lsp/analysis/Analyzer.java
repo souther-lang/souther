@@ -223,13 +223,7 @@ public final class Analyzer {
      * semantic error a compile turns up, or the warnings a clean compile found. */
     public List<LspDiagnostic> diagnostics(String text) {
         SourceLayout lines = SourceLayout.of(text);
-        List<LspDiagnostic> out = new ArrayList<>();
-
-        try {
-            out.addAll(syntaxOf(text, lines.lines()));
-        } catch (RuntimeException | StackOverflowError e) {
-            return List.of(internalError(lines.lines(), e));   // the parse itself did not finish
-        }
+        List<LspDiagnostic> out = new ArrayList<>(syntaxOf(Reading.of(text), lines.lines()));
         if (!out.isEmpty()) {
             return out;   // don't chase semantics through a broken parse
         }
@@ -259,10 +253,17 @@ public final class Analyzer {
      * code and the other a null: a reader in an editor met a syntax error with nothing to look up,
      * and only in a workspace. What is tested is one route, and what makes that cover the other is
      * that there is only one of these.
+     *
+     * <p>Read off a {@link Reading} and not off the text, so the parse it reports is the one the
+     * document's module name and whether it joins a compile were read off: a document is parsed
+     * once, and what is said about it comes from that.
      */
-    private List<LspDiagnostic> syntaxOf(String text, LineIndex lines) {
+    private List<LspDiagnostic> syntaxOf(Reading reading, LineIndex lines) {
+        if (reading.unfinished() != null) {
+            return List.of(internalError(lines, reading.unfinished()));   // the parse did not finish
+        }
         List<LspDiagnostic> found = new ArrayList<>();
-        for (CstError<?> e : CstParser.parse(text).errors()) {
+        for (CstError<?> e : reading.errors()) {
             found.add(new LspDiagnostic(range(lines, e.offset(), e.offset() + e.width()),
                     LspDiagnostic.ERROR, e.code().name(),
                     Messages.render(e.said(), EDITOR_LANGUAGE)));
@@ -302,19 +303,12 @@ public final class Analyzer {
             abandonment.stopIfAsked();   // between two files, before this one is parsed
             String text = graph.text(uri);
             SourceLayout lines = SourceLayout.of(text, new SourceId(uri));
-            List<LspDiagnostic> syntax = new ArrayList<>();
-            boolean readable = true;
-            try {
-                syntax.addAll(syntaxOf(text, lines.lines()));
-            } catch (RuntimeException | StackOverflowError e) {
-                syntax.add(internalError(lines.lines(), e));   // the parse itself did not finish
-                readable = false;
-            }
-            out.put(uri, syntax);
-            if (readable && syntax.isEmpty()) {
+            Reading reading = readingOf(uri, text);
+            out.put(uri, new ArrayList<>(syntaxOf(reading, lines.lines())));
+            if (reading.parses()) {
                 compileSet.put(uri, text);   // a syntactically broken file cannot join the compile
             } else {
-                String name = readingOf(uri, text).declares();
+                String name = reading.declares();
                 if (name != null) {
                     brokenModules.add(name);   // present but unparseable; importers skip, not cascade
                 }
@@ -454,9 +448,11 @@ public final class Analyzer {
 
 
     /**
-     * What one document was found to be: whether it can join a compile, and the module its header
-     * names. Where it cannot join, that name is what keeps an importer from being told the module
-     * is unknown; the name is read off the same parse either way.
+     * What one parse of a document found: the syntax errors it met, or what stopped it before it
+     * finished, and the module its header names. Whether the document can join a compile, what the
+     * editor is told about its syntax and which module it is taken for are all read off this, so a
+     * document is parsed once for all three. Where it cannot join, the name is what keeps an
+     * importer from being told the module is unknown.
      *
      * <p>Kept with the text it was read from. Every request that arrives with the workspace sorts it
      * into what can be compiled and what cannot, and a request arrives for each keystroke while
@@ -465,7 +461,25 @@ public final class Analyzer {
      * 3898 lines — it was 7.3 of the 9.3 milliseconds a completion took, and it grows with the
      * workspace rather than with the edit.
      */
-    private record Reading(String text, boolean parses, String declares) {}
+    private record Reading(String text, List<CstError<?>> errors, Throwable unfinished,
+                           String declares) {
+
+        /** {@code text} parsed, once. */
+        static Reading of(String text) {
+            try {
+                CstParser.Result parsed = CstParser.parse(text);
+                return new Reading(text, parsed.errors(), null,
+                        AstBuilder.headerModuleName(parsed.root()));
+            } catch (RuntimeException | StackOverflowError e) {
+                return new Reading(text, List.of(), e, null);
+            }
+        }
+
+        /** Whether the parse finished and met nothing, which is what joining a compile asks. */
+        boolean parses() {
+            return unfinished == null && errors.isEmpty();
+        }
+    }
 
     /** Documents this analyzer has already read, by URI. Dropped along with everything else it
      * remembers about a document the workspace no longer holds. */
@@ -476,14 +490,7 @@ public final class Analyzer {
         if (had != null && had.text().equals(text)) {
             return had;
         }
-        Reading now;
-        try {
-            CstParser.Result parsed = CstParser.parse(text);
-            now = new Reading(text, parsed.errors().isEmpty(),
-                    AstBuilder.headerModuleName(parsed.root()));
-        } catch (RuntimeException | StackOverflowError e) {
-            now = new Reading(text, false, null);
-        }
+        Reading now = Reading.of(text);
         readings.put(uri, now);
         return now;
     }
