@@ -22,9 +22,32 @@ jobs:
   # Not on a schedule: the job below runs everything this one runs and the slow tests besides, so
   # the two together would build the reactor twice over and answer the same question the second
   # time.
+  #
+  # The compiler's tests are most of the wait, so they are spread over two runners and every other
+  # module's tests are on a third. Each runner builds what it needs and runs only the tests its
+  # filter names. The filters are exhaustive by construction: `rest` is everything outside the
+  # compiler's test package, `compiler-a` is the packages listed, and `compiler-b` is the
+  # compiler's package less those. A test class added anywhere lands in exactly one of the three,
+  # and a package added under the compiler lands in `compiler-b`. Naming tests replaces the
+  # classes surefire takes by default, so `rest` leaves out `*IT` again: those run after
+  # packaging, in failsafe, which the filter does not reach.
   build:
     if: github.event_name != 'schedule'
+    name: build (${{ matrix.shard.name }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - name: rest
+            modules: ''
+            tests: '!souther/compiler/**,!**/*IT'
+          - name: compiler-a
+            modules: '-pl souther-compiler -am'
+            tests: 'souther/compiler/partition/**,souther/compiler/check/**,souther/compiler/doc/**,souther/compiler/fmt/**,souther/compiler/inputs/**,souther/compiler/query/**,souther/compiler/values/**'
+          - name: compiler-b
+            modules: '-pl souther-compiler -am'
+            tests: 'souther/compiler/**,!souther/compiler/partition/**,!souther/compiler/check/**,!souther/compiler/doc/**,!souther/compiler/fmt/**,!souther/compiler/inputs/**,!souther/compiler/query/**,!souther/compiler/values/**'
     steps:
       - uses: actions/checkout@v7
       - name: Set up JDK 25
@@ -36,10 +59,15 @@ jobs:
       - name: Build and test
         # As many as the runner has, and printed so that a run says how many it was given. The
         # number in the pom is a ceiling for a machine somebody is also working on, and a runner
-        # is nobody's.
+        # is nobody's. A module a filter matches nothing in runs no tests rather than failing.
+        # Naming tests in the pom empties the tag left out, so the tag is named here again.
         run: |
           echo "forks: $(nproc)"
-          mvn -B --no-transfer-progress verify -DforkCount=$(nproc)
+          mvn -B --no-transfer-progress verify ${{ matrix.shard.modules }} \
+            -DforkCount=$(nproc) \
+            -Dtest.excluded.groups=nightly \
+            -Dsurefire.failIfNoSpecifiedTests=false \
+            '-Dtest=${{ matrix.shard.tests }}'
 
   # And the slow ones, asked where waiting for them costs nobody an edit: once a night, and nowhere
   # a change is on its way in. Emptying the property is what asks them; everything the job above
