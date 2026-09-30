@@ -5,7 +5,9 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -233,29 +235,28 @@ final class TypeGuarantees {
      * a rule the walk has already gone one name down to, and no row can discharge it.
      */
     boolean anyRuleUnder(Type type) {
-        return anyRuleUnder(type, new HashSet<>());
-    }
-
-    /** {@code seen} stops a type that holds its own kind. A name met on the way here was read where
-     * it was met, so what it holds is accounted for and reaching it again adds nothing. */
-    private boolean anyRuleUnder(Type type, Set<TypeSymbol> seen) {
-        ValueReading written = ValueReading.of(type, inners(), kinds(), symbols, published());
-        if (written.entering() != null && !seen.add(written.entering())) {
-            return false;
-        }
-        for (ValueReading.Owner owner : written.owners()) {
-            if (!clauses.declared(owner.named()).isEmpty()) {
-                return true;
+        // `seen` stops a type that holds its own kind. A name met on the way here was read
+        // where it was met, so what it holds is accounted for and reaching it again adds nothing.
+        // On a stack of its own, because what is under a type is as deep as its declarations chain.
+        Set<TypeSymbol> seen = new HashSet<>();
+        Deque<Type> left = new ArrayDeque<>();
+        left.push(type);
+        while (!left.isEmpty()) {
+            ValueReading written = ValueReading.of(left.pop(), inners(), kinds(), symbols,
+                    published());
+            if (written.entering() != null && !seen.add(written.entering())) {
+                continue;
             }
-        }
-        for (Type under : written.named().values()) {
-            if (anyRuleUnder(under, seen)) {
-                return true;
+            for (ValueReading.Owner owner : written.owners()) {
+                if (!clauses.declared(owner.named()).isEmpty()) {
+                    return true;
+                }
             }
-        }
-        for (Type under : written.handedOn()) {
-            if (anyRuleUnder(under, seen)) {
-                return true;
+            // Pushed last first, so what is under here is read in the order it is written.
+            List<Type> under = new ArrayList<>(written.named().values());
+            under.addAll(written.handedOn());
+            for (Type each : under.reversed()) {
+                left.push(each);
             }
         }
         return false;

@@ -107,16 +107,18 @@ sealed interface ValueReading {
     /** What the model writes where a value of {@code type} stands. */
     static ValueReading of(Type type, NewtypeInners inners, DeclarationKinds kinds, Symbols symbols,
                            PublishedDeclarations published) {
-        TypeView view = TypeView.of(type, inners, symbols, published);
-        if (view.isWrapped() && view.wrappers().getFirst() instanceof TypeSymbol.AtModule worn) {
+        // The outermost name and nothing under it. What stands under the name is read where a walk
+        // reaches it, so the rest of the names are not this reading's to take off.
+        TypeOps.Unwrapped outer = TypeOps.outermost(type, inners);
+        if (outer != null && outer.layer().named() instanceof TypeSymbol.AtModule worn) {
             // The one name a value written under a name makes readable, which is what that name
-            // wraps. A name is worn here only because the walk that took the names off found
-            // something under it, so there is something to write down; reading the declaration for
-            // it would be deciding how far a newtype reaches a second time in a method that has
-            // already been told.
+            // wraps. A name is worn here only because the step that takes names off found something
+            // under it, so there is something to write down; reading the declaration for it would be
+            // deciding how far a newtype reaches a second time.
             return new UnderAName(worn, owning(worn, kinds),
-                    Map.of(NewtypeInners.THE_ONE_VALUE, inners.of(worn.key())));
+                    Map.of(NewtypeInners.THE_ONE_VALUE, outer.inner()));
         }
+        TypeView view = TypeView.of(type, inners, symbols, published);
         // What a field access may write here is one question with one owner, asked once for every
         // shape. What is left for the switch is which declarations state something of every value
         // here and what stands below that this does not take in.

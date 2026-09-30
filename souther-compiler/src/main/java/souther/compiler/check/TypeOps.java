@@ -1844,21 +1844,41 @@ public final class TypeOps {
         Set<TypeSymbol> worn = new LinkedHashSet<>();
         Type at = t;
         while (at instanceof Type.Ref ref && worn.add(ref.name())) {
-            // What the name wraps, asked once. A name that wraps nothing is where the walk stops,
-            // and it is one answer whether the name wears no one value or wears one whose written
-            // type denotes nothing — the walk has nowhere further to go either way.
-            Type inner = inners.under(at);
-            if (inner == null) {
+            Unwrapped step = outermost(at, inners);
+            if (step == null) {
                 break;
             }
-            layers.add(new Layer(ref.name()));
-            at = inner;
+            layers.add(step.layer());
+            at = step.inner();
         }
         return new NewtypeSpine(List.copyOf(layers), at);
     }
 
     /** The names a value wears, and the type underneath them. */
     public record NewtypeSpine(List<Layer> layers, Type terminal) {}
+
+    /**
+     * The outermost name a value of {@code t} wears and what it wraps, or null where it wears none.
+     *
+     * <p>The step {@link #newtypeSpine} takes at every name, and the whole of its first one. A reader
+     * that only reads the name on the outside asks this, and is not handed the rest of the spine to
+     * throw away: over a chain of newtypes a walk asks at every link, and the spine under a link is
+     * the rest of the chain.
+     *
+     * <p>What the name wraps is asked once. A name that wraps nothing is where a walk stops, and it
+     * is one answer whether the name wears no one value or wears one whose written type denotes
+     * nothing — there is nowhere further to go either way.
+     */
+    public static Unwrapped outermost(Type t, NewtypeInners inners) {
+        if (!(t instanceof Type.Ref ref)) {
+            return null;
+        }
+        Type inner = inners.under(t);
+        return inner == null ? null : new Unwrapped(new Layer(ref.name()), inner);
+    }
+
+    /** One name taken off a value, and the type it was worn over. */
+    public record Unwrapped(Layer layer, Type inner) {}
 
     /**
      * One name a value wears.

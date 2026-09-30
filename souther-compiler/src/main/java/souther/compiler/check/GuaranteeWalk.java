@@ -4,8 +4,11 @@ import souther.compiler.core.Core;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -183,17 +186,58 @@ final class GuaranteeWalk {
      * relative to it.
      */
     void from(Core root, RuleKey path, Denotations at, Scope scope, Reader reader) {
-        walk(root, path, at, 0, scope, new HashSet<>(), reader);
+        // On a stack of its own. How far down a reader reads may have no bound at all, and then the
+        // walk is as deep as the declarations are chained; one on the call stack would answer a long
+        // chain by running out of room.
+        Set<TypeSymbol> entered = new HashSet<>();
+        Deque<Inside> inside = new ArrayDeque<>();
+        Inside first = enter(root, path, at, 0, scope, entered, reader);
+        if (first != null) {
+            inside.push(first);
+        }
+        while (!inside.isEmpty()) {
+            Inside here = inside.peek();
+            if (!here.under().hasNext()) {
+                inside.pop();
+                if (here.name() != null) {
+                    entered.remove(here.name());
+                }
+                continue;
+            }
+            TypeGuarantees.At.Readable under = here.under().next();
+            // Whether following the name reaches somewhere else is `Location.isStep`'s answer,
+            // asked here because here is where the name is written down. A newtype's `value` is
+            // this same value under a name, so a walk into one keeps the path it came with.
+            RuleKey there = Location.isStep(here.root().type(), under.name(), newtypes)
+                    ? here.path().then(under.name()) : here.path();
+            Inside next = enter(under.value(), there, at, here.depth() + 1, scope, entered, reader);
+            if (next != null) {
+                inside.push(next);
+            }
+        }
     }
 
-    private void walk(Core root, RuleKey path, Denotations at, int depth, Scope scope,
-                      Set<TypeSymbol> entered, Reader reader) {
+    /**
+     * A value the walk has entered, and what is readable off it that it has not gone to yet.
+     *
+     * @param name the declaration it was entered under, taken off the path when the walk leaves it,
+     *             or null where none stands there
+     */
+    private record Inside(Core root, RuleKey path, int depth, Iterator<TypeGuarantees.At.Readable> under,
+                          TypeSymbol name) {}
+
+    /**
+     * Tells {@code reader} what stands at {@code root}, and answers what is left to walk under it —
+     * or null where the walk goes no further here.
+     */
+    private Inside enter(Core root, RuleKey path, Denotations at, int depth, Scope scope,
+                         Set<TypeSymbol> entered, Reader reader) {
         // Asked one at a time, because a stop says two things and only one of them is the same for
         // all of these: whether the rules under it were read, and whether a construction could have
         // got out of making the value they are about.
         if (!scope.extent().reaches(depth)) {
             reader.stopped(path, root.type(), Stop.PAST_THE_DEPTH);
-            return;
+            return null;
         }
         // The reading first, because what stands here is what this walk's own limits are about: the
         // name it was told to stop at and the name it has already entered are the declaration's, and
@@ -203,14 +247,14 @@ final class GuaranteeWalk {
         if (name != null) {
             if (scope.stopAt().test(name)) {
                 reader.stopped(path, root.type(), Stop.ASKED_TO_STOP);
-                return;
+                return null;
             }
             // A name already entered was read where it was met, so reading it again would be the
             // same reading done twice — which costs, and which a reader that remembers what it was
             // asked would see twice.
             if (entered.contains(name)) {
                 reader.stopped(path, root.type(), Stop.ALREADY_ENTERED);
-                return;
+                return null;
             }
         }
         // What the declarations state is read whatever this walk was asked for; which of them this
@@ -245,17 +289,7 @@ final class GuaranteeWalk {
         if (name != null) {
             entered.add(name);
         }
-        for (TypeGuarantees.At.Readable under : here.readable()) {
-            // Whether following the name reaches somewhere else is `Location.isStep`'s answer,
-            // asked here because here is where the name is written down. A newtype's `value` is
-            // this same value under a name, so a walk into one keeps the path it came with.
-            RuleKey there = Location.isStep(root.type(), under.name(), newtypes)
-                    ? path.then(under.name()) : path;
-            walk(under.value(), there, at, depth + 1, scope, entered, reader);
-        }
-        if (name != null) {
-            entered.remove(name);
-        }
+        return new Inside(root, path, depth, here.readable().iterator(), name);
     }
 
 }
