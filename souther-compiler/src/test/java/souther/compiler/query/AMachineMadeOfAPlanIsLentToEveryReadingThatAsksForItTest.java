@@ -88,7 +88,7 @@ class AMachineMadeOfAPlanIsLentToEveryReadingThatAsksForItTest {
     /** An allowance that can build no machine at all: one state is fewer than any pattern here
      *  needs, so a reading under it comes to a set only by borrowing one. */
     private static final ReadingPolicy BUILDING_NOTHING = new ReadingPolicy(64, 12,
-            new PatternPlan.Budget(1, 1), new PatternPlan.Budget(1, 1));
+            new PatternPlan.Budget(1, 1, 1_000_000_000L), new PatternPlan.Budget(1, 1, 1_000_000_000L));
 
     @Test
     void theDeclarationsMachinesAreOneAnswerOfTheStore() {

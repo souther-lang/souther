@@ -219,7 +219,9 @@ public final class PatternParser {
         if (negated) {
             take();
         }
-        CodePoints held = CodePoints.NONE;
+        // Gathered and put in order once. Joined one member at a time, each join would put every
+        // member so far in order again, and a class would cost the square of how long it is.
+        List<CodePoints.Range> members = new ArrayList<>();
         boolean first = true;
         while (!done() && (peek() != ']' || first)) {
             first = false;
@@ -232,9 +234,10 @@ public final class PatternParser {
                 at += 2;
                 throw refused(PatternRead.Refusal.A_CLASS_OF_CLASSES);
             }
-            held = held.or(classMember());
+            members.addAll(classMember().ranges());
         }
         expect(']');
+        CodePoints held = new CodePoints(members);
         if (held.isEmpty()) {
             throw refused(PatternRead.Refusal.SOMETHING_UNCLOSED);
         }

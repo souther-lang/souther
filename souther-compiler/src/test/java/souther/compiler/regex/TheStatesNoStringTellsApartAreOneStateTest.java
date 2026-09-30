@@ -34,7 +34,7 @@ class TheStatesNoStringTellsApartAreOneStateTest {
 
     /** More than either machine here reaches, so that what is measured is the grouping. */
     private static Meter roomy() {
-        return new Meter(100_000, 10_000_000);
+        return new Meter(100_000, 10_000_000, 1_000_000_000L);
     }
 
     /** How long the words are, and so how many of them there are. */

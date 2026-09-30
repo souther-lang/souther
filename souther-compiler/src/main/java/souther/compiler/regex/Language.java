@@ -61,9 +61,14 @@ public final class Language {
         return one == null ? null : new Language(one);
     }
 
-    /** Whether the whole of {@code value} is in it. A walk over the value, which builds nothing. */
+    /**
+     * Whether the whole of {@code value} is in it. A walk over the value, which builds nothing.
+     *
+     * <p>One state at a time, since the machine is canonical, and each symbol found by a search: a
+     * value costs its length whatever the machine holds.
+     */
     public boolean has(String value) {
-        return machine.accepts(value);
+        return machine.walks(value);
     }
 
     /**

@@ -126,6 +126,9 @@ final class CodegenContext {
     private final Map<GeneratedClass, byte[]> synthClasses = new LinkedHashMap<>();
     private int lambdaCounter = 0;
 
+    /** The constants the patterns this module's classes run are loaded from. */
+    final PatternConstants patterns = new PatternConstants();
+
     /**
      * Where what a behavior, a declared type or a published value offers on the JVM is read, and
      * where reading another module's is recorded.

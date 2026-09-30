@@ -217,6 +217,7 @@ public enum DiagnosticCode {
     E2106("a-field-does-not-collide-with-an-object-method", "check.reserved.title"),
     E2107("source-structural-complexity-is-bounded", "e2107.title"),
     E2108("running-out-of-room-is-reported", "e2108.title"),
+    E2109("a-pattern-runs-as-a-machine-a-class-holds", "e2109.title"),
 
     // --- the text as written ---
     E2301("declaration-syntax", "parse.title"),

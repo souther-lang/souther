@@ -68,7 +68,7 @@ class WhatOneAnswerIsAllowedIsSpentOnceTest {
      * reach. Asked of the meter, which is the only thing that knows ({@link Meter}).
      */
     private static int costOfMeeting(ValueSet one, ValueSet other) {
-        Meter meter = new Meter(PLENTY, PLENTY);
+        Meter meter = new Meter(PLENTY, PLENTY, 1_000_000_000L);
         assertNotNull(language(one).and(language(other), meter), "and it is built at all");
         return PLENTY - meter.left();
     }
@@ -79,7 +79,7 @@ class WhatOneAnswerIsAllowedIsSpentOnceTest {
 
     /** An allowance of {@code inAll} states in all, no one machine being larger than the lot. */
     private static Allowance<String> allowing(int inAll) {
-        return Allowance.of(new PatternPlan.Budget(inAll, inAll));
+        return Allowance.of(new PatternPlan.Budget(inAll, inAll, 1_000_000_000L));
     }
 
     /**

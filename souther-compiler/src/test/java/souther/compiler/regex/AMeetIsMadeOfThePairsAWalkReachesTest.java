@@ -28,7 +28,7 @@ class AMeetIsMadeOfThePairsAWalkReachesTest {
     }
 
     private static Meter roomy() {
-        return new Meter(100_000, 10_000_000);
+        return new Meter(100_000, 10_000_000, 1_000_000_000L);
     }
 
     /**
@@ -49,7 +49,7 @@ class AMeetIsMadeOfThePairsAWalkReachesTest {
 
         assertNotNull(met);
         assertEquals(1, met.size(), "and the pairs a walk gets to is the one it begins at");
-        assertFalse(met.accepts("ab"), "nothing is accepted, which is what the meet holds");
+        assertFalse(met.accepts("ab", roomy()), "nothing is accepted, which is what the meet holds");
     }
 
     /**
@@ -62,7 +62,7 @@ class AMeetIsMadeOfThePairsAWalkReachesTest {
     @Test
     void aMeetIsRefusedOnWhatItReachesAndNotOnWhatItCouldReach() {
         // Room for either side and for what the walk reaches, and not for the pairs there are.
-        Meter meter = new Meter(600, 2000);
+        Meter meter = new Meter(600, 2000, 1_000_000_000L);
         Automaton left = of("[ab]{30}", meter);
         Automaton right = of("[bc]{30}", meter);
         assertTrue(left.size() * right.size() > 600, "the pairs there are do not fit in a machine");
@@ -70,7 +70,7 @@ class AMeetIsMadeOfThePairsAWalkReachesTest {
         Automaton met = left.and(right, meter);
 
         assertNotNull(met, "and the meet is built, being the pairs a walk reaches");
-        assertTrue(met.accepts("b".repeat(30)), "and it holds what both sides hold");
+        assertTrue(met.accepts("b".repeat(30), roomy()), "and it holds what both sides hold");
     }
 
     /** And what a meet spends is the pairs it made, not the pairs it could have made. */
@@ -101,9 +101,9 @@ class AMeetIsMadeOfThePairsAWalkReachesTest {
 
         assertNotNull(met);
         assertEquals(6, met.size(), "six of the sixteen pairs are reached");
-        assertTrue(met.accepts("bb"), "the one string both sides accept");
-        assertFalse(met.accepts("ab"), "which the right side does not");
-        assertFalse(met.accepts("bc"), "nor the left");
+        assertTrue(met.accepts("bb", roomy()), "the one string both sides accept");
+        assertFalse(met.accepts("ab", roomy()), "which the right side does not");
+        assertFalse(met.accepts("bc", roomy()), "nor the left");
     }
 
     /**
@@ -123,10 +123,10 @@ class AMeetIsMadeOfThePairsAWalkReachesTest {
         Automaton met = left.and(right, meter);
 
         assertNotNull(met);
-        assertTrue(met.accepts(""), "no letters at all is a run of both");
-        assertTrue(met.accepts("aaaaaa"), "six is two threes and three twos");
-        assertFalse(met.accepts("aa"), "which the right side does not accept");
-        assertFalse(met.accepts("aaa"), "nor the left");
-        assertFalse(met.accepts("aaaa"), "and four is neither");
+        assertTrue(met.accepts("", roomy()), "no letters at all is a run of both");
+        assertTrue(met.accepts("aaaaaa", roomy()), "six is two threes and three twos");
+        assertFalse(met.accepts("aa", roomy()), "which the right side does not accept");
+        assertFalse(met.accepts("aaa", roomy()), "nor the left");
+        assertFalse(met.accepts("aaaa", roomy()), "and four is neither");
     }
 }

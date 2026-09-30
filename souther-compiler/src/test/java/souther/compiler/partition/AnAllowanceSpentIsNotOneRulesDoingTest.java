@@ -43,7 +43,8 @@ class AnAllowanceSpentIsNotOneRulesDoingTest {
     private static Meter stoppedBy(Meter.Stopped which) {
         // Nothing left to build with, so the first state asked for is refused by the whole
         // allowance; and a machine larger than one may be is refused by the other limit first.
-        Meter meter = which == Meter.Stopped.THE_ANSWER ? new Meter(50_000, 1) : new Meter(1, 1);
+        Meter meter = which == Meter.Stopped.THE_ANSWER ? new Meter(50_000, 1, 1_000_000_000L)
+                : new Meter(1, 1, 1_000_000_000L);
         PatternPlan.of(PatternMeaning.ofAnySymbols(2, 2)).compile(meter);
         assertEquals(which, meter.stoppedBy(), "the fixture reaches the limit it names");
         return meter;

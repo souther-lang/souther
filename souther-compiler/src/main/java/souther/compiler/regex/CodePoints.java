@@ -147,14 +147,25 @@ public record CodePoints(List<Range> ranges) {
         return out;
     }
 
-    /** Whether {@code symbol} is one of these. */
+    /**
+     * Whether {@code symbol} is one of these.
+     *
+     * <p>A search and not a walk: the runs are in order and apart, and a machine asks this of every
+     * label at every step it works out, so a class written wide would make each of those as long as
+     * the class.
+     */
     public boolean has(int symbol) {
-        for (Range each : ranges) {
-            if (symbol >= each.from() && symbol <= each.to()) {
+        int low = 0;
+        int high = ranges.size() - 1;
+        while (low <= high) {
+            int mid = (low + high) >>> 1;
+            Range each = ranges.get(mid);
+            if (each.to() < symbol) {
+                low = mid + 1;
+            } else if (each.from() > symbol) {
+                high = mid - 1;
+            } else {
                 return true;
-            }
-            if (symbol < each.from()) {
-                return false;
             }
         }
         return false;

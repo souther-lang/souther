@@ -65,7 +65,7 @@ class WhatAConjunctionCostsIsTheComposersToSayTest {
 
     /** An allowance of {@code inAll} states in all, no one machine being larger than the lot. */
     private static Allowance<String> allowing(int inAll) {
-        return Allowance.of(new PatternPlan.Budget(inAll, inAll));
+        return Allowance.of(new PatternPlan.Budget(inAll, inAll, 1_000_000_000L));
     }
 
     /** What building this composition takes at the position, measured rather than reckoned. */

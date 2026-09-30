@@ -1449,6 +1449,12 @@ public final class Backend {
      * is recorded as another text, so a module built under version 34 records copies that this
      * reader would hold to something other than what they were built from.
      *
+     * <p>Version 36 changes what a published class calls the runtime with for a pattern. A
+     * {@code String.matches} call and a decoder's format constraint load the machine the compiler
+     * built as a constant of the class and hand the runtime that, where before they handed it text
+     * for {@code java.util.regex}. A class emitted under version 35 calls a
+     * {@code Strings.matches} that takes a string, which this runtime no longer has.
+     *
      * <p>That is also where this number stops. It says whether a jar and this compiler agree on
      * what the metadata says and on the rules a declaration is turned into JVM facts by — a
      * behavior's class and methods, how one is held and built, a type's layout and codecs. It does
@@ -1459,7 +1465,7 @@ public final class Backend {
      * {@code [#a-published-module-agrees-with-what-it-copied]}). An edit to a declaration moves
      * that and not this; an edit to a rule moves this.
      */
-    public static final int BOUNDARY_VERSION = 35;
+    public static final int BOUNDARY_VERSION = 36;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java

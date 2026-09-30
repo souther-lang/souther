@@ -141,6 +141,16 @@ public sealed interface DeclarationMessage extends Message {
      * and this one is what a reader reaches for first and what it does instead. */
     record NamingPartsDoesNotDivideTheMethod() implements DeclarationMessage, Supporting {}
 
+    /** The machine a pattern's shape builds is past what this backend lets one class run. */
+    @Code(DiagnosticCode.E2109)
+    record APatternsMachineHasMoreStatesThanAClassRuns(String pattern, String most) implements DeclarationMessage, Reported {}
+
+    /** The same machine, written out, is past what a class is given for one pattern. */
+    @Code(DiagnosticCode.E2109)
+    record APatternsMachineIsWrittenInMoreThanAClassHolds(String pattern, String most) implements DeclarationMessage, Reported {}
+
+    record WriteTheRepetitionsOfAPatternSmaller() implements DeclarationMessage, Supporting {}
+
     @Code(DiagnosticCode.E2103)
     record AClassNeedsMoreConstantsThanItHolds(String owner, String needs, String holds) implements DeclarationMessage, Reported {}
 

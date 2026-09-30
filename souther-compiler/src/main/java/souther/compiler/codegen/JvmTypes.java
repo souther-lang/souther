@@ -13,7 +13,6 @@ import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.SequencedMap;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
 import static souther.compiler.codegen.Descriptors.*;
@@ -149,17 +148,12 @@ final class JvmTypes {
      * Gives a class with no state one instance of itself, so every use site loads it instead of
      * allocating: a unit data, a lambda that captures nothing, a decoder/encoder implementation.
      *
-     * <p>{@code extraInit} folds any other static setup into the single {@code <clinit>} a class may
-     * carry — a second one is a duplicate method and a {@code ClassFormatError} at load time. This is
-     * the only place in the backend that writes a {@code <clinit>}, which is what keeps that true.
+     * <p>This is the only place in the backend that writes a {@code <clinit>}. A class carries at
+     * most one, and a second is a duplicate method and a {@code ClassFormatError} at load time.
      */
-    static void emitSharedInstance(ClassBuilder cb, ClassDesc cd, int fieldFlags,
-                                   Consumer<CodeBuilder> extraInit) {
+    static void emitSharedInstance(ClassBuilder cb, ClassDesc cd, int fieldFlags) {
         cb.withField(SHARED_INSTANCE, cd, fieldFlags | ClassFile.ACC_STATIC | ClassFile.ACC_FINAL);
         cb.withMethodBody(ConstantDescs.CLASS_INIT_NAME, MTD_void, ClassFile.ACC_STATIC, code -> {
-            if (extraInit != null) {
-                extraInit.accept(code);
-            }
             code.new_(cd);
             code.dup();
             code.invokespecial(cd, "<init>", MTD_void);
@@ -168,9 +162,9 @@ final class JvmTypes {
         });
     }
 
-    /** {@link #emitSharedInstance} with a {@code public} field and no other static setup. */
+    /** {@link #emitSharedInstance} with a {@code public} field. */
     static void emitSharedInstance(ClassBuilder cb, ClassDesc cd) {
-        emitSharedInstance(cb, cd, ClassFile.ACC_PUBLIC, null);
+        emitSharedInstance(cb, cd, ClassFile.ACC_PUBLIC);
     }
 
     /** Loads the one instance {@link #emitSharedInstance} gave {@code cd}. */

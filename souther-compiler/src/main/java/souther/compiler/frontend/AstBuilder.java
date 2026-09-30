@@ -1899,7 +1899,7 @@ public final class AstBuilder {
     }
 
     /** The direct IDENT tokens of a node, in order (skipping keywords, punctuation, and trivia). */
-    private List<SyntaxToken> identTokens(SyntaxNode n) {
+    private static List<SyntaxToken> identTokens(SyntaxNode n) {
         List<SyntaxToken> out = new ArrayList<>();
         for (SyntaxElement e : n.children()) {
             if (e instanceof SyntaxToken t && t.kind().standsWhereANameStands()) {
@@ -2001,7 +2001,27 @@ public final class AstBuilder {
         return name;
     }
 
-    private String qualifiedNameText(SyntaxNode n) {
+    /**
+     * The module a parsed source's header names, as a compile of it would name the module, or null
+     * where it writes no header or the header names nothing.
+     *
+     * <p>For a reader holding a source a compile does not have. Read off the tree the parser made,
+     * which the parser makes of a broken source too, so the name is the one the lexer and the
+     * parser read and not a second account of what a header looks like.
+     *
+     * <p>Which module a source a compilation does have is part of is the compilation's to answer,
+     * and this cannot answer it: an {@code examples for} file writes no header and is part of a
+     * module all the same.
+     */
+    public static String headerModuleName(SyntaxNode file) {
+        String name = file.child(SyntaxKind.MODULE_HEADER)
+                .flatMap(header -> header.child(SyntaxKind.QUALIFIED_NAME))
+                .map(AstBuilder::qualifiedNameText)
+                .orElse("");
+        return name.isEmpty() ? null : name;
+    }
+
+    private static String qualifiedNameText(SyntaxNode n) {
         StringBuilder sb = new StringBuilder();
         for (SyntaxToken t : identTokens(n)) {
             if (sb.length() > 0) {

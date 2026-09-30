@@ -282,8 +282,8 @@ class ADeclarationIsReadOnceForEveryQuestionThatReachesItTest {
     /** Terms a reading of the same declaration comes to something else under: what a rule may
      *  spend building a machine is far less than the reading above allows. */
     private static final ReadingPolicy OTHER_TERMS = new ReadingPolicy(64, 12,
-            new PatternPlan.Budget(1, 1),
-            new PatternPlan.Budget(1, 1));
+            new PatternPlan.Budget(1, 1, 1_000_000_000L),
+            new PatternPlan.Budget(1, 1, 1_000_000_000L));
 
     /**
      * What was read of one world is not lent into the next.

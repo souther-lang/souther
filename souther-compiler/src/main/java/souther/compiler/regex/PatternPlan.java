@@ -22,27 +22,31 @@ public final class PatternPlan {
     /**
      * How much a plan is allowed.
      *
-     * <p>States, because that is what everything here costs: a pattern is its states, a meet is the
-     * product of two, and what a walk over any of them takes is bounded by them. Counted over the
-     * whole of the plan and not per pattern — a plan is admitted as a whole or not at all, so what
-     * it is charged is everything it builds.
+     * <p>States, because that is what a machine is made of: a pattern is its states, a meet is the
+     * pairs of two, and a walk over any of them is bounded by them. And the work of making them,
+     * because a state is not one thing to make: a deterministic one is a row as wide as the symbols
+     * the machine tells apart ({@link Meter}). Counted over the whole of the plan and not per
+     * pattern — a plan is admitted as a whole or not at all, so what it is charged is everything
+     * it builds.
      *
      * @param mostStates the largest machine a step of the plan may make
      * @param mostBuilt  how many states the plan may make in all, the intermediate ones counted.
      *                   Beside the first because a plan of many small meets is affordable at each
      *                   step and not as a whole
+     * @param mostWork   how much making them may look at in all, which one machine may not take
+     *                   more of on its own either
      */
-    public record Budget(int mostStates, int mostBuilt) {
+    public record Budget(int mostStates, int mostBuilt, long mostWork) {
 
         public Budget {
-            if (mostStates <= 0 || mostBuilt <= 0) {
+            if (mostStates <= 0 || mostBuilt <= 0 || mostWork <= 0) {
                 throw new IllegalArgumentException("a budget allows something");
             }
         }
 
         /** A meter that allows this much and has spent none of it. */
         public Meter meter() {
-            return new Meter(mostStates, mostBuilt);
+            return new Meter(mostStates, mostBuilt, mostWork);
         }
 
         /**
@@ -58,7 +62,7 @@ public final class PatternPlan {
          * measurement of anything: it is the size past which this compiler would rather say it did
          * not answer.
          */
-        public static final Budget OF_ADMITTED_VALUES = new Budget(50_000, 200_000);
+        public static final Budget OF_ADMITTED_VALUES = new Budget(50_000, 200_000, 50_000_000);
 
         /**
          * What handing each of a position's rules on as the set it admits is allowed to cost.
@@ -80,7 +84,7 @@ public final class PatternPlan {
          *
          * <p>The same numbers as the others today, and a coincidence rather than a fact.
          */
-        public static final Budget OF_WHAT_A_RULE_LEAVES = new Budget(50_000, 200_000);
+        public static final Budget OF_WHAT_A_RULE_LEAVES = new Budget(50_000, 200_000, 50_000_000);
 
         /**
          * What composing one value somebody can write into a row is allowed to cost.
@@ -105,7 +109,7 @@ public final class PatternPlan {
          * <p>The same numbers today, and that is a coincidence rather than a fact. Written as one
          * constant, the day either question wants a different size the other would move with it.
          */
-        public static final Budget OF_A_WITNESS = new Budget(50_000, 200_000);
+        public static final Budget OF_A_WITNESS = new Budget(50_000, 200_000, 50_000_000);
 
         /**
          * What working out where one rule's strings stop on the order is allowed to cost.
@@ -121,7 +125,7 @@ public final class PatternPlan {
          *
          * <p>The same numbers as the two above, and a coincidence rather than a fact.
          */
-        public static final Budget OF_AN_ORDERED_EXTENT = new Budget(50_000, 200_000);
+        public static final Budget OF_AN_ORDERED_EXTENT = new Budget(50_000, 200_000, 50_000_000);
 
         /**
          * What deciding whether a set of values and a range on an order share one is allowed to
@@ -135,7 +139,7 @@ public final class PatternPlan {
          *
          * <p>The same numbers as the rest, and a coincidence rather than a fact.
          */
-        public static final Budget OF_WHAT_A_SET_AND_A_RANGE_SHARE = new Budget(50_000, 200_000);
+        public static final Budget OF_WHAT_A_SET_AND_A_RANGE_SHARE = new Budget(50_000, 200_000, 50_000_000);
 
         /**
          * What working out the classes a behavior's rules about the strings at one position divide
@@ -165,10 +169,12 @@ public final class PatternPlan {
          *
          * <p>The same numbers as the others today, and a coincidence rather than a fact.
          */
-        public static final Budget OF_BEHAVIOR_DISTINCTIONS = new Budget(50_000, 200_000);
+        public static final Budget OF_BEHAVIOR_DISTINCTIONS = new Budget(50_000, 200_000, 50_000_000);
 
         /**
-         * What the machine a compile-time fold of {@code String.matches} walks is allowed to cost.
+         * What the machine a compile-time fold of {@code String.matches} walks is allowed to cost,
+         * and what walking one subject over it may look at: the machine is built once and answers
+         * many subjects, and each of them is given this allowance of its own.
          *
          * <p>Its own, because what it decides is only whether the compiler answers a match or leaves
          * it to the run time. Spent from what a reading of the rules is allowed, a fold would change
@@ -177,7 +183,32 @@ public final class PatternPlan {
          *
          * <p>The same numbers as the others today, and a coincidence rather than a fact.
          */
-        public static final Budget OF_A_FOLD = new Budget(50_000, 200_000);
+        public static final Budget OF_A_FOLD = new Budget(50_000, 200_000, 50_000_000);
+
+        /**
+         * What the machine a class runs for a pattern may be, built from the pattern's shape.
+         *
+         * <p>Its own, because what it bounds is what a class holds and what a run walks, and not
+         * what the compiler answers: past it the pattern is refused as larger than this backend
+         * writes, where every other budget here leaves a question unanswered and the program as it
+         * was. One machine and nothing thrown away, so the two numbers are the same.
+         *
+         * <p>Well above every budget a reading of the rules is allowed. A pattern the reading
+         * declines to build is left unanswered and the program stands, and a program that stands
+         * is one a class has to run; were this the same figure, the first pattern past the reading
+         * would be refused here instead.
+         */
+        public static final Budget OF_A_RUN = new Budget(250_000, 250_000, 50_000_000);
+
+        /**
+         * What making the machine a class runs deterministic is allowed to cost.
+         *
+         * <p>Apart from {@link #OF_A_RUN}, because running out of it refuses nothing: the class
+         * runs the machine the shape built instead, which answers the same and walks more states a
+         * character. So this is what a faster run is worth to the compiler, and a pattern whose
+         * deterministic machine is large is not larger for it than one whose machine is small.
+         */
+        public static final Budget OF_A_DETERMINISTIC_RUN = new Budget(10_000, 20_000, 5_000_000);
     }
 
     /** What one step of a plan does. */

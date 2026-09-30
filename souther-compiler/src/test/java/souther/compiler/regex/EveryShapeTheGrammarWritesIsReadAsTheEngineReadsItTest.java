@@ -70,7 +70,7 @@ class EveryShapeTheGrammarWritesIsReadAsTheEngineReadsItTest {
     /** More than anything here asks for. What is under test is the language and not the
      *  allowance. */
     private static Meter plenty() {
-        return new Meter(100_000, 10_000_000);
+        return new Meter(100_000, 10_000_000, 1_000_000_000L);
     }
 
     /** Every shape of two leaves, and every shape of one of those beside a leaf. */
@@ -120,7 +120,7 @@ class EveryShapeTheGrammarWritesIsReadAsTheEngineReadsItTest {
                 continue;
             }
             for (String value : STRINGS) {
-                boolean mine = machine.accepts(value);
+                boolean mine = machine.accepts(value, plenty());
                 boolean theirs = engine.matcher(value).matches();
                 if (mine != theirs) {
                     apart.add(written(regex) + " over " + written(value)
@@ -147,7 +147,7 @@ class EveryShapeTheGrammarWritesIsReadAsTheEngineReadsItTest {
             Automaton machine = Automaton.of(it.meaning(), plenty());
             String one = machine == null ? null : machine.shortest();
             if (one != null) {
-                assertTrue(machine.accepts(one),
+                assertTrue(machine.accepts(one, plenty()),
                         () -> written(regex) + " hands back " + written(one)
                                 + ", which it says it does not hold");
             }

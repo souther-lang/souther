@@ -72,7 +72,7 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
                 compilation.db().ask(new Bodies.StatedContracts(module)).value().get("pick"),
                 inputs.reading(rules), inputs.parameterReads(),
                 checked.elementBindings().get("pick"),
-                Allowance.of(new PatternPlan.Budget(1000, 1000)),
+                Allowance.of(new PatternPlan.Budget(1000, 1000, 1_000_000_000L)),
                 guardsOf(declaration).forks(),
                 new RuleReachNumbering(module, "pick"));
         List<String> found = new ArrayList<>();
@@ -122,7 +122,7 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
         BehaviorSetStatements.Read sets = BehaviorSetStatements.of("pick", states, stated,
                 inputs.reading(rules), inputs.parameterReads(),
                 checked.elementBindings().get("pick"),
-                Allowance.of(new PatternPlan.Budget(1000, 1000)), guards.forks(),
+                Allowance.of(new PatternPlan.Budget(1000, 1000, 1_000_000_000L)), guards.forks(),
                 new RuleReachNumbering(module, "pick"));
         return new Read(guards.thresholds().size(), sets.forks().size(),
                 guards.noLine().reported().size() + guards.noLine().unclassified().size());

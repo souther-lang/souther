@@ -4,8 +4,6 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.PrimitiveIterator;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 import souther.unicode.Normalization;
 import souther.unicode.ScalarValues;
@@ -337,21 +335,15 @@ public final class Strings {
         return out.build();
     }
 
-    /** Compiled patterns, cached by text so {@link #matches} does not recompile per call. Every
-     *  pattern is one a compiler wrote into a program loaded here, so the keys are bounded by the
-     *  programs, not by runtime input, and never evicted. */
-    private static final ConcurrentHashMap<String, Pattern> PATTERNS = new ConcurrentHashMap<>();
-
     /**
-     * Whether the whole of {@code s} matches {@code pattern}. Backs {@code String.matches}.
+     * Whether the whole of {@code s} is one of the strings {@code pattern} accepts. Backs
+     * {@code String.matches}.
      *
-     * <p>The pattern is not the one an author wrote. The compiler read that as a pattern of the
-     * language and wrote what it means in {@code java.util.regex}'s constructs whose meaning no
-     * flag or class reading changes, so {@link Pattern#compile} here cannot fail and what the
-     * engine accepts is what the language says.
+     * <p>The pattern is the machine the compiler built from what the author's text means, loaded
+     * as a constant of the calling class; no text is read here.
      */
-    public static boolean matches(String s, String pattern) {
-        return PATTERNS.computeIfAbsent(pattern, Pattern::compile).matcher(s).matches();
+    public static boolean matches(String s, StringPattern pattern) {
+        return pattern.matches(s);
     }
 
     /** The characters of {@code s}, one per Unicode code point

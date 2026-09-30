@@ -348,7 +348,7 @@ final class BodyGen {
                     // and one instance per lambda site is enough. Two sites never share one, and
                     // Souther has no function equality, so this is unobservable. Package-private:
                     // every use site is in the module's own package.
-                    emitSharedInstance(cb, cd, 0, null);
+                    emitSharedInstance(cb, cd, 0);
                 }
                 cb.withMethodBody("apply", MTD_Fn_apply, ClassFile.ACC_PUBLIC, code -> {
                     BodyGen g = new BodyGen(ctx, code, null, cd, 2);   // slot 0 = this, slot 1 = the Object[] args
@@ -1236,12 +1236,11 @@ final class BodyGen {
                 Kernel.INT_TRUNCATING_REMAINDER, Kernel.STRING_MATCHES);
 
         /**
-         * {@code String.matches}, run by the JVM's matcher over what the checker read the pattern
-         * as.
+         * {@code String.matches}, run as the machine what the checker read the pattern as builds.
          *
          * <p>The pattern argument is not evaluated. It is text the checker folded at compile time,
-         * and what the call carries is what that text means ({@link JavaPatterns}), so the pattern
-         * handed to the runtime is written from the meaning and the author's text reaches no engine.
+         * and what the call carries is what that text means, so what the runtime is handed is a
+         * machine built from the meaning ({@link PatternConstants}) and no text reaches it.
          */
         private void matches(Core.Call call) {
             // The call cannot be built without this settlement, so a different one is the
@@ -1252,7 +1251,8 @@ final class BodyGen {
                         "a String.matches call carries the pattern the checker read: " + call);
             }
             genExpr(call.args().get(1));
-            code.loadConstant(JavaPatterns.of(settled.meaning()));
+            code.ldc(ctx.patterns.of(settled.meaning(), settled.written(),
+                    Diagnostic.at(call.args().get(0).pos())));
             code.invokestatic(CD_Strings, "matches", MTD_strings_matches);
         }
 

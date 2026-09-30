@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TheComplementOfTheOneMachineIsTheOneMachineTest {
 
     private static Meter roomy() {
-        return new Meter(100_000, 10_000_000);
+        return new Meter(100_000, 10_000_000, 1_000_000_000L);
     }
 
     private static Automaton canonicalMachineOf(String regex, Meter meter) {
@@ -81,7 +81,7 @@ class TheComplementOfTheOneMachineIsTheOneMachineTest {
     @Test
     void aComplementIsMadeWithNothingLeftToMakeAStateWith() {
         // As much in all as one machine may hold, so that what is left can be taken in one ask.
-        Meter meter = new Meter(100_000, 100_000);
+        Meter meter = new Meter(100_000, 100_000, 1_000_000_000L);
         Automaton one = canonicalMachineOf("[ab]+", meter);
         // Everything the meter had, so that a state asked for now is refused.
         assertTrue(meter.making().states(meter.left()), "the allowance is spent down to nothing");

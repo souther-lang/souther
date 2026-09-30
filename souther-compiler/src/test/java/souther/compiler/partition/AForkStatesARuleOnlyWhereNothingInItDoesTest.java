@@ -96,7 +96,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
         BehaviorSetStatements.Read sets = BehaviorSetStatements.of("pick", states, stated,
                 inputs.reading(rules), inputs.parameterReads(),
                 checked.elementBindings().get("pick"),
-                Allowance.of(new PatternPlan.Budget(1000, 1000)), guards.forks(),
+                Allowance.of(new PatternPlan.Budget(1000, 1000, 1_000_000_000L)), guards.forks(),
                 new RuleReachNumbering(module, "pick"));
         return new Both(guards, sets.forks());
     }
@@ -435,7 +435,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
         List<BehaviorSetStatements.ForkOfItsOwn> forks = BehaviorSetStatements.of("pick",
                 checked.analysisBodies().get("pick"), stated, inputs.reading(rules),
                 inputs.parameterReads(), checked.elementBindings().get("pick"),
-                Allowance.of(new PatternPlan.Budget(1000, 1000)), guards.forks(),
+                Allowance.of(new PatternPlan.Budget(1000, 1000, 1_000_000_000L)), guards.forks(),
                 new RuleReachNumbering(module, "pick")).forks();
 
         assertEquals(List.of("probe.forks/pick"), forks.stream()

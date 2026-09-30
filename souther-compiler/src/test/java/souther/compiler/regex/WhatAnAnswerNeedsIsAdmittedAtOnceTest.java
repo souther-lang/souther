@@ -121,7 +121,7 @@ class WhatAnAnswerNeedsIsAdmittedAtOnceTest {
     void aPlanPastWhatItIsAllowedComesToNothing() {
         PatternPlan big = plan("[0-9]{5000}");
 
-        assertNull(big.compile(new PatternPlan.Budget(100, 100).meter()));
+        assertNull(big.compile(new PatternPlan.Budget(100, 100, 1_000_000_000L).meter()));
         assertNotNull(big.compile(PatternPlan.Budget.OF_ADMITTED_VALUES.meter()), "and is built where there is room");
     }
 
@@ -137,9 +137,9 @@ class WhatAnAnswerNeedsIsAdmittedAtOnceTest {
         PatternPlan several = plan("[0-9]{40}").or(plan("[a-z]{40}"))
                 .or(plan("[A-Z]{40}")).or(plan("[0-9a-z]{40}"));
 
-        PatternPlan.Budget roomForOne = new PatternPlan.Budget(1_000, 100);
+        PatternPlan.Budget roomForOne = new PatternPlan.Budget(1_000, 100, 1_000_000_000L);
 
-        assertNotNull(several.compile(new PatternPlan.Budget(1_000, 100_000).meter()),
+        assertNotNull(several.compile(new PatternPlan.Budget(1_000, 100_000, 1_000_000_000L).meter()),
                 "each of them is small, and together they fit where there is room for them");
         assertNull(several.compile(roomForOne.meter()),
                 "and not where there is room for one of them at a time");

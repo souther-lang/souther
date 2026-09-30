@@ -105,7 +105,7 @@ class WhatThisAcceptsIsWhatTheEngineAcceptsTest {
     /** More than anything here asks for, unspent. A meter is spent as it is used, so each
      *  construction gets its own and what is measured is the language rather than the allowance. */
     private static Meter plenty() {
-        return new Meter(100_000, 10_000_000);
+        return new Meter(100_000, 10_000_000, 1_000_000_000L);
     }
 
     /**
@@ -134,7 +134,7 @@ class WhatThisAcceptsIsWhatTheEngineAcceptsTest {
             if (one == null) {
                 continue;
             }
-            assertTrue(machine.accepts(one),
+            assertTrue(machine.accepts(one, plenty()),
                     () -> regex + " hands back " + written(one) + ", which it says it does not"
                             + " hold");
         }
@@ -152,7 +152,7 @@ class WhatThisAcceptsIsWhatTheEngineAcceptsTest {
 
             java.util.regex.Pattern engine = java.util.regex.Pattern.compile(regex);
             for (String value : STRINGS) {
-                boolean mine = machine.accepts(value);
+                boolean mine = machine.accepts(value, plenty());
                 boolean theirs = engine.matcher(value).matches();
                 if (mine != theirs) {
                     apart.add(regex + " over " + written(value)
@@ -193,7 +193,7 @@ class WhatThisAcceptsIsWhatTheEngineAcceptsTest {
         PatternMeaning big = assertInstanceOf(PatternRead.Read.class,
                 PatternParser.read("[0-9]{5000}")).meaning();
 
-        org.junit.jupiter.api.Assertions.assertNull(Automaton.of(big, new Meter(100, 100)));
+        org.junit.jupiter.api.Assertions.assertNull(Automaton.of(big, new Meter(100, 100, 1_000_000_000L)));
         assertNotNull(Automaton.of(big, plenty()), "and it is built where there is room");
     }
 

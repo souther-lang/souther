@@ -9,6 +9,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.core.BoundaryConstraint;
 import souther.compiler.core.ConstraintProjection;
 import souther.compiler.core.ValueShape;
+import souther.compiler.diag.Diagnostic;
 import souther.compiler.regex.PatternMeaning;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.MapKeyRepresentation;
@@ -37,6 +38,7 @@ import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
 import java.lang.constant.DirectMethodHandleDesc;
 import java.lang.constant.DynamicCallSiteDesc;
+import java.lang.constant.DynamicConstantDesc;
 import java.lang.constant.MethodHandleDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
@@ -127,9 +129,9 @@ final class CodecGen {
      *  to is what keeps the two from being named apart. Set beside {@link #decoderClass}. */
     private GeneratedClass.Value decodedValue;
 
-    /** The patterns the decoder being generated holds a value to, and the fields they are kept in
-     *  ({@link #patternFieldsOf}). Set beside {@link #decoderClass}. */
-    private Map<PatternMeaning, PatternField> patternFields = Map.of();
+    /** The patterns the decoder being generated holds a value to, and the constants their machines
+     *  are loaded from ({@link #patternConstantsOf}). Set beside {@link #decoderClass}. */
+    private Map<PatternMeaning, DynamicConstantDesc<Object>> patternConstants = Map.of();
 
     CodecGen(CodegenContext ctx) {
         this.ctx = ctx;
@@ -720,7 +722,7 @@ final class CodecGen {
         decoderClass = cdDec;
         decodedValue = valueOf(data);
         List<ValueShape.Invariant> invariants = invariantsOf(data);
-        patternFields = patternFieldsOf(invariants);
+        patternConstants = patternConstantsOf(invariants, data);
         return buildDecoder(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_RDecoder);
@@ -743,11 +745,11 @@ final class CodecGen {
             for (MapKeyRepresentation key : keyTypes.values()) {
                 emitRekeyHelper(cb, key);
             }
-            emitSharedInstance(cb, cdDec, ClassFile.ACC_PUBLIC, emitPatternFields(cb));
+            emitSharedInstance(cb, cdDec);
             if (invariants.stream().anyMatch(c -> !c.projection().complete())) {
                 emitInvariantFailureHelper(cb, data.name());
             }
-            if (!patternFields.isEmpty()) {
+            if (!patternConstants.isEmpty()) {
                 emitPatternFailureHelper(cb);
             }
             if (constraintsOf(invariants).stream()
@@ -1744,16 +1746,14 @@ final class CodecGen {
                 code.invokevirtual(CD_StringDecoder, "fixedLength", MTD_strLengthBound);
             }
             case BoundaryConstraint.Pattern p -> {
-                // Compiled once into a static field, not on every decode. Run as a predicate rather
-                // than handed to `pattern`, which would quote the pattern the matcher runs: what a
+                // The machine is a constant of the class, built once when it is first loaded. What a
                 // failure quotes is the pattern the call was given, built by `__patternFailure`.
-                PatternField field = patternFields.get(p.meaning());
-                if (field == null) {
+                DynamicConstantDesc<Object> machine = patternConstants.get(p.meaning());
+                if (machine == null) {
                     throw new IllegalStateException(
-                            "a pattern the decoder class keeps no field for: " + p);
+                            "a pattern the decoder class holds no constant for: " + p);
                 }
-                code.getstatic(decoderClass, field.name(), CD_Pattern);
-                code.invokevirtual(CD_Pattern, "asMatchPredicate", MTD_asMatchPredicate);
+                code.ldc(machine);
                 code.loadConstant(p.written());
                 code.invokedynamic(patternFailureCallSite());
                 code.invokevirtual(CD_StringDecoder, "refine", MTD_refineStringFailing);
@@ -1908,57 +1908,24 @@ final class CodecGen {
     }
 
     /**
-     * A pattern the decoder being generated holds a value to: the static field its compiled regex
-     * is kept in, and the regex this backend's matcher runs.
-     */
-    private record PatternField(String name, String regex) {}
-
-    /**
-     * Each pattern the clauses are stated as, by what it matches, with the field it is kept in.
+     * Each pattern the clauses are stated as, by what it matches, with the constant its machine is
+     * loaded from.
      *
-     * <p>Worked out once per decoder class and before its decode method is written, because that
-     * method reads the fields the class declares afterwards: one table, so the field a constraint
-     * reads is the field the class declares, and a pattern's regex is written once. The fields are
-     * numbered by their place here, so two patterns are two fields whatever their texts are.
+     * <p>Worked out before the decode method is written, so a pattern this backend writes no machine
+     * for is refused at the data that states it rather than partway through the class. A refusal is
+     * reported at the declaration: the constraint was read off its clauses and holds no place of its
+     * own.
      */
-    private static Map<PatternMeaning, PatternField> patternFieldsOf(
-            List<ValueShape.Invariant> invariants) {
-        Map<PatternMeaning, PatternField> out = new LinkedHashMap<>();
+    private Map<PatternMeaning, DynamicConstantDesc<Object>> patternConstantsOf(
+            List<ValueShape.Invariant> invariants, Hir.Data data) {
+        Map<PatternMeaning, DynamicConstantDesc<Object>> out = new LinkedHashMap<>();
         for (BoundaryConstraint c : constraintsOf(invariants)) {
             if (c instanceof BoundaryConstraint.Pattern p && !out.containsKey(p.meaning())) {
-                out.put(p.meaning(), new PatternField("__pattern$" + out.size(),
-                        JavaPatterns.of(p.meaning())));
+                out.put(p.meaning(), ctx.patterns.of(p.meaning(), p.written(),
+                        Diagnostic.at(data.written().reportedAt())));
             }
         }
         return out;
-    }
-
-    /**
-     * Compiles each pattern the invariant states once, into a {@code static final} field: the
-     * constraint chain is rebuilt per decode call, and compiling a regex there would repeat the
-     * expensive part of it on every value.
-     *
-     * <p>Emits the fields and returns how to initialize them ({@code null} when there are none),
-     * rather than writing a {@code <clinit>} of its own — a class carries at most one, and
-     * {@code emitSharedInstance} is what writes it.
-     */
-    private Consumer<CodeBuilder> emitPatternFields(ClassBuilder cb) {
-        if (patternFields.isEmpty()) {
-            return null;
-        }
-        List<PatternField> fields = List.copyOf(patternFields.values());
-        for (PatternField field : fields) {
-            cb.withField(field.name(), CD_Pattern,
-                    ClassFile.ACC_PRIVATE | ClassFile.ACC_STATIC | ClassFile.ACC_FINAL);
-        }
-        ClassDesc owner = decoderClass;
-        return code -> {
-            for (PatternField field : fields) {
-                code.loadConstant(field.regex());
-                code.invokestatic(CD_Pattern, "compile", MTD_patternCompile);
-                code.putstatic(owner, field.name(), CD_Pattern);
-            }
-        };
     }
 
 

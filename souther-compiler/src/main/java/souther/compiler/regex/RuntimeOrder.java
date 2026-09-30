@@ -75,7 +75,7 @@ final class RuntimeOrder {
         steps.add(new ArrayList<>(List.of(new Automaton.Step(CodePoints.EVERYTHING, 0))));
         BitSet accepting = new BitSet();
         accepting.set(0);
-        Automaton one = Automaton.madeOf(steps, accepting).canonical(new Meter(16, 64));
+        Automaton one = Automaton.madeOf(steps, accepting).canonical(new Meter(16, 64, 1024));
         if (one == null) {
             throw new IllegalStateException("the machine for every string is one state");
         }

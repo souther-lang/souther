@@ -169,7 +169,7 @@ class ABudgetIsTheCompilationsToSetTest {
                 .withAdequacyPolicy(new AdequacyPolicy(
                         new AdequacyPolicy.OfTheMeasures(Budgets.measures().pairSpace(),
                                 Budgets.measures().cellsPerGroup(),
-                                new PatternPlan.Budget(1, 1)),
+                                new PatternPlan.Budget(1, 1, 1_000_000_000L)),
                         Budgets.generation()));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
