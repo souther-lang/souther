@@ -151,6 +151,69 @@ class APatternIsReadAsWhatItAcceptsTest {
                         read("[\\x{10000}-\\x{10400}]")).held());
     }
 
+    /**
+     * U+0000 written in a pattern stands for itself, as every character that is not punctuation
+     * does, wherever a character stands.
+     */
+    @Test
+    void aNulWrittenInThePatternStandsForItself() {
+        assertEquals(CodePoints.of(0),
+                assertInstanceOf(PatternMeaning.Symbols.class, read("\0")).held());
+        assertEquals(read("\\x00"), read("\0"));
+        assertEquals(read("a\\x00b"), read("a\0b"));
+        assertEquals(read("[\\x00a]"), read("[\0a]"));
+        assertEquals(read("(?:\\x00)*"), read("\0*"));
+        assertEquals(read("\\x00|a"), read("\0|a"));
+    }
+
+    /** A hex digit is an ASCII one, in either case, in every escape that spells a number. */
+    @Test
+    void theHexDigitsAreTheAsciiOnes() {
+        assertEquals(CodePoints.of(0x0F),
+                assertInstanceOf(PatternMeaning.Symbols.class, read("\\x0f")).held());
+        assertEquals(CodePoints.of(0xAF),
+                assertInstanceOf(PatternMeaning.Symbols.class, read("\\xAF")).held());
+        assertEquals(CodePoints.of(0xAB),
+                assertInstanceOf(PatternMeaning.Symbols.class, read("\\x{aB}")).held());
+        assertEquals(CodePoints.of('A'),
+                assertInstanceOf(PatternMeaning.Symbols.class, read("\\u0041")).held());
+        assertEquals(CodePoints.of(0x10FFFF),
+                assertInstanceOf(PatternMeaning.Symbols.class, read("\\x{10FFFF}")).held());
+
+        // U+FF11 and U+FF12 are the fullwidth one and two, U+FF21 the fullwidth A: digits to the
+        // JDK and not to the language.
+        for (String each : List.of("\\x\uFF11\uFF12", "\\x1\uFF12", "\\u\uFF10\uFF10\uFF14\uFF11",
+                "\\u004\uFF11", "\\x{\uFF21}", "\\x{1\uFF10}", "[\\x\uFF11\uFF12]")) {
+            assertEquals(PatternRead.Refusal.AN_ESCAPE_THIS_DOES_NOT_READ, refused(each), each);
+        }
+    }
+
+    /**
+     * A backslash before a letter or a decimal digit the grammar does not name is refused, and the
+     * character is classified whole wherever it is.
+     *
+     * <p>Classified by the first half of its pair, a letter past the basic plane was no letter and
+     * read as itself. A character past the basic plane that is neither is still read as itself, so
+     * what is refused is the classification and not the plane.
+     */
+    @Test
+    void aBackslashBeforeALetterOrADigitIsKeptForAnEscapeWhateverPlaneItIsOn() {
+        String gothic = new String(Character.toChars(0x10330));
+        String doubleStruckZero = new String(Character.toChars(0x1D7D8));
+        for (String each : List.of("\\é", "\\あ", "\\" + gothic, "\\٣",
+                "\\" + doubleStruckZero, "[\\" + gothic + "]")) {
+            assertEquals(PatternRead.Refusal.AN_ESCAPE_THIS_DOES_NOT_READ, refused(each), each);
+        }
+        assertEquals("\\" + gothic, refusal("a\\" + gothic).construct(),
+                "the refusal quotes the whole character and not half of it");
+
+        String grinning = new String(Character.toChars(0x1F600));
+        assertEquals(CodePoints.of(0x1F600),
+                assertInstanceOf(PatternMeaning.Symbols.class, read("\\" + grinning)).held());
+        assertEquals(CodePoints.of('.'),
+                assertInstanceOf(PatternMeaning.Symbols.class, read("\\.")).held());
+    }
+
     /** The shorthands hold the sets the specification states, ASCII all of them. */
     @Test
     void theShorthandsAreTheSetsTheLanguageStates() {

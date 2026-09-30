@@ -1463,6 +1463,14 @@ public final class Backend {
      * for {@code java.util.regex}. A class emitted under version 35 calls a
      * {@code Strings.matches} that takes a string, which this runtime no longer has.
      *
+     * <p>Version 37 changes which text a {@code String.matches} pattern is. The hex digits of an
+     * escape are the ASCII ones, a U+0000 written in the pattern stands for itself, and a backslash
+     * before a letter or a decimal digit is refused whichever plane the character is on. A reader
+     * built under version 36 admits a carried body whose pattern spells an escape with a fullwidth
+     * digit or puts a backslash before such a letter past the basic plane or such a digit outside
+     * ASCII, all of which this reader refuses, and refuses one whose pattern writes U+0000, which
+     * this reader admits.
+     *
      * <p>That is also where this number stops. It says whether a jar and this compiler agree on
      * what the metadata says and on the rules a declaration is turned into JVM facts by — a
      * behavior's class and methods, how one is held and built, a type's layout and codecs. It does
@@ -1473,7 +1481,7 @@ public final class Backend {
      * {@code [#a-published-module-agrees-with-what-it-copied]}). An edit to a declaration moves
      * that and not this; an edit to a rule moves this.
      */
-    public static final int BOUNDARY_VERSION = 36;
+    public static final int BOUNDARY_VERSION = 37;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java

@@ -55,7 +55,7 @@ final class PatternEscapes {
         int digits = 0;
         int here = at + 1;
         while (here < regex.length() && regex.charAt(here) != '}') {
-            int digit = Character.digit(regex.charAt(here), 16);
+            int digit = hexDigit(regex.charAt(here));
             if (digit < 0) {
                 return null;
             }
@@ -79,12 +79,32 @@ final class PatternEscapes {
         }
         int value = 0;
         for (int i = at; i < at + digits; i++) {
-            int digit = Character.digit(regex.charAt(i), 16);
+            int digit = hexDigit(regex.charAt(i));
             if (digit < 0) {
                 return -1;
             }
             value = value * 16 + digit;
         }
         return value;
+    }
+
+    /**
+     * The value of a hex digit, or -1 where {@code c} is none.
+     *
+     * <p>The hex digits are the ASCII ones, in either case. A fullwidth {@code １} or {@code Ａ} is
+     * a digit to {@link Character#digit(char, int)} and not to the language, so {@code \x１２} is no
+     * escape.
+     */
+    private static int hexDigit(char c) {
+        if (c >= '0' && c <= '9') {
+            return c - '0';
+        }
+        if (c >= 'A' && c <= 'F') {
+            return c - 'A' + 10;
+        }
+        if (c >= 'a' && c <= 'f') {
+            return c - 'a' + 10;
+        }
+        return -1;
     }
 }

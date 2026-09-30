@@ -34,7 +34,7 @@ class WhatARunWalksIsWhatThePatternMeansTest {
     private static final List<String> LEAVES = List.of(
             "a", "1", ".", "[ab]", "[^a]", "\\d", "\\s", "\\W", "^", "$", "",
             "\\-", "\\.", "\\\\", "[\\]\\^\\-]", " ", "\\x{10330}", "[^\\x{0}-\\x{10FFFF}]",
-            "\\n", "\\x{85}");
+            "\\n", "\\x{85}", "\0");
 
     private static List<String> around(String one, String other) {
         return List.of(one + other, one + "|" + other, "(?:" + one + ")" + other,
@@ -48,7 +48,7 @@ class WhatARunWalksIsWhatThePatternMeansTest {
     private static List<String> strings() {
         List<String> out = new ArrayList<>(List.of(
                 "", "a", "1", "aa", "a1", "1a", "11", "ab", "b", "bb", "ba", " ", "  ", "a ",
-                "-", ".", "\\", "]", "^", "-.", "\n", "\r", "a\n", "\n\n", "\t", "é",
+                "-", ".", "\\", "]", "^", "-.", "\n", "\r", "a\n", "\n\n", "\t", "é", "\0", "\0a",
                 String.valueOf((char) 0x85), String.valueOf((char) 0x2028)));
         out.add(new String(Character.toChars(0x10330)));
         out.add(new String(Character.toChars(0x10330)) + "a");
@@ -74,6 +74,20 @@ class WhatARunWalksIsWhatThePatternMeansTest {
 
     private static Meter plenty() {
         return new Meter(100_000, 10_000_000, 1_000_000_000L);
+    }
+
+    /**
+     * Every piece is a pattern.
+     *
+     * <p>The walk below asks only what the reader reads, and passes over what it refuses. A piece
+     * the reader wrongly refused would leave every pattern built from it out of the walk, and the
+     * walk would stay green having asked nothing about it.
+     */
+    @Test
+    void everyPieceIsRead() {
+        for (String leaf : LEAVES) {
+            assertInstanceOf(PatternRead.Read.class, PatternParser.read(leaf), shown(leaf));
+        }
     }
 
     @Test
