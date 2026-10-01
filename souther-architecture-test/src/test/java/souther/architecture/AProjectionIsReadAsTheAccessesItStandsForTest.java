@@ -189,9 +189,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
 
     /** Whether calling {@code name} of {@code owner} is going down a tree. */
     private static boolean goesDown(String owner, String name) {
-        return owner.equals(CORE) && Set.of("forEachChild", "mapAll", "mapChildren").contains(name)
-                || owner.equals(SCOPE_STEP) && name.equals("forEachChild")
-                || owner.equals(CORE + "$FieldAccess") && name.equals("target");
+        return (owner.equals(CORE) && Set.of("forEachChild", "mapAll", "mapChildren").contains(name))
+                || (owner.equals(SCOPE_STEP) && name.equals("forEachChild"))
+                || (owner.equals(CORE + "$FieldAccess") && name.equals("target"));
     }
 
     /** What evaluating a node runs, which reading a name adds nothing to. */

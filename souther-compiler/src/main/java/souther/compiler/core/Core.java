@@ -352,10 +352,10 @@ public sealed interface Core {
         /**
          * The names of a projection, the last one and the ones before it.
          *
-         * <p>Shared rather than copied, so a reading one name further is one allocation and not a
-         * copy of every name so far. Compared and hashed along the names rather than by recursing,
-         * for the reason the node exists: how many names there are is not bounded by anything a
-         * stack is.
+         * <p>Shared rather than copied, so a reading one name further costs the same however many
+         * names came before it, and copies none of them. Compared and hashed along the names rather
+         * than by recursing, for the reason the node exists: how many names there are is not
+         * bounded by anything a stack is.
          *
          * @param before the names before the last one, or null where the last one is the first
          * @param last   the name this projection answers

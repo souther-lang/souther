@@ -2853,7 +2853,8 @@ public final class InvariantChecker {
             @Override
             public RuleKey positionOf(Core here, Denotations where) {
                 FactSubject named = nameOf(here, where);
-                Coordinate found = named == null ? null : byName.get(named);                if (found == null) {
+                Coordinate found = named == null ? null : byName.get(named);
+                if (found == null) {
                     return null;
                 }
                 met.putIfAbsent(found.path(), found);

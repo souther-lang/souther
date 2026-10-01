@@ -168,6 +168,35 @@ class AValueAGuaranteeWalkReachesIsOneNodeHoweverFarDownTest {
         static final List<Heard> HEARD = heardAtTheBottomOf(LINKS);
     }
 
+    /**
+     * Two projections of as many names as the long chain has are compared, hashed and spelled on
+     * a stack the chain does not fit in.
+     *
+     * <p>Built apart, so that no part of one is the other's and the comparison has to go along
+     * every name. What the node is for is keeping how many names there are off the stack, and
+     * names compared by recursing would put it back there.
+     */
+    @Test
+    void manyNamesAreComparedHashedAndSpelledWithoutTheCallStack() {
+        Core.Read root = new Core.Read("v", null, Type.INT, POS);
+        Core.FieldProjection one = longProjection(root, "next");
+        Core.FieldProjection same = longProjection(root, "next");
+        Core.FieldProjection other = longProjection(root, "nxt");
+
+        assertTrue(onASmallStack(() -> one.equals(same) && one.hashCode() == same.hashCode()
+                && !one.equals(other) && one.toString().equals(same.toString())));
+    }
+
+    /** {@code root} with {@code first} read off it and then {@code next} as often as the chain is
+     *  long. */
+    private static Core.FieldProjection longProjection(Core root, String first) {
+        Core.FieldProjection out = Core.FieldProjection.then(root, first, Type.INT);
+        for (int i = 2; i <= LINKS; i++) {
+            out = Core.FieldProjection.then(out, "next", Type.INT);
+        }
+        return out;
+    }
+
     /** How many nodes the longest way down {@code e} has, counted on a stack of its own. */
     private static int depthOf(Core e) {
         record At(Core node, int depth) {}
