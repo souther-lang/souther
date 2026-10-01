@@ -89,16 +89,21 @@ public record InputDemand(List<TermPath> paths) {
 
     private static void walk(Core e, InputReads names, Symbols symbols,
                              DeclarationNewtypes newtypes, Set<TermPath> found) {
-        // What is demanded are the positions named, so an expression that stands nowhere demands
-        // none: what the model puts at no position, nothing asks for.
-        switch (names.pathOf(e, newtypes)) {
-            case PathResolution.At(var at) -> found.add(at);
-            case PathResolution.NotAPosition _ -> { }
-            // A name that may stand at a place stands there on some run, so each of them is asked
-            // for. Which of them this read is of is what could not be worked out, and taking one of
-            // them for the answer would leave the others unasked wherever the model reads nothing
-            // else of them.
-            case PathResolution.MayStandAt(var among) -> found.addAll(among);
+        // Every subexpression standing here and not only the node: a projection's shorter
+        // projections are not children, and each names a position as the access over it does.
+        // Reading a field binds nothing, so they are read where the projection is.
+        for (Core standing : Core.subexpressionsAt(e)) {
+            // What is demanded are the positions named, so an expression that stands nowhere
+            // demands none: what the model puts at no position, nothing asks for.
+            switch (names.pathOf(standing, newtypes)) {
+                case PathResolution.At(var at) -> found.add(at);
+                case PathResolution.NotAPosition _ -> { }
+                // A name that may stand at a place stands there on some run, so each of them is
+                // asked for. Which of them this read is of is what could not be worked out, and
+                // taking one of them for the answer would leave the others unasked wherever the
+                // model reads nothing else of them.
+                case PathResolution.MayStandAt(var among) -> found.addAll(among);
+            }
         }
         ScopeStep.forEachChild(e, (child, step) ->
                 walk(child, names.entering(step, symbols, newtypes), symbols, newtypes, found));

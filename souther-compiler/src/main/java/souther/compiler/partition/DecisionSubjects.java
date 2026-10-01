@@ -71,6 +71,11 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, PublishedDeclaratio
             // A newtype's value is the value it wraps, which is one subject and not a step inside
             // one. Read as a step, `riskScore(c).value` and `riskScore(c)` would be two columns
             // over one answer.
+            // The same accesses held as one node, taken a name at a time from the last.
+            if (under instanceof Core.FieldProjection projection) {
+                under = projection.lastAccess();
+                continue;
+            }
             if (under instanceof Core.FieldAccess field) {
                 if (Location.isStep(field.target().type(), field.field(), newtypes)) {
                     steps.add(new TermPath.Step.Field(field.field()));

@@ -748,6 +748,9 @@ final class BodyGen {
                     Type targetType = genExpr(fa.target());
                     emitFieldRead(code, ((Type.Ref) targetType).name(), fa.field(), fa.type());
                 }
+                // What reading a type's guarantees reaches a value by. What is emitted reads a field
+                // an access at a time.
+                case Core.FieldProjection p -> throw p.unexpectedIn("the emitter");
                 case Core.If iff -> {
                     Type want = shapeOf(iff, expected);
                     fork(iff, arm -> genExpr(arm, want));

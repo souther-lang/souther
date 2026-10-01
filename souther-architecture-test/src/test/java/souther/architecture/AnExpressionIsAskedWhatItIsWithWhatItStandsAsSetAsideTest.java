@@ -21,7 +21,6 @@ import java.lang.classfile.instruction.TypeCheckInstruction;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDesc;
 import java.lang.constant.DirectMethodHandleDesc;
-import java.lang.reflect.AccessFlag;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -221,14 +220,14 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         Set<String> settingAside = settingAside(classes, kinds);
         Map<String, Integer> out = new LinkedHashMap<>();
         for (ClassModel owner : classes) {
-            Map<String, String> writtenIn = writtenIn(owner);
+            WhereALambdaIsWritten lambdas = WhereALambdaIsWritten.in(owner);
             for (MethodModel method : owner.methods()) {
                 if (method.code().isEmpty()) {
                     continue;
                 }
                 int count = unsetIn(method, kinds, settingAside);
                 if (count > 0) {
-                    out.merge(enclosing(AMethod.of(owner, method), writtenIn), count,
+                    out.merge(lambdas.enclosing(AMethod.of(owner, method)), count,
                             Integer::sum);
                 }
             }
@@ -440,56 +439,6 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         return out;
     }
 
-    /**
-     * Which method each lambda of {@code owner} is written in: the method holding the instruction
-     * that makes it. A lambda is the synthetic method a handle of that instruction names; a method
-     * named by a method reference is not one, and is answered for as itself.
-     */
-    private static Map<String, String> writtenIn(ClassModel owner) {
-        String self = owner.thisClass().asInternalName();
-        Set<String> synthetic = new HashSet<>();
-        for (MethodModel method : owner.methods()) {
-            if (method.flags().has(AccessFlag.SYNTHETIC)) {
-                synthetic.add(AMethod.of(owner, method));
-            }
-        }
-        Map<String, String> out = new HashMap<>();
-        for (MethodModel method : owner.methods()) {
-            method.code().ifPresent(code -> code.elementList().forEach(element -> {
-                if (!(element instanceof InvokeDynamicInstruction indy)) {
-                    return;
-                }
-                for (ConstantDesc arg : indy.bootstrapArgs()) {
-                    if (arg instanceof DirectMethodHandleDesc handle
-                            && !FIELD_HANDLES.contains(handle.kind())
-                            && internalNameOf(handle.owner()).equals(self)) {
-                        String made = AMethod.of(self, handle.methodName(),
-                                handle.lookupDescriptor());
-                        if (synthetic.contains(made)) {
-                            out.put(made, AMethod.of(owner, method));
-                        }
-                    }
-                }
-            }));
-        }
-        return out;
-    }
-
-    /** The handles that name a field rather than a method, which no lambda is. */
-    private static final Set<DirectMethodHandleDesc.Kind> FIELD_HANDLES = Set.of(
-            DirectMethodHandleDesc.Kind.GETTER, DirectMethodHandleDesc.Kind.SETTER,
-            DirectMethodHandleDesc.Kind.STATIC_GETTER, DirectMethodHandleDesc.Kind.STATIC_SETTER);
-
-    /** The method {@code method} is written in, through every lambda it is written in. */
-    private static String enclosing(String method, Map<String, String> writtenIn) {
-        String at = method;
-        Set<String> met = new HashSet<>();
-        while (writtenIn.containsKey(at) && met.add(at)) {
-            at = writtenIn.get(at);
-        }
-        return at;
-    }
-
     /** A walk over every node, which has no case for a {@code Widen} and goes on into what it holds,
      *  where the test meets the value. */
     private static final String GOES_ON_INTO_IT = "a walk over every node: a Widen has no case of"
@@ -504,6 +453,12 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
     private static final String REWRITES_UNDER_IT = "rewrites the node it stands at, and a Widen it"
             + " does not replace is carried through Core.mapChildren, which keeps what is rewritten"
             + " under it standing as what it stood as";
+
+    /** Whether a projection is read on from another. */
+    private static final String ONE_PROJECTION = "whether names are read on from a projection, which"
+            + " is asked of the value they are read off as it stands: a name read off a projection"
+            + " standing as a wider type is read off that standing value, and starts a projection of"
+            + " its own";
 
     /** Asked of the fork a walk stands at. */
     private static final String OF_A_FORK = "asked of a fork the walk is standing at, which is an"
@@ -524,6 +479,12 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                         + " answers nothing of its own, and what it holds is filed one step down");
         row(out, c + "check/AdmissibleReading", "gather",
                 "(" + core + "Ljava/util/Set;L" + c + "check/Denotations;)V", 1, GOES_ON_INTO_IT);
+        row(out, c + "check/AffineForms", "projected", "(L" + CORE + "$FieldProjection;"
+                        + "Ljava/lang/Object;L" + c + "check/AffineForms$Reading;L" + c
+                        + "check/AffineForms$Walk;L" + c + "check/AffineForms$Stop;)L" + c
+                        + "numeric/LinearForm;", 1,
+                "whether a projection's target is one name shorter or its base: a base that is not"
+                        + " a projection is read as any expression is, which sets a Widen aside");
         row(out, c + "check/AnalysisBody", "visit",
                 "(" + core + "L" + c + "check/ValueTemplates;Ljava/util/Set;Ljava/util/List;)V", 1,
                 GOES_ON_INTO_IT);
@@ -600,6 +561,16 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "asks whether the node just emitted was an unreachable, to say which shape it left;"
                         + " a Widen is emitted by its own case, as what it holds");
         row(out, c + "codegen/BodyGen", "walksInside", "(" + core + ")Z", 1, GOES_ON_INTO_IT);
+        row(out, c + "core/Core", "rebased", "(" + core + "L" + CORE + "$FieldProjection;)L" + CORE
+                + "$FieldProjection;", 1, ONE_PROJECTION);
+        row(out, c + "core/Core", "subexpressionsAt", "(" + core + ")Ljava/lang/Iterable;", 1,
+                "asked of the node a walk stands at: a Widen has no names read off it, and the"
+                        + " walk asks what it holds one step down");
+        row(out, c + "core/Core$FieldProjection", "<init>", "(" + core + "L" + CORE
+                + "$FieldProjection$Steps;L" + c + "diag/SourcePos;)V", 1, ONE_PROJECTION);
+        row(out, c + "core/Core$FieldProjection", "then", "(" + core + "Ljava/lang/String;L" + c
+                + "types/Type;L" + c + "diag/SourcePos;)L" + CORE + "$FieldProjection;", 1,
+                ONE_PROJECTION);
         row(out, c + "core/GrowingFold", "adds", "(" + core + ")I", 2, COUNTS_THROUGH_IT);
         row(out, c + "core/GrowingFold", "aliased", "(" + core + "Ljava/util/Set;)I", 1,
                 COUNTS_THROUGH_IT);

@@ -91,6 +91,19 @@ public record Location(BindingId root, List<String> path) {
                 Location base = of(fa.target(), newtypes, rooted);
                 yield base == null ? null : base.then(fa.target().type(), fa.field(), newtypes);
             }
+            // The same step a name at a time, along the names rather than down the stack.
+            case Core.FieldProjection p -> {
+                Location at = of(p.base(), newtypes, rooted);
+                Type from = p.base().type();
+                for (Core.FieldProjection.Step step : p.steps().inOrder()) {
+                    if (at == null) {
+                        break;
+                    }
+                    at = at.then(from, step.field(), newtypes);
+                    from = step.type();
+                }
+                yield at;
+            }
             default -> null;
         };
     }

@@ -672,7 +672,9 @@ public final class PathReachability {
         TermPath here = positionOf(side, reads);
         return here != null ? here
                 : Core.withoutStanding(side) instanceof Core.FieldAccess field
-                        ? positionOf(field.target(), reads) : null;
+                        ? positionOf(field.target(), reads)
+                : Core.withoutStanding(side) instanceof Core.FieldProjection projection
+                        ? positionOf(projection.target(), reads) : null;
     }
 
     /** Where {@code e} stands, and null where it stands nowhere or was not read — which are one

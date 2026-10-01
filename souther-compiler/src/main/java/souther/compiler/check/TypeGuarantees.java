@@ -95,7 +95,10 @@ final class TypeGuarantees {
         Map<String, Core> values = new LinkedHashMap<>();
         List<At.Readable> readable = new ArrayList<>();
         for (Map.Entry<String, Type> field : written.named().entrySet()) {
-            Core value = new Core.FieldAccess(root, field.getKey(), field.getValue(), root.pos());
+            // One node however far down the root already is: a walk reaches a value one name at a
+            // time, as far as the declarations chain, and a value nested once per name would make
+            // every reader of a rule read at the bottom recurse that far.
+            Core value = Core.FieldProjection.then(root, field.getKey(), field.getValue());
             values.put(field.getKey(), value);
             readable.add(new At.Readable(field.getKey(), value, field.getValue()));
         }

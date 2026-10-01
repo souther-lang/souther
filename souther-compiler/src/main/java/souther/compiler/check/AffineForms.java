@@ -12,6 +12,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -539,6 +540,23 @@ public final class AffineForms {
                 yield each;
             }
             case Core.LetIn li -> standing(li.body(), reading.inside(li, at), reading, following);
+            // The elimination below a name at a time, along the names rather than down the stack.
+            // A name with nothing written to stand against leaves the whole projection standing,
+            // as it leaves every access above it standing when they are written out.
+            case Core.FieldProjection p -> {
+                List<Standing<A, E>> reached = standing(p.base(), at, reading, following);
+                for (Core.FieldProjection.Step step : p.steps().inOrder()) {
+                    List<Standing<A, E>> written = given(reached, step.field());
+                    if (written == null) {
+                        yield List.of(new Standing<>(e, at, reading));
+                    }
+                    reached = new ArrayList<>();
+                    for (Standing<A, E> one : written) {
+                        reached.addAll(standing(one.value(), one.at(), one.reading(), following));
+                    }
+                }
+                yield reached;
+            }
             case Core.FieldAccess _, Core.TupleGet _ -> {
                 java.util.List<Standing<A, E>> written = eliminated(e, at, reading, following);
                 if (written == null) {
@@ -582,22 +600,11 @@ public final class AffineForms {
     private static <A, E> java.util.List<Standing<A, E>> eliminated(
             Core e, E at, Reading<A, E> reading, Walk<A, E> following) {
         return switch (Core.withoutStanding(e)) {
-            case Core.FieldAccess fa -> {
-                java.util.List<Standing<A, E>> out = new java.util.ArrayList<>();
-                for (Standing<A, E> target : standing(fa.target(), at, reading, following)) {
-                    if (!(Core.withoutStanding(target.value()) instanceof Core.Construct nd)) {
-                        yield null;
-                    }
-                    Core written = ConstructionProjection.given(nd, fa.field());
-                    if (written == null) {
-                        yield null;
-                    }
-                    // What a member gives a field is read with what the member is read with, which
-                    // is how one plurality stays one over the parts of it.
-                    out.add(new Standing<>(written, target.at(), target.reading()));
-                }
-                yield out;
-            }
+            case Core.FieldAccess fa ->
+                    given(standing(fa.target(), at, reading, following), fa.field());
+            // Its last name against what the names before it reach.
+            case Core.FieldProjection p -> given(standing(p.target(), at, reading, following),
+                    p.steps().last().field());
             case Core.TupleGet get -> {
                 java.util.List<Standing<A, E>> out = new java.util.ArrayList<>();
                 for (Standing<A, E> tuple : standing(get.tuple(), at, reading, following)) {
@@ -613,6 +620,27 @@ public final class AffineForms {
             }
             default -> null;
         };
+    }
+
+    /**
+     * What each of {@code targets} gives {@code field}, or null where one of them is no construction
+     * giving it — one field taken off what a projection's target stands at.
+     */
+    private static <A, E> List<Standing<A, E>> given(List<Standing<A, E>> targets, String field) {
+        List<Standing<A, E>> out = new ArrayList<>();
+        for (Standing<A, E> target : targets) {
+            if (!(Core.withoutStanding(target.value()) instanceof Core.Construct nd)) {
+                return null;
+            }
+            Core written = ConstructionProjection.given(nd, field);
+            if (written == null) {
+                return null;
+            }
+            // What a member gives a field is read with what the member is read with, which is how
+            // one plurality stays one over the parts of it.
+            out.add(new Standing<>(written, target.at(), target.reading()));
+        }
+        return out;
     }
 
     /**
@@ -722,6 +750,7 @@ public final class AffineForms {
                 yield reading.readsThrough(fa, at)
                         ? formOf(fa.target(), at, reading, following, stopped) : null;
             }
+            case Core.FieldProjection p -> projected(p, at, reading, following, stopped);
             // The same elimination against the introduction beside it. A tuple's element is reached
             // this way and no other — the language writes no projection of one, so what comes here
             // is what a binding over a tuple was taken apart into — and there is no second proof to
@@ -741,6 +770,89 @@ public final class AffineForms {
                     stopped);
             default -> null;
         };
+    }
+
+    /**
+     * {@code p} read as arithmetic: the arm above for a field access, asked of each of its names in
+     * turn from the last one down.
+     *
+     * <p>The same two proofs in the same order. Where the second one holds, what the projection
+     * comes to is what its target comes to, and the target is the projection one name shorter — so
+     * the reading goes down a name and asks again, and only where it stops does it come back up,
+     * each name it passed answering with what the one below it came to or, where that was nothing,
+     * with what the walk makes of the name itself ({@link #unread}). That is the order the arm and
+     * {@link #formOf} take when the names are written out; it is kept here and not on the stack,
+     * because how many names there are is as long as the declarations chain.
+     */
+    private static <A, E> LinearForm<A> projected(Core.FieldProjection p, E at,
+                                                  Reading<A, E> reading, Walk<A, E> following,
+                                                  Stop<A, E> stopped) {
+        // The projections the reading went down through, below `p`, and the stop each one's own
+        // arm records — the first being the caller's.
+        List<Core.FieldProjection> through = new ArrayList<>();
+        List<Stop<A, E>> stops = new ArrayList<>();
+        stops.add(stopped);
+        Core.FieldProjection here = p;
+        LinearForm<A> form;
+        while (true) {
+            Stop<A, E> stop = stops.getLast();
+            // What a carrier counts a written value as is asked ahead of the arms, as it is for
+            // any expression ({@link #composed}).
+            LinearForm<A> written = literal(here, reading);
+            if (written != null) {
+                form = written;
+                break;
+            }
+            List<Standing<A, E>> eliminated = eliminated(here, at, reading, following);
+            if (eliminated != null) {
+                form = commonForm(eliminated, following, stop);
+                break;
+            }
+            if (!reading.readsThrough(here.lastAccess(), at)) {
+                form = null;
+                break;
+            }
+            if (!(here.target() instanceof Core.FieldProjection shorter)) {
+                form = formOf(here.target(), at, reading, following, stop);
+                break;
+            }
+            through.add(shorter);
+            stops.add(new Stop<>());
+            here = shorter;
+        }
+        // Back up the names gone down through: each one is read as the walk reads any expression,
+        // which is its arm's form where there is one and what is left of the walk where not.
+        for (int i = through.size() - 1; i >= 0; i--) {
+            Outcome<A, E> read = form != null ? new Outcome.Composed<>(form)
+                    : unread(through.get(i), at, reading, stops.get(i + 1));
+            if (read instanceof Outcome.StoppedAt<A, E> stop) {
+                if (stops.get(i).at == null) {
+                    stops.get(i).at = stop;
+                }
+                form = null;
+            } else {
+                form = ((Outcome.Composed<A, E>) read).form();
+            }
+        }
+        return form;
+    }
+
+    /**
+     * What the walk makes of a projection its arm composed nothing for: the stages after
+     * composition, in their order ({@link #of}). A projection is not a name, so the stage that
+     * reads one through has nothing to ask.
+     */
+    private static <A, E> Outcome<A, E> unread(Core.FieldProjection p, E at, Reading<A, E> reading,
+                                               Stop<A, E> stopped) {
+        BigDecimal folded = Terms.constantNumber(p, reading.symbols());
+        if (folded != null) {
+            return new Outcome.Composed<>(LinearForm.constant(ExactRatio.of(folded)));
+        }
+        LinearForm<A> leaf = reading.leafOf(p, at);
+        if (leaf != null) {
+            return new Outcome.Composed<>(leaf);
+        }
+        return stopped.at != null ? stopped.at : new Outcome.StoppedAt<>(p, at);
     }
 
     /**

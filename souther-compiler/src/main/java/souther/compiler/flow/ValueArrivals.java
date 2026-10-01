@@ -813,6 +813,8 @@ public final class ValueArrivals<P> {
             case Core.MaterialisedValue _ -> List.of();
             case Core.Neg neg -> present(neg.operand());
             case Core.FieldAccess access -> present(access.target());
+            // Built out of what the names are read off, which is the one value evaluated.
+            case Core.FieldProjection projection -> present(projection.base());
             case Core.TupleGet get -> present(get.tuple());
             case Core.OptionSome option -> present(option.value());
             case Core.Widen widen -> present(widen.value());

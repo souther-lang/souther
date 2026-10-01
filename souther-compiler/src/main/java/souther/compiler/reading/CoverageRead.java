@@ -316,6 +316,9 @@ public final class CoverageRead {
             // Everything the node is made of is evaluated, and under what the node itself was.
             case Core.Neg neg -> walkAll(some(neg.operand()), naming, reach, observed);
             case Core.FieldAccess access -> walkAll(some(access.target()), naming, reach, observed);
+            // What reading a type's guarantees reaches a value by. The tree that runs reads a field
+            // an access at a time.
+            case Core.FieldProjection p -> throw p.unexpectedIn("the reading of what runs");
             case Core.TupleGet get -> walkAll(some(get.tuple()), naming, reach, observed);
             case Core.OptionSome option -> walkAll(some(option.value()), naming, reach, observed);
             case Core.Widen widen -> walkAll(some(widen.value()), naming, reach, observed);

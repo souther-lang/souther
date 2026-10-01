@@ -1355,7 +1355,9 @@ public final class InvariantChecker {
             if (under == null) {
                 break;
             }
-            inner = new Core.FieldAccess(inner, "value", under, NOWHERE);
+            // One node however many names come off, since how many there are is as long as the
+            // declarations chain.
+            inner = Core.FieldProjection.then(inner, "value", under, NOWHERE);
             worn = under;
         }
         if (depth > GuaranteeWalk.FIELDS_SEEDED) {
@@ -1379,7 +1381,7 @@ public final class InvariantChecker {
             case ValueReading.UnderAName _ -> Map.of();
         };
         for (Map.Entry<String, Type> field : under.entrySet()) {
-            name(new Core.FieldAccess(inner, field.getKey(), field.getValue(), NOWHERE),
+            name(Core.FieldProjection.then(inner, field.getKey(), field.getValue(), NOWHERE),
                     path.then(field.getKey()), field.getValue(), at, symbols, depth + 1,
                     atoms, typeAt, held, keys);
         }
@@ -2851,8 +2853,7 @@ public final class InvariantChecker {
             @Override
             public RuleKey positionOf(Core here, Denotations where) {
                 FactSubject named = nameOf(here, where);
-                Coordinate found = named == null ? null : byName.get(named);
-                if (found == null) {
+                Coordinate found = named == null ? null : byName.get(named);                if (found == null) {
                     return null;
                 }
                 met.putIfAbsent(found.path(), found);
@@ -3598,15 +3599,19 @@ public final class InvariantChecker {
     private void relating(Core clause, TypeSymbol.AtModule from, Denotations at,
                           Map<FactSubject, Coordinate> byName,
                           Map<RuleKey, List<TypeSymbol.AtModule>> narrowers) {
-        FactSubject named = nameOf(clause, at);
-        Coordinate found = named == null ? null : byName.get(named);
-        if (found != null) {
-            List<TypeSymbol.AtModule> had =
-                    narrowers.computeIfAbsent(found.path(), _ -> new ArrayList<>());
-            if (!had.contains(from)) {
-                had.add(from);
+        // Every subexpression standing here and not only the node: a projection's shorter
+        // projections are not children, and each may be the coordinate.
+        for (Core standing : Core.subexpressionsAt(clause)) {
+            FactSubject named = nameOf(standing, at);
+            Coordinate found = named == null ? null : byName.get(named);
+            if (found != null) {
+                List<TypeSymbol.AtModule> had =
+                        narrowers.computeIfAbsent(found.path(), _ -> new ArrayList<>());
+                if (!had.contains(from)) {
+                    had.add(from);
+                }
+                return;   // a coordinate names itself and nothing under it is one of its own
             }
-            return;   // a coordinate names itself and nothing under it is a coordinate of its own
         }
         Core.forEachChild(clause, child -> relating(child, from, at, byName, narrowers));
     }

@@ -143,6 +143,9 @@ public record ExecutableIdentity(Kind kind, List<Settled> settled,
                 settled.add(new Settled.Word(it.field()));
                 yield Kind.FIELD_ACCESS;
             }
+            // What reading a type's guarantees reaches a value by, which the tree that runs holds
+            // none of.
+            case Core.FieldProjection it -> throw it.unexpectedIn("what a body does");
             case Core.Binary it -> {
                 settled.add(new Settled.Operator(it.op()));
                 yield Kind.BINARY;
