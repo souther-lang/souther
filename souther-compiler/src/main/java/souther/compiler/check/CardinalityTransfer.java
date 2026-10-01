@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * How many values a declaration has, given how many the declarations it reaches have.
@@ -286,31 +287,102 @@ final class CardinalityTransfer {
                 || !worn.add(ref.name())) {
             return named;
         }
-        // The name is not a step of the path: a rule the record wrote about this field reaches what
-        // the name wraps, and reading the wrapped type without it would leave a floor written here
-        // saying nothing. Both readings bound the same values, so the narrower of them holds.
-        Type representation = TypeOps.fieldTypes(data, source.symbols()).get("value");
-        if (representation == null) {
-            return named;
+        // Worn while what it wraps is read and not after. What the name stops is a value reached
+        // from inside itself, which is a question about what this one is inside of; a value beside
+        // it — another part of the same tuple — is read the same whichever part was read first.
+        try {
+            OPENED.incrementAndGet();
+            // Opened once already, where the name was answered: what is beneath it is the same
+            // names with the same counts whoever opens it, and only what they end in is read under
+            // this position's rules. Without this, every name opened here would open the whole of
+            // what it wraps again, and a chain of them would be read once per link.
+            Unwrapping known = answers.unwrappingOf(ref.name());
+            if (known != null) {
+                return known.terminal() == null ? known.standsFor()
+                        : throughTheName(known.standsFor(), upperAt(known.terminal(), path, counts,
+                                values, source, answers, granted, worn));
+            }
+            // The name is not a step of the path: a rule the record wrote about this field reaches
+            // what the name wraps, and reading the wrapped type without it would leave a floor
+            // written here saying nothing.
+            Type representation = TypeOps.fieldTypes(data, source.symbols()).get("value");
+            if (representation == null) {
+                return named;
+            }
+            return throughTheName(named,
+                    upperAt(representation, path, counts, values, source, answers, granted, worn));
+        } finally {
+            worn.remove(ref.name());
         }
-        Cardinality unwrapped =
-                upperAt(representation, path, counts, values, source, answers, granted, worn);
+    }
+
+    /** How many times a reading has opened a name worn over a value. */
+    static long namesOpened() {
+        return OPENED.get();
+    }
+
+    private static final AtomicLong OPENED = new AtomicLong();
+
+    /**
+     * What a name with {@code named} comes to once opened onto what it wraps, which came to
+     * {@code unwrapped}.
+     *
+     * <p>Both readings bound the same values, so the narrower of them holds. Where both come to none,
+     * what is left to choose is which proof is carried: the unwrapped one is about the rules written
+     * at the position and the named one stops at the name, and the nearer of the two is the one that
+     * says something there.
+     */
+    static Cardinality throughTheName(Cardinality named, Cardinality unwrapped) {
         if (named instanceof Cardinality.Standing here
                 && unwrapped instanceof Cardinality.Standing there) {
             return Cardinality.Standing.narrower(here, there);
         }
-        // Both readings cannot be wider than none, so what is left to choose is which proof is
-        // carried. The unwrapped one is about the rules written at this position and the named one
-        // stops at the name, and the nearer of the two is the one that says something here.
         if (named instanceof Cardinality.None it && unwrapped instanceof Cardinality.None other) {
             return other.why().category().compareTo(it.why().category()) <= 0 ? other : it;
         }
         return named instanceof Cardinality.None ? named : unwrapped;
     }
 
-    /** A value a collection holds, which no rule of the collection's own was written about. */
+    /**
+     * What opening {@code named} finds beneath it, for the readings that reach it after it is
+     * answered.
+     *
+     * <p>Where it wraps a name that was opened already, that one's opening with this name's count
+     * taken on top; otherwise this name opened onto what it wraps. A name the readings never open
+     * stops at its count, as {@link #ofRef} would.
+     */
+    static Unwrapping unwrappingOf(TypeSymbol named, Hir.Def def, RuleReadingSource source,
+                                   Answers answers, Set<TypeSymbol> granted) {
+        Cardinality count = answers.of(named);
+        if (granted.contains(named) || !(def instanceof Hir.Data data) || !data.newtype()) {
+            return Unwrapping.stoppingAt(count);
+        }
+        Type representation = TypeOps.fieldTypes(data, source.symbols()).get("value");
+        if (representation == null) {
+            return Unwrapping.stoppingAt(count);
+        }
+        Unwrapping beneath = representation instanceof Type.Ref ref
+                ? answers.unwrappingOf(ref.name()) : null;
+        return beneath != null ? beneath.beneath(count)
+                : Unwrapping.onto(representation, count, ofType(representation, source, answers,
+                        granted, new HashSet<>(Set.of(named))));
+    }
+
+    /**
+     * A value a collection holds, which no rule of the collection's own was written about.
+     *
+     * <p>Read under no rule, so a name here comes to what opening it under no rule came to when it
+     * was answered, and is not opened again.
+     */
     private static Cardinality ofType(Type type, RuleReadingSource source, Answers answers,
                                       Set<TypeSymbol> granted, Set<TypeSymbol> worn) {
+        if (type instanceof Type.Ref ref && !granted.contains(ref.name())
+                && !worn.contains(ref.name())) {
+            Unwrapping known = answers.unwrappingOf(ref.name());
+            if (known != null) {
+                return known.unruled();
+            }
+        }
         return upperAt(type, RuleKey.THE_VALUE, OccurrenceCounts.NOTHING_READ,
                 OccurrenceValues.NOTHING_READ, source, answers, granted, worn);
     }

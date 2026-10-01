@@ -5,6 +5,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -90,6 +91,14 @@ public final class TypeCardinality {
         /** What {@code name} came to, nothing being known of a name nobody answers for. */
         Cardinality of(TypeSymbol name);
 
+        /**
+         * What opening {@code name} found beneath it when it was answered, or null where that was
+         * not worked out — which leaves a reading reaching the name to open it itself.
+         */
+        default Unwrapping unwrappingOf(TypeSymbol name) {
+            return null;
+        }
+
         /** Nowhere to ask, for a count that holds every declaration it reads. */
         Counts NONE = _ -> null;
     }
@@ -137,18 +146,48 @@ public final class TypeCardinality {
      * the names they are written in terms of, so an author changing what a rule allows leaves this
      * where it was.
      */
-    public static Map<TypeSymbol, List<TypeSymbol>> componentsOf(List<? extends TypeSymbol> roots,
-                                                                 RuleReadingSource source) {
+    public static Components componentsOf(List<? extends TypeSymbol> roots,
+                                          RuleReadingSource source) {
         Symbols symbols = source.symbols();
         Map<TypeSymbol, Hir.Def> declared = reached(roots, symbols);
         Map<TypeSymbol, Set<TypeSymbol>> edges = new LinkedHashMap<>();
         declared.forEach((name, def) -> edges.put(name, read(def, symbols, declared.keySet())));
-        Map<TypeSymbol, List<TypeSymbol>> of = new LinkedHashMap<>();
-        for (List<TypeSymbol> component : TypeComponents.of(edges)) {
-            List<TypeSymbol> members = component.stream().sorted().toList();
-            members.forEach(each -> of.put(each, members));
+        return Components.of(TypeComponents.of(edges));
+    }
+
+    /**
+     * The declarations that have to be answered together, each group after every group it reads.
+     *
+     * <p>The order is part of the answer and not a way of writing it down. A count of one group is
+     * handed what the groups it reads came to, so answering them front to back hands every count
+     * what it reads as an answer already made; answered as each happens to be reached, a count would
+     * wait on the one it reads, and that one on the next, as deep as the declarations chain.
+     *
+     * @param inOrder  every group, each after every group it reads, its members under their names
+     * @param byMember the group each declaration is answered with, which is {@code inOrder} read
+     *                 by member and nothing beside it
+     */
+    public record Components(List<List<TypeSymbol>> inOrder,
+                             Map<TypeSymbol, List<TypeSymbol>> byMember) {
+
+        public Components {
+            inOrder = List.copyOf(inOrder);
+            byMember = Map.copyOf(byMember);
         }
-        return of;
+
+        /** The groups {@code inOrder} holds, each read by its members. */
+        static Components of(List<List<TypeSymbol>> inOrder) {
+            Map<TypeSymbol, List<TypeSymbol>> by = new HashMap<>();
+            for (List<TypeSymbol> component : inOrder) {
+                component.forEach(each -> by.put(each, component));
+            }
+            return new Components(inOrder, by);
+        }
+
+        /** The group {@code named} is answered with, or null where it was not reached. */
+        public List<TypeSymbol> of(TypeSymbol named) {
+            return byMember.get(named);
+        }
     }
 
     /**
@@ -188,10 +227,8 @@ public final class TypeCardinality {
      * Nothing is rounded where a component is read once, so a component that reads no declaration
      * written in terms of it asks no declaration what counts its rules turn on.
      */
-    public static Map<TypeSymbol, Cardinality> ofComponent(List<TypeSymbol> component,
-                                                           RuleReadingContext reading,
-                                                           Premises premises,
-                                                           Counts outside) {
+    public static Counted ofComponent(List<TypeSymbol> component, RuleReadingContext reading,
+                                      Premises premises, Counts outside) {
         Symbols symbols = reading.source().symbols();
         Map<TypeSymbol, Hir.Def> declared = new LinkedHashMap<>();
         for (TypeSymbol each : component) {
@@ -200,7 +237,7 @@ public final class TypeCardinality {
             }
         }
         if (declared.isEmpty()) {
-            return Map.of();
+            return new Counted(Map.of(), Map.of());
         }
         Map<TypeSymbol, Set<TypeSymbol>> edges = new LinkedHashMap<>();
         declared.forEach((name, def) -> edges.put(name, read(def, symbols, declared.keySet())));
@@ -211,7 +248,27 @@ public final class TypeCardinality {
                 : CardinalityCuts.keeping(Set.of());
         Answers answers = Answers.over(outside);
         settle(members, declared, edges, cuts, reading, Set.of(), answers);
-        return answers.everySettled();
+        return new Counted(answers.everySettled(), answers.everyUnwrapping());
+    }
+
+    /**
+     * What the declarations of one component came to, and what opening each of them finds.
+     *
+     * <p>The second is here for the counts that read this component afterwards. A count reaching a
+     * name worn over a value opens it, and what is beneath is the same whoever opens it — so it is
+     * worked out where the name is answered and handed on with the count, and a chain of such names
+     * is opened one link at a time rather than all the way down at every link.
+     *
+     * @param counts     what every declaration of the component came to
+     * @param unwrapping what opening each declaration finds, for the ones it was worked out for
+     */
+    public record Counted(Map<TypeSymbol, Cardinality> counts,
+                          Map<TypeSymbol, Unwrapping> unwrapping) {
+
+        public Counted {
+            counts = Map.copyOf(counts);
+            unwrapping = Map.copyOf(unwrapping);
+        }
     }
 
     /**
@@ -405,6 +462,8 @@ public final class TypeCardinality {
         for (TypeSymbol each : component) {
             if (granted.contains(each)) {
                 answers.settle(each, Cardinality.UNKNOWN);
+                answers.unwrapsTo(each, CardinalityTransfer.unwrappingOf(
+                        each, declared.get(each), reading.source(), answers, granted));
             } else {
                 asked.add(each);
             }
@@ -412,9 +471,14 @@ public final class TypeCardinality {
         if (asked.isEmpty()) {
             return;
         }
+        // Worked out for a declaration that settles alone and for no other. Where declarations are
+        // risen through together, what is beneath one of them is the others, which are still
+        // moving while it is read.
         if (asked.size() == 1 && !TypeComponents.recurses(component, edges)) {
             TypeSymbol one = asked.get(0);
             answers.settle(one, transfer(one, declared.get(one), reading, answers, granted));
+            answers.unwrapsTo(one, CardinalityTransfer.unwrappingOf(
+                    one, declared.get(one), reading.source(), answers, granted));
             return;
         }
         rise(asked, declared, reading, cuts, answers, granted);
@@ -517,6 +581,19 @@ public final class TypeCardinality {
     }
 
     private static final AtomicLong TRANSFERS = new AtomicLong();
+
+    /**
+     * How many times a count has opened a name worn over a value to read what it wraps, for a test
+     * holding a caller to what a chain of such names costs.
+     *
+     * <p>Beside {@link #transfersMade()} because a transfer is not where a chain is paid for. A
+     * declaration wrapping a name is asked once, and what asking it opens is the rest: a count that
+     * opened every name beneath the one it reached would make one transfer per declaration and open
+     * the whole chain beneath each.
+     */
+    public static long namesOpened() {
+        return CardinalityTransfer.namesOpened();
+    }
 
     private static Cardinality round(CardinalityCuts cuts, Cardinality of) {
         return of instanceof Cardinality.Standing standing ? cuts.round(standing) : of;
