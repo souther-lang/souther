@@ -5,7 +5,9 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.Value;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -211,109 +213,7 @@ final class CardinalityTransfer {
                                OccurrenceValues values, RuleReadingSource source,
                                Answers answers, Set<TypeSymbol> granted,
                                Set<TypeSymbol> worn) {
-        return switch (type) {
-            case Type.Prim prim -> switch (prim) {
-                // As many as it has values, which is a question with an answer of its own. Written
-                // here as a number, the count and the values would be two records of one fact with
-                // nothing holding them together.
-                case BOOL ->
-                        howManyValues(type, source.inners(), source.kinds(),
-                                source.published());
-                case INT -> values.wholeValuesAt(path);
-                // Spaced too finely to count between two ends, or not spaced at all. A string bounded
-                // in length and a date bounded at both ends are finite and are not counted here: what
-                // it would take is a reading of each carrier's own values, and nothing asks yet.
-                case STRING, DECIMAL, RATIONAL, DATE, TIME, DATETIME, INSTANT ->
-                        Cardinality.UNKNOWN;
-            };
-            case Type.Ref ref -> ofRef(ref, path, counts, values, source, answers, granted, worn);
-            // A `None` is a value of it whatever it wraps, so this is the one position that is never
-            // empty. What it wraps is a value of its own type and nothing was written about it here.
-            case Type.OptionOf option ->
-                    ofType(option.element(), source, answers, granted, worn)
-                            instanceof Cardinality.Standing wrapped
-                            ? Cardinality.atMost(1).plus(wrapped) : Cardinality.atMost(1);
-            case Type.ListOf list -> ofList(list.element(), path, counts, source, answers, granted, worn);
-            case Type.SetOf set -> ofSet(set.element(), path, counts, source, answers, granted, worn);
-            case Type.MapOf map -> ofMap(map, path, counts, source, answers, granted, worn);
-            // Several values carried together, which is a product like a record's fields. Written only
-            // inside a computation — a field of one is refused — so nothing in a declaration reaches
-            // this, and a part with no value is carried up as it stands: the parts sit at no path of
-            // their own for a proof to name.
-            case Type.TupleOf tuple -> {
-                Cardinality.Standing across = Cardinality.atMost(1);
-                Cardinality.None without = null;
-                for (Type each : tuple.elements()) {
-                    switch (ofType(each, source, answers, granted, worn)) {
-                        case Cardinality.None it -> {
-                            if (without == null
-                                    || it.why().category().compareTo(without.why().category()) < 0) {
-                                without = it;
-                            }
-                        }
-                        case Cardinality.Standing it -> across = across.times(it);
-                    }
-                }
-                yield without != null ? without : across;
-            }
-            case Type.Union union -> ofCases(List.copyOf(union.members()), answers);
-            // A type standing for another, a name that resolved to nothing, a function, and the two
-            // that only an expression reaches: `Nothing` is what an empty list literal's element is
-            // waiting to be told, and `Never` is where an abort leaves off. None of them is written
-            // in a declaration, and a count of none read off one would refuse a type on the strength
-            // of a form this never decided.
-            case Type.Open _, Type.Erroneous _, Type.FnOf _, Type.Nothing _, Type.Never _ ->
-                    Cardinality.UNKNOWN;
-        };
-    }
-
-    /**
-     * A name, unwrapped while it is one this value is not already wearing.
-     *
-     * <p>The one place anything is learned about a name beyond what the answers say of it. A sum
-     * reads its cases and a union its members, and both read the answer and nothing else; here the
-     * name is opened and what it wraps is read again. So this is where a name that was granted a
-     * value has to be left alone: opening it reaches the very rules and the very shape that leave it
-     * without one, and the granting would be undone one step in.
-     */
-    private static Cardinality ofRef(Type.Ref ref, RuleKey path, OccurrenceCounts counts,
-                                     OccurrenceValues values, RuleReadingSource source,
-                                     Answers answers, Set<TypeSymbol> granted,
-                                     Set<TypeSymbol> worn) {
-        Cardinality named = answers.of(ref.name());
-        if (granted.contains(ref.name())
-                || !(source.symbols().declaredNode(ref.name()) instanceof Hir.Data data)
-                || !data.newtype()
-                || !worn.add(ref.name())) {
-            return named;
-        }
-        // Worn while what it wraps is read and not after. What the name stops is a value reached
-        // from inside itself, which is a question about what this one is inside of; a value beside
-        // it — another part of the same tuple — is read the same whichever part was read first.
-        try {
-            OPENED.incrementAndGet();
-            // Opened once already, where the name was answered: what is beneath it is the same
-            // names with the same counts whoever opens it, and only what they end in is read under
-            // this position's rules. Without this, every name opened here would open the whole of
-            // what it wraps again, and a chain of them would be read once per link.
-            Unwrapping known = answers.unwrappingOf(ref.name());
-            if (known != null) {
-                return known.terminal() == null ? known.standsFor()
-                        : throughTheName(known.standsFor(), upperAt(known.terminal(), path, counts,
-                                values, source, answers, granted, worn));
-            }
-            // The name is not a step of the path: a rule the record wrote about this field reaches
-            // what the name wraps, and reading the wrapped type without it would leave a floor
-            // written here saying nothing.
-            Type representation = TypeOps.fieldTypes(data, source.symbols()).get("value");
-            if (representation == null) {
-                return named;
-            }
-            return throughTheName(named,
-                    upperAt(representation, path, counts, values, source, answers, granted, worn));
-        } finally {
-            worn.remove(ref.name());
-        }
+        return new Walk(source, answers, granted, worn).at(type, path, counts, values);
     }
 
     /** How many times a reading has opened a name worn over a value. */
@@ -349,7 +249,7 @@ final class CardinalityTransfer {
      *
      * <p>Where it wraps a name that was opened already, that one's opening with this name's count
      * taken on top; otherwise this name opened onto what it wraps. A name the readings never open
-     * stops at its count, as {@link #ofRef} would.
+     * stops at its count, as {@link Walk} would.
      */
     static Unwrapping unwrappingOf(TypeSymbol named, Hir.Def def, RuleReadingSource source,
                                    Answers answers, Set<TypeSymbol> granted) {
@@ -364,27 +264,9 @@ final class CardinalityTransfer {
         Unwrapping beneath = representation instanceof Type.Ref ref
                 ? answers.unwrappingOf(ref.name()) : null;
         return beneath != null ? beneath.beneath(count)
-                : Unwrapping.onto(representation, count, ofType(representation, source, answers,
-                        granted, new HashSet<>(Set.of(named))));
-    }
-
-    /**
-     * A value a collection holds, which no rule of the collection's own was written about.
-     *
-     * <p>Read under no rule, so a name here comes to what opening it under no rule came to when it
-     * was answered, and is not opened again.
-     */
-    private static Cardinality ofType(Type type, RuleReadingSource source, Answers answers,
-                                      Set<TypeSymbol> granted, Set<TypeSymbol> worn) {
-        if (type instanceof Type.Ref ref && !granted.contains(ref.name())
-                && !worn.contains(ref.name())) {
-            Unwrapping known = answers.unwrappingOf(ref.name());
-            if (known != null) {
-                return known.unruled();
-            }
-        }
-        return upperAt(type, RuleKey.THE_VALUE, OccurrenceCounts.NOTHING_READ,
-                OccurrenceValues.NOTHING_READ, source, answers, granted, worn);
+                : Unwrapping.onto(representation, count,
+                        new Walk(source, answers, granted, new HashSet<>(Set.of(named)))
+                                .held(representation));
     }
 
     /**
@@ -407,17 +289,9 @@ final class CardinalityTransfer {
                 : Cardinality.none(new Emptiness.NonEmptyCollectionWithNoElement(element));
     }
 
-    private static Cardinality ofSet(Type element, RuleKey path, OccurrenceCounts counts,
-                                     RuleReadingSource source, Answers answers,
-                                     Set<TypeSymbol> granted, Set<TypeSymbol> worn) {
-        if (!counts.mayHoldAtLeast(path, 1)) {
-            return noSizeLeft(counts, path);
-        }
-        Cardinality.Standing each;
-        switch (ofType(element, source, answers, granted, worn)) {
-            case Cardinality.None it -> { return nothingToHold(counts, path, it.why()); }
-            case Cardinality.Standing it -> each = it;
-        }
+    /** The sets at {@code path}, of an element with {@code each} values. */
+    private static Cardinality setsOf(Cardinality.Standing each, RuleKey path,
+                                      OccurrenceCounts counts) {
         long distinct = each.boundOr(-1);
         if (distinct < 0) {
             return Cardinality.UNKNOWN;
@@ -446,17 +320,9 @@ final class CardinalityTransfer {
         return across == null ? Cardinality.UNKNOWN : across;
     }
 
-    private static Cardinality ofList(Type element, RuleKey path, OccurrenceCounts counts,
-                                      RuleReadingSource source, Answers answers,
-                                      Set<TypeSymbol> granted, Set<TypeSymbol> worn) {
-        if (!counts.mayHoldAtLeast(path, 1)) {
-            return noSizeLeft(counts, path);
-        }
-        Cardinality.Standing each;
-        switch (ofType(element, source, answers, granted, worn)) {
-            case Cardinality.None it -> { return nothingToHold(counts, path, it.why()); }
-            case Cardinality.Standing it -> each = it;
-        }
+    /** The lists at {@code path}, of an element with {@code each} values. */
+    private static Cardinality listsOf(Cardinality.Standing each, RuleKey path,
+                                       OccurrenceCounts counts) {
         // A list holds its element's values over again, so length and not the element is what bounds
         // it. Left long enough and the lists are past counting however few values the element has.
         if (counts.mayHoldAtLeast(path, ENUMERATION_LIMIT + 1L)) {
@@ -469,22 +335,252 @@ final class CardinalityTransfer {
                 across = across == null ? here : across.plus(here);
             }
         }
-        return across == null ? Cardinality.UNKNOWN : across;   // as in `ofSet`, and as unreachable
+        return across == null ? Cardinality.UNKNOWN : across;   // as in `setsOf`, and as unreachable
     }
 
-    private static Cardinality ofMap(Type.MapOf map, RuleKey path, OccurrenceCounts counts,
-                                     RuleReadingSource source, Answers answers,
-                                     Set<TypeSymbol> granted, Set<TypeSymbol> worn) {
-        if (!counts.mayHoldAtLeast(path, 1)) {
-            return noSizeLeft(counts, path);
+    /**
+     * One reading of a position, with what is waiting on the parts of it held here rather than on
+     * the call stack.
+     *
+     * <p>A position is read by reading its parts, and a name worn over a value is read by opening it
+     * and reading what its declaration wraps — which may be another such name, or a collection of
+     * one, and so on into whatever declarations the names lead to. That is the one place a reading
+     * goes from one declaration to another, and how far it goes is how far the declarations lead,
+     * not how deep any one of them was written. Waiting on it on the call stack would let a long
+     * enough chain or ring of declarations run out of the thread's stack, so what a module comes to
+     * would depend on the thread that compiled it. Each position waiting on a part is a
+     * {@link Waiting} pushed here, and the reading is a loop.
+     *
+     * <p>Every position is answered as the reading did when it waited on its parts on the call
+     * stack: the parts are asked for in the same order, and what each position does with what its
+     * part came to is the same.
+     */
+    private static final class Walk {
+
+        /** A position waiting on what one of its parts comes to. */
+        @FunctionalInterface
+        private interface Waiting {
+
+            /** What the position comes to, its part having come to {@code part}; null where it has
+             *  asked for another part and is waiting again. */
+            Cardinality resume(Cardinality part);
         }
-        if (!Type.STRING.equals(map.key())) {
-            return Cardinality.UNKNOWN;   // keyed by something this has not read
+
+        /** A part asked for and not yet read, and where it is read from. */
+        private record Part(Type type, RuleKey path, OccurrenceCounts counts,
+                            OccurrenceValues values) {}
+
+        private final RuleReadingSource source;
+        private final Answers answers;
+        private final Set<TypeSymbol> granted;
+        private final Set<TypeSymbol> worn;
+        private final Deque<Waiting> waiting = new ArrayDeque<>();
+        private Part asked;
+
+        Walk(RuleReadingSource source, Answers answers, Set<TypeSymbol> granted,
+             Set<TypeSymbol> worn) {
+            this.source = source;
+            this.answers = answers;
+            this.granted = granted;
+            this.worn = worn;
         }
-        // A key is a string and there is no end of those, so a map holding anything at all holds it
-        // under more keys than can be counted. Only a map with nothing to hold is finite here, and
-        // one that must hold something has no value.
-        return ofType(map.value(), source, answers, granted, worn) instanceof Cardinality.None it
-                ? nothingToHold(counts, path, it.why()) : Cardinality.UNKNOWN;
+
+        /** How many values may stand at {@code path}. */
+        Cardinality at(Type type, RuleKey path, OccurrenceCounts counts, OccurrenceValues values) {
+            return finish(begin(new Part(type, path, counts, values)));
+        }
+
+        /** How many values a value of {@code type} has where no rule is written about it. */
+        Cardinality held(Type type) {
+            return finish(holding(part -> part, type));
+        }
+
+        /** {@code done}, or what the reading comes to once every part asked for is read. */
+        private Cardinality finish(Cardinality done) {
+            Cardinality now = done;
+            while (true) {
+                if (now == null) {
+                    Part next = asked;
+                    asked = null;
+                    now = begin(next);
+                } else if (waiting.isEmpty()) {
+                    return now;
+                } else {
+                    now = waiting.pop().resume(now);
+                }
+            }
+        }
+
+        /** Waits on the position at {@code path} with {@code then}, answering nothing yet. */
+        private Cardinality ask(Waiting then, Type type, RuleKey path, OccurrenceCounts counts,
+                                OccurrenceValues values) {
+            waiting.push(then);
+            asked = new Part(type, path, counts, values);
+            return null;
+        }
+
+        /**
+         * A value a collection holds, which no rule of the collection's own was written about,
+         * handed to {@code then}.
+         *
+         * <p>Read under no rule, so a name here comes to what opening it under no rule came to when
+         * it was answered, and is not opened again.
+         */
+        private Cardinality holding(Waiting then, Type type) {
+            if (type instanceof Type.Ref ref && !granted.contains(ref.name())
+                    && !worn.contains(ref.name())) {
+                Unwrapping known = answers.unwrappingOf(ref.name());
+                if (known != null) {
+                    return then.resume(known.unruled());
+                }
+            }
+            return ask(then, type, RuleKey.THE_VALUE, OccurrenceCounts.NOTHING_READ,
+                    OccurrenceValues.NOTHING_READ);
+        }
+
+        /** What {@code part} comes to, or null where it waits on a part of its own. */
+        private Cardinality begin(Part part) {
+            RuleKey path = part.path();
+            OccurrenceCounts counts = part.counts();
+            return switch (part.type()) {
+                case Type.Prim prim -> switch (prim) {
+                    // As many as it has values, which is a question with an answer of its own.
+                    // Written here as a number, the count and the values would be two records of one
+                    // fact with nothing holding them together.
+                    case BOOL -> howManyValues(part.type(), source.inners(), source.kinds(),
+                            source.published());
+                    case INT -> part.values().wholeValuesAt(path);
+                    // Spaced too finely to count between two ends, or not spaced at all. A string
+                    // bounded in length and a date bounded at both ends are finite and are not
+                    // counted here: what it would take is a reading of each carrier's own values,
+                    // and nothing asks yet.
+                    case STRING, DECIMAL, RATIONAL, DATE, TIME, DATETIME, INSTANT ->
+                            Cardinality.UNKNOWN;
+                };
+                case Type.Ref ref -> opening(ref, part);
+                // A `None` is a value of it whatever it wraps, so this is the one position that is
+                // never empty. What it wraps is a value of its own type and nothing was written about
+                // it here.
+                case Type.OptionOf option -> holding(wrapped ->
+                        wrapped instanceof Cardinality.Standing it
+                                ? Cardinality.atMost(1).plus(it) : Cardinality.atMost(1),
+                        option.element());
+                case Type.ListOf list -> !counts.mayHoldAtLeast(path, 1) ? noSizeLeft(counts, path)
+                        : holding(held -> switch (held) {
+                            case Cardinality.None it -> nothingToHold(counts, path, it.why());
+                            case Cardinality.Standing each -> listsOf(each, path, counts);
+                        }, list.element());
+                case Type.SetOf set -> !counts.mayHoldAtLeast(path, 1) ? noSizeLeft(counts, path)
+                        : holding(held -> switch (held) {
+                            case Cardinality.None it -> nothingToHold(counts, path, it.why());
+                            case Cardinality.Standing each -> setsOf(each, path, counts);
+                        }, set.element());
+                case Type.MapOf map -> !counts.mayHoldAtLeast(path, 1) ? noSizeLeft(counts, path)
+                        // Keyed by something this has not read.
+                        : !Type.STRING.equals(map.key()) ? Cardinality.UNKNOWN
+                        // A key is a string and there is no end of those, so a map holding anything
+                        // at all holds it under more keys than can be counted. Only a map with
+                        // nothing to hold is finite here, and one that must hold something has no
+                        // value.
+                        : holding(held -> held instanceof Cardinality.None it
+                                ? nothingToHold(counts, path, it.why()) : Cardinality.UNKNOWN,
+                                map.value());
+                // Several values carried together, which is a product like a record's fields.
+                // Written only inside a computation — a field of one is refused — so nothing in a
+                // declaration reaches this, and a part with no value is carried up as it stands: the
+                // parts sit at no path of their own for a proof to name.
+                case Type.TupleOf tuple -> new Parts(tuple.elements()).next();
+                case Type.Union union -> ofCases(List.copyOf(union.members()), answers);
+                // A type standing for another, a name that resolved to nothing, a function, and the
+                // two that only an expression reaches: `Nothing` is what an empty list literal's
+                // element is waiting to be told, and `Never` is where an abort leaves off. None of
+                // them is written in a declaration, and a count of none read off one would refuse a
+                // type on the strength of a form this never decided.
+                case Type.Open _, Type.Erroneous _, Type.FnOf _, Type.Nothing _, Type.Never _ ->
+                        Cardinality.UNKNOWN;
+            };
+        }
+
+        /**
+         * A name, unwrapped while it is one this value is not already wearing.
+         *
+         * <p>The one place anything is learned about a name beyond what the answers say of it. A
+         * sum reads its cases and a union its members, and both read the answer and nothing else;
+         * here the name is opened and what it wraps is read again. So this is where a name that was
+         * granted a value has to be left alone: opening it reaches the very rules and the very shape
+         * that leave it without one, and the granting would be undone one step in.
+         *
+         * <p>Worn while what it wraps is read and not after. What the name stops is a value reached
+         * from inside itself, which is a question about what this one is inside of; a value beside
+         * it — another part of the same tuple — is read the same whichever part was read first.
+         */
+        private Cardinality opening(Type.Ref ref, Part part) {
+            TypeSymbol name = ref.name();
+            Cardinality named = answers.of(name);
+            if (granted.contains(name)
+                    || !(source.symbols().declaredNode(name) instanceof Hir.Data data)
+                    || !data.newtype()
+                    || !worn.add(name)) {
+                return named;
+            }
+            OPENED.incrementAndGet();
+            // Opened once already, where the name was answered: what is beneath it is the same names
+            // with the same counts whoever opens it, and only what they end in is read under this
+            // position's rules. Without this, every name opened here would open the whole of what it
+            // wraps again, and a chain of them would be read once per link.
+            Unwrapping known = answers.unwrappingOf(name);
+            if (known != null && known.terminal() == null) {
+                worn.remove(name);
+                return known.standsFor();
+            }
+            // The name is not a step of the path: a rule the record wrote about this field reaches
+            // what the name wraps, and reading the wrapped type without it would leave a floor
+            // written here saying nothing.
+            Cardinality over = known != null ? known.standsFor() : named;
+            Type beneath = known != null ? known.terminal()
+                    : TypeOps.fieldTypes(data, source.symbols()).get("value");
+            if (beneath == null) {
+                worn.remove(name);
+                return named;
+            }
+            return ask(opened -> {
+                worn.remove(name);
+                return throughTheName(over, opened);
+            }, beneath, part.path(), part.counts(), part.values());
+        }
+
+        /** The parts of a tuple, read one after another and taken together as a record's fields
+         *  are. */
+        private final class Parts implements Waiting {
+
+            private final List<Type> elements;
+            private int next;
+            private Cardinality.Standing across = Cardinality.atMost(1);
+            private Cardinality.None without;
+
+            Parts(List<Type> elements) {
+                this.elements = elements;
+            }
+
+            /** What the tuple comes to, or null where it waits on its next part. */
+            Cardinality next() {
+                return next < elements.size() ? holding(this, elements.get(next++))
+                        : without != null ? without : across;
+            }
+
+            @Override
+            public Cardinality resume(Cardinality part) {
+                switch (part) {
+                    case Cardinality.None it -> {
+                        if (without == null
+                                || it.why().category().compareTo(without.why().category()) < 0) {
+                            without = it;
+                        }
+                    }
+                    case Cardinality.Standing it -> across = across.times(it);
+                }
+                return next();
+            }
+        }
     }
 }

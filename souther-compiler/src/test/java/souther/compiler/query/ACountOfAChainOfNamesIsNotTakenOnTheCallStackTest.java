@@ -139,30 +139,75 @@ class ACountOfAChainOfNamesIsNotTakenOnTheCallStackTest {
     }
 
     /**
-     * What each link's count is recorded as reading is the link beneath it and not the chain, and
-     * the module's counts read each link once.
+     * A ring of names, each a list of the one before and the first a list of the last: one
+     * component, risen through together, whose members open one another as far round the ring as
+     * the reading goes before it comes back to where it started.
+     */
+    @Test
+    void aRingOfNamesEachWrappingAListOfTheOneBefore() {
+        onASmallStack(() -> said(compiled(ring("List<%s>"))));
+    }
+
+    /** The same ring with every other link a name worn straight over the one before, so the
+     *  reading opens names in a row as well as through lists. */
+    @Test
+    void aRingOfNamesAndListsInTurn() {
+        onASmallStack(() -> said(compiled(ring("%s").replaceAll(
+                "(data T[0-9]*[13579] = )(T[0-9]+)", "$1List<$2>"))));
+    }
+
+    /**
+     * {@code T1} to {@code T<RING>}, each {@code shape} of the one before and the first of the last.
+     *
+     * <p>Longer than the chains, because a reading that opened the names on the call stack only
+     * runs out of this stack at about this length. And no longer: every member's reading opens the
+     * ring as far round as it goes, so what a ring costs rises with the square of its length.
+     */
+    private static String ring(String shape) {
+        StringBuilder src = new StringBuilder("module chain\n\n")
+                .append("data T1 = ").append(shape.formatted("T" + RING)).append('\n');
+        for (int i = 2; i <= RING; i++) {
+            src.append("data T").append(i).append(" = ").append(shape.formatted("T" + (i - 1)))
+                    .append('\n');
+        }
+        return src.toString();
+    }
+
+    private static final int RING = 200;
+
+    /**
+     * What each link's count is recorded as reading is the link it wraps and not the chain, the
+     * link at the bottom reads no count, and the module's counts read each link once.
      */
     @Test
     void eachCountReadsTheLinkItWrapsAndTheModuleReadsEachLinkOnce() {
         Compilation c = onASmallStack(() -> compiled(chain(BOUNDED)));
         said(c);
-        int mostAnyLinkRead = 0;
-        for (int i = 1; i <= LINKS; i++) {
-            mostAnyLinkRead = Math.max(mostAnyLinkRead,
-                    countsRead(c.db(), new Shapes.CardinalityOf(new TypeKey("chain", "T" + i))));
-        }
 
-        assertEquals(1, mostAnyLinkRead, "a link's count read more than the link it wraps");
-        assertEquals(LINKS, countsRead(c.db(), new Shapes.CardinalitiesOf("chain")),
-                "the module's counts read the links some other number of times than once each");
+        assertEquals(List.of(), countsRead(c.db(), link(1)), "the bottom link read a count");
+        for (int i = 2; i <= LINKS; i++) {
+            assertEquals(List.of(link(i - 1)), countsRead(c.db(), link(i)),
+                    "T" + i + " read some other count than the link it wraps");
+        }
+        List<Key<?>> every = new ArrayList<>();
+        for (int i = 1; i <= LINKS; i++) {
+            every.add(link(i));
+        }
+        assertEquals(every, countsRead(c.db(), new Shapes.CardinalitiesOf("chain")),
+                "the module's counts read something other than each link once, in order");
     }
 
-    private static int countsRead(Db db, Key<?> key) {
+    private static Shapes.CardinalityOf link(int i) {
+        return new Shapes.CardinalityOf(new TypeKey("chain", "T" + i));
+    }
+
+    /** The counts {@code key} was recorded as reading, in the order it read them. */
+    private static List<Key<?>> countsRead(Db db, Key<?> key) {
         assertTrue(db.isComputed(key), () -> key + " was never asked");
-        int counts = 0;
+        List<Key<?>> counts = new ArrayList<>();
         for (Key<?> read : db.dependenciesOf(key)) {
             if (read instanceof Shapes.CardinalityOf) {
-                counts++;
+                counts.add(read);
             }
         }
         return counts;
