@@ -4,17 +4,15 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
+import souther.test.OnItsOwnStack;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -138,25 +136,8 @@ class WhichDeclarationsAreAnsweredTogetherIsAnAnswerAboutTheGraphTest {
             edges.put(link(i), Set.of(link(i + 1)));
         }
         edges.put(link(links), Set.of(link(links - 1)));
-        AtomicReference<Throwable> failed = new AtomicReference<>();
-        List<List<List<TypeSymbol>>> answered = new ArrayList<>();
-        Thread walking = new Thread(null, () -> {
-            try {
-                answered.add(TypeComponents.of(edges));
-            } catch (Throwable e) {
-                failed.set(e);
-            }
-        }, "a small stack", 512L << 10);
-        walking.start();
-        try {
-            walking.join();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new AssertionError(e);
-        }
-
-        assertNull(failed.get(), () -> String.valueOf(failed.get()));
-        List<List<TypeSymbol>> components = answered.get(0);
+        List<List<TypeSymbol>> components = OnItsOwnStack.ask("a walk on a small stack", 512L << 10,
+                () -> TypeComponents.of(edges));
         assertEquals(Set.of(link(links - 1), link(links)), Set.copyOf(components.get(0)),
                 "the far end of the chain is answered first, and the two there together");
         assertEquals(List.of(link(0)), components.get(components.size() - 1),

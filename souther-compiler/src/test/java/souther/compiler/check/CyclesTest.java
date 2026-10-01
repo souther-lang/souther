@@ -1,16 +1,14 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.test.OnItsOwnStack;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
@@ -59,25 +57,9 @@ class CyclesTest {
             edges.put(i, List.of(i + 1));
         }
         edges.put(links, List.of(links - 1));
-        AtomicReference<Throwable> failed = new AtomicReference<>();
-        List<Object> answers = new ArrayList<>();
-        Thread walking = new Thread(null, () -> {
-            try {
-                answers.add(Cycles.groups(edges));
-                answers.add(Cycles.roundFrom(links - 1, edges));
-            } catch (Throwable e) {
-                failed.set(e);
-            }
-        }, "a small stack", 512L << 10);
-        walking.start();
-        try {
-            walking.join();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new AssertionError(e);
-        }
+        List<Object> answers = OnItsOwnStack.ask("a walk on a small stack", 512L << 10,
+                () -> List.of(Cycles.groups(edges), Cycles.roundFrom(links - 1, edges)));
 
-        assertNull(failed.get(), () -> String.valueOf(failed.get()));
         assertEquals(Set.of(links - 1, links), ((Map<?, ?>) answers.get(0)).keySet());
         assertEquals(List.of(links - 1, links, links - 1), answers.get(1));
     }
