@@ -4,7 +4,17 @@ Status: Accepted. Settles what ADR-0118's "What this does not settle" section le
 narrows ADR-0112's and ADR-0118's consequences for `String.lowercase`/`String.uppercase` the same
 way ADR-0118 narrowed ADR-0112's for `String.trim`: both ADR-0112's "stay on `JdkVirtual`" bullet
 and ADR-0118's "is unchanged" bullet, each naming `lowercase`/`uppercase` among the operations
-untouched by that ADR, no longer hold for those two.
+untouched by that ADR, no longer hold for those two. Revised 2026-10-01 — see *Revision*.
+
+## Revision (2026-10-01, the tables and the mapping are 199x-notation's)
+
+The decision stands; where it is implemented moved. The case tables, their generator and the
+mapping that reads them, `Final_Sigma` included, are in
+[199x-notation](https://github.com/raoh-project/199x-notation), which Raoh uses too, as
+`CaseConversion.lowercaseWithin` and `uppercaseWithin`. `Strings.lowercase` and `uppercase` ask it
+for the mapped text within the length a `String` holds and canonicalize the answer to NFC, which
+stay Souther's. Taking a later Unicode version is still a change to the specification, made by
+moving to a release of 199x-notation that implements it, and is never taken by a dependency update.
 
 ## Context
 

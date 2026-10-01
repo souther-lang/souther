@@ -1,7 +1,7 @@
 package souther.compiler.values;
 
 import souther.compiler.regex.Language;
-import souther.compiler.regex.Meter;
+import net.unit8.notation199x.pattern.Meter;
 
 import java.util.LinkedHashSet;
 import java.util.Set;

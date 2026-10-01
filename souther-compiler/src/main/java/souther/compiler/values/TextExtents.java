@@ -3,7 +3,7 @@ package souther.compiler.values;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Text;
 import souther.compiler.regex.Language;
-import souther.compiler.regex.Meter;
+import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.regex.PatternPlan;
 
 /**

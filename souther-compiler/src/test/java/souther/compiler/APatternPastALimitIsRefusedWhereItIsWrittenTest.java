@@ -19,16 +19,16 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A pattern is run as a machine a class holds, and a pattern whose machine is past what a class runs
- * is refused rather than handed to anything else to run (spec
- * {@code [#a-pattern-runs-as-a-machine-a-class-holds]}).
+ * A pattern that comes to more states than a pattern may is refused where it is written, as a
+ * pattern past a limit every implementation holds a pattern to (spec
+ * {@code [#a-pattern-is-admitted-within-three-limits]}), and every pattern within the limits is one
+ * a class runs.
  *
  * <p>Refused where the pattern is: a {@code String.matches} call at its pattern, and a decoder's
  * format at the data whose clause it was read from. A pattern whose deterministic machine is
- * large and whose shape is small is not refused; that it runs is
- * {@code WhatARunWalksIsWhatThePatternMeansTest}'s.
+ * large and whose shape is small is not refused.
  */
-class APatternLargerThanAClassRunsIsRefusedWhereItIsWrittenTest {
+class APatternPastALimitIsRefusedWhereItIsWrittenTest {
 
     private static final String TOO_LARGE = "(a{1000}){1000}";
 
@@ -43,7 +43,7 @@ class APatternLargerThanAClassRunsIsRefusedWhereItIsWrittenTest {
                     Out(String.matches("%s", i.s))
                 """.formatted(TOO_LARGE);
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("E2109", e.code(), e.getMessage());
+        assertEquals("E2110", e.code(), e.getMessage());
 
         String said = rendered(e, src);
         assertTrue(said.contains("demo.sou:6:24"), "at the pattern: " + said);
@@ -57,7 +57,7 @@ class APatternLargerThanAClassRunsIsRefusedWhereItIsWrittenTest {
                 data Code = String invariant String.matches("%s", value)
                 """.formatted(TOO_LARGE);
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("E2109", e.code(), e.getMessage());
+        assertEquals("E2110", e.code(), e.getMessage());
         assertTrue(rendered(e, src).contains("demo.sou:2:"), rendered(e, src));
     }
 

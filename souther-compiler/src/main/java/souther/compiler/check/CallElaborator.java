@@ -23,9 +23,9 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
-import souther.compiler.regex.PatternParser;
-import souther.compiler.regex.PatternRead;
-import souther.temporal.TemporalText;
+import net.unit8.notation199x.pattern.PatternParser;
+import net.unit8.notation199x.pattern.PatternRead;
+import souther.temporal.TemporalForms;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -964,9 +964,25 @@ public final class CallElaborator {
                      A_QUOTATION, A_CLASS_OF_CLASSES, A_POSSESSIVE_REPETITION ->
                         new TypeMessage.ThePatternWritesWhatNoPatternHas(refused.construct());
             });
-            case PatternRead.TooDeep deep ->
-                    throw refusedAt(e, new TypeMessage.ThePatternNestsDeeperThanIsRead(deep.deepest()));
+            case PatternRead.Beyond beyond -> throw pastALimit(e, pattern, beyond);
         };
+    }
+
+    /** A pattern past one of the limits every implementation holds a pattern to, which is a
+     *  pattern of the language and one no implementation is asked to run. */
+    private static CompileException pastALimit(BoundExpr e, String pattern, PatternRead.Beyond beyond) {
+        String most = String.valueOf(beyond.limit().most());
+        Diagnostic.Builder at = Diagnostic.at(e.expr().pos());
+        Diagnostic.Builder said = switch (beyond.limit()) {
+            case REPETITION_COUNT -> at.say(
+                    new TypeMessage.ThePatternCountsMoreThanAPatternMay(beyond.construct(), most));
+            case NESTING_DEPTH -> at.say(
+                    new TypeMessage.ThePatternNestsDeeperThanAPatternMay(beyond.construct(), most));
+            case MACHINE_STATES -> at.say(
+                    new TypeMessage.ThePatternComesToMoreStatesThanAPatternMay(pattern, most))
+                    .hint(new DeclarationMessage.WriteTheRepetitionsOfAPatternSmaller());
+        };
+        return CompileException.of(said.build());
     }
 
     private static <M extends TypeMessage & Reported> CompileException refusedAt(BoundExpr e,
@@ -1073,21 +1089,21 @@ public final class CallElaborator {
      * Returns the parsed value so the backend and the example verifier share this one reading of
      * the text.
      *
-     * <p>Which text a temporal may be written as is {@link TemporalText#inSource}'s, asked before
+     * <p>Which text a temporal may be written as is {@link TemporalForms#inSource}'s, asked before
      * anything is parsed: what {@code java.time} would take is wider, and the difference is not
      * the checker's to decide. {@code kind} decides which value is built and {@code fn} is only what
      * a report quotes. They were one value, and the caller that had a name for a temporal it had not
      * resolved got the parse the name spelled. */
     public static Object parseTemporal(Type.Prim kind, String fn, String text, Region at) {
-        TemporalText.Kind form = switch (kind) {
-            case DATE -> TemporalText.Kind.DATE;
-            case TIME -> TemporalText.Kind.TIME;
-            case DATETIME -> TemporalText.Kind.DATETIME;
-            case INSTANT -> TemporalText.Kind.INSTANT;
+        TemporalForms.Kind form = switch (kind) {
+            case DATE -> TemporalForms.Kind.DATE;
+            case TIME -> TemporalForms.Kind.TIME;
+            case DATETIME -> TemporalForms.Kind.DATETIME;
+            case INSTANT -> TemporalForms.Kind.INSTANT;
             case INT, STRING, BOOL, DECIMAL, RATIONAL ->
                     throw new IllegalStateException("`" + fn + "` names no temporal");
         };
-        TemporalText.inSource(form, text).ifPresent(refusal -> {
+        TemporalForms.inSource(form, text).ifPresent(refusal -> {
             throw CompileException.of(Diagnostic.at(at).say(switch (refusal) {
                 case MALFORMED -> new TypeMessage.ThatIsNotATemporalOfThatKind(fn, text);
                 case SUB_SECOND -> new TypeMessage.ATimeOfDayIsWrittenToTheSecond(fn, text);

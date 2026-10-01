@@ -1,5 +1,8 @@
 package souther.compiler.regex;
 
+import net.unit8.notation199x.pattern.Meter;
+import net.unit8.notation199x.pattern.PatternParser;
+import net.unit8.notation199x.pattern.PatternRead;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

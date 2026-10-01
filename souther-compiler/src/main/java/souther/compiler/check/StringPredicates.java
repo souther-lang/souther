@@ -3,9 +3,9 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
-import souther.compiler.regex.PatternParser;
-import souther.compiler.regex.PatternRead;
-import souther.compiler.regex.PatternMeaning;
+import net.unit8.notation199x.pattern.PatternParser;
+import net.unit8.notation199x.pattern.PatternRead;
+import net.unit8.notation199x.pattern.PatternMeaning;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
@@ -168,11 +168,11 @@ public enum StringPredicates {
          * A pattern it states that is not read, and what the reader said instead.
          *
          * <p>Only in a program the checker refuses. A pattern that is no pattern of the language, or
-         * one deeper than this compiler reads, is a compile error where the call is checked — but a
-         * reading of the rules goes on over a module with errors in it, and what it meets there is
-         * this rather than an answer nobody could give. Only an entry whose text is a pattern
-         * arrives here. One that composes what it accepts out of text has nothing in that to be
-         * stopped by.
+         * one past a limit every implementation holds to, is a compile error where the call is
+         * checked — but a reading of the rules goes on over a module with errors in it, and what it
+         * meets there is this rather than an answer nobody could give. Only an entry whose text is
+         * a pattern arrives here. One that composes what it accepts out of text has nothing in that
+         * to be stopped by.
          */
         record PatternNotRead(PatternRead why) implements Reading {
 
@@ -263,7 +263,7 @@ public enum StringPredicates {
         return switch (PatternParser.read(written)) {
             case PatternRead.Read read -> new Reading.Accepting(read.meaning());
             case PatternRead.Refused refused -> new Reading.PatternNotRead(refused);
-            case PatternRead.TooDeep deep -> new Reading.PatternNotRead(deep);
+            case PatternRead.Beyond beyond -> new Reading.PatternNotRead(beyond);
         };
     }
 

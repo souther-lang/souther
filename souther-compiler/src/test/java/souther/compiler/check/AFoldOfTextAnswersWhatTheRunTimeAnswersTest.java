@@ -3,14 +3,16 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 import souther.compiler.core.Kernel;
 import souther.compiler.numeric.Rel;
-import souther.compiler.regex.PatternImage;
-import souther.compiler.regex.PatternMeaning;
-import souther.compiler.regex.PatternParser;
-import souther.compiler.regex.PatternRead;
+import net.unit8.notation199x.pattern.PatternImage;
+import net.unit8.notation199x.pattern.PatternMachine;
+import net.unit8.notation199x.pattern.PatternMeaning;
+import net.unit8.notation199x.pattern.PatternParser;
+import net.unit8.notation199x.pattern.PatternRead;
 import souther.compiler.types.BinOp;
-import souther.runtime.StringPattern;
+import souther.runtime.Patterns;
 import souther.runtime.Strings;
 
+import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +20,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -55,11 +58,15 @@ class AFoldOfTextAnswersWhatTheRunTimeAnswersTest {
     private static final Map<Kernel, Function<List<Object>, Object>> RUN_TIME = Map.of(
             Kernel.STRING_LENGTH, args -> Strings.length((String) args.get(0)),
             Kernel.STRING_CONTAINS, args -> ((String) args.get(1)).contains((String) args.get(0)),
-            Kernel.STRING_MATCHES, args -> Strings.matches((String) args.get(1), machine(
-                    ((PatternRead.Read) PatternParser.read((String) args.get(0))).meaning())));
+            Kernel.STRING_MATCHES, args -> machine(
+                    ((PatternRead.Read) PatternParser.read((String) args.get(0))).meaning())
+                    .test((String) args.get(1)));
 
-    private static StringPattern machine(PatternMeaning meaning) {
-        return StringPattern.of(((PatternImage.Written) PatternImage.of(meaning)).strings());
+    /** The constant a compiled call loads for {@code meaning}, made by the bootstrap it names. */
+    private static Predicate<String> machine(PatternMeaning meaning) {
+        List<String> image = ((PatternImage.Written) PatternMachine.of(meaning).image()).strings();
+        return Patterns.read(MethodHandles.lookup(), "pattern", Predicate.class,
+                image.toArray(new String[0]));
     }
 
     @Test

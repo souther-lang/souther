@@ -5,6 +5,10 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    # Which strings 199x-notation accepts is a rule of the specification, so a version of it is
+    # taken by hand with the change to the language it makes, never by an update.
+    ignore:
+      - dependency-name: "net.unit8.199x:*"
     groups:
       maven-plugins:
         patterns:

@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.regex.Language;
 import souther.compiler.regex.PatternPlan;
-import souther.compiler.regex.PatternMeaning;
+import net.unit8.notation199x.pattern.PatternMeaning;
 
 import java.lang.constant.ClassDesc;
 import java.lang.reflect.Method;

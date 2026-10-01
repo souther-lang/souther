@@ -91,10 +91,18 @@ public sealed interface TypeMessage extends Message {
     @Code(DiagnosticCode.E1323)
     record ThePatternWritesHalfASurrogatePair(String escape) implements TypeMessage, Reported {}
 
-    /** A pattern whose groups nest deeper than the compiler reads — a limit of the compiler, not a
-     *  construct the language lacks. */
-    @Code(DiagnosticCode.E2104)
-    record ThePatternNestsDeeperThanIsRead(int deepest) implements TypeMessage, Reported {}
+    /** A pattern writing a count of a repetition past the most a pattern may count — a limit every
+     *  implementation holds a pattern to, not a construct the language lacks. */
+    @Code(DiagnosticCode.E2110)
+    record ThePatternCountsMoreThanAPatternMay(String construct, String most) implements TypeMessage, Reported {}
+
+    /** A pattern whose groups nest deeper than a pattern may. */
+    @Code(DiagnosticCode.E2110)
+    record ThePatternNestsDeeperThanAPatternMay(String construct, String most) implements TypeMessage, Reported {}
+
+    /** A pattern that comes to more states, its repetitions written out, than a pattern may. */
+    @Code(DiagnosticCode.E2110)
+    record ThePatternComesToMoreStatesThanAPatternMay(String pattern, String most) implements TypeMessage, Reported {}
 
     @Code(DiagnosticCode.E1815)
     record OverTheEmptyListTheSeedDecides(String call) implements TypeMessage, Reported {}

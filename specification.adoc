@@ -4512,7 +4512,30 @@ A pattern is built from these, and from nothing else:
 * `+A?+`, `+A*+`, `A{plus}`, `+A{n}+`, `+A{n,}+` and `+A{n,m}+` are between the two counts of `+A+`, the second no smaller than the first. A `+?+` after any of them is allowed and changes nothing.
 * `+^+` and `+$+` are the start and the end of the string. The whole string is matched, so one at the edge adds nothing: `+^[0-9]{3}$+` is `+[0-9]{3}+`. A `+^+` after something every string of which has a character leaves no string. Anywhere its answer would turn on the string matched — after something that may or may not take a character, `+(a|)^b+`; in a repetition that is not of exactly one; a `+$+` before something that must take one — it is refused.
 
-Everything else is refused (<<e1323>>), each for a reason of its own. A back reference, `+\1+`–`+\9+` and `+\k+`, can denote a set no regular language is, so the language does not have it. A group beginning `+(?+` other than `+(?:+` is not in the grammar: a lookaround's sets are often regular, and a named group denotes what the group inside it does, but neither has a spelling here, and a flag group would change what a class or a shorthand means for the rest of the pattern, which the language keeps fixed. A possessive count — `{plus}{plus}`, or any other count followed by `{plus}` — fixes how a matcher walks, and which strings it accepts follows from that walk, which the language does not describe. `+\p+` and `+\P+`, the boundaries `+\b+`, `+\B+`, `+\A+`, `+\z+`, `+\Z+`, `+\G+`, `+\R+`, the quotation `+\Q+`…`+\E+`, a class inside a class and `+&&+`, and a backslash before any letter or decimal digit not named above — `+\é+`, `+\𐌰+`, `+\٣+` — have no spelling in the grammar. A pattern nesting groups more deeply than the compiler reads is refused as a limit of the compiler and not of the language (<<e2104>>).
+Everything else is refused (<<e1323>>), each for a reason of its own. A back reference, `+\1+`–`+\9+` and `+\k+`, can denote a set no regular language is, so the language does not have it. A group beginning `+(?+` other than `+(?:+` is not in the grammar: a lookaround's sets are often regular, and a named group denotes what the group inside it does, but neither has a spelling here, and a flag group would change what a class or a shorthand means for the rest of the pattern, which the language keeps fixed. A possessive count — `{plus}{plus}`, or any other count followed by `{plus}` — fixes how a matcher walks, and which strings it accepts follows from that walk, which the language does not describe. `+\p+` and `+\P+`, the boundaries `+\b+`, `+\B+`, `+\A+`, `+\z+`, `+\Z+`, `+\G+`, `+\R+`, the quotation `+\Q+`…`+\E+`, a class inside a class and `+&&+`, and a backslash before any letter or decimal digit not named above — `+\é+`, `+\𐌰+`, `+\٣+` — have no spelling in the grammar. Text that is no pattern is refused for that, whatever limit below it also goes past.
+
+[[a-pattern-is-admitted-within-three-limits]]A pattern is admitted only within three limits, each the same number in every implementation of the language and of Raoh and each decided from the text. They are not part of what a pattern means: a pattern past one of them denotes a set of strings like any other, and is refused for the limit and not as text that is no pattern (<<e2110>>). They bound what running a pattern costs, so that no carrier's way of running patterns decides which ones a program may write.
+
+[cols="3,1"]
+|===
+|Limit |At most
+
+|A count written in `+{n}+`, `+{n,}+` or `+{n,m}+` |134217727
+|Groups nested one inside another |200
+|States, counted as below |250000
+|===
+
+The states of a pattern are what it comes to with its repetitions written out, counted on the pattern as written:
+
+* a character, an escape, `+.+`, a shorthand and a class count one each, and so do `+^+` and `+$+`;
+* an empty pattern, group or alternative counts nothing;
+* a sequence counts the sum of its parts, and a group what is inside it;
+* a choice of n alternatives, written with n - 1 bars, counts one, plus one more than each alternative;
+* `+A{n,m}+` counts m times `+A+`, plus one; `+A{n}+` is `+A{n,n}+` and `+A?+` is `+A{0,1}+`;
+* `+A{n,}+` counts n + 1 times `+A+`, plus one; `+A*+` is `+A{0,}+` and `A{plus}` is `+A{1,}+`;
+* the pattern counts one more than what it is written as.
+
+So `+a{249998}+` is 1 + 249998 + 1 = 250000 states and is admitted, `+a{249999}+` is not, and neither is `+(a{500}){500}+`, which is 1 + 500 × 501 + 1. `+(a|b)*+` is 1 + (1 + 2 + 2) + 1 = 7. An anchor counts one wherever it stands and whatever it comes to. Which patterns are admitted is part of what a published module's bodies mean to the compiler that reads them again, as which text is a pattern is.
 
 [#string-whitespace]
 **String whitespace** is this fixed set of code points, matching Unicode 18.0's `+White_Space+` property:
@@ -5033,7 +5056,7 @@ Two more come from names rather than sizes:
 
 The first is decided at the declaration, before anything is emitted. The other two are not known until the code is written, and are reported as the definition being emitted when the limit was met.
 
-[[a-pattern-runs-as-a-machine-a-class-holds]]A pattern (<<string-patterns>>) is run as a machine the compiler builds from what the pattern means and writes into the class, and that machine MUST be within what a generated class runs for one pattern (<<e2109>>). No text decides a match: a class runs the machine and hands no pattern text to an engine. The text the author wrote may be kept beside it, as what a decoder's failure quotes (<<decoder-error>>), and is never read to decide one. So whether a string is one of a pattern's strings is answered by walking the machine over the string once: for a given pattern the time is proportional to the string's length and no stack grows with it. Where the compiler can afford to make the machine deterministic a character costs one step, and where it cannot the class runs the machine the pattern's shape builds instead, which answers the same. Which of the two a class holds is not a limit: only the machine the shape builds can put a pattern past this one, and that machine is the pattern's repetitions written out one copy after another.
+[[a-pattern-runs-as-a-machine-a-class-holds]]A pattern (<<string-patterns>>) is run as a machine the compiler builds from what the pattern means and writes into the class, and that machine, written out, MUST be within the characters a generated class is given for one pattern (<<e2109>>). No text decides a match: a class runs the machine and hands no pattern text to an engine. The text the author wrote may be kept beside it, as what a decoder's failure quotes (<<decoder-error>>), and is never read to decide one. So whether a string is one of a pattern's strings is answered by walking the machine over the string once: for a given pattern the time is proportional to the string's length and no stack grows with it. Where the compiler can afford to make the machine deterministic a character costs one step, and where it cannot the class runs the machine the pattern's shape builds instead, which answers the same. Which of the two a class holds is not a limit. Every admitted pattern has a machine (<<a-pattern-is-admitted-within-three-limits>>), so what can put one past this is how many characters its machine takes written out, which turns on how large the sets the pattern writes are and not on its states alone.
 
 [#target-jdk]
 === Target JDK
@@ -5236,7 +5259,7 @@ The model author does not write this type name in Souther source; they only writ
 [#compiler-pipeline]
 == Compiler structure
 
-[[source-nesting-is-bounded]]A source MUST nest no deeper than the compiler reads. The limit is stated as the compiler's rather than as any one pass's, and it is reached while reading, so it is reported at the token that reached it — including by the formatter, which reads sources it cannot compile. Breaking the nesting into named parts is how a text past it is written instead. A `+String.matches+` pattern is held to a limit of the same kind, counted in the groups it nests one inside another and reported at the pattern.
+[[source-nesting-is-bounded]]A source MUST nest no deeper than the compiler reads. The limit is stated as the compiler's rather than as any one pass's, and it is reached while reading, so it is reported at the token that reached it — including by the formatter, which reads sources it cannot compile. Breaking the nesting into named parts is how a text past it is written instead. A `+String.matches+` pattern is held instead to the limits every implementation holds a pattern to (<<a-pattern-is-admitted-within-three-limits>>).
 
 [[source-structural-complexity-is-bounded]]A definition MUST have a structural complexity of 320 or less. Its complexity is counted over what the source wrote:
 
@@ -7520,15 +7543,7 @@ bounded too, and far above this.
 
 Reported where reading a source descends past the depth the compiler holds itself to (<<source-nesting-is-bounded>>). It is reached while reading, so it is reported wherever the reading is done, including by the formatter, which reads sources it cannot compile, and at the token that reached it.
 
-Naming the parts is the answer to this one, and what the parts add up to is a separate limit — <<e2107>>, which is far above this one and counted differently. What a pass builds from a source may be deeper than the source was; this limit says nothing about that.
-
-[,text]
-----
-This pattern nests groups deeper than I read, which is 200 groups inside one another. Write it with
-fewer groups around each other.
-----
-
-The same limit for a `+String.matches+` pattern (<<string-patterns>>), reported at the pattern. A pattern is text inside a string literal, so it is read where the call is checked rather than with the source; the language has no depth past which a pattern stops being one, and the limit is the compiler's.
+Naming the parts is the answer to this one, and what the parts add up to is a separate limit — <<e2107>>, which is far above this one and counted differently. What a pass builds from a source may be deeper than the source was; this limit says nothing about that. A `+String.matches+` pattern nested too deep is <<e2110>>.
 
 [#e2107]
 === A definition is more complex than the compiler holds
@@ -7592,19 +7607,31 @@ the same name, and `hashCode()` is already a method every class has.
 Reported at the field (<<a-field-does-not-collide-with-an-object-method>>). `+equals+` is not among them: `+equals()+` and `+equals(Object)+` are different methods, and Java allows it as a component name.
 
 [#e2109]
-=== A pattern's machine is larger than a class runs
+=== A pattern's machine is larger than a class holds
 
 [,text]
 ----
-The pattern `(a{1000}){1000}` is run as a machine of its repetitions written out one copy after
-another, and that machine has more than 250000 states, which is the most a generated class runs for
-one pattern.
+The pattern `[…]{…}` is run as a machine a generated class holds written out, and written out it
+takes more than 8388608 characters, which is the most a class is given for one pattern.
 Hint: A repetition counts as many copies of what it repeats as its larger count, and a repetition
 inside another counts the two multiplied. Write the counts smaller, or state the length apart from
 the pattern with `String.length`.
 ----
 
-Reported where a pattern is lowered to the machine a class runs (<<a-pattern-runs-as-a-machine-a-class-holds>>): at the pattern of a `+String.matches+` call, and at the `+data+` whose clause a decoder's format constraint was read from. What is counted is the pattern's repetitions written out, so it turns on the counts a pattern writes and not on how long its text is. The same machine written into the class may instead be longer than a class is given for one pattern, and that is reported under this code too, with the number of characters.
+The pattern in the message above is schematic: `+[…]+` stands for a class of many characters and `+{…}+` for a count, since a pattern long enough to reach this limit would not fit on the page.
+
+Reported where a pattern is lowered to the machine a class runs (<<a-pattern-runs-as-a-machine-a-class-holds>>): at the pattern of a `+String.matches+` call, and at the `+data+` whose clause a decoder's format constraint was read from. Every pattern this is asked of is admitted (<<a-pattern-is-admitted-within-three-limits>>) and has a machine, so what is counted is the characters that machine takes written out, which turns on how large the sets the pattern writes are. It is a limit of carrying a machine in a class, and a carrier that holds a machine some other way is not bound by it.
+
+[#e2110]
+=== A pattern is past a limit
+
+[,text]
+----
+`String.matches` pattern nests groups deeper than 200 at `(?:`, which is as deep as every
+implementation holds a pattern to. Write it with fewer groups around each other.
+----
+
+Reported where a `+String.matches+` pattern is read, at the pattern (<<a-pattern-is-admitted-within-three-limits>>). Each limit is said as itself: a count past the most a count may be, quoting the count; groups nested past the deepest, quoting the group opened past it; and a pattern that comes to more states than a pattern may, quoting the pattern, with the hint <<e2109>> gives. Text that is no pattern is <<e1323>> whatever limit it also goes past, so a limit is said only of a pattern the language has. The limits are the same numbers in every implementation of the language and of Raoh, so a pattern refused here is refused by each of them, and one admitted here has a machine on every carrier.
 
 [#e2301]
 === A declaration is not written in its form

@@ -3,9 +3,9 @@ package souther.compiler.values;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.regex.Language;
-import souther.compiler.regex.PatternParser;
+import net.unit8.notation199x.pattern.PatternParser;
 import souther.compiler.regex.PatternPlan;
-import souther.compiler.regex.PatternRead;
+import net.unit8.notation199x.pattern.PatternRead;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;

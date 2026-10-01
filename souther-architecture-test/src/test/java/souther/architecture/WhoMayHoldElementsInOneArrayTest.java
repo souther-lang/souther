@@ -51,26 +51,18 @@ class WhoMayHoldElementsInOneArrayTest {
      * <p>As long as a trie node or a few more: the nodes {@code PersistentHashMap.BitmapIndexedNode}
      * copies, and the tail {@code PersistentVector.Builder.build} copies. As long as a chunk or the
      * count of them: {@code Sorting.Slots}. As long as the terms a caller writes:
-     * {@code ExactOrder.allWrittenOut}. As long as a table the class decodes when it is loaded, or an
-     * enumeration: {@code CaseTables}, {@code NormalizationTables}, {@code Normalization}'s static
-     * initializer, the switch map {@code ExactRounding} is compiled with. As long as one code point's
-     * decomposition: {@code Normalization.decomposeOne}. As long as the code points of one
-     * {@code String}, which is no longer than a {@code String} holds: {@code Strings.mapCase}. As long
-     * as the marks of one combining run of such a string, since no mark that decomposes stands in
-     * one ({@code AMarkThatDecomposesIsNeverItsOwnNfcTest}): {@code Normalization.Composing}. As long
-     * as a host list the members of an external form already arrived in, which may hold {@code null}
-     * that no {@code List} of the language holds: {@code Representations.sortedMembers}. As long as
-     * the machine a pattern's image writes, whose states and characters the compiler that wrote it
-     * bounded, or the states of one such machine a walk is in, or its steps over the ASCII
-     * characters, which {@code StringPattern} keeps only under a bound of its own:
-     * {@code StringPattern} and its {@code Writer}.
+     * {@code ExactOrder.allWrittenOut}. As long as an enumeration: the switch maps
+     * {@code ExactRounding} and {@code TemporalForms} are compiled with. As long as a host list the members of an external form
+     * already arrived in, which may hold {@code null} that no {@code List} of the language holds:
+     * {@code Representations.sortedMembers}.
+     *
+     * <p>The text rules the run time is built on — normalization, case conversion, the machine a
+     * pattern runs as — are a library's and are not walked here. What the run time asks of them is
+     * asked within the length a {@code String} holds ({@code WhoMayCanonicalizeTextWithNoBoundTest}).
      */
     private static final List<String> MAY_HOLD_ONE_ARRAY = List.of(
             "souther/exact/ExactOrder#allWrittenOut new java/math/BigInteger[]",
             "souther/exact/ExactRounding$1#<clinit> new I[]",
-            "souther/runtime/CaseTables#decodeMapping new I[]",
-            "souther/runtime/CaseTables#decodeMapping new [I[]",
-            "souther/runtime/CaseTables#decodeRanges new I[]",
             "souther/runtime/PersistentHashMap$BitmapIndexedNode#copyAndInsertValue new java/lang/Object[]",
             "souther/runtime/PersistentHashMap$BitmapIndexedNode#copyAndMigrateInlineToNode"
                     + " new java/lang/Object[]",
@@ -86,34 +78,7 @@ class WhoMayHoldElementsInOneArrayTest {
                     + " java/util/List.sort(Ljava/util/Comparator;)V",
             "souther/runtime/Sorting$Slots#<init> new [Ljava/lang/Object;[]",
             "souther/runtime/Sorting$Slots#<init> new java/lang/Object[]",
-            "souther/runtime/StringPattern#ascii new I[]",
-            "souther/runtime/StringPattern#live java/util/ArrayList.<init>()V",
-            "souther/runtime/StringPattern#live java/util/ArrayList.<init>(I)V",
-            "souther/runtime/StringPattern#live new I[]",
-            "souther/runtime/StringPattern#live new Z[]",
-            "souther/runtime/StringPattern#of new I[]",
-            "souther/runtime/StringPattern#of new Z[]",
-            "souther/runtime/StringPattern#of new [I[]",
-            "souther/runtime/StringPattern#of new [[I[]",
-            "souther/runtime/StringPattern#runs java/util/ArrayList.<init>()V",
-            "souther/runtime/StringPattern#runs java/util/List.sort(Ljava/util/Comparator;)V",
-            "souther/runtime/StringPattern#runs new I[]",
-            "souther/runtime/StringPattern#runs new [I[]",
-            "souther/runtime/StringPattern#spread new I[]",
-            "souther/runtime/StringPattern$Writer#<init> java/util/ArrayList.<init>()V",
-            "souther/runtime/StringPattern$Writer#image java/util/ArrayList.<init>()V",
-            "souther/runtime/StringPattern$Writer#image"
-                    + " java/util/List.copyOf(Ljava/util/Collection;)Ljava/util/List;",
-            "souther/runtime/StringPattern$Writer#state java/util/ArrayList.<init>()V",
-            "souther/runtime/Strings#mapCase java/util/stream/IntStream.toArray()[I",
-            "souther/unicode/Normalization#<clinit> java/util/stream/IntStream.toArray()[I",
-            "souther/unicode/Normalization#<clinit> java/util/stream/LongStream.toArray()[J",
-            "souther/unicode/Normalization#decomposeOne java/util/stream/IntStream.toArray()[I",
-            "souther/unicode/Normalization$Composing#holdMark java/util/Arrays.copyOf([II)[I",
-            "souther/unicode/Normalization$Composing#order new I[]",
-            "souther/unicode/NormalizationTables#decodeIntValues new I[]",
-            "souther/unicode/NormalizationTables#decodeMapping new I[]",
-            "souther/unicode/NormalizationTables#decodeMapping new [I[]");
+            "souther/temporal/TemporalForms$1#<clinit> new I[]");
 
     @Test
     void everyRunTimeCallThatHoldsElementsInOneArrayIsWrittenDownHere() {

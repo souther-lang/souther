@@ -1,6 +1,6 @@
 package souther.compiler.core;
 
-import souther.compiler.regex.PatternMeaning;
+import net.unit8.notation199x.pattern.PatternMeaning;
 
 import java.math.BigDecimal;
 

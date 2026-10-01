@@ -1,5 +1,9 @@
 package souther.compiler.regex;
 
+import net.unit8.notation199x.pattern.Automaton;
+import net.unit8.notation199x.pattern.CodePoints;
+import net.unit8.notation199x.pattern.Meter;
+
 /**
  * A set of strings this compiler can answer about exactly.
  *

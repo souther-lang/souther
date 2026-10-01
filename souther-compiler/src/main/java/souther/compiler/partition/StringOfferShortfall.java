@@ -3,7 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.regex.Meter;
+import net.unit8.notation199x.pattern.Meter;
 
 import java.util.ArrayList;
 import java.util.List;

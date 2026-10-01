@@ -42,14 +42,20 @@
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
-        <!-- Compile scope, not `provided`: `Reserved.name` and a string literal both call
-             `Normalization.nfc` unconditionally (ADR-0120), so the compiler needs this present to
-             run at all, not only for CTFE's generated `$Ctfe.check` class and the `Fn` a
-             lambda-bearing invariant's bytecode references. Raoh stays test-only — CTFE runs the
-             bare invariant, not the Raoh-returning decoder/__construct. -->
+        <!-- Compile scope, not `provided`: the compiler folds constant text and reads temporal
+             literals by the rules the runtime holds (`Strings`, `TextAdmission`, `Temporals`), so it
+             needs this present to run at all, not only for CTFE's generated `$Ctfe.check` class and
+             the `Fn` a lambda-bearing invariant's bytecode references. Raoh stays test-only — CTFE
+             runs the bare invariant, not the Raoh-returning decoder/__construct. -->
         <dependency>
             <groupId>org.souther-lang</groupId>
             <artifactId>souther-runtime</artifactId>
+        </dependency>
+        <!-- The text rules themselves: the pattern reader and the machines the compiler's own
+             analysis of patterns is built on, normalization, and the temporal grammar. -->
+        <dependency>
+            <groupId>net.unit8.199x</groupId>
+            <artifactId>199x-notation</artifactId>
         </dependency>
         <!-- raoh core: the derived decoders/encoders `souther run` drives through (Runner), and the
              leaf codecs for primitive-typed inputs/outputs. -->

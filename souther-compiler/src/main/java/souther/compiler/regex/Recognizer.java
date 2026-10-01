@@ -1,6 +1,9 @@
 package souther.compiler.regex;
 
 import java.util.Optional;
+import net.unit8.notation199x.pattern.Automaton;
+import net.unit8.notation199x.pattern.Meter;
+import net.unit8.notation199x.pattern.PatternMeaning;
 
 /**
  * Whether a string is one a pattern means, answered by walking the machine the meaning builds.

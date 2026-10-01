@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.partition.StringOfferShortfall;
-import souther.compiler.regex.Meter;
+import net.unit8.notation199x.pattern.Meter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;

@@ -18,7 +18,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 import souther.compiler.inputs.NumericTerm.Reading;
-import souther.unicode.ScalarValues;
+import net.unit8.notation199x.ScalarValues;
 
 /**
  * The number a term names at an observation of its position, or why there is none.

@@ -28,9 +28,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * a UTF-16 unit at a time. A rule of the language written with them moves when the JDK does: a
  * pattern one compiler reads another refuses, one behavior is two classes under two JDKs, a name
  * is cut short where it holds a character past the basic plane. The language's own answers are
- * {@code IdentifierAlphabet}, {@code UnicodeProperty}, {@code StringWhitespace}, the pattern
- * alphabet, the simple uppercase mapping and the run time's case and normalization tables, each
- * read against a version the specification fixes.
+ * {@code IdentifierAlphabet}, {@code UnicodeProperty} and the simple uppercase mapping here, and the
+ * white space, case, normalization and pattern alphabet of the text rules the language shares with
+ * Raoh, each read against a version the specification fixes. The shared rules are a library's and
+ * are not walked here.
  *
  * <p>The modules are the ones whose answers are what a program means or what a module publishes:
  * the run time, the syntax and the compiler. A call left here is one whose answer does not turn on

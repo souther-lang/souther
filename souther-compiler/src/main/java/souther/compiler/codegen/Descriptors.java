@@ -208,15 +208,17 @@ final class Descriptors {
     static final ClassDesc CD_Instant = ClassDesc.of("java.time.Instant");
     static final ClassDesc CD_Lists = ClassDesc.of("souther.runtime.Lists");
     static final ClassDesc CD_Strings = ClassDesc.of("souther.runtime.Strings");
-    static final ClassDesc CD_StringPattern = ClassDesc.of("souther.runtime.StringPattern");
-    /** {@code Strings.matches(String subject, StringPattern pattern)}: whether the whole of the
-     *  subject is one of the strings the pattern's machine accepts. */
-    static final MethodTypeDesc MTD_strings_matches =
-            MethodTypeDesc.of(ConstantDescs.CD_boolean, ConstantDescs.CD_String, CD_StringPattern);
-    /** {@code StringPattern.read(Lookup, String, Class, String...)}: the bootstrap of the constant a
-     *  pattern's machine is loaded as, handed the strings its image was cut into. */
-    static final DirectMethodHandleDesc BSM_stringPattern = ConstantDescs.ofConstantBootstrap(
-            CD_StringPattern, "read", CD_StringPattern, ConstantDescs.CD_String.arrayType());
+    static final ClassDesc CD_Predicate = ClassDesc.of("java.util.function.Predicate");
+    /** {@code Predicate.test(Object)}: whether the whole of a subject is one of the strings a
+     *  pattern's machine accepts, asked of the constant {@link #BSM_pattern} loads. */
+    static final MethodTypeDesc MTD_predicate_test =
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, ConstantDescs.CD_Object);
+    static final ClassDesc CD_Patterns = ClassDesc.of("souther.runtime.Patterns");
+    /** {@code Patterns.read(Lookup, String, Class, String...)}: the bootstrap of the constant a
+     *  pattern's machine is loaded as, handed the strings its image was cut into. The constant is a
+     *  {@code Predicate}, so a class names this runtime and the JDK and nothing of what runs it. */
+    static final DirectMethodHandleDesc BSM_pattern = ConstantDescs.ofConstantBootstrap(
+            CD_Patterns, "read", CD_Predicate, ConstantDescs.CD_String.arrayType());
     static final ClassDesc CD_Maps = ClassDesc.of("souther.runtime.Maps");
     static final ClassDesc CD_Sets = ClassDesc.of("souther.runtime.Sets");
     static final ClassDesc CD_Representations = ClassDesc.of("souther.runtime.Representations");
@@ -464,7 +466,6 @@ final class Descriptors {
     // A newtype's invariant as Raoh constraints on its leaf decoder (issue #83): the recognised
     // shapes call the typed decoder's own constraint, and what is left calls `refine` with the
     // invariant as a predicate.
-    static final ClassDesc CD_Predicate = ClassDesc.of("java.util.function.Predicate");
     /** {@code TemporalDecoder.refine(Predicate, code, message)}: the temporal leaf narrowed to what
      *  the language can hold — a {@code Time} and a {@code DateTime} to the second. Returns the
      *  temporal decoder itself, so a chain stays one. */

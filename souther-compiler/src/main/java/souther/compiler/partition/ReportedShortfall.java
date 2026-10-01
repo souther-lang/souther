@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.regex.Meter;
+import net.unit8.notation199x.pattern.Meter;
 
 /**
  * The words an adequacy document writes for what gave an offer no value.

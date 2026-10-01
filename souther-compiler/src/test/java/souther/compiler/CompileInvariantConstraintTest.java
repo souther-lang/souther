@@ -211,7 +211,8 @@ class CompileInvariantConstraintTest {
         int patterns = 0;
         for (PoolEntry entry : dec.constantPool()) {
             if (entry instanceof ConstantDynamicEntry constant
-                    && constant.typeSymbol().equals(ClassDesc.of("souther.runtime.StringPattern"))) {
+                    && constant.bootstrap().bootstrapMethod().reference().owner().asSymbol()
+                            .equals(ClassDesc.of("souther.runtime.Patterns"))) {
                 patterns++;
             }
         }

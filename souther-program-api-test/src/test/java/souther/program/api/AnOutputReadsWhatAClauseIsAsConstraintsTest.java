@@ -6,9 +6,9 @@ import souther.compiler.core.ValueShape;
 import souther.compiler.program.CheckedData;
 import souther.compiler.program.CheckedModule;
 import souther.compiler.program.CheckedProgram;
-import souther.compiler.regex.PatternMeaning;
-import souther.compiler.regex.PatternParser;
-import souther.compiler.regex.PatternRead;
+import net.unit8.notation199x.pattern.PatternMeaning;
+import net.unit8.notation199x.pattern.PatternParser;
+import net.unit8.notation199x.pattern.PatternRead;
 
 import org.junit.jupiter.api.Test;
 

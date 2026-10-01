@@ -1,6 +1,6 @@
 package souther.compiler.numeric;
 
-import souther.unicode.ScalarValues;
+import net.unit8.notation199x.ScalarValues;
 
 /**
  * Where a string sits on its carrier's order, which is the string.

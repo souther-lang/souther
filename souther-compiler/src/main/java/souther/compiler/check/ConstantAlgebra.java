@@ -12,13 +12,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import souther.compiler.regex.PatternMeaning;
-import souther.compiler.regex.PatternParser;
+import net.unit8.notation199x.pattern.PatternMeaning;
+import net.unit8.notation199x.pattern.PatternParser;
 import souther.compiler.regex.PatternPlan;
-import souther.compiler.regex.PatternRead;
+import net.unit8.notation199x.pattern.PatternRead;
 import souther.compiler.regex.Recognizer;
-import souther.unicode.Normalization;
-import souther.unicode.ScalarValues;
+import net.unit8.notation199x.Normalization;
+import net.unit8.notation199x.ScalarValues;
 
 /**
  * What an expression comes to where the values under it are already known.

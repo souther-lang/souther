@@ -20,7 +20,7 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.ValueOrder;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.regex.Language;
-import souther.compiler.regex.Meter;
+import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
