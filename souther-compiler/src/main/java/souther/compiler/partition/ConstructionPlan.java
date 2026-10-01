@@ -745,7 +745,8 @@ final class ConstructionPlan {
                                                  PublishedDeclarations published) {
         List<Refinement> out = new ArrayList<>();
         for (Case one : Distinctions.ofType(
-                TypeView.of(settled.building(), inners, symbols, published), symbols, published)) {
+                TypeView.shapeOf(settled.building(), inners, symbols, published), symbols,
+                published)) {
             Refinement narrowing = Refinement.of(one);
             if (narrowing != null
                     && applying(settled, narrowing, inners, symbols, published).exact() == null) {
@@ -973,7 +974,7 @@ final class ConstructionPlan {
      */
     private static Type held(Type declared, NewtypeInners inners, Symbols symbols,
                              PublishedDeclarations published) {
-        if (TypeView.of(declared, inners, symbols, published).shape()
+        if (TypeView.shapeOf(declared, inners, symbols, published)
                 instanceof souther.compiler.check.Shape.Optional optional) {
             return optional.element();
         }

@@ -387,6 +387,8 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
                 Edit.A_DATA_DECLARED_BESIDE);
         projection(out, Shapes.NormalizedDef.class, Shapes.NormalizedDeclarations.class,
                 Edit.A_DATA_DECLARED_BESIDE, Edit.A_DECLARATION_BESIDE_THAT_CANNOT_BE_BUILT);
+        projection(out, Shapes.NewtypeTerminalOf.class, Shapes.NewtypeTerminals.class,
+                Edit.A_DATA_DECLARED_BESIDE);
         equalUnderASiblingEdit(out, Bodies.Assumptions.class, Bodies.StatedContracts.class,
                 Edit.A_BEHAVIOR_BESIDE_STATING_A_RULE);
         equalUnderASiblingEdit(out, Bodies.CheckedBehavior.class, Bodies.ReqSigs.class,

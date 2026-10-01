@@ -11,6 +11,7 @@ import souther.compiler.check.RuleKey;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Shape;
+import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NameReach;
@@ -2882,12 +2883,12 @@ public final class Generator {
         // name round a value, and the fields belong to what the name wraps. So the position has to
         // wear no name as well as be a record — read where a position's reading is made, which
         // answers both, rather than walked from the declaration a second time.
-        TypeView view =
-                TypeView.of(Type.ref(built), subject.rules().inners(), subject.symbols(),
-                        subject.rules().published());
-        return !view.isWrapped()
-                        && view.shape() instanceof Shape.Product(TypeSymbol _,
-                                SequencedMap<String, Type> fields)
+        Type position = Type.ref(built);
+        return TypeOps.outermost(position, subject.rules().inners()) == null
+                        && TypeView.shapeOf(position, subject.rules().inners(), subject.symbols(),
+                                subject.rules().published())
+                                instanceof Shape.Product(TypeSymbol _,
+                                        SequencedMap<String, Type> fields)
                 ? List.copyOf(fields.sequencedKeySet()) : null;
     }
 
@@ -5784,7 +5785,7 @@ public final class Generator {
         // reading's. The rules are then read on the declaration the fields came off — a position
         // written under a name takes its fields from what that name wraps, and reading the rules on
         // the name instead would be asking a declaration that has no such field.
-        return TypeView.of(type, source.inners(), source.symbols(), source.published()).shape()
+        return TypeView.shapeOf(type, source.inners(), source.symbols(), source.published())
                         instanceof Shape.Product(TypeSymbol.AtModule declared, Map<String, Type> _)
                 ? FieldDomains.of(declared, reading, settled) : FieldDomains.NONE;
     }

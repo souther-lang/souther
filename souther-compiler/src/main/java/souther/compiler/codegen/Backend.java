@@ -6,6 +6,7 @@ import souther.compiler.check.EmittedDefinition;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.DeclarationKinds;
+import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -255,8 +256,12 @@ public final class Backend {
                 recHelpers.put(fn.name(), fn);
             }
         }
+        // What a name wraps is read off the declarations, one name at a time, and not taken from
+        // the compilation's answer. Each declaration read here is recorded as one the classes were
+        // built against, and whether a newtype's class is Comparable depends on every name under it:
+        // a projection of the name it wraps does not say whether that name's class is ordered.
         CodegenContext ctx = new CodegenContext(module.name(), symbols, published, kinds,
-                souther.compiler.check.NewtypeInners.asWritten(symbols), kernels,
+                NewtypeInners.asWritten(symbols), kernels,
                 caseToSums, typePackage,
                 module.published(), standingCalls, layouts,
                 module.pos().quotedFrom(), linkage);

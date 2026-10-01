@@ -1817,7 +1817,7 @@ public final class TypeOps {
      * A newtype's value is what its comparison and equality read.
      */
     public static Type base(Type t, NewtypeInners inners) {
-        return newtypeSpine(t, inners).terminal();
+        return inners.terminal(t);
     }
 
     /**
@@ -1827,7 +1827,8 @@ public final class TypeOps {
      * is asking, and two readers deciding it apart is what #461 was: a comparison reaching the base
      * while the range beside it stopped at the first name. Everything that needs to know derives from
      * here — what a value is carried as, which declarations' rules apply to it, whether it is a
-     * number at all.
+     * number at all. A reader that wants only the terminal asks {@link NewtypeInners#terminal},
+     * which a compilation answers for each name once and has to answer as this walk does.
      *
      * <p>Stops on a name already worn, so a declaration reachable from itself ends the walk rather
      * than repeating it, and stops where a newtype's {@code value} is not declared.
@@ -1916,7 +1917,7 @@ public final class TypeOps {
      * {@link #directNumericNewtypeBase} and stops at one layer, which the language means.
      */
     public static Type numericBase(Type t, NewtypeInners inners) {
-        Type carried = newtypeSpine(t, inners).terminal();
+        Type carried = inners.terminal(t);
         return carried == Type.INT || carried == Type.DECIMAL ? carried : null;
     }
 

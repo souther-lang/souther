@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
+import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.Distinctions;
@@ -35,7 +36,7 @@ final class PartitionClasses {
         RuleReadingSource ruleSource = reading.source();
         TypeView view = TypeView.of(type, ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.published());
-        return of(Distinctions.ofType(view, ruleSource.symbols(), ruleSource.published()),
+        return of(Distinctions.ofType(view.shape(), ruleSource.symbols(), ruleSource.published()),
                 view, reading, expanding);
     }
 
@@ -232,12 +233,12 @@ final class PartitionClasses {
         if (!(leaf instanceof TypeSymbol.AtModule declared)) {
             return namingItBuildsIt(leaf, is, writes, names);
         }
-        TypeView held = TypeView.of(Type.ref(declared), ruleSource.inners(), ruleSource.symbols(),
-                ruleSource.published());
-        if (!held.isWrapped() && !(held.shape() instanceof Shape.Product)) {
+        boolean wrapped = TypeOps.outermost(Type.ref(declared), ruleSource.inners()) != null;
+        if (!wrapped && !(TypeView.shapeOf(Type.ref(declared), ruleSource.inners(),
+                ruleSource.symbols(), ruleSource.published()) instanceof Shape.Product)) {
             return namingItBuildsIt(leaf, is, writes, names);
         }
-        if (held.isWrapped()) {
+        if (wrapped) {
             // Values of the case, which is a position of its own: it is read like any other, and
             // what comes back already wears the case's own name. Under the position's names as well,
             // since a case of a `data DecisionN = Decision` is written inside that name too.

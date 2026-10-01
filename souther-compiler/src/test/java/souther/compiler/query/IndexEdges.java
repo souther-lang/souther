@@ -471,6 +471,7 @@ final class IndexEdges {
         names(out, Shapes.FieldLayoutOf.class, "named");
         names(out, Shapes.MeaningOf.class, "named");
         names(out, Shapes.NewtypeInnerOf.class, "named");
+        names(out, Shapes.NewtypeTerminalOf.class, "named");
         names(out, Shapes.NormalizedDef.class, "named");
         return out;
     }

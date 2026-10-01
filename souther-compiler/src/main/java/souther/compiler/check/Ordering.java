@@ -22,9 +22,9 @@ import java.util.Objects;
  * the names are off and drops how it got there, and a reader that then asks the next question of the
  * type as written is the defect this closes — it is what {@code BinaryElaborator} and the
  * {@code ORDERING} row of the old capability table both did, on the line after they computed the
- * base. So this reads {@link TypeOps#newtypeSpine} once and keeps both halves of its answer: the
- * terminal says what the order is, and the layers say whether a name is worn over it. Nothing here
- * asks a second time whether something was a newtype.
+ * base. So this keeps both halves of the spine's answer: its terminal ({@link
+ * NewtypeInners#terminal}) says what the order is, and its first step ({@link TypeOps#outermost})
+ * says whether a name is worn over it. Neither is read off the type as written.
  *
  * <p><b>Sealed, so an order added is one every reader has to answer for.</b> The switches over these
  * are what makes one more a build failure rather than a comparison emitted as an equality test.
@@ -81,15 +81,15 @@ public sealed interface Ordering {
      * JVM holds it, and {@code inner} once it has been opened to the value it wraps. Use
      * {@link #asHeld()} and {@link #opened()} rather than reading this apart.
      *
-     * <p>Never nested. The spine walk goes to the terminal in one pass, so {@code Manager = Level =
-     * Int} is one {@code Wrapped(Longs)} and not two.
+     * <p>Never nested. The order inside is read off the spine's terminal, and reading a terminal
+     * takes no name off, so {@code Manager = Level = Int} is one {@code Wrapped(Longs)} and not two.
      */
     record Wrapped(Ordering inner) implements Ordering {
 
         public Wrapped {
             if (inner instanceof Wrapped) {
                 throw new IllegalArgumentException(
-                        "the spine walk reaches the terminal in one pass, so a wrapped order is never wrapped again");
+                        "a wrapped order is read off the spine's terminal, so it is never wrapped again");
             }
         }
     }
@@ -154,12 +154,12 @@ public sealed interface Ordering {
      */
     static Ordering of(Type type, NewtypeInners inners, Symbols symbols, DeclarationKinds kinds,
                        PublishedDeclarations published) {
-        TypeOps.NewtypeSpine spine = TypeOps.newtypeSpine(type, inners);
-        Ordering terminal = ofTerminal(spine.terminal(), symbols, kinds, published);
+        Ordering terminal = ofTerminal(inners.terminal(type), symbols, kinds, published);
         if (terminal == null) {
             return null;
         }
-        return spine.layers().isEmpty() ? terminal : new Wrapped(terminal);
+        // The spine has a layer exactly where its first step takes a name off.
+        return TypeOps.outermost(type, inners) == null ? terminal : new Wrapped(terminal);
     }
 
     /**
