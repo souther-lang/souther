@@ -3,15 +3,18 @@ package souther.compiler.check;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
+import souther.compiler.identity.DecidedByTheRest;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
+import java.util.Set;
 
 /**
  * Which declaration a name reaches where a body of one module is expanded.
@@ -68,6 +71,9 @@ public final class HelperTable {
     private final Map<DefinitionName, HelperEntry> byAddress;
     private final Map<DefinitionName, HelperEntry> declared;
     private final Map<DefinitionName, HelperEntry> emits;
+    /** How each entry of {@code emits} is reached — read off the entries, as {@code byAddress} is. */
+    @DecidedByTheRest
+    private final Set<ReachName.Declaration> heldAs;
     /** The library the table was built over — held so that a reader expanding against this table
      *  asks the same library the helpers under it came from. */
     private final Stdlib stdlib;
@@ -87,6 +93,11 @@ public final class HelperTable {
             at.put(entry.address(), entry);
         }
         this.byAddress = Collections.unmodifiableMap(at);
+        Set<ReachName.Declaration> as = new HashSet<>();
+        for (HelperEntry entry : emits.values()) {
+            as.add(entry.reachedAs());
+        }
+        this.heldAs = Collections.unmodifiableSet(as);
     }
 
     /**
@@ -176,15 +187,24 @@ public final class HelperTable {
      * <p>This narrows what a call expands to. It does not change what recurses: the call graph is a
      * fact about the declarations, worked out over the table as it was built, and a graph taken over
      * a narrowed table would find {@code foldFrom} non-recursive and expand its self-call forever.
+     *
+     * <p>Asked for the body of every recursive helper, and most parameters share no helper's name,
+     * so the table is copied only where one of them hides something.
      */
     public HelperTable hiding(Collection<ReachName.Declaration> references) {
-        SequencedMap<ReachName.Declaration, HelperEntry> narrowed = new LinkedHashMap<>(byReference);
         boolean any = false;
         for (ReachName.Declaration reference : references) {
-            any |= narrowed.remove(reference) != null;
+            any |= byReference.containsKey(reference);
         }
-        return any ? new HelperTable(module, policy, Collections.unmodifiableSequencedMap(narrowed),
-                declared, emits, stdlib) : this;
+        if (!any) {
+            return this;
+        }
+        SequencedMap<ReachName.Declaration, HelperEntry> narrowed = new LinkedHashMap<>(byReference);
+        for (ReachName.Declaration reference : references) {
+            narrowed.remove(reference);
+        }
+        return new HelperTable(module, policy, Collections.unmodifiableSequencedMap(narrowed),
+                declared, emits, stdlib);
     }
 
     /** The library the table was built over. */
@@ -246,14 +266,12 @@ public final class HelperTable {
      * it is held. An address worked out of the reference would be a second statement of that pairing,
      * and where the two came apart a held fn would be answered as not held. Unaffected by
      * {@link #hiding}, which narrows what a call reaches and not what this module holds.
+     *
+     * <p>Answered from the references read off those entries when the table was made, because it
+     * is asked once for every recursion in reach.
      */
     public boolean holds(ReachName.Declaration reference) {
-        for (HelperEntry entry : emits.values()) {
-            if (entry.reachedAs().equals(reference)) {
-                return true;
-            }
-        }
-        return false;
+        return heldAs.contains(reference);
     }
 
     /**

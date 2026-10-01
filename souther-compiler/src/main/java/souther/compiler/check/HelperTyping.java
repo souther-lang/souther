@@ -59,6 +59,9 @@ public final class HelperTyping {
         Preserved.Settling settledSignatures = elaborated.settledValues;
         Map<ValueName, Object> settledConstants = new HashMap<>();
         Preserved standing = Preserved.valuesAlreadySettled(settledSignatures);
+        // Every helper's scope reaches the same recursions. Fixed once here, so Scope.reaching keeps
+        // this map for each helper rather than copying it.
+        Map<String, Type> standingCalls = Map.copyOf(recursiveHelperFns);
         for (Hir.FnDef h : valuesBeforeTheValuesThatNameThem(inliner, symbols.library(), toCheck)) {
             boolean recursive = recursiveHelperFns.containsKey(h.name());
             // What it runs as, settled once where this module was lowered and read here rather than
@@ -182,7 +185,7 @@ public final class HelperTyping {
                 // helper gets — so a mis-declared return type or a mis-passed function argument in the
                 // body is caught here, at the helper, not only where it is later inlined.
                 typeFromBody(h, inferred, env, body, symbols, published, kinds, reachable,
-                        recursiveHelperFns);
+                        standingCalls);
             }
             // A recursive helper is lowered to a method, so a self- or mutual call is left standing
             // rather than expanded; its signature is what a call to it is typed against, so it goes
@@ -192,7 +195,7 @@ public final class HelperTyping {
             // it is given. A parameter of the same name wins: a binding in force wins over the
             // declaration it shadows (spec §fn-rules), so `let use (depth: Int)` reads its `depth` as
             // the Int it declares and not as the helper it is spelled like.
-            Scope tenv = env.reaching(recursiveHelperFns);
+            Scope tenv = env.reaching(standingCalls);
             // a helper that returns a function (e.g. `let adder (n) = (x) -> x + n`) has no application
             // here to infer the lambda's parameter types from; it is checked where it is inlined and
             // applied (spec §blocks).
