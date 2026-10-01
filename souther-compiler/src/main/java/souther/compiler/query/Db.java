@@ -127,10 +127,38 @@ public final class Db implements StoreWork {
      * @param changedAt the revision the answer last came out different at
      * @param reads what answering it read, in the order it read them
      */
-    private record Memo(Answer<?> answer, long verifiedAt, long changedAt, Set<Key<?>> reads) {
+    private record Memo(Answer<?> answer, long verifiedAt, long changedAt, Set<Filed> reads) {
 
         Memo verifiedAt(long revision) {
             return new Memo(answer, revision, changedAt, reads);
+        }
+    }
+
+    /**
+     * A key as this store holds it: the key, and a hash that tells apart the questions asked about
+     * one thing.
+     *
+     * <p>A key's own hash is its record's, which is made of its components and not of which
+     * question it is. Every question asked about one declaration carries the same address and
+     * nothing else, so all of them hash alike, and a table holding a few dozen of them for each
+     * declaration puts each declaration's questions in one bucket and compares them one by one.
+     * The name of the question goes into the hash here. A name and not the class itself, whose
+     * hash would change from run to run and take the order these tables are walked in with it.
+     */
+    record Filed(Key<?> key, int hash) {
+
+        static Filed of(Key<?> key) {
+            return new Filed(key, 31 * key.getClass().getName().hashCode() + key.hashCode());
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Filed filed && hash == filed.hash && key.equals(filed.key);
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
         }
     }
 
@@ -207,7 +235,7 @@ public final class Db implements StoreWork {
                 : StringMachineAnswers.unborrowed(readings().extents());
     }
 
-    private final Map<Key<?>, Memo> memos = new HashMap<>();
+    private final Map<Filed, Memo> memos = new HashMap<>();
     /**
      * Whether whoever set this walk going has since stopped wanting the answer. Asked where a
      * question is about to be answered and nowhere else, so a walk stops between two questions and
@@ -222,7 +250,7 @@ public final class Db implements StoreWork {
     /** The keys being answered right now, outermost first — the chain a cycle is found on. */
     private final Set<Key<?>> inProgress = new LinkedHashSet<>();
     /** The reads of each in-progress key, innermost frame last. */
-    private final Deque<Set<Key<?>>> frames = new ArrayDeque<>();
+    private final Deque<Set<Filed>> frames = new ArrayDeque<>();
     /**
      * Keys whose current answer was reached through a cycle. A cyclic answer depends on where the
      * cycle was entered, so keeping it would make one caller's answer depend on whether another
@@ -297,12 +325,13 @@ public final class Db implements StoreWork {
      */
     public <T> Db set(Input<T> key, T value) {
         Answer<T> now = Answer.of(value);
-        Memo known = memos.get(key);
+        Filed filed = Filed.of(key);
+        Memo known = memos.get(filed);
         if (known != null && known.answer().equals(now)) {
             return this;
         }
         revision++;
-        memos.put(key, new Memo(now, revision, revision, Set.of()));
+        memos.put(filed, new Memo(now, revision, revision, Set.of()));
         return this;
     }
 
@@ -321,10 +350,10 @@ public final class Db implements StoreWork {
         // however many claim it — so while this source was the module, every answer about that module
         // was an answer about this source. A source that claimed a name it did not get is passed a
         // null module name and takes nothing else with it.
-        memos.keySet().removeIf(key -> sourceId.equals(key.sourceId())
-                || (moduleName != null && moduleName.equals(key.module())));
-        hasSpoken.removeIf(key -> !memos.containsKey(key));
-        spoke.removeIf(key -> !memos.containsKey(key));
+        memos.keySet().removeIf(filed -> sourceId.equals(filed.key().sourceId())
+                || (moduleName != null && moduleName.equals(filed.key().module())));
+        hasSpoken.removeIf(key -> !isComputed(key));
+        spoke.removeIf(key -> !isComputed(key));
     }
 
     /**
@@ -343,10 +372,15 @@ public final class Db implements StoreWork {
     /** Answers {@code key}, computing it if nothing kept from before still holds. */
     @SuppressWarnings("unchecked")
     public <T> Answer<T> ask(Key<T> key) {
-        recordRead(key);
-        Memo memo = memos.get(key);
+        return (Answer<T>) answer(Filed.of(key));
+    }
+
+    private Answer<?> answer(Filed filed) {
+        Key<?> key = filed.key();
+        recordRead(filed);
+        Memo memo = memos.get(filed);
         if (memo != null && memo.verifiedAt() == revision) {
-            return (Answer<T>) memo.answer();
+            return memo.answer();
         }
         if (inProgress.contains(key)) {
             // Everything in flight has now seen an answer that depends on where it was entered.
@@ -360,13 +394,13 @@ public final class Db implements StoreWork {
         // being asked its cheapest question over and over, and that is the question an edit asks.
         abandonment.stopIfAsked();
         if (memo != null && stillHolds(memo)) {
-            memos.put(key, memo.verifiedAt(revision));
-            return (Answer<T>) memo.answer();
+            memos.put(filed, memo.verifiedAt(revision));
+            return memo.answer();
         }
         inProgress.add(key);
         frames.push(new LinkedHashSet<>());
-        Answer<T> answer;
-        Set<Key<?>> read;
+        Answer<?> answer;
+        Set<Filed> read;
         // This key leaves nothing of itself behind, whether it answered or threw: not its frame, not
         // its place in the chain, not a cycle mark. A compile error is a value, so a throw is an
         // internal fault, and a store kept across edits would otherwise never keep this key again.
@@ -388,7 +422,7 @@ public final class Db implements StoreWork {
         if (!reachedThroughCycle) {
             long changedAt = memo != null && memo.answer().equals(answer)
                     ? memo.changedAt() : revision;
-            memos.put(key, new Memo(answer, revision, changedAt, read));
+            memos.put(filed, new Memo(answer, revision, changedAt, read));
         }
         if (!answer.reports().isEmpty() && hasSpoken.add(key)) {
             spoke.add(key);
@@ -411,13 +445,13 @@ public final class Db implements StoreWork {
         // ask at the moment it was checked.
         frames.push(new LinkedHashSet<>());
         try {
-            for (Key<?> read : memo.reads()) {
+            for (Filed read : memo.reads()) {
                 // Here, and not left to the ask below. A dependency already verified at this
                 // revision is answered before that one gets as far as asking, so a walk over a graph
                 // that another question has already been through would go the whole way without
                 // being asked once — which is the walk this is, most of the time.
                 abandonment.stopIfAsked();
-                ask(read);
+                answer(read);
                 Memo dependency = memos.get(read);
                 if (dependency == null || dependency.changedAt() > memo.verifiedAt()) {
                     return false;
@@ -453,7 +487,7 @@ public final class Db implements StoreWork {
         Map<Told, Found> found = new LinkedHashMap<>();
         for (Key<?> key : spoke) {
             abandonment.stopIfAsked();
-            Memo memo = memos.get(key);
+            Memo memo = memos.get(Filed.of(key));
             if (memo == null || memo.verifiedAt() != revision) {
                 continue;
             }
@@ -475,14 +509,19 @@ public final class Db implements StoreWork {
 
     /** What {@code key} read while it was answered, empty if it has not been asked. */
     public Set<Key<?>> dependenciesOf(Key<?> key) {
-        Memo memo = memos.get(key);
-        return memo == null ? Set.of() : memo.reads();
+        Memo memo = memos.get(Filed.of(key));
+        if (memo == null) {
+            return Set.of();
+        }
+        Set<Key<?>> read = new LinkedHashSet<>();
+        memo.reads().forEach(filed -> read.add(filed.key()));
+        return Collections.unmodifiableSet(read);
     }
 
     /** Whether {@code key}'s answer is being kept — it has been asked, and was not reached through
      * a cycle. */
     public boolean isComputed(Key<?> key) {
-        return memos.containsKey(key);
+        return memos.containsKey(Filed.of(key));
     }
 
     /**
@@ -495,7 +534,7 @@ public final class Db implements StoreWork {
      */
     Map<Key<?>, Answer<?>> everyAnswer() {
         Map<Key<?>, Answer<?>> out = new LinkedHashMap<>();
-        memos.forEach((key, memo) -> out.put(key, memo.answer()));
+        memos.forEach((filed, memo) -> out.put(filed.key(), memo.answer()));
         return out;
     }
 
@@ -562,21 +601,24 @@ public final class Db implements StoreWork {
     @Override
     public <T> Made<T> watching(Supplier<T> work) {
         frames.push(new LinkedHashSet<>());
-        Set<Key<?>> read;
+        Set<Filed> read;
         T made;
         try {
             made = work.get();
         } finally {
-            read = Set.copyOf(frames.pop());
+            // The frame as it was filled and not a copy of it: nothing adds to a frame once it is
+            // off the stack, and a copy would hash every read again for each question handed the
+            // work — and walk them in an order of its own rather than the order they were read.
+            read = Collections.unmodifiableSet(frames.pop());
         }
         read.forEach(this::recordRead);
         return new Made<>(made, () -> read.forEach(this::recordRead));
     }
 
-    private void recordRead(Key<?> key) {
-        Set<Key<?>> frame = frames.peek();
+    private void recordRead(Filed filed) {
+        Set<Filed> frame = frames.peek();
         if (frame != null) {
-            frame.add(key);
+            frame.add(filed);
         }
     }
 }
