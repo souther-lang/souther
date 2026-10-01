@@ -5,13 +5,16 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -117,5 +120,50 @@ class WhichDeclarationsAreAnsweredTogetherIsAnAnswerAboutTheGraphTest {
                 TypeComponents.of(together),
                 "the two are answered together, and stand under their names: which of them came"
                         + " off the walk first is a fact about the walk and not about either");
+    }
+
+    /**
+     * And a chain as long as a module likes is walked on a small stack, ending in two that read
+     * each other: a walk as deep as the chain on the call stack would not get to the end of it.
+     *
+     * <p>Here and not only in a compile. A compile reaches this walk through whatever asks for the
+     * components, and the stack it runs out of first is whichever of those is deepest — so a walk
+     * on the call stack here would be hidden behind any of them that was deeper.
+     */
+    @Test
+    void andALongChainIsWalkedOnASmallStack() {
+        int links = 100_000;
+        Map<TypeSymbol, Set<TypeSymbol>> edges = new LinkedHashMap<>();
+        for (int i = 0; i < links; i++) {
+            edges.put(link(i), Set.of(link(i + 1)));
+        }
+        edges.put(link(links), Set.of(link(links - 1)));
+        AtomicReference<Throwable> failed = new AtomicReference<>();
+        List<List<List<TypeSymbol>>> answered = new ArrayList<>();
+        Thread walking = new Thread(null, () -> {
+            try {
+                answered.add(TypeComponents.of(edges));
+            } catch (Throwable e) {
+                failed.set(e);
+            }
+        }, "a small stack", 512L << 10);
+        walking.start();
+        try {
+            walking.join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(e);
+        }
+
+        assertNull(failed.get(), () -> String.valueOf(failed.get()));
+        List<List<TypeSymbol>> components = answered.get(0);
+        assertEquals(Set.of(link(links - 1), link(links)), Set.copyOf(components.get(0)),
+                "the far end of the chain is answered first, and the two there together");
+        assertEquals(List.of(link(0)), components.get(components.size() - 1),
+                "and the near end last");
+    }
+
+    private static TypeSymbol link(int i) {
+        return named("L" + i);
     }
 }

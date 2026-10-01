@@ -2,11 +2,9 @@ package souther.compiler.check;
 
 import souther.compiler.types.TypeSymbol;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -24,17 +22,7 @@ import java.util.Set;
  */
 final class TypeComponents {
 
-    private final Map<TypeSymbol, Set<TypeSymbol>> edges;
-    private final Map<TypeSymbol, Integer> reached = new HashMap<>();
-    private final Map<TypeSymbol, Integer> lowest = new HashMap<>();
-    private final Deque<TypeSymbol> standing = new ArrayDeque<>();
-    private final Set<TypeSymbol> onStand = new HashSet<>();
-    private final List<List<TypeSymbol>> found = new ArrayList<>();
-    private int next;
-
-    private TypeComponents(Map<TypeSymbol, Set<TypeSymbol>> edges) {
-        this.edges = edges;
-    }
+    private TypeComponents() {}
 
     /**
      * The components of {@code edges}, each one before any component that reads it.
@@ -51,56 +39,31 @@ final class TypeComponents {
      * answering a different question with the same shape.
      */
     static List<List<TypeSymbol>> of(Map<TypeSymbol, Set<TypeSymbol>> edges) {
-        TypeComponents walk = new TypeComponents(edges);
+        Map<TypeSymbol, List<TypeSymbol>> ordered = new LinkedHashMap<>();
         for (TypeSymbol each : inOneOrder(edges.keySet())) {
-            if (!walk.reached.containsKey(each)) {
-                walk.walk(each);
-            }
+            ordered.put(each, inOneOrder(edges.get(each)));
         }
-        return walk.found;
+        List<List<TypeSymbol>> found = new ArrayList<>();
+        for (List<TypeSymbol> each : Cycles.components(ordered)) {
+            // Under the names, because the order the walk leaves them in is the order it happened
+            // to reach them and members of one component reach each other — there is no order
+            // among them for it to be. The order between components is another question and is
+            // what the list they are added to answers.
+            found.add(inOneOrder(each));
+        }
+        return found;
     }
 
     /** The same declarations, in the one order their names put them in. */
-    private static List<TypeSymbol> inOneOrder(Set<TypeSymbol> named) {
+    private static List<TypeSymbol> inOneOrder(Collection<TypeSymbol> named) {
         List<TypeSymbol> out = new ArrayList<>(named);
         out.sort(null);
-        return out;
+        return List.copyOf(out);
     }
 
     /** Whether {@code component} is one that has to be risen through rather than read once. */
     static boolean recurses(List<TypeSymbol> component, Map<TypeSymbol, Set<TypeSymbol>> edges) {
         return component.size() > 1
                 || edges.getOrDefault(component.get(0), Set.of()).contains(component.get(0));
-    }
-
-    private void walk(TypeSymbol from) {
-        reached.put(from, next);
-        lowest.put(from, next);
-        next++;
-        standing.push(from);
-        onStand.add(from);
-        for (TypeSymbol each : inOneOrder(edges.getOrDefault(from, Set.of()))) {
-            if (!reached.containsKey(each)) {
-                walk(each);
-                lowest.put(from, Math.min(lowest.get(from), lowest.get(each)));
-            } else if (onStand.contains(each)) {
-                lowest.put(from, Math.min(lowest.get(from), reached.get(each)));
-            }
-        }
-        if (lowest.get(from).equals(reached.get(from))) {
-            List<TypeSymbol> component = new ArrayList<>();
-            TypeSymbol each;
-            do {
-                each = standing.pop();
-                onStand.remove(each);
-                component.add(each);
-            } while (!each.equals(from));
-            // Under the names, because the order they come off the stand is the order the walk
-            // happened to reach them and members of one component reach each other — there is no
-            // order among them for it to be. The order between components is another question and
-            // is what the list they are added to answers.
-            component.sort(null);
-            found.add(List.copyOf(component));
-        }
     }
 }
