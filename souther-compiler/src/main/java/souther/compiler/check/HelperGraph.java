@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.types.ReachName;
 
+import java.util.AbstractList;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -12,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.RandomAccess;
 import java.util.Set;
 
 /**
@@ -46,12 +48,19 @@ import java.util.Set;
  * narrows what a call reaches and changes nothing here: a graph taken over the narrowed table would
  * find the very helper being expanded non-recursive.
  *
- * <p>{@link #recurses} is membership over the same list — a linear scan — because a module's
- * recursive helpers are few; this reads a positional answer, it does not maintain a second index of
- * one.
+ * <p>{@link #recurses} is asked for each call while bodies are expanded and lowered, and a module has
+ * as many recursions as it was written with, together with every one in the prelude and its imports.
+ * So {@code recursive} is a list that answers membership by hash: the order is still the list's and
+ * is all its {@code equals} compares, and the index is part of how the list is held, not a second
+ * component that would have to agree with it. Every graph holds one, however it was built, because
+ * the constructor makes it.
  */
 public record HelperGraph(Map<ReachName.Declaration, Set<ReachName.Declaration>> callsOf,
                           List<ReachName.Declaration> recursive) {
+
+    public HelperGraph {
+        recursive = Recursions.of(recursive);
+    }
 
     /** The graph of {@code table}: what each declaration in it calls, and which of them recurse. */
     public static HelperGraph of(HelperTable table) {
@@ -67,7 +76,7 @@ public record HelperGraph(Map<ReachName.Declaration, Set<ReachName.Declaration>>
                 recursive.add(reference);
             }
         }
-        return new HelperGraph(fixed(callsOf), List.copyOf(recursive));
+        return new HelperGraph(fixed(callsOf), recursive);
     }
 
     /**
@@ -148,5 +157,48 @@ public record HelperGraph(Map<ReachName.Declaration, Set<ReachName.Declaration>>
             }
         }
         return reached;
+    }
+
+    /**
+     * The recursions in order, with their membership answered by hash.
+     *
+     * <p>A {@link List} in everything a reader can tell: it iterates, compares and hashes as the
+     * sequence it holds, so it equals any list of the same declarations in the same order and no
+     * other. Only {@link #contains} reads the set, which holds the same declarations and so cannot
+     * answer differently from a scan of them.
+     */
+    private static final class Recursions extends AbstractList<ReachName.Declaration>
+            implements RandomAccess {
+
+        private final List<ReachName.Declaration> ordered;
+        private final Set<ReachName.Declaration> members;
+
+        private Recursions(List<ReachName.Declaration> ordered) {
+            this.ordered = ordered;
+            this.members = Set.copyOf(ordered);
+        }
+
+        static List<ReachName.Declaration> of(List<ReachName.Declaration> recursive) {
+            if (recursive instanceof Recursions already) {
+                return already;
+            }
+            List<ReachName.Declaration> ordered = List.copyOf(recursive);
+            return ordered.isEmpty() ? ordered : new Recursions(ordered);
+        }
+
+        @Override
+        public ReachName.Declaration get(int index) {
+            return ordered.get(index);
+        }
+
+        @Override
+        public int size() {
+            return ordered.size();
+        }
+
+        @Override
+        public boolean contains(Object o) {
+            return members.contains(o);
+        }
     }
 }

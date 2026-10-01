@@ -14,6 +14,7 @@ import java.util.Objects;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * The abstract syntax: a module as the characters that spell it were read, with every name still a
@@ -272,7 +273,8 @@ public interface Ast {
                     publishable.add(fn.name());
                 }
             }
-            publishable.removeIf(declaration -> !exposing.admits(declaration));
+            Predicate<String> admitted = exposing.admitting();
+            publishable.removeIf(admitted.negate());
             return Set.copyOf(publishable);
         }
     }

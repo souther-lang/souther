@@ -438,6 +438,7 @@ public final class TypeChecker {
         for (Hir.Def d : module.defs()) {
             ownTypes.add(d.name());
         }
+        Map<String, Hir.FnDef> helpers = HelperInliner.helpersOf(module);
         for (String e : module.exposing().named()) {
             int dot = e.indexOf('.');
             // `exposing` is type-granular: a data's decoder/encoder are always public API once the
@@ -456,7 +457,7 @@ public final class TypeChecker {
                 // written against, and the rule itself. A behavior's own `let` is not — what a reader
                 // reaches there is the behavior, which it calls, and the module publishes its
                 // specification rather than the body it was given (ADR-0005).
-                Hir.FnDef helper = HelperInliner.helpersOf(module).get(e);
+                Hir.FnDef helper = helpers.get(e);
                 if (helper != null) {
                     // The same rule a body is held to (spec §an-attached-files-values-are-for-its-rows),
                     // read here because an `exposing` list is a list of names and not an expression, so
