@@ -560,10 +560,14 @@ final class AdmissibleReading {
             gather(li.body(), found, terms.inside(li, at));
             return;
         }
-        FactSubject here = terms.subjectOf(e, at);
-        if (here != null && byName.containsKey(here)) {
-            found.add(here);
-            return;   // a position names itself, and nothing under it is a position of its own
+        // Every subexpression standing here, and not only the node: a projection's shorter
+        // projections are not children, and each may be the position the clause names.
+        for (Core standing : Core.subexpressionsAt(e)) {
+            FactSubject here = terms.subjectOf(standing, at);
+            if (here != null && byName.containsKey(here)) {
+                found.add(here);
+                return;   // a position names itself, and nothing under it is a position of its own
+            }
         }
         Core.forEachChild(e, child -> gather(child, found, at));
     }

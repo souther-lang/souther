@@ -19,7 +19,10 @@ import souther.compiler.diag.SourcePos;
 import net.unit8.notation199x.pattern.PatternMeaning;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -226,6 +229,199 @@ public sealed interface Core {
     record Neg(Core operand, Type type, SourcePos pos) implements Core {}
 
     record FieldAccess(Core target, String field, Type type, SourcePos pos) implements Core {}
+
+    /**
+     * Fields read off {@code base} one after another, held as one node however many there are.
+     *
+     * <p>What a reading of a type's guarantees reaches a value by. That reading goes down the
+     * declarations a name at a time, and how far it goes is how long the declarations chain — a
+     * length nothing the author wrote bounds. Written as a {@link FieldAccess} per name, the tree
+     * would be as deep as the chain, and every reader that recurses over a target would answer a
+     * long chain by running out of stack. So the names are held beside the one expression they are
+     * read off, and only {@code base} is a child: a pass that rewrites what a value is read off
+     * rewrites the base and keeps the names.
+     *
+     * <p>The same reading as the accesses it stands for, and nothing else. A reader that gives a
+     * field access a meaning gives this one the meaning of its steps in order; there is no rule
+     * here that a {@link FieldAccess} does not have.
+     *
+     * <p>Never the base of another one ({@link #then}), so a chain is one node and not a chain of
+     * them. Analysis only: a run never reads a value this way, and an emitter that meets one has
+     * been handed a tree that was not built to run.
+     *
+     * @param base  what the first name is read off
+     * @param steps the names read, the last one being what this answers
+     */
+    record FieldProjection(Core base, Steps steps, SourcePos pos) implements Core {
+
+        public FieldProjection {
+            if (base instanceof FieldProjection) {
+                throw new IllegalArgumentException(
+                        "a projection reads its names off one value, not off another projection");
+            }
+            Objects.requireNonNull(base, "a projection reads its names off some value");
+            Objects.requireNonNull(steps, "a projection reads some name");
+        }
+
+        /** {@code from} with {@code field} read off it: one more step where {@code from} is already
+         *  a projection, and a projection of one step where it is not. */
+        public static FieldProjection then(Core from, String field, Type type) {
+            return then(from, field, type, from.pos());
+        }
+
+        /** The same, standing at {@code pos} — where the access it stands for would. */
+        public static FieldProjection then(Core from, String field, Type type, SourcePos pos) {
+            Step step = new Step(field, type);
+            return from instanceof FieldProjection p
+                    ? new FieldProjection(p.base(), p.steps().then(step), pos)
+                    : new FieldProjection(from, Steps.of(step), pos);
+        }
+
+        @Override
+        public Type type() {
+            return steps.last().type();
+        }
+
+        /** What the last name is read off: the base where there is one name, and this projection
+         *  short of its last name where there are more. */
+        public Core target() {
+            Steps before = steps.before();
+            return before == null ? base : new FieldProjection(base, before, pos);
+        }
+
+        /**
+         * Every projection shorter than this one, the nearest first: this with its last name taken
+         * off, then with the one before it, down to the projection of one name.
+         *
+         * <p>The subexpressions the accesses written out would have had as nodes of their own,
+         * between this one and the base. A walk that asks each node it meets what it is — a
+         * position, a subject, a term — asked each of those too, and has to ask them here: they are
+         * not children, since the base is the only one. The base is not among them for that reason;
+         * the walk reaches it as it reaches any child. Made a name at a time and never on the
+         * stack.
+         */
+        public Iterable<FieldProjection> shorter() {
+            return () -> new Iterator<>() {
+
+                private Steps next = steps.before();
+
+                @Override
+                public boolean hasNext() {
+                    return next != null;
+                }
+
+                @Override
+                public FieldProjection next() {
+                    if (next == null) {
+                        throw new NoSuchElementException();
+                    }
+                    FieldProjection here = new FieldProjection(base, next, pos);
+                    next = next.before();
+                    return here;
+                }
+            };
+        }
+
+        /**
+         * The last step as the one field access it is, read off {@link #target}.
+         *
+         * <p>As shallow as the target is, which is one node: for a reader whose question about a
+         * field access is asked of the access and its target, and never of what is under them.
+         */
+        public FieldAccess lastAccess() {
+            return new FieldAccess(target(), steps.last().field(), type(), pos);
+        }
+
+        /** What a reader of the tree that runs throws on meeting one. */
+        public IllegalStateException unexpectedIn(String reader) {
+            return new IllegalStateException(
+                    "a projection of a type's guarantees (" + base + steps + ") reached " + reader
+                            + ", at " + pos);
+        }
+
+        /** One name read, and the type of what it reads. What it is read off is the type of the step
+         *  before it, or the base's for the first. */
+        public record Step(String field, Type type) {
+
+            public Step {
+                Objects.requireNonNull(field, "a step reads some name");
+                Objects.requireNonNull(type, "and what it reads is of some type");
+            }
+        }
+
+        /**
+         * The names of a projection, the last one and the ones before it.
+         *
+         * <p>Shared rather than copied, so a reading one name further costs the same however many
+         * names came before it, and copies none of them. Compared and hashed along the names rather
+         * than by recursing, for the reason the node exists: how many names there are is not
+         * bounded by anything a stack is.
+         *
+         * @param before the names before the last one, or null where the last one is the first
+         * @param last   the name this projection answers
+         */
+        public record Steps(Steps before, Step last) {
+
+            public Steps {
+                Objects.requireNonNull(last, "a projection reads some name");
+            }
+
+            public static Steps of(Step first) {
+                return new Steps(null, first);
+            }
+
+            public Steps then(Step next) {
+                return new Steps(this, next);
+            }
+
+            /** Every name, the first one first. */
+            public List<Step> inOrder() {
+                List<Step> out = new ArrayList<>();
+                for (Steps at = this; at != null; at = at.before) {
+                    out.add(at.last);
+                }
+                return List.copyOf(out.reversed());
+            }
+
+            @Override
+            public boolean equals(Object o) {
+                if (!(o instanceof Steps other)) {
+                    return false;
+                }
+                Steps a = this;
+                Steps b = other;
+                while (a != null && b != null) {
+                    if (a == b) {
+                        return true;
+                    }
+                    if (!a.last.equals(b.last)) {
+                        return false;
+                    }
+                    a = a.before;
+                    b = b.before;
+                }
+                return a == b;
+            }
+
+            @Override
+            public int hashCode() {
+                int hash = 0;
+                for (Steps at = this; at != null; at = at.before) {
+                    hash = 31 * hash + at.last.hashCode();
+                }
+                return hash;
+            }
+
+            @Override
+            public String toString() {
+                StringBuilder sb = new StringBuilder();
+                for (Step each : inOrder()) {
+                    sb.append('.').append(each.field());
+                }
+                return sb.toString();
+            }
+        }
+    }
 
     /**
      * {@code occurrence} is which comparison of the model this is: the construct the source wrote
@@ -1597,6 +1793,44 @@ public sealed interface Core {
     }
 
     /**
+     * The subexpressions standing at {@code e} that a walk going down a tree asks one at a time:
+     * {@code e} itself, and where it is a {@link FieldProjection}, the projections shorter than it,
+     * the nearest first.
+     *
+     * <p>For a walk asking each node it meets what it is — a position, a subject, a term — and not
+     * for one asking about the tree's structure. Written out as accesses, those projections were
+     * nodes the walk met going down; held as one node, they are not children, and a walk asking only
+     * the node misses every one of them. Asked through here, such a walk meets them in the order the
+     * descent did and then goes on into the base as into any child.
+     */
+    static Iterable<Core> subexpressionsAt(Core e) {
+        if (!(e instanceof FieldProjection projection)) {
+            return List.of(e);
+        }
+        return () -> new Iterator<>() {
+
+            private Core next = projection;
+
+            private final Iterator<FieldProjection> shorter = projection.shorter().iterator();
+
+            @Override
+            public boolean hasNext() {
+                return next != null || shorter.hasNext();
+            }
+
+            @Override
+            public Core next() {
+                if (next != null) {
+                    Core here = next;
+                    next = null;
+                    return here;
+                }
+                return shorter.next();
+            }
+        };
+    }
+
+    /**
      * {@code e} as what it evaluates, with the type it stands as at its position set aside: the value
      * a {@link Widen} holds, and {@code e} itself where nothing widened it.
      *
@@ -1701,6 +1935,12 @@ public sealed interface Core {
                 yield target == fa.target() ? fa
                         : new FieldAccess(target, fa.field(), fa.type(), fa.pos());
             }
+            // The base is the one expression; the names read off it are not slots. What it is
+            // rewritten to may be a projection itself, and the names are then read further on.
+            case FieldProjection p -> {
+                Core base = atExpr.apply(p.base());
+                yield base == p.base() ? p : rebased(base, p);
+            }
             case Binary b -> {
                 Core left = atExpr.apply(b.left());
                 Core right = atExpr.apply(b.right());
@@ -1800,6 +2040,19 @@ public sealed interface Core {
         });
         return values == nd.values() ? nd
                 : new Construct(nd.typeName(), values, nd.type(), nd.pos());
+    }
+
+    /** {@code p}'s names read off {@code base} instead. Where {@code base} is a projection the names
+     *  go on after its own, so a chain stays one node. */
+    private static FieldProjection rebased(Core base, FieldProjection p) {
+        if (!(base instanceof FieldProjection under)) {
+            return new FieldProjection(base, p.steps(), p.pos());
+        }
+        FieldProjection.Steps steps = under.steps();
+        for (FieldProjection.Step each : p.steps().inOrder()) {
+            steps = steps.then(each);
+        }
+        return new FieldProjection(under.base(), steps, p.pos());
     }
 
     /** {@code xs} with {@code f} applied to each, or {@code xs} itself where none of them changed. */

@@ -63,18 +63,21 @@ class AReadingReadsEverythingATermSaysAndNothingOfWhereItStandsTest {
             MaterialisationSite.class);
 
     /**
-     * The records a reading walks: every kind of term, and the three a term holds that are not terms
+     * The records a reading walks: every kind of term, and the parts a term holds that are not terms
      * themselves.
      *
      * <p>The kinds come from the language's own list of what a term can be, so one added later is
-     * here without anybody adding it. The other three are named because nothing declares them as a
-     * family — an arm, a field's value and a departure are parts of the three kinds that have them.
+     * here without anybody adding it. The parts are named because nothing declares them as a
+     * family — an arm, a field's value, a departure, and the names of a projection and each name of
+     * them are parts of the kinds that have them.
      */
     private static List<Class<?>> walked() {
         List<Class<?>> out = new ArrayList<>(List.of(Core.class.getPermittedSubclasses()));
         out.add(Core.Case.class);
         out.add(Core.FieldValue.class);
         out.add(Core.ElseArm.class);
+        out.add(Core.FieldProjection.Steps.class);
+        out.add(Core.FieldProjection.Step.class);
         return out;
     }
 

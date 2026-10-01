@@ -2289,7 +2289,7 @@ final class Terms {
                     : Naming.of(pathKey(e, at, leaf), Naming.Reason.A_BINDING_STANDS_FOR_NOTHING);
         }
         return switch (e) {
-            case Core.Read _, Core.FieldAccess _ ->
+            case Core.Read _, Core.FieldAccess _, Core.FieldProjection _ ->
                     Naming.of(pathKey(e, at, leaf), Naming.Reason.A_BINDING_STANDS_FOR_NOTHING);
             case Core.Int i -> new Naming.Named(interned.written(i.value()));
             case Core.Decimal d -> new Naming.Named(interned.written(d.value()));
@@ -2547,6 +2547,7 @@ final class Terms {
         return switch (Core.withoutStanding(e)) {
             case Core.Read r -> r.binding();
             case Core.FieldAccess fa -> rootBinding(fa.target());
+            case Core.FieldProjection p -> rootBinding(p.base());
             default -> null;
         };
     }
@@ -2559,9 +2560,16 @@ final class Terms {
     }
 
     private static void chainInto(Core e, List<String> out) {
-        if (Core.withoutStanding(e) instanceof Core.FieldAccess fa) {
-            chainInto(fa.target(), out);
-            out.add(fa.field());
+        switch (Core.withoutStanding(e)) {
+            case Core.FieldAccess fa -> {
+                chainInto(fa.target(), out);
+                out.add(fa.field());
+            }
+            case Core.FieldProjection p -> {
+                chainInto(p.base(), out);
+                p.steps().inOrder().forEach(step -> out.add(step.field()));
+            }
+            default -> { }
         }
     }
 
@@ -2617,8 +2625,27 @@ final class Terms {
                     Location.isStep(fa.target().type(), fa.field(), newtypes())
                             ? interned.on(subjectKey(fa.target(), at), List.of(fa.field()))
                             : subjectKey(fa.target(), at);
+            // The rule above taken a name at a time, along the names rather than down the stack.
+            // The steps are read off together: a term read on by one name and then another is the
+            // term read on by both, and building each one between is a term per name.
+            case Core.FieldProjection p ->
+                    interned.on(subjectKey(p.base(), at), stepsOf(p));
             default -> interned.evaluated(evaluationIdOf(e));
         };
+    }
+
+    /** The names of {@code p} that are steps of a position, the first one first: a newtype's own
+     *  {@code value} is the value under the name and no step ({@link Location#isStep}). */
+    private List<String> stepsOf(Core.FieldProjection p) {
+        List<String> out = new ArrayList<>();
+        Type from = p.base().type();
+        for (Core.FieldProjection.Step step : p.steps().inOrder()) {
+            if (Location.isStep(from, step.field(), newtypes())) {
+                out.add(step.field());
+            }
+            from = step.type();
+        }
+        return out;
     }
 
     /**
@@ -2642,6 +2669,10 @@ final class Terms {
                 }
                 Term base = keyOfNowhere(fa.target(), at);
                 yield base == null ? null : interned.on(base, List.of(fa.field()));
+            }
+            case Core.FieldProjection p -> {
+                Term base = keyOfNowhere(p.base(), at);
+                yield base == null ? null : interned.on(base, stepsOf(p));
             }
             default -> null;
         };

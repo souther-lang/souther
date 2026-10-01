@@ -140,6 +140,8 @@ final class Witnessed {
                     taken.add(access.field());
                     at = access.target();
                 }
+                // The same accesses held as one node, taken a name at a time from the last.
+                case Core.FieldProjection projection -> at = projection.lastAccess();
                 case Core.TupleGet get -> {
                     taken.add(get.index());
                     at = get.tuple();

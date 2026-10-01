@@ -80,6 +80,7 @@ public record BlockReaches(
                 a.args().forEach(x -> walk(x, bound, acc));
             }
             case Core.FieldAccess fa -> walk(fa.target(), bound, acc);
+            case Core.FieldProjection p -> throw p.unexpectedIn("what a block reaches");
             case Core.Binary bin -> {
                 walk(bin.left(), bound, acc);
                 walk(bin.right(), bound, acc);

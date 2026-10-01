@@ -84,12 +84,12 @@ class ANewtypeChainIsReadOneNameAtATimeTest {
     }
 
     /**
-     * The walk goes to the bottom of a long chain, and is told to stop one name short of it.
+     * The walk goes to the bottom of a long chain and reads the rule written there.
      *
-     * <p>Short of it because of what stands there. The value under a name is that name's
-     * {@code value} of the value over it, so the one under every name of the chain is an access as
-     * deep as the chain; reading the rule on it is a reading of that expression, which goes down it
-     * on the call stack whatever the walk does. What this holds is the walk.
+     * <p>Read, and not only reached. The value under every name of the chain is that name's
+     * {@code value} of the value over it, so the value the rule is read against is reached by as
+     * many names as the chain has; what holds is that reading it states the relation the rule
+     * writes, on a stack the chain does not fit in.
      */
     @Test
     void theWalkGoesDownALongChainWithoutTheCallStack() {
@@ -108,12 +108,12 @@ class ANewtypeChainIsReadOneNameAtATimeTest {
         List<String> heard = new ArrayList<>();
 
         onASmallStack(() -> {
-            // T{LINKS} is read at no name down, so T2 is read LINKS - 2 names down and T1 is past it.
-            walk.from(root, RuleKey.THE_VALUE, at, GuaranteeWalk.Scope.asFarAs(LINKS - 2),
+            walk.from(root, RuleKey.THE_VALUE, at, GuaranteeWalk.Scope.everyName(),
                     new GuaranteeWalk.Reader() {
                         @Override
                         public void guaranteed(RuleKey path, TypeGuarantee guarantee) {
-                            heard.add("guaranteed " + guarantee.rule().clause());
+                            heard.add(path + " guaranteed " + guarantee.rule().clause()
+                                    + " stating " + guarantee.owed().relations().size());
                         }
 
                         @Override
@@ -124,7 +124,9 @@ class ANewtypeChainIsReadOneNameAtATimeTest {
             return null;
         });
 
-        assertEquals(List.of(GuaranteeWalk.Stop.PAST_THE_DEPTH + " at " + top(1)), heard);
+        // Every name of the chain is a newtype's `value`, which reaches no further position, so the
+        // rule is heard at the value itself.
+        assertEquals(List.of(RuleKey.THE_VALUE + " guaranteed T1#0 stating 1"), heard);
     }
 
     @Test

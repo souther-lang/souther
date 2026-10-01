@@ -96,6 +96,7 @@ final class EmittedClassReferences {
             case Core.TupleGet element -> add(element.type());
             // A field is read off the class of the value it is read from.
             case Core.FieldAccess access -> add(access.target().type());
+            case Core.FieldProjection p -> throw p.unexpectedIn("what the emitter references");
             // A function handed over as a value is a class of its own: its parameters come in as
             // objects and are cast to their types, and what it reaches of the body around it is a
             // field and a constructor argument. What it reaches is the one answer BlockReaches gives.

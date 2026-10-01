@@ -192,15 +192,21 @@ class EveryKindOfTermACorpusWritesIsReadForWhatItSaysTest {
     }
 
     /**
-     * The one kind no source reaches, and why.
+     * The kinds no source reaches, and why.
      *
      * <p>A model cannot write an absence. An optional stands on a data field, a construction has to
      * give that field a value, and there is no way to spell the empty one outside a fixture — which
      * is never elaborated, so it makes no term. E1402 says as much where a model tries: answer a
      * list of nought or one instead. So this is here rather than reached, and a kind that turns up
      * beside it is one someone has to say the same about.
+     *
+     * <p>Nor does any source write a {@code FieldProjection}. It is what a reading of a type's
+     * guarantees reaches a value by, made while that reading runs and never elaborated from what an
+     * author wrote. What it says is what the accesses it stands for say, and that is held where the
+     * two are compared ({@link AValueAGuaranteeWalkReachesIsOneNodeHoweverFarDownTest}).
      */
-    private static final Set<String> WRITTEN_BY_NOTHING = new TreeSet<>(Set.of("OptionNone"));
+    private static final Set<String> WRITTEN_BY_NOTHING =
+            new TreeSet<>(Set.of("OptionNone", "FieldProjection"));
 
     @Test
     void everyKindOfTermTheCorpusWritesIsReached() {

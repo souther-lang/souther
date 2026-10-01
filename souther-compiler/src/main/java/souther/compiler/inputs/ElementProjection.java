@@ -4,6 +4,7 @@ import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.Location;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -100,6 +101,22 @@ public record ElementProjection(List<String> steps) {
                     yield through == null ? null
                             : trail.through(read.binding(),
                                     () -> steps(through, element, trail));
+                }
+                // The rule below a name at a time, along the names rather than down the stack.
+                case Core.FieldProjection p -> {
+                    List<String> base = steps(p.base(), element, trail);
+                    if (base == null) {
+                        yield null;
+                    }
+                    List<String> longer = new ArrayList<>(base);
+                    Type from = p.base().type();
+                    for (Core.FieldProjection.Step step : p.steps().inOrder()) {
+                        if (Location.isStep(from, step.field(), newtypes)) {
+                            longer.add(step.field());
+                        }
+                        from = step.type();
+                    }
+                    yield List.copyOf(longer);
                 }
                 case Core.FieldAccess fa -> {
                     List<String> base = steps(fa.target(), element, trail);

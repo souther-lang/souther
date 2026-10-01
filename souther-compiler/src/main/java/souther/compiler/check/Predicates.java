@@ -180,8 +180,12 @@ final class Predicates {
      * binder is the value it was given, and the two spellings name the same thing.
      */
     private boolean names(Core e, Set<FactSubject> handed, Denotations at) {
-        if (handed.contains(terms.subjectOf(e, at))) {
-            return true;
+        // Every subexpression standing here and not only the node: a projection's shorter
+        // projections are not children, and each may be the value handed.
+        for (Core standing : Core.subexpressionsAt(e)) {
+            if (handed.contains(terms.subjectOf(standing, at))) {
+                return true;
+            }
         }
         // A binding is crossed as a binding. Its body is what the clause names, read inside it; what
         // it was given is reached through the name where the body reads it, and is not a part of the
@@ -1589,6 +1593,16 @@ final class Predicates {
                     }
                     List<String> out = new ArrayList<>(head);
                     out.add(fa.field());
+                    yield out;
+                }
+                // The same a name at a time, along the names rather than down the stack.
+                case Core.FieldProjection p -> {
+                    List<String> head = chain(p.base());
+                    if (head == null) {
+                        yield null;
+                    }
+                    List<String> out = new ArrayList<>(head);
+                    p.steps().inOrder().forEach(step -> out.add(step.field()));
                     yield out;
                 }
                 case Core.Read r when chains.containsKey(r.binding()) -> chains.get(r.binding());

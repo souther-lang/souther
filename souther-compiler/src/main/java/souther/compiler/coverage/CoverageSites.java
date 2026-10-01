@@ -1097,6 +1097,9 @@ public final class CoverageSites {
                 case Core.FieldAccess fa ->
                         walk(structural.take(new CoreStructure.Edge.FieldTarget(), fa.target()),
                                 inside);
+                // What reading a type's guarantees reaches a value by. The tree that runs reads a
+                // field an access at a time, so one arriving here is the wrong tree.
+                case Core.FieldProjection p -> throw p.unexpectedIn("coverage numbering");
                 case Core.Binary b -> {
                     number(b, inside);
                     walk(structural.take(new CoreStructure.Edge.BinaryLeft(), b.left()), inside);

@@ -801,10 +801,13 @@ sealed interface StatedByClauses {
                 gather(li.body(), found, terms.inside(li, at));
                 return;
             }
-            FactSubject here = terms.subjectOf(e, at);
-            if (here != null && byName.containsKey(here)) {
-                found.add(here);
-                return;
+            // Every subexpression standing here, for the reason AdmissibleReading.gather gives.
+            for (Core standing : Core.subexpressionsAt(e)) {
+                FactSubject here = terms.subjectOf(standing, at);
+                if (here != null && byName.containsKey(here)) {
+                    found.add(here);
+                    return;
+                }
             }
             Core.forEachChild(e, child -> gather(child, found, at));
         }

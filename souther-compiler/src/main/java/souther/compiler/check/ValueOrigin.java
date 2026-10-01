@@ -387,6 +387,9 @@ public sealed interface ValueOrigin<K> {
     private static <K, E> ValueOrigin<K> of(Core raw, E at, Reading<K, E> reading,
                                             BindingWalk<ValueOrigin<K>> following) {
         Core e = Terms.asOperator(raw);
+        if (e instanceof Core.FieldProjection projection) {
+            return projected(projection, at, reading, following);
+        }
         K here = reading.positionOf(e, at);
         if (here != null) {
             return new IsAPosition<>(here);
@@ -478,6 +481,57 @@ public sealed interface ValueOrigin<K> {
             return leafOf(e, at, reading);
         }
         return new Composed<>(partsOf(children, at, reading, following));
+    }
+
+    /**
+     * What {@code p} is made of: the rule for a field access below, asked of each of its names in
+     * turn.
+     *
+     * <p>A projection or one shorter than it that is a position is that position, and nothing
+     * under it is asked. Where none is, what the base is made of is read, and each name taken off it
+     * on the way back up is either the field a construction was given or one more value made of what
+     * it is read off — which is what the accesses written out come to. Gone down and back along the
+     * names rather than on the stack, because how many there are is as long as the declarations
+     * chain.
+     */
+    private static <K, E> ValueOrigin<K> projected(Core.FieldProjection p, E at,
+                                                   Reading<K, E> reading,
+                                                   BindingWalk<ValueOrigin<K>> following) {
+        // The names below the one that is a position, the outermost first, or every name where no
+        // projection of them is one.
+        List<Core.FieldProjection.Step> above = new ArrayList<>();
+        ValueOrigin<K> origin = null;
+        Core.FieldProjection.Steps steps = p.steps();
+        K here = reading.positionOf(p, at);
+        if (here != null) {
+            return new IsAPosition<>(here);
+        }
+        above.add(steps.last());
+        for (Core.FieldProjection shorter : p.shorter()) {
+            K there = reading.positionOf(shorter, at);
+            if (there != null) {
+                origin = new IsAPosition<>(there);
+                break;
+            }
+            above.add(shorter.steps().last());
+        }
+        if (origin == null) {
+            origin = of(p.base(), at, reading, following);
+        }
+        for (int i = above.size() - 1; i >= 0; i--) {
+            String field = above.get(i).field();
+            if (origin instanceof Constructed<K> built) {
+                ValueOrigin<K> given = built.fields().get(field);
+                if (given == null) {
+                    throw new IllegalStateException("a construction of " + built.fields().keySet()
+                            + " was read for a field it has none of: " + field);
+                }
+                origin = given;
+            } else {
+                origin = new Composed<>(List.of(origin));
+            }
+        }
+        return origin;
     }
 
     /**

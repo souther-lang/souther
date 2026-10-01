@@ -9,6 +9,7 @@ import souther.compiler.core.ConstructionProjection;
 import souther.compiler.core.Core;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -169,6 +170,8 @@ final class InputPath {
                     // says or on where it is written.
                     Location.isStep(fa.target().type(), fa.field(), newtypes)
                             ? base -> base.then(fa.field()) : base -> base);
+            // The two rules above a name at a time, from the base.
+            case Core.FieldProjection p -> namedAlong(p.base(), p.steps().inOrder(), 0, names);
             // What an expression that binds a name comes to is what its body comes to, under that
             // name. Whether the name may stand for the position its value names is not asked here
             // and is not a question about this shape: it is asked where the name is read, of what
@@ -265,6 +268,8 @@ final class InputPath {
             // what a value built out of values written where they stand looks like.
             case Core.FieldAccess fa -> introducing(fa.target(), names,
                     (construct, at) -> introducing(given(construct, fa), at, found));
+            case Core.FieldProjection p ->
+                    introducingAlong(p.base(), p.steps().inOrder(), 0, names, found);
             case null, default -> null;
         };
     }
@@ -277,12 +282,58 @@ final class InputPath {
      * with itself and is said where it is found.
      */
     private static Core given(Core.Construct construct, Core.FieldAccess fa) {
-        Core written = ConstructionProjection.given(construct, fa.field());
+        return given(construct, fa.field());
+    }
+
+    private static Core given(Core.Construct construct, String field) {
+        Core written = ConstructionProjection.given(construct, field);
         if (written == null) {
             throw new IllegalStateException("a construction of " + construct.typeName()
-                    + " was read for a field it has none of: " + fa.field());
+                    + " was read for a field it has none of: " + field);
         }
         return written;
+    }
+
+    /**
+     * Where the value {@code steps} from {@code next} on read off {@code from} stands: the two
+     * rules for a field access, asked a name at a time.
+     *
+     * <p>A construction the names start from cancels against the first of them, and what that field
+     * was given is read on. Where none does, each name is one more step of where {@code from}
+     * stands, taken along the names: how many there are is as long as the declarations chain, and
+     * only a cancellation — which is as deep as the constructions the source wrote — goes down the
+     * stack.
+     */
+    private PathResolution namedAlong(Core from, List<Core.FieldProjection.Step> steps, int next,
+                                      BindingEnvironment names) {
+        PathResolution reduced = introducing(from, names, (construct, at) -> {
+            Core given = given(construct, steps.get(next).field());
+            return next + 1 == steps.size() ? named(given, at)
+                    : namedAlong(given, steps, next + 1, at);
+        });
+        if (reduced != null) {
+            return reduced;
+        }
+        PathResolution at = named(from, names);
+        Type read = from.type();
+        for (int i = next; i < steps.size(); i++) {
+            Core.FieldProjection.Step step = steps.get(i);
+            at = at.deeper(Location.isStep(read, step.field(), newtypes)
+                    ? base -> base.then(step.field()) : base -> base);
+            read = step.type();
+        }
+        return at;
+    }
+
+    /** What {@code found} makes of the construction the value {@code steps} from {@code next} on
+     *  read off {@code from} stands for, each name cancelling against a construction in turn. */
+    private <T> T introducingAlong(Core from, List<Core.FieldProjection.Step> steps, int next,
+                                   BindingEnvironment names, OfAConstruction<T> found) {
+        if (next == steps.size()) {
+            return introducing(from, names, found);
+        }
+        return introducing(from, names, (construct, at) -> introducingAlong(
+                given(construct, steps.get(next).field()), steps, next + 1, at, found));
     }
 
     /**
