@@ -1,10 +1,7 @@
 package souther.compiler;
 
 import org.junit.jupiter.api.Test;
-
-import java.util.concurrent.atomic.AtomicReference;
-
-import static org.junit.jupiter.api.Assertions.assertNull;
+import souther.test.OnItsOwnStack;
 
 /**
  * A module chains its declarations as long as it likes, and a pass that follows the chain on the
@@ -48,21 +45,6 @@ class ADeclarationChainIsNotWalkedOnTheCallStackTest {
     }
 
     private static void assertCompilesOnASmallStack(String src) {
-        AtomicReference<Throwable> failed = new AtomicReference<>();
-        Thread compiling = new Thread(null, () -> {
-            try {
-                Compiler.compile(src);
-            } catch (Throwable e) {
-                failed.set(e);
-            }
-        }, "a small stack", STACK);
-        compiling.start();
-        try {
-            compiling.join();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new AssertionError(e);
-        }
-        assertNull(failed.get(), () -> String.valueOf(failed.get()));
+        OnItsOwnStack.ask("a compile on a small stack", STACK, () -> Compiler.compile(src));
     }
 }

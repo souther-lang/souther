@@ -4,17 +4,16 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.TypeCardinality;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
+import souther.test.OnItsOwnStack;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -233,23 +232,6 @@ class ACountOfAChainOfNamesIsNotTakenOnTheCallStackTest {
     }
 
     private static <T> T onASmallStack(Supplier<T> body) {
-        AtomicReference<T> answer = new AtomicReference<>();
-        AtomicReference<Throwable> failed = new AtomicReference<>();
-        Thread compiling = new Thread(null, () -> {
-            try {
-                answer.set(body.get());
-            } catch (Throwable e) {
-                failed.set(e);
-            }
-        }, "a small stack", STACK);
-        compiling.start();
-        try {
-            compiling.join();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new AssertionError(e);
-        }
-        assertNull(failed.get(), () -> String.valueOf(failed.get()));
-        return answer.get();
+        return OnItsOwnStack.ask("a compile on a small stack", STACK, body);
     }
 }

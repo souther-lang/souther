@@ -11,11 +11,11 @@ import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
+import souther.test.OnItsOwnStack;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -140,25 +140,6 @@ class ANewtypeChainIsReadOneNameAtATimeTest {
     }
 
     private static <T> T onASmallStack(Supplier<T> asked) {
-        AtomicReference<T> answered = new AtomicReference<>();
-        AtomicReference<Throwable> failed = new AtomicReference<>();
-        Thread asking = new Thread(null, () -> {
-            try {
-                answered.set(asked.get());
-            } catch (Throwable e) {
-                failed.set(e);
-            }
-        }, "a small stack", STACK);
-        asking.start();
-        try {
-            asking.join();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new AssertionError(e);
-        }
-        if (failed.get() != null) {
-            throw new AssertionError("asked on a small stack", failed.get());
-        }
-        return answered.get();
+        return OnItsOwnStack.ask("asked on a small stack", STACK, asked);
     }
 }

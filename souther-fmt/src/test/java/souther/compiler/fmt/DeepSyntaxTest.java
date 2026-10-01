@@ -7,6 +7,7 @@ import souther.compiler.cst.CstError;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.Message;
 import souther.compiler.cst.CstParser;
+import souther.test.OnItsOwnStack;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -211,18 +212,7 @@ class DeepSyntaxTest {
 
     /** Runs {@code work} on a thread with {@link #STACK_BYTES} of stack and returns what it threw,
      *  or null where it returned. */
-    private static Throwable onSmallStack(Runnable work) throws InterruptedException {
-        AtomicReference<Throwable> caught = new AtomicReference<>();
-        Thread t = new Thread(null, () -> {
-            try {
-                work.run();
-            } catch (Throwable x) {
-                caught.set(x);
-            }
-        }, "deep-expression", STACK_BYTES);
-        t.start();
-        t.join(120_000);
-        assertFalse(t.isAlive(), "the parse did not come back within 120s");
-        return caught.get();
+    private static Throwable onSmallStack(Runnable work) {
+        return OnItsOwnStack.run("a parse of deep syntax", STACK_BYTES, work);
     }
 }
