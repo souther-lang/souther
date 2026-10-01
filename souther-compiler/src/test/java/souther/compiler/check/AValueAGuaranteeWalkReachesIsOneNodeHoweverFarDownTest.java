@@ -58,7 +58,7 @@ class AValueAGuaranteeWalkReachesIsOneNodeHoweverFarDownTest {
         return src.toString();
     }
 
-    private final class Reading {
+    private static final class Reading {
 
         private final RuleReadingSource rules;
 
@@ -128,11 +128,7 @@ class AValueAGuaranteeWalkReachesIsOneNodeHoweverFarDownTest {
      */
     @Test
     void aRuleUnderALongChainOfRecordsIsReadAtItsPosition() {
-        Reading reading = new Reading(recordChainOf(LINKS));
-        Core.Read root = reading.place("v", declared("R" + LINKS));
-        Denotations at = reading.entering(Denotations.none(), root);
-
-        List<Heard> heard = onASmallStack(() -> reading.walked(root, at));
+        List<Heard> heard = ALongChain.HEARD;
 
         // R1 writes the rule about its own field, so it is heard where R1 stands.
         List<String> steps = new ArrayList<>();
@@ -154,15 +150,22 @@ class AValueAGuaranteeWalkReachesIsOneNodeHoweverFarDownTest {
      */
     @Test
     void theClauseReadAtTheBottomIsNoDeeperForALongerChain() {
-        assertEquals(depthOfTheClauseAtTheBottom(2), depthOfTheClauseAtTheBottom(LINKS));
+        assertEquals(depthOf(heardAtTheBottomOf(2).getFirst().guarantee().clause()),
+                depthOf(ALongChain.HEARD.getFirst().guarantee().clause()));
     }
 
-    private int depthOfTheClauseAtTheBottom(int links) {
+    /** What a walk over a chain of {@code links} records hears, walked on a small stack. */
+    private static List<Heard> heardAtTheBottomOf(int links) {
         Reading reading = new Reading(recordChainOf(links));
         Core.Read root = reading.place("v", declared("R" + links));
         Denotations at = reading.entering(Denotations.none(), root);
-        List<Heard> heard = onASmallStack(() -> reading.walked(root, at));
-        return depthOf(heard.getFirst().guarantee().clause());
+        return onASmallStack(() -> reading.walked(root, at));
+    }
+
+    /** The long chain, compiled and walked once for every question asked of it. */
+    private static final class ALongChain {
+
+        static final List<Heard> HEARD = heardAtTheBottomOf(LINKS);
     }
 
     /** How many nodes the longest way down {@code e} has, counted on a stack of its own. */

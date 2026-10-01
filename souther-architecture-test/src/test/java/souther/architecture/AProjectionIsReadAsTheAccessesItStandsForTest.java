@@ -90,11 +90,13 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
 
     private static final Map<String, Row> WALKS = walks();
 
+    /** Every walk the compiled classes hold, read once for the three questions below. */
+    private static final Map<String, Set<String>> FOUND = walkers(PUBLISHED.all());
+
     @Test
     void everyWalkOverATreeSaysHowItReadsAProjection() {
-        Map<String, Set<String>> found = walkers(PUBLISHED.all());
-        assertFalse(found.isEmpty(), "no walk over a tree was found, so the rule is asked of nothing");
-        assertEquals(new TreeSet<>(WALKS.keySet()), new TreeSet<>(found.keySet()),
+        assertFalse(FOUND.isEmpty(), "no walk over a tree was found, so the rule is asked of nothing");
+        assertEquals(new TreeSet<>(WALKS.keySet()), new TreeSet<>(FOUND.keySet()),
                 "a method going down a Core tree that does not say how it reads a FieldProjection."
                         + " Say which it is in WALKS: a question about structure, a question asked"
                         + " of every subexpression, the rule for a field access, a question about"
@@ -103,11 +105,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
 
     @Test
     void aWalkThatAsksEachNodeAsksEverySubexpressionStandingThere() {
-        Map<String, Set<String>> found = walkers(PUBLISHED.all());
         Set<String> unasked = new TreeSet<>();
         WALKS.forEach((method, row) -> {
             if (row.reading() == Reading.EACH_SUBEXPRESSION
-                    && !found.getOrDefault(method, Set.of()).contains(SUBEXPRESSIONS_AT)) {
+                    && !FOUND.getOrDefault(method, Set.of()).contains(SUBEXPRESSIONS_AT)) {
                 unasked.add(method);
             }
         });
@@ -118,11 +119,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
 
     @Test
     void theRuleForAFieldAccessReadsAProjectionToo() {
-        Map<String, Set<String>> found = walkers(PUBLISHED.all());
         Set<String> unread = new TreeSet<>();
         WALKS.forEach((method, row) -> {
             if (row.reading() == Reading.NAMES
-                    && !found.getOrDefault(method, Set.of()).contains(PROJECTION)) {
+                    && !FOUND.getOrDefault(method, Set.of()).contains(PROJECTION)) {
                 unread.add(method);
             }
         });

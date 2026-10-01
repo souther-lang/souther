@@ -2626,19 +2626,26 @@ final class Terms {
                             ? interned.on(subjectKey(fa.target(), at), List.of(fa.field()))
                             : subjectKey(fa.target(), at);
             // The rule above taken a name at a time, along the names rather than down the stack.
-            case Core.FieldProjection p -> {
-                Term key = subjectKey(p.base(), at);
-                Type from = p.base().type();
-                for (Core.FieldProjection.Step step : p.steps().inOrder()) {
-                    if (Location.isStep(from, step.field(), newtypes())) {
-                        key = interned.on(key, List.of(step.field()));
-                    }
-                    from = step.type();
-                }
-                yield key;
-            }
+            // The steps are read off together: a term read on by one name and then another is the
+            // term read on by both, and building each one between is a term per name.
+            case Core.FieldProjection p ->
+                    interned.on(subjectKey(p.base(), at), stepsOf(p));
             default -> interned.evaluated(evaluationIdOf(e));
         };
+    }
+
+    /** The names of {@code p} that are steps of a position, the first one first: a newtype's own
+     *  {@code value} is the value under the name and no step ({@link Location#isStep}). */
+    private List<String> stepsOf(Core.FieldProjection p) {
+        List<String> out = new ArrayList<>();
+        Type from = p.base().type();
+        for (Core.FieldProjection.Step step : p.steps().inOrder()) {
+            if (Location.isStep(from, step.field(), newtypes())) {
+                out.add(step.field());
+            }
+            from = step.type();
+        }
+        return out;
     }
 
     /**
@@ -2664,18 +2671,8 @@ final class Terms {
                 yield base == null ? null : interned.on(base, List.of(fa.field()));
             }
             case Core.FieldProjection p -> {
-                Term key = keyOfNowhere(p.base(), at);
-                Type from = p.base().type();
-                for (Core.FieldProjection.Step step : p.steps().inOrder()) {
-                    if (key == null) {
-                        break;
-                    }
-                    if (Location.isStep(from, step.field(), newtypes())) {
-                        key = interned.on(key, List.of(step.field()));
-                    }
-                    from = step.type();
-                }
-                yield key;
+                Term base = keyOfNowhere(p.base(), at);
+                yield base == null ? null : interned.on(base, stepsOf(p));
             }
             default -> null;
         };
