@@ -23,7 +23,7 @@ public final class OnItsOwnStack {
 
     /** Longer than any of these tests takes on a loaded machine, and short enough that one that
      *  never comes back is reported the same run. */
-    public static final Duration WAIT = Duration.ofSeconds(120);
+    public static final Duration WAIT = Duration.ofMinutes(2);
 
     private OnItsOwnStack() {}
 
