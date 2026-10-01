@@ -14,9 +14,12 @@ import net.unit8.notation199x.pattern.StringPattern;
  * answer.
  *
  * <p>The constant is a {@code Predicate} and not the type that runs it, so a generated class names
- * this class and the JDK, and nothing of the library the machine is run by. An image says which
- * format it is written in, and the library reads every format a release of it has written, so the
- * class runs against whichever release the program resolves.
+ * this class and the JDK, and nothing of the library the machine is run by. What that leaves to the
+ * library is the image, and an image says which format it is written in. A release of the library
+ * reads every format an earlier release wrote, and refuses a format it does not read, saying which
+ * it was given. So a class runs against the release it was compiled with or a later one, and
+ * against an earlier one that does not read its image it is refused where the constant is loaded;
+ * it is never run as some other machine.
  */
 public final class Patterns {
 

@@ -20,12 +20,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The bootstrap a generated class loads its pattern through reads the image in the format the image
  * names, and refuses one in a format it does not read.
  *
- * <p>A class is compiled against one release of the text rules and runs against whichever the
- * program resolves, so what keeps a class from being run as some other machine is that the image
- * says its format and the reader holds it to that. What is asked here is that the run time's
- * bootstrap goes through that reader rather than around it: an image the compiler writes is read,
- * and the same image with its format taken off, or named as another, is refused where it is
- * loaded.
+ * <p>A class is compiled against one release of the text rules and may be run against another, so
+ * what keeps it from being run as some other machine is that the image says its format and the
+ * reader holds it to that: a release reads the formats earlier ones wrote, and refuses one it does
+ * not read. What is asked here is that the run time's bootstrap goes through that reader rather
+ * than around it: an image the compiler writes is read, and the same image with its format taken
+ * off, or named as another, is refused where it is loaded.
  */
 class APatternConstantIsReadInTheFormatItsImageNamesTest {
 

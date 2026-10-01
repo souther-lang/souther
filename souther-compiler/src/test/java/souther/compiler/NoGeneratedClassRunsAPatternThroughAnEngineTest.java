@@ -50,8 +50,8 @@ class NoGeneratedClassRunsAPatternThroughAnEngineTest {
 
     /**
      * Nor the library the machine is run by. A class loads its machine as a {@code Predicate} the
-     * run time makes, so what it links against is the run time and the JDK, and a class compiled
-     * against one release of the text rules runs against whichever the program resolves.
+     * run time makes, so what it links against is the run time and the JDK. What it still takes
+     * from the library is the image's format, which is {@code souther.runtime.Patterns}' to say.
      */
     @Test
     void noClassNamesTheLibraryThatRunsTheMachine() {
