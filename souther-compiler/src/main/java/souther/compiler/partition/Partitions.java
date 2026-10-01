@@ -1855,9 +1855,7 @@ public final class Partitions {
      */
     static DeclaredBounds.CountRange heldRange(Type type, RuleReadingContext reading,
                                                FieldDomains.Held held) {
-        return DeclaredBounds.countsHeld(TypeView.of(type, reading.source().inners(), reading.source().symbols(),
-                        reading.source().published()), reading,
-                held);
+        return DeclaredBounds.countsHeld(type, reading, held);
     }
 
     /**
