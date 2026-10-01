@@ -94,69 +94,87 @@ class CompileNewtypeTest {
                 "the newtype reads and writes the inner object's representation, not `{value: ...}`");
     }
 
-    /** A chain of two newtypes over an object, and an object holding the outer one as a field. */
-    private static final String CHAIN_OVER_AN_OBJECT = """
+    /**
+     * Newtypes over each kind of type whose decoder is handed a {@code Map} — a chain of two over an
+     * object, and one over a discriminated sum — and an object holding the outer ones as fields.
+     */
+    private static final String OVER_WHAT_IS_HANDED_A_MAP = """
             module demo
             data Inner = { a: Int, b: Int }
             data Wrap = Inner
             data Rewrap = Wrap
-            data Holder = { w: Rewrap }
+            data Circle = { r: Int }
+            data Square = { side: Int }
+            data Shape = Circle | Square
+            data Shaped = Shape
+            data Holder = { w: Rewrap, s: Shaped }
             """;
+
+    private BytesClassLoader overWhatIsHandedAMap() {
+        return new BytesClassLoader(Compiler.compile(OVER_WHAT_IS_HANDED_A_MAP),
+                getClass().getClassLoader());
+    }
 
     private static Type inputOfTheDecoder(ClassLoader loader, String className) throws Exception {
         Method factory = loader.loadClass(className).getMethod("decoder");
-        return ((ParameterizedType) factory.getGenericReturnType()).getActualTypeArguments()[0];
+        Type in = ((ParameterizedType) factory.getGenericReturnType()).getActualTypeArguments()[0];
+        return in instanceof ParameterizedType p ? p.getRawType() : in;
+    }
+
+    private static List<String> issuesOf(Result<?> r) {
+        return ((Err<?>) r).issues().asList().stream()
+                .map(i -> i.code() + " at " + i.path().toJsonPointer())
+                .sorted()
+                .toList();
     }
 
     @Test
-    void anObjectsDecoderIsHandedAMap() throws Exception {
-        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(CHAIN_OVER_AN_OBJECT),
-                getClass().getClassLoader());
+    void anObjectsAndADiscriminatedSumsDecodersAreHandedAMap() throws Exception {
+        BytesClassLoader loader = overWhatIsHandedAMap();
 
-        Type in = inputOfTheDecoder(loader, "demo.Inner");
-        assertEquals(Map.class, in instanceof ParameterizedType p ? p.getRawType() : in);
+        assertEquals(List.of(Map.class, Map.class),
+                List.of(inputOfTheDecoder(loader, "demo.Inner"), inputOfTheDecoder(loader, "demo.Shape")));
     }
 
     @Test
     void aNewtypesDecoderIsHandedWhateverArrivesWhateverItWraps() throws Exception {
-        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(CHAIN_OVER_AN_OBJECT),
-                getClass().getClassLoader());
+        BytesClassLoader loader = overWhatIsHandedAMap();
 
-        assertEquals(List.of(Object.class, Object.class),
-                List.of(inputOfTheDecoder(loader, "demo.Wrap"), inputOfTheDecoder(loader, "demo.Rewrap")));
+        assertEquals(List.of(Object.class, Object.class, Object.class),
+                List.of(inputOfTheDecoder(loader, "demo.Wrap"), inputOfTheDecoder(loader, "demo.Rewrap"),
+                        inputOfTheDecoder(loader, "demo.Shaped")));
     }
 
     @Test
-    void aChainOfNewtypesOverAnObjectReadsTheObject() throws Exception {
-        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(CHAIN_OVER_AN_OBJECT),
-                getClass().getClassLoader());
+    void newtypesOverAnObjectAndADiscriminatedSumReadWhatTheyWrap() throws Exception {
+        BytesClassLoader loader = overWhatIsHandedAMap();
+        Map<String, Object> written = Map.of(
+                "w", Map.of("a", 1L, "b", 2L),
+                "s", Map.of("type", "Circle", "r", 3L));
 
-        Object v = Codecs.decoded(loader, "demo.Holder", Map.of("w", Map.of("a", 1L, "b", 2L)));
-        assertEquals(Map.of("w", Map.of("a", 1L, "b", 2L)), Codecs.encode(loader, "demo.Holder", v));
+        Object v = Codecs.decoded(loader, "demo.Holder", written);
+        assertEquals(written, Codecs.encode(loader, "demo.Holder", v));
     }
 
     @Test
     void aValueThatIsNoObjectIsRefusedUnderTheKeyItStandsAt() throws Exception {
-        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(CHAIN_OVER_AN_OBJECT),
-                getClass().getClassLoader());
+        Result<?> r = Codecs.decode(overWhatIsHandedAMap(), "demo.Holder", Map.of("w", 5L, "s", 6L));
 
-        Result<?> r = Codecs.decode(loader, "demo.Holder", Map.of("w", 5L));
-        List<String> issues = ((Err<?>) r).issues().asList().stream()
-                .map(i -> i.code() + " at " + i.path().toJsonPointer())
-                .toList();
-        assertEquals(List.of("type_mismatch at /w"), issues);
+        assertEquals(List.of("type_mismatch at /s", "type_mismatch at /w"), issuesOf(r));
     }
 
     @Test
-    void aValueThatIsNoObjectIsRefusedByTheNewtypeHandedIt() throws Exception {
-        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(CHAIN_OVER_AN_OBJECT),
-                getClass().getClassLoader());
+    void aValueThatIsNoObjectIsRefusedByTheNewtypeOverAnObjectHandedIt() throws Exception {
+        Result<?> r = Codecs.decode(overWhatIsHandedAMap(), "demo.Rewrap", 5L);
 
-        Result<?> r = Codecs.decode(loader, "demo.Rewrap", 5L);
-        List<String> issues = ((Err<?>) r).issues().asList().stream()
-                .map(i -> i.code() + " at " + i.path().toJsonPointer())
-                .toList();
-        assertEquals(List.of("type_mismatch at "), issues);
+        assertEquals(List.of("type_mismatch at "), issuesOf(r));
+    }
+
+    @Test
+    void aValueThatIsNoObjectIsRefusedByTheNewtypeOverASumHandedIt() throws Exception {
+        Result<?> r = Codecs.decode(overWhatIsHandedAMap(), "demo.Shaped", 5L);
+
+        assertEquals(List.of("type_mismatch at "), issuesOf(r));
     }
 
     @Test
