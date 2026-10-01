@@ -27,10 +27,8 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.ValueName;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -73,46 +71,10 @@ public final class Linkages {
     }
 
     /**
-     * Every module whose declarations a module may be built against: every module it names —
-     * imported, or written as a qualifier, which needs no import — what the modules it reads off the
-     * path carry beside their text as reaching, and so on from each.
-     *
-     * <p>A behavior a composition builds may be declared in a module the composition's own module
-     * never imports — the stage's module does — so what a projection or an emission reads is bounded
-     * by this and not by the import lines of the one module. The language's own modules are not
-     * here: what they declare is the same on every side of every artifact.
-     */
-    public record InSight(String name) implements Key<List<String>> {
-        @Override
-        public String module() {
-            return name;
-        }
-
-        @Override
-        public Answer<List<String>> compute(Db db) {
-            Set<String> seen = new LinkedHashSet<>();
-            Deque<String> pending = new ArrayDeque<>();
-            pending.add(name);
-            while (!pending.isEmpty()) {
-                String module = pending.removeFirst();
-                if (Reserved.isNamespace(module) || !seen.add(module)) {
-                    continue;
-                }
-                List<String> named = db.ask(new Named(module)).value();
-                if (named != null) {
-                    pending.addAll(named);
-                }
-            }
-            return Answer.of(List.copyOf(seen));
-        }
-    }
-
-    /**
      * The modules one module names: what it imports or writes as a qualifier, and, for a module
      * off the path, what it carries beside its text as reaching.
      *
-     * <p>Its own question so a module's text is walked for these once, whichever module's
-     * {@link InSight} it is on the way to.
+     * <p>Its own question so a module's text is walked for these once, whichever module asks.
      */
     public record Named(String name) implements Key<List<String>> {
         @Override
@@ -137,18 +99,25 @@ public final class Linkages {
      * offer here — which a module that did not come out, or one off the path held to another version
      * of what it was built against, does not.
      *
+     * <p>The modules it may be built against are the ones it names ({@link Named}) and, from each, the
+     * ones that one may be built against. A behavior a composition builds may be declared in a module
+     * the composition's own module never imports — the stage's module does — so this is not bounded
+     * by the import lines of the one module. The language's own modules are not among them: what they
+     * declare is the same on every side of every artifact.
+     *
+     * <p>Only the modules it names are asked. A module offers only once every module it may be built
+     * against does ({@link Provided}), so a named module that offers has answered this for everything
+     * beyond it; and a module this compilation does not have names nothing. Asking each module's
+     * whole reach instead would ask, down a chain of modules, every link of the chain once per link.
+     *
      * <p>Asked of whether each offers anything and not of what it offers, so a module is told when
      * one of those stops or starts coming out and not whenever one of them declares something.
      * What each declaration offers is asked one declaration at a time where it is read
      * ({@link #reading}).
      */
     static boolean everyModuleInSightOffers(Db db, String name) {
-        List<String> inSight = db.ask(new InSight(name)).value();
-        if (inSight == null) {
-            return false;
-        }
-        for (String module : inSight) {
-            if (!module.equals(name) && held(db, module)
+        for (String module : db.ask(new Named(name)).value()) {
+            if (!module.equals(name) && !Reserved.isNamespace(module) && held(db, module)
                     && !db.ask(new Offers(module)).present()) {
                 return false;
             }
