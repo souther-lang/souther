@@ -237,10 +237,10 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
     }
 
     private static Optional<String> aWayToWalk(String owner, String name) {
-        boolean walks = TYPE_OPS.equals(owner)
-                && (name.equals("newtypeSpine") || name.equals("newtypeChain"))
-                || TYPE_VIEW.equals(owner) && name.equals("of");
-        return walks ? Optional.of(owner + "#" + name) : Optional.empty();
+        boolean theWalk = TYPE_OPS.equals(owner)
+                && (name.equals("newtypeSpine") || name.equals("newtypeChain"));
+        boolean aPositionReadWhole = TYPE_VIEW.equals(owner) && name.equals("of");
+        return theWalk || aPositionReadWhole ? Optional.of(owner + "#" + name) : Optional.empty();
     }
 
     private static List<Instruction> instructionsOf(MethodModel method) {
