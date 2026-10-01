@@ -37,6 +37,7 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.check.Cardinality;
 import souther.compiler.check.CardinalityPremise;
 import souther.compiler.check.TypeCardinality;
+import souther.compiler.check.Unwrapping;
 import souther.compiler.check.UninhabitableTypes;
 import souther.compiler.check.ClauseHelpers;
 import souther.compiler.check.ClausesForDischarge;
@@ -65,6 +66,7 @@ import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -994,10 +996,10 @@ public final class Shapes {
             // Read off the module's, because which declarations are one answer is a fact about the
             // graph and not about any declaration in it: worked out here, every declaration of a
             // module would walk everything it reaches to be told what one walk tells all of them.
-            Answer<Map<TypeSymbol, List<TypeSymbol>>> module =
+            Answer<TypeCardinality.Components> module =
                     db.ask(new CardinalityComponentsOf(named.module()));
-            if (module.present() && module.value().containsKey(self)) {
-                return Answer.of(module.value().get(self));
+            if (module.present() && module.value().of(self) != null) {
+                return Answer.of(module.value().of(self));
             }
             // And worked out here for a declaration no module of this compilation indexes, which a
             // count reaches where it walks into a module nobody is editing.
@@ -1017,16 +1019,19 @@ public final class Shapes {
      * shapes, so an author changing what a rule allows leaves it where it was, and a declaration
      * written beside the others changes it without changing what it says about any of them — which
      * is what keeps the counts built on it where they are.
+     *
+     * <p>In the order the counts are taken in, which is the other half of what it answers: every
+     * group after the groups it reads.
      */
     public record CardinalityComponentsOf(String name)
-            implements Key<Map<TypeSymbol, List<TypeSymbol>>> {
+            implements Key<TypeCardinality.Components> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<TypeSymbol, List<TypeSymbol>>> compute(Db db) {
+        public Answer<TypeCardinality.Components> compute(Db db) {
             Answer<List<TypeSymbol.AtModule>> written = db.ask(new Front.DeclaredTypes(name));
             Answer<RuleReadingSource> reading = ruleReading(db, name);
             if (!written.present() || !reading.present()) {
@@ -1035,8 +1040,50 @@ public final class Shapes {
             try {
                 return Answer.of(TypeCardinality.componentsOf(written.value(), reading.value()));
             } catch (CompileException e) {
-                return Answer.of(Map.of(), Report.of(e));
+                return Answer.of(TypeCardinality.componentsOf(List.of(), reading.value()),
+                        Report.of(e));
             }
+        }
+    }
+
+    /**
+     * How many values every declaration this module writes, and everything they reach, has at most.
+     *
+     * <p>The one place a count of a group is asked for, and asked in the order the groups read each
+     * other. A count of a group is handed what the groups it reads came to by asking for them, and
+     * asked here every one of those has been answered already — so the asking is a lookup, however
+     * long a chain of declarations each reading the next one is. Asked anywhere else, the first
+     * count would wait on the one it reads, that one on the next, and a module would compile or not
+     * by the stack of the thread compiling it.
+     *
+     * <p>What it answers is every count, and the counts are still kept one group at a time: an edit
+     * to one declaration takes its group's count again and the counts that read it, and every other
+     * group's answer stands.
+     */
+    public record CardinalitiesOf(String name) implements Key<Map<TypeSymbol, Cardinality>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<TypeSymbol, Cardinality>> compute(Db db) {
+            Answer<TypeCardinality.Components> components =
+                    db.ask(new CardinalityComponentsOf(name));
+            if (!components.present()) {
+                return Answer.absent();
+            }
+            Map<TypeSymbol, Cardinality> every = new HashMap<>();
+            for (List<TypeSymbol> component : components.value().inOrder()) {
+                if (component.get(0) instanceof TypeSymbol.AtModule first) {
+                    Answer<TypeCardinality.Counted> counted =
+                            db.ask(new CardinalityOf(first.key()));
+                    if (counted.present()) {
+                        every.putAll(counted.value().counts());
+                    }
+                }
+            }
+            return Answer.of(Map.copyOf(every));
         }
     }
 
@@ -1053,15 +1100,19 @@ public final class Shapes {
      * <p>Under the declarations' own module. What a count of a component comes to is settled by the
      * component's rules and by what it reads, and asking it under the scope of whoever reached it
      * would make two readers of one component hold two answers.
+     *
+     * <p>Asked by {@link CardinalitiesOf} and by another count, and by nothing else. Whatever this
+     * reads outside its own component comes before it in the order that one asks in, so the count
+     * asking another one here is handed an answer already made.
      */
-    public record CardinalityOf(TypeKey named) implements Key<Map<TypeSymbol, Cardinality>> {
+    record CardinalityOf(TypeKey named) implements Key<TypeCardinality.Counted> {
         @Override
         public String module() {
             return named.module();
         }
 
         @Override
-        public Answer<Map<TypeSymbol, Cardinality>> compute(Db db) {
+        public Answer<TypeCardinality.Counted> compute(Db db) {
             Answer<List<TypeSymbol>> component = db.ask(new CardinalityComponentOf(named));
             Answer<RuleReadingSource> reading = ruleReading(db, named.module());
             Answer<souther.compiler.check.ReadingPolicy> policy = db.ask(new Front.Reading());
@@ -1070,7 +1121,7 @@ public final class Shapes {
             }
             List<TypeSymbol> members = component.value();
             if (members.isEmpty()) {
-                return Answer.of(Map.of());
+                return Answer.of(new TypeCardinality.Counted(Map.of(), Map.of()));
             }
             // Asked where the component is named and not wherever a member of it was reached, so
             // that the declarations are risen through once however many of them a reader asks about.
@@ -1082,7 +1133,7 @@ public final class Shapes {
                 RuleReadingContext world =
                         RuleReadingContext.of(reading.value(), policy.value(), db.readings());
                 return Answer.of(TypeCardinality.ofComponent(members, world,
-                        cardinalityPremises(db, world), name -> countOf(db, name)));
+                        cardinalityPremises(db, world), new CountedElsewhere(db)));
             } catch (CompileException e) {
                 return Answer.absent(Report.of(e));
             }
@@ -1091,12 +1142,33 @@ public final class Shapes {
 
     /** What a count of one component is handed about a declaration outside it: the answer for the
      *  component that one is a member of, which is a reading of its own. */
-    private static Cardinality countOf(Db db, TypeSymbol name) {
-        if (!(name instanceof TypeSymbol.AtModule at)) {
-            return null;
+    private static final class CountedElsewhere implements TypeCardinality.Counts {
+
+        private final Db db;
+
+        CountedElsewhere(Db db) {
+            this.db = db;
         }
-        Answer<Map<TypeSymbol, Cardinality>> counted = db.ask(new CardinalityOf(at.key()));
-        return counted.present() ? counted.value().get(name) : null;
+
+        @Override
+        public Cardinality of(TypeSymbol name) {
+            TypeCardinality.Counted counted = countedWith(name);
+            return counted == null ? null : counted.counts().get(name);
+        }
+
+        @Override
+        public Unwrapping unwrappingOf(TypeSymbol name) {
+            TypeCardinality.Counted counted = countedWith(name);
+            return counted == null ? null : counted.unwrapping().get(name);
+        }
+
+        private TypeCardinality.Counted countedWith(TypeSymbol name) {
+            if (!(name instanceof TypeSymbol.AtModule at)) {
+                return null;
+            }
+            Answer<TypeCardinality.Counted> counted = db.ask(new CardinalityOf(at.key()));
+            return counted.present() ? counted.value() : null;
+        }
     }
 
     /**
@@ -1191,6 +1263,8 @@ public final class Shapes {
                 return Answer.of(new UninhabitableTypes.WithNoValue.NotCounted());
             }
             List<TypeSymbol.AtModule> declarations = written.value();
+            Answer<Map<TypeSymbol, Cardinality>> every = db.ask(new CardinalitiesOf(name));
+            Map<TypeSymbol, Cardinality> counts = every.present() ? every.value() : Map.of();
             try {
                 // The counts are read from the answer each component has and not worked out here.
                 // What is left to do is what a count is beside the counts: which declarations had to
@@ -1199,8 +1273,7 @@ public final class Shapes {
                 RuleReadingContext world =
                         RuleReadingContext.of(reading.value(), policy.value(), db.readings());
                 TypeCardinality.Cardinalities counted = TypeCardinality.assembled(
-                        declarations, world, cardinalityPremises(db, world),
-                        name -> countOf(db, name));
+                        declarations, world, cardinalityPremises(db, world), counts::get);
                 // Not counted where a rule the count read could not be read at all. What makes a
                 // type have no value is what its rules leave, so a count short of one of them may
                 // have missed the rule that empties a type — and would report it as inhabited.

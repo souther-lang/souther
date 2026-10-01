@@ -38,6 +38,7 @@ final class Answers {
     private static final Answer AT_BOTTOM = new Answer.AtBottom();
 
     private final Map<TypeSymbol, Answer> by;
+    private final Map<TypeSymbol, Unwrapping> unwrapped = new HashMap<>();
     private final TypeCardinality.Counts outside;
 
     private Answers(Map<TypeSymbol, Answer> by, TypeCardinality.Counts outside) {
@@ -92,6 +93,24 @@ final class Answers {
         };
     }
 
+    /** What opening {@code name} finds beneath it, once {@code name} is settled and nothing that
+     *  opens it is still rising. */
+    void unwrapsTo(TypeSymbol name, Unwrapping unwrapping) {
+        unwrapped.put(name, unwrapping);
+    }
+
+    /**
+     * What opening {@code name} finds beneath it, or null where nobody has worked that out and the
+     * reading has to open it.
+     *
+     * <p>Asked of whoever holds the name's count. A name answered here is one of the names still
+     * being answered, or one answered beside them, and is known here or not at all; a name nobody
+     * here answers for is asked of whoever answered it.
+     */
+    Unwrapping unwrappingOf(TypeSymbol name) {
+        return by.containsKey(name) ? unwrapped.get(name) : outside.unwrappingOf(name);
+    }
+
     /** A count as a reading that reached it by name takes it: nothing known of a name nobody
      *  answers for, and a proof that stops at the name where it has none. */
     private static Cardinality atTheName(TypeSymbol name, Cardinality count) {
@@ -118,5 +137,10 @@ final class Answers {
             counts.put(name, settled.count());
         });
         return counts;
+    }
+
+    /** What opening each name answered here finds, where that was worked out. */
+    Map<TypeSymbol, Unwrapping> everyUnwrapping() {
+        return Map.copyOf(unwrapped);
     }
 }

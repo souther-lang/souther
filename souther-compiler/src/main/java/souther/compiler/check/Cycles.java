@@ -12,7 +12,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Which nodes of a directed graph lie on a cycle, and a way round one.
+ * Which nodes of a directed graph lie on a cycle, a way round one, and the strongly connected
+ * groups in the order a pass over them reads them.
  *
  * <p>The graphs handed here are the ones a module's declarations make, and a module chains its
  * declarations as long as it likes. Every walk holds its own stack for that reason: one on the call
@@ -32,14 +33,40 @@ final class Cycles {
      * itself among them: a strongly connected group of more than one, or one node with an edge to
      * itself. A node on no cycle is not a key.
      *
-     * <p>Every member of one group maps to the same set. Tarjan's, written with its own stack.
+     * <p>Every member of one group maps to the same set.
      */
     static <N> Map<N, Set<N>> groups(Map<N, ? extends Collection<N>> edges) {
+        Map<N, Set<N>> found = new LinkedHashMap<>();
+        for (List<N> each : components(edges)) {
+            // One node is a group of its own unless it names itself: a group of one has no way
+            // round except an edge back to where it started.
+            if (each.size() > 1 || edgesOf(edges, each.get(0)).contains(each.get(0))) {
+                Set<N> fixed = Collections.unmodifiableSet(new LinkedHashSet<>(each));
+                for (N member : each) {
+                    found.put(member, fixed);
+                }
+            }
+        }
+        return found;
+    }
+
+    /**
+     * Every strongly connected group of {@code edges}, cycles or not, each one after every group it
+     * reaches.
+     *
+     * <p>That order is the one a pass answering a node from what it reads needs: walked front to
+     * back, everything a group reads has been answered before the group is. Which group comes first
+     * among those that reach nothing of each other, and the order of the members inside one, are
+     * the order the walk met them in — the order of the keys, and of each node's edges.
+     *
+     * <p>Tarjan's, written with its own stack.
+     */
+    static <N> List<List<N>> components(Map<N, ? extends Collection<N>> edges) {
         Map<N, Integer> index = new LinkedHashMap<>();
         Map<N, Integer> low = new LinkedHashMap<>();
         Set<N> open = new LinkedHashSet<>();       // on the component stack
         List<N> component = new ArrayList<>();
-        Map<N, Set<N>> found = new LinkedHashMap<>();
+        List<List<N>> found = new ArrayList<>();
         int next = 0;
         for (N root : edges.keySet()) {
             if (index.containsKey(root)) {
@@ -73,21 +100,14 @@ final class Cycles {
                     low.put(under, Math.min(low.get(under), low.get(at)));
                 }
                 if (low.get(at).equals(index.get(at))) {
-                    Set<N> group = new LinkedHashSet<>();
+                    List<N> group = new ArrayList<>();
                     N popped;
                     do {
                         popped = component.removeLast();
                         open.remove(popped);
                         group.add(popped);
                     } while (!popped.equals(at));
-                    // One node is a group of its own unless it names itself: a group of one has no
-                    // way round except an edge back to where it started.
-                    if (group.size() > 1 || edgesOf(edges, at).contains(at)) {
-                        Set<N> fixed = Collections.unmodifiableSet(group);
-                        for (N member : group) {
-                            found.put(member, fixed);
-                        }
-                    }
+                    found.add(List.copyOf(group));
                 }
             }
         }
