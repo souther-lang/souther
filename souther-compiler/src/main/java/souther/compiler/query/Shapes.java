@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.Boundary;
@@ -14,6 +15,7 @@ import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.DeclarationLocations;
 import souther.compiler.check.DeclarationMeaning;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.DeclaredNames;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.Normalized;
 import souther.compiler.check.ProductSpreads;
@@ -71,6 +73,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * What each declaration becomes before anything is checked against it, one achievement to a rung:
@@ -368,10 +371,163 @@ public final class Shapes {
      * refuses to publish half of and what a test of this holds it to.
      */
     public static NewtypeInners newtypeInners(Db db) {
-        return declaration -> {
-            Answer<Type> inner = db.ask(new NewtypeInnerOf(declaration));
-            return inner.present() ? inner.value() : null;
+        return new NewtypeInners() {
+            @Override
+            public Type of(TypeKey declaration) {
+                Answer<Type> inner = db.ask(new NewtypeInnerOf(declaration));
+                return inner.present() ? inner.value() : null;
+            }
+
+            /**
+             * The compilation's answer for the name {@code type} wears, where it wears one. A name
+             * that wraps nothing is its own terminal, and is answered without asking what its
+             * module's chains end in.
+             */
+            @Override
+            public Type terminal(Type type) {
+                if (!(type instanceof Type.Ref ref && ref.name() instanceof TypeSymbol.AtModule worn)
+                        || of(worn.key()) == null) {
+                    return type;
+                }
+                Answer<Type> terminal = db.ask(new NewtypeTerminalOf(worn.key()));
+                // A name that wraps something has an answer whenever its module has declarations,
+                // and the module has them because the name was found wrapping something there. The
+                // walk is the same answer reached one name at a time.
+                return terminal.present() ? terminal.value() : NewtypeInners.super.terminal(type);
+            }
         };
+    }
+
+    /**
+     * What every newtype a module declares is left as once the names are off: the terminal of the
+     * spine each one starts.
+     *
+     * <p><b>One answer for the module, and one step out of it.</b> The chains inside a module are
+     * followed here, each name once, so a module of {@code n} names stacked on each other costs
+     * {@code n} steps rather than one walk per name. Where a chain leaves the module this asks
+     * {@link NewtypeTerminalOf} of the name it reaches and stops: what lies past that name is the
+     * other module's answer, and a module asks only the modules it names directly, as
+     * {@link Linkages.Provided} does.
+     *
+     * <p>Answered as the walk answers it, a cycle included. The walk stops on the first name it
+     * has already worn, so a name on a cycle is its own terminal and a name before one ends at the
+     * name it enters the cycle by.
+     */
+    public record NewtypeTerminals(String name) implements Key<Map<TypeKey, Type>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<TypeKey, Type>> compute(Db db) {
+            Answer<DeclaredNames.Index<Ast.Def>> declared = db.ask(new Names.Declarations(name));
+            if (!declared.present()) {
+                return Answer.absent();
+            }
+            List<TypeKey> newtypes = new ArrayList<>();
+            declared.value().declarations().forEach((named, def) -> {
+                if (def instanceof Ast.Data data && data.newtype()) {
+                    newtypes.add(new TypeKey(name, named));
+                }
+            });
+            return Answer.of(Ordered.map(within(name, newtypes, newtypeInners(db), elsewhere -> {
+                Answer<Type> terminal = db.ask(new NewtypeTerminalOf(elsewhere));
+                return terminal.present() ? terminal.value() : null;
+            })));
+        }
+
+        /**
+         * The terminal of every name in {@code newtypes} that wraps something, reading what each
+         * name of {@code module} wraps once.
+         *
+         * <p>{@code elsewhere} answers for a name of another module the way this answers for one of
+         * this, or null where it wraps nothing.
+         */
+        static Map<TypeKey, Type> within(String module, List<TypeKey> newtypes, NewtypeInners inners,
+                                         Function<TypeKey, Type> elsewhere) {
+            Map<TypeKey, Type> terminals = new LinkedHashMap<>();
+            for (TypeKey start : newtypes) {
+                if (terminals.containsKey(start)) {
+                    continue;
+                }
+                // The names this walk has taken off and not yet answered for, each with what it
+                // wraps, and where on the walk each was taken off.
+                List<TypeKey> taken = new ArrayList<>();
+                List<Type> wraps = new ArrayList<>();
+                Map<TypeKey, Integer> takenAt = new HashMap<>();
+                TypeKey at = start;
+                // The name at `at` as the name before it wrapped it; nothing before the start.
+                Type reached = null;
+                Type terminal;
+                while (true) {
+                    Type answered = terminals.get(at);
+                    if (answered != null) {
+                        terminal = answered;
+                        break;
+                    }
+                    Integer worn = takenAt.get(at);
+                    if (worn != null) {
+                        // Back round to a name this walk wore. Each name on the cycle is its own
+                        // terminal, written as the name before it on the cycle wraps it; the names
+                        // before the cycle end where they entered it.
+                        int last = taken.size() - 1;
+                        for (int i = worn; i <= last; i++) {
+                            terminals.put(taken.get(i), wraps.get(i == worn ? last : i - 1));
+                        }
+                        taken.subList(worn, taken.size()).clear();
+                        terminal = reached;
+                        break;
+                    }
+                    Type inner = inners.of(at);
+                    if (inner == null) {
+                        terminal = reached;
+                        break;
+                    }
+                    takenAt.put(at, taken.size());
+                    taken.add(at);
+                    wraps.add(inner);
+                    if (!(inner instanceof Type.Ref ref
+                            && ref.name() instanceof TypeSymbol.AtModule next)) {
+                        terminal = inner;
+                        break;
+                    }
+                    if (!next.key().module().equals(module)) {
+                        Type there = elsewhere.apply(next.key());
+                        terminal = there != null ? there : inner;
+                        break;
+                    }
+                    at = next.key();
+                    reached = inner;
+                }
+                for (TypeKey name : taken) {
+                    terminals.put(name, terminal);
+                }
+            }
+            return terminals;
+        }
+    }
+
+    /**
+     * What one newtype is left as once the names are off, read off its module's
+     * {@link NewtypeTerminals}. A reader depends on this one name's answer, so another chain of the
+     * module moving reaches it only if this one moved too.
+     */
+    public record NewtypeTerminalOf(TypeKey named) implements Key<Type> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<Type> compute(Db db) {
+            Answer<Map<TypeKey, Type>> terminals = db.ask(new NewtypeTerminals(named.module()));
+            if (!terminals.present()) {
+                return Answer.absent();
+            }
+            Type terminal = terminals.value().get(named);
+            return terminal == null ? Answer.absent() : Answer.of(terminal);
+        }
     }
 
     /**

@@ -167,16 +167,21 @@ public record FieldRead(Symbols symbols, PublishedDeclarations published, Declar
      * made, and a position nothing is readable at where a text is being typed.
      */
     private Surface surfaceOf(Type position) {
+        // The outermost name and nothing under it: a name makes its own declaration readable, so
+        // what the names below it wrap does not say what a `.` here may take.
+        TypeOps.Unwrapped outer = TypeOps.outermost(position, inners);
+        if (outer != null) {
+            return new Surface.OfAName(outer.layer().named());
+        }
         TypeView view;
         try {
-            view = TypeView.of(position, inners, symbols, published);
+            view = TypeView.wearingNoName(position, symbols, published);
         } catch (CompileException doesNotRead) {
             if (unreadable == Unreadable.REFUSED) {
                 throw doesNotRead;
             }
             return new Surface.OfNothing();
         }
-        return view.isWrapped() ? new Surface.OfAName(view.wrappers().getFirst())
-                : new Surface.OfAShape(view.shape());
+        return new Surface.OfAShape(view.shape());
     }
 }

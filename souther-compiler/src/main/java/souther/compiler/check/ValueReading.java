@@ -119,14 +119,14 @@ sealed interface ValueReading {
                     Map.of(NewtypeInners.THE_ONE_VALUE, outer.inner()));
         }
         // Where the step found no name, the spine is empty and the step is not asked again.
-        TypeView view = outer == null
-                ? TypeView.wearingNoName(type, symbols, published)
-                : TypeView.of(type, inners, symbols, published);
+        Shape shape = outer == null
+                ? TypeView.wearingNoName(type, symbols, published).shape()
+                : TypeView.shapeOf(type, inners, symbols, published);
         // What a field access may write here is one question with one owner, asked once for every
         // shape. What is left for the switch is which declarations state something of every value
         // here and what stands below that this does not take in.
-        ReadableFields readable = ReadableFields.of(view.shape());
-        return switch (view.shape()) {
+        ReadableFields readable = ReadableFields.of(shape);
+        return switch (shape) {
             case Shape.Product product ->
                     new AtAValue(product.name(), owning(readable.declaredBy(), kinds), readable,
                             List.of());

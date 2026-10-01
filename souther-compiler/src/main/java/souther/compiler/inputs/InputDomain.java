@@ -714,16 +714,16 @@ public final class InputDomain {
      * rather than a fourth quiet absence.
      */
     private static Type under(Type type, TermPath.Step step, RuleReadingSource source) {
-        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.published());
         // Asked of the shape rather than through the proof a position is made with. What is under a
         // type is a question about the type, and a type nothing can be read at answers nothing here
         // rather than being refused as a position this compiler disagrees with itself about.
-        if (!(view.shape() instanceof Shape.ReadablePositionShape shape)) {
+        if (!(TypeView.shapeOf(type, source.inners(), source.symbols(), source.published())
+                instanceof Shape.ReadablePositionShape shape)) {
             return null;
         }
         StructuralInspection under =
                 StructuralInspection.of(shape,
-                        Distinctions.ofType(view, source.symbols(), source.published()));
+                        Distinctions.ofType(shape, source.symbols(), source.published()));
         return switch (step) {
             // A field of a record, or a name a sum's cases all spread. The second is readable on a
             // value of the sum without opening a case, so the model does put something at it, and a
@@ -963,7 +963,7 @@ public final class InputDomain {
         // cases are decides which classes the position has and which branches stand under it, and a
         // second reading of that here would be the two disagreeing about which cases there are.
         List<Case> declared =
-                Distinctions.ofType(input.view(), source.symbols(), source.published());
+                Distinctions.ofType(input.view().shape(), source.symbols(), source.published());
         // Asked of the occurrence and answered before anything under it is opened, never before the
         // occurrence itself is read. What stands here is read whichever time round it is — the
         // classes of a sum, the ends its rules put on it — and what is refused is unfolding the

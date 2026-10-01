@@ -70,6 +70,18 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
     }
 
     /**
+     * What a value of {@code type} is, with every name off: {@link #of}'s {@link #shape}, for a
+     * reader that asks nothing about the names.
+     *
+     * <p>Read off the spine's terminal as {@code inners} answers it, so a reader handed the
+     * compilation's answer does not take the names off one at a time to learn what is under them.
+     */
+    public static Shape shapeOf(Type type, NewtypeInners inners, Symbols symbols,
+                                PublishedDeclarations published) {
+        return shapeOf(inners.terminal(type), symbols, published);
+    }
+
+    /**
      * How {@code type} is read where the step that takes a name off ({@link TypeOps#outermost})
      * found none on it.
      *

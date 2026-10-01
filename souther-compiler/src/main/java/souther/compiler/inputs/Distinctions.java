@@ -45,9 +45,9 @@ public final class Distinctions {
      * <p>Nothing about the rules on the position. What its type declares and what its rules leave
      * it able to hold are two facts, and this is the first of them.
      */
-    public static List<Case> ofType(TypeView view, Symbols symbols,
+    public static List<Case> ofType(Shape shape, Symbols symbols,
                                     PublishedDeclarations published) {
-        return switch (view.shape()) {
+        return switch (shape) {
             // A `Bool` is two values. No other primitive has distinctions to read off its type:
             // what a number's rules leave is a range with edges — everything outside a newtype's
             // invariant is refused at construction (E1903), so there is no class on the other side

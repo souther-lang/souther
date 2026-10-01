@@ -4,6 +4,7 @@ import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
 import souther.compiler.semantics.TakenArguments;
+import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
@@ -213,6 +214,18 @@ public final class DeclaredBounds {
      */
     public static Range of(TypeView view, RuleReadingContext reading, Carrier carrier,
                            ValueName measure) {
+        return of(outermostOf(view), reading, carrier, measure);
+    }
+
+    /** The name a position is written under on the outside, or null where it wears none. */
+    private static TypeSymbol outermostOf(TypeView view) {
+        return view.wrappers().isEmpty() ? null : view.wrappers().getFirst();
+    }
+
+    /** The same, read off the name a position is written under on the outside — null where it
+     *  wears none — which is all of the position this reads. */
+    private static Range of(TypeSymbol worn, RuleReadingContext reading, Carrier carrier,
+                            ValueName measure) {
         if (carrier == null) {
             return null;
         }
@@ -220,8 +233,7 @@ public final class DeclaredBounds {
         // nothing reads. Told apart from the null above, because a caller asking what is left of a
         // number needs a number that is left of it.
         Range everything = new Range(null, null, carrier);
-        if (view.wrappers().isEmpty()
-                || !(view.wrappers().getFirst() instanceof TypeSymbol.AtModule outermost)) {
+        if (!(worn instanceof TypeSymbol.AtModule outermost)) {
             return everything;
         }
         NumberAt.OfWhatNumber kind = measure == null
@@ -340,9 +352,24 @@ public final class DeclaredBounds {
      */
     public static CountRange countsHeld(TypeView view, RuleReadingContext reading,
                                         FieldDomains.Held held) {
+        return countsHeld(view.declared(), outermostOf(view), reading, held);
+    }
+
+    /**
+     * The same, for a caller holding the type and not a reading of the position. The outermost
+     * name is all of the names this reads, so that is the one step taken off the type.
+     */
+    public static CountRange countsHeld(Type type, RuleReadingContext reading,
+                                        FieldDomains.Held held) {
+        TypeOps.Unwrapped outer = TypeOps.outermost(type, reading.source().inners());
+        return countsHeld(type, outer == null ? null : outer.layer().named(), reading, held);
+    }
+
+    private static CountRange countsHeld(Type declared, TypeSymbol worn, RuleReadingContext reading,
+                                         FieldDomains.Held held) {
         ValueName.Stdlib counts =
-                NumericMeasures.takenOf(view.declared(), reading.source().inners());
-        Range sized = counts == null ? null : of(view, reading, Carrier.WHOLE, counts);
+                NumericMeasures.takenOf(declared, reading.source().inners());
+        Range sized = counts == null ? null : of(worn, reading, Carrier.WHOLE, counts);
         Endpoint least = sized == null ? null : sized.min();
         Endpoint most = sized == null ? null : sized.max();
         return new CountRange(

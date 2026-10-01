@@ -148,7 +148,7 @@ class WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest {
     /** The narrowing to {@code leaf}, taken from what the sum's type divides into. */
     private static Refinement caseOf(String leaf) {
         TypeSymbol wanted = TypeSymbols.declared(new TypeKey(module(), leaf));
-        for (Case one : Distinctions.ofType(TypeView.asWritten(typeOf("r"), symbols(), said()),
+        for (Case one : Distinctions.ofType(TypeView.asWritten(typeOf("r"), symbols(), said()).shape(),
                 symbols(), said())) {
             if (one instanceof Case.SumCase found && found.leaf().equals(wanted)) {
                 return Refinement.of(one);
@@ -269,7 +269,7 @@ class WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest {
         Shape.ReadablePositionShape shape = assertInstanceOf(
                 Shape.ReadablePositionShape.class, view.shape(),
                 "the model under test declares a shape a position can have");
-        return StructuralInspection.of(shape, Distinctions.ofType(view, symbols(), said()));
+        return StructuralInspection.of(shape, Distinctions.ofType(view.shape(), symbols(), said()));
     }
 
     /** Where a step into a written value lands, for each name in hand. */

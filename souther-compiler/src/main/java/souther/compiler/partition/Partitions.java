@@ -13,6 +13,7 @@ import souther.compiler.check.StringPredicates;
 import souther.compiler.check.DeclaredClauses;
 import souther.compiler.inputs.Distinctions;
 import souther.compiler.check.Shape;
+import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
@@ -1559,7 +1560,8 @@ public final class Partitions {
     private static List<FixtureTemplate> dividedInto(TypeView view, RuleReadingContext reading,
                                                      java.util.Set<TypeSymbol> expanding) {
         for (PartitionClass each : PartitionClasses.of(
-                Distinctions.ofType(view, reading.source().symbols(), reading.source().published()),
+                Distinctions.ofType(view.shape(), reading.source().symbols(),
+                        reading.source().published()),
                 view, reading, expanding)) {
             List<FixtureTemplate> stands =
                     standingFor(each.representatives(), reading, expanding);
@@ -1782,10 +1784,11 @@ public final class Partitions {
         // the caller gave. Read through a name to another declaration's fields, the fields would
         // be one declaration's and the rules another's, and every field would be chosen against
         // rules that name nothing it has.
-        TypeView view = TypeView.of(Type.ref(record), ruleSource.inners(), ruleSource.symbols(),
-                ruleSource.published());
-        if (expanding.contains(record) || view.isWrapped()
-                || !(view.shape() instanceof Shape.Product(TypeSymbol _,
+        Type position = Type.ref(record);
+        if (expanding.contains(record)
+                || TypeOps.outermost(position, ruleSource.inners()) != null
+                || !(TypeView.shapeOf(position, ruleSource.inners(), ruleSource.symbols(),
+                        ruleSource.published()) instanceof Shape.Product(TypeSymbol _,
                         SequencedMap<String, Type> fields))) {
             return null;
         }
@@ -1852,9 +1855,7 @@ public final class Partitions {
      */
     static DeclaredBounds.CountRange heldRange(Type type, RuleReadingContext reading,
                                                FieldDomains.Held held) {
-        return DeclaredBounds.countsHeld(TypeView.of(type, reading.source().inners(), reading.source().symbols(),
-                        reading.source().published()), reading,
-                held);
+        return DeclaredBounds.countsHeld(type, reading, held);
     }
 
     /**

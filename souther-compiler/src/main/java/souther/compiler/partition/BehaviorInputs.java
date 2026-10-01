@@ -252,21 +252,21 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      */
     static Type stepWrittenValue(TermPath.Step step, Type from, NewtypeInners inners,
                                  Symbols symbols, PublishedDeclarations published) {
-        TypeView view = TypeView.of(from, inners, symbols, published);
+        Shape shape = TypeView.shapeOf(from, inners, symbols, published);
         return switch (step) {
-            case TermPath.Step.Field named -> view.shape() instanceof Shape.Product product
+            case TermPath.Step.Field named -> shape instanceof Shape.Product product
                     ? product.fields().get(named.name()) : null;
-            case TermPath.Step.Element _ -> view.shape() instanceof Shape.Sequence sequence
+            case TermPath.Step.Element _ -> shape instanceof Shape.Sequence sequence
                     ? sequence.element() : null;
             // What a sum's case holds is the value the sum held, and what an optional holds is at
             // no name of its own — so both narrow the type at this position and nothing is
             // descended into.
             case TermPath.Step.Refine refine -> switch (refine.refinement()) {
-                case Refinement.SumCase one -> view.shape() instanceof Shape.Sum
+                case Refinement.SumCase one -> shape instanceof Shape.Sum
                         ? Type.ref(one.leaf()) : null;
                 case Refinement.Presence presence ->
-                        !(view.shape() instanceof Shape.Optional optional) ? null
-                                : presence.present() ? optional.element() : view.declared();
+                        !(shape instanceof Shape.Optional optional) ? null
+                                : presence.present() ? optional.element() : from;
             };
         };
     }
