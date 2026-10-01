@@ -2397,6 +2397,28 @@ public final class Bodies {
     }
 
     /**
+     * The fns a settled module wrote, by name — the first of a name where it wrote two.
+     *
+     * <p>Read once for the module, because {@link SettledFn} is asked once for each of its fns and
+     * a module's fns are a list.
+     */
+    public record SettledByName(String module) implements Key<Map<String, Hir.FnDef>> {
+
+        @Override
+        public Answer<Map<String, Hir.FnDef>> compute(Db db) {
+            Answer<Hir.Module> settled = db.ask(new Settled(module));
+            if (!settled.present()) {
+                return Answer.absent();
+            }
+            Map<String, Hir.FnDef> byName = new LinkedHashMap<>();
+            for (Hir.FnDef fn : settled.value().fns()) {
+                byName.putIfAbsent(fn.name(), fn);
+            }
+            return Answer.of(Ordered.map(byName));
+        }
+    }
+
+    /**
      * One settled fn, so what a body is expanded from is the fn itself and not the module it sits in.
      *
      * <p>A projection, not a settling of its own: the module is settled together — one helper's
@@ -2409,15 +2431,14 @@ public final class Bodies {
 
         @Override
         public Answer<Hir.FnDef> compute(Db db) {
-            Answer<Hir.Module> settled = db.ask(new Settled(module));
+            Answer<Map<String, Hir.FnDef>> settled = db.ask(new SettledByName(module));
             if (!settled.present()) {
                 return Answer.absent();
             }
             // What this module wrote.
-            for (Hir.FnDef candidate : settled.value().fns()) {
-                if (candidate.name().equals(fn)) {
-                    return Answer.of(candidate);
-                }
+            Hir.FnDef written = settled.value().get(fn);
+            if (written != null) {
+                return Answer.of(written);
             }
             // A definition this compilation minted, which is no declaration and is in no table.
             Answer<Map<String, Hir.FnDef>> minted = db.ask(new MintedDefs(module));

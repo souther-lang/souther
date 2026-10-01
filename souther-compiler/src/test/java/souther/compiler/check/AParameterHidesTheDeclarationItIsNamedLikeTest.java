@@ -10,9 +10,11 @@ import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -74,6 +76,37 @@ class AParameterHidesTheDeclarationItIsNamedLikeTest {
         assertNull(inside.reached(own("step")), "a parameter named like it hides it");
         assertNotNull(inside.reached(FOLD_FROM), "and hides nothing else");
         assertNotNull(table.reached(own("step")), "the table it was taken from is unchanged");
+    }
+
+    /** Every way the table is asked about a reference or an address says the same of the hidden one,
+     * and the same as before of every other. */
+    @Test
+    void everyQuestionTheNarrowedTableAnswersLeavesOutTheHiddenNameAndOnlyIt() {
+        HelperTable table = tableOf(DECLARES_STEP);
+        HelperTable inside = table.hiding(List.of(own("step")));
+
+        List<ReachName.Declaration> expected = new ArrayList<>(table.reachable().keySet());
+        expected.remove(own("step"));
+        assertEquals(expected, new ArrayList<>(inside.reachable().keySet()),
+                "what it reaches is the rest, in the order they were reached");
+        for (ReachName.Declaration each : table.reachable().keySet()) {
+            boolean hidden = each.equals(own("step"));
+            String said = each.rendered();
+            assertEquals(hidden ? null : table.reached(each), inside.reached(each), said);
+            assertEquals(!hidden, inside.reaches(each), said);
+            assertEquals(hidden ? null : table.heldAt(each), inside.heldAt(each), said);
+            assertEquals(hidden ? null : table.at(table.heldAt(each)),
+                    inside.at(table.heldAt(each)), said);
+            assertEquals(table.holds(each), inside.holds(each),
+                    "what the module holds is not what a call reaches: " + said);
+        }
+    }
+
+    @Test
+    void hidingWhatIsAlreadyHiddenIsTheSameTable() {
+        HelperTable inside = tableOf(DECLARES_STEP).hiding(List.of(own("step")));
+
+        assertTrue(inside.hiding(List.of(own("step"))) == inside);
     }
 
     @Test
