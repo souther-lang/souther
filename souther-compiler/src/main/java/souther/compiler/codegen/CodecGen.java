@@ -928,8 +928,16 @@ final class CodecGen {
         });
     }
 
-    /** True when the type's decoder reads from a {@code Map} (object/sum), false for a bare
-     * value (newtype/unit). Used to bridge nested field-value decoders with {@code nested()}. */
+    /**
+     * True when the type's neutral decoder is handed a {@code Map} (object/sum), false when it is
+     * handed whatever value arrives (newtype/unit/enumeration). Used to bridge nested field-value
+     * decoders with {@code nested()}.
+     *
+     * <p>A newtype is handed any value, whatever it wraps. Its decoder passes the value to the
+     * decoder of the type it wraps, read as from under a key, so the bridge to a {@code Map} is put
+     * where the wrapped type is an object or a sum. The answer is the declaration's own, and no
+     * reader of it opens what the newtype wraps — nor does it follow a chain of newtypes to its end.
+     */
     boolean isMapInput(Hir.Def def) {
         return isMapInputOf(def);
     }
@@ -960,18 +968,8 @@ final class CodecGen {
             // an enumeration arrives as its case's name, a bare string (issue #161)
             return !readsABareTag(sum);
         }
-        if (def instanceof Hir.Data data) {
-            Hir.DecoderDef d = symbols.derived(data).decoder();
-            if (d instanceof Hir.ObjectDecoder) {
-                return true;
-            }
-            // a newtype reads whatever its inner type reads: a Map for an object/sum inner, a bare
-            // value for a primitive one
-            if (d instanceof Hir.NewtypeDecoder nt && nt.inner() instanceof Hir.DataDecRef inner) {
-                return isMapInput(inner.typeName());
-            }
-        }
-        return false;
+        return def instanceof Hir.Data data
+                && symbols.derived(data).decoder() instanceof Hir.ObjectDecoder;
     }
 
     /** Pushes a Raoh leaf {@code Decoder} for a primitive value from the given source. */

@@ -1,15 +1,22 @@
 package souther.compiler;
 
+import net.unit8.raoh.Err;
 import net.unit8.raoh.Result;
 
 import org.junit.jupiter.api.Test;
+
+import java.lang.reflect.Method;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * The explicit newtype form {@code data X = Y} (spec §newtype): a single implicit field {@code value}
  * of type {@code Y}, encoded as bare {@code Y} rather than an object, with an invariant allowed on
- * {@code value}. For now only a primitive inner type is derived.
+ * {@code value}.
  */
 class CompileNewtypeTest {
 
@@ -85,6 +92,71 @@ class CompileNewtypeTest {
         assertEquals("demo.Wrap", v.getClass().getName());
         assertEquals(java.util.Map.of("a", 1L, "b", 2L), Codecs.encode(loader, "demo.Wrap", v),
                 "the newtype reads and writes the inner object's representation, not `{value: ...}`");
+    }
+
+    /** A chain of two newtypes over an object, and an object holding the outer one as a field. */
+    private static final String CHAIN_OVER_AN_OBJECT = """
+            module demo
+            data Inner = { a: Int, b: Int }
+            data Wrap = Inner
+            data Rewrap = Wrap
+            data Holder = { w: Rewrap }
+            """;
+
+    private static Type inputOfTheDecoder(ClassLoader loader, String className) throws Exception {
+        Method factory = loader.loadClass(className).getMethod("decoder");
+        return ((ParameterizedType) factory.getGenericReturnType()).getActualTypeArguments()[0];
+    }
+
+    @Test
+    void anObjectsDecoderIsHandedAMap() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(CHAIN_OVER_AN_OBJECT),
+                getClass().getClassLoader());
+
+        Type in = inputOfTheDecoder(loader, "demo.Inner");
+        assertEquals(Map.class, in instanceof ParameterizedType p ? p.getRawType() : in);
+    }
+
+    @Test
+    void aNewtypesDecoderIsHandedWhateverArrivesWhateverItWraps() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(CHAIN_OVER_AN_OBJECT),
+                getClass().getClassLoader());
+
+        assertEquals(List.of(Object.class, Object.class),
+                List.of(inputOfTheDecoder(loader, "demo.Wrap"), inputOfTheDecoder(loader, "demo.Rewrap")));
+    }
+
+    @Test
+    void aChainOfNewtypesOverAnObjectReadsTheObject() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(CHAIN_OVER_AN_OBJECT),
+                getClass().getClassLoader());
+
+        Object v = Codecs.decoded(loader, "demo.Holder", Map.of("w", Map.of("a", 1L, "b", 2L)));
+        assertEquals(Map.of("w", Map.of("a", 1L, "b", 2L)), Codecs.encode(loader, "demo.Holder", v));
+    }
+
+    @Test
+    void aValueThatIsNoObjectIsRefusedUnderTheKeyItStandsAt() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(CHAIN_OVER_AN_OBJECT),
+                getClass().getClassLoader());
+
+        Result<?> r = Codecs.decode(loader, "demo.Holder", Map.of("w", 5L));
+        List<String> issues = ((Err<?>) r).issues().asList().stream()
+                .map(i -> i.code() + " at " + i.path().toJsonPointer())
+                .toList();
+        assertEquals(List.of("type_mismatch at /w"), issues);
+    }
+
+    @Test
+    void aValueThatIsNoObjectIsRefusedByTheNewtypeHandedIt() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(CHAIN_OVER_AN_OBJECT),
+                getClass().getClassLoader());
+
+        Result<?> r = Codecs.decode(loader, "demo.Rewrap", 5L);
+        List<String> issues = ((Err<?>) r).issues().asList().stream()
+                .map(i -> i.code() + " at " + i.path().toJsonPointer())
+                .toList();
+        assertEquals(List.of("type_mismatch at "), issues);
     }
 
     @Test
