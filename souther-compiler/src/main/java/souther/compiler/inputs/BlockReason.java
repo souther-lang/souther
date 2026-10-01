@@ -2,7 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.RunSensitivity;
-import souther.compiler.regex.Meter;
+import net.unit8.notation199x.pattern.Meter;
 
 import java.util.Comparator;
 import souther.compiler.values.UnreadReason;
@@ -708,7 +708,7 @@ public sealed interface BlockReason {
      * somebody wrote and could write smaller; an answer that had already spent what it was allowed
      * is not, and the same rule asked first would have been read.
      */
-    record OrderedExtentTooCostly(souther.compiler.regex.Meter.Stopped stopped)
+    record OrderedExtentTooCostly(Meter.Stopped stopped)
             implements RuleReadingStopped {
 
         public OrderedExtentTooCostly {

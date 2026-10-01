@@ -1,9 +1,12 @@
 package souther.compiler.check;
 
+import net.unit8.notation199x.pattern.PatternParser;
+import net.unit8.notation199x.pattern.PatternRead;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
+import souther.compiler.regex.PatternPlan;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
@@ -478,10 +481,8 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
     }
 
     /** The pattern a rule would have this compiler build, as a plan. */
-    private static souther.compiler.regex.PatternPlan aPattern(String regex) {
-        return souther.compiler.regex.PatternPlan.of(
-                ((souther.compiler.regex.PatternRead.Read)
-                        souther.compiler.regex.PatternParser.read(regex)).meaning());
+    private static PatternPlan aPattern(String regex) {
+        return PatternPlan.of(((PatternRead.Read) PatternParser.read(regex)).meaning());
     }
 
     /** Every question of every rule that nothing answered, and what stopped this reading of it. */

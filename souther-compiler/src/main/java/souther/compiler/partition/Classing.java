@@ -8,7 +8,7 @@ import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Text;
-import souther.compiler.regex.Meter;
+import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.values.Allowance;
 import souther.compiler.values.Sameness;
 import souther.compiler.values.Value;

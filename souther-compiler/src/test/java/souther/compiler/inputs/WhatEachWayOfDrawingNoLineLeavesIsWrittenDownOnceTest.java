@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import net.unit8.notation199x.pattern.Meter;
 import org.junit.jupiter.api.Test;
 
 import tools.jackson.databind.JsonNode;
@@ -436,8 +437,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.EndLeftOpenByAChoice(),
                 new BlockReason.ValueRuleLeftOpenByAChoice(),
                 new BlockReason.PatternTooCostly(),
-                new BlockReason.OrderedExtentTooCostly(
-                        souther.compiler.regex.Meter.Stopped.ONE_MACHINE),
+                new BlockReason.OrderedExtentTooCostly(Meter.Stopped.ONE_MACHINE),
                 new BlockReason.ExactValuesTooCostly(),
                 new BlockReason.BehaviorDistinctionsTooCostly(),
                 new BlockReason.RulesNotHandedOnAsSets(),

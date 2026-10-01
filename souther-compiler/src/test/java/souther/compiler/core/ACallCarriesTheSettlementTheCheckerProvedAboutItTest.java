@@ -5,7 +5,7 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.regex.PatternMeaning;
+import net.unit8.notation199x.pattern.PatternMeaning;
 
 import org.junit.jupiter.api.Test;
 

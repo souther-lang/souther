@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * format-constrained values in an invariant (spec §stdlib-string, §string-patterns). The pattern
  * must evaluate to a string at compile time, where it is read, so text that is no pattern of the
  * language is a compile error and the call reads as a plain Bool. Declared in
- * {@code souther.string}, backed by the {@code Strings.matches} kernel. A pattern written as a
+ * {@code souther.string}, backed by the machine the pattern means. A pattern written as a
  * composition is {@link CompileComposedPatternTest}'s.
  */
 class CompileStringMatchesTest {
@@ -166,14 +166,38 @@ class CompileStringMatchesTest {
     }
 
     /**
-     * A pattern nested past what the compiler reads is the compiler's limit and is said as one — not
-     * as a construct the language lacks, since every construct in it is one the language has.
+     * A pattern past one of the limits every implementation holds a pattern to is said as that
+     * limit — not as a construct the language lacks, since every construct in it is one the
+     * language has — and is refused where it is read, before any machine is built for it.
      */
     @Test
-    void aPatternPastWhatTheCompilerReadsIsItsLimit() {
-        CompileException ex = refused("(?:".repeat(300) + "a" + ")".repeat(300));
-        assertEquals(new TypeMessage.ThePatternNestsDeeperThanIsRead(200), ex.diagnostic().said());
-        assertEquals("E2104", ex.diagnostic().code());
+    void aPatternPastALimitIsSaidAsTheLimitItIsPast() {
+        CompileException deep = refused("(?:".repeat(300) + "a" + ")".repeat(300));
+        assertEquals(new TypeMessage.ThePatternNestsDeeperThanAPatternMay("(?:", "200"),
+                deep.diagnostic().said());
+        assertEquals("E2110", deep.diagnostic().code());
+
+        CompileException counted = refused("a{134217728}");
+        assertEquals(new TypeMessage.ThePatternCountsMoreThanAPatternMay("134217728", "134217727"),
+                counted.diagnostic().said());
+        assertEquals("E2110", counted.diagnostic().code());
+
+        CompileException large = refused("(a{500}){500}");
+        assertEquals(new TypeMessage.ThePatternComesToMoreStatesThanAPatternMay("(a{500}){500}", "250000"),
+                large.diagnostic().said());
+        assertEquals("E2110", large.diagnostic().code());
+    }
+
+    /** The most a pattern may come to is a pattern like any other, and a class runs it. */
+    @Test
+    void aPatternAtTheLimitIsReadAndRun() throws Exception {
+        ClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+                data Wide = String invariant String.matches("a{249998}", value)
+                """), getClass().getClassLoader());
+        Decoder<Object, ?> wide = Codecs.decoder(loader, "demo.Wide");
+        assertTrue(wide.decode("a".repeat(249_998), Path.ROOT) instanceof Ok, "as many as it counts");
+        assertTrue(wide.decode("a".repeat(249_997), Path.ROOT) instanceof Err, "one fewer");
     }
 
     /**

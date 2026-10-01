@@ -1,7 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.regex.Meter;
+import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.values.ValueSet;
 
 import java.util.function.Supplier;

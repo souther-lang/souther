@@ -3,7 +3,7 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.OrderedIntervals;
-import souther.compiler.regex.Meter;
+import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;

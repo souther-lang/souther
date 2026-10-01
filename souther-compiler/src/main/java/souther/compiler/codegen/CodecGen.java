@@ -10,7 +10,7 @@ import souther.compiler.core.BoundaryConstraint;
 import souther.compiler.core.ConstraintProjection;
 import souther.compiler.core.ValueShape;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.regex.PatternMeaning;
+import net.unit8.notation199x.pattern.PatternMeaning;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.CaseShape;
@@ -18,7 +18,7 @@ import souther.compiler.types.LeafScalar;
 import souther.compiler.types.TemporalRule;
 import net.unit8.raoh.ErrorCodes;
 import souther.runtime.BoundaryScalars;
-import souther.temporal.TemporalText;
+import souther.temporal.TemporalForms;
 import souther.compiler.types.Type;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.TypeSymbol;
@@ -1071,7 +1071,7 @@ final class CodecGen {
      * a JSON temporal is a string that is then parsed — whereas the neutral/jOOQ source has a direct
      * static one, which takes the value as itself where the caller hands over a real temporal.
      *
-     * <p>Both put the text to {@link TemporalText} before it is parsed, so a rule about what a
+     * <p>Both put the text to {@link TemporalForms} before it is parsed, so a rule about what a
      * {@code Time} holds cannot be one thing at a field and another at a map key. Raoh's bare-value
      * factory parses a {@code String} inside itself, so a decoder that stands in front of it
      * (the class's own {@code __date} and its siblings) asks first, and a real temporal a Java

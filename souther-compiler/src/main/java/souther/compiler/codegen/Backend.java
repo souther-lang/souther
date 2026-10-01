@@ -1478,6 +1478,17 @@ public final class Backend {
      * import a name holding a character past the basic plane needs, which a writer under version
      * 36 left out.
      *
+     * <p>Version 38 changes what a published class loads a pattern as and which patterns are read.
+     * The constant is a {@code Predicate} made by {@code Patterns.read}, which a class asks
+     * {@code test} of, where before it was a {@code StringPattern} the class handed to
+     * {@code Strings.matches}; and the image it is made from begins with the format it is written
+     * in. A class emitted under version 37 names a {@code StringPattern} and a
+     * {@code Strings.matches} this runtime no longer has. A pattern is read within the three limits
+     * every implementation holds a pattern to, so a carried body whose pattern writes a count past
+     * the most a pattern may count, which a reader under version 37 refused as no pattern, is now a
+     * pattern past a limit, and one whose machine has more states than a pattern may, which that
+     * reader read and only its backend refused, is now refused where it is read.
+     *
      * <p>That is also where this number stops. It says whether a jar and this compiler agree on
      * what the metadata says and on the rules a declaration is turned into JVM facts by — a
      * behavior's class and methods, how one is held and built, a type's layout and codecs. It does
@@ -1488,7 +1499,7 @@ public final class Backend {
      * {@code [#a-published-module-agrees-with-what-it-copied]}). An edit to a declaration moves
      * that and not this; an edit to a rule moves this.
      */
-    public static final int BOUNDARY_VERSION = 37;
+    public static final int BOUNDARY_VERSION = 38;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java

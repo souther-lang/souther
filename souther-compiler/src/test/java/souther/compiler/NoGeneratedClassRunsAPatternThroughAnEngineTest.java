@@ -48,14 +48,32 @@ class NoGeneratedClassRunsAPatternThroughAnEngineTest {
         assertEquals(List.of(), naming);
     }
 
-    /** And the classes that run a pattern name the machine, so an empty answer above means
-     *  something. */
+    /**
+     * Nor the library the machine is run by. A class loads its machine as a {@code Predicate} the
+     * run time makes, so what it links against is the run time and the JDK, and a class compiled
+     * against one release of the text rules runs against whichever the program resolves.
+     */
+    @Test
+    void noClassNamesTheLibraryThatRunsTheMachine() {
+        List<String> naming = new ArrayList<>();
+        for (Map.Entry<String, ClassFileImage> each : Compiler.compile(SOURCE).entrySet()) {
+            for (String said : utf8(each.getValue())) {
+                if (said.contains("net/unit8/notation199x")) {
+                    naming.add(each.getKey() + " names " + said);
+                }
+            }
+        }
+        assertEquals(List.of(), naming);
+    }
+
+    /** And the classes that run a pattern name the run time's bootstrap for the machine, so an empty
+     *  answer above means something. */
     @Test
     void theClassesThatRunAPatternNameTheMachine() {
         List<String> naming = new ArrayList<>();
         for (Map.Entry<String, ClassFileImage> each : Compiler.compile(SOURCE).entrySet()) {
             if (utf8(each.getValue()).stream()
-                    .anyMatch(said -> said.contains("souther/runtime/StringPattern"))) {
+                    .anyMatch(said -> said.contains("souther/runtime/Patterns"))) {
                 naming.add(each.getKey());
             }
         }

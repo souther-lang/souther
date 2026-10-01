@@ -4,10 +4,10 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.Text;
 import souther.compiler.regex.Language;
-import souther.compiler.regex.Meter;
-import souther.compiler.regex.PatternParser;
+import net.unit8.notation199x.pattern.Meter;
+import net.unit8.notation199x.pattern.PatternParser;
 import souther.compiler.regex.PatternPlan;
-import souther.compiler.regex.PatternRead;
+import net.unit8.notation199x.pattern.PatternRead;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;

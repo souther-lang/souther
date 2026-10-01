@@ -8,9 +8,9 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.generated.JsonBoundary;
-import souther.temporal.TemporalText;
-import souther.temporal.TemporalText.Kind;
-import souther.temporal.TemporalText.Refusal;
+import souther.temporal.TemporalForms;
+import souther.temporal.TemporalForms.Kind;
+import souther.temporal.TemporalForms.Refusal;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * text arrives.
  *
  * <p>Every row is put to a JSON field, a JSON map key, the runner's own decoders, and the bare-value
- * decoders a Java caller hands a {@code Map} to, and each answers what {@link TemporalText} answers.
+ * decoders a Java caller hands a {@code Map} to, and each answers what {@link TemporalForms} answers.
  * A source literal is asked the same rows for the language it may write. What is being held is that no
  * path leaves the grammar to the parser behind it: {@code java.time} takes {@code t} and {@code z},
  * and a decimal point with no digits, and the Raoh a decoder is built against has taken them in one
@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>No row is left out of any path. The bare-value decoders take a real temporal as itself and a
  * {@code String} as text, and Raoh parses that text inside itself, so a decoder stands in front of
- * it and asks {@link TemporalText} first (the decoder class's own {@code __date} and its siblings);
+ * it and asks {@link TemporalForms} first (the decoder class's own {@code __date} and its siblings);
  * that is what lets a zero
  * fraction, which reads as a whole second once parsed, be refused there as it is everywhere else.
  * The same rows hold against a Raoh that takes more texts than the language does.
@@ -125,9 +125,9 @@ class ATemporalTextIsTheLanguagesAndNotTheParsersTest {
     @Test
     void theLanguageAnswersEveryRow() {
         for (Row r : ROWS) {
-            assertEquals(r.atBoundary(), TemporalText.atBoundary(r.kind(), r.text()),
+            assertEquals(r.atBoundary(), TemporalForms.atBoundary(r.kind(), r.text()),
                     r.kind() + " " + r.text() + " at a boundary");
-            assertEquals(r.inSource(), TemporalText.inSource(r.kind(), r.text()),
+            assertEquals(r.inSource(), TemporalForms.inSource(r.kind(), r.text()),
                     r.kind() + " " + r.text() + " in source");
         }
     }
@@ -225,7 +225,7 @@ class ATemporalTextIsTheLanguagesAndNotTheParsersTest {
             Object value = Codecs.decoded(loader, "demo.In", raw);
             Map<?, ?> written = (Map<?, ?>) Codecs.encode(loader, "demo.In", value);
             String text = String.valueOf(written.get(field));
-            assertEquals(Optional.empty(), TemporalText.inSource(r.kind(), text),
+            assertEquals(Optional.empty(), TemporalForms.inSource(r.kind(), text),
                     where + " is written back as " + text + ", which source may not write");
             assertEquals(value, Codecs.decoded(loader, "demo.In", MAPPER.convertValue(written, Map.class)),
                     where + " does not read back as the value it was written from");

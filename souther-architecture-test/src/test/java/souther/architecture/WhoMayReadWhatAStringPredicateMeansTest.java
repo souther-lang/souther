@@ -159,7 +159,7 @@ class WhoMayReadWhatAStringPredicateMeansTest {
                     + "Lsouther/compiler/check/Denotations;)L" + OWNER + "$Stated;",
             READS + "$Reading",
             READS + "$Reading$Accepting",
-            READS + "$Reading$Accepting#accepts()Lsouther/compiler/regex/PatternMeaning;",
+            READS + "$Reading$Accepting#accepts()Lnet/unit8/notation199x/pattern/PatternMeaning;",
             READS + "$Reading$PatternNotRead",
             READS + "$Reading$WrittenArgumentNotKnown",
             READS + "$Stated",
@@ -170,7 +170,7 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             WHAT_A_RULE_STATES + "$Reading",
             WHAT_A_RULE_STATES + "$Reading$Accepting",
             WHAT_A_RULE_STATES
-                    + "$Reading$Accepting#accepts()Lsouther/compiler/regex/PatternMeaning;",
+                    + "$Reading$Accepting#accepts()Lnet/unit8/notation199x/pattern/PatternMeaning;",
             WHAT_A_RULE_STATES + "$Reading$PatternNotRead",
             WHAT_A_RULE_STATES + "$Reading$WrittenArgumentNotKnown",
             WHAT_A_CLAUSE_STATES,
@@ -189,7 +189,7 @@ class WhoMayReadWhatAStringPredicateMeansTest {
                     + "Lsouther/compiler/check/Symbols;)L" + OWNER + "$Reading;",
             WITNESS + "$Reading",
             WITNESS + "$Reading$Accepting",
-            WITNESS + "$Reading$Accepting#accepts()Lsouther/compiler/regex/PatternMeaning;",
+            WITNESS + "$Reading$Accepting#accepts()Lnet/unit8/notation199x/pattern/PatternMeaning;",
             // And the outcomes a witness was not composed from, which is not a second answer about
             // the position. What is taken here is that this reading yielded no pattern to compose
             // out of — so the value offered came from the rules beside it, and a search that had

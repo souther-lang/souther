@@ -47,6 +47,13 @@
             <groupId>net.unit8.raoh</groupId>
             <artifactId>raoh</artifactId>
         </dependency>
+        <!-- The text rules a String operation, a temporal value and a pattern are run by. Generated
+             code never names it: a pattern constant is a Predicate made by this module's bootstrap,
+             so what a published class links against is this artifact and the JDK. -->
+        <dependency>
+            <groupId>net.unit8.199x</groupId>
+            <artifactId>199x-notation</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

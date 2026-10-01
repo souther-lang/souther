@@ -29,7 +29,9 @@ class WhoMayReadPatternTextTest {
 
     private static final CompiledOutputs COMPILED = CompiledOutputs.ofWhatThisRepositoryPublishes();
 
-    private static final String READER = "souther/compiler/regex/PatternParser";
+    /** The language's reader of pattern text, which is the shared text rules' and not in what this
+     *  repository publishes, so every call of it counted is a call from here. */
+    private static final String READER = "net/unit8/notation199x/pattern/PatternParser";
 
     /**
      * The places that read a pattern's text.
@@ -64,10 +66,6 @@ class WhoMayReadPatternTextTest {
         for (Path module : COMPILED.modules()) {
             for (ClassModel each : COMPILED.classesOf(module)) {
                 String reader = each.thisClass().asInternalName();
-                // The reader's own package is the reader: what it names of itself is not a reading.
-                if (reader.startsWith("souther/compiler/regex/")) {
-                    continue;
-                }
                 for (PoolEntry entry : each.constantPool()) {
                     if (entry instanceof MemberRefEntry member
                             && member.owner().name().stringValue().equals(READER)

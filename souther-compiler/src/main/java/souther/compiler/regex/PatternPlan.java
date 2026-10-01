@@ -1,5 +1,10 @@
 package souther.compiler.regex;
 
+import net.unit8.notation199x.pattern.Automaton;
+import net.unit8.notation199x.pattern.CodePoints;
+import net.unit8.notation199x.pattern.Meter;
+import net.unit8.notation199x.pattern.PatternMeaning;
+
 /**
  * What would be built out of some patterns, said before anything is made of it.
  *
@@ -184,31 +189,6 @@ public final class PatternPlan {
          * <p>The same numbers as the others today, and a coincidence rather than a fact.
          */
         public static final Budget OF_A_FOLD = new Budget(50_000, 200_000, 50_000_000);
-
-        /**
-         * What the machine a class runs for a pattern may be, built from the pattern's shape.
-         *
-         * <p>Its own, because what it bounds is what a class holds and what a run walks, and not
-         * what the compiler answers: past it the pattern is refused as larger than this backend
-         * writes, where every other budget here leaves a question unanswered and the program as it
-         * was. One machine and nothing thrown away, so the two numbers are the same.
-         *
-         * <p>Well above every budget a reading of the rules is allowed. A pattern the reading
-         * declines to build is left unanswered and the program stands, and a program that stands
-         * is one a class has to run; were this the same figure, the first pattern past the reading
-         * would be refused here instead.
-         */
-        public static final Budget OF_A_RUN = new Budget(250_000, 250_000, 50_000_000);
-
-        /**
-         * What making the machine a class runs deterministic is allowed to cost.
-         *
-         * <p>Apart from {@link #OF_A_RUN}, because running out of it refuses nothing: the class
-         * runs the machine the shape built instead, which answers the same and walks more states a
-         * character. So this is what a faster run is worth to the compiler, and a pattern whose
-         * deterministic machine is large is not larger for it than one whose machine is small.
-         */
-        public static final Budget OF_A_DETERMINISTIC_RUN = new Budget(10_000, 20_000, 5_000_000);
     }
 
     /** What one step of a plan does. */

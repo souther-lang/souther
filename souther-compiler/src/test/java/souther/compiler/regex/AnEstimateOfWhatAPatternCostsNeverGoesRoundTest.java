@@ -1,5 +1,9 @@
 package souther.compiler.regex;
 
+import net.unit8.notation199x.pattern.CodePoints;
+import net.unit8.notation199x.pattern.PatternMeaning;
+import net.unit8.notation199x.pattern.PatternParser;
+import net.unit8.notation199x.pattern.PatternRead;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -38,14 +42,24 @@ class AnEstimateOfWhatAPatternCostsNeverGoesRoundTest {
      * And a repetition of a repetition of a repetition stops climbing.
      *
      * <p>Each of these multiplies the last, so counted without a ceiling the fourth would pass what
-     * a whole number holds and come back as something small or negative.
+     * a whole number holds and come back as something small or negative. The reader admits no such
+     * pattern, so the meaning is put together as a caller of a plan may put one together.
      */
     @Test
     void anEstimateThatWouldPassEveryNumberStopsAtOne() {
-        long deep = states("(((a{60000}){60000}){60000}){60000}");
+        long deep = PatternPlan.of(fourTimesOver('a')).states();
         assertTrue(deep > 0, "it does not come back round: " + deep);
-        assertEquals(deep, states("(((b{60000}){60000}){60000}){60000}"),
+        assertEquals(deep, PatternPlan.of(fourTimesOver('b')).states(),
                 "and every pattern past the ceiling is at the ceiling");
         assertTrue(deep > states("a{300}"), "which is still above what is merely large");
+    }
+
+    /** {@code (((c{60000}){60000}){60000}){60000}}, as what it means. */
+    private static PatternMeaning fourTimesOver(char c) {
+        PatternMeaning out = new PatternMeaning.Symbols(CodePoints.of(c));
+        for (int i = 0; i < 4; i++) {
+            out = new PatternMeaning.Repeated(out, 60_000, 60_000);
+        }
+        return out;
     }
 }

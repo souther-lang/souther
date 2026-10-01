@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * Exhaustive counterpart to {@code AStringHasOneWhitespaceAlphabetTest} (souther-compiler), which
  * picks a handful of code points to tell String whitespace apart from three near-miss candidates.
  * Spec §string-whitespace enumerates a closed 25-code-point set, so membership in it is checked
- * exactly rather than sampled — a range boundary {@code Strings.isWhitespace} got wrong (dropping
+ * exactly rather than sampled — a range boundary the set {@code trim} scans by got wrong (dropping
  * U+0085, mistyping U+202F, or widening U+2000-U+200A past its edges) would pass a witness test
  * built only from the handful of code points issue #1871 named, and does not pass this one.
  */

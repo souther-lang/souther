@@ -1,6 +1,11 @@
 package souther.compiler.regex;
 
 import java.util.List;
+import net.unit8.notation199x.pattern.Automaton;
+import net.unit8.notation199x.pattern.Meter;
+import net.unit8.notation199x.pattern.PatternMeaning;
+import net.unit8.notation199x.pattern.PatternParser;
+import net.unit8.notation199x.pattern.PatternRead;
 
 import org.junit.jupiter.api.Test;
 

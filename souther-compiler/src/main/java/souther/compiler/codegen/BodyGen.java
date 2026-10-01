@@ -1250,10 +1250,12 @@ final class BodyGen {
                 throw new IllegalStateException(
                         "a String.matches call carries the pattern the checker read: " + call);
             }
-            genExpr(call.args().get(1));
+            // The machine before the subject, since it is what the subject is asked of. Loading
+            // it has no effect, so the subject is still the one argument evaluated.
             code.ldc(ctx.patterns.of(settled.meaning(), settled.written(),
                     Diagnostic.at(call.args().get(0).pos())));
-            code.invokestatic(CD_Strings, "matches", MTD_strings_matches);
+            genExpr(call.args().get(1));
+            code.invokeinterface(CD_Predicate, "test", MTD_predicate_test);
         }
 
         private void call(Core.Call call) {
