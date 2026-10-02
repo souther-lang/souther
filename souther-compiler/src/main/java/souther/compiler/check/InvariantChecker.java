@@ -262,9 +262,8 @@ public final class InvariantChecker {
      * question they add up to — can anything stand here — has more than this one reader, and a
      * second walk deriving it again would be a second set of rules. */
     private final PathEngine engine;
-    private final Symbols symbols;
-    /** Which form each declaration was written in and which of them wrap one value. Beside
-     * {@link #symbols} and not read off it: what a construction is judged against turns on the form
+    /** Which form each declaration was written in and which of them wrap one value. Beside the
+     * scope and not read off it: what a construction is judged against turns on the form
      * its name was declared in, which was settled when the module was indexed. */
     private final DeclarationKinds kinds;
     private final DeclarationNewtypes newtypes;
@@ -318,7 +317,6 @@ public final class InvariantChecker {
         this.answers = StringMachineAnswers.unborrowed(reading.readings().extents());
         // Named here because this check reads them directly and often. They are the engine's, not a
         // second copy: one engine builds them once and everything below sees those.
-        this.symbols = engine.symbols();
         this.kinds = reading.source().kinds();
         this.newtypes = reading.source().newtypes();
         this.clauses = engine.clauses();
