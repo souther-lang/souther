@@ -68,6 +68,8 @@ class OneValueIsOneLocationHoweverItWasSpelledTest {
     }
 
     private static Location of(Core e) {
-        return Location.of(e, DeclarationNewtypes.NONE, Location::of);
+        return Location.of(e, DeclarationNewtypes.NONE, Location::of, p -> {
+            throw new AssertionError("no expression here reads a chain of names: " + p);
+        });
     }
 }
