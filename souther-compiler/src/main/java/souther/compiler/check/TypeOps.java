@@ -1234,21 +1234,18 @@ public final class TypeOps {
      * sum's shared part is a reader of what a position is, which is {@link Shape}'s to say; asked
      * here directly, a reader would have a second way to find out what kind of sum it is holding.
      */
-    static Shape.CommonProduct commonSpreadOf(Hir.SumData sum, Symbols symbols,
-                                              DeclarationKinds kinds, SumCases sums) {
+    static Shape.CommonProduct commonSpreadOf(SumCases.Cases reaches, Symbols symbols) {
         // Every case of an enumeration is a unit, and a unit spreads nothing, so its cases share
         // nothing and none of them is opened to find that out.
-        if (sum.declares() instanceof TypeSymbol.AtModule named
-                && sums.of(named) instanceof SumCases.Enumeration) {
+        if (reaches instanceof SumCases.Enumeration) {
             return new Shape.CommonProduct.None();
         }
-        return commonSpreadOf(AtomSpace.subjectAtoms(Type.ref(sum.declares()), kinds, sums),
-                symbols);
+        return commonSpreadOf(reaches.cases(), symbols);
     }
 
-    /** As {@link #commonSpreadOf(Hir.SumData, Symbols, DeclarationKinds, SumCases)}, for cases
-     *  already flattened to leaves. */
-    static Shape.CommonProduct commonSpreadOf(List<TypeSymbol> cases, Symbols symbols) {
+    /** As {@link #commonSpreadOf(SumCases.Cases, Symbols)}, for cases already flattened to
+     *  leaves. */
+    private static Shape.CommonProduct commonSpreadOf(List<TypeSymbol> cases, Symbols symbols) {
         if (cases == null || cases.isEmpty()) {
             return new Shape.CommonProduct.None();
         }

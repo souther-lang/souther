@@ -153,8 +153,10 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
     private static Shape denoted(TypeSymbol name, Symbols symbols, DeclarationKinds kinds,
                                  SumCases sums) {
         return switch (symbols.declaredNode(name)) {
-            case Hir.SumData sum ->
-                    new Shape.Sum(name, TypeOps.commonSpreadOf(sum, symbols, kinds, sums));
+            case Hir.SumData _ -> {
+                SumCases.Cases reaches = reached(name, kinds, sums);
+                yield new Shape.Sum(name, reaches, TypeOps.commonSpreadOf(reaches, symbols));
+            }
             case Hir.UnitData _ -> new Shape.Unit(name);
             case Hir.Data data when data.newtype() -> new Shape.Unresolved(name);
             // A product shape states an order, so the order is asked of what answers it and the
@@ -164,6 +166,18 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
                     laidOut(TypeOps.fieldLayout(data, symbols), TypeOps.fieldTypes(data, symbols)));
             case null -> new Shape.Unresolved(name);
         };
+    }
+
+    /**
+     * What a value of the sum {@code name} declares can be, as {@code sums} answers it.
+     *
+     * <p>A declaration this scope says is a sum and the declarations' forms do not answer for is one
+     * read off another world than the answers; nothing descends it, so the one leaf there is is the
+     * name itself, and nothing says every leaf is a unit.
+     */
+    private static SumCases.Cases reached(TypeSymbol name, DeclarationKinds kinds, SumCases sums) {
+        SumCases.Cases reached = AtomSpace.sumNamedBy(Type.ref(name), kinds, sums);
+        return reached != null ? reached : new SumCases.NonEnumeration(List.of(name));
     }
 
     /** {@code types} in the order {@code layout} puts them, which is what a product shape holds. */

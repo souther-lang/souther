@@ -62,32 +62,35 @@ public final class Boundary {
      * wanting the whole external representation of an arbitrary type is not asking this.
      */
     public static Alternatives of(Type subject, DeclarationKinds kinds, SumCases sums) {
+        // A named sum's answer holds both what its alternatives are and whether every one is a
+        // unit, which is a fact about its declarations; what is this form's is only that such a
+        // set travels as a bare tag. Taken once and read for both.
+        SumCases.Cases named = AtomSpace.sumNamedBy(subject, kinds, sums);
+        if (named != null) {
+            return new Alternatives(named.cases(), named instanceof SumCases.Enumeration
+                    ? new Representation.Enumeration()
+                    : new Representation.Discriminated(DISCRIMINATOR, CONTENTS));
+        }
         List<TypeSymbol> atoms = AtomSpace.subjectAtoms(subject, kinds, sums);
-        return new Alternatives(atoms, isEnumerationForm(subject, atoms, kinds, sums)
+        return new Alternatives(atoms, isUnionOfUnits(subject, atoms, kinds)
                 ? new Representation.Enumeration()
                 : new Representation.Discriminated(DISCRIMINATOR, CONTENTS));
     }
 
     /**
-     * Whether the set travels as a bare tag: it is an alternative space, and every alternative in it
-     * carries nothing but which one it is (spec §sum-discrimination).
+     * Whether a set that is no named sum travels as a bare tag: it is a union, and every alternative
+     * in it carries nothing but which one it is (spec §sum-discrimination).
      *
-     * <p>Being an alternative space is a term of this and not a guard on {@link #of}. A standalone
-     * unit is one atom and that atom is a unit, so the atoms alone would call it an enumeration —
-     * and a unit crosses on its own as an empty object, the bare name being the form of an
-     * enumeration and not of its unit cases (spec §encoder-derivation). The atoms answer what the
-     * alternatives are; they do not answer whether there is a set of them.
+     * <p>Being a union is a term of this and not a guard on {@link #of}. A standalone unit is one
+     * atom and that atom is a unit, so the atoms alone would call it an enumeration — and a unit
+     * crosses on its own as an empty object, the bare name being the form of an enumeration and not
+     * of its unit cases (spec §encoder-derivation). The atoms answer what the alternatives are; they
+     * do not answer whether there is a set of them.
      *
-     * <p>Whether every alternative of a named sum is a unit is a fact about the sum's declarations,
-     * and {@code sums} already holds it; what is this form's is only that such a set travels as a
-     * bare tag. A name that is no sum has no answer there, which is the standalone unit above. A
-     * union is no declaration and holds no answer of its own, so its members are asked here.
+     * <p>A union is no declaration and holds no answer of its own, so its members are asked here.
      */
-    private static boolean isEnumerationForm(Type subject, List<TypeSymbol> atoms,
-                                             DeclarationKinds kinds, SumCases sums) {
-        if (subject instanceof Type.Ref(TypeSymbol.AtModule named)) {
-            return sums.of(named) instanceof SumCases.Enumeration;
-        }
+    private static boolean isUnionOfUnits(Type subject, List<TypeSymbol> atoms,
+                                          DeclarationKinds kinds) {
         return subject instanceof Type.Union
                 && !atoms.isEmpty()
                 && atoms.stream().allMatch(atom -> atom instanceof TypeSymbol.AtModule at

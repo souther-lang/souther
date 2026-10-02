@@ -135,7 +135,7 @@ sealed interface ValueReading {
             // case, and a reading of it is opened where a match opens the case.
             case Shape.Sum sum ->
                     new AtAValue(sum.name(), owning(readable.declaredBy(), kinds), readable,
-                            cases(sum.name(), kinds, sums));
+                            cases(sum));
             // A unit data holds nothing and may write no rule about it (spec §unit-data), and a
             // primitive is written under no declaration of its own.
             case Shape.Unit unit -> new AtAValue(unit.name(), List.of(), readable, List.of());
@@ -168,21 +168,19 @@ sealed interface ValueReading {
     }
 
     /**
-     * A sum's cases, as the one closure over them answers.
+     * A sum's cases, as the answer the shape was made from holds them.
      *
      * <p>None for an enumeration. Every case of one is a unit, and a unit holds nothing and may
      * write no rule about it (spec §unit-data), so a reading opened at any of them would take in
      * nothing — and handing them on has every reader of a value of the enumeration open each case
      * to find that out.
      */
-    private static List<Type> cases(TypeSymbol sum, DeclarationKinds kinds,
-                                    SumCases sums) {
-        if (sum instanceof TypeSymbol.AtModule named
-                && sums.of(named) instanceof SumCases.Enumeration) {
+    private static List<Type> cases(Shape.Sum sum) {
+        if (sum.reaches() instanceof SumCases.Enumeration) {
             return List.of();
         }
         List<Type> out = new ArrayList<>();
-        for (TypeSymbol leaf : AtomSpace.subjectAtoms(Type.ref(sum), kinds, sums)) {
+        for (TypeSymbol leaf : sum.reaches().cases()) {
             out.add(Type.ref(leaf));
         }
         return out;

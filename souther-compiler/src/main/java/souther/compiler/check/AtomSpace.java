@@ -80,6 +80,17 @@ public final class AtomSpace {
         return List.copyOf(atoms);
     }
 
+    /**
+     * What {@code sums} answers for the one sum {@code t} names, or null where it names none.
+     *
+     * <p>For a reader that wants both what a value of the sum can be and which of the two it is:
+     * one answer holds both, so it is taken here once and read for each. Going back through
+     * {@link #subjectAtoms} for the leaves would ask the same sum again.
+     */
+    public static SumCases.Cases sumNamedBy(Type t, DeclarationKinds kinds, SumCases sums) {
+        return t instanceof Type.Ref ref ? reached(ref.name(), kinds, sums) : null;
+    }
+
     /** What {@code sums} answers for {@code name}, or null where it is no sum. */
     private static SumCases.Cases reached(TypeSymbol name, DeclarationKinds kinds, SumCases sums) {
         return name instanceof TypeSymbol.AtModule at && kinds.isSum(at.key()) ? sums.of(at) : null;
