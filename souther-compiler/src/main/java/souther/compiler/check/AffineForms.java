@@ -528,6 +528,13 @@ public final class AffineForms {
             // as it leaves every access above it standing when they are written out.
             case Core.FieldProjection p -> {
                 List<Standing<A, E>> reached = standing(p.base(), at, reading, following);
+                // Asked before the names are written out: a base standing at no construction has
+                // nothing written against its first name, and the names are as many as the chain
+                // is deep.
+                if (!reached.stream().allMatch(one ->
+                        Core.withoutStanding(one.value()) instanceof Core.Construct)) {
+                    yield List.of(new Standing<>(e, at, reading));
+                }
                 for (Core.FieldProjection.Step step : p.steps().inOrder()) {
                     List<Standing<A, E>> written = given(reached, step.field());
                     if (written == null) {

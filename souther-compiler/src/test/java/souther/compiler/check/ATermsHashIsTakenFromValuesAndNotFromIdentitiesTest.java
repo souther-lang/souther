@@ -244,6 +244,16 @@ class ATermsHashIsTakenFromValuesAndNotFromIdentitiesTest {
                             path.then(shown(type) + " stands for its " + part.getName()));
                 }
             }
+            // The number it keeps is worked out from the chain before it and the name read last, so
+            // what it is taken from is a name at every link.
+            case ITS_NAMES -> {
+                if (type != FieldPath.class) {
+                    findings.add(shown(type) + " is taken by the number a chain of names keeps and"
+                            + " is no such chain, under\n       " + path);
+                } else {
+                    walkType(String.class, path.then(shown(type) + " keeps a number over each name"));
+                }
+            }
             case ITS_ELEMENTS, ITS_UNORDERED_ELEMENTS, ITS_ELEMENT_IF_ANY -> findings.add(shown(type)
                     + " is taken by its elements, and what it holds is not written down here,"
                     + " under\n       " + path);

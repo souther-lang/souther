@@ -643,41 +643,38 @@ public sealed interface ValueOrigin<K> {
      *
      * <p>A projection or one shorter than it that is a position is that position, and nothing
      * under it is asked; which one is, is the reading's one answer ({@link Reading#positionAlong}).
-     * Where none is, what the base is made of is read, and each name taken off it
-     * on the way back up is either the field a construction was given or one more value made of what
-     * it is read off — which is what the accesses written out come to. Gone down and back along the
-     * names rather than on the stack, because how many there are is as long as the declarations
-     * chain.
+     * Where none is, what the base is made of is read, and each name taken off it is either the
+     * field a construction was given or one more value made of what it is read off — which is what
+     * the accesses written out come to. Taken along the names rather than on the stack, because
+     * how many there are is as long as the declarations chain.
+     *
+     * <p>One layer for every name past the last a construction answers, and not one per name. A
+     * value made of one made of something is made of it the way the one under it is — what it is
+     * made from, whether an operation made it, which positions it names — so a layer per name says
+     * nothing a single layer does not, and a projection as deep as a chain of declarations would
+     * hand every reader an origin as deep, to walk at each question it is asked.
      */
     private static <K, E> ValueOrigin<K> projected(Core.FieldProjection p, E at,
                                                    Reading<K, E> reading,
                                                    BindingWalk<ValueOrigin<K>> following) {
         Reading.Along<K> found = reading.positionAlong(p, at);
-        ValueOrigin<K> origin = found == null ? of(p.base(), at, reading, following)
-                : new IsAPosition<>(found.at());
-        Core.FieldProjection.Steps under = found == null ? null : found.upTo();
-        // The names above the one that is a position, the outermost first, or every name where no
-        // projection of them is one.
-        List<Core.FieldProjection.Step> above = new ArrayList<>();
-        for (Core.FieldProjection.Steps each = p.steps(); each != under; each = each.before()) {
-            if (each == null) {
-                throw new IllegalStateException("a reading answered " + p + " with a position at "
-                        + under + ", which is no projection of its names");
-            }
-            above.add(each.last());
+        if (found != null) {
+            // A position is no construction, so every name above it is a value made of what it is
+            // read off.
+            return found.upTo() == p.steps() ? new IsAPosition<>(found.at())
+                    : new Composed<>(List.of(new IsAPosition<>(found.at())));
         }
-        for (int i = above.size() - 1; i >= 0; i--) {
-            String field = above.get(i).field();
-            if (origin instanceof Constructed<K> built) {
-                ValueOrigin<K> given = built.fields().get(field);
-                if (given == null) {
-                    throw new IllegalStateException("a construction of " + built.fields().keySet()
-                            + " was read for a field it has none of: " + field);
-                }
-                origin = given;
-            } else {
-                origin = new Composed<>(List.of(origin));
+        ValueOrigin<K> origin = of(p.base(), at, reading, following);
+        for (Core.FieldProjection.Step step : p.steps().inOrder()) {
+            if (!(origin instanceof Constructed<K> built)) {
+                return new Composed<>(List.of(origin));
             }
+            ValueOrigin<K> given = built.fields().get(step.field());
+            if (given == null) {
+                throw new IllegalStateException("a construction of " + built.fields().keySet()
+                        + " was read for a field it has none of: " + step.field());
+            }
+            origin = given;
         }
         return origin;
     }

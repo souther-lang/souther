@@ -40,12 +40,14 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.SequencedMap;
+import java.util.SequencedSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -2049,10 +2051,12 @@ public final class InvariantChecker {
                                    Coordinates byName,
                                    ReadingEvidence took, RulesRead rules) {
         List<Direct> out = new ArrayList<>();
-        List<FieldDomains.NoLine> noLines = new ArrayList<>();
+        // Sets in the order they were filed: one finding is filed by every rule that comes to it, and
+        // a list asked whether it holds one already is asked across everything filed before.
+        SequencedSet<FieldDomains.NoLine> noLines = new LinkedHashSet<>();
         SequencedMap<HandOver, FieldDomains.WithoutAnEnd> withoutAnEnd = new LinkedHashMap<>();
         SequencedMap<Candidate, Set<InvariantStatementId>> aboutOneCoordinate = new LinkedHashMap<>();
-        Map<RuleKey, List<TypeSymbol.AtModule>> narrowers = new LinkedHashMap<>();
+        Map<RuleKey, SequencedSet<TypeSymbol.AtModule>> narrowers = new LinkedHashMap<>();
         Map<RuleRef.Invariant, Required> raised = new LinkedHashMap<>();
         Map<ReadingPlace, Required> raisedByPart = new LinkedHashMap<>();
         Map<FieldDomains.BoundaryQuestion, FieldDomains.BoundaryStanding> standing =
@@ -2086,7 +2090,8 @@ public final class InvariantChecker {
                         .map(each -> new FieldDomains.AboutOneCoordinate(
                                 each.getKey().at(), each.getValue()))
                         .toList(),
-                Map.copyOf(narrowers),
+                narrowers.entrySet().stream().collect(Collectors.toUnmodifiableMap(
+                        Map.Entry::getKey, each -> List.copyOf(each.getValue()))),
                 Collections.unmodifiableMap(new LinkedHashMap<>(raised)),
                 Collections.unmodifiableMap(new LinkedHashMap<>(raisedByPart)),
                 Collections.unmodifiableMap(new LinkedHashMap<>(standing)));
@@ -2212,10 +2217,10 @@ public final class InvariantChecker {
     private void direct(ClauseExpr.Part said, InvariantStatementId statement,
                         Written of, PartId<RuleRef.Invariant> part, Denotations at,
                         Coordinates byName, List<Direct> out,
-                        List<FieldDomains.NoLine> noLines,
+                        SequencedSet<FieldDomains.NoLine> noLines,
                         SequencedMap<HandOver, FieldDomains.WithoutAnEnd> withoutAnEnd,
                         SequencedMap<Candidate, Set<InvariantStatementId>> naming,
-                        Map<RuleKey, List<TypeSymbol.AtModule>> narrowers,
+                        Map<RuleKey, SequencedSet<TypeSymbol.AtModule>> narrowers,
                         Map<RuleRef.Invariant, Required> raised, ReadingEvidence took,
                         RulesRead rules,
                         Map<ReadingPlace, Required> raisedByPart,
@@ -3004,7 +3009,7 @@ public final class InvariantChecker {
     private void noLineDrawn(CanonicalForm read, Core clause, PartId<RuleRef.Invariant> part,
                             Denotations at,
                             Coordinates byName, Arrivals answering,
-                            List<FieldDomains.NoLine> out) {
+                            SequencedSet<FieldDomains.NoLine> out) {
         if (!(read.comparison().claim() instanceof ComparisonClaim.Cut)) {
             return;
         }
@@ -3075,7 +3080,7 @@ public final class InvariantChecker {
     private void restricting(Core clause, ClauseOccurrence at, RuleRef.Invariant from,
                              Written of, PartId<RuleRef.Invariant> part,
                              Coordinates byName, RulesRead rules,
-                             List<FieldDomains.NoLine> noLines, RunsRead runs) {
+                             SequencedSet<FieldDomains.NoLine> noLines, RunsRead runs) {
         ReadByClauses.OfAPart account = of.adoptedAt(at);
         ReadByClauses.OfARule rule = rules.ruleIn(from);
         if (account == null || rule == null) {
@@ -3140,10 +3145,8 @@ public final class InvariantChecker {
     }
 
     /** One finding per rule and reason, however many readers arrive at it. */
-    private static void add(List<FieldDomains.NoLine> noLines, FieldDomains.NoLine said) {
-        if (!noLines.contains(said)) {
-            noLines.add(said);
-        }
+    private static void add(SequencedSet<FieldDomains.NoLine> noLines, FieldDomains.NoLine said) {
+        noLines.add(said);
     }
 
     /**
@@ -3425,11 +3428,8 @@ public final class InvariantChecker {
     /** One finding, kept once. A coordinate reached twice is one place with one thing to say. */
     private static void file(Coordinate where, PartId<RuleRef.Invariant> part, Core clause,
                              BlockReason.RuleWithoutLineReason why,
-                             List<FieldDomains.NoLine> out) {
-        FieldDomains.NoLine said = new FieldDomains.NoLine(where.at(), part, clause, why);
-        if (!out.contains(said)) {
-            out.add(said);
-        }
+                             SequencedSet<FieldDomains.NoLine> out) {
+        out.add(new FieldDomains.NoLine(where.at(), part, clause, why));
     }
 
     /**
@@ -3651,16 +3651,13 @@ public final class InvariantChecker {
      */
     private void relating(Core clause, TypeSymbol.AtModule from, Denotations at,
                           Coordinates byName,
-                          Map<RuleKey, List<TypeSymbol.AtModule>> narrowers) {
+                          Map<RuleKey, SequencedSet<TypeSymbol.AtModule>> narrowers) {
         // Every subexpression standing here and not only the node: a projection's shorter
         // projections are not children, and each may be the coordinate.
         FactSubject named = terms.heldAt(clause, at, byName.chains());
         if (named != null) {
-            List<TypeSymbol.AtModule> had =
-                    narrowers.computeIfAbsent(byName.get(named).path(), _ -> new ArrayList<>());
-            if (!had.contains(from)) {
-                had.add(from);
-            }
+            narrowers.computeIfAbsent(byName.get(named).path(), _ -> new LinkedHashSet<>())
+                    .add(from);
             return;   // a coordinate names itself and nothing under it is one of its own
         }
         Core.forEachChild(clause, child -> relating(child, from, at, byName, narrowers));
