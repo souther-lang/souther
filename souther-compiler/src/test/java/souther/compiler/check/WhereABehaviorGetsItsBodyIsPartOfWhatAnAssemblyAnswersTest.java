@@ -64,6 +64,6 @@ class WhereABehaviorGetsItsBodyIsPartOfWhatAnAssemblyAnswersTest {
                 DeclarationNewtypes.NONE, Map.of(), FakeTables.classify(surface.settling().module()),
                 bodies, Map.of(), Set.of(), DefaultStdlib.get(),
                 ResolvedSymbols.none(DefaultStdlib.get()),
-                PublishedDeclarations.NONE, DeclarationKinds.NONE, NewtypeInners.NONE);
+                SumCases.NONE, DeclarationKinds.NONE, NewtypeInners.NONE);
     }
 }

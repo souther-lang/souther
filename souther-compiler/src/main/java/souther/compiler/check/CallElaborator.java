@@ -164,7 +164,7 @@ public final class CallElaborator {
         }
         Type declared = entry.signature().result();
         Map<String, Type> bindings = new HashMap<>();
-        BottomInfer.pinResultTypeVars(declared, expected, bindings, ctx.kinds(), ctx.published());
+        BottomInfer.pinResultTypeVars(declared, expected, bindings, ctx.kinds(), ctx.sums());
         // A name written where a value goes, and no call written anywhere: reading a value's name
         // is running its body, so the call is this compiler's and there is none to send anybody to.
         //
@@ -310,7 +310,7 @@ public final class CallElaborator {
             arity(call, params.size());
         }
         Map<String, Type> bind = SignatureApplication.settledByValues(
-                params, kept.result(), expected, ca::type, ctx.kinds(), ctx.published());
+                params, kept.result(), expected, ca::type, ctx.kinds(), ctx.sums());
         requireValueArgs(call, params, ca, bind);
         for (int i = 0; i < params.size(); i++) {
             if (params.get(i) instanceof Type.FnOf declared) {
@@ -324,7 +324,7 @@ public final class CallElaborator {
                 // Refused here rather than inside the walk, and by the sentence a value argument is
                 // refused by: both kinds of argument are one rule, and this is the reader that
                 // still has the argument to point at.
-                if (TypeOps.unify(declared.result(), answered, bind, ctx.kinds(), ctx.published())
+                if (TypeOps.unify(declared.result(), answered, bind, ctx.kinds(), ctx.sums())
                         instanceof Fit.Disagrees d) {
                     throw Elaborator.doesNotFit(call.args().get(i), d.actual(), d.expected(),
                             "argument " + (i + 1) + " of " + call.written());
@@ -426,7 +426,7 @@ public final class CallElaborator {
          *  does, and handed to the call standing as {@code expected}. */
         void require(int i, Type expected, String what) {
             cores[i] = Elaborator.standing(args.get(i), Elaborator.elaborate(args.get(i), env, ctx),
-                    expected, ctx.kinds(), ctx.published(), what);
+                    expected, ctx.kinds(), ctx.sums(), what);
         }
 
         /** Argument {@code i}, elaborated once by {@link #type}, required to fit {@code required}
@@ -438,7 +438,7 @@ public final class CallElaborator {
                         "argument " + (i + 1) + " required before it was typed");
             }
             Elaborator.requireType(args.get(i), cores[i].type(), required, ctx.kinds(),
-                    ctx.published(), what);
+                    ctx.sums(), what);
         }
 
         /** Argument {@code i}, elaborated once by {@link #type}, required to fit {@code required}
@@ -451,7 +451,7 @@ public final class CallElaborator {
                         "argument " + (i + 1) + " required before it was typed");
             }
             cores[i] = Elaborator.standing(args.get(i), cores[i], required, ctx.kinds(),
-                    ctx.published(), what);
+                    ctx.sums(), what);
         }
 
         /** Argument {@code i} as a block (or a function value standing in for one), returning the
@@ -494,7 +494,7 @@ public final class CallElaborator {
                 return;
             }
             Type answered = ((Type.FnOf) read.type()).result();
-            if (!TypeOps.assignable(answered, takes.result(), ctx.kinds(), ctx.published())) {
+            if (!TypeOps.assignable(answered, takes.result(), ctx.kinds(), ctx.sums())) {
                 throw Elaborator.doesNotFit(args.get(i), answered, takes.result(), what);
             }
             cores[i] = Elaborator.answering(read, takes.result());
@@ -658,7 +658,7 @@ public final class CallElaborator {
         }
         Map<String, Type> bind = SignatureApplication.settledByValues(
                 signature.params(), signature.result(), expected, ca::type, ctx.kinds(),
-                ctx.published());
+                ctx.sums());
         requireValueArgs(call, signature.params(), ca, bind);
         try {
             for (int i = 0; i < args.size(); i++) {

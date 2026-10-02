@@ -185,8 +185,8 @@ final class CardinalityTransfer {
      */
     private static Cardinality howManyValues(Type type, NewtypeInners inners,
                                              DeclarationKinds kinds,
-                                             PublishedDeclarations published) {
-        List<Value> every = ValueUniverse.of(type, inners, kinds, published);
+                                             SumCases sums) {
+        List<Value> every = ValueUniverse.of(type, inners, kinds, sums);
         return every == null || every.isEmpty() ? Cardinality.UNKNOWN
                 : Cardinality.atMost(every.size());
     }
@@ -451,7 +451,7 @@ final class CardinalityTransfer {
                     // Written here as a number, the count and the values would be two records of one
                     // fact with nothing holding them together.
                     case BOOL -> howManyValues(part.type(), source.inners(), source.kinds(),
-                            source.published());
+                            source.sums());
                     case INT -> part.values().wholeValuesAt(path);
                     // Spaced too finely to count between two ends, or not spaced at all. A string
                     // bounded in length and a date bounded at both ends are finite and are not

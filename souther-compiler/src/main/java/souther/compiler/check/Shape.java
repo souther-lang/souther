@@ -91,14 +91,20 @@ public sealed interface Shape permits Shape.ReadablePositionShape, Shape.Cases, 
     }
 
     /**
-     * A declared sum, {@code data S = A | B}, and the part its cases hold in common.
+     * A declared sum, {@code data S = A | B}, what a value of it can be, and the part its cases hold
+     * in common.
      *
-     * <p>The two are independent and the record says so by holding both. A sum is a common product
-     * times a choice of case, never a choice between the common part and the cases: sharing a spread
-     * adds no case and changes no case's identity, so a reader asking what the position divides into
-     * reads {@link #name} and is right to ignore {@link #common}.
+     * <p>The choice and the common part are independent and the record says so by holding both. A
+     * sum is a common product times a choice of case, never a choice between the common part and the
+     * cases: sharing a spread adds no case and changes no case's identity, so a reader asking what
+     * the position divides into reads {@link #reaches} and is right to ignore {@link #common}.
+     *
+     * <p>{@link #reaches} is the answer for the sum as it was taken to make this shape, held so that a
+     * reader of the shape reads the leaves and whether every one is a unit from it, rather than
+     * asking the sum by its name again.
      */
-    record Sum(TypeSymbol name, CommonProduct common) implements ReadablePositionShape {}
+    record Sum(TypeSymbol name, SumCases.Cases reaches, CommonProduct common)
+            implements ReadablePositionShape {}
 
     /**
      * What every case of a sum spreads, or that they spread nothing.

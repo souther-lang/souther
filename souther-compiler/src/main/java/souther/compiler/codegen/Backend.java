@@ -1197,7 +1197,7 @@ public final class Backend {
             // encoder and the bridge cases, so none of them is in a position to work the form or a
             // tag out again.
             results.put(new GeneratedClass.BehaviorResult(module.name(), bd.name()),
-                    Boundary.of(sig.outputType(), ctx.kinds, ctx.published));
+                    Boundary.of(sig.outputType(), ctx.kinds, ctx.sums));
         }
         return results;
     }

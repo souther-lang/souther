@@ -52,6 +52,58 @@ public final class AtomSpace {
      * type would be a second way of deciding where the descent starts, and the two would answer
      * alike until the day one of them was extended.
      *
+     * <p>Composed and not descended. What a sum the type names reaches is {@code sums}' answer for
+     * that sum, and what is done here is to put the answers for the names the type states side by
+     * side, each leaf once at the place it was first reached. That is the leaves one descent from
+     * all of the names would reach: a sum met from a second name was taken apart under the first,
+     * so everything under it is already in place.
+     *
+     * <p>Whether a name is a sum is asked of {@code kinds}, and only a sum is asked of {@code
+     * sums}. Which form a declaration is, is the one thing known of it before what it says.
+     */
+    public static List<TypeSymbol> subjectAtoms(Type t, DeclarationKinds kinds, SumCases sums) {
+        List<TypeSymbol> roots = roots(t);
+        // One sum is its own answer, handed on as it is: laid beside nothing, it has nothing to
+        // be put in order with, and copying it would pay for every leaf on each question.
+        if (roots.size() == 1 && reached(roots.getFirst(), kinds, sums) instanceof SumCases.Cases one) {
+            return one.cases();
+        }
+        Set<TypeSymbol> atoms = new LinkedHashSet<>();
+        for (TypeSymbol root : roots) {
+            SumCases.Cases reached = reached(root, kinds, sums);
+            if (reached == null) {
+                atoms.add(root);
+            } else {
+                atoms.addAll(reached.cases());
+            }
+        }
+        return List.copyOf(atoms);
+    }
+
+    /**
+     * What {@code sums} answers for the one sum {@code t} names, or null where it names none.
+     *
+     * <p>For a reader that wants both what a value of the sum can be and which of the two it is:
+     * one answer holds both, so it is taken here once and read for each. Going back through
+     * {@link #subjectAtoms} for the leaves would ask the same sum again.
+     */
+    public static SumCases.Cases sumNamedBy(Type t, DeclarationKinds kinds, SumCases sums) {
+        return t instanceof Type.Ref ref ? reached(ref.name(), kinds, sums) : null;
+    }
+
+    /** What {@code sums} answers for {@code name}, or null where it is no sum. */
+    private static SumCases.Cases reached(TypeSymbol name, DeclarationKinds kinds, SumCases sums) {
+        return name instanceof TypeSymbol.AtModule at && kinds.isSum(at.key()) ? sums.of(at) : null;
+    }
+
+    /**
+     * The leaves under {@code roots}, descending every one of them that is a sum: the descent
+     * itself, which {@link SumCases#asWritten} asks of one sum at a time.
+     *
+     * <p>One descent over all of them, so a sum reached from two roots is taken apart once and its
+     * leaves stand where the first root reached them. Package-private so that what
+     * {@link #subjectAtoms} composes out of one answer per root can be held to it.
+     *
      * <p>Asked of what the declarations publish and not of a world's declarations. Which cases a sum
      * has is what that declaration says about itself, so a reader here means nothing by the tree it
      * was written in — and reading one would answer differently for the same sum every time a line
@@ -62,10 +114,10 @@ public final class AtomSpace {
      * and a clause that orders a value asks this of the sums of the value's module. Asking every
      * case what it says would ask it of a product whose own meaning is being made.
      */
-    public static List<TypeSymbol> subjectAtoms(Type t, DeclarationKinds kinds,
-                                                PublishedDeclarations published) {
+    static List<TypeSymbol> leavesUnder(List<TypeSymbol> roots, DeclarationKinds kinds,
+                                        PublishedDeclarations published) {
         Set<TypeSymbol> atoms = new LinkedHashSet<>();
-        descend(roots(t), kinds, published, atoms, new HashSet<>());
+        descend(roots, kinds, published, atoms, new HashSet<>());
         return List.copyOf(atoms);
     }
 

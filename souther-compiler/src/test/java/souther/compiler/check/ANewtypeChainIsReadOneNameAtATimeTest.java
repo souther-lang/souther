@@ -76,7 +76,7 @@ class ANewtypeChainIsReadOneNameAtATimeTest {
         };
 
         ValueReading reading = ValueReading.of(top(links), counting, rules.kinds(),
-                rules.symbols(), rules.published());
+                rules.symbols(), rules.sums());
 
         assertEquals(1, asked.get());
         assertEquals(List.of(NewtypeInners.THE_ONE_VALUE), List.copyOf(reading.named().keySet()));

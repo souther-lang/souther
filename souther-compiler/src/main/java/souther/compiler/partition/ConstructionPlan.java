@@ -3,7 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.NewtypeInners;
-import souther.compiler.check.PublishedDeclarations;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Case;
@@ -427,7 +427,7 @@ final class ConstructionPlan {
      *                   exists to stop
      */
     static Result of(Type declared, TermPath at, NewtypeInners inners, Symbols symbols,
-                     DeclarationKinds kinds, PublishedDeclarations published, Set<TermPath> decided,
+                     DeclarationKinds kinds, SumCases sums, Set<TermPath> decided,
                      Requirements additional, HowManyItHolds howMany) {
         Requirements required = additional;
         for (TermPath fixed : decided) {
@@ -454,7 +454,7 @@ final class ConstructionPlan {
                         + " keeping two accounts of one position");
             }
         }
-        return switch (node(declared, at, inners, symbols, kinds, published, 0, decided, required,
+        return switch (node(declared, at, inners, symbols, kinds, sums, 0, decided, required,
                 howMany)) {
             case NodeResult.Made(Node root) -> new Result.Planned(new ConstructionPlan(root));
             case NodeResult.Refused(ModelRefusal why) -> new Result.Refused(why);
@@ -556,14 +556,14 @@ final class ConstructionPlan {
 
     private static NodeResult node(Type declared, TermPath at, NewtypeInners inners,
                                    Symbols symbols,
-                                   DeclarationKinds kinds, PublishedDeclarations published,
+                                   DeclarationKinds kinds, SumCases sums,
                                    int depth,
                                    Set<TermPath> decided, Requirements required,
                                    HowManyItHolds howMany) {
         // What the requirements leave standing here, worked out before anything is decided about
         // the position. Read once and in full: what is built, whether the search chooses it, and
         // where every path below it hangs all follow from it.
-        Settled settled = settle(declared, at, inners, symbols, kinds, published, required);
+        Settled settled = settle(declared, at, inners, symbols, kinds, sums, required);
         if (settled.exact() != null) {
             refuseWhatWouldStandUnder(settled.at(), decided, required);
             return new NodeResult.Made(
@@ -578,7 +578,7 @@ final class ConstructionPlan {
         }
         TermPath here = settled.at();
         Type building = settled.building();
-        TypeView view = TypeView.of(building, inners, symbols, kinds, published);
+        TypeView view = TypeView.of(building, inners, symbols, kinds, sums);
         // The names the position wore before the narrowings, and those with the narrowed type's own
         // after them — which is what a value composed here bare needs. Both are what the position
         // declares, kept: a value written under the narrowed type's names alone is of a type the
@@ -620,7 +620,7 @@ final class ConstructionPlan {
                 return givenUpAt(descent, here, building, settled.outer(), demanded);
             }
             NodeResult inside = node(sequence.element(), here.element(), inners, symbols,
-                    kinds, published,
+                    kinds, sums,
                     depth + 1, decided, required, howMany);
             if (!(inside instanceof NodeResult.Made(Node element))) {
                 return inside;
@@ -653,7 +653,7 @@ final class ConstructionPlan {
             // state.
             if (anythingIsAskedUnder(here, decided, required)) {
                 return new NodeResult.Unnarrowed(here,
-                        narrowingsAt(settled, inners, symbols, kinds, published));
+                        narrowingsAt(settled, inners, symbols, kinds, sums));
             }
             return new NodeResult.Made(
                     new Slot(here, building, settled.outer(), new Leaf.Open()));
@@ -667,7 +667,7 @@ final class ConstructionPlan {
         NodeResult.Unnarrowed owed = null;
         for (Map.Entry<String, Type> field : composed.fields().entrySet()) {
             switch (node(field.getValue(), here.then(field.getKey()), inners, symbols, kinds,
-                    published, depth + 1,
+                    sums, depth + 1,
                     decided, required, howMany)) {
                 case NodeResult.Made(Node built) -> under.put(field.getKey(), built);
                 // The model settling that there is no value ends the walk. Nothing a field further
@@ -745,14 +745,14 @@ final class ConstructionPlan {
     private static List<Refinement> narrowingsAt(Settled settled, NewtypeInners inners,
                                                  Symbols symbols,
                                                  DeclarationKinds kinds,
-                                                 PublishedDeclarations published) {
+                                                 SumCases sums) {
         List<Refinement> out = new ArrayList<>();
         for (Case one : Distinctions.ofType(
-                TypeView.shapeOf(settled.building(), inners, symbols, kinds, published), symbols,
-                kinds, published)) {
+                TypeView.shapeOf(settled.building(), inners, symbols, kinds, sums), symbols,
+                kinds, sums)) {
             Refinement narrowing = Refinement.of(one);
             if (narrowing != null
-                    && applying(settled, narrowing, inners, symbols, kinds, published).exact()
+                    && applying(settled, narrowing, inners, symbols, kinds, sums).exact()
                             == null) {
                 out.add(narrowing);
             }
@@ -805,12 +805,12 @@ final class ConstructionPlan {
      */
     private static Settled settle(Type declared, TermPath at, NewtypeInners inners,
                                   Symbols symbols,
-                                  DeclarationKinds kinds, PublishedDeclarations published,
+                                  DeclarationKinds kinds, SumCases sums,
                                   Requirements required) {
         Settled settled = new Settled(at, declared, null, List.of());
         for (Refinement refinement = required.at(settled.at()); refinement != null;
                 refinement = required.at(settled.at())) {
-            settled = applying(settled, refinement, inners, symbols, kinds, published);
+            settled = applying(settled, refinement, inners, symbols, kinds, sums);
             // Nothing narrows what is not there, so a narrowing that settled the value is the end
             // of the chain whatever else was written.
             if (settled.exact() != null) {
@@ -831,9 +831,9 @@ final class ConstructionPlan {
      */
     private static Settled applying(Settled settled, Refinement refinement, NewtypeInners inners,
                                     Symbols symbols,
-                                    DeclarationKinds kinds, PublishedDeclarations published) {
+                                    DeclarationKinds kinds, SumCases sums) {
         List<TypeSymbol> outer = outside(settled.outer(),
-                TypeView.of(settled.building(), inners, symbols, kinds, published).wrappers());
+                TypeView.of(settled.building(), inners, symbols, kinds, sums).wrappers());
         TermPath here = settled.at().refine(refinement);
         if (refinement instanceof Refinement.Presence presence && !presence.present()) {
             // The absence of an optional settles the value rather than narrowing to something to be
@@ -844,7 +844,7 @@ final class ConstructionPlan {
             return new Settled(here, null, FixtureTemplate.none(), outer);
         }
         return new Settled(here,
-                narrowed(settled.building(), refinement, inners, symbols, kinds, published),
+                narrowed(settled.building(), refinement, inners, symbols, kinds, sums),
                 null, outer);
     }
 
@@ -951,14 +951,14 @@ final class ConstructionPlan {
      */
     private static Type narrowed(Type declared, Refinement refinement, NewtypeInners inners,
                                  Symbols symbols,
-                                 DeclarationKinds kinds, PublishedDeclarations published) {
+                                 DeclarationKinds kinds, SumCases sums) {
         return switch (refinement) {
             case Refinement.SumCase one -> Type.ref(one.leaf());
             // What a `Some` leaves at the position is what the optional was declared to hold, which
             // is the same reading the branches under a position are made from
             // (`StructuralInspection.carried`).
             case Refinement.Presence presence ->
-                    presence.present() ? held(declared, inners, symbols, kinds, published)
+                    presence.present() ? held(declared, inners, symbols, kinds, sums)
                     : illegal(declared);
         };
     }
@@ -978,8 +978,8 @@ final class ConstructionPlan {
      * {@code data MaybeTagN = Tag?} is an optional and holds a {@code Tag}.
      */
     private static Type held(Type declared, NewtypeInners inners, Symbols symbols,
-                             DeclarationKinds kinds, PublishedDeclarations published) {
-        if (TypeView.shapeOf(declared, inners, symbols, kinds, published)
+                             DeclarationKinds kinds, SumCases sums) {
+        if (TypeView.shapeOf(declared, inners, symbols, kinds, sums)
                 instanceof souther.compiler.check.Shape.Optional optional) {
             return optional.element();
         }

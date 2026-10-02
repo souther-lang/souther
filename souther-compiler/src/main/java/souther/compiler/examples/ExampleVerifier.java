@@ -9,7 +9,7 @@ import souther.compiler.check.AtomSpace;
 import souther.compiler.core.Contract;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.DeclarationKinds;
-import souther.compiler.check.PublishedDeclarations;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Sig;
@@ -154,7 +154,7 @@ public final class ExampleVerifier {
      * @throws IllegalArgumentException where the artifact is of another module
      */
     public static Observations check(souther.compiler.check.Prepared.ForExamples module,
-                                     Symbols symbols, PublishedDeclarations published,
+                                     Symbols symbols, SumCases sums,
                                      DeclarationKinds kinds,
                                      souther.compiler.observe.FieldTypes fields,
                                      Map<ValueName.Behavior, Sig> sigs,
@@ -173,7 +173,7 @@ public final class ExampleVerifier {
         if (module.examples().isEmpty()) {
             return Observations.NONE;
         }
-        ExampleVerifier v = evaluating(module, symbols, published, kinds, fields, sigs, artifact,
+        ExampleVerifier v = evaluating(module, symbols, sums, kinds, fields, sigs, artifact,
                 declared,
                 requirements, parent, values, deadline, policy, answering, contracts);
         List<Diagnostic> failures = new ArrayList<>();
@@ -216,7 +216,7 @@ public final class ExampleVerifier {
      * what an implementation answers out of changes between one row and the next.
      */
     public static ExampleVerifier evaluating(souther.compiler.check.Prepared.ForExamples module,
-                                      Symbols symbols, PublishedDeclarations published,
+                                      Symbols symbols, SumCases sums,
                                       DeclarationKinds kinds,
                                       souther.compiler.observe.FieldTypes fields,
                                       Map<ValueName.Behavior, Sig> sigs,
@@ -228,7 +228,7 @@ public final class ExampleVerifier {
                                       Answering answering,
                                       Map<ValueName.Behavior, Contract> contracts) {
         MemoryClassLoader loader = new MemoryClassLoader(artifact.classes(), parent);
-        return new ExampleVerifier(module, symbols, published, kinds, fields, sigs, requirements,
+        return new ExampleVerifier(module, symbols, sums, kinds, fields, sigs, requirements,
                 loader,
                 values,
                 deadline, policy, answering.over(artifact.implementations(), loader), declared,
@@ -717,8 +717,8 @@ public final class ExampleVerifier {
 
     private final souther.compiler.check.Prepared.ForExamples module;
     private final Symbols symbols;
-    /** What the declarations a row names say about themselves. */
-    private final PublishedDeclarations published;
+    /** What a value of each sum a row names can be. */
+    private final SumCases sums;
     /** Which form each of those declarations was written in. */
     private final DeclarationKinds kinds;
     /** What a value of a declaration is made of, as the check settled it. */
@@ -781,7 +781,7 @@ public final class ExampleVerifier {
     private final EnsuresChecks ensures;
 
     private ExampleVerifier(souther.compiler.check.Prepared.ForExamples module,
-                            Symbols symbols, PublishedDeclarations published,
+                            Symbols symbols, SumCases sums,
                             DeclarationKinds kinds,
                             souther.compiler.observe.FieldTypes fields,
                             Map<ValueName.Behavior, Sig> sigs,
@@ -795,7 +795,7 @@ public final class ExampleVerifier {
         this.ensures = new EnsuresChecks(loader, contracts, sigs.keySet());
         this.module = module;
         this.symbols = symbols;
-        this.published = published;
+        this.sums = sums;
         this.kinds = kinds;
         this.fields = fields;
         this.sigs = sigs;
@@ -818,7 +818,7 @@ public final class ExampleVerifier {
      * starts.
      */
     private FixtureReader newFixtureReader() {
-        return new FixtureReader(module, symbols, published, kinds, fields, values, loader);
+        return new FixtureReader(module, symbols, sums, kinds, fields, values, loader);
     }
 
     // --- one example (a target and its rows) --------------------------------------------------
@@ -1862,7 +1862,7 @@ public final class ExampleVerifier {
     private TypeSymbol caseWritten(FixtureReader fixtures, Hir.Expr fixture, Type position) {
         try {
             return fixtures.caseUnder(
-                    TypeView.asWritten(position, symbols, kinds, published).wrappers(), fixture);
+                    TypeView.asWritten(position, symbols, kinds, sums).wrappers(), fixture);
         } catch (RuntimeException e) {
             if (overspending(e) != null) {
                 throw e;   // the row's budget is gone; it is not a form that could not be read
@@ -1881,7 +1881,7 @@ public final class ExampleVerifier {
         if (result == null || !(out instanceof Type.Union)) {
             return result;
         }
-        for (TypeSymbol member : AtomSpace.subjectAtoms(out, kinds, published)) {
+        for (TypeSymbol member : AtomSpace.subjectAtoms(out, kinds, sums)) {
             if (!member.isDeclaredByLanguage()
                     && member instanceof TypeSymbol.AtModule at
                     && at.module().equals(module.name())) {
@@ -2354,7 +2354,7 @@ public final class ExampleVerifier {
     }
 
     private Set<TypeSymbol> outCases(Type out) {
-        return TypeOps.outputCases(out, kinds, published);
+        return TypeOps.outputCases(out, kinds, sums);
     }
 
     // --- what a row hands over, and what it makes of a failure ---------------------------------

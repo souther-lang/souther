@@ -467,7 +467,7 @@ class CompileFakeExampleDisagreementTest {
         return ExampleStatements.disagreements(
                 prepared.forExamples(),
                 souther.compiler.query.Scopes.derived(c.db(), name).value(),
-                souther.compiler.query.Shapes.publishedDeclarations(c.db()),
+                souther.compiler.query.Shapes.sumCases(c.db()),
                 souther.compiler.query.Shapes.declarationKinds(c.db()),
                 souther.compiler.query.ExampleExecutions.of(c.db(), name).fieldTypes(),
                 c.db().ask(new souther.compiler.query.Bodies.Reachable(name)).value(),

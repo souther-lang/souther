@@ -32,13 +32,13 @@ public final class SignatureDeclarations {
      */
     public static Map<String, DeclaredSig> of(List<Hir.BehaviorDef> behaviors, Symbols symbols,
                                               DeclarationKinds kinds,
-                                              PublishedDeclarations published) {
+                                              SumCases sums) {
         Map<String, DeclaredSig> declared = new LinkedHashMap<>();
         for (Hir.BehaviorDef b : behaviors) {
             if (b instanceof Hir.SpecBehavior spec) {
                 try {
                     declared.put(spec.name(),
-                            SignatureBoundary.of(spec, symbols, kinds, published));
+                            SignatureBoundary.of(spec, symbols, kinds, sums));
                 } catch (Unanswerable _) {
                     // deliberately empty: see above
                 }

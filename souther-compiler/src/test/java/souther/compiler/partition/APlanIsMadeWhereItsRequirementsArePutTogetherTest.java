@@ -116,7 +116,7 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
 
         ConstructionPlan.Result asked = ConstructionPlan.of(typeOf(), TermPath.of("query"),
                 ScopedDeclarations.wrapsOf(symbols()),
-                symbols(), ScopedDeclarations.kindsOf(symbols()), ScopedDeclarations.of(symbols()),
+                symbols(), ScopedDeclarations.kindsOf(symbols()), ScopedDeclarations.sumsOf(symbols()),
                 Set.of(tag.refine(caseOf("Tag"))),
                 Requirements.NONE.and(tag, caseOf("NoTag")), ANY);
 
@@ -150,7 +150,7 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
         IllegalStateException said = assertThrows(IllegalStateException.class,
                 () -> ConstructionPlan.of(typeOf(), TermPath.of("query"),
                         ScopedDeclarations.wrapsOf(symbols()), symbols(),
-                        ScopedDeclarations.kindsOf(symbols()), ScopedDeclarations.of(symbols()),
+                        ScopedDeclarations.kindsOf(symbols()), ScopedDeclarations.sumsOf(symbols()),
                         Set.of(tag),
                         Requirements.NONE.and(tag, caseOf("Tag")), ANY));
 
@@ -187,7 +187,7 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
                 () -> ConstructionPlan.of(heldType(), TermPath.of("query"),
                         ScopedDeclarations.wrapsOf(heldSymbols()), heldSymbols(),
                         ScopedDeclarations.kindsOf(heldSymbols()),
-                        ScopedDeclarations.of(heldSymbols()), Set.of(),
+                        ScopedDeclarations.sumsOf(heldSymbols()), Set.of(),
                         Requirements.NONE.and(tag, Refinement.of(new Case.Presence(false)))
                                 .and(absent, caseOf("Tag")),
                         ANY));
@@ -212,7 +212,7 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
                 () -> ConstructionPlan.of(heldType(), TermPath.of("query"),
                         ScopedDeclarations.wrapsOf(heldSymbols()), heldSymbols(),
                         ScopedDeclarations.kindsOf(heldSymbols()),
-                        ScopedDeclarations.of(heldSymbols()), Set.of(absent.then("value")),
+                        ScopedDeclarations.sumsOf(heldSymbols()), Set.of(absent.then("value")),
                         Requirements.NONE.and(tag, Refinement.of(new Case.Presence(false))),
                         ANY));
 
@@ -232,7 +232,7 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
         return assertInstanceOf(ConstructionPlan.Result.Planned.class,
                 ConstructionPlan.of(typeOf(), TermPath.of("query"),
                         ScopedDeclarations.wrapsOf(symbols()), symbols(),
-                        ScopedDeclarations.kindsOf(symbols()), ScopedDeclarations.of(symbols()),
+                        ScopedDeclarations.kindsOf(symbols()), ScopedDeclarations.sumsOf(symbols()),
                         decided, additional, ANY),
                 "nothing here asks one position to be two things").plan();
     }

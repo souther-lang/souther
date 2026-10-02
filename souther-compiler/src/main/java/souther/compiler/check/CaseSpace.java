@@ -114,14 +114,14 @@ sealed interface CaseSpace {
          */
         @Override
         public ResolvedCase covering(TypeSymbol name, DeclarationKinds kinds,
-                                     PublishedDeclarations published) {
+                                     SumCases sums) {
             if (TypeSymbol.SOME.equals(name) || TypeSymbol.NONE.equals(name)) {
                 return null;   // an optional's carriers, which no subject with cases has
             }
             ResolvedCase candidate =
-                    resolve(CaseSelector.direct(name), kinds, published);
+                    resolve(CaseSelector.direct(name), kinds, sums);
             return !candidate.atoms().isEmpty()
-                    && new LinkedHashSet<>(AtomSpace.subjectAtoms(subject, kinds, published))
+                    && new LinkedHashSet<>(AtomSpace.subjectAtoms(subject, kinds, sums))
                             .containsAll(candidate.atoms())
                     ? candidate
                     : null;
@@ -135,14 +135,15 @@ sealed interface CaseSpace {
      * {@code Option} is not a declaration a module holds; a union is read before a name because it
      * has no name to look up.
      */
-    static CaseSpace of(Type subject, DeclarationKinds kinds, PublishedDeclarations published) {
+    static CaseSpace of(Type subject, DeclarationKinds kinds, PublishedDeclarations published,
+                        SumCases sums) {
         if (subject instanceof Type.OptionOf option) {
             // An optional's carriers cover themselves. What `Some` holds is the element, and the
             // element's own atoms are not what an arm over an optional answers for: `Some` is the
             // case, whatever it wraps.
             return new Optional(subject, List.of(
-                    resolve(CaseSelector.optionPresent(option.element()), kinds, published),
-                    resolve(CaseSelector.optionAbsent(), kinds, published)));
+                    resolve(CaseSelector.optionPresent(option.element()), kinds, sums),
+                    resolve(CaseSelector.optionAbsent(), kinds, sums)));
         }
         if (subject instanceof Type.Union union) {
             // Described from the members this lists and not by showing the union again. What a
@@ -151,7 +152,7 @@ sealed interface CaseSpace {
             // and the two halves of one message would order the same union two ways.
             List<TypeSymbol> members = AtomSpace.statedBy(union);
             return new Cases(subject, "union `" + shown(members) + "`",
-                    direct(members, kinds, published));
+                    direct(members, kinds, sums));
         }
         // Whether the subject is a sum is asked of the form, which is settled where the module was
         // indexed; what its cases are is asked of the declaration, and only of the ones that are
@@ -163,15 +164,15 @@ sealed interface CaseSpace {
                 && published.of(at.key())
                     instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Sum sum)) {
             return new Cases(subject, "data `" + sum.declares().name() + "`",
-                    direct(AtomSpace.declaredCases(sum), kinds, published));
+                    direct(AtomSpace.declaredCases(sum), kinds, sums));
         }
         return new Plain(subject);
     }
 
     /** Whether {@code name} selects part of what this subject can be. */
     default boolean holds(TypeSymbol name, DeclarationKinds kinds,
-                          PublishedDeclarations published) {
-        return selector(name, kinds, published) != null;
+                          SumCases sums) {
+        return selector(name, kinds, sums) != null;
     }
 
     /**
@@ -183,13 +184,13 @@ sealed interface CaseSpace {
      * part of what the subject can be selects that part whether or not the subject listed it.
      */
     default ResolvedCase selector(TypeSymbol name, DeclarationKinds kinds,
-                                  PublishedDeclarations published) {
+                                  SumCases sums) {
         for (ResolvedCase selected : selectors()) {
             if (selected.name().equals(name)) {
                 return selected;
             }
         }
-        return covering(name, kinds, published);
+        return covering(name, kinds, sums);
     }
 
     /**
@@ -200,7 +201,7 @@ sealed interface CaseSpace {
      * them would be selecting a carrier it is not.
      */
     default ResolvedCase covering(TypeSymbol name, DeclarationKinds kinds,
-                                  PublishedDeclarations published) {
+                                  SumCases sums) {
         return null;
     }
 
@@ -238,20 +239,20 @@ sealed interface CaseSpace {
      * are and in what order; what one of them reaches is not restated here.
      */
     private static List<ResolvedCase> direct(Iterable<TypeSymbol> members, DeclarationKinds kinds,
-                                             PublishedDeclarations published) {
+                                             SumCases sums) {
         Set<TypeSymbol> seen = new LinkedHashSet<>();
         for (TypeSymbol member : members) {
             seen.add(member);
         }
         List<ResolvedCase> out = new ArrayList<>();
         for (TypeSymbol member : seen) {
-            out.add(resolve(CaseSelector.direct(member), kinds, published));
+            out.add(resolve(CaseSelector.direct(member), kinds, sums));
         }
         return out;
     }
 
     /**
-     * {@code selector} resolved against the declarations {@code published} holds.
+     * {@code selector} resolved against what {@code sums} says a value of each sum can be.
      *
      * <p>The one place what a case covers is worked out. A {@link ResolvedCase} is a selector and
      * the atoms selecting it reaches, and the second half is a fact about the declarations this
@@ -264,8 +265,8 @@ sealed interface CaseSpace {
      * this pass rather than reading the declarations a second time.
      */
     static ResolvedCase resolve(CaseSelector selector, DeclarationKinds kinds,
-                                PublishedDeclarations published) {
-        return ResolvedCase.of(selector, covers(selector, kinds, published));
+                                SumCases sums) {
+        return ResolvedCase.of(selector, covers(selector, kinds, sums));
     }
 
     /**
@@ -283,13 +284,13 @@ sealed interface CaseSpace {
      * because the type to ask it about is the one that is missing.
      */
     private static List<TypeSymbol> covers(CaseSelector selector, DeclarationKinds kinds,
-                                           PublishedDeclarations published) {
+                                           SumCases sums) {
         return switch (selector.refinement()) {
             case Refinement.OptionPresent _ -> List.of(TypeSymbol.SOME);
             case Refinement.OptionAbsent _ -> List.of(TypeSymbol.NONE);
             case Refinement.Direct direct -> direct.bound() == null
                     ? List.of()
-                    : AtomSpace.subjectAtoms(direct.bound(), kinds, published);
+                    : AtomSpace.subjectAtoms(direct.bound(), kinds, sums);
         };
     }
 }

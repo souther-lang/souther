@@ -150,7 +150,7 @@ class OnlyTypeAtWrittenPathStepsIntoAWrittenValueTest {
                         + "Lsouther/compiler/check/NewtypeInners;"
                         + "Lsouther/compiler/check/Symbols;"
                         + "Lsouther/compiler/check/DeclarationKinds;"
-                        + "Lsouther/compiler/check/PublishedDeclarations;"
+                        + "Lsouther/compiler/check/SumCases;"
                         + ")Lsouther/compiler/types/Type;"),
                 declared,
                 "where a written value has a part is one question, so it is answered by one method");

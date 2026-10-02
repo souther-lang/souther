@@ -51,16 +51,16 @@ final class SignatureBoundary {
      * both are in hand, rather than by a reader holding the two lists afterwards.
      */
     static DeclaredSig of(Hir.SpecBehavior spec, Symbols symbols, DeclarationKinds kinds,
-                          PublishedDeclarations published) {
+                          SumCases sums) {
         List<DeclaredSig.Input> ins = new ArrayList<>(spec.params().size());
         for (Hir.Param p : spec.params()) {
             Type t = TypeOps.successType(p.type());
             ins.add(new DeclaredSig.Input(p.name(),
-                    input(t, t, Where.param(p, spec.pos()), symbols, kinds, published)));
+                    input(t, t, Where.param(p, spec.pos()), symbols, kinds, sums)));
         }
         Type out = TypeOps.successType(spec.ret());
         return new DeclaredSig(ins,
-                output(out, out, Where.output(spec.name(), spec.pos()), symbols, kinds, published));
+                output(out, out, Where.output(spec.name(), spec.pos()), symbols, kinds, sums));
     }
 
     /**
@@ -70,16 +70,16 @@ final class SignatureBoundary {
      */
     static Sig publishedComposition(Hir.PipeBehavior pipe, Hir.Composition.Elsewhere elsewhere,
                                     Symbols symbols, DeclarationKinds kinds,
-                                    PublishedDeclarations published) {
+                                    SumCases sums) {
         List<BoundaryInput> ins = new ArrayList<>(elsewhere.takes().size());
         for (Hir.RetType takes : elsewhere.takes()) {
             Type t = TypeOps.successType(takes);
             ins.add(input(t, t, Where.publishedInput(pipe.name(), pipe.pos()), symbols, kinds,
-                    published));
+                    sums));
         }
         Type out = TypeOps.successType(elsewhere.answers());
         return new Sig(ins,
-                output(out, out, Where.output(pipe.name(), pipe.pos()), symbols, kinds, published));
+                output(out, out, Where.output(pipe.name(), pipe.pos()), symbols, kinds, sums));
     }
 
     /**
@@ -89,8 +89,8 @@ final class SignatureBoundary {
      */
     static BoundaryOutput composedOutput(String behavior, SourcePos at, Type out, Symbols symbols,
                                          DeclarationKinds kinds,
-                                         PublishedDeclarations published) {
-        return output(out, out, Where.output(behavior, at), symbols, kinds, published);
+                                         SumCases sums) {
+        return output(out, out, Where.output(behavior, at), symbols, kinds, sums);
     }
 
     /**
@@ -101,16 +101,16 @@ final class SignatureBoundary {
      */
     private static BoundaryInput input(Type t, Type whole, Where where, Symbols symbols,
                                        DeclarationKinds kinds,
-                                       PublishedDeclarations published) {
+                                       SumCases sums) {
         return switch (t) {
             case Type.Prim p -> new BoundaryInput.Scalar(scalar(p, where));
             case Type.Ref r -> new BoundaryInput.Nominal(nominal(r.name(), where, symbols));
             case Type.ListOf l ->
-                    new BoundaryInput.ListOf(input(l.element(), whole, where, symbols, kinds, published));
+                    new BoundaryInput.ListOf(input(l.element(), whole, where, symbols, kinds, sums));
             case Type.SetOf s ->
-                    new BoundaryInput.SetOf(input(s.element(), whole, where, symbols, kinds, published));
-            case Type.MapOf m -> new BoundaryInput.MapOf(mapKey(m.key(), where, symbols, kinds, published),
-                    input(m.value(), whole, where, symbols, kinds, published));
+                    new BoundaryInput.SetOf(input(s.element(), whole, where, symbols, kinds, sums));
+            case Type.MapOf m -> new BoundaryInput.MapOf(mapKey(m.key(), where, symbols, kinds, sums),
+                    input(m.value(), whole, where, symbols, kinds, sums));
             // A parameter names a single type, a named sum included, so the members of a union have
             // no name the far side can hold onto: the input and the output are separate for this.
             case Type.Union u -> throw union(u, where);
@@ -125,17 +125,17 @@ final class SignatureBoundary {
     /** What a behavior's answer can leave as. */
     private static BoundaryOutput output(Type t, Type whole, Where where, Symbols symbols,
                                          DeclarationKinds kinds,
-                                         PublishedDeclarations published) {
+                                         SumCases sums) {
         return switch (t) {
             case Type.Prim p -> new BoundaryOutput.Scalar(scalar(p, where));
             case Type.Ref r -> new BoundaryOutput.Nominal(nominal(r.name(), where, symbols));
             case Type.Union u -> new BoundaryOutput.Cases(admittedCases(u, where, symbols));
             case Type.ListOf l ->
-                    new BoundaryOutput.ListOf(output(l.element(), whole, where, symbols, kinds, published));
+                    new BoundaryOutput.ListOf(output(l.element(), whole, where, symbols, kinds, sums));
             case Type.SetOf s ->
-                    new BoundaryOutput.SetOf(output(s.element(), whole, where, symbols, kinds, published));
-            case Type.MapOf m -> new BoundaryOutput.MapOf(mapKey(m.key(), where, symbols, kinds, published),
-                    output(m.value(), whole, where, symbols, kinds, published));
+                    new BoundaryOutput.SetOf(output(s.element(), whole, where, symbols, kinds, sums));
+            case Type.MapOf m -> new BoundaryOutput.MapOf(mapKey(m.key(), where, symbols, kinds, sums),
+                    output(m.value(), whole, where, symbols, kinds, sums));
             case Type.OptionOf o -> throw optional(o, where);
             case Type.TupleOf _ -> throw tuple(where);
             case Type.FnOf _ -> throw function(whole, where);
@@ -218,9 +218,9 @@ final class SignatureBoundary {
      */
     private static CrossingMapKey mapKey(Type key, Where where, Symbols symbols,
                                          DeclarationKinds kinds,
-                                         PublishedDeclarations published) {
+                                         SumCases sums) {
         MapKeyRepresentation representation =
-                TypeOps.classifyConcreteMapKey(key, symbols, kinds, published);
+                TypeOps.classifyConcreteMapKey(key, symbols, kinds, sums);
         if (representation == null) {
             throw notAKey(key, where);
         }

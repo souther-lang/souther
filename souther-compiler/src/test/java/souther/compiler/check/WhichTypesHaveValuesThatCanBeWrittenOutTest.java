@@ -44,14 +44,14 @@ class WhichTypesHaveValuesThatCanBeWrittenOutTest {
         return ValueUniverse.of(
                 Type.ref(TypeSymbols.declared(new TypeKey(symbols.module(), named))),
                 ScopedDeclarations.wrapsOf(symbols),
-                ScopedDeclarations.kindsOf(symbols), ScopedDeclarations.of(symbols));
+                ScopedDeclarations.kindsOf(symbols), ScopedDeclarations.sumsOf(symbols));
     }
 
     @Test
     void aBooleanIsTwoValues() {
         assertEquals(List.of(Value.truth(false), Value.truth(true)),
                 ValueUniverse.of(Type.BOOL, NewtypeInners.NONE,
-                        DeclarationKinds.NONE, PublishedDeclarations.NONE));
+                        DeclarationKinds.NONE, SumCases.NONE));
     }
 
     /** And a name wrapped round one is the same two: wearing a name is not being another type. */
@@ -82,7 +82,7 @@ class WhichTypesHaveValuesThatCanBeWrittenOutTest {
                         Type.ref(TypeSymbols.declared(new TypeKey(symbols.module(), "Colour"))),
                         ScopedDeclarations.wrapsOf(symbols),
                         ScopedDeclarations.kindsOf(symbols),
-                        ScopedDeclarations.of(symbols)));
+                        ScopedDeclarations.sumsOf(symbols)));
     }
 
     private static Value named(Symbols symbols, String data) {
@@ -99,13 +99,13 @@ class WhichTypesHaveValuesThatCanBeWrittenOutTest {
     @Test
     void thePositionsWithNoValuesToWriteOutAreAnsweredNothing() {
         assertNull(ValueUniverse.of(Type.STRING, NewtypeInners.NONE, DeclarationKinds.NONE,
-                PublishedDeclarations.NONE));
+                SumCases.NONE));
         assertNull(ValueUniverse.of(Type.INT, NewtypeInners.NONE, DeclarationKinds.NONE,
-                PublishedDeclarations.NONE));
+                SumCases.NONE));
         assertNull(ValueUniverse.of(Type.DECIMAL, NewtypeInners.NONE, DeclarationKinds.NONE,
-                PublishedDeclarations.NONE));
+                SumCases.NONE));
         assertNull(ValueUniverse.of(Type.DATE, NewtypeInners.NONE, DeclarationKinds.NONE,
-                PublishedDeclarations.NONE));
+                SumCases.NONE));
     }
 
     /** A sum whose cases hold something is not an enumeration, so its values are not written out. */

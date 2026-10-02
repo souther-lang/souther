@@ -7,6 +7,7 @@ import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.FakeTables;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Contract;
 import souther.compiler.coverage.NumberingIdentity;
@@ -76,7 +77,7 @@ public final class RowTrial {
      */
     public static RowTrials over(Prepared.ForExamples module,
                               Symbols symbols,
-                              souther.compiler.check.PublishedDeclarations published,
+                              SumCases sums,
                               souther.compiler.check.DeclarationKinds kinds,
                               FieldTypes fields,
                               Map<String, ClassFileImage> classes,
@@ -96,7 +97,7 @@ public final class RowTrial {
             // One reader per row, the way a written row has one: what a reading builds up while it
             // expands a value is that row's, and a reader kept between them would be a session
             // spanning every candidate of every combination.
-            return went(new FixtureReader(module, symbols, published, kinds, fields, values, loader),
+            return went(new FixtureReader(module, symbols, sums, kinds, fields, values, loader),
                     module, ensures,
                     applies, behavior, sig, inputs, answers, probes, steps);
         };

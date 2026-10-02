@@ -6,7 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.CallElaborator;
 import souther.compiler.check.DeclarationKinds;
-import souther.compiler.check.PublishedDeclarations;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.cst.SyntaxKind;
 import souther.compiler.core.IntNegation;
@@ -80,8 +80,8 @@ public final class FixtureReader {
 
     private final souther.compiler.check.Prepared.ForExamples module;
     private final Symbols symbols;
-    /** What the declarations a fixture names say about themselves. */
-    private final PublishedDeclarations published;
+    /** What a value of each sum a fixture names can be. */
+    private final SumCases sums;
     /** Which form each of those declarations was written in. */
     private final DeclarationKinds kinds;
     /** The values a row may name: this module's own, and the ones its imports bring in. */
@@ -95,12 +95,12 @@ public final class FixtureReader {
     private final ValueTypes types;
 
     FixtureReader(souther.compiler.check.Prepared.ForExamples module, Symbols symbols,
-                  PublishedDeclarations published, DeclarationKinds kinds,
+                  SumCases sums, DeclarationKinds kinds,
                   FieldTypes fields, Map<String, Hir.FnDef> values,
                   MemoryClassLoader loader) {
         this.module = module;
         this.symbols = symbols;
-        this.published = published;
+        this.sums = sums;
         this.kinds = kinds;
         this.values = values;
         this.loader = loader;
@@ -108,13 +108,13 @@ public final class FixtureReader {
         // What a declaration is laid out as reaches this reading through the two that read a value
         // by it, and is not held beside them: a reader here asks one of those, and one that asked
         // the declarations itself would be a third answer about what a value's parts are.
-        this.neutral = new NeutralForm(symbols, published, kinds, fields);
+        this.neutral = new NeutralForm(symbols, sums, kinds, fields);
         this.types = ValueTypes.over(fields);
     }
 
     /** A way to build values against this module's generated classes, without any rows to run. */
     public static BoundaryValues constructing(souther.compiler.check.Prepared.ForExamples module,
-                                              Symbols symbols, PublishedDeclarations published,
+                                              Symbols symbols, SumCases sums,
                                             DeclarationKinds kinds, FieldTypes fields,
                                             Map<String, ClassFileImage> classes, ClassLoader parent,
                                             Map<String, Hir.FnDef> values) {
@@ -129,7 +129,7 @@ public final class FixtureReader {
         // and a fake's subclass is generated once.
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
         return (at, fixture) ->
-                new FixtureReader(module, symbols, published, kinds, fields, values, loader)
+                new FixtureReader(module, symbols, sums, kinds, fields, values, loader)
                         .building(at, fixture);
     }
 
@@ -336,7 +336,7 @@ public final class FixtureReader {
         if (value == null) {
             return null;
         }
-        for (TypeSymbol candidate : AtomSpace.subjectAtoms(outType, kinds, published)) {
+        for (TypeSymbol candidate : AtomSpace.subjectAtoms(outType, kinds, sums)) {
             if (represents(candidate, value)) {
                 return candidate;
             }
@@ -499,7 +499,7 @@ public final class FixtureReader {
                     && spells(v, r.name());
             case Type.Ref _, Type.Union _ -> {
                 TypeSymbol name = named(a);
-                yield name != null && AtomSpace.subjectAtoms(type, kinds, published).contains(name)
+                yield name != null && AtomSpace.subjectAtoms(type, kinds, sums).contains(name)
                         && parts(a, name);
             }
             case Type.ListOf l -> a instanceof Asserted.Elements(Asserted.Container stated,
@@ -1064,7 +1064,7 @@ public final class FixtureReader {
             case Type.Ref r when r.name().isPrimitive() -> NO_NAME;
             case Type.Ref r -> new Admits.OneOf(
                     new LinkedHashSet<>(AtomSpace.subjectAtoms(Type.ref(r.name()), kinds,
-                            published)));
+                            sums)));
             case Type.Prim _, Type.ListOf _, Type.SetOf _, Type.MapOf _, Type.TupleOf _ -> NO_NAME;
             case null, default -> UNSAID;
         };

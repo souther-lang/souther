@@ -30,16 +30,16 @@ public interface EnumerationListings {
 
     /**
      * The same question read off the declarations in {@code symbols}, each time it is asked: every
-     * sum of the value's module, each asked whether it is an enumeration and opened if it is.
+     * sum of the value's module, each asked of {@code sums} whether it is an enumeration and what
+     * it lists if it is.
      *
      * <p>For the walks that have not been handed the compilation's answer.
      */
-    static EnumerationListings asWritten(Symbols symbols, DeclarationKinds kinds,
-                                         PublishedDeclarations published) {
+    static EnumerationListings asWritten(Symbols symbols, DeclarationKinds kinds, SumCases sums) {
         return value -> {
             Set<TypeSymbol> owners = new LinkedHashSet<>();
             TypeOps.forEachEnumeration(value.module(), symbols.declaredNamesIn(value.module()),
-                    kinds, published,
+                    kinds, sums,
                     (enumeration, listed) -> {
                         if (listed.contains(value)) {
                             owners.add(enumeration);

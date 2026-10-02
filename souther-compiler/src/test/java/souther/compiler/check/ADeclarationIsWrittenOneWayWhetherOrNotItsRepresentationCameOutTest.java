@@ -54,7 +54,7 @@ class ADeclarationIsWrittenOneWayWhetherOrNotItsRepresentationCameOutTest {
 
         Derived.Def derived =
                 Derived.Def.derive(amount, scope, ScopedDeclarations.kindsOf(scope),
-                        ScopedDeclarations.of(scope));
+                        ScopedDeclarations.sumsOf(scope));
 
         assertNotNull(derived, "`Amount` has a representation to derive");
         assertEquals(amount, derived.declaration(),
@@ -72,7 +72,7 @@ class ADeclarationIsWrittenOneWayWhetherOrNotItsRepresentationCameOutTest {
     void aDeclarationThatDidNotDeriveIsStillNormalised() {
         Normalized.Def broken = normalizedNamed("Broken");
 
-        assertNull(Derived.Def.derive(broken, scope, ScopedDeclarations.kindsOf(scope), ScopedDeclarations.of(scope)),
+        assertNull(Derived.Def.derive(broken, scope, ScopedDeclarations.kindsOf(scope), ScopedDeclarations.sumsOf(scope)),
                 "nothing could be derived for a field whose type names nothing");
         assertNotNull(broken.node(),
                 "and the declaration is still written in the form the stage below reads");
@@ -91,7 +91,7 @@ class ADeclarationIsWrittenOneWayWhetherOrNotItsRepresentationCameOutTest {
         for (InvariantSettled.Def def : settled.defs()) {
             Normalized.Def normalised = Normalized.Def.of(def, DeclarationNewtypes.asWritten(scope));
             Derived.Def derived =
-                    Derived.Def.derive(normalised, scope, ScopedDeclarations.kindsOf(scope), ScopedDeclarations.of(scope));
+                    Derived.Def.derive(normalised, scope, ScopedDeclarations.kindsOf(scope), ScopedDeclarations.sumsOf(scope));
             if (derived != null) {
                 assertSame(normalised, derived.declaration(),
                         "`" + def.name() + "` reached the derivation already written this way");

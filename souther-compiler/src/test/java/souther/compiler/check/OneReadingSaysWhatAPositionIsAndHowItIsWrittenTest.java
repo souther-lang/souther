@@ -54,14 +54,25 @@ class OneReadingSaysWhatAPositionIsAndHowItIsWrittenTest {
         return Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get()));
     }
 
+    /** {@code Stage} as a shape: its three units, every one a unit, and nothing they share. */
+    private Shape.Sum stage() {
+        return new Shape.Sum(declared("Stage"), new SumCases.Enumeration(
+                        List.of(declared("Prospecting"), declared("Qualified"), declared("Won"))),
+                new Shape.CommonProduct.None());
+    }
+
+    private TypeSymbol declared(String name) {
+        return TypeSymbols.declared(new TypeKey(symbols.module(), name));
+    }
+
     private TypeView view(String name) {
         return TypeView.asWritten(Type.ref(TypeSymbols.declared(new TypeKey(symbols.module(), name))),
-                symbols, ScopedDeclarations.kindsOf(symbols), ScopedDeclarations.of(symbols));
+                symbols, ScopedDeclarations.kindsOf(symbols), ScopedDeclarations.sumsOf(symbols));
     }
 
     private TypeView view(Type type) {
         return TypeView.asWritten(type, symbols, ScopedDeclarations.kindsOf(symbols),
-                ScopedDeclarations.of(symbols));
+                ScopedDeclarations.sumsOf(symbols));
     }
 
     // --- a name is never a shape ----------------------------------------------------------------
@@ -69,8 +80,7 @@ class OneReadingSaysWhatAPositionIsAndHowItIsWrittenTest {
     /** The reading issue #631 is about. What the position is, is what the name wraps. */
     @Test
     void aNewtypeOverASumIsThatSum() {
-        assertEquals(new Shape.Sum(TypeSymbols.declared(new TypeKey(symbols.module(), "Stage")),
-                new Shape.CommonProduct.None()), view("StageN").shape());
+        assertEquals(stage(), view("StageN").shape());
     }
 
     @Test
@@ -135,8 +145,7 @@ class OneReadingSaysWhatAPositionIsAndHowItIsWrittenTest {
     void eachTypeConstructorReadsAsItsOwnShape() {
         assertEquals(new Shape.Scalar(Type.Prim.STRING), view(Type.STRING).shape());
         assertEquals(new Shape.Unit(TypeSymbols.declared(new TypeKey(symbols.module(), "Won"))), view("Won").shape());
-        assertEquals(new Shape.Sum(TypeSymbols.declared(new TypeKey(symbols.module(), "Stage")),
-                new Shape.CommonProduct.None()), view("Stage").shape());
+        assertEquals(stage(), view("Stage").shape());
         assertEquals(new Shape.Sequence(Shape.Sequence.Kind.LIST, Type.INT),
                 view(Type.list(Type.INT)).shape());
         assertEquals(new Shape.Sequence(Shape.Sequence.Kind.SET, Type.INT),

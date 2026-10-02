@@ -9,6 +9,7 @@ import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.NewtypeInners;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.TypeOps;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.meta.ModulePath;
@@ -74,6 +75,8 @@ class AnEmitterWritesWhatItWasHandedTest {
     /** Which form each of them was written in. */
     private final souther.compiler.check.DeclarationKinds forms =
             souther.compiler.query.Shapes.declarationKinds(compilation.db());
+    /** What a value of each sum among them can be. */
+    private final SumCases sums = SumCases.asWritten(forms, said);
     private final CodecGen codec = codecGen();
 
     @Test
@@ -153,7 +156,7 @@ class AnEmitterWritesWhatItWasHandedTest {
     /** The sum's first atom alone, under a key no derivation produces. */
     private Boundary.Alternatives oneAtom(String sumName, String key) {
         List<TypeSymbol> atoms =
-                Boundary.of(Type.ref(sum(sumName).declares()), forms, said).atoms();
+                Boundary.of(Type.ref(sum(sumName).declares()), forms, sums).atoms();
         return new Boundary.Alternatives(List.of(atoms.get(0)),
                 new Boundary.Representation.Discriminated(key, SENTINEL_CONTENTS_KEY));
     }
@@ -161,7 +164,7 @@ class AnEmitterWritesWhatItWasHandedTest {
     /** The sum's newtype case alone, under keys no derivation produces. */
     private Boundary.Alternatives theNewtypeCase(String sumName) {
         List<TypeSymbol> atoms =
-                Boundary.of(Type.ref(sum(sumName).declares()), forms, said).atoms();
+                Boundary.of(Type.ref(sum(sumName).declares()), forms, sums).atoms();
         TypeSymbol wrapped = atoms.stream()
                 .filter(atom -> TypeOps.caseShape(atom, symbols) == CaseShape.WRAPPED)
                 .findFirst()

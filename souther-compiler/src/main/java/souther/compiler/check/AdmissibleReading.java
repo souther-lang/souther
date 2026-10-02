@@ -57,9 +57,9 @@ final class AdmissibleReading {
     /** The same positions as chains of names, for asking which subexpression of a clause is one. */
     private final Term.Chains chains;
     private final Symbols symbols;
-    /** What the declarations a position names say about themselves. Beside {@link #symbols} and not
-     *  read off it: what a declaration states is not what this module's world holds. */
-    private final PublishedDeclarations published;
+    /** What a value of each sum a position names can be. Beside {@link #symbols} and not read off
+     *  it: what a declaration states is not what this module's world holds. */
+    private final SumCases sums;
     /**
      * What puts two sets together, and what it is allowed to build doing it.
      *
@@ -96,13 +96,13 @@ final class AdmissibleReading {
      */
     private final Set<Core> gaveUp = Collections.newSetFromMap(new IdentityHashMap<>());
     private AdmissibleReading(Terms terms, Map<FactSubject, Type> byName, Term.Chains chains,
-                              Symbols symbols, PublishedDeclarations published,
+                              Symbols symbols, SumCases sums,
                               Allowance<FactSubject> allowed) {
         this.terms = terms;
         this.byName = byName;
         this.chains = chains;
         this.symbols = symbols;
-        this.published = published;
+        this.sums = sums;
         this.allowed = allowed;
     }
 
@@ -112,9 +112,9 @@ final class AdmissibleReading {
      *  reading holding the environment the clause began in would read a rule under a binding at
      *  names that mean nothing there, and every such rule came out as a form nothing reads. */
     static AdmissibleReading of(Terms terms, Map<FactSubject, Type> byName, Term.Chains chains,
-                                Symbols symbols, PublishedDeclarations published,
+                                Symbols symbols, SumCases sums,
                                 Allowance<FactSubject> allowed) {
-        return new AdmissibleReading(terms, byName, chains, symbols, published, allowed);
+        return new AdmissibleReading(terms, byName, chains, symbols, sums, allowed);
     }
 
     /** What this reading is spending, for whoever meets its answer with the next rule's. */
@@ -509,7 +509,7 @@ final class AdmissibleReading {
             return ValueSet.just(value);
         }
         List<Value> every =
-                ValueUniverse.of(type, terms.newtypeInners(), terms.kinds(), published);
+                ValueUniverse.of(type, terms.newtypeInners(), terms.kinds(), sums);
         if (every == null) {
             return ValueSet.allBut(value);
         }

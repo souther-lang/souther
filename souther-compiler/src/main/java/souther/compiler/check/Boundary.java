@@ -32,10 +32,12 @@ import java.util.List;
  *
  * <p>What is <em>not</em> here: which atoms there are, which is {@link AtomSpace}'s and is read from
  * it; what a case carries and therefore whether the tag can sit beside it, which is
- * {@link TypeOps#caseShape}'s; and whether a named sum is an enumeration in the language's sense,
- * which is {@link TypeOps#isUnitOnlySum}'s and is read by what counts a type's values and by what
- * orders them. Those are different questions about the same declarations, and folding them in here
- * would make one answer decide three things.
+ * {@link TypeOps#caseShape}'s; whether every leaf of a named sum is a unit, which is a fact about
+ * its declarations that {@link SumCases} holds; and what the language makes of that fact, which is
+ * {@link TypeOps#isUnitOnlySum}'s and is read by what counts a type's values and by what orders
+ * them. The fact is one and is read here as it is held. What follows from it is two policies, the
+ * language's and this one, and each stays its own: folding the language's into here would make one
+ * answer decide how a value is ordered and how it is written.
  */
 public final class Boundary {
 
@@ -59,27 +61,37 @@ public final class Boundary {
      * a bare tag — and is not a claim that the type crosses as a discriminated object. A reader
      * wanting the whole external representation of an arbitrary type is not asking this.
      */
-    public static Alternatives of(Type subject, DeclarationKinds kinds,
-                                  PublishedDeclarations published) {
-        List<TypeSymbol> atoms = AtomSpace.subjectAtoms(subject, kinds, published);
-        return new Alternatives(atoms, isEnumerationForm(subject, atoms, kinds)
+    public static Alternatives of(Type subject, DeclarationKinds kinds, SumCases sums) {
+        // A named sum's answer holds both what its alternatives are and whether every one is a
+        // unit, which is a fact about its declarations; what is this form's is only that such a
+        // set travels as a bare tag. Taken once and read for both.
+        SumCases.Cases named = AtomSpace.sumNamedBy(subject, kinds, sums);
+        if (named != null) {
+            return new Alternatives(named.cases(), named instanceof SumCases.Enumeration
+                    ? new Representation.Enumeration()
+                    : new Representation.Discriminated(DISCRIMINATOR, CONTENTS));
+        }
+        List<TypeSymbol> atoms = AtomSpace.subjectAtoms(subject, kinds, sums);
+        return new Alternatives(atoms, isUnionOfUnits(subject, atoms, kinds)
                 ? new Representation.Enumeration()
                 : new Representation.Discriminated(DISCRIMINATOR, CONTENTS));
     }
 
     /**
-     * Whether the set travels as a bare tag: it is an alternative space, and every alternative in it
-     * carries nothing but which one it is (spec §sum-discrimination).
+     * Whether a set that is no named sum travels as a bare tag: it is a union, and every alternative
+     * in it carries nothing but which one it is (spec §sum-discrimination).
      *
-     * <p>Being an alternative space is a term of this and not a guard on {@link #of}. A standalone
-     * unit is one atom and that atom is a unit, so the atoms alone would call it an enumeration —
-     * and a unit crosses on its own as an empty object, the bare name being the form of an
-     * enumeration and not of its unit cases (spec §encoder-derivation). The atoms answer what the
-     * alternatives are; they do not answer whether there is a set of them.
+     * <p>Being a union is a term of this and not a guard on {@link #of}. A standalone unit is one
+     * atom and that atom is a unit, so the atoms alone would call it an enumeration — and a unit
+     * crosses on its own as an empty object, the bare name being the form of an enumeration and not
+     * of its unit cases (spec §encoder-derivation). The atoms answer what the alternatives are; they
+     * do not answer whether there is a set of them.
+     *
+     * <p>A union is no declaration and holds no answer of its own, so its members are asked here.
      */
-    private static boolean isEnumerationForm(Type subject, List<TypeSymbol> atoms,
-                                             DeclarationKinds kinds) {
-        return TypeOps.isSumType(subject, kinds)
+    private static boolean isUnionOfUnits(Type subject, List<TypeSymbol> atoms,
+                                          DeclarationKinds kinds) {
+        return subject instanceof Type.Union
                 && !atoms.isEmpty()
                 && atoms.stream().allMatch(atom -> atom instanceof TypeSymbol.AtModule at
                         && kinds.of(at.key()) == DeclarationKind.UNIT);

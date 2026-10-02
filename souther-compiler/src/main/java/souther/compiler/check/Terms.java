@@ -81,10 +81,10 @@ final class Terms {
         return symbols;
     }
 
-    /** What the declarations this reading was made against say, for the readings below that ask
-     *  which of them is a sum and what its cases are. */
-    PublishedDeclarations published() {
-        return ruleReading.source().published();
+    /** What a value of each sum this reading was made against can be, for the readings below that
+     *  ask which declarations are sums and what their cases are. */
+    SumCases sums() {
+        return ruleReading.source().sums();
     }
 
     /** Which form each declaration this reading was made against was written in. */
@@ -3159,7 +3159,7 @@ final class Terms {
      * readable there. What a value has of its own is the one reading's answer, so a field every case
      * of a sum spreads is read off the sum here exactly as it is where a body reads one. */
     Type fieldType(Type owner, String field) {
-        return ValueReading.of(owner, newtypeInners(), kinds(), symbols, published()).named().get(field);
+        return ValueReading.of(owner, newtypeInners(), kinds(), symbols, sums()).named().get(field);
     }
 
     /** What a container hands its closure: a list's or set's element, a map's value (the key is the

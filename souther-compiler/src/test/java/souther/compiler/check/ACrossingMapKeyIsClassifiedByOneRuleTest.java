@@ -73,12 +73,12 @@ class ACrossingMapKeyIsClassifiedByOneRuleTest {
 
     private MapKeyRepresentation classify(Type key) {
         return TypeOps.classifyConcreteMapKey(key, symbols, ScopedDeclarations.kindsOf(symbols),
-                ScopedDeclarations.of(symbols));
+                ScopedDeclarations.sumsOf(symbols));
     }
 
     private boolean admissible(Type key) {
         return TypeOps.isMapKeyAdmissibleInSignature(key, symbols,
-                ScopedDeclarations.kindsOf(symbols), ScopedDeclarations.of(symbols));
+                ScopedDeclarations.kindsOf(symbols), ScopedDeclarations.sumsOf(symbols));
     }
 
     private Type named(String name) {

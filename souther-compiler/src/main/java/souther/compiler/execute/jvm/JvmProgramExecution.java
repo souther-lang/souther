@@ -74,7 +74,7 @@ public final class JvmProgramExecution implements ProgramExecution {
         }
         Observations observed = ExampleVerifier.check(asked.forExamplesWrittenIn(source),
                 asked.symbols(),
-                asked.published(),
+                asked.sums(),
                 asked.kinds(),
                 asked.fieldTypes(),
                 asked.signatures(), image.program(), image.published(), asked.requirements(),
@@ -103,7 +103,7 @@ public final class JvmProgramExecution implements ProgramExecution {
         // The classes alone. Nothing here applies a behavior, so what the compile implemented is not
         // a question this asks.
         return new TableBuild.Built(ExampleStatements.fakeTables(asked.forExamples(), asked.symbols(),
-                asked.published(),
+                asked.sums(),
                 asked.kinds(),
                 asked.fieldTypes(),
                 asked.signatures(), image.program().classes(), image.around(), asked.definitions(),
@@ -123,10 +123,10 @@ public final class JvmProgramExecution implements ProgramExecution {
         Map<String, ExampleStatements.Declaring> declaring = new LinkedHashMap<>();
         asked.declaring().forEach((name, reading) -> declaring.put(name,
                 new ExampleStatements.Declaring(reading.forExamples(), reading.symbols(),
-                        reading.published(), reading.kinds(), reading.fieldTypes(),
+                        reading.sums(), reading.kinds(), reading.fieldTypes(),
                         reading.definitions())));
         return new StatementReading.Read(ExampleStatements.disagreements(asked.forExamples(),
-                asked.symbols(), asked.published(), asked.kinds(), asked.fieldTypes(),
+                asked.symbols(), asked.sums(), asked.kinds(), asked.fieldTypes(),
                 asked.signatures(), image.program().classes(), image.around(),
                 asked.definitions(), keeping(asked), asked.policy(), asked.contracts(),
                 declaring));
@@ -145,7 +145,7 @@ public final class JvmProgramExecution implements ProgramExecution {
         JvmProgramImage image = images.evaluating(asked.module(), ArmObservation.OMIT);
         return image == null ? null
                 : FixtureReader.constructing(asked.forExamples(), asked.symbols(),
-                        asked.published(), asked.kinds(), asked.fieldTypes(),
+                        asked.sums(), asked.kinds(), asked.fieldTypes(),
                         image.program().classes(), image.around(), asked.definitions());
     }
 
@@ -155,7 +155,7 @@ public final class JvmProgramExecution implements ProgramExecution {
         if (image == null || image.program().implementations() == null) {
             return null;
         }
-        return RowTrial.over(asked.forExamples(), asked.symbols(), asked.published(), asked.kinds(),
+        return RowTrial.over(asked.forExamples(), asked.symbols(), asked.sums(), asked.kinds(),
                 asked.fieldTypes(),
                 image.program().classes(),
                 image.around(), asked.definitions(), image.program().implementations(),

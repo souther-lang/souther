@@ -27,11 +27,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * kept apart on purpose: folding them would make one answer decide both, and the day either moved
  * the other would move with it unasked.
  *
- * <p>Kept apart, they walk the atoms twice, so this holds the relation the spec states between them
- * (spec §sum-discrimination): a unit-only sum crosses as its case's name. It is not a test that two
- * implementations agree — it is the rule that lets them be two. Breaking it deliberately means
- * saying, here, that a sum can be an enumeration in the language and a discriminated object on the
- * wire.
+ * <p>What both read for a named sum is one fact about its declarations — whether every leaf is a
+ * unit — and both read it from {@link SumCases} rather than working it out. What is kept apart is
+ * what each makes of it, so this holds the relation the spec states between the two (spec
+ * §sum-discrimination): a unit-only sum crosses as its case's name. It is not a test that two
+ * implementations agree — it is the rule that lets them be two policies. Breaking it deliberately
+ * means saying, here, that a sum can be an enumeration in the language and a discriminated object
+ * on the wire.
  */
 class AnEnumerationIsOneAnswerToTheLanguageAndTheBoundaryTest {
 
@@ -57,7 +59,7 @@ class AnEnumerationIsOneAnswerToTheLanguageAndTheBoundaryTest {
     private final Hir.Module module = derive(MODULE);
     private final Symbols symbols = TypeChecker.symbols(module, DefaultStdlib.get());
 
-    private final PublishedDeclarations said = ScopedDeclarations.of(symbols);
+    private final SumCases sums = ScopedDeclarations.sumsOf(symbols);
 
     private final DeclarationKinds forms = ScopedDeclarations.kindsOf(symbols);
 
@@ -66,8 +68,8 @@ class AnEnumerationIsOneAnswerToTheLanguageAndTheBoundaryTest {
         for (Hir.Def def : module.defs()) {
             if (def instanceof Hir.SumData sum) {
                 Type type = Type.ref(sum.declares());
-                assertEquals(TypeOps.isUnitOnlySum(type, forms, said),
-                        Boundary.of(type, forms, said).representation()
+                assertEquals(TypeOps.isUnitOnlySum(type, forms, sums),
+                        Boundary.of(type, forms, sums).representation()
                                 instanceof Boundary.Representation.Enumeration,
                         sum.name() + ": the language and the boundary disagree about the form");
             }
@@ -93,9 +95,9 @@ class AnEnumerationIsOneAnswerToTheLanguageAndTheBoundaryTest {
      */
     @Test
     void aUnitDataOnItsOwnIsNotAnEnumeration() {
-        assertFalse(Boundary.of(Type.ref(named("Draft")), forms, said).representation()
+        assertFalse(Boundary.of(Type.ref(named("Draft")), forms, sums).representation()
                 instanceof Boundary.Representation.Enumeration);
-        assertFalse(TypeOps.isUnitOnlySum(Type.ref(named("Draft")), forms, said));
+        assertFalse(TypeOps.isUnitOnlySum(Type.ref(named("Draft")), forms, sums));
     }
 
     /**
@@ -118,14 +120,14 @@ class AnEnumerationIsOneAnswerToTheLanguageAndTheBoundaryTest {
     void aUnionOfUnitsIsWrittenAsABareTagAndIsNoNamedSum() {
         Type union = Type.union(new java.util.LinkedHashSet<>(
                 java.util.List.of(named("Prospecting"), named("Won"))));
-        assertTrue(Boundary.of(union, forms, said).representation()
+        assertTrue(Boundary.of(union, forms, sums).representation()
                 instanceof Boundary.Representation.Enumeration);
-        assertFalse(TypeOps.isUnitOnlySum(union, forms, said),
+        assertFalse(TypeOps.isUnitOnlySum(union, forms, sums),
                 "a union is not a declaration, so the language's question does not reach it");
     }
 
     private boolean isEnumeration(String sum) {
-        return Boundary.of(Type.ref(named(sum)), forms, said).representation()
+        return Boundary.of(Type.ref(named(sum)), forms, sums).representation()
                 instanceof Boundary.Representation.Enumeration;
     }
 

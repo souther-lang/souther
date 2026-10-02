@@ -668,7 +668,7 @@ public final class Partitions {
         // the account is owed are observations of their own, so everything below runs whichever way
         // this came out. A second route past them would be a second answer about all of them.
         TypeView view = TypeView.of(type, ruleSource.inners(), ruleSource.symbols(),
-                ruleSource.kinds(), ruleSource.published());
+                ruleSource.kinds(), ruleSource.sums());
         // What writing one value out is allowed to cost, one allowance to each value written. Named
         // here because this is where a witness for a row is paid for: a string offered for a row is
         // no answer about the position, and paying for it out of what the position may build would
@@ -1467,7 +1467,7 @@ public final class Partitions {
                                                    java.util.Set<TypeSymbol> expanding) {
         return type == null ? List.of()
                 : representativesOf(TypeView.of(type, reading.source().inners(), reading.source().symbols(),
-                        reading.source().kinds(), reading.source().published()), reading,
+                        reading.source().kinds(), reading.source().sums()), reading,
                         within, expanding);
     }
 
@@ -1562,7 +1562,7 @@ public final class Partitions {
                                                      java.util.Set<TypeSymbol> expanding) {
         for (PartitionClass each : PartitionClasses.of(
                 Distinctions.ofType(view.shape(), reading.source().symbols(),
-                        reading.source().kinds(), reading.source().published()),
+                        reading.source().kinds(), reading.source().sums()),
                 view, reading, expanding)) {
             List<FixtureTemplate> stands =
                     standingFor(each.representatives(), reading, expanding);
@@ -1789,7 +1789,7 @@ public final class Partitions {
         if (expanding.contains(record)
                 || TypeOps.outermost(position, ruleSource.inners()) != null
                 || !(TypeView.shapeOf(position, ruleSource.inners(), ruleSource.symbols(),
-                        ruleSource.kinds(), ruleSource.published())
+                        ruleSource.kinds(), ruleSource.sums())
                         instanceof Shape.Product(TypeSymbol _,
                         SequencedMap<String, Type> fields))) {
             return null;
@@ -1880,7 +1880,7 @@ public final class Partitions {
     static java.util.Set<CompositionBudget> notBuilt(Type type, RuleReadingContext reading,
                                                      FieldDomains.Held held) {
         TypeView view = TypeView.of(type, reading.source().inners(), reading.source().symbols(),
-                        reading.source().kinds(), reading.source().published());
+                        reading.source().kinds(), reading.source().sums());
         return Witnesses.heldBackFor(view, leastHeld(view, reading, held), reading);
     }
 
@@ -1905,7 +1905,7 @@ public final class Partitions {
             return StringOfferShortfall.NONE;
         }
         TypeView view = TypeView.of(type, reading.source().inners(), reading.source().symbols(),
-                        reading.source().kinds(), reading.source().published());
+                        reading.source().kinds(), reading.source().sums());
         return stringsTheRulesReadAdmit(view, reading, PatternPlan.Budget.OF_A_WITNESS.meter())
                 .shortfall();
     }
@@ -1992,7 +1992,7 @@ public final class Partitions {
                                                         FieldDomains.Held held,
                                                         java.util.Set<TypeSymbol> expanding) {
         return representativesHolding(TypeView.of(type, reading.source().inners(), reading.source().symbols(),
-                        reading.source().kinds(), reading.source().published()), reading,
+                        reading.source().kinds(), reading.source().sums()), reading,
                 within, held, expanding);
     }
 
@@ -2045,7 +2045,7 @@ public final class Partitions {
         // holds back, where its rules leave a number, and the names any of those go under.
         RuleReadingSource ruleSource = reading.source();
         TypeView view = TypeView.of(type, ruleSource.inners(), ruleSource.symbols(),
-                ruleSource.kinds(), ruleSource.published());
+                ruleSource.kinds(), ruleSource.sums());
         List<FixtureTemplate> base = new ArrayList<>(representativesHolding(
                 view, reading, within, held, java.util.Set.of()));
         // What a position holds back for the product search's second pass is on offer here from the
@@ -2154,7 +2154,7 @@ public final class Partitions {
         }
         RuleReadingSource ruleSource = reading.source();
         TypeView view = TypeView.of(type, ruleSource.inners(), ruleSource.symbols(),
-                ruleSource.kinds(), ruleSource.published());
+                ruleSource.kinds(), ruleSource.sums());
         List<FixtureTemplate> out = new ArrayList<>();
         for (String each : textsTheRulesAdmit(view, reading, many)) {
             FixtureTemplate written =
@@ -2508,7 +2508,7 @@ public final class Partitions {
     static List<FixtureTemplate> inReserve(Type type, RuleReadingContext reading,
                                            NumericDomain.Bounds within) {
         return inReserve(TypeView.of(type, reading.source().inners(), reading.source().symbols(),
-                        reading.source().kinds(), reading.source().published()), reading, within);
+                        reading.source().kinds(), reading.source().sums()), reading, within);
     }
 
     /** The same, of a position that has already been read. */

@@ -51,7 +51,7 @@ class AnUnorderedValueIsWrittenInOneOrderTest {
 
     private static ValueRendering rendering() {
         Symbols symbols = Symbols.none(DefaultStdlib.get());
-        return new ValueRendering(new NeutralForm(symbols, ScopedDeclarations.of(symbols),
+        return new ValueRendering(new NeutralForm(symbols, ScopedDeclarations.sumsOf(symbols),
                 ScopedDeclarations.kindsOf(symbols),
                 FieldTypes.over(new CheckedDeclarations(_ -> null, _ -> null))));
     }

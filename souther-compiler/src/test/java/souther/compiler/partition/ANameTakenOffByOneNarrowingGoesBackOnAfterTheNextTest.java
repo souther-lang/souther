@@ -117,7 +117,7 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
                 ConstructionPlan.of(read.sig().inputs().get(0).type(),
                         TermPath.of(read.parameter()), read.rules().inners(),
                         read.rules().symbols(),
-                        read.rules().kinds(), read.rules().published(), Set.of(),
+                        read.rules().kinds(), read.rules().sums(), Set.of(),
                         axis.requiring(cls), ONE_AT_LEAST),
                 "nothing here asks one position to be two things").plan();
 

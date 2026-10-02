@@ -51,7 +51,7 @@ public final class BehaviorChecker {
                                        DeclarationAccess declarations,
                                        Map<String, Type> helpers) {
         Reading reading = read(behavior, module, declared, declarations.published(),
-                declarations.kinds());
+                declarations.kinds(), declarations.sums());
         BehaviorContract contract = reading.contract();
         // The rules it did read, held to what a rule has to be. Two mistakes in one declaration are
         // two things for an author to fix, and this is the reading that reports them.
@@ -98,8 +98,8 @@ public final class BehaviorChecker {
     public static BehaviorContract contractAsRead(Hir.SpecBehavior behavior, String module,
                                                   DeclaredSig declared,
                                                   PublishedDeclarations published,
-                                                  DeclarationKinds kinds) {
-        return read(behavior, module, declared, published, kinds).whole();
+                                                  DeclarationKinds kinds, SumCases sums) {
+        return read(behavior, module, declared, published, kinds, sums).whole();
     }
 
     /**
@@ -129,7 +129,8 @@ public final class BehaviorChecker {
 
     /** The declaration as rules, beside what could not be read of it. */
     private static Reading read(Hir.SpecBehavior behavior, String module, DeclaredSig declared,
-                                PublishedDeclarations published, DeclarationKinds kinds) {
+                                PublishedDeclarations published, DeclarationKinds kinds,
+                                SumCases sums) {
         List<Diagnostic> found = new ArrayList<>();
         ValueName.Behavior name = new ValueName.Behavior(module, behavior.name());
         if (declared == null) {
@@ -156,7 +157,8 @@ public final class BehaviorChecker {
         // Which cases the answer can be, and what `value` is in each, come from the same place a
         // `match` over that answer reads them. A clause naming a case a caller could not match is a
         // clause a caller could never assume, so the two admit the same names by construction.
-        CaseSpace answer = CaseSpace.of(declared.boundary().outputType(), kinds, published);
+        CaseSpace answer = CaseSpace.of(declared.boundary().outputType(), kinds, published,
+                sums);
 
         // Arm by arm, and an arm this cannot read leaves the rest readable. Reading and checking are
         // one pass — what a rule states is which case it applies to and what holds there, and every
@@ -171,7 +173,7 @@ public final class BehaviorChecker {
                 int ordinal = armOrdinal++;
                 int clauseIndex = c;
                 collect(found, () -> rules.addAll(
-                        read(behavior, arm, answer, kinds, published, owner, params.size(),
+                        read(behavior, arm, answer, kinds, sums, owner, params.size(),
                                 clauseIndex, ordinal)));
             }
             clauses.add(new BehaviorContract.Clause(written.name(), rules, written.pos(),
@@ -191,7 +193,7 @@ public final class BehaviorChecker {
      * answer does not have.
      */
     private static List<Rule> read(Hir.SpecBehavior behavior, Hir.EnsuresArm arm, CaseSpace answer,
-                                   DeclarationKinds kinds, PublishedDeclarations published,
+                                   DeclarationKinds kinds, SumCases sums,
                                    BindingOwner owner, int paramCount, int clause,
                                    int ordinal) {
         boolean hasCases = !(answer instanceof CaseSpace.Plain);
@@ -224,7 +226,7 @@ public final class BehaviorChecker {
                 // the reading is abandoned instead, as a `match` arm's is.
                 throw new Unanswerable(armCase.pos());
             }
-            ResolvedCase selected = answer.selector(armCase.answered().type(), kinds, published);
+            ResolvedCase selected = answer.selector(armCase.answered().type(), kinds, sums);
             if (selected == null) {
                 throw CompileException.of(Diagnostic.at(armCase.pos())
                         .say(new BehaviorMessage.AnEnsuresArmIsNotAnOutputCase(

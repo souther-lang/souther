@@ -162,7 +162,7 @@ class WhatTwoValuesAreEqualByIsOneAnswerOnBothSidesOfTheBoundaryTest {
     private static ObservedValue observe(Object live) {
         Symbols symbols = Symbols.none(DefaultStdlib.get());
         return ObservedValues.of(live, symbols,
-                new NeutralForm(symbols, ScopedDeclarations.of(symbols),
+                new NeutralForm(symbols, ScopedDeclarations.sumsOf(symbols),
                         ScopedDeclarations.kindsOf(symbols),
                         FieldTypes.over(new CheckedDeclarations(_ -> null, _ -> null))),
                 Limits.DEFAULT);

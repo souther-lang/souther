@@ -14,9 +14,9 @@ import souther.compiler.check.Requirement;
 import souther.compiler.check.RuleAccounting;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.ProjectionEvidence;
-import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Rules;
 import souther.compiler.check.Shape;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
@@ -95,7 +95,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     static PlacedRules of(TermPath root, Type type, RuleReadingContext reading,
                           Reaching alsoReaching) {
         RuleReadingSource source = reading.source();
-        TypeSymbol read = readAs(type, source.symbols(), source.kinds(), source.published());
+        TypeSymbol read = readAs(type, source.symbols(), source.kinds(), source.sums());
         // What this keeps of the world is the lender alone: the questions asked of these rules after
         // the walk borrow what the walk made.
         DeclarationReadings machines = reading.retainedReadings();
@@ -674,11 +674,11 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * declaration that may have no clause about the pair at all.
      */
     private static TypeSymbol readAs(Type type, Symbols symbols,
-                                     DeclarationKinds kinds, PublishedDeclarations published) {
+                                     DeclarationKinds kinds, SumCases sums) {
         TypeSymbol written = nameOf(type);
         return written != null
                 && symbols.declaredNode(written) instanceof Hir.Data
-                ? written : heldIn(type, symbols, kinds, published);
+                ? written : heldIn(type, symbols, kinds, sums);
     }
 
     /**
@@ -691,8 +691,8 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * rather than to nothing.
      */
     private static TypeSymbol heldIn(Type type, Symbols symbols,
-                                     DeclarationKinds kinds, PublishedDeclarations published) {
-        TypeSymbol record = recordIn(type, symbols, kinds, published);
+                                     DeclarationKinds kinds, SumCases sums) {
+        TypeSymbol record = recordIn(type, symbols, kinds, sums);
         return record != null ? record : nameOf(type);
     }
 
@@ -700,8 +700,8 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      *  {@code data SlotN = Slot} is a {@code Slot}, and the clauses relating its fields are
      *  {@code Slot}'s. */
     private static TypeSymbol recordIn(Type type, Symbols symbols,
-                                       DeclarationKinds kinds, PublishedDeclarations published) {
-        return TypeView.asWritten(type, symbols, kinds, published).shape()
+                                       DeclarationKinds kinds, SumCases sums) {
+        return TypeView.asWritten(type, symbols, kinds, sums).shape()
                 instanceof Shape.Product product ? product.name() : null;
     }
 

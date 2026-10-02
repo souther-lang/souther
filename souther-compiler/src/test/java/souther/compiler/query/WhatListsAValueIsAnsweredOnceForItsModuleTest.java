@@ -79,7 +79,7 @@ class WhatListsAValueIsAnsweredOnceForItsModuleTest {
         Compilation c = compiled();
         Symbols symbols = Scopes.derived(c.db(), MODULE).value();
         EnumerationListings walked = EnumerationListings.asWritten(symbols,
-                Shapes.declarationKinds(c.db()), Shapes.publishedDeclarations(c.db()));
+                Shapes.declarationKinds(c.db()), Shapes.sumCases(c.db()));
         EnumerationListings held = Shapes.enumerationListings(c.db());
 
         for (String unit : List.of("Prospecting", "Qualified", "Won", "Lost", "Alone", "Ok")) {

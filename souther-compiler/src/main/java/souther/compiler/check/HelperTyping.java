@@ -53,7 +53,7 @@ public final class HelperTyping {
                                      Map<String, Hir.Expr> loweredBodies,
                                      Set<String> valuesWithAnEntry,
                                      TypeChecker.Elaborated elaborated) {
-        PublishedDeclarations published = declarations.published();
+        SumCases sums = declarations.sums();
         // What each value of this module was settled as, filled in as they are checked. A value is
         // checked against these rather than against a copy of the body each of them stands for,
         // which is the same answer worked out once instead of once per name that reaches it.
@@ -263,7 +263,7 @@ public final class HelperTyping {
             Core definition = elaboratedBody;
             if (declaredReturn != null && (standsAt == null || standsAt.required() != null)) {
                 Type declared = declaredReturn;
-                if (!TypeOps.assignable(bodyType, declared, declarations.kinds(), published)) {
+                if (!TypeOps.assignable(bodyType, declared, declarations.kinds(), sums)) {
                     // A definition standing at a position carries a claim the position made, so
                     // what is said leans on the place and quotes no name the author never wrote.
                     // A definition is named, whoever wrote it: one this module took on is another
@@ -790,7 +790,7 @@ public final class HelperTyping {
                 Type at = Elaborator.typeOf(inliner.inline(call.args().get(i), inliner.bodyOf(h.name())),
                         env, new CheckContext(symbols, declarations, null, reqs));
                 if (TypeOps.unify(declared.get(i), at, bind, declarations.kinds(),
-                        declarations.published())
+                        declarations.sums())
                         instanceof Fit.Disagrees) {
                     return;   // the argument does not fit; leave it to the inlined check
                 }
@@ -853,7 +853,7 @@ public final class HelperTyping {
                                          DeclarationAccess declarations,
                                          Map<ValueName.Behavior, ReqSig> reqs, HelperInliner inliner,
                                          Map<String, Type> bind) {
-        PublishedDeclarations published = declarations.published();
+        SumCases sums = declarations.sums();
         if (arg instanceof Hir.Block lambda) {
             if (lambda.params().size() != want.params().size()) {
                 throw CompileException.of(Diagnostic.at(arg.pos())
@@ -881,13 +881,13 @@ public final class HelperTyping {
                 // what there is to check: `'b?` accepts a block answering with an optional and rejects
                 // one answering with a plain value. Unifying also pins `'b` for the arguments after
                 // this one. A failure is reported as the mismatch it is, in written types.
-                if (TypeOps.unify(want.result(), got, bind, declarations.kinds(), published)
+                if (TypeOps.unify(want.result(), got, bind, declarations.kinds(), sums)
                         instanceof Fit.Disagrees) {
                     throw blockReturnMismatch(h, paramName, want.result(), got, lambda);
                 }
                 return;
             }
-            if (!TypeOps.assignable(got, want.result(), declarations.kinds(), published)) {
+            if (!TypeOps.assignable(got, want.result(), declarations.kinds(), sums)) {
                 throw blockReturnMismatch(h, paramName, want.result(), got, lambda);
             }
         } else if (arg instanceof Hir.Var.Denoting v

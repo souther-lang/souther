@@ -40,12 +40,12 @@ public final class BottomInfer {
      * List<Int>)}, and the call it settled read its step and seed at the first.
      */
     static boolean refines(Type held, Type reading, DeclarationKinds kinds,
-                           PublishedDeclarations published) {
+                           SumCases sums) {
         if (isBottom(held)) {
             return true;
         }
         return !isBottom(reading) && Type.mentions(held, BottomInfer::isBottom)
-                && TypeOps.assignable(held, reading, kinds, published);
+                && TypeOps.assignable(held, reading, kinds, sums);
     }
 
     /** The scalar empty-collection bottom: the element type of a {@code []} whose type is not yet
@@ -96,11 +96,11 @@ public final class BottomInfer {
      * fold materialisation so both pin the same accumulator type. */
     public static void pinResultTypeVars(Type result, Type expected, Map<String, Type> bind,
                                          DeclarationKinds kinds,
-                                         PublishedDeclarations published) {
+                                         SumCases sums) {
         if (expected == null) {
             return;
         }
-        TypeOps.unify(result, expected, bind, kinds, published);
+        TypeOps.unify(result, expected, bind, kinds, sums);
     }
 
     /** Whether a step-typing error is the unresolved-bottom error (an operand/branch reported as the

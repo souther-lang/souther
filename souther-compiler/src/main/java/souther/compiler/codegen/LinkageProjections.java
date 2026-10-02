@@ -5,10 +5,10 @@ import souther.compiler.check.AtomSpace;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.DerivedSymbols;
-import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.ReadableFields;
 import souther.compiler.check.Shape;
 import souther.compiler.check.Sig;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.jvm.GeneratedClass;
@@ -42,10 +42,10 @@ import static souther.compiler.codegen.Descriptors.MTD_apply;
  * ({@link BehaviorAbi}, {@link JvmTypes}), so what they declare is what this says they declare.
  *
  * <p>What a projection reads of another module's declarations goes through {@code foreign} and the
- * doors {@code symbols} and {@code published} were built reading into, so what it read is what the
- * module records it was built against. A behavior held by a behavior of this module is held as its
- * own number of inputs has it, and for one declared elsewhere that is a fact of the module that
- * declares it.
+ * doors {@code symbols}, {@code kinds} and {@code sums} were built reading into, so what it read is
+ * what the module records it was built against. A behavior held by a behavior of this module is
+ * held as its own number of inputs has it, and for one declared elsewhere that is a fact of the
+ * module that declares it.
  */
 public final class LinkageProjections {
 
@@ -68,7 +68,8 @@ public final class LinkageProjections {
      * @param values          what each value it publishes answers, by the value
      * @param symbols         its declarations, reading into what records another module's
      * @param kinds           which form each declaration was written in, reading into the same
-     * @param published       what declarations say, reading into the same
+     * @param sums            what a value of each sum can be, read off what the declarations say
+     *                        through the same
      */
     public record Settled(String module, Set<String> publishedNames, List<TypeKey> declarations,
                           Map<TypeKey, Optional<LinkageProjection.HeldOrder>> orders,
@@ -76,10 +77,10 @@ public final class LinkageProjections {
                           Map<String, BehaviorImplementation> implementations,
                           Map<String, List<ValueName.Behavior>> requirements,
                           Map<String, Type> values, DerivedSymbols symbols,
-                          DeclarationKinds kinds, PublishedDeclarations published) {
+                          DeclarationKinds kinds, SumCases sums) {
 
         public Settled {
-            if (symbols == null || kinds == null || published == null) {
+            if (symbols == null || kinds == null || sums == null) {
                 throw new IllegalArgumentException("a projection reads what each declaration it"
                         + " rests on says, so it is handed somewhere to read every one of them");
             }
@@ -210,7 +211,7 @@ public final class LinkageProjections {
         }
         List<LinkageProjection.Bridged> out = new ArrayList<>();
         for (TypeSymbol member
-                : AtomSpace.subjectAtoms(answers, settled.kinds(), settled.published())) {
+                : AtomSpace.subjectAtoms(answers, settled.kinds(), settled.sums())) {
             if (!member.isDeclaredByLanguage() && member instanceof TypeSymbol.AtModule at
                     && at.module().equals(settled.module())) {
                 continue;
@@ -284,7 +285,7 @@ public final class LinkageProjections {
     private static List<LinkageProjection.Field> shared(Hir.SumData sum, Settled settled) {
         List<LinkageProjection.Field> out = new ArrayList<>();
         if (TypeView.asWritten(Type.ref(sum.declares()), settled.symbols(), settled.kinds(),
-                        settled.published())
+                        settled.sums())
                 .shape() instanceof Shape.Sum shape) {
             ReadableFields.of(shape).declaredFields().forEach((field, type) ->
                     out.add(new LinkageProjection.Field(field, type)));

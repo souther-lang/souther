@@ -660,7 +660,7 @@ sealed interface StatedByClauses {
         }
         Term.Chains chains = new Term.Chains(held);
         return new Reading(
-                AdmissibleReading.of(terms, byName, chains, symbols, terms.published(), allowed),
+                AdmissibleReading.of(terms, byName, chains, symbols, terms.sums(), allowed),
                 OrderedReading.of(terms, byName), terms, byName, chains, alternatives,
                 machines, lines, boundaries);
     }

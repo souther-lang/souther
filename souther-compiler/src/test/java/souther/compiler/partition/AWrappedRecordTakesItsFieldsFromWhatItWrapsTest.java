@@ -101,7 +101,7 @@ class AWrappedRecordTakesItsFieldsFromWhatItWrapsTest {
         RuleReadingSource rules = RuleReadings.ofSource(source);
         return TypeView.asWritten(Type.ref(TypeSymbols.declared(
                 new TypeKey(rules.symbols().module(), name))), rules.symbols(), rules.kinds(),
-                rules.published());
+                rules.sums());
     }
 
     private static String rowsOf(String source) {
