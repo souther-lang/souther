@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ast.Hir;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -13,9 +14,10 @@ import souther.compiler.values.StringMachineAnswers;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -23,29 +25,31 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A reading a supposing hands a declaration says what a reading of that declaration stopping at
- * every supposed name says, whichever reading it was handed.
+ * What a count comes to under a supposing does not depend on which readings the supposing shares,
+ * nor on whether a reading stops at a supposed name with nothing written under it.
  *
- * <p>A supposing hands out two readings that are not made for the declaration under it. One is the
- * reading of a newtype beneath, for a newtype that writes nothing worn over another — lent past a
- * name the reading should stop at, it would read the rules the supposing was about and say the
- * declaration has no value by them. The other is the declaration's own reading, where no name
- * supposed has a rule under it — and lent where one has, it would read those rules too. What the
- * readings say is compared rather than which they are, because that is what a count reads off them:
- * whether the rules leave anything, and what they leave at every place the declaration has.
+ * <p>A count reads a declaration's rules once and hands that one reading to every question it asks
+ * of them: whether they leave anything, how many whole numbers they leave at a place, and which sizes
+ * they leave a collection there. And the reading handed over is not always made for the declaration.
+ * A newtype that writes nothing, worn over another that writes nothing, is handed the reading of the
+ * one beneath, as its own reading is; a supposing hands it the same way down to the first name it
+ * stops at; and a supposing that stops nowhere hands each declaration its own reading, borrowed once.
+ * Lent past a supposed name, a reading would read the rules the supposing was about.
  *
- * <p>Asked of every declaration under every one name supposed, in both orders, since what a
- * supposing lends depends on which name of a chain it read first.
+ * <p>Held two ways, because two different things are being trusted. That sharing changes nothing is
+ * held on what the count comes to: every declaration is counted under every supposing once in the
+ * compilation's world and once in a world of its own, where nothing is lent and every declaration is
+ * read as itself — so whatever a count comes to read off a reading, the comparison reads it too. That
+ * a supposing need not stop at a name with no rule under it is a claim about the reading and not
+ * about sharing, and is held on the reading: against one stopping at the supposed name, every
+ * question a count can ask of it is asked of both.
+ *
+ * <p>The model writes the shapes those questions can tell apart — a chain of names over a number
+ * with three values, a set of them asked to hold two, a rule about a place deep under a record — and
+ * each comparison says it saw an answer that a reading which had read the wrong rules would not give.
  */
 class AReadingUnderASupposingIsTheOneThatStopsThereTest {
 
-    /**
-     * A chain of names that write nothing over one whose rules leave it no value; a ring of such
-     * names with one more worn over it; a ring of records with a rule under every one of them; a
-     * ring of records with no rule anywhere; a record holding one of each beside a rule of its
-     * own; and a record whose rule about a place deep in what it holds leaves nothing beside the
-     * rule written there, and leaves something once that is not read.
-     */
     private static final String MODULE = """
             module demo
 
@@ -56,6 +60,15 @@ class AReadingUnderASupposingIsTheOneThatStopsThereTest {
             data X1 = X0
             data X2 = X1
             data X3 = X2
+
+            data Small = Int
+                invariant few = value >= 1 && value <= 3
+            data S0 = Small
+            data S1 = S0
+            data S2 = S1
+
+            data Bag = { xs: Set<S2>, at: S1 }
+                invariant two = Set.size(xs) >= 2
 
             data R1 = R2
             data R2 = R3
@@ -78,41 +91,107 @@ class AReadingUnderASupposingIsTheOneThatStopsThereTest {
                 invariant deep = b.p.k >= 5
             """;
 
-    private static final List<String> NAMES = List.of("Empty", "X0", "X1", "X2", "X3", "R1",
-            "R2", "R3", "Into", "P1", "P2", "P3", "Q1", "Q2", "Holds", "Outer");
+    private static final List<String> NAMES = List.of("Empty", "X0", "X1", "X2", "X3", "Small",
+            "S0", "S1", "S2", "Bag", "R1", "R2", "R3", "Into", "P1", "P2", "P3", "Q1", "Q2",
+            "Holds", "Outer");
 
+    /** Every size a count asks a collection about, and one past them. */
+    private static final long SIZES = CardinalityTransfer.ENUMERATION_LIMIT + 1L;
+
+    /**
+     * Every declaration counted under nothing supposed and under every one name supposed, in both
+     * orders, comes to the same in the compilation's world as in a world that lends nothing.
+     */
     @Test
-    void everyDeclarationIsLentWhatItsOwnReadingUnderTheSupposingSays() {
-        Compilation compilation = Compilation.ofSources(List.of(MODULE), ModulePath.EMPTY);
-        compilation.answerEverything();
+    void everyDeclarationCountsTheSameWhateverItsReadingWasSharedWith() {
+        Compilation compilation = compiled();
+        RuleReadingSource source = RuleReadings.of(compilation, "demo");
+        RuleReadingContext shared = RuleReadingContext.of(source, ReadAs.THE_COMPILATION_DOES,
+                compilation.db().readings());
+        // The same rules, under an origin nobody else has: no lender hands it a reading made for
+        // any other declaration, and no name is read as the one beneath it.
+        RuleReadingSource itsOwn = new RuleReadingSource(source.symbols(), source.invariants(),
+                source.declarations(), source.newtypes(), source.bindings(), source.written());
+        RuleReadingContext alone = RuleReadingContext.unshared(itsOwn, ReadAs.THE_COMPILATION_DOES);
+        Map<String, Hir.Def> defs = new LinkedHashMap<>();
+        compilation.module("demo").defs()
+                .forEach(each -> defs.put(each.declaration().node().name(),
+                        each.declaration().node()));
+        // Nothing known of any name, so whatever a count comes to it read off the rules.
+        Map<TypeSymbol, Cardinality> unknown = new LinkedHashMap<>();
+        NAMES.forEach(each -> unknown.put(declared(each), Cardinality.UNKNOWN));
+        List<String> backwards = new ArrayList<>(NAMES);
+        Collections.reverse(backwards);
+        List<Set<TypeSymbol>> supposings = new ArrayList<>();
+        supposings.add(Set.of());
+        NAMES.forEach(each -> supposings.add(Set.of(declared(each))));
+        Set<Cardinality> seen = new HashSet<>();
+        for (Set<TypeSymbol> supposed : supposings) {
+            for (List<String> order : List.of(NAMES, backwards)) {
+                Supposing sharing = Supposing.of(supposed, new Supposing.Across(source));
+                Supposing notSharing = Supposing.of(supposed, new Supposing.Across(itsOwn));
+                for (String asked : order) {
+                    TypeSymbol.AtModule named = declared(asked);
+                    if (supposed.contains(named)) {
+                        continue;
+                    }
+                    Cardinality lent = CardinalityTransfer.upperOf(named, defs.get(asked),
+                            shared, Answers.settled(unknown), sharing);
+                    Cardinality own = CardinalityTransfer.upperOf(named, defs.get(asked),
+                            alone, Answers.settled(unknown), notSharing);
+                    assertEquals(String.valueOf(own), String.valueOf(lent),
+                            () -> asked + " under " + supposed + " counts otherwise when its"
+                                    + " reading is shared");
+                    seen.add(own instanceof Cardinality.None ? null : own);
+                }
+            }
+        }
+        // A count of three is the chain over three values read through its rules, and a count of
+        // none is a contradiction the rules were read far enough to find.
+        assertTrue(seen.contains(Cardinality.atMost(3)) && seen.contains(null)
+                        && seen.contains(Cardinality.UNKNOWN),
+                () -> "the model no longer comes to a count that a reading of the wrong rules"
+                        + " would miss: " + seen);
+    }
+
+    /**
+     * A reading a supposing hands out says, to every question a count can ask of it, what a reading
+     * of the declaration stopping at the supposed name says.
+     */
+    @Test
+    void everyQuestionACountAsksIsAnsweredAsAReadingThatStopsThereAnswersIt() {
+        Compilation compilation = compiled();
         RuleReadingSource source = RuleReadings.of(compilation, "demo");
         RuleReadingContext reading = RuleReadingContext.of(source, ReadAs.THE_COMPILATION_DOES,
                 compilation.db().readings());
-        Supposing.Across rules = new Supposing.Across(source);
+        Supposing.Across across = new Supposing.Across(source);
         List<String> backwards = new ArrayList<>(NAMES);
         Collections.reverse(backwards);
-        int lentPastTheSupposing = 0;
+        Set<String> told = new HashSet<>();
         int lentItsOwn = 0;
         for (String supposed : NAMES) {
             InvariantChecker.Reach stopsThere =
                     InvariantChecker.Reach.stoppingAt(Set.of(declared(supposed)));
             for (List<String> order : List.of(NAMES, backwards)) {
-                Supposing supposing = Supposing.of(Set.of(declared(supposed)), rules);
+                Supposing supposing = Supposing.of(Set.of(declared(supposed)), across);
                 for (String asked : order) {
                     if (asked.equals(supposed)) {
                         continue;
                     }
                     TypeSymbol.AtModule named = declared(asked);
                     DeclarationReading lent = supposing.readingOf(named, reading);
-                    List<Object> own = saidBy(InvariantChecker.readFields(
+                    List<String> own = saidBy(InvariantChecker.readFields(
                             named, reading, Map.of(), stopsThere), named, reading, stopsThere,
                             source);
-                    assertEquals(own, saidBy(lent, named, reading, supposing.reach(), source),
-                            () -> asked + " under " + supposed
-                                    + " supposed was lent a reading that says something else");
-                    if (own.get(0).equals(Optional.empty()) && asked.startsWith("X")) {
-                        lentPastTheSupposing++;
+                    List<String> handed = saidBy(lent, named, reading, supposing.reach(), source);
+                    assertEquals(own.size(), handed.size(), "the same questions were asked");
+                    for (int each = 0; each < own.size(); each++) {
+                        int at = each;
+                        assertEquals(own.get(at), handed.get(at), () -> asked + " under "
+                                + supposed + " supposed was lent a reading that says something"
+                                + " else");
                     }
+                    told.addAll(own);
                     if (lent == InvariantChecker.readFields(named, reading, Map.of(),
                             InvariantChecker.Reach.EVERYTHING)) {
                         lentItsOwn++;
@@ -120,9 +199,15 @@ class AReadingUnderASupposingIsTheOneThatStopsThereTest {
                 }
             }
         }
-        assertTrue(lentPastTheSupposing > 0,
-                "no name of the chain has a value under any supposing, so nothing here could tell"
-                        + " a reading lent past the supposed name from one that stops there");
+        // Answers a reading of the wrong rules would not give: the chain over three values counted
+        // at three, a set of two refused a size of one, a deep rule's contradiction found, and the
+        // chain over the empty number left with nothing to contradict once its bottom is supposed.
+        for (String expected : List.of("value at most 3", "xs 1 exactly false",
+                "holds nothing true", "holds nothing false")) {
+            assertTrue(told.contains(expected),
+                    () -> "no reading here said `" + expected + "`, so nothing here tells a"
+                            + " reading of the wrong rules from the right one");
+        }
         assertTrue(lentItsOwn > 0,
                 "no declaration was lent its own reading under any supposing, so nothing here"
                         + " could tell a supposing that reads past a rule from one that stops");
@@ -138,8 +223,7 @@ class AReadingUnderASupposingIsTheOneThatStopsThereTest {
      */
     @Test
     void aDeclarationsOwnReadingIsBorrowedOnceForEverySupposingOfOneCount() {
-        Compilation compilation = Compilation.ofSources(List.of(MODULE), ModulePath.EMPTY);
-        compilation.answerEverything();
+        Compilation compilation = compiled();
         RuleReadingSource source = RuleReadings.of(compilation, "demo");
         DeclarationReadings lender = compilation.db().readings();
         int[] borrowed = {0};
@@ -181,27 +265,36 @@ class AReadingUnderASupposingIsTheOneThatStopsThereTest {
     }
 
     /**
-     * What a count reads off {@code read}: whether its rules leave {@code named} anything, and at
-     * the value and each of its fields how many whole numbers stand there and which small sizes
-     * a collection there may hold.
+     * Every answer a count can read off {@code read}, each said with what it was asked: whether the
+     * rules leave {@code named} anything, and at the value and each field how many whole numbers
+     * stand there and every size a collection there may hold exactly, at least and at most.
      */
-    private static List<Object> saidBy(DeclarationReading read, TypeSymbol.AtModule named,
+    private static List<String> saidBy(DeclarationReading read, TypeSymbol.AtModule named,
                                        RuleReadingContext reading, InvariantChecker.Reach reach,
                                        RuleReadingSource source) {
-        List<Object> said = new ArrayList<>();
-        said.add(FieldDomains.of(read, reading, reach)
-                .holdsNothing(reading.readings().of(named.key())));
+        List<String> said = new ArrayList<>();
+        said.add("holds nothing " + FieldDomains.of(read, reading, reach)
+                .holdsNothing(reading.readings().of(named.key())).isPresent());
         OccurrenceCounts counts = OccurrenceCounts.of(read.seeded());
         OccurrenceValues values = OccurrenceValues.of(read.seeded());
         List<RuleKey> places = new ArrayList<>(List.of(RuleKey.THE_VALUE));
         source.fieldTypes().of(named).keySet().forEach(field -> places.add(RuleKey.of(field)));
         for (RuleKey place : places) {
-            said.add(place + " " + values.wholeValuesAt(place));
-            for (long size = 0; size <= 3; size++) {
-                said.add(place + " " + size + " " + counts.mayHoldExactly(place, size));
+            String at = place.isTheValueItself() ? "value" : place.toString();
+            said.add(at + " " + values.wholeValuesAt(place));
+            for (long size = 0; size <= SIZES; size++) {
+                said.add(at + " " + size + " exactly " + counts.mayHoldExactly(place, size));
+                said.add(at + " " + size + " at least " + counts.mayHoldAtLeast(place, size));
+                said.add(at + " " + size + " at most " + counts.mayHoldAtMost(place, size));
             }
         }
         return said;
+    }
+
+    private static Compilation compiled() {
+        Compilation compilation = Compilation.ofSources(List.of(MODULE), ModulePath.EMPTY);
+        compilation.answerEverything();
+        return compilation;
     }
 
     private static TypeSymbol.AtModule declared(String declaration) {
