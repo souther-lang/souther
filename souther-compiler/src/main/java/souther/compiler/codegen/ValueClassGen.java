@@ -2,6 +2,7 @@ package souther.compiler.codegen;
 
 import souther.compiler.check.Boundary;
 import souther.compiler.check.DerivedSymbols;
+import souther.compiler.check.EnumerationListings;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -536,7 +537,8 @@ final class ValueClassGen {
                 case null -> null;
             };
         }
-        return Ordering.ofBare(value, symbols, ctx.kinds, ctx.published);
+        return Ordering.ofBare(value, ctx.kinds, ctx.published,
+                EnumerationListings.asWritten(symbols, ctx.kinds, ctx.published));
     }
 
     /** {@code Record} plus each interface, with {@code Comparable} bound to the class itself, so a

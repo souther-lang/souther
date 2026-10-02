@@ -72,18 +72,11 @@ public final class AffineForms {
          *  rather than reaching for a library of its own. */
         Symbols symbols();
 
-        /** What the declarations the expression was written against say. Asked beside the symbols
-         *  because what a carrier is depends on which of them is a sum and what its cases are, and
-         *  that is the declaration's own answer rather than the tree it was written in. */
-        PublishedDeclarations published();
-
-        /** Which form each of those declarations was written in, for the carrier's question about
-         *  whether one is a sum. */
-        DeclarationKinds kinds();
-
-        /** What each of them that wears one value wraps, for the walk that takes the names off a
-         *  position before the carrier is read. */
-        NewtypeInners inners();
+        /** What is asked of the declarations the expression was written against. Asked beside the
+         *  symbols because what a carrier is depends on which of them is a sum, what its cases are,
+         *  which enumerations list a case and what a name wraps, and those are the declarations'
+         *  own answers rather than the tree they were written in. */
+        DeclarationAccess declarations();
 
         /** {@code e} as a form, where nothing here composes one: an atom, a value read through, or
          *  null where the caller can say nothing about it. */
@@ -437,18 +430,8 @@ public final class AffineForms {
         }
 
         @Override
-        public PublishedDeclarations published() {
-            return of.published();
-        }
-
-        @Override
-        public DeclarationKinds kinds() {
-            return of.kinds();
-        }
-
-        @Override
-        public NewtypeInners inners() {
-            return of.inners();
+        public DeclarationAccess declarations() {
+            return of.declarations();
         }
 
         @Override
@@ -731,7 +714,7 @@ public final class AffineForms {
             // written, and this one asks what the arithmetic under the name comes to.
             case Core.Construct nd when !nd.values().isEmpty()
                     && TypeView.asWritten(Type.ref(nd.typeName()), reading.symbols(),
-                            reading.published())
+                            reading.declarations().published())
                             .isWrapped() ->
                     formOf(nd.values().get(0).value(), at, reading, following, stopped);
             // One arm, holding two proofs that this projection is the value it reads. The
@@ -878,8 +861,7 @@ public final class AffineForms {
      */
     private static <A, E> LinearForm<A> literal(Core e, Reading<A, E> reading) {
         Carrier carrier =
-                Carrier.ofValue(e.type(), reading.inners(), reading.symbols(), reading.kinds(),
-                        reading.published());
+                Carrier.ofValue(e.type(), reading.declarations());
         if (carrier == null || !carrier.counts()) {
             return null;
         }

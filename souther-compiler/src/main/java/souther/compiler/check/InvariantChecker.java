@@ -1995,8 +1995,7 @@ public final class InvariantChecker {
         Map<FactSubject, Coordinate> byName = new LinkedHashMap<>();
         keys.forEach((path, key) -> {
             Carrier carrier =
-                    Carrier.ofValue(typeAt.get(path), terms.newtypeInners(), symbols,
-                            terms.kinds(), terms.published());
+                    Carrier.ofValue(typeAt.get(path), terms.declarations());
             byName.put(key, new Coordinate(NumberAt.valueOf(path), carrier));
             FactSubject atom = atoms.get(path);
             if (atom != null) {

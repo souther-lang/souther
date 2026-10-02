@@ -74,7 +74,7 @@ public final class BinaryElaborator {
                 Type lt = left.type();
                 Type rt = right.type();
                 OrderedReading ordered = orderedReading(lt, rt, bin.left(), bin.right(),
-                        ctx.inners(), ctx.symbols(), ctx.kinds(), ctx.published());
+                        ctx.symbols(), ctx.declarations());
                 if (ordered == null) {
                     throw CompileException.of(Diagnostic
                                     .at(bin.pos()).say(new TypeMessage.ComparisonNeedsOrderedValuesOfOneType(Type.show(lt), Type.show(rt))).build());
@@ -206,19 +206,19 @@ public final class BinaryElaborator {
      * by the enumeration listing {@code w}.
      */
     static OrderedReading orderedReading(Type lt, Type rt, Hir.Expr le, Hir.Expr re,
-                                         NewtypeInners inners,
-                                         Symbols symbols, DeclarationKinds kinds,
-                                         PublishedDeclarations published) {
+                                         Symbols symbols, DeclarationAccess declarations) {
+        NewtypeInners inners = declarations.inners();
         // Two of the same type, where that type has an order: 金額 <= 金額, Stage <= Stage, and
         // StageN <= StageN, whose order is the enumeration it wraps (ADR-0047 over ADR-0069).
         if (lt.equals(rt)) {
-            Ordering how = Ordering.of(lt, inners, symbols, kinds, published);
+            Ordering how = Ordering.of(lt, declarations);
             return how == null ? null
                     : new OrderedReading(Core.BinaryReading.AS_THEY_STAND, basisOf(how));
         }
         // Two values of one enumeration that are not one type: a case value is a value of its sum
         // (spec §sum-data), so `stage < Won` compares in the sum both sides belong to (issue #161).
-        TypeSymbol enumeration = TypeOps.comparisonEnumeration(lt, rt, symbols, kinds, published);
+        TypeSymbol enumeration = TypeOps.comparisonEnumeration(lt, rt, declarations.kinds(),
+                declarations.published(), declarations.enumerations());
         if (enumeration != null) {
             Type sum = Type.ref(enumeration);
             return new OrderedReading(new Core.BinaryReading.In(sum), new Core.OrderingBasis(sum));
@@ -231,7 +231,7 @@ public final class BinaryElaborator {
         // Int variable, and not 金額 <= 数量. Ordering asks in addition that the wrapped value be
         // ordered, which the equality rule this shares does not. The pair is ordered by what both
         // sides open to, which the two sharing a base makes the one the left is ordered by.
-        Ordering how = Ordering.of(lt, inners, symbols, kinds, published);
+        Ordering how = Ordering.of(lt, declarations);
         return how != null && TypeOps.base(lt, inners).equals(TypeOps.base(rt, inners))
                 && literalPairsNewtype(lt, rt, le, re, symbols)
                 ? new OrderedReading(new Core.BinaryReading.In(newtypeOfThePair(lt, rt, symbols)),

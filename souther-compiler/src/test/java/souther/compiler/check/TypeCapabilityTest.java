@@ -18,8 +18,7 @@ class TypeCapabilityTest {
 
     /** Whether the type has an order, which is {@link Ordering#of} having an answer. */
     private static boolean ordered(Type type) {
-        return Ordering.of(type, NewtypeInners.NONE, null, DeclarationKinds.NONE,
-                PublishedDeclarations.NONE) != null;
+        return Ordering.of(type, DeclarationAccess.NONE) != null;
     }
 
     @Test

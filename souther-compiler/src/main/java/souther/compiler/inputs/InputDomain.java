@@ -1332,8 +1332,7 @@ public final class InputDomain {
         TypeView view = input.view();
         Type type = view.declared();
         Carrier carried =
-                Carrier.ofValue(type, source.inners(), source.symbols(), source.kinds(),
-                        source.published());
+                Carrier.ofValue(type, source.declarations());
         ValueName.Stdlib taken = NumericMeasures.takenOf(type, source.inners());
         // The ends the value this sits in places on this position, which its own type says nothing
         // about. Read beside the type's own rules and not after them: a clause naming one coordinate
@@ -1449,9 +1448,7 @@ public final class InputDomain {
         }
         BlockReason.RuleReadingStopped here = found.aReadingThatStopped();
         if (!declared.isEmpty()) {
-            return Crossing.of(declared, view, admissible, admitted, source.inners(),
-                    source.symbols(),
-                    source.kinds(), source.published(), here);
+            return Crossing.of(declared, view, admissible, admitted, source.declarations(), here);
         }
         // The values a rule named, where the type states no division. Not crossed with anything:
         // the reading that named them is the reading of the rules, and a value the rules single out

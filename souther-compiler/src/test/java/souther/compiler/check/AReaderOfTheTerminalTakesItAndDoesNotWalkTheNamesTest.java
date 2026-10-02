@@ -99,8 +99,9 @@ class AReaderOfTheTerminalTakesItAndDoesNotWalkTheNamesTest {
     void theOrderTakesTheTerminalAndOneStep() {
         Counting inners = new Counting(true);
 
-        assertEquals(new Ordering.Wrapped(Ordering.LONGS), Ordering.of(TOP, inners, SYMBOLS,
-                ScopedDeclarations.kindsOf(SYMBOLS), ScopedDeclarations.of(SYMBOLS)));
+        assertEquals(new Ordering.Wrapped(Ordering.LONGS), Ordering.of(TOP, inners,
+                ScopedDeclarations.kindsOf(SYMBOLS), ScopedDeclarations.of(SYMBOLS),
+                EnumerationListings.NONE));
         assertEquals(1, inners.terminals);
         assertEquals(1, inners.asked, "the order read more than the outermost name");
     }

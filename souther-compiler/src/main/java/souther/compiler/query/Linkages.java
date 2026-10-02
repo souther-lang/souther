@@ -7,6 +7,7 @@ import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.Derived;
+import souther.compiler.check.EnumerationListings;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.Ordering;
 import souther.compiler.check.Preserved;
@@ -286,11 +287,11 @@ public final class Linkages {
         PublishedDeclarations published = Shapes.publishedDeclarations(db);
         // Which enumerations list a value, worked out once for each module asked of: asked again
         // for every unit, it would read every sum of the module once per unit it declares.
-        Map<String, Map<TypeSymbol, Set<TypeSymbol>>> listings = new HashMap<>();
-        Function<TypeSymbol.AtModule, Set<TypeSymbol>> listing = value -> listings
+        Map<String, Map<TypeKey, Set<TypeSymbol>>> listings = new HashMap<>();
+        EnumerationListings listing = value -> listings
                 .computeIfAbsent(value.module(), module -> TypeOps.enumerationsListing(module,
-                        symbols.value(), kinds, published))
-                .getOrDefault(value, Set.of());
+                        symbols.value().declaredNamesIn(module), kinds, published))
+                .getOrDefault(value.key(), Set.of());
         Map<TypeKey, Optional<LinkageProjection.HeldOrder>> out = new HashMap<>();
         for (TypeKey declaration : declarations) {
             Hir.Def def = symbols.value().declaredNode(declaration);

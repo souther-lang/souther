@@ -17,6 +17,7 @@ import souther.compiler.check.DeclarationMeaning;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclarationReadings;
 import souther.compiler.check.DeclaredNames;
+import souther.compiler.check.EnumerationListings;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.Normalized;
 import souther.compiler.check.ProductSpreads;
@@ -529,6 +530,70 @@ public final class Shapes {
             }
             Type terminal = terminals.value().get(named);
             return terminal == null ? Answer.absent() : Answer.of(terminal);
+        }
+    }
+
+    /**
+     * Which enumerations list a unit value among their cases, for a reader working out what orders
+     * it — each answered once for the value's module.
+     *
+     * <p>One of these for the whole compilation, for the reason {@link #expandedClauses} gives. A
+     * reader taking one depends on the values it asks about and on nothing else: each is answered
+     * by {@link EnumerationsListing}.
+     */
+    public static EnumerationListings enumerationListings(Db db) {
+        return value -> {
+            Answer<Set<TypeSymbol>> listing = db.ask(new EnumerationsListing(value.key()));
+            return listing.present() ? listing.value() : Set.of();
+        };
+    }
+
+    /**
+     * Every enumeration a module declares, by each value it lists.
+     *
+     * <p><b>One answer for the module, and one value read off it.</b> What lists a value is read
+     * off every sum of the value's module, so working it out is one walk of the module whichever
+     * value it is for. Walked here once, and a reader depends on {@link EnumerationsListing} of the
+     * value it asks about — so a sum of the module moving reaches a reader only where what lists
+     * that reader's value moved with it.
+     */
+    public record EnumerationsListingIn(String name)
+            implements Key<Map<TypeKey, Set<TypeSymbol>>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<TypeKey, Set<TypeSymbol>>> compute(Db db) {
+            Answer<DeclaredNames.Index<Ast.Def>> declared = db.ask(new Names.Declarations(name));
+            if (!declared.present()) {
+                return Answer.absent();
+            }
+            return Answer.of(TypeOps.enumerationsListing(name, declared.value().asDeclared(),
+                    declarationKinds(db), publishedDeclarations(db)));
+        }
+    }
+
+    /**
+     * Which enumerations list one value, read off its module's {@link EnumerationsListingIn}. A
+     * value no enumeration lists is answered as none, which is an answer: absent is a module with
+     * no declarations to read.
+     */
+    public record EnumerationsListing(TypeKey named) implements Key<Set<TypeSymbol>> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<Set<TypeSymbol>> compute(Db db) {
+            Answer<Map<TypeKey, Set<TypeSymbol>>> listing =
+                    db.ask(new EnumerationsListingIn(named.module()));
+            if (!listing.present()) {
+                return Answer.absent();
+            }
+            return Answer.of(listing.value().getOrDefault(named, Set.of()));
         }
     }
 
@@ -1998,7 +2063,8 @@ public final class Shapes {
      */
     public static DeclarationAccess declarationAccess(Db db) {
         return new DeclarationAccess(publishedDeclarations(db), declarationKinds(db),
-                newtypeInners(db), effectiveFieldTypes(db), fieldLayout(db));
+                newtypeInners(db), effectiveFieldTypes(db), fieldLayout(db),
+                enumerationListings(db));
     }
 
     /**
@@ -2261,7 +2327,8 @@ public final class Shapes {
                             ExecutableInvariants.of(data, governing.value().get(data.declares()),
                                     scope.value(), publishedDeclarations(db), declarationKinds(db),
                                     newtypeInners(db), effectiveFieldTypes(db),
-                                    helpers.value(), expandedClauses(db), statements));
+                                    enumerationListings(db), helpers.value(),
+                                    expandedClauses(db), statements));
                 } catch (Unanswerable _) {
                     // Rests on something already reported where it went wrong.
                 } catch (CompileException e) {

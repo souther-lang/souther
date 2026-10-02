@@ -8,6 +8,7 @@ import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.Distinctions;
 import souther.compiler.inputs.Refinement;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
@@ -217,9 +218,7 @@ final class PartitionClasses {
         // type and the declarations are all in hand. A line a body draws on an ordered enumeration
         // is at one of these places, and the class holding it is asked with the place.
         Recognition is = Recognition.Under.of(worn, new Recognition.OfCase(leaf,
-                ValueClasses.placeOf(new souther.compiler.observe.ObservedValue.Unit(leaf), of,
-                        ruleSource.inners(), ruleSource.symbols(), ruleSource.kinds(),
-                        ruleSource.published())));
+                ValueClasses.placeOf(new ObservedValue.Unit(leaf), of, ruleSource.declarations())));
         // A case whose module does not expose it: a value of the position all the same, and one no
         // author here can write down. Said as that, rather than offered under a spelling that
         // resolves to nothing wherever the row is pasted (issue #696).

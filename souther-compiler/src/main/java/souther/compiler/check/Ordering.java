@@ -5,8 +5,6 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.Objects;
-import java.util.Set;
-import java.util.function.Function;
 
 /**
  * How the values of a type are ordered: whether they are ordered at all, and by what.
@@ -157,24 +155,18 @@ public sealed interface Ordering {
      * put on the tree, so admission takes this answer and keeps it: a reader that admits a value it
      * cannot emit a comparison for is what #856 was.
      */
-    static Ordering of(Type type, NewtypeInners inners, Symbols symbols, DeclarationKinds kinds,
-                       PublishedDeclarations published) {
-        return of(type, inners, kinds, published,
-                TypeOps.listingIn(symbols, kinds, published));
+    static Ordering of(Type type, DeclarationAccess declarations) {
+        return of(type, declarations.inners(), declarations.kinds(), declarations.published(),
+                declarations.enumerations());
     }
 
     /**
-     * The same, with which enumerations list a value read off {@code listing} — for a reader asking
-     * this of every declaration of a module, which works each module's enumerations out once rather
-     * than once for each value they list.
-     *
-     * @param listing every enumeration that lists a value, as {@link TypeOps#enumerationsListing}
-     *                answers it for the value's module
+     * The same, asking each question of the declarations where it is handed — for a reader that
+     * holds its own answer to one of them.
      */
     static Ordering of(Type type, NewtypeInners inners, DeclarationKinds kinds,
-                       PublishedDeclarations published,
-                       Function<TypeSymbol.AtModule, Set<TypeSymbol>> listing) {
-        Ordering terminal = ofBare(inners.terminal(type), kinds, published, listing);
+                       PublishedDeclarations published, EnumerationListings listings) {
+        Ordering terminal = ofBare(inners.terminal(type), kinds, published, listings);
         if (terminal == null) {
             return null;
         }
@@ -240,22 +232,16 @@ public sealed interface Ordering {
      * <p>Reads no name off: handed a newtype, it answers null, as it does for a product, and says
      * nothing about what the newtype wraps.
      */
-    public static Ordering ofBare(Type terminal, Symbols symbols, DeclarationKinds kinds,
-                                  PublishedDeclarations published) {
-        return ofBare(terminal, kinds, published, TypeOps.listingIn(symbols, kinds, published));
-    }
-
-    private static Ordering ofBare(Type terminal, DeclarationKinds kinds,
-                                   PublishedDeclarations published,
-                                   Function<TypeSymbol.AtModule, Set<TypeSymbol>> listing) {
+    public static Ordering ofBare(Type terminal, DeclarationKinds kinds,
+                                  PublishedDeclarations published, EnumerationListings listings) {
         return switch (terminal) {
             case Type.Prim p -> ofPrimitive(p);
             // A sum every one of whose cases is a unit data, one of its cases, or a union of them.
             // Null where more than one enumeration lists the case: the order belongs to the sum, so
             // a value two sums place differently has none of its own, and that is refused rather
             // than guessed (ADR-0069).
-            case Type.Ref r -> placesIn(r, kinds, published, listing);
-            case Type.Union u -> placesIn(u, kinds, published, listing);
+            case Type.Ref r -> placesIn(r, kinds, published, listings);
+            case Type.Union u -> placesIn(u, kinds, published, listings);
             // A collection has no order of its own whatever it holds, a function and a tuple none at
             // all, and a type standing for a type has no values to order.
             case Type.ListOf _, Type.SetOf _, Type.OptionOf _, Type.MapOf _, Type.TupleOf _,
@@ -265,8 +251,8 @@ public sealed interface Ordering {
 
     private static Ordering placesIn(Type t, DeclarationKinds kinds,
                                      PublishedDeclarations published,
-                                     Function<TypeSymbol.AtModule, Set<TypeSymbol>> listing) {
-        TypeSymbol enumeration = TypeOps.orderingEnumeration(t, kinds, published, listing);
+                                     EnumerationListings listings) {
+        TypeSymbol enumeration = TypeOps.orderingEnumeration(t, kinds, published, listings);
         return enumeration == null ? null : new Places(enumeration);
     }
 }

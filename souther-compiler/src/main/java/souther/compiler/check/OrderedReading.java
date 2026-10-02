@@ -91,11 +91,10 @@ final class OrderedReading {
      *  <p>No environment is held. Which environment a leaf is read at is where the leaf stands,
      *  which the fold hands down — kept here, a rule under a binding would be read at the names the
      *  clause began with. */
-    static OrderedReading of(Terms terms, Map<FactSubject, Type> byName, Symbols symbols) {
+    static OrderedReading of(Terms terms, Map<FactSubject, Type> byName) {
         Map<FactSubject, Carrier> carriers = new LinkedHashMap<>();
         byName.forEach((name, type) -> {
-            Carrier carrier = Carrier.ofValue(type, terms.newtypeInners(), symbols, terms.kinds(),
-                    terms.published());
+            Carrier carrier = Carrier.ofValue(type, terms.declarations());
             if (carrier != null) {
                 carriers.put(name, carrier);
             }

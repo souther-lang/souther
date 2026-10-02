@@ -4,9 +4,7 @@ import souther.compiler.check.AffineForms;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Location;
-import souther.compiler.check.DeclarationKinds;
-import souther.compiler.check.NewtypeInners;
-import souther.compiler.check.PublishedDeclarations;
+import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
@@ -142,18 +140,8 @@ record DecisionComparison(InputDomain inputs, RuleReadingSource rules, DecisionS
             }
 
             @Override
-            public PublishedDeclarations published() {
-                return rules.published();
-            }
-
-            @Override
-            public DeclarationKinds kinds() {
-                return rules.kinds();
-            }
-
-            @Override
-            public NewtypeInners inners() {
-                return rules.inners();
+            public DeclarationAccess declarations() {
+                return rules.declarations();
             }
 
             @Override

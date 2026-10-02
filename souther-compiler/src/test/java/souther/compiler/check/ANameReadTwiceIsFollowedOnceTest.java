@@ -57,18 +57,8 @@ class ANameReadTwiceIsFollowedOnceTest {
         }
 
         @Override
-        public PublishedDeclarations published() {
-            return PublishedDeclarations.NONE;
-        }
-
-        @Override
-        public DeclarationKinds kinds() {
-            return DeclarationKinds.NONE;
-        }
-
-        @Override
-        public NewtypeInners inners() {
-            return NewtypeInners.NONE;
+        public DeclarationAccess declarations() {
+            return DeclarationAccess.NONE;
         }
 
         /** Nothing is an atom here: what this measures is how often the walk asks to follow a

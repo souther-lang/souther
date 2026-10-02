@@ -654,7 +654,7 @@ sealed interface StatedByClauses {
                              StatedLines lines, BoundaryReading boundaries) {
         return new Reading(
                 AdmissibleReading.of(terms, byName, symbols, terms.published(), allowed),
-                OrderedReading.of(terms, byName, symbols), terms, byName, alternatives,
+                OrderedReading.of(terms, byName), terms, byName, alternatives,
                 machines, lines, boundaries);
     }
 

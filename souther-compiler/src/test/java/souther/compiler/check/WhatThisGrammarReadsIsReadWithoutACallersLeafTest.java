@@ -111,18 +111,8 @@ class WhatThisGrammarReadsIsReadWithoutACallersLeafTest {
             }
 
             @Override
-            public PublishedDeclarations published() {
-                return PublishedDeclarations.NONE;
-            }
-
-            @Override
-            public DeclarationKinds kinds() {
-                return DeclarationKinds.NONE;
-            }
-
-            @Override
-            public NewtypeInners inners() {
-                return NewtypeInners.NONE;
+            public DeclarationAccess declarations() {
+                return DeclarationAccess.NONE;
             }
 
             @Override
