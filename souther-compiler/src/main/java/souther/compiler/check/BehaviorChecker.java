@@ -48,9 +48,10 @@ public final class BehaviorChecker {
      */
     public static CheckedEnsures contractOf(Hir.SpecBehavior behavior, String module,
                                        DeclaredSig declared, Symbols symbols,
-                                       PublishedDeclarations published, DeclarationKinds kinds,
+                                       DeclarationAccess declarations,
                                        Map<String, Type> helpers) {
-        Reading reading = read(behavior, module, declared, published, kinds);
+        Reading reading = read(behavior, module, declared, declarations.published(),
+                declarations.kinds());
         BehaviorContract contract = reading.contract();
         // The rules it did read, held to what a rule has to be. Two mistakes in one declaration are
         // two things for an author to fix, and this is the reading that reports them.
@@ -61,8 +62,8 @@ public final class BehaviorChecker {
         List<Contract.Rule> checked = new ArrayList<>();
         for (Rule rule : contract.rules()) {
             collect(found, () ->
-                    checked.add(checkRule(behavior, contract, rule, helpers, symbols, published,
-                            kinds)));
+                    checked.add(checkRule(behavior, contract, rule, helpers, symbols,
+                            declarations)));
         }
         if (found.size() == 1) {
             throw CompileException.of(found.get(0));
@@ -259,12 +260,10 @@ public final class BehaviorChecker {
      */
     private static Contract.Rule checkRule(Hir.SpecBehavior behavior, BehaviorContract contract,
                                            Rule rule, Map<String, Type> helpers, Symbols symbols,
-                                           PublishedDeclarations published,
-                                           DeclarationKinds kinds) {
+                                           DeclarationAccess declarations) {
         Core condition = Elaborator.elaborate(Lower.desugarExpr(rule.statement()),
                 scopeOf(contract, rule).reaching(helpers),
-                CheckContext.executableEnsures(symbols,
-                        DeclarationAccess.asWritten(symbols, published, kinds)));
+                CheckContext.executableEnsures(symbols, declarations));
         if (condition.type() != Type.BOOL) {
             throw CompileException.of(Diagnostic.at(rule.statement().pos())
                     .say(new BehaviorMessage.AnEnsuresExpressionIsNotBool(

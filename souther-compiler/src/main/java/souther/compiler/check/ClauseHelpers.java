@@ -192,8 +192,11 @@ public final class ClauseHelpers {
      * would key differently. */
     static Hir.Module settled(Hir.Module m, Symbols symbols, PublishedDeclarations published,
                               DeclarationKinds kinds) {
-        return HelperNames.withQualifiedInvariants(
-                HelperParams.settle(m, symbols, published, kinds, Map.of()));
+        // Read off the scope and what it was handed, never off the compilation's answers: this is
+        // what a declaration's clauses are settled from on the way to what the declaration says,
+        // and those answers are read off what the declarations say.
+        return HelperNames.withQualifiedInvariants(HelperParams.settle(m, symbols,
+                DeclarationAccess.asWritten(symbols, published, kinds), Map.of()));
     }
 
     /**

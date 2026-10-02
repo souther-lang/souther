@@ -21,11 +21,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * Which methods work out for themselves which enumerations list a unit value.
  *
- * <p>Two ways do it: the capability that walks the value's module each time it is asked
- * ({@code EnumerationListings#asWritten}), and the table of a whole module
- * ({@code TypeOps#enumerationsListing}). Each reads every sum of the module, so a reader holding the
- * first and ordering many values pays the module for every one of them — and the compilation
- * already holds the answer once for each module ({@code Shapes#enumerationListings}).
+ * <p>Three ways do it: the capability that walks the value's module each time it is asked
+ * ({@code EnumerationListings#asWritten}), the declaration questions read off a scope, which hand
+ * that capability on ({@code DeclarationAccess#asWritten}), and the table of a whole module
+ * ({@code TypeOps#enumerationsListing}). Each reads every sum of the module, so a reader holding a
+ * walk and ordering many values pays the module for every one of them — and the compilation
+ * already holds the answer once for each module ({@code Shapes#enumerationListings}). A reader
+ * handed the compilation's {@code DeclarationAccess} and building one off its scope instead is the
+ * second way, which is why it is watched as one.
  *
  * <p>So the methods that make one are written down. What entitles one is that it has no compilation
  * to ask, or that it is making what a declaration says and has taken that declaration out of what
@@ -52,6 +55,10 @@ class WhoWorksOutWhatListsAValueIsWrittenDownTest {
 
     private static final String THE_TABLE = TYPE_OPS + "#enumerationsListing";
 
+    private static final String ACCESS_TYPE = CHECK + "DeclarationAccess";
+
+    private static final String THE_WALK_IN_AN_ACCESS = ACCESS_TYPE + "#asWritten";
+
     private static final String SYMBOLS = "L" + CHECK + "Symbols;";
 
     private static final String KINDS = "L" + CHECK + "DeclarationKinds;";
@@ -60,19 +67,35 @@ class WhoWorksOutWhatListsAValueIsWrittenDownTest {
 
     private static final String ACCESS = "L" + CHECK + "DeclarationAccess;";
 
+    private static final String HIR_MODULE = "souther/compiler/ast/Hir$Module";
+
     /**
      * Every method that works it out, and the way it does.
      *
-     * <p>The answer handed to a reading made of a scope alone, and to one making what a declaration
-     * says. The emitter, which is handed no answer of the compilation's. The compilation's own
-     * answer for a module. And the linkage of a module, which records what it reads as what its
-     * classes are built against.
+     * <p>The ways in for a reading made of a scope alone, which a compilation never makes and a test
+     * of one reading does: a context, a source, and the sources of a compilation that hands them
+     * nothing. The settling of a declaration's clauses on the way to what the declaration says,
+     * which the compilation's answer is read off. The answer handed to a reading made of a scope
+     * alone, and to one making what a declaration says. The emitter, which is handed no answer of
+     * the compilation's. The compilation's own answer for a module. And the linkage of a module,
+     * which records what it reads as what its classes are built against.
      */
     private static final List<String> WORKING_IT_OUT = List.of(
+            row(CHECK + "CheckContext", "of",
+                    "(" + SYMBOLS + PUBLISHED + KINDS + ")L" + CHECK + "CheckContext;",
+                    THE_WALK_IN_AN_ACCESS),
+            row(CHECK + "ClauseHelpers", "settled",
+                    "(L" + HIR_MODULE + ";" + SYMBOLS + PUBLISHED + KINDS + ")L" + HIR_MODULE + ";",
+                    THE_WALK_IN_AN_ACCESS),
             row(CHECK + "DeclarationAccess", "asWritten",
                     "(" + SYMBOLS + PUBLISHED + KINDS + ")" + ACCESS, THE_WALK),
             row(CHECK + "DeclarationAccess", "saying", "(" + PUBLISHED + SYMBOLS + ")" + ACCESS,
                     THE_WALK),
+            row(CHECK + "RuleReadingSource", "<init>",
+                    "(" + SYMBOLS + "L" + CHECK + "ExpandedClauseLookup;" + PUBLISHED + KINDS + "L"
+                            + CHECK + "DeclarationNewtypes;L" + CHECK + "ClauseLocations;)V",
+                    THE_WALK_IN_AN_ACCESS),
+            CHECK + "TheCompilationsSources#new, in a lambda -> " + THE_WALK_IN_AN_ACCESS,
             row(CODEGEN + "BodyGen", "context", "()L" + CHECK + "CheckContext;", THE_WALK),
             row(CODEGEN + "ValueClassGen", "orderOfWrapped",
                     "(Lsouther/compiler/types/Type;)L" + CHECK + "Ordering;", THE_WALK),
@@ -146,6 +169,9 @@ class WhoWorksOutWhatListsAValueIsWrittenDownTest {
     private static Optional<String> aWay(String owner, String name) {
         if (LISTINGS.equals(owner) && name.equals("asWritten")) {
             return Optional.of(THE_WALK);
+        }
+        if (ACCESS_TYPE.equals(owner) && name.equals("asWritten")) {
+            return Optional.of(THE_WALK_IN_AN_ACCESS);
         }
         if (TYPE_OPS.equals(owner) && name.equals("enumerationsListing")) {
             return Optional.of(THE_TABLE);

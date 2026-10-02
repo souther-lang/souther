@@ -90,6 +90,40 @@ class WhatListsAValueIsAnsweredOnceForItsModuleTest {
     }
 
     /**
+     * A case of an enumeration the language declares is listed by it like any other. No module of
+     * the compilation writes the library's declarations, so a module's names read off what its
+     * sources declare would have none here, and every case of it would be ordered by nothing.
+     */
+    @Test
+    void aCaseTheLanguageDeclaresIsListedByItsEnumeration() {
+        Compilation c = compiled();
+
+        assertEquals(Set.of(TypeSymbols.declared(new TypeKey("souther.decimal", "RoundingMode"))),
+                Shapes.enumerationListings(c.db()).of(
+                        TypeSymbols.declared(new TypeKey("souther.decimal", "HALF_UP"))));
+    }
+
+    /** And two of its cases compare, which is the order a reader of one relies on. */
+    @Test
+    void twoCasesTheLanguageDeclaresCompare() {
+        Compilation c = Compilation.ofDocuments(Map.of("modes.sou", """
+                module modes
+
+                data Ok
+                data No
+                data Verdict = Ok | No
+
+                behavior gentler : (x: Int) -> Verdict
+                let gentler (x) = if HALF_UP < DOWN then Ok else No
+                """), Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+
+        assertEquals(List.of(), c.db().allReports().stream()
+                        .map(each -> each.report().diagnostic().code()).toList(),
+                "two cases of the library's rounding modes are ordered by it");
+    }
+
+    /**
      * Checking a body that orders a unit reads the answer for that unit, and does not read the
      * module's whole answer or work it out again.
      */
@@ -102,6 +136,29 @@ class WhatListsAValueIsAnsweredOnceForItsModuleTest {
                 () -> "the comparison is ordered without the compilation's answer: " + read);
         assertTrue(read.stream().noneMatch(Shapes.EnumerationsListingIn.class::isInstance),
                 () -> "the comparison read what lists every value of the module: " + read);
+    }
+
+    /**
+     * And a helper's body is checked against the same answer. The module's check is handed the
+     * compilation's answers to what is asked of a declaration, and a helper checked under it is
+     * checked with those, not with a walk of the module made again out of its scope.
+     */
+    @Test
+    void aCheckedHelperDependsOnTheAnswerForItsValue() {
+        Compilation c = Compilation.ofDocuments(Map.of("shop.sou", SOURCE + """
+
+                let early (s: Prospecting): Bool = s < Won
+
+                behavior open : (s: Prospecting) -> Verdict
+                let open (s) = if early(s) then Ok else No
+                """), Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+        assertTrue(c.db().allReports().isEmpty(), "the module compiles to begin with");
+        Set<Key<?>> read = c.db().dependenciesOf(new Bodies.ModuleCheck(MODULE));
+
+        assertTrue(read.contains(new Shapes.EnumerationsListing(key("Prospecting"))),
+                () -> "the helper's comparison is ordered without the compilation's answer: "
+                        + read);
     }
 
     /**

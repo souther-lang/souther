@@ -566,11 +566,11 @@ public final class Shapes {
 
         @Override
         public Answer<Map<TypeKey, Set<TypeSymbol>>> compute(Db db) {
-            Answer<DeclaredNames.Index<Ast.Def>> declared = db.ask(new Names.Declarations(name));
+            Answer<List<String>> declared = db.ask(new Names.NamesDeclaredIn(name));
             if (!declared.present()) {
                 return Answer.absent();
             }
-            return Answer.of(TypeOps.enumerationsListing(name, declared.value().asDeclared(),
+            return Answer.of(TypeOps.enumerationsListing(name, declared.value(),
                     declarationKinds(db), publishedDeclarations(db)));
         }
     }
@@ -2325,9 +2325,7 @@ public final class Shapes {
                 try {
                     shapes.put(data.declares(),
                             ExecutableInvariants.of(data, governing.value().get(data.declares()),
-                                    scope.value(), publishedDeclarations(db), declarationKinds(db),
-                                    newtypeInners(db), effectiveFieldTypes(db),
-                                    enumerationListings(db), helpers.value(),
+                                    scope.value(), declarationAccess(db), helpers.value(),
                                     expandedClauses(db), statements));
                 } catch (Unanswerable _) {
                     // Rests on something already reported where it went wrong.

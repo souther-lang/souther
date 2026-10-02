@@ -21,7 +21,8 @@ import java.util.Set;
 @FunctionalInterface
 public interface EnumerationListings {
 
-    /** Every enumeration that lists {@code value}, and none where no enumeration does. */
+    /** Every enumeration that lists {@code value}, and none where no enumeration does. An
+     *  unmodifiable set, whichever way it was answered. */
     Set<TypeSymbol> of(TypeSymbol.AtModule value);
 
     /** Nothing declared anywhere — for a reading over primitives, which asks of no declaration. */
@@ -46,7 +47,7 @@ public interface EnumerationListings {
                             owners.add(enumeration);
                         }
                     });
-            return owners;
+            return Set.copyOf(owners);
         };
     }
 }
