@@ -155,7 +155,8 @@ class WhatOneReadingDecidesIsLentWithItTest {
         RuleReadingSource source = RuleReadings.of(compilation, "demo");
         RuleReadingContext reading = RuleReadingContext.of(source, ReadAs.THE_COMPILATION_DOES,
                 compilation.db().readings());
-        Supposing supposing = Supposing.of(Set.of(declared("Common")));
+        Supposing supposing = Supposing.of(Set.of(declared("Common")),
+                new Supposing.Across(source));
         FieldDomains granting = FieldDomains.of(supposing.readingOf(held, reading), reading,
                 supposing.reach());
 

@@ -319,6 +319,8 @@ public final class TypeCardinality {
          *  first pass borrowed from, because it is the same declarations. */
         private final RuleReadingContext reading;
         private final boolean everyRuleReached;
+        /** What every supposing made of these answers shares; made when the first one is. */
+        private Supposing.Across supposings;
 
         private Cardinalities(Map<TypeSymbol, Cardinality> upper, List<List<TypeSymbol>> components,
                               Map<TypeSymbol, Hir.Def> declared,
@@ -413,7 +415,11 @@ public final class TypeCardinality {
             // but what has already been made of the declarations is borrowed all the same: what a
             // rule's strings come to is settled by the rule and not by what is supposed beside it.
             // Made once for this supposing, and kept for as long as it is answered.
-            return pass(within, declared, stillRead, cuts, reading, Supposing.of(supposed));
+            if (supposings == null) {
+                supposings = new Supposing.Across(reading.source());
+            }
+            return pass(within, declared, stillRead, cuts, reading,
+                    Supposing.of(supposed, supposings));
         }
 
         /** {@code these} and every declaration they read, at whatever remove. */
