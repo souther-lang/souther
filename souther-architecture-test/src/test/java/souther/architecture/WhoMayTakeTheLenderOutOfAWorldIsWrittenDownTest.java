@@ -90,7 +90,7 @@ class WhoMayTakeTheLenderOutOfAWorldIsWrittenDownTest {
     private static final List<String> TAKING_IT_OUT = List.of(
             AMethod.of(CHECK + "CardinalityTransfer", "ofData",
                     "(Lsouther/compiler/types/TypeSymbol$AtModule;Lsouther/compiler/ast/Hir$Data;"
-                            + A_WORLD + "L" + CHECK + "Answers;Ljava/util/Set;)L" + CHECK
+                            + A_WORLD + "L" + CHECK + "Answers;L" + CHECK + "Supposing;)L" + CHECK
                             + "Cardinality;")
                     + " -> " + OWNER + "#" + THE_LENDER,
             AMethod.of(CHECK + "FieldDomains", "leftBy",

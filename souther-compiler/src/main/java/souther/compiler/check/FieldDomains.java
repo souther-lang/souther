@@ -407,17 +407,18 @@ public final class FieldDomains {
     }
 
     /**
-     * The same, with the declarations {@code granted} names supposed to hold values.
+     * The same, off {@code read}, a reading made only as far as {@code reach} says and with
+     * nothing settled.
      *
-     * <p>What a reader asking "would this hold anything if that one did" needs. A value said to have
-     * none is one whose rules say so, and those rules are read wherever it is reached — its own and
-     * the ones under whatever it wraps — so supposing it has a value is not reading it at all. A
-     * record holding it is otherwise told it holds nothing by the very rules the supposing was
-     * about.
+     * <p>What a reader asking "would this hold anything if that one did" needs, handed the reading
+     * the supposing made ({@link Supposing#readingOf}). A value said to have none is one whose
+     * rules say so, and those rules are read wherever it is reached — its own and the ones under
+     * whatever it wraps — so supposing it has a value is not reading it at all. A record holding it
+     * is otherwise told it holds nothing by the very rules the supposing was about.
      */
-    static FieldDomains granting(TypeSymbol.AtModule named, RuleReadingContext reading,
-                                 Set<TypeSymbol> granted) {
-        return of(named, reading, Map.of(), InvariantChecker.Reach.stoppingAt(granted));
+    static FieldDomains of(DeclarationReading read, RuleReadingContext reading,
+                           InvariantChecker.Reach reach) {
+        return read.fields(seeded -> leftBy(seeded, read.owner(), reading, Map.of(), reach));
     }
 
     /** The same, reading only as far as {@code reach} says — see {@link #narrowedBy}. */

@@ -69,10 +69,11 @@ final class CardinalityTransfer {
      *                clauses are left out of every reading here, because a declaration said to have
      *                no value is one whose rules say so, and those rules are read wherever it is
      *                reached: a record holding it would otherwise be told it holds nothing by the
-     *                very rules the supposing was about.
+     *                very rules the supposing was about. The readings made that way are kept there
+     *                and taken from there.
      */
     static Cardinality upperOf(TypeSymbol named, Hir.Def def, RuleReadingContext reading,
-                               Answers answers, Set<TypeSymbol> granted) {
+                               Answers answers, Supposing granted) {
         return switch (def) {
             case Hir.UnitData _ -> Cardinality.atMost(1);
             case Hir.SumData sum -> ofCases(namedCases(sum), answers);
@@ -128,19 +129,21 @@ final class CardinalityTransfer {
 
     private static Cardinality ofData(TypeSymbol.AtModule named, Hir.Data data,
                                       RuleReadingContext reading, Answers answers,
-                                      Set<TypeSymbol> granted) {
+                                      Supposing granted) {
         RuleReadingSource source = reading.source();
+        // One reading of the rules for all three questions below, as the supposing has them.
+        DeclarationReading read = granted.readingOf(named, reading);
         // Rules that cannot all hold leave nothing to count, and the ends they would have been
         // counted between are gone with them. Asked before the positions, which have nothing to say
         // about a value the declaration as a whole refuses, and nearer than anything they could say.
         Optional<Emptiness> contradiction =
-                FieldDomains.granting(named, reading, granted)
+                FieldDomains.of(read, reading, granted.reach())
                         .holdsNothing(reading.readings().of(named.key()));
         if (contradiction.isPresent()) {
             return Cardinality.none(contradiction.get());
         }
-        OccurrenceCounts counts = OccurrenceCounts.of(named, reading, granted);
-        OccurrenceValues values = OccurrenceValues.of(named, reading, granted);
+        OccurrenceCounts counts = OccurrenceCounts.of(read.seeded());
+        OccurrenceValues values = OccurrenceValues.of(read.seeded());
         Map<String, Type> fields = TypeOps.fieldTypes(data, source.symbols());
         if (data.newtype()) {
             // A newtype is one value under a name, so its value sits where it sits: the rules written
@@ -211,7 +214,7 @@ final class CardinalityTransfer {
      */
     static Cardinality upperAt(Type type, RuleKey path, OccurrenceCounts counts,
                                OccurrenceValues values, RuleReadingSource source,
-                               Answers answers, Set<TypeSymbol> granted,
+                               Answers answers, Supposing granted,
                                Set<TypeSymbol> worn) {
         return new Walk(source, answers, granted, worn).at(type, path, counts, values);
     }
@@ -252,7 +255,7 @@ final class CardinalityTransfer {
      * stops at its count, as {@link Walk} would.
      */
     static Unwrapping unwrappingOf(TypeSymbol named, Hir.Def def, RuleReadingSource source,
-                                   Answers answers, Set<TypeSymbol> granted) {
+                                   Answers answers, Supposing granted) {
         Cardinality count = answers.of(named);
         if (granted.contains(named) || !(def instanceof Hir.Data data) || !data.newtype()) {
             return Unwrapping.stoppingAt(count);
@@ -372,12 +375,12 @@ final class CardinalityTransfer {
 
         private final RuleReadingSource source;
         private final Answers answers;
-        private final Set<TypeSymbol> granted;
+        private final Supposing granted;
         private final Set<TypeSymbol> worn;
         private final Deque<Waiting> waiting = new ArrayDeque<>();
         private Part asked;
 
-        Walk(RuleReadingSource source, Answers answers, Set<TypeSymbol> granted,
+        Walk(RuleReadingSource source, Answers answers, Supposing granted,
              Set<TypeSymbol> worn) {
             this.source = source;
             this.answers = answers;

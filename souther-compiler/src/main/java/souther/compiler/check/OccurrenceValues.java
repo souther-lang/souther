@@ -9,7 +9,6 @@ import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * How many values the value at a name may take, which is not how much it holds.
@@ -44,21 +43,15 @@ public final class OccurrenceValues {
 
     /** What the declaration {@code named} is leaves the values at each of its names. */
     public static OccurrenceValues of(TypeSymbol.AtModule named, RuleReadingContext reading) {
-        return of(named, reading, Set.of());
+        return new OccurrenceValues(InvariantChecker.seedFields(named, reading));
     }
 
     /**
-     * The same, with the declarations {@code granted} names supposed to hold values.
-     *
-     * <p>Read this way by whatever is asking what would be true if some declaration had values. Its
-     * rules are what say it has none — its own, and the ones under whatever it wraps — so supposing
-     * it has a value is not reading it at all.
+     * The same, off a reading somebody has already made of the declaration — the one a supposing
+     * made ({@link Supposing#readingOf}) among them.
      */
-    static OccurrenceValues of(TypeSymbol.AtModule named, RuleReadingContext reading,
-                               Set<TypeSymbol> granted) {
-        return new OccurrenceValues(
-                InvariantChecker.seedFields(named, reading, java.util.Map.of(),
-                        InvariantChecker.Reach.stoppingAt(granted)));
+    static OccurrenceValues of(InvariantChecker.Seeded seeded) {
+        return new OccurrenceValues(seeded);
     }
 
     /**

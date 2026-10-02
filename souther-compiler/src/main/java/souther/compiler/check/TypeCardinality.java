@@ -125,7 +125,7 @@ public final class TypeCardinality {
         CardinalityCuts cuts = CardinalityCuts.keeping(read.counts());
         List<List<TypeSymbol>> components = TypeComponents.of(edges);
         return new Cardinalities(
-                Map.copyOf(pass(components, declared, edges, cuts, reading, Set.of())),
+                Map.copyOf(pass(components, declared, edges, cuts, reading, Supposing.NOTHING)),
                 components, declared, edges, cuts, reading, read.everyRuleReached());
     }
 
@@ -247,7 +247,7 @@ public final class TypeCardinality {
                         ofTheDeclarations(reached(members, symbols).keySet(), premises).counts())
                 : CardinalityCuts.keeping(Set.of());
         Answers answers = Answers.over(outside);
-        settle(members, declared, edges, cuts, reading, Set.of(), answers);
+        settle(members, declared, edges, cuts, reading, Supposing.NOTHING, answers);
         return new Counted(answers.everySettled(), answers.everyUnwrapping());
     }
 
@@ -392,21 +392,28 @@ public final class TypeCardinality {
         Map<TypeSymbol, Cardinality> granting(List<? extends TypeSymbol> these,
                                               Set<TypeSymbol> granted) {
             Set<TypeSymbol> reach = reaching(these);
-            List<List<TypeSymbol>> within = new ArrayList<>();
-            for (List<TypeSymbol> component : components) {
-                // A component is reached or it is not: its members read each other, so one of them
-                // being reached is all of them being reached.
-                if (component.stream().anyMatch(reach::contains)) {
-                    within.add(component);
-                }
-            }
             Set<TypeSymbol> supposed = new LinkedHashSet<>(granted);
             supposed.retainAll(reach);
+            // A name granted a value reads nothing: it is answered without being read, and every
+            // reading that reaches it stops there. So the declarations that have to be answered
+            // together under this supposing are found over what is still read, and a ring with one
+            // of its names granted is a chain answered link by link rather than a ring risen
+            // through.
+            Map<TypeSymbol, Set<TypeSymbol>> stillRead = new LinkedHashMap<>();
+            for (TypeSymbol each : reach) {
+                if (edges.containsKey(each)) {
+                    Set<TypeSymbol> read = new LinkedHashSet<>(edges.get(each));
+                    read.retainAll(reach);
+                    stillRead.put(each, supposed.contains(each) ? Set.of() : read);
+                }
+            }
+            List<List<TypeSymbol>> within = TypeComponents.of(stillRead);
             // The readings are made afresh — what is asked here is what a declaration would hold if
             // another had values, and no reading with something supposed is a declaration's own —
             // but what has already been made of the declarations is borrowed all the same: what a
             // rule's strings come to is settled by the rule and not by what is supposed beside it.
-            return pass(within, declared, edges, cuts, reading, supposed);
+            // Made once for this supposing, and kept for as long as it is answered.
+            return pass(within, declared, stillRead, cuts, reading, Supposing.of(supposed));
         }
 
         /** {@code these} and every declaration they read, at whatever remove. */
@@ -438,7 +445,7 @@ public final class TypeCardinality {
                                                    Map<TypeSymbol, Hir.Def> declared,
                                                    Map<TypeSymbol, Set<TypeSymbol>> edges,
                                                    CardinalityCuts cuts, RuleReadingContext reading,
-                                                   Set<TypeSymbol> granted) {
+                                                   Supposing granted) {
         Answers answers = Answers.empty();
         for (List<TypeSymbol> component : components) {
             settle(component, declared, edges, cuts, reading, granted, answers);
@@ -456,7 +463,7 @@ public final class TypeCardinality {
      */
     private static void settle(List<TypeSymbol> component, Map<TypeSymbol, Hir.Def> declared,
                                Map<TypeSymbol, Set<TypeSymbol>> edges, CardinalityCuts cuts,
-                               RuleReadingContext reading, Set<TypeSymbol> granted,
+                               RuleReadingContext reading, Supposing granted,
                                Answers answers) {
         List<TypeSymbol> asked = new ArrayList<>();
         for (TypeSymbol each : component) {
@@ -493,7 +500,7 @@ public final class TypeCardinality {
      */
     private static void rise(List<TypeSymbol> component, Map<TypeSymbol, Hir.Def> declared,
                              RuleReadingContext reading, CardinalityCuts cuts,
-                             Answers answers, Set<TypeSymbol> granted) {
+                             Answers answers, Supposing granted) {
         component.forEach(answers::atBottom);
         boolean moved = true;
         while (moved) {
@@ -534,7 +541,7 @@ public final class TypeCardinality {
     private static void settleUnrounded(List<TypeSymbol> component,
                                         Map<TypeSymbol, Hir.Def> declared,
                                         RuleReadingContext reading, Answers answers,
-                                        Set<TypeSymbol> granted) {
+                                        Supposing granted) {
         Map<TypeSymbol, Cardinality> found = new LinkedHashMap<>();
         for (TypeSymbol each : component) {
             found.put(each, transfer(each, declared.get(each), reading, answers, granted));
@@ -557,7 +564,7 @@ public final class TypeCardinality {
      * are the same spending.
      */
     private static Cardinality transfer(TypeSymbol named, Hir.Def def, RuleReadingContext reading,
-                                        Answers answers, Set<TypeSymbol> granted) {
+                                        Answers answers, Supposing granted) {
         TRANSFERS.incrementAndGet();
         return CardinalityTransfer.upperOf(named, def, reading, answers, granted);
     }
