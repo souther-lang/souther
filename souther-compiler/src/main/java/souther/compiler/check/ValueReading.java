@@ -167,9 +167,20 @@ sealed interface ValueReading {
         return out;
     }
 
-    /** A sum's cases, as the one closure over them answers. */
+    /**
+     * A sum's cases, as the one closure over them answers.
+     *
+     * <p>None for an enumeration. Every case of one is a unit, and a unit holds nothing and may
+     * write no rule about it (spec §unit-data), so a reading opened at any of them would take in
+     * nothing — and handing them on has every reader of a value of the enumeration open each case
+     * to find that out.
+     */
     private static List<Type> cases(TypeSymbol sum, DeclarationKinds kinds,
                                     SumCases sums) {
+        if (sum instanceof TypeSymbol.AtModule named
+                && sums.of(named) instanceof SumCases.Enumeration) {
+            return List.of();
+        }
         List<Type> out = new ArrayList<>();
         for (TypeSymbol leaf : AtomSpace.subjectAtoms(Type.ref(sum), kinds, sums)) {
             out.add(Type.ref(leaf));

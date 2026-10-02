@@ -113,6 +113,10 @@ class WhatASumCanBeIsAnsweredOnceForTheSumTest {
      * Its own dependencies hold nothing about the cases it does not name: what each of them is was
      * read by the answer for the sum. A reader reading it beside the answer is opening the
      * enumeration again.
+     *
+     * <p>Nor anything else of those cases. Every one of them is a unit, which holds nothing, so a
+     * reading of a value of the enumeration that opened each case — what it wraps, what declares
+     * it — would find nothing there, and pay for every case of the enumeration to find it.
      */
     @Test
     void aReaderOrderingAValueOfTheEnumerationReadsNoCaseItDoesNotNameBesideTheAnswer() {
@@ -121,9 +125,14 @@ class WhatASumCanBeIsAnsweredOnceForTheSumTest {
         for (Key<?> reader : READERS) {
             Set<Key<?>> read = c.db().dependenciesOf(reader);
             for (String unnamed : List.of("Prospecting", "Qualified")) {
-                assertTrue(read.stream().noneMatch(new Names.DeclarationKindOf(key(unnamed))::equals),
-                        () -> reader + " read what " + unnamed + " is beside the answer for Stage: "
-                                + read);
+                for (Key<?> ofTheCase : List.<Key<?>>of(new Names.DeclarationKindOf(key(unnamed)),
+                        new Names.ResolvedDeclaration(key(unnamed)),
+                        new Shapes.NewtypeInnerOf(key(unnamed)),
+                        new Shapes.MeaningOf(key(unnamed)))) {
+                    assertTrue(read.stream().noneMatch(ofTheCase::equals),
+                            () -> reader + " read " + ofTheCase + " beside the answer for Stage: "
+                                    + read);
+                }
             }
         }
     }

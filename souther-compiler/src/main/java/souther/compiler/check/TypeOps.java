@@ -1236,6 +1236,12 @@ public final class TypeOps {
      */
     static Shape.CommonProduct commonSpreadOf(Hir.SumData sum, Symbols symbols,
                                               DeclarationKinds kinds, SumCases sums) {
+        // Every case of an enumeration is a unit, and a unit spreads nothing, so its cases share
+        // nothing and none of them is opened to find that out.
+        if (sum.declares() instanceof TypeSymbol.AtModule named
+                && sums.of(named) instanceof SumCases.Enumeration) {
+            return new Shape.CommonProduct.None();
+        }
         return commonSpreadOf(AtomSpace.subjectAtoms(Type.ref(sum.declares()), kinds, sums),
                 symbols);
     }
