@@ -121,9 +121,8 @@ class AReadingAnswersAboutItsOwnTermsAndNoOthersTest {
     /** What the answer would have been, which is what makes the refusal load-bearing. */
     @Test
     void theAnswerItWouldHaveGivenIsHalfOne() {
-        TermOrders would = TermOrdering.of(lengthOfS(), null,
-                souther.compiler.check.ScopedDeclarations.wrapsOf(SYMBOLS), SYMBOLS,
-                ScopedDeclarations.kindsOf(SYMBOLS), ScopedDeclarations.of(SYMBOLS));
+        TermOrders would = TermOrdering.of(lengthOfS(), null, SYMBOLS,
+                ScopedDeclarations.accessOf(SYMBOLS));
 
         assertEquals(souther.compiler.check.Carrier.WHOLE, would.answered(),
                 "the operation answers with a whole number wherever it was applied");

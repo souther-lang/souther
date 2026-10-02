@@ -43,17 +43,15 @@ public final class CarriedBodyDependencies {
      * @param standingCalls what the calls it leaves standing are typed against
      */
     public static Set<TypeSymbol.AtModule> of(Hir.FnDef closed, DerivedSymbols symbols,
-                                              PublishedDeclarations published,
-                                              DeclarationKinds kinds,
+                                              DeclarationAccess declarations,
                                               DeclarationNewtypes newtypes,
                                               Map<String, Type> standingCalls) {
-        DeclarationAccess declarations = DeclarationAccess.asWritten(symbols, published, kinds);
         Type declared = closed.declaredReturn() == null
                 ? null : TypeOps.successType(closed.declaredReturn());
         Core typed;
         try {
             Scope env = HelperTyping.parameterScope(closed, closed.writtenBody(), symbols,
-                    published, kinds, standingCalls);
+                    declarations, standingCalls);
             typed = Elaborator.elaborate(closed.writtenBody(), env.reaching(standingCalls),
                     new CheckContext(symbols, declarations, null, Map.of()),
                     declared);

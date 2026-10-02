@@ -85,8 +85,7 @@ public final class CallElaborator {
         if (element instanceof Type.Nothing) {
             return OrderingRequirement.overNothingToOrder(element);
         }
-        Ordering how = Ordering.of(element, ctx.inners(), ctx.symbols(), ctx.kinds(),
-                ctx.published());
+        Ordering how = Ordering.of(element, ctx.declarations());
         if (how != null) {
             return OrderingRequirement.orderedBy(element, how);
         }
@@ -114,8 +113,7 @@ public final class CallElaborator {
         if (BottomInfer.isBottom(answered) || answered instanceof Type.Var) {
             return OrderingRequirement.overNothingToOrder(answered);
         }
-        Ordering how = Ordering.of(answered, ctx.inners(), ctx.symbols(), ctx.kinds(),
-                ctx.published());
+        Ordering how = Ordering.of(answered, ctx.declarations());
         if (how != null) {
             return OrderingRequirement.orderedBy(answered, how);
         }

@@ -245,9 +245,7 @@ final class ReadQuantities implements Quantities {
         // other — an answer about no reading, wearing this one's name.
         held(term);
         return TermOrdering.of(term, typeAt.apply(term.subjectPath()),
-                ruleReading.source().inners(),
-                ruleReading.source().symbols(), ruleReading.source().kinds(),
-                ruleReading.source().published());
+                ruleReading.source().symbols(), ruleReading.source().declarations());
     }
 
     @Override

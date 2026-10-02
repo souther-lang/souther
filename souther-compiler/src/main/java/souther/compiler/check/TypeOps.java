@@ -33,7 +33,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BiConsumer;
-import java.util.function.Function;
 
 /**
  * The type-level questions the checker asks, independent of any expression being checked: resolving
@@ -1709,12 +1708,12 @@ public final class TypeOps {
      * here. What it answers reaches the backend as the type the comparison reads its operands in,
      * so no reader after the checker asks it again.
      */
-    static TypeSymbol comparisonEnumeration(Type lt, Type rt, Symbols symbols,
-                                            DeclarationKinds kinds,
-                                            PublishedDeclarations published) {
-        TypeSymbol named = orderingEnumeration(lt, symbols, kinds, published);
+    static TypeSymbol comparisonEnumeration(Type lt, Type rt, DeclarationKinds kinds,
+                                            PublishedDeclarations published,
+                                            EnumerationListings listings) {
+        TypeSymbol named = orderingEnumeration(lt, kinds, published, listings);
         if (named == null) {
-            named = orderingEnumeration(rt, symbols, kinds, published);
+            named = orderingEnumeration(rt, kinds, published, listings);
         }
         return named != null && isValueOfEnumeration(lt, named, published)
                 && isValueOfEnumeration(rt, named, published) ? named : null;
@@ -1747,56 +1746,39 @@ public final class TypeOps {
      * <p>Null when the type is not one and when more than one enumeration lists it: a unit data may
      * be a case of two sums, which place it differently, so no one order is the value's own. The
      * order therefore belongs to the sum and not to the case value.
-     */
-    static TypeSymbol orderingEnumeration(Type t, Symbols symbols, DeclarationKinds kinds,
-                                          PublishedDeclarations published) {
-        return orderingEnumeration(t, kinds, published, listingIn(symbols, kinds, published));
-    }
-
-    /**
-     * The same, with which enumerations list a value read off {@code listing}: for a reader placing
-     * many values, which works a module's enumerations out once rather than once for each value.
      *
-     * @param listing every enumeration that lists a value, as {@link #enumerationsListing} answers
-     *                it for the value's module
+     * @param listings every enumeration that lists a value
      */
     static TypeSymbol orderingEnumeration(Type t, DeclarationKinds kinds,
                                           PublishedDeclarations published,
-                                          Function<TypeSymbol.AtModule, Set<TypeSymbol>> listing) {
-        Set<TypeSymbol> candidates = orderingCandidates(t, kinds, published, listing);
+                                          EnumerationListings listings) {
+        Set<TypeSymbol> candidates = orderingCandidates(t, kinds, published, listings);
         return candidates != null && candidates.size() == 1 ? candidates.iterator().next() : null;
-    }
-
-    /** Every enumeration that lists a value, worked out from its module's declarations each time it
-     *  is asked. */
-    static Function<TypeSymbol.AtModule, Set<TypeSymbol>> listingIn(
-            Symbols symbols, DeclarationKinds kinds, PublishedDeclarations published) {
-        return value -> {
-            Set<TypeSymbol> owners = new LinkedHashSet<>();
-            forEachEnumeration(value.module(), symbols, kinds, published, (enumeration, listed) -> {
-                if (listed.contains(value)) {
-                    owners.add(enumeration);
-                }
-            });
-            return owners;
-        };
     }
 
     /**
      * Every enumeration {@code module} declares, by each value it lists: the cases it reaches,
      * nested sums opened. For a reader asking of many values of one module, which reads each of its
      * sums once rather than once for each value.
+     *
+     * <p>Unmodifiable all the way down, so it can be held as an answer and compared as one.
+     *
+     * @param declared the names {@code module} declares
      */
-    public static Map<TypeSymbol, Set<TypeSymbol>> enumerationsListing(
-            String module, Symbols symbols, DeclarationKinds kinds,
+    public static Map<TypeKey, Set<TypeSymbol>> enumerationsListing(
+            String module, Iterable<String> declared, DeclarationKinds kinds,
             PublishedDeclarations published) {
-        Map<TypeSymbol, Set<TypeSymbol>> listing = new HashMap<>();
-        forEachEnumeration(module, symbols, kinds, published, (enumeration, listed) -> {
+        Map<TypeKey, Set<TypeSymbol>> listing = new HashMap<>();
+        forEachEnumeration(module, declared, kinds, published, (enumeration, listed) -> {
             for (TypeSymbol value : listed) {
-                listing.computeIfAbsent(value, _ -> new LinkedHashSet<>()).add(enumeration);
+                if (value instanceof TypeSymbol.AtModule at) {
+                    listing.computeIfAbsent(at.key(), _ -> new LinkedHashSet<>()).add(enumeration);
+                }
             }
         });
-        return listing;
+        Map<TypeKey, Set<TypeSymbol>> held = new HashMap<>();
+        listing.forEach((value, owners) -> held.put(value, Set.copyOf(owners)));
+        return Map.copyOf(held);
     }
 
     /**
@@ -1806,12 +1788,14 @@ public final class TypeOps {
      * here, E1606), so every enumeration that lists a case is in the case's own module. Asking that
      * module rather than what is visible keeps the answer the same in every module that reads the
      * value.
+     *
+     * @param names the names {@code module} declares
      */
-    private static void forEachEnumeration(
-            String module, Symbols symbols, DeclarationKinds kinds,
+    static void forEachEnumeration(
+            String module, Iterable<String> names, DeclarationKinds kinds,
             PublishedDeclarations published,
             BiConsumer<TypeSymbol.AtModule, List<TypeSymbol>> each) {
-        for (String declared : symbols.declaredNamesIn(module)) {
+        for (String declared : names) {
             // Which form the declaration is, first and on its own. What its cases are is asked only
             // of the ones that have any — a sweep that asked every declaration what it says would
             // ask that of the declaration whose own meaning is being worked out, which is asking for
@@ -1835,12 +1819,12 @@ public final class TypeOps {
      */
     private static Set<TypeSymbol> orderingCandidates(
             Type t, DeclarationKinds kinds, PublishedDeclarations published,
-            Function<TypeSymbol.AtModule, Set<TypeSymbol>> listing) {
+            EnumerationListings listings) {
         if (t instanceof Type.Union union) {
             Set<TypeSymbol> shared = null;
             for (TypeSymbol member : union.members()) {
                 Set<TypeSymbol> owners =
-                        orderingCandidates(Type.ref(member), kinds, published, listing);
+                        orderingCandidates(Type.ref(member), kinds, published, listings);
                 if (owners == null) {
                     return null;
                 }
@@ -1863,7 +1847,7 @@ public final class TypeOps {
         if (kinds.of(named.key()) != DeclarationKind.UNIT) {
             return null;
         }
-        return listing.apply(named);
+        return listings.of(named);
     }
 
     /**

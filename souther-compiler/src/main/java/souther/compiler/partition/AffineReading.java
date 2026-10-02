@@ -4,9 +4,7 @@ import souther.compiler.check.AffineForms;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Location;
-import souther.compiler.check.DeclarationKinds;
-import souther.compiler.check.PublishedDeclarations;
-import souther.compiler.check.NewtypeInners;
+import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
@@ -225,18 +223,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
 
             @Override
-            public PublishedDeclarations published() {
-                return ruleSource.published();
-            }
-
-            @Override
-            public DeclarationKinds kinds() {
-                return ruleSource.kinds();
-            }
-
-            @Override
-            public NewtypeInners inners() {
-                return ruleSource.inners();
+            public DeclarationAccess declarations() {
+                return ruleSource.declarations();
             }
 
             @Override

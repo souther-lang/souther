@@ -38,6 +38,11 @@ public final class ScopedDeclarations {
         return NewtypeInners.asWritten(symbols);
     }
 
+    /** Everything a check asks of {@code symbols}'s declarations, each read off the same scope. */
+    public static DeclarationAccess accessOf(Symbols symbols) {
+        return DeclarationAccess.asWritten(symbols, of(symbols), kindsOf(symbols));
+    }
+
     /** What {@code symbols} declares, as the readers of a published declaration ask for it. */
     public static PublishedDeclarations of(Symbols symbols) {
         RuleReadingSource source = RuleReadings.ofNoClauseFiled(symbols);

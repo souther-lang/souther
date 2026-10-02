@@ -103,6 +103,12 @@ final class Terms {
         return ruleReading.source().inners();
     }
 
+    /** Everything asked of the declarations this reading was made against, for the readings below
+     *  that ask what orders a value. */
+    DeclarationAccess declarations() {
+        return ruleReading.source().declarations();
+    }
+
     /**
      * What a clause states, read through this very reading.
      *
@@ -557,18 +563,8 @@ final class Terms {
             }
 
             @Override
-            public PublishedDeclarations published() {
-                return Terms.this.published();
-            }
-
-            @Override
-            public DeclarationKinds kinds() {
-                return Terms.this.kinds();
-            }
-
-            @Override
-            public NewtypeInners inners() {
-                return Terms.this.newtypeInners();
+            public DeclarationAccess declarations() {
+                return Terms.this.declarations();
             }
 
             @Override
@@ -620,18 +616,8 @@ final class Terms {
                 }
 
                 @Override
-                public PublishedDeclarations published() {
-                    return Terms.this.published();
-                }
-
-                @Override
-                public DeclarationKinds kinds() {
-                    return Terms.this.kinds();
-                }
-
-                @Override
-                public NewtypeInners inners() {
-                    return Terms.this.newtypeInners();
+                public DeclarationAccess declarations() {
+                    return Terms.this.declarations();
                 }
 
                 @Override
@@ -1038,7 +1024,7 @@ final class Terms {
 
     /** The same, of a type a caller already holds. */
     private boolean carriesANumber(Type t) {
-        Carrier carrier = Carrier.ofValue(t, newtypeInners(), symbols, kinds(), published());
+        Carrier carrier = Carrier.ofValue(t, declarations());
         return carrier != null && carrier.counts();
     }
 
@@ -1630,7 +1616,7 @@ final class Terms {
      * failure of this compiler.
      */
     private NumericDomain.Bounds extentOf(Type type) {
-        Carrier carrier = Carrier.ofValue(type, newtypeInners(), symbols, kinds(), published());
+        Carrier carrier = Carrier.ofValue(type, declarations());
         if (carrier == null) {
             return null;
         }
@@ -1878,7 +1864,7 @@ final class Terms {
      * in it.
      */
     Granularity granularityOf(Type t) {
-        Carrier carrier = Carrier.ofValue(t, newtypeInners(), symbols, kinds(), published());
+        Carrier carrier = Carrier.ofValue(t, declarations());
         if (carrier == null || !carrier.counts()) {
             throw new IllegalStateException("not a number the domain carries: " + Type.show(t));
         }

@@ -3,10 +3,8 @@ package souther.compiler.partition;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.Location;
-import souther.compiler.check.DeclarationKinds;
+import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
-import souther.compiler.check.NewtypeInners;
-import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Symbols;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.core.Core;
@@ -36,13 +34,12 @@ import java.util.List;
  * @param dependencies the behaviors this one declares it depends on, which are the ones a row
  *                     stands in for
  */
-record DecisionSubjects(InputDomain inputs, Symbols symbols, PublishedDeclarations published,
-                        DeclarationKinds kinds, DeclarationNewtypes newtypes,
-                        NewtypeInners inners,
+record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess declarations,
+                        DeclarationNewtypes newtypes,
                         Membership<ValueName.Behavior> dependencies) {
 
     DecisionSubjects {
-        if (published == null || kinds == null || newtypes == null || inners == null) {
+        if (declarations == null || newtypes == null) {
             throw new IllegalArgumentException("reading what a row controls asks the declarations"
                     + " what they say, which form each of them is, which of them wrap one value"
                     + " and what each of those wraps, so it is handed somewhere to read every one"
@@ -160,18 +157,8 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, PublishedDeclaratio
             }
 
             @Override
-            public PublishedDeclarations published() {
-                return published;
-            }
-
-            @Override
-            public DeclarationKinds kinds() {
-                return kinds;
-            }
-
-            @Override
-            public NewtypeInners inners() {
-                return inners;
+            public DeclarationAccess declarations() {
+                return declarations;
             }
 
             @Override

@@ -47,12 +47,11 @@ final class HelperParams {
      * only by passing it to {@code hold}, whose own parameter the body settles — so the rounds run
      * until nothing new is settled.
      */
-    static Hir.Module settle(Hir.Module module, Symbols symbols, PublishedDeclarations published,
-                             DeclarationKinds kinds,
+    static Hir.Module settle(Hir.Module module, Symbols symbols, DeclarationAccess declarations,
                              Map<ValueName.Behavior, ReqSig> reqSigs) {
         Hir.Module current = module;
         while (true) {
-            Hir.Module next = settleOnce(current, symbols, published, kinds, reqSigs);
+            Hir.Module next = settleOnce(current, symbols, declarations, reqSigs);
             if (next == current) {
                 return current;
             }
@@ -62,7 +61,7 @@ final class HelperParams {
 
     /** One round: returns {@code m} itself when no parameter was settled. */
     private static Hir.Module settleOnce(Hir.Module m, Symbols symbols,
-                                         PublishedDeclarations published, DeclarationKinds kinds,
+                                         DeclarationAccess declarations,
                                          Map<ValueName.Behavior, ReqSig> reqSigs) {
         if (!hasOpenParam(m)) {
             return m;   // nothing to settle: don't build the inliner (it scans the whole prelude)
@@ -96,7 +95,7 @@ final class HelperParams {
             if (recursive.contains(h.name())) {
                 continue;   // a recursive helper is not inlined and declares its parameters (spec §fn-declaration)
             }
-            Hir.FnDef s = settle(h, inliner, symbols, published, kinds, reqSigs, recursiveHelperFns);
+            Hir.FnDef s = settle(h, inliner, symbols, declarations, reqSigs, recursiveHelperFns);
             if (s != null) {
                 settled.put(h.name(), s);
             }
@@ -154,7 +153,7 @@ final class HelperParams {
     static Type readFromBody(Hir.Binder param, Hir.Expr body, Scope env, CheckContext ctx,
                              Type answers) {
         try {
-            return new BodyTyping(ctx.symbols(), ctx.published(), ctx.kinds(), ctx.reqs(), Map.of())
+            return new BodyTyping(ctx.symbols(), ctx.declarations(), ctx.reqs(), Map.of())
                     .typeOf(param, body, env, answers);
         } catch (CompileException | Unanswerable _) {
             // The two ways a body has no type to give: it does not type, and it depends on a name
@@ -166,7 +165,7 @@ final class HelperParams {
 
     /** {@code h} with its determinable parameters typed, or null when none of them is. */
     private static Hir.FnDef settle(Hir.FnDef h, HelperInliner inliner, Symbols symbols,
-                                    PublishedDeclarations published, DeclarationKinds kinds,
+                                    DeclarationAccess declarations,
                                     Map<ValueName.Behavior, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns) {
         List<Integer> open = new ArrayList<>();
         Scope env = Scope.NONE;
@@ -189,7 +188,7 @@ final class HelperParams {
         }
         Map<Integer, Type> found;
         try {
-            found = determine(h, open, env, body, symbols, published, kinds, reqSigs,
+            found = determine(h, open, env, body, symbols, declarations, reqSigs,
                     recursiveHelperFns, new HashMap<>());
         } catch (Unanswerable _) {
             // A body resting on a name that denotes nothing gives no type, which is an answer this
@@ -264,12 +263,11 @@ final class HelperParams {
      */
     static Map<Integer, Type> determine(Hir.FnDef h, List<Integer> open, Scope env,
                                         Hir.Expr body, Symbols symbols,
-                                        PublishedDeclarations published, DeclarationKinds kinds,
+                                        DeclarationAccess declarations,
                                         Map<ValueName.Behavior, ReqSig> reqSigs,
                                         Map<String, Type> recursiveHelperFns,
                                         Map<Integer, OpenUse> openUses) {
-        BodyTyping typing =
-                new BodyTyping(symbols, published, kinds, reqSigs, recursiveHelperFns);
+        BodyTyping typing = new BodyTyping(symbols, declarations, reqSigs, recursiveHelperFns);
         Type answers = declaredReturn(h);
         Map<Integer, Type> found = new LinkedHashMap<>();
         List<Integer> value = new ArrayList<>();
@@ -403,6 +401,8 @@ final class HelperParams {
      */
     private static final class BodyTyping {
         private final Symbols symbols;
+        /** What is asked of the declarations this body names, as it was handed in. */
+        private final DeclarationAccess declarations;
         /** What the declarations this body names say about themselves. */
         private final PublishedDeclarations published;
         /** Which form each of those declarations was written in. */
@@ -425,24 +425,24 @@ final class HelperParams {
         private final Readings readings = new Readings();
         private OpenUse openUse;
 
-        BodyTyping(Symbols symbols, PublishedDeclarations published, DeclarationKinds kinds,
+        BodyTyping(Symbols symbols, DeclarationAccess declarations,
                    Map<ValueName.Behavior, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns) {
-            this(symbols, published, kinds, reqSigs, recursiveHelperFns, new Freshening());
+            this(symbols, declarations, reqSigs, recursiveHelperFns, new Freshening());
         }
 
         /** The walk one step inside a closure reads the calls of the same body, so what those calls
          * decided is the same decision. Deciding again would name two applications alike — the count
          * a name carries starts over with the reader — and unifying them would say the two hold one
          * thing. */
-        BodyTyping(Symbols symbols, PublishedDeclarations published, DeclarationKinds kinds,
+        BodyTyping(Symbols symbols, DeclarationAccess declarations,
                    Map<ValueName.Behavior, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
                    Freshening freshening) {
             this.freshening = freshening;
             this.symbols = symbols;
-            this.published = published;
-            this.kinds = kinds;
-            this.ctx = new CheckContext(symbols,
-                    DeclarationAccess.asWritten(symbols, published, kinds), null, reqSigs);
+            this.declarations = declarations;
+            this.published = declarations.published();
+            this.kinds = declarations.kinds();
+            this.ctx = new CheckContext(symbols, declarations, null, reqSigs);
             this.reqSigs = reqSigs;
             this.recursiveHelperFns = recursiveHelperFns;
         }
@@ -815,7 +815,7 @@ final class HelperParams {
                 Scope inner = walking(env, lambda, step);
                 try {
                     for (int i = 0; i < lambda.params().size(); i++) {
-                        Type t = new BodyTyping(symbols, published, kinds, reqSigs, recursiveHelperFns, freshening)
+                        Type t = new BodyTyping(symbols, declarations, reqSigs, recursiveHelperFns, freshening)
                                 .typeOf(lambda.params().get(i), lambda.body(), inner, step.result());
                         if (t != null   // a position the lambda's body leaves open says nothing
                                 && decided.decide(step.params().get(i), t, published)
@@ -962,7 +962,7 @@ final class HelperParams {
             Type.FnOf known = TypeOps.substitute(step, bind) instanceof Type.FnOf f ? f : step;
             Scope inner = walking(env, lambda, known);
             for (int i = 0; i < lambda.params().size(); i++) {
-                Type t = new BodyTyping(symbols, published, kinds, reqSigs, recursiveHelperFns, freshening)
+                Type t = new BodyTyping(symbols, declarations, reqSigs, recursiveHelperFns, freshening)
                         .typeOf(lambda.params().get(i), lambda.body(), inner, known.result());
                 if (t != null) {
                     // only a position the closure's body settled: unifying an undetermined one

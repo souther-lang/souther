@@ -2,11 +2,9 @@ package souther.compiler.partition;
 
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.Carrier;
-import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.Choice;
-import souther.compiler.check.DeclarationKinds;
+import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
-import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.RuleAt;
 import souther.compiler.check.RuleCitation;
@@ -464,9 +462,7 @@ public final class GuardThresholds {
         UnreadComparison.Quantity.NotRead<TermPath> notRead =
                 new UnreadComparison.Quantity.NotRead<>(here.origin());
         java.util.function.Predicate<TermPath> ordered =
-                at -> met.containsKey(at) && orderable(met.get(at), read.rules().inners(), symbols,
-                        read.rules().kinds(),
-                        read.rules().published());
+                at -> met.containsKey(at) && orderable(met.get(at), read.rules().declarations());
         java.util.SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out =
                 new java.util.LinkedHashMap<>();
         for (FilingCoordinate at : filedAt(comparison, read, reads, answering)) {
@@ -660,10 +656,8 @@ public final class GuardThresholds {
     }
 
     /** Whether a line can be drawn on what this type carries, asked of the one place that says so. */
-    static boolean orderable(Type type, NewtypeInners inners, Symbols symbols,
-                             DeclarationKinds kinds,
-                             PublishedDeclarations published) {
-        return Carrier.ofValue(type, inners, symbols, kinds, published) != null;
+    static boolean orderable(Type type, DeclarationAccess declarations) {
+        return Carrier.ofValue(type, declarations) != null;
     }
 
     /**

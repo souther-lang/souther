@@ -48,11 +48,12 @@ public final class HelperTyping {
      * repeated here.
      */
     static void checkHelpers(HelperInliner inliner, Map<String, Hir.FnDef> toCheck, Symbols symbols,
-                                     PublishedDeclarations published, DeclarationKinds kinds,
+                                     DeclarationAccess declarations,
                                      Map<ValueName.Behavior, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
                                      Map<String, Hir.Expr> loweredBodies,
                                      Set<String> valuesWithAnEntry,
                                      TypeChecker.Elaborated elaborated) {
+        PublishedDeclarations published = declarations.published();
         // What each value of this module was settled as, filled in as they are checked. A value is
         // checked against these rather than against a copy of the body each of them stands for,
         // which is the same answer worked out once instead of once per name that reaches it.
@@ -184,7 +185,7 @@ public final class HelperTyping {
                 // Complete the env from the body, then run the same standalone check an annotated
                 // helper gets — so a mis-declared return type or a mis-passed function argument in the
                 // body is caught here, at the helper, not only where it is later inlined.
-                typeFromBody(h, inferred, env, body, symbols, published, kinds, reachable,
+                typeFromBody(h, inferred, env, body, symbols, declarations, reachable,
                         standingCalls);
             }
             // A recursive helper is lowered to a method, so a self- or mutual call is left standing
@@ -199,7 +200,7 @@ public final class HelperTyping {
             // a helper that returns a function (e.g. `let adder (n) = (x) -> x + n`) has no application
             // here to infer the lambda's parameter types from; it is checked where it is inlined and
             // applied (spec §blocks).
-            checkFunctionArgs(h.writtenBody(), tenv, symbols, published, kinds, reachable, inliner);
+            checkFunctionArgs(h.writtenBody(), tenv, symbols, declarations, reachable, inliner);
             // push a declared return type into the body so an empty-collection body (Map.empty, [])
             // takes the declared element/value type rather than a bottom
             Type declaredReturn = h.declaredReturn() == null ? null : TypeOps.successType(h.declaredReturn());
@@ -229,9 +230,7 @@ public final class HelperTyping {
                 rejectInjectedCalls(body, h.name(), reqSigs.keySet());
             }
             Core elaboratedBody = Elaborator.elaborate(body, tenv,
-                    new CheckContext(symbols,
-                            DeclarationAccess.asWritten(symbols, published, kinds), null,
-                            reachable)
+                    new CheckContext(symbols, declarations, null, reachable)
                             .preserving(emitted != null || reading ? standing : Preserved.NONE),
                     declaredReturn);
             Type bodyType = elaboratedBody.type();
@@ -403,8 +402,7 @@ public final class HelperTyping {
      * it again is what turns "not settled" into a report that names the use that named no type.
      */
     private static void typeFromBody(Hir.FnDef h, List<Integer> open, Scope env,
-            Hir.Expr body, Symbols symbols, PublishedDeclarations published,
-            DeclarationKinds kinds,
+            Hir.Expr body, Symbols symbols, DeclarationAccess declarations,
             Map<ValueName.Behavior, ReqSig> reqSigs,
             Map<String, Type> recursiveHelperFns) {
         // A parameter used as a function is one, and neither applying it nor handing it to a
@@ -422,7 +420,7 @@ public final class HelperTyping {
             }
         }
         Map<Integer, HelperParams.OpenUse> openUses = new HashMap<>();
-        HelperParams.determine(h, open, env, body, symbols, published, kinds, reqSigs,
+        HelperParams.determine(h, open, env, body, symbols, declarations, reqSigs,
                 recursiveHelperFns, openUses);
         // What the body reaches for decides whether an annotation is what is missing. A helper does
         // not reach a behavior at all, and the type of an argument to a call that cannot be written is
@@ -468,7 +466,7 @@ public final class HelperTyping {
      * @throws CompileException where the body settles no type for a parameter
      */
     static Scope parameterScope(Hir.FnDef h, Hir.Expr body, Symbols symbols,
-                                PublishedDeclarations published, DeclarationKinds kinds,
+                                DeclarationAccess declarations,
                                 Map<String, Type> recursiveHelperFns) {
         Scope env = Scope.NONE;
         List<Integer> open = new ArrayList<>();
@@ -481,7 +479,7 @@ public final class HelperTyping {
             env = env.with(p.binder(), TypeOps.resolveParamType(p.type()));
         }
         if (!open.isEmpty()) {
-            typeFromBody(h, open, env, body, symbols, published, kinds, Map.of(),
+            typeFromBody(h, open, env, body, symbols, declarations, Map.of(),
                     recursiveHelperFns);
         }
         return env;
@@ -751,18 +749,17 @@ public final class HelperTyping {
      * skipped and the ordinary inlined check still applies.
      */
     static void checkFunctionArgs(Hir.Expr e, Scope env, Symbols symbols,
-                                          PublishedDeclarations published, DeclarationKinds kinds,
+                                          DeclarationAccess declarations,
                                           Map<ValueName.Behavior, ReqSig> reqs, HelperInliner inliner) {
         if (e instanceof Hir.Apply call) {
-            checkHelperCallFnArgs(call, env, symbols, published, kinds, reqs, inliner);
+            checkHelperCallFnArgs(call, env, symbols, declarations, reqs, inliner);
         }
         TypeChecker.forEachChild(e, sub ->
-                checkFunctionArgs(sub, env, symbols, published, kinds, reqs, inliner));
+                checkFunctionArgs(sub, env, symbols, declarations, reqs, inliner));
     }
 
     private static void checkHelperCallFnArgs(Hir.Apply call, Scope env, Symbols symbols,
-                                              PublishedDeclarations published,
-                                              DeclarationKinds kinds,
+                                              DeclarationAccess declarations,
                                               Map<ValueName.Behavior, ReqSig> reqs, HelperInliner inliner) {
         // what the call applies, which a binding of a helper's spelling is not: applying a
         // function-typed parameter is not a call to the helper it happens to be named after
@@ -791,10 +788,9 @@ public final class HelperTyping {
             }
             try {
                 Type at = Elaborator.typeOf(inliner.inline(call.args().get(i), inliner.bodyOf(h.name())),
-                        env, new CheckContext(symbols,
-                                DeclarationAccess.asWritten(symbols, published, kinds), null,
-                                reqs));
-                if (TypeOps.unify(declared.get(i), at, bind, published) instanceof Fit.Disagrees) {
+                        env, new CheckContext(symbols, declarations, null, reqs));
+                if (TypeOps.unify(declared.get(i), at, bind, declarations.published())
+                        instanceof Fit.Disagrees) {
                     return;   // the argument does not fit; leave it to the inlined check
                 }
             } catch (CompileException _) {
@@ -812,7 +808,7 @@ public final class HelperTyping {
                     continue;
                 }
                 checkFunctionArg(h, h.params().get(i).name(), want,
-                        call.args().get(i), env, symbols, published, kinds, reqs, inliner, bind);
+                        call.args().get(i), env, symbols, declarations, reqs, inliner, bind);
             }
         }
     }
@@ -853,9 +849,10 @@ public final class HelperTyping {
 
     private static void checkFunctionArg(Hir.FnDef h, String paramName, Type.FnOf want, Hir.Expr arg,
                                          Scope env, Symbols symbols,
-                                         PublishedDeclarations published, DeclarationKinds kinds,
+                                         DeclarationAccess declarations,
                                          Map<ValueName.Behavior, ReqSig> reqs, HelperInliner inliner,
                                          Map<String, Type> bind) {
+        PublishedDeclarations published = declarations.published();
         if (arg instanceof Hir.Block lambda) {
             if (lambda.params().size() != want.params().size()) {
                 throw CompileException.of(Diagnostic.at(arg.pos())
@@ -874,9 +871,7 @@ public final class HelperTyping {
             Type got;
             try {
                 got = Elaborator.typeOf(inliner.inline(lambda.body(), inliner.bodyOf(h.name())), lenv,
-                        new CheckContext(symbols,
-                                DeclarationAccess.asWritten(symbols, published, kinds), null,
-                                reqs));
+                        new CheckContext(symbols, declarations, null, reqs));
             } catch (CompileException _) {
                 return;   // best-effort; the inlined check reports a genuine error with full context
             }

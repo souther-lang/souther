@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.Reserved;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.source.SourceId;
 
@@ -341,6 +342,37 @@ public final class Names {
             return fromPath == null ? Answer.absent()
                     : Answer.of(new DeclaredNames.Index<>(fromPath.declarations(),
                             fromPath.asDeclared(), List.of()));
+        }
+    }
+
+    /**
+     * The names a module declares, in the order it declares them, whoever wrote them: the
+     * library's for a module of the language's namespace, and the module's own declarations for any
+     * other.
+     *
+     * <p>For a reader walking every declaration of a module to answer something about all of them.
+     * {@link Declarations} is what this compilation's sources and the class path declare, and the
+     * language is written in neither, so a walk over it alone answers as if the language's modules
+     * declared nothing. Which of the two a module is read from is decided here, the way the scope a
+     * module is checked in decides it, and not by each walk.
+     */
+    public record NamesDeclaredIn(String name) implements Key<List<String>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<List<String>> compute(Db db) {
+            if (Reserved.isNamespace(name)) {
+                Answer<Stdlib> library = db.ask(new Front.Library());
+                return library.present()
+                        ? Answer.of(List.copyOf(
+                                library.value().languageDeclarationsIn(name).keySet()))
+                        : Answer.absent();
+            }
+            Answer<DeclaredNames.Index<Ast.Def>> declared = db.ask(new Declarations(name));
+            return declared.present() ? Answer.of(declared.value().asDeclared()) : Answer.absent();
         }
     }
 

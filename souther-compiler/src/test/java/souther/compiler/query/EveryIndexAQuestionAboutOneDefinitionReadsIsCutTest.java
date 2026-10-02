@@ -51,7 +51,8 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
      * A module with enough in it to reach the questions this is about.
      *
      * <p>Declarations with rules of their own, a helper, behaviors that state something about their
-     * answers and one that names another behavior, and a row to run. What is wanted of each is an
+     * answers and one that names another behavior, a comparison ordered by an enumeration, and a row
+     * to run. What is wanted of each is an
      * index: a module gathers one per kind of thing in it, and a kind of thing the fixture does not
      * write is a column of the census that is never read.
      */
@@ -86,6 +87,14 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
 
             behavior totalOf : (line: Line) -> Amount
             let totalOf (line) = spinDown(line.amount.value)
+
+            data Draft
+            data Sent
+            data Paid
+            data Status = Draft | Sent | Paid
+
+            behavior settled : (s: Sent) -> Bool
+            let settled (s) = s < Paid
 
             example priceOf
                 | "one" : (Line { code = Code { value = "AB123" }, amount = Amount { value = 1 } })
@@ -131,11 +140,16 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
                 let atLeast (x) = x
                 """),
 
-        /** What the module declares, resolves, normalizes and derives. */
+        /** What the module declares, resolves, normalizes and derives, and which enumerations it
+         *  declares list which values. */
         A_DATA_DECLARED_BESIDE("""
 
                 data Spare = Int
                     invariant value >= 1
+
+                data Red
+                data Green
+                data Colour = Red | Green
                 """),
 
         /** The definitions a module writes to run its rows. */
@@ -389,6 +403,10 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
                 Edit.A_DATA_DECLARED_BESIDE, Edit.A_DECLARATION_BESIDE_THAT_CANNOT_BE_BUILT);
         projection(out, Shapes.NewtypeTerminalOf.class, Shapes.NewtypeTerminals.class,
                 Edit.A_DATA_DECLARED_BESIDE);
+        // A value's entry of the module's table, which is a set: an entry that is a collection is
+        // not told apart from one folded out of the table, so it is met as an equal answer.
+        equalUnderASiblingEdit(out, Shapes.EnumerationsListing.class,
+                Shapes.EnumerationsListingIn.class, Edit.A_DATA_DECLARED_BESIDE);
         // Asked of every declaration a reading is made of, and only a newtype has an entry.
         metEitherWay(out, Shapes.ReadingOwnerOf.class, Shapes.ReadingOwners.class,
                 Edit.A_DATA_DECLARED_BESIDE);

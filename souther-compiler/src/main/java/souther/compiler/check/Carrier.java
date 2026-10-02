@@ -170,7 +170,7 @@ public sealed interface Carrier extends ValueOrder {
      */
     static Carrier ofPrimitive(Type type) {
         return type instanceof Type.Prim
-                ? ofValue(type, NewtypeInners.NONE, null, DeclarationKinds.NONE, null)
+                ? ofValue(type, DeclarationAccess.NONE)
                 : null;
     }
 
@@ -200,18 +200,16 @@ public sealed interface Carrier extends ValueOrder {
      * makes {@code data Cutoff = Date} the same carrier as a bare {@code Date}, and
      * {@code data StageN = Stage} the same carrier as a bare {@code Stage}.
      */
-    static Carrier ofValue(Type type, NewtypeInners inners, Symbols symbols,
-                           DeclarationKinds kinds,
-                           PublishedDeclarations published) {
+    static Carrier ofValue(Type type, DeclarationAccess declarations) {
         // Which order a value of this type is compared on is {@link Ordering}'s, and this asks it
         // rather than deciding what an enumeration is a second time. Every one of its answers is
         // answered for here, so an order added there is one this has to place or say it has no
         // count for — the direction #856 went silent in was a reader measuring what another refused.
-        Ordering how = Ordering.of(type, inners, symbols, kinds, published);
+        Ordering how = Ordering.of(type, declarations);
         if (how == null) {
             return null;
         }
-        Type base = TypeOps.base(type, inners);
+        Type base = TypeOps.base(type, declarations.inners());
         return switch (how.opened()) {
             // Being ordered is not being counted: two dates order alike whatever a line on one is
             // counted in, and which count that is belongs here and is asked of the type.
@@ -222,7 +220,7 @@ public sealed interface Carrier extends ValueOrder {
             // one case, given the sum's counts, was asked for a row at a value it cannot hold.
             case Ordering.Places places -> base instanceof Type.Ref ref
                     && ref.name().equals(places.enumeration())
-                    ? ordinalOf(places, published) : null;
+                    ? ordinalOf(places, declarations.published()) : null;
             // `opened` answers for the value with the names off, which is never one still wearing
             // them.
             case Ordering.Wrapped _ ->

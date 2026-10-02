@@ -85,6 +85,7 @@ class ACarrierOfADeclarationQuestionRefusesToBeBuiltWithoutItTest {
             "Lsouther/compiler/check/NewtypeInners;",
             "Lsouther/compiler/check/EffectiveFieldTypes;",
             "Lsouther/compiler/check/FieldLayout;",
+            "Lsouther/compiler/check/EnumerationListings;",
             "Lsouther/compiler/check/DeclarationAccess;",
             "Lsouther/compiler/check/DeclarationNewtypes;",
             "Lsouther/compiler/check/FieldBindings;",

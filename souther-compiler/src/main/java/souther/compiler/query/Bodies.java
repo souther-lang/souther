@@ -36,9 +36,8 @@ import souther.compiler.check.Preserved;
 import souther.compiler.check.ValueEntries;
 import souther.compiler.core.CompleteSignature;
 import souther.compiler.check.CarriedBodyDependencies;
-import souther.compiler.check.DeclarationKinds;
+import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
-import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Expansion;
 import souther.compiler.check.HelperGraph;
 import souther.compiler.check.HelperNames;
@@ -653,8 +652,7 @@ public final class Bodies {
                 try {
                     contracts.put(spec.name(), BehaviorChecker.contractOf(spec, name,
                             signatures.value().get(spec.name()), scope.value(),
-                            Shapes.publishedDeclarations(db), Shapes.declarationKinds(db),
-                            helpers.value()));
+                            Shapes.declarationAccess(db), helpers.value()));
                 } catch (Unanswerable _) {
                     // Rests on something already reported where it went wrong. Said again here it
                     // would be that one mistake seen from a second angle.
@@ -1726,8 +1724,7 @@ public final class Bodies {
             }
             try {
                 return Answer.of(Lower.settle(surface.value(), scope.value(),
-                        Shapes.publishedDeclarations(db), Shapes.declarationKinds(db),
-                        reqSigs.value()));
+                        Shapes.declarationAccess(db), reqSigs.value()));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -2282,8 +2279,7 @@ public final class Bodies {
             for (Hir.FnDef root : roots) {
                 published.add(HelperNames.qualified(name, root.name()));
             }
-            PublishedDeclarations declarations = Shapes.publishedDeclarations(db);
-            DeclarationKinds kinds = Shapes.declarationKinds(db);
+            DeclarationAccess declarations = Shapes.declarationAccess(db);
             DeclarationNewtypes newtypes = Shapes.declarationNewtypes(db);
             List<Report> reports = new ArrayList<>();
             for (Hir.FnDef carried : carriedClosure(from, roots, against.value()).values()) {
@@ -2298,7 +2294,7 @@ public final class Bodies {
                         .get(carried.name().substring(prefix.length())) : null;
                 Set<TypeSymbol.AtModule> named = emitted != null
                         ? CarriedBodyDependencies.of(emitted, symbols.value(), newtypes)
-                        : CarriedBodyDependencies.of(carried, symbols.value(), declarations, kinds,
+                        : CarriedBodyDependencies.of(carried, symbols.value(), declarations,
                         newtypes, standingCalls);
                 for (TypeSymbol.AtModule built : named) {
                     if (built.module().equals(name) && kept.contains(built.name())) {
