@@ -450,7 +450,8 @@ public final class DataChecker {
         if (Boundary.of(Type.ref(sum.declares()), kinds, published).representation()
                 instanceof Boundary.Representation.Discriminated(String tagKey, String _)) {
             TypeSymbol carrying =
-                    TypeOps.memberCarryingField(Type.ref(sum.declares()), tagKey, symbols, published);
+                    TypeOps.memberCarryingField(Type.ref(sum.declares()), tagKey, symbols, kinds,
+                            published);
             if (carrying != null) {
                 throw CompileException.of(Diagnostic
                                 .at(sum.pos())
@@ -946,10 +947,11 @@ public final class DataChecker {
             // expected optional no longer means a field asked for it (issue #202).
             CheckContext making = ctx.makingAnOptional(ft instanceof Type.OptionOf);
             Core value = Elaborator.liftIntoOption(
-                    Elaborator.elaborate(init.value(), env, making, ft), ft, ctx.published());
+                    Elaborator.elaborate(init.value(), env, making, ft), ft, ctx.kinds(),
+                    ctx.published());
             Type vt = value.type();
             // a case value widens to its sum-typed field (spec §sum-data)
-            if (!TypeOps.assignable(vt, ft, ctx.published())) {
+            if (!TypeOps.assignable(vt, ft, ctx.kinds(), ctx.published())) {
                 throw CompileException.of(Diagnostic
                                 .at(init.written().reportedAt())
 
@@ -1020,7 +1022,7 @@ public final class DataChecker {
                 throw CompileException.of(d.build());
             }
             Type pv = from.fields().get(name);
-            if (!TypeOps.assignable(pv, type, ctx.published())) {
+            if (!TypeOps.assignable(pv, type, ctx.kinds(), ctx.published())) {
                 throw CompileException.of(Diagnostic.at(pos)
                         .say(new DataMessage.SpreadSuppliesTheWrongType(name, Type.show(pv),
                                 typeName, Type.show(type)))
@@ -1059,7 +1061,8 @@ public final class DataChecker {
     private static Map<String, Type> spreadOfSum(String name, Hir.SumData sum, Type bound,
                                                  SourcePos pos, CheckContext ctx) {
         Map<String, Type> shared =
-                TypeView.asWritten(Type.ref(sum.declares()), ctx.symbols(), ctx.published()).shape()
+                TypeView.asWritten(Type.ref(sum.declares()), ctx.symbols(), ctx.kinds(),
+                        ctx.published()).shape()
                         instanceof Shape.Sum s
                         ? ReadableFields.of(s).declaredFields() : Map.of();
         if (shared.isEmpty()) {

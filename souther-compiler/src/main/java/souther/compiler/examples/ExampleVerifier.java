@@ -1862,7 +1862,7 @@ public final class ExampleVerifier {
     private TypeSymbol caseWritten(FixtureReader fixtures, Hir.Expr fixture, Type position) {
         try {
             return fixtures.caseUnder(
-                    TypeView.asWritten(position, symbols, published).wrappers(), fixture);
+                    TypeView.asWritten(position, symbols, kinds, published).wrappers(), fixture);
         } catch (RuntimeException e) {
             if (overspending(e) != null) {
                 throw e;   // the row's budget is gone; it is not a form that could not be read
@@ -1881,7 +1881,7 @@ public final class ExampleVerifier {
         if (result == null || !(out instanceof Type.Union)) {
             return result;
         }
-        for (TypeSymbol member : AtomSpace.subjectAtoms(out, published)) {
+        for (TypeSymbol member : AtomSpace.subjectAtoms(out, kinds, published)) {
             if (!member.isDeclaredByLanguage()
                     && member instanceof TypeSymbol.AtModule at
                     && at.module().equals(module.name())) {
@@ -2354,7 +2354,7 @@ public final class ExampleVerifier {
     }
 
     private Set<TypeSymbol> outCases(Type out) {
-        return TypeOps.outputCases(out, published);
+        return TypeOps.outputCases(out, kinds, published);
     }
 
     // --- what a row hands over, and what it makes of a failure ---------------------------------

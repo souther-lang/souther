@@ -534,7 +534,8 @@ public final class TypeOps {
      * declarations state does the same with what it read. Answered apart, the two parted at exactly
      * the positions a declaration leaves open.
      */
-    public static boolean admits(Type declared, Type actual, PublishedDeclarations published) {
+    public static boolean admits(Type declared, Type actual, DeclarationKinds kinds,
+                                 PublishedDeclarations published) {
         // A position states nothing where a variable stands at it — one an application has not
         // decided, or one a declaration wrote, which stands for whatever each use of it makes — and
         // where it stands at what an empty collection carries, which is a reading so far and is
@@ -550,32 +551,32 @@ public final class TypeOps {
         }
         return switch (declared) {
             case Type.ListOf l -> actual instanceof Type.ListOf a
-                    && admits(l.element(), a.element(), published);
+                    && admits(l.element(), a.element(), kinds, published);
             case Type.SetOf s -> actual instanceof Type.SetOf a
-                    && admits(s.element(), a.element(), published);
+                    && admits(s.element(), a.element(), kinds, published);
             case Type.OptionOf o -> actual instanceof Type.OptionOf a
-                    && admits(o.element(), a.element(), published);
+                    && admits(o.element(), a.element(), kinds, published);
             case Type.MapOf m -> actual instanceof Type.MapOf a
-                    && admits(m.key(), a.key(), published)
-                    && admits(m.value(), a.value(), published);
+                    && admits(m.key(), a.key(), kinds, published)
+                    && admits(m.value(), a.value(), kinds, published);
             case Type.TupleOf t -> actual instanceof Type.TupleOf a
                     && t.elements().size() == a.elements().size()
-                    && admitsEach(t.elements(), a.elements(), published);
+                    && admitsEach(t.elements(), a.elements(), kinds, published);
             case Type.FnOf f -> actual instanceof Type.FnOf a
                     && f.params().size() == a.params().size()
-                    && admitsEach(f.params(), a.params(), published)
-                    && admits(f.result(), a.result(), published);
+                    && admitsEach(f.params(), a.params(), kinds, published)
+                    && admits(f.result(), a.result(), kinds, published);
             // Nothing inside it to weigh position by position, so what is left is the ordinary
             // question. It answers a variable the declaration wrote too, which is not an
             // application's to decide and stands for whatever each use of it makes it.
-            case Type.Leaf _ -> assignable(actual, declared, published);
+            case Type.Leaf _ -> assignable(actual, declared, kinds, published);
         };
     }
 
     private static boolean admitsEach(List<Type> declared, List<Type> actual,
-                                      PublishedDeclarations published) {
+                                      DeclarationKinds kinds, PublishedDeclarations published) {
         for (int i = 0; i < declared.size(); i++) {
-            if (!admits(declared.get(i), actual.get(i), published)) {
+            if (!admits(declared.get(i), actual.get(i), kinds, published)) {
                 return false;
             }
         }
@@ -585,7 +586,8 @@ public final class TypeOps {
     /** Whether a {@code from} value can be assigned where {@code to} is expected. Lists are
      * covariant, and a data-like type widens to the set of leaf cases it can be — so a list of
      * a sum's cases is assignable to a list of the sum (spec §sum-data, §unmarked-output). */
-    public static boolean assignable(Type from, Type to, PublishedDeclarations published) {
+    public static boolean assignable(Type from, Type to, DeclarationKinds kinds,
+                                     PublishedDeclarations published) {
         if (from.equals(to)) {
             return true;
         }
@@ -607,29 +609,29 @@ public final class TypeOps {
         // smuggle a sibling case in — the same reason Scala's immutable List and Kotlin's read-only
         // List are covariant, and Java's mutable arrays are not.
         if (from instanceof Type.ListOf a && to instanceof Type.ListOf b) {
-            return assignable(a.element(), b.element(), published);
+            return assignable(a.element(), b.element(), kinds, published);
         }
         if (from instanceof Type.MapOf a && to instanceof Type.MapOf b) {
-            return assignable(a.key(), b.key(), published)
-                    && assignable(a.value(), b.value(), published);
+            return assignable(a.key(), b.key(), kinds, published)
+                    && assignable(a.value(), b.value(), kinds, published);
         }
         if (from instanceof Type.SetOf a && to instanceof Type.SetOf b) {
-            return assignable(a.element(), b.element(), published);
+            return assignable(a.element(), b.element(), kinds, published);
         }
         if (from instanceof Type.OptionOf a && to instanceof Type.OptionOf b) {
-            return assignable(a.element(), b.element(), published);
+            return assignable(a.element(), b.element(), kinds, published);
         }
         if (from instanceof Type.TupleOf a && to instanceof Type.TupleOf b
                 && a.elements().size() == b.elements().size()) {
             for (int i = 0; i < a.elements().size(); i++) {
-                if (!assignable(a.elements().get(i), b.elements().get(i), published)) {
+                if (!assignable(a.elements().get(i), b.elements().get(i), kinds, published)) {
                     return false;
                 }
             }
             return true;
         }
-        List<TypeSymbol> fa = AtomSpace.subjectAtoms(from, published);
-        List<TypeSymbol> ta = AtomSpace.subjectAtoms(to, published);
+        List<TypeSymbol> fa = AtomSpace.subjectAtoms(from, kinds, published);
+        List<TypeSymbol> ta = AtomSpace.subjectAtoms(to, kinds, published);
         return !fa.isEmpty() && !ta.isEmpty() && ta.containsAll(fa);
     }
 
@@ -739,9 +741,9 @@ public final class TypeOps {
      * caller reading the map afterwards cannot tell those from what was there before.
      */
     public static Fit unify(Type param, Type arg, Map<String, Type> bindings,
-                            PublishedDeclarations published) {
+                            DeclarationKinds kinds, PublishedDeclarations published) {
         Map<String, Type> settled = new HashMap<>(bindings);
-        Fit fit = unify(param, arg, settled, published, true);
+        Fit fit = unify(param, arg, settled, kinds, published, true);
         if (fit instanceof Fit.Disagrees) {
             return fit;
         }
@@ -761,16 +763,17 @@ public final class TypeOps {
      * walk's question.
      */
     public static void bindVars(Type param, Type arg, Map<String, Type> bindings,
-                                PublishedDeclarations published) {
-        unify(param, arg, bindings, published, false);
+                                DeclarationKinds kinds, PublishedDeclarations published) {
+        unify(param, arg, bindings, kinds, published, false);
     }
 
     private static Fit unify(Type param, Type arg, Map<String, Type> bindings,
-                             PublishedDeclarations published, boolean refusing) {
+                             DeclarationKinds kinds, PublishedDeclarations published,
+                             boolean refusing) {
         switch (param) {
             case Type.Var v -> {
                 Type bound = bindings.get(v.name());
-                if (bound == null || BottomInfer.refines(bound, arg, published)) {
+                if (bound == null || BottomInfer.refines(bound, arg, kinds, published)) {
                     // first sight, or a reading that says what an earlier one carrying the
                     // empty-collection bottom did not (ADR-0028), at whatever depth: an earlier
                     // `[]` / `Map.empty` / `(0, [])` argument bound the bottom, and a later reading
@@ -778,32 +781,32 @@ public final class TypeOps {
                     bindings.put(v.name(), arg);
                 } else if (arg instanceof Type.Nothing) {
                     // the empty bottom absorbs into the concrete binding already learned
-                } else if (refusing && !assignable(arg, bound, published)
-                        && !assignable(bound, arg, published)) {
+                } else if (refusing && !assignable(arg, bound, kinds, published)
+                        && !assignable(bound, arg, kinds, published)) {
                     return new Fit.Disagrees(bound, arg);
                 }
             }
             case Type.ListOf p when arg instanceof Type.ListOf a -> {
-                return unify(p.element(), a.element(), bindings, published, refusing);
+                return unify(p.element(), a.element(), bindings, kinds, published, refusing);
             }
             case Type.MapOf p when arg instanceof Type.MapOf a -> {
-                Fit key = unify(p.key(), a.key(), bindings, published, refusing);
+                Fit key = unify(p.key(), a.key(), bindings, kinds, published, refusing);
                 if (key instanceof Fit.Disagrees) {
                     return key;
                 }
-                return unify(p.value(), a.value(), bindings, published, refusing);
+                return unify(p.value(), a.value(), bindings, kinds, published, refusing);
             }
             case Type.SetOf p when arg instanceof Type.SetOf a -> {
-                return unify(p.element(), a.element(), bindings, published, refusing);
+                return unify(p.element(), a.element(), bindings, kinds, published, refusing);
             }
             case Type.OptionOf p when arg instanceof Type.OptionOf a -> {
-                return unify(p.element(), a.element(), bindings, published, refusing);
+                return unify(p.element(), a.element(), bindings, kinds, published, refusing);
             }
             case Type.TupleOf p when arg instanceof Type.TupleOf a
                     && p.elements().size() == a.elements().size() -> {
                 for (int i = 0; i < p.elements().size(); i++) {
-                    Fit at = unify(p.elements().get(i), a.elements().get(i), bindings, published,
-                            refusing);
+                    Fit at = unify(p.elements().get(i), a.elements().get(i), bindings, kinds,
+                            published, refusing);
                     if (at instanceof Fit.Disagrees) {
                         return at;
                     }
@@ -811,16 +814,16 @@ public final class TypeOps {
             }
             case Type.FnOf p when arg instanceof Type.FnOf a && p.params().size() == a.params().size() -> {
                 for (int i = 0; i < p.params().size(); i++) {
-                    Fit at = unify(p.params().get(i), a.params().get(i), bindings, published,
-                            refusing);
+                    Fit at = unify(p.params().get(i), a.params().get(i), bindings, kinds,
+                            published, refusing);
                     if (at instanceof Fit.Disagrees) {
                         return at;
                     }
                 }
-                return unify(p.result(), a.result(), bindings, published, refusing);
+                return unify(p.result(), a.result(), bindings, kinds, published, refusing);
             }
             default -> {
-                if (refusing && !assignable(arg, param, published)) {
+                if (refusing && !assignable(arg, param, kinds, published)) {
                     return new Fit.Disagrees(param, arg);
                 }
             }
@@ -913,12 +916,13 @@ public final class TypeOps {
      * {@code match} arm names and what the {@code "type"} discriminator carries — a sum contributes
      * its cases, not itself.
      */
-    static TypeSymbol.AtModule[] ambiguousMembers(Type out, PublishedDeclarations published) {
+    static TypeSymbol.AtModule[] ambiguousMembers(Type out, DeclarationKinds kinds,
+                                                  PublishedDeclarations published) {
         Map<String, TypeSymbol.AtModule> byName = new LinkedHashMap<>();
         // Only a module's declarations can collide by spelling here: a module may not declare a
         // name the language gives, so a union holding one holds it under a spelling nothing else
         // in it has.
-        for (TypeSymbol atom : AtomSpace.subjectAtoms(out, published)) {
+        for (TypeSymbol atom : AtomSpace.subjectAtoms(out, kinds, published)) {
             if (!(atom instanceof TypeSymbol.AtModule member)) {
                 continue;
             }
@@ -937,8 +941,9 @@ public final class TypeOps {
      * nested sum contributes its cases rather than itself.
      */
     static TypeSymbol memberCarryingField(Type out, String key, Symbols symbols,
+                                          DeclarationKinds kinds,
                                           PublishedDeclarations published) {
-        for (TypeSymbol member : AtomSpace.subjectAtoms(out, published)) {
+        for (TypeSymbol member : AtomSpace.subjectAtoms(out, kinds, published)) {
             if (declaresField(member, key, symbols)) {
                 return member;
             }
@@ -965,9 +970,10 @@ public final class TypeOps {
      * what is left here is which types this reader will take an answer about. A primitive output
      * names one atom like any other type, and is not a case list.
      */
-    public static Set<TypeSymbol> outputCases(Type t, PublishedDeclarations published) {
+    public static Set<TypeSymbol> outputCases(Type t, DeclarationKinds kinds,
+                                              PublishedDeclarations published) {
         return t instanceof Type.Union || t instanceof Type.Ref
-                ? new LinkedHashSet<>(AtomSpace.subjectAtoms(t, published))
+                ? new LinkedHashSet<>(AtomSpace.subjectAtoms(t, kinds, published))
                 : Set.of();
     }
 
@@ -1229,12 +1235,14 @@ public final class TypeOps {
      * here directly, a reader would have a second way to find out what kind of sum it is holding.
      */
     static Shape.CommonProduct commonSpreadOf(Hir.SumData sum, Symbols symbols,
+                                              DeclarationKinds kinds,
                                               PublishedDeclarations published) {
-        return commonSpreadOf(AtomSpace.subjectAtoms(Type.ref(sum.declares()), published), symbols);
+        return commonSpreadOf(AtomSpace.subjectAtoms(Type.ref(sum.declares()), kinds, published),
+                symbols);
     }
 
-    /** As {@link #commonSpreadOf(Hir.SumData, Symbols, PublishedDeclarations)}, for cases already
-     *  flattened to leaves. */
+    /** As {@link #commonSpreadOf(Hir.SumData, Symbols, DeclarationKinds, PublishedDeclarations)},
+     *  for cases already flattened to leaves. */
     static Shape.CommonProduct commonSpreadOf(List<TypeSymbol> cases, Symbols symbols) {
         if (cases == null || cases.isEmpty()) {
             return new Shape.CommonProduct.None();
@@ -1659,7 +1667,7 @@ public final class TypeOps {
         if (!kinds.isSum(sum.key())) {
             return false;
         }
-        List<TypeSymbol> leaves = AtomSpace.subjectAtoms(Type.ref(sum), published);
+        List<TypeSymbol> leaves = AtomSpace.subjectAtoms(Type.ref(sum), kinds, published);
         if (leaves.isEmpty()) {
             return false;
         }
@@ -1811,7 +1819,7 @@ public final class TypeOps {
             }
             if (TypeSymbols.declared(address) instanceof TypeSymbol.AtModule at
                     && isUnitOnlySum(at, kinds, published)) {
-                each.accept(at, AtomSpace.subjectAtoms(Type.ref(at), published));
+                each.accept(at, AtomSpace.subjectAtoms(Type.ref(at), kinds, published));
             }
         }
     }

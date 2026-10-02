@@ -59,7 +59,8 @@ class APositionAReadingIsMadeOfIsProvedToBeOneTest {
     }
 
     private Shape.ReadablePositionShape admit(Type type) {
-        return ReadablePosition.of(type, symbols, ScopedDeclarations.of(symbols)).shape();
+        return ReadablePosition.of(type, symbols, ScopedDeclarations.kindsOf(symbols),
+                ScopedDeclarations.of(symbols)).shape();
     }
 
     private Type named(String name) {

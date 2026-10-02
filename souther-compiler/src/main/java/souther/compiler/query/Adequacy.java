@@ -7460,7 +7460,7 @@ public final class Adequacy {
     private static Set<TypeSymbol> casesOfSum(Type t, DeclarationKinds kinds,
                                               PublishedDeclarations published) {
         return TypeOps.isSumType(t, kinds)
-                ? new LinkedHashSet<>(AtomSpace.subjectAtoms(t, published))
+                ? new LinkedHashSet<>(AtomSpace.subjectAtoms(t, kinds, published))
                 : Set.of();
     }
 

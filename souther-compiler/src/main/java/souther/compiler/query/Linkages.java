@@ -253,6 +253,7 @@ public final class Linkages {
                     new LinkageProjections.Settled(name, written.published(), declarations,
                             orders, signatures.value(), implementations.value().states(), required,
                             values, symbols.value(),
+                            reader.readingKinds(Shapes.declarationKinds(db)),
                             reader.readingPublished(Shapes.publishedDeclarations(db))),
                     reader);
             if (onThePath != null) {

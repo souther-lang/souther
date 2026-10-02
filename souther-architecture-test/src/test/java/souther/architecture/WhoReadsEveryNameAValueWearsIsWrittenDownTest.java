@@ -59,6 +59,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
 
     private static final String SYMBOLS = "L" + CHECK + "Symbols;";
 
+    private static final String KINDS = "L" + CHECK + "DeclarationKinds;";
+
     private static final String PUBLISHED = "L" + CHECK + "PublishedDeclarations;";
 
     private static final String CONTEXT = "L" + CHECK + "RuleReadingContext;";
@@ -100,9 +102,11 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_NAMES),
             row(CHECK + "NewtypeInners", "terminal", "(" + TYPE + ")" + TYPE, THE_SPINE),
             row(TYPE_OPS, "newtypeChain", "(" + TYPE + INNERS + ")Ljava/util/List;", THE_SPINE),
-            row(TYPE_VIEW, "asWritten", "(" + TYPE + SYMBOLS + PUBLISHED + ")L" + TYPE_VIEW + ";",
+            row(TYPE_VIEW, "asWritten",
+                    "(" + TYPE + SYMBOLS + KINDS + PUBLISHED + ")L" + TYPE_VIEW + ";",
                     THE_POSITION),
-            row(TYPE_VIEW, "of", "(" + TYPE + INNERS + SYMBOLS + PUBLISHED + ")L" + TYPE_VIEW + ";",
+            row(TYPE_VIEW, "of",
+                    "(" + TYPE + INNERS + SYMBOLS + KINDS + PUBLISHED + ")L" + TYPE_VIEW + ";",
                     THE_SPINE),
             row(INPUTS + "InputDomain", "walk",
                     "(L" + INPUTS + "TermPath;" + TYPE + "L" + INPUTS + "ExpansionTrace;" + CONTEXT
@@ -112,15 +116,16 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "InputDomain$Reach;)V",
                     THE_POSITION),
             row(PARTITION + "BehaviorInputs$Standing", "step",
-                    "(L" + INPUTS + "TermPath$Step;" + INNERS + SYMBOLS + PUBLISHED
+                    "(L" + INPUTS + "TermPath$Step;" + INNERS + SYMBOLS + KINDS + PUBLISHED
                             + "Ljava/util/List;)Z",
                     THE_POSITION),
             row(PARTITION + "ConstructionPlan", "applying",
                     "(L" + PARTITION + "ConstructionPlan$Settled;L" + INPUTS + "Refinement;" + INNERS
-                            + SYMBOLS + PUBLISHED + ")L" + PARTITION + "ConstructionPlan$Settled;",
+                            + SYMBOLS + KINDS + PUBLISHED + ")L" + PARTITION
+                            + "ConstructionPlan$Settled;",
                     THE_POSITION),
             row(PARTITION + "ConstructionPlan", "node",
-                    "(" + TYPE + "L" + INPUTS + "TermPath;" + INNERS + SYMBOLS + PUBLISHED
+                    "(" + TYPE + "L" + INPUTS + "TermPath;" + INNERS + SYMBOLS + KINDS + PUBLISHED
                             + "ILjava/util/Set;L" + INPUTS + "Requirements;L" + PARTITION
                             + "ConstructionPlan$HowManyItHolds;)L" + PARTITION
                             + "ConstructionPlan$NodeResult;",

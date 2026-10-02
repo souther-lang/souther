@@ -125,6 +125,7 @@ class WhatASnapshotSaysAModuleDeclaresIsWhatTheCheckerResolvedAgainstTest {
                 case Hir.SumData sum -> assertEquals(
                         souther.compiler.check.AtomSpace.subjectAtoms(
                                 souther.compiler.types.Type.ref(sum.declares()),
+                                ScopedDeclarations.kindsOf(read.symbols()),
                                 ScopedDeclarations.of(read.symbols())),
                         assertInstanceOf(CheckedData.Sum.class, published,
                                 declared.getKey()::toString).cases(),

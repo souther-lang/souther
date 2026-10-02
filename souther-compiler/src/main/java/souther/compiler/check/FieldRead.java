@@ -175,7 +175,7 @@ public record FieldRead(Symbols symbols, PublishedDeclarations published, Declar
         }
         TypeView view;
         try {
-            view = TypeView.wearingNoName(position, symbols, published);
+            view = TypeView.wearingNoName(position, symbols, kinds, published);
         } catch (CompileException doesNotRead) {
             if (unreadable == Unreadable.REFUSED) {
                 throw doesNotRead;

@@ -135,7 +135,8 @@ class AnOptionalsClassesStateWhichNarrowingTheyAreTest {
         Read read = read(HOLDING);
         return assertInstanceOf(ConstructionPlan.Result.Planned.class,
                 ConstructionPlan.of(read.sig().inputs().get(0).type(), TermPath.of("query"),
-                        read.rules().inners(), read.rules().symbols(), read.rules().published(),
+                        read.rules().inners(), read.rules().symbols(), read.rules().kinds(),
+                        read.rules().published(),
                         Set.of(), required,
                         ONE_AT_LEAST),
                 "nothing here asks one position to be two things").plan();

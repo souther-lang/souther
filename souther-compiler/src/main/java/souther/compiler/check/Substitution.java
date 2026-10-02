@@ -59,8 +59,8 @@ final class Substitution {
      * the application settles them at, so what its body answers under them is not what this
      * application decided.
      */
-    Fit hold(Type declared, Type actual, PublishedDeclarations published) {
-        return fits(actual, declared, published)
+    Fit hold(Type declared, Type actual, DeclarationKinds kinds, PublishedDeclarations published) {
+        return fits(actual, declared, kinds, published)
                 ? Fit.FITS : new Fit.Disagrees(settle(declared), actual);
     }
 
@@ -74,8 +74,9 @@ final class Substitution {
      * reader that has no application to decide under would have been given a second rule about
      * open positions, and the two would part at exactly the positions a declaration leaves open.
      */
-    private boolean fits(Type is, Type declared, PublishedDeclarations published) {
-        return TypeOps.admits(zonk(declared), zonk(is), published);
+    private boolean fits(Type is, Type declared, DeclarationKinds kinds,
+                         PublishedDeclarations published) {
+        return TypeOps.admits(zonk(declared), zonk(is), kinds, published);
     }
 
     /**
@@ -97,7 +98,8 @@ final class Substitution {
      * type from. Every caller today either refuses at once or drops the whole {@code Substitution},
      * and a caller that wants to do neither is asking for something this does not offer.
      */
-    Fit decide(Type declared, Type actual, PublishedDeclarations published) {
+    Fit decide(Type declared, Type actual, DeclarationKinds kinds,
+               PublishedDeclarations published) {
         // Neither side is written through first. A variable already decided is still the variable
         // this reading is about, and writing what it stands for in its place would leave nothing for
         // a later, more definite reading to rebind — which is what a first reading carrying the
@@ -105,42 +107,43 @@ final class Substitution {
         Type left = declared;
         Type right = actual;
         if (left instanceof Type.MetaVar m) {
-            return bind(m, right, published);
+            return bind(m, right, kinds, published);
         }
         // The other side carries what this one left open: a declared `List<Int>` read against a
         // result still standing at a variable says what that variable is.
         if (right instanceof Type.MetaVar m) {
-            return bind(m, left, published);
+            return bind(m, left, kinds, published);
         }
         // Position by position where the two shapes line up. Where they do not there is no variable
         // here to decide, and whether they agree is {@link #fits}'s question.
         switch (left) {
             case Type.ListOf l -> {
                 if (right instanceof Type.ListOf a) {
-                    return decide(l.element(), a.element(), published);
+                    return decide(l.element(), a.element(), kinds, published);
                 }
             }
             case Type.SetOf s -> {
                 if (right instanceof Type.SetOf a) {
-                    return decide(s.element(), a.element(), published);
+                    return decide(s.element(), a.element(), kinds, published);
                 }
             }
             case Type.OptionOf o -> {
                 if (right instanceof Type.OptionOf a) {
-                    return decide(o.element(), a.element(), published);
+                    return decide(o.element(), a.element(), kinds, published);
                 }
             }
             case Type.MapOf m -> {
                 if (right instanceof Type.MapOf a) {
-                    Fit key = decide(m.key(), a.key(), published);
-                    return key instanceof Fit.Disagrees ? key : decide(m.value(), a.value(), published);
+                    Fit key = decide(m.key(), a.key(), kinds, published);
+                    return key instanceof Fit.Disagrees ? key
+                            : decide(m.value(), a.value(), kinds, published);
                 }
             }
             case Type.TupleOf t -> {
                 if (right instanceof Type.TupleOf a
                         && t.elements().size() == a.elements().size()) {
                     for (int i = 0; i < t.elements().size(); i++) {
-                        Fit at = decide(t.elements().get(i), a.elements().get(i), published);
+                        Fit at = decide(t.elements().get(i), a.elements().get(i), kinds, published);
                         if (at instanceof Fit.Disagrees) {
                             return at;
                         }
@@ -150,12 +153,12 @@ final class Substitution {
             case Type.FnOf f -> {
                 if (right instanceof Type.FnOf a && f.params().size() == a.params().size()) {
                     for (int i = 0; i < f.params().size(); i++) {
-                        Fit at = decide(f.params().get(i), a.params().get(i), published);
+                        Fit at = decide(f.params().get(i), a.params().get(i), kinds, published);
                         if (at instanceof Fit.Disagrees) {
                             return at;
                         }
                     }
-                    return decide(f.result(), a.result(), published);
+                    return decide(f.result(), a.result(), kinds, published);
                 }
             }
             // Nothing inside it to descend into, so nothing here decides a variable.
@@ -196,7 +199,8 @@ final class Substitution {
         return Type.mentions(zonk(t), x -> x instanceof Type.MetaVar);
     }
 
-    private Fit bind(Type.MetaVar m, Type reading, PublishedDeclarations published) {
+    private Fit bind(Type.MetaVar m, Type reading, DeclarationKinds kinds,
+                     PublishedDeclarations published) {
         // What the reading stands for, not how it was written. A variable another application
         // decided is that decision here, and comparing the variable itself would find every reading
         // through one to disagree with every other.
@@ -222,12 +226,13 @@ final class Substitution {
         // A reading that carried the bottom said what the value was made of and not what it holds —
         // `Option.withDefault([], xs)` reads the variable as a list of nothing first — so a later
         // reading that says what it holds is what stands.
-        if (BottomInfer.refines(held, at, published)) {
+        if (BottomInfer.refines(held, at, kinds, published)) {
             owner.decided.put(m, at);
             return Fit.FITS;
         }
         Type stands = zonk(held);
-        if (TypeOps.assignable(at, stands, published) || TypeOps.assignable(stands, at, published)) {
+        if (TypeOps.assignable(at, stands, kinds, published)
+                || TypeOps.assignable(stands, at, kinds, published)) {
             return Fit.FITS;
         }
         return new Fit.Disagrees(held, at);

@@ -183,6 +183,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/inputs/TermPath;"
                             + "Lsouther/compiler/check/NewtypeInners;"
                             + "Lsouther/compiler/check/Symbols;"
+                            + "Lsouther/compiler/check/DeclarationKinds;"
                             + "Lsouther/compiler/check/PublishedDeclarations;I"
                             + "Ljava/util/Set;"
                             + "Lsouther/compiler/inputs/Requirements;"

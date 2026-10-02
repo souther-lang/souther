@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.ReadableFields;
@@ -169,7 +170,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
             List<Standing> next = new ArrayList<>();
             int took = 0;
             for (Standing each : standing) {
-                if (each.step(step, rules.inners(), symbols(), published(), next)) {
+                if (each.step(step, rules.inners(), symbols(), rules.kinds(), published(), next)) {
                     took++;
                 }
             }
@@ -221,7 +222,8 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
         }
         Type here = types.get(at);
         for (TermPath.Step step : path.steps()) {
-            here = stepWrittenValue(step, here, rules.inners(), symbols(), published());
+            here = stepWrittenValue(step, here, rules.inners(), symbols(), rules.kinds(),
+                    published());
             if (here == null) {
                 return null;
             }
@@ -251,8 +253,9 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      * {@link #typeAtWrittenPath}, and it is watched.
      */
     static Type stepWrittenValue(TermPath.Step step, Type from, NewtypeInners inners,
-                                 Symbols symbols, PublishedDeclarations published) {
-        Shape shape = TypeView.shapeOf(from, inners, symbols, published);
+                                 Symbols symbols, DeclarationKinds kinds,
+                                 PublishedDeclarations published) {
+        Shape shape = TypeView.shapeOf(from, inners, symbols, kinds, published);
         return switch (step) {
             case TermPath.Step.Field named -> shape instanceof Shape.Product product
                     ? product.fields().get(named.name()) : null;
@@ -304,12 +307,13 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
          * second as a row that is somewhere else.
          */
         boolean step(TermPath.Step step, NewtypeInners inners, Symbols symbols,
-                     PublishedDeclarations published, List<Standing> out) {
+                     DeclarationKinds kinds, PublishedDeclarations published,
+                     List<Standing> out) {
             if (value.unread() != null) {
                 out.add(this);
                 return true;
             }
-            TypeView view = TypeView.of(type, inners, symbols, published);
+            TypeView view = TypeView.of(type, inners, symbols, kinds, published);
             ObservedValue here = Classifier.inside(view.wrappers(), value);
             if (here.unread() != null) {
                 out.add(new Standing(here, type, reached, at));

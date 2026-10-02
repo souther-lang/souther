@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.Value;
 
 import java.util.ArrayList;
@@ -53,14 +52,13 @@ final class ValueUniverse {
         // Read through it, a change to which types carry an order would silently change which types
         // have values that can be written out. Both go to `TypeOps` for what an enumeration is, so
         // this is one reading of that and not two.
-        if (!(base instanceof Type.Ref(TypeSymbol.AtModule named))
-                || !(published.of(named.key())
-                        instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Sum _))
-                || !TypeOps.isUnitOnlySum(base, kinds, published)) {
+        // Whether it is one is asked of its form before of what it says, as `isUnitOnlySum` does
+        // it: a product's meaning is made by reading clauses, and one being made cannot be asked.
+        if (!TypeOps.isUnitOnlySum(base, kinds, published)) {
             return null;
         }
         List<Value> values = new ArrayList<>();
-        AtomSpace.subjectAtoms(base, published).forEach(each -> values.add(Value.of(each)));
+        AtomSpace.subjectAtoms(base, kinds, published).forEach(each -> values.add(Value.of(each)));
         return values.isEmpty() ? null : List.copyOf(values);
     }
 }

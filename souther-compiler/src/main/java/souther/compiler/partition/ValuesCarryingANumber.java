@@ -41,6 +41,7 @@ record ValuesCarryingANumber(TermPath fixed, FixtureTemplate value, RuleReadingC
         return slot.at().equals(fixed)
                 ? WornNames.under(TypeView.of(slot.type(), reading.source().inners(),
                                 reading.source().symbols(),
+                                reading.source().kinds(),
                                 reading.source().published()).wrappers(),
                         value, reading.source())
                 : null;

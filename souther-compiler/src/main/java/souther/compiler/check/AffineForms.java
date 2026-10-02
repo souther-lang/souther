@@ -732,7 +732,7 @@ public final class AffineForms {
             // written, and this one asks what the arithmetic under the name comes to.
             case Core.Construct nd when !nd.values().isEmpty()
                     && TypeView.asWritten(Type.ref(nd.typeName()), reading.symbols(),
-                            reading.declarations().published())
+                            reading.declarations().kinds(), reading.declarations().published())
                             .isWrapped() ->
                     formOf(nd.values().get(0).value(), at, reading, following, stopped);
             // One arm, holding two proofs that this projection is the value it reads. The

@@ -47,7 +47,8 @@ class ASignatureIsNotInstantiatedPerUseTest {
         Stdlib.Signature get = DefaultStdlib.get()
                 .entry(ValueName.Stdlib.operation("List", "get")).signature();
         Map<String, Type> bind = new HashMap<>();
-        BottomInfer.pinResultTypeVars(get.result(), Type.option(Type.var("$0")), bind, null);
+        BottomInfer.pinResultTypeVars(get.result(), Type.option(Type.var("$0")), bind, null,
+                null);
         assertEquals(Type.var("$0"), bind.get("'a"));
         assertEquals(Type.list(Type.var("$0")), TypeOps.substitute(get.params().get(1), bind));
     }

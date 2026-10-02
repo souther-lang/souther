@@ -106,7 +106,7 @@ final class PlanComposer {
         // value again and a set may not — so the collection is asked for whole rather than padded
         // here.
         if (!(TypeView.shapeOf(plan.type(), ruleSource.inners(), ruleSource.symbols(),
-                ruleSource.published())
+                ruleSource.kinds(), ruleSource.published())
                 instanceof Shape.Sequence carrier)) {
             return null;
         }

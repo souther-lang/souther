@@ -100,7 +100,8 @@ class AWrappedRecordTakesItsFieldsFromWhatItWrapsTest {
     private static TypeView view(String source, String name) {
         RuleReadingSource rules = RuleReadings.ofSource(source);
         return TypeView.asWritten(Type.ref(TypeSymbols.declared(
-                new TypeKey(rules.symbols().module(), name))), rules.symbols(), rules.published());
+                new TypeKey(rules.symbols().module(), name))), rules.symbols(), rules.kinds(),
+                rules.published());
     }
 
     private static String rowsOf(String source) {

@@ -32,7 +32,8 @@ class AFailedSolveCommitsNothingTest {
         Type param = Type.tuple(List.of(Type.var("'a"), Type.INT));
         Type arg = Type.tuple(List.of(Type.STRING, Type.BOOL));
 
-        Fit fit = TypeOps.unify(param, arg, bind, PublishedDeclarations.NONE);
+        Fit fit = TypeOps.unify(param, arg, bind, DeclarationKinds.NONE,
+                PublishedDeclarations.NONE);
 
         assertInstanceOf(Fit.Disagrees.class, fit);
         assertTrue(bind.isEmpty(),
@@ -47,7 +48,8 @@ class AFailedSolveCommitsNothingTest {
         Type param = Type.tuple(List.of(Type.var("'a"), Type.INT));
         Type arg = Type.tuple(List.of(Type.STRING, Type.INT));
 
-        Fit fit = TypeOps.unify(param, arg, bind, PublishedDeclarations.NONE);
+        Fit fit = TypeOps.unify(param, arg, bind, DeclarationKinds.NONE,
+                PublishedDeclarations.NONE);
 
         assertInstanceOf(Fit.Fits.class, fit);
         assertEquals(Type.STRING, bind.get("'a"));
@@ -65,7 +67,8 @@ class AFailedSolveCommitsNothingTest {
         Type param = Type.tuple(List.of(Type.var("'a"), Type.INT));
         Type arg = Type.tuple(List.of(Type.BOOL, Type.STRING));
 
-        assertInstanceOf(Fit.Disagrees.class, TypeOps.unify(param, arg, bind, PublishedDeclarations.NONE));
+        assertInstanceOf(Fit.Disagrees.class, TypeOps.unify(param, arg, bind,
+                DeclarationKinds.NONE, PublishedDeclarations.NONE));
 
         assertEquals(Map.of("'settled", Type.STRING), bind,
                 "a walk that did not fit left the map as " + bind);
@@ -79,7 +82,8 @@ class AFailedSolveCommitsNothingTest {
         Type arg = Type.tuple(List.of(Type.STRING, Type.BOOL));
 
         Fit.Disagrees d = assertInstanceOf(Fit.Disagrees.class,
-                TypeOps.unify(param, arg, new HashMap<>(), PublishedDeclarations.NONE));
+                TypeOps.unify(param, arg, new HashMap<>(), DeclarationKinds.NONE,
+                        PublishedDeclarations.NONE));
 
         assertEquals(Type.INT, d.expected());
         assertEquals(Type.BOOL, d.actual());

@@ -48,7 +48,7 @@ public final class BinaryElaborator {
             throw new Unanswerable(bin.pos());
         }
         if (bin.op().joinsTwoConditions()) {
-            return Elaborator.standing(e, read, Type.BOOL, ctx.published(),
+            return Elaborator.standing(e, read, Type.BOOL, ctx.kinds(), ctx.published(),
                     "operand of logical operator");
         }
         return read;
@@ -107,7 +107,8 @@ public final class BinaryElaborator {
                         // the right side stands as the left's type, and the pair is read as it
                         // stands.
                         yield new Core.Binary(bin.op(), left,
-                                Elaborator.standing(bin.right(), right, lt, ctx.published(),
+                                Elaborator.standing(bin.right(), right, lt, ctx.kinds(),
+                                        ctx.published(),
                                         "operand of arithmetic"),
                                 Core.BinaryReading.AS_THEY_STAND,
                                 ctx.occurrenceOf(bin.origin()), lt, bin.pos());
@@ -278,8 +279,8 @@ public final class BinaryElaborator {
         if (eqCoercible(lt, rt, le, re, ctx.inners(), ctx.symbols())) {
             return new Core.BinaryReading.In(newtypeOfThePair(lt, rt, ctx.symbols()));
         }
-        List<TypeSymbol> lCases = AtomSpace.subjectAtoms(lt, ctx.published());
-        List<TypeSymbol> rCases = AtomSpace.subjectAtoms(rt, ctx.published());
+        List<TypeSymbol> lCases = AtomSpace.subjectAtoms(lt, ctx.kinds(), ctx.published());
+        List<TypeSymbol> rCases = AtomSpace.subjectAtoms(rt, ctx.kinds(), ctx.published());
         if (!lCases.isEmpty() && !rCases.isEmpty()
                 && (lCases.containsAll(rCases) || rCases.containsAll(lCases))) {
             // Read in the cases both sides range over, and not in either side's name: two sums

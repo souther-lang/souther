@@ -263,7 +263,7 @@ public final class HelperTyping {
             Core definition = elaboratedBody;
             if (declaredReturn != null && (standsAt == null || standsAt.required() != null)) {
                 Type declared = declaredReturn;
-                if (!TypeOps.assignable(bodyType, declared, published)) {
+                if (!TypeOps.assignable(bodyType, declared, declarations.kinds(), published)) {
                     // A definition standing at a position carries a claim the position made, so
                     // what is said leans on the place and quotes no name the author never wrote.
                     // A definition is named, whoever wrote it: one this module took on is another
@@ -789,7 +789,8 @@ public final class HelperTyping {
             try {
                 Type at = Elaborator.typeOf(inliner.inline(call.args().get(i), inliner.bodyOf(h.name())),
                         env, new CheckContext(symbols, declarations, null, reqs));
-                if (TypeOps.unify(declared.get(i), at, bind, declarations.published())
+                if (TypeOps.unify(declared.get(i), at, bind, declarations.kinds(),
+                        declarations.published())
                         instanceof Fit.Disagrees) {
                     return;   // the argument does not fit; leave it to the inlined check
                 }
@@ -880,12 +881,13 @@ public final class HelperTyping {
                 // what there is to check: `'b?` accepts a block answering with an optional and rejects
                 // one answering with a plain value. Unifying also pins `'b` for the arguments after
                 // this one. A failure is reported as the mismatch it is, in written types.
-                if (TypeOps.unify(want.result(), got, bind, published) instanceof Fit.Disagrees) {
+                if (TypeOps.unify(want.result(), got, bind, declarations.kinds(), published)
+                        instanceof Fit.Disagrees) {
                     throw blockReturnMismatch(h, paramName, want.result(), got, lambda);
                 }
                 return;
             }
-            if (!TypeOps.assignable(got, want.result(), published)) {
+            if (!TypeOps.assignable(got, want.result(), declarations.kinds(), published)) {
                 throw blockReturnMismatch(h, paramName, want.result(), got, lambda);
             }
         } else if (arg instanceof Hir.Var.Denoting v

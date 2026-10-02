@@ -82,6 +82,8 @@ public final class FixtureReader {
     private final Symbols symbols;
     /** What the declarations a fixture names say about themselves. */
     private final PublishedDeclarations published;
+    /** Which form each of those declarations was written in. */
+    private final DeclarationKinds kinds;
     /** The values a row may name: this module's own, and the ones its imports bring in. */
     private final Map<String, Hir.FnDef> values;
     private final MemoryClassLoader loader;
@@ -99,6 +101,7 @@ public final class FixtureReader {
         this.module = module;
         this.symbols = symbols;
         this.published = published;
+        this.kinds = kinds;
         this.values = values;
         this.loader = loader;
         this.operands = new OperandRunner(module.name(), loader);
@@ -333,7 +336,7 @@ public final class FixtureReader {
         if (value == null) {
             return null;
         }
-        for (TypeSymbol candidate : AtomSpace.subjectAtoms(outType, published)) {
+        for (TypeSymbol candidate : AtomSpace.subjectAtoms(outType, kinds, published)) {
             if (represents(candidate, value)) {
                 return candidate;
             }
@@ -496,7 +499,7 @@ public final class FixtureReader {
                     && spells(v, r.name());
             case Type.Ref _, Type.Union _ -> {
                 TypeSymbol name = named(a);
-                yield name != null && AtomSpace.subjectAtoms(type, published).contains(name)
+                yield name != null && AtomSpace.subjectAtoms(type, kinds, published).contains(name)
                         && parts(a, name);
             }
             case Type.ListOf l -> a instanceof Asserted.Elements(Asserted.Container stated,
@@ -1060,7 +1063,8 @@ public final class FixtureReader {
             case Type.OptionOf o -> new Admits.OrAbsent(admits(o.element()));
             case Type.Ref r when r.name().isPrimitive() -> NO_NAME;
             case Type.Ref r -> new Admits.OneOf(
-                    new LinkedHashSet<>(AtomSpace.subjectAtoms(Type.ref(r.name()), published)));
+                    new LinkedHashSet<>(AtomSpace.subjectAtoms(Type.ref(r.name()), kinds,
+                            published)));
             case Type.Prim _, Type.ListOf _, Type.SetOf _, Type.MapOf _, Type.TupleOf _ -> NO_NAME;
             case null, default -> UNSAID;
         };

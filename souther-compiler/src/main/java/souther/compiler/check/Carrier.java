@@ -220,7 +220,7 @@ public sealed interface Carrier extends ValueOrder {
             // one case, given the sum's counts, was asked for a row at a value it cannot hold.
             case Ordering.Places places -> base instanceof Type.Ref ref
                     && ref.name().equals(places.enumeration())
-                    ? ordinalOf(places, declarations.published()) : null;
+                    ? ordinalOf(places, declarations.kinds(), declarations.published()) : null;
             // `opened` answers for the value with the names off, which is never one still wearing
             // them.
             case Ordering.Wrapped _ ->
@@ -255,13 +255,15 @@ public sealed interface Carrier extends ValueOrder {
 
     /** The cases in the order they are declared, which is the order itself and not a set. The
      *  declaration is read for that list alone: whether this is an enumeration is already answered. */
-    private static Carrier ordinalOf(Ordering.Places places, PublishedDeclarations published) {
+    private static Carrier ordinalOf(Ordering.Places places, DeclarationKinds kinds,
+                                     PublishedDeclarations published) {
         if (!(places.enumeration() instanceof TypeSymbol.AtModule at)
                 || !(published.of(at.key())
                         instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Sum _))) {
             return null;
         }
-        List<TypeSymbol> cases = AtomSpace.subjectAtoms(Type.ref(places.enumeration()), published);
+        List<TypeSymbol> cases =
+                AtomSpace.subjectAtoms(Type.ref(places.enumeration()), kinds, published);
         return cases.isEmpty() ? null : new Ordinal(places.enumeration(), cases);
     }
 

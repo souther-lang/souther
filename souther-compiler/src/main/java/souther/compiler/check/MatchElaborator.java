@@ -67,11 +67,14 @@ public final class MatchElaborator {
      */
     static NotACaseOfThisMatch notCase(Hir.Name written, String what, Hir.Case c,
                                        Set<TypeSymbol> cases, Symbols symbols,
-                                       PublishedDeclarations published) {
+                                       DeclarationKinds kinds, PublishedDeclarations published) {
         String caseName = written.written();
         String otherSum = null;
         for (TypeSymbol name : symbols.scope().visibleNames()) {
+            // Which of them are sums is asked of their form, and what a sum lists only of those:
+            // the product whose clause this match is in may be among them, its meaning being made.
             if (!(name instanceof TypeSymbol.AtModule at)
+                    || !kinds.isSum(at.key())
                     || !(published.of(at.key())
                             instanceof PublishedDeclarationResult.Found(
                                     DeclarationMeaning.Sum sum))) {
@@ -143,9 +146,9 @@ public final class MatchElaborator {
          * so a match further out that also has it is not told, and what comes back from here is no
          * longer something any of them will answer about.
          */
-        CompileException takenFromTheMatchAround(CaseSpace.Cases around,
+        CompileException takenFromTheMatchAround(CaseSpace.Cases around, DeclarationKinds kinds,
                                                 PublishedDeclarations published) {
-            if (named == null || !around.holds(named, published)) {
+            if (named == null || !around.holds(named, kinds, published)) {
                 return this;
             }
             return CompileException.of(said(caseName, what, at, otherSum, true));
@@ -167,7 +170,7 @@ public final class MatchElaborator {
         // are the same kind of arm, and what tells a match apart from what it left out is which
         // atoms nobody took (#966).
         CasePartition partition =
-                CasePartition.of(AtomSpace.subjectAtoms(scrutinee, ctx.published()));
+                CasePartition.of(AtomSpace.subjectAtoms(scrutinee, ctx.kinds(), ctx.published()));
         List<Core.Case> arms = new ArrayList<>();
         Type branchType = null;
         for (int armIndex = 0; armIndex < m.cases().size(); armIndex++) {
@@ -176,9 +179,10 @@ public final class MatchElaborator {
             List<ResolvedCase> alternatives = new ArrayList<>();
             for (Hir.Name written : c.caseTypes()) {
                 TypeSymbol caseName = names(written);
-                ResolvedCase resolved = space.selector(caseName, ctx.published());
+                ResolvedCase resolved = space.selector(caseName, ctx.kinds(), ctx.published());
                 if (resolved == null) {
-                    throw notCase(written, what, c, cases, ctx.symbols(), ctx.published());
+                    throw notCase(written, what, c, cases, ctx.symbols(), ctx.kinds(),
+                            ctx.published());
                 }
                 alternatives.add(resolved);
                 answersFor.addAll(resolved.atoms());
@@ -231,9 +235,9 @@ public final class MatchElaborator {
                 body = Elaborator.liftIntoOption(
                         Elaborator.elaborate(c.body(), bound(env, c.binding(), binding.type()), ctx,
                                 expected),
-                        expected, ctx.published());
+                        expected, ctx.kinds(), ctx.published());
             } catch (NotACaseOfThisMatch inner) {
-                throw inner.takenFromTheMatchAround(space, ctx.published());
+                throw inner.takenFromTheMatchAround(space, ctx.kinds(), ctx.published());
             }
             arms.add(new Core.Case(pattern, binding, body, c.pos()));
             branchType = mergeBranch(m, branchType, body.type(), c, expected);
@@ -269,7 +273,7 @@ public final class MatchElaborator {
             Hir.Name arm = c.caseTypes().get(0);
             String caseType = arm.written();
             TypeSymbol armName = names(arm);
-            ResolvedCase resolved = space.selector(armName, ctx.published());
+            ResolvedCase resolved = space.selector(armName, ctx.kinds(), ctx.published());
             if (resolved == null) {
                 throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.NotACaseOfAnOptional(caseType)).build());
             }
@@ -289,7 +293,7 @@ public final class MatchElaborator {
             Core body = Elaborator.liftIntoOption(
                     Elaborator.elaborate(c.body(), bound(env, c.binding(), binding.type()), ctx,
                             expected),
-                    expected, ctx.published());
+                    expected, ctx.kinds(), ctx.published());
             arms.add(new Core.Case(pattern, binding, body, c.pos()));
             branchType = mergeBranch(m, branchType, body.type(), c, expected);
         }
