@@ -117,8 +117,9 @@ class ACountIsPaidByWhatReadsTheRuleThatMovedTest {
      */
     @Test
     void aRuleMovingIsNotPaidForByTheDeclarationsBesideIt() {
-        assertEquals(askingsFor(besideSpares(1, 99), besideSpares(1, 98)),
-                askingsFor(besideSpares(32, 99), besideSpares(32, 98)),
+        long few = askingsFor(besideSpares(1, 99), besideSpares(1, 98));
+        assertTrue(few > 0, "a rule moved and nothing was counted for it, so this measures nothing");
+        assertEquals(few, askingsFor(besideSpares(32, 99), besideSpares(32, 98)),
                 "a rule moved, and declarations that read none of it were answered again for it");
     }
 
@@ -133,8 +134,10 @@ class ACountIsPaidByWhatReadsTheRuleThatMovedTest {
      */
     @Test
     void aDeclarationWrittenBesideThemIsPaidForByItself() {
-        assertEquals(askingsFor(besideSpares(1, 99), besideSpares(2, 99)),
-                askingsFor(besideSpares(32, 99), besideSpares(33, 99)),
+        long few = askingsFor(besideSpares(1, 99), besideSpares(2, 99));
+        assertTrue(few > 0,
+                "a declaration was written and nothing was counted for it, so this measures nothing");
+        assertEquals(few, askingsFor(besideSpares(32, 99), besideSpares(33, 99)),
                 "a declaration was written beside them and the rest were counted again for it");
     }
 

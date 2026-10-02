@@ -3,10 +3,8 @@ package souther.runtime;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.lang.management.ManagementFactory;
-import java.lang.management.ThreadMXBean;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
+import souther.test.Allocated;
 
 /**
  * An allocation budget for {@link PersistentVector#append}, the operation every fold-derived
@@ -58,22 +56,14 @@ class PersistentVectorAllocationTest {
 
     @Test
     void appendStaysWithinItsAllocationBudget() {
-        com.sun.management.ThreadMXBean bean = allocationCountingBean();
-
         for (int warmup = 0; warmup < 3; warmup++) {
             grow();
         }
 
-        long before = bean.getCurrentThreadAllocatedBytes();
-        PersistentVector<Object> built = grow();
-        long after = bean.getCurrentThreadAllocatedBytes();
-
-        long perElement = (after - before) / ELEMENTS;
-        assertTrue(perElement > 0, "allocation accounting reported nothing; measurement is broken");
+        long perElement = Allocated.by(() -> assertEquals(ELEMENTS, grow().size())) / ELEMENTS;
         assertTrue(perElement < MAX_BYTES_PER_ELEMENT,
                 "append allocated " + perElement + " bytes/element, budget is "
                         + MAX_BYTES_PER_ELEMENT + " (see ADR-0060 for the measured figures)");
-        assertEquals(ELEMENTS, built.size());
     }
 
     private static PersistentVector<Object> grow() {
@@ -83,17 +73,5 @@ class PersistentVectorAllocationTest {
             pv = pv.append(element);
         }
         return pv;
-    }
-
-    /** The allocation counter, or a skipped test where the JVM does not offer one. */
-    private static com.sun.management.ThreadMXBean allocationCountingBean() {
-        ThreadMXBean threads = ManagementFactory.getThreadMXBean();
-        Assumptions.assumeTrue(threads instanceof com.sun.management.ThreadMXBean,
-                "this JVM has no com.sun.management.ThreadMXBean");
-        com.sun.management.ThreadMXBean bean = (com.sun.management.ThreadMXBean) threads;
-        Assumptions.assumeTrue(bean.isThreadAllocatedMemorySupported(),
-                "this JVM does not support per-thread allocation counting");
-        bean.setThreadAllocatedMemoryEnabled(true);
-        return bean;
     }
 }

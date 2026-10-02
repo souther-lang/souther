@@ -113,6 +113,7 @@ class WhatOneReadingDecidesIsLentWithItTest {
         long few = readingsMadeCompiling(MODULE);
         long many = readingsMadeCompiling(MORE_QUESTIONS);
 
+        assertTrue(few > 0, "the model made no reading, so this measures nothing");
         assertEquals(few, many,
                 () -> "a model with more questions over the same declarations read them " + many
                         + " times against " + few + ", so a question reaching a declaration is"

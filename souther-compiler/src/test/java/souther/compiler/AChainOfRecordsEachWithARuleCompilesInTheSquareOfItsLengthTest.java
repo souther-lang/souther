@@ -1,9 +1,7 @@
 package souther.compiler;
 
-import com.sun.management.ThreadMXBean;
 import org.junit.jupiter.api.Test;
-
-import java.lang.management.ManagementFactory;
+import souther.test.Allocated;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -41,11 +39,8 @@ class AChainOfRecordsEachWithARuleCompilesInTheSquareOfItsLengthTest {
     }
 
     private static long allocatedCompiling(int records) {
-        ThreadMXBean thread = (ThreadMXBean) ManagementFactory.getThreadMXBean();
         String src = chain(records);
-        long before = thread.getCurrentThreadAllocatedBytes();
-        Compiler.compile(src);
-        return thread.getCurrentThreadAllocatedBytes() - before;
+        return Allocated.by(() -> Compiler.compile(src));
     }
 
     /** What the record after the {@code records}-th costs. */
@@ -56,9 +51,9 @@ class AChainOfRecordsEachWithARuleCompilesInTheSquareOfItsLengthTest {
     @Test
     void oneMoreRecordCostsAboutTwiceAsMuchAtTwiceTheLength() {
         allocatedCompiling(10);
-        long shorter = oneMoreAfter(20);
-        long longer = oneMoreAfter(40);
-        assertTrue(longer <= shorter * 2,
-                "one more record after 20 allocated " + shorter + " bytes and after 40 " + longer);
+        long shorter = oneMoreAfter(15);
+        long longer = oneMoreAfter(30);
+        assertTrue(longer * 10 <= shorter * 19,
+                "one more record after 15 allocated " + shorter + " bytes and after 30 " + longer);
     }
 }

@@ -3,16 +3,17 @@ package souther.compiler.numeric;
 import org.junit.jupiter.api.Test;
 import souther.compiler.numeric.AffineConstraint.Read;
 import souther.compiler.numeric.DifferenceBounds.Apart;
+import souther.test.Growth;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedMap;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A difference through nought is two positions' own bounds, and every bounded position has an edge
@@ -67,12 +68,11 @@ class TheDifferencesHoldWhatTheRulesRelateAndNoMoreTest {
 
     @Test
     void doublingThePairsAboutDoublesTheHops() {
-        Map<Integer, Long> hops = new LinkedHashMap<>();
+        SequencedMap<Integer, Long> hops = new LinkedHashMap<>();
         for (int pairs : new int[] {20, 40, 80}) {
             hops.put(pairs, hopsOver(pairs));
         }
-        assertTrue(hops.get(40) <= hops.get(20) * 5 / 2, "40 pairs: " + hops);
-        assertTrue(hops.get(80) <= hops.get(40) * 5 / 2, "80 pairs: " + hops);
+        Growth.eachAtMost(hops, 5, 2);
     }
 
     @Test
