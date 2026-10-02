@@ -2,16 +2,20 @@ package souther.compiler.check;
 
 import souther.compiler.hash.SaysWhatStandsForIt;
 import souther.compiler.types.BinOp;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * What the invariant-discharge check names a value by — the identity two writings of one value
@@ -1043,6 +1047,96 @@ final class Term {
         int size() {
             return shared.size();
         }
+    }
+
+    /**
+     * Terms held so that a chain of names read off a value can be asked which of its shorter chains
+     * comes to one of them, going down the names once.
+     *
+     * <p>{@link Interner#on} read backwards. A place with names read off it is the place's root with
+     * a longer path, and anything else with names read off it is one chain over that thing, so each
+     * term here is held under what its chain starts from and then a name at a time. Asked instead by
+     * naming each shorter chain, every one of them is a term as long as itself, and a chain as long
+     * as a chain of declarations costs the square of that.
+     */
+    static final class Chains {
+
+        /** Where one more name goes, and the term a chain stopping here is, where it is one held. */
+        private static final class Node {
+
+            private final Map<String, Node> next = new HashMap<>();
+            private Term held;
+        }
+
+        private final Map<BindingId, Node> fromPlaces = new HashMap<>();
+        private final Map<List<Term>, Node> fromValues = new HashMap<>();
+        private final Set<Term> held = new HashSet<>();
+
+        Chains(Collection<Term> terms) {
+            for (Term each : terms) {
+                held.add(each);
+                switch (each.shape) {
+                    case AT -> {
+                        Location where = (Location) each.of;
+                        down(fromPlaces.computeIfAbsent(where.root(), _ -> new Node()),
+                                where.path()).held = each;
+                    }
+                    case ON -> down(fromValues.computeIfAbsent(each.parts, _ -> new Node()),
+                            each.fields()).held = each;
+                    default -> { }
+                }
+            }
+        }
+
+        /** Whether {@code term} is one held here. */
+        boolean holds(Term term) {
+            return held.contains(term);
+        }
+
+        private static Node down(Node from, List<String> names) {
+            Node at = from;
+            for (String name : names) {
+                at = at.next.computeIfAbsent(name, _ -> new Node());
+            }
+            return at;
+        }
+
+        /**
+         * Of {@code base} with {@code names} read off it, the most of the names that come to a term
+         * held here, no fewer than {@code least} of them — or null where none do.
+         */
+        Reached longest(Term base, List<String> names, int least) {
+            Reached out = least == 0 && held.contains(base) ? new Reached(0, base) : null;
+            Node at = switch (base.shape) {
+                case AT -> along(fromPlaces.get(((Location) base.of).root()),
+                        ((Location) base.of).path());
+                case ON -> along(fromValues.get(base.parts), base.fields());
+                default -> fromValues.get(List.of(base));
+            };
+            for (int read = 0; read < names.size() && at != null; read++) {
+                at = at.next.get(names.get(read));
+                if (at != null && at.held != null && read + 1 >= least) {
+                    out = new Reached(read + 1, at.held);
+                }
+            }
+            return out;
+        }
+
+        private static Node along(Node from, List<String> names) {
+            Node at = from;
+            for (int read = 0; read < names.size() && at != null; read++) {
+                at = at.next.get(names.get(read));
+            }
+            return at;
+        }
+
+        /**
+         * A chain that comes to a term held here.
+         *
+         * @param names how many of the names read off the value it is
+         * @param term  the term it is
+         */
+        record Reached(int names, Term term) {}
     }
 
     /** The parts, for a reader that walks one. */

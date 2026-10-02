@@ -27,15 +27,19 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * nodes were two things at once: the slots a walk goes down, and the subexpressions a walk asks
  * about. A projection keeps the first — its base is its one child — and not the second: the
  * projections shorter than it are subexpressions of it that no walk meets by going down. So every
- * walk is one of five, and this is where each says which.
+ * walk is one of six, and this is where each says which.
  *
  * <ul>
  *   <li>It asks about the tree's structure — what is evaluated, what a binding reads, which slots
  *       there are, where a choice or a call stands — and no name read adds anything to that, so the
  *       base is all there is to go down to.</li>
- *   <li>It asks each node it meets what it is — a position, a subject, a term — and asks it of every
- *       subexpression standing there ({@code Core.subexpressionsAt}), which is the node and the
- *       projections shorter than it, in the order the descent met them.</li>
+ *   <li>It asks each node it meets what it is — a position, a subject, a term — and wants the answer
+ *       for every subexpression standing there ({@code Core.subexpressionsAt}), which is the node
+ *       and the projections shorter than it, in the order the descent met them.</li>
+ *   <li>It asks which of the subexpressions standing there a table of subjects holds first, and
+ *       stops there ({@code Terms.heldAt}). One answer and not every one, so it goes down the names
+ *       once against the table: naming each shorter projection to look it up costs the square of
+ *       the projection, and a projection the table stops short of is named all the way down.</li>
  *   <li>It is the rule for a field access itself, and reads it along a projection's names.</li>
  *   <li>It is handed one access and asks of it and its target alone.</li>
  *   <li>It reads only a tree that runs, which holds no projection.</li>
@@ -45,13 +49,16 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * ({@code Core.forEachChild}, {@code ScopeStep.forEachChild}, {@code Core.mapAll},
  * {@code Core.mapChildren}) or by hand through a field access's target. A method the table does not
  * name is red, and so is a row naming a method that no longer is one. A row of the second kind is
- * red where the method does not ask through {@code Core.subexpressionsAt}, and one of the third
+ * red where the method does not ask through {@code Core.subexpressionsAt}; one of the third where it
+ * does not ask through {@code Terms.heldAt}, or names every subexpression besides; one of the fourth
  * where it never reads a projection.
  *
  * <p>Asking through the one method is what is held, rather than each walk's own loop over a
  * projection's names. Which subexpressions stand at a node is a single answer
  * ({@code AValueAGuaranteeWalkReachesIsOneNodeHoweverFarDownTest} holds it to the accesses written
- * out), and a walk that wrote its own would be a second one nothing compares.
+ * out), and a walk that wrote its own would be a second one nothing compares. Which of them a table
+ * holds first is that answer looked up, and {@code ATableIsAskedOfAProjectionAsOfEachShorterOneTest}
+ * holds {@code Terms.heldAt} to it.
  */
 class AProjectionIsReadAsTheAccessesItStandsForTest {
 
@@ -64,6 +71,11 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
     /** What a walk asking each node names where it asks every subexpression standing there. */
     private static final String SUBEXPRESSIONS_AT = CORE + "#subexpressionsAt";
 
+    private static final String TERMS = "souther/compiler/check/Terms";
+
+    /** What a walk asking which subexpression a table holds names where it asks that. */
+    private static final String HELD_AT = TERMS + "#heldAt";
+
     private static final CompiledOutputs PUBLISHED = CompiledOutputs.ofWhatThisRepositoryPublishes();
 
     /** How a walk reads a projection. */
@@ -72,8 +84,11 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         /** Its question is about the tree's structure, and the base is the one child. */
         STRUCTURE,
 
-        /** It asks each node what it is, and asks it of every subexpression standing there. */
+        /** It asks each node what it is, and wants it of every subexpression standing there. */
         EACH_SUBEXPRESSION,
+
+        /** It asks which subexpression standing there a table holds first, and stops there. */
+        FIRST_HELD,
 
         /** It is the rule for a field access, read along a projection's names. */
         NAMES,
@@ -99,8 +114,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         assertEquals(new TreeSet<>(WALKS.keySet()), new TreeSet<>(FOUND.keySet()),
                 "a method going down a Core tree that does not say how it reads a FieldProjection."
                         + " Say which it is in WALKS: a question about structure, a question asked"
-                        + " of every subexpression, the rule for a field access, a question about"
-                        + " one access, or a reader of the tree that runs");
+                        + " of every subexpression, the first subexpression a table holds, the rule"
+                        + " for a field access, a question about one access, or a reader of the"
+                        + " tree that runs");
     }
 
     @Test
@@ -115,6 +131,22 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         assertEquals(Set.of(), unasked,
                 "a walk that asks each node what it is, and does not ask it of every subexpression"
                         + " standing there through Core.subexpressionsAt");
+    }
+
+    @Test
+    void aWalkThatLooksForTheFirstHeldAsksTheTableAlongTheNames() {
+        Set<String> unasked = new TreeSet<>();
+        WALKS.forEach((method, row) -> {
+            Set<String> named = FOUND.getOrDefault(method, Set.of());
+            if (row.reading() == Reading.FIRST_HELD
+                    && (!named.contains(HELD_AT) || named.contains(SUBEXPRESSIONS_AT))) {
+                unasked.add(method);
+            }
+        });
+        assertEquals(Set.of(), unasked,
+                "a walk that looks for the first subexpression a table holds, and does not ask"
+                        + " Terms.heldAt, or names every subexpression besides: each shorter"
+                        + " projection named to look it up is a term as long as itself");
     }
 
     @Test
@@ -162,6 +194,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                                     && call.name().equalsString("subexpressionsAt")) {
                                 mentioned.add(SUBEXPRESSIONS_AT);
                             }
+                            if (call.owner().asInternalName().equals(TERMS)
+                                    && call.name().equalsString("heldAt")) {
+                                mentioned.add(HELD_AT);
+                            }
                             if (goesDown(call.owner().asInternalName(),
                                     call.name().stringValue())) {
                                 walking.add(at);
@@ -202,6 +238,11 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
     private static final String BINDINGS = "which bindings a tree reads or binds: a name read off a"
             + " value is no binding, so a projection reads what its base reads";
 
+    /** Looks for the first subexpression a table holds. */
+    private static final String FINDS_THE_FIRST_HELD = "asks which subexpression standing at each"
+            + " node a table of this value's subjects holds, and stops at the first: a position names"
+            + " itself and nothing under it is one of its own";
+
     /** A choice, a binding or a call found in a tree, which no name read is. */
     private static final String CHOICES_AND_CALLS = "looks for a choice, a binding, a call or a"
             + " comparison: a name read off a value is none of them, so nothing between a"
@@ -241,7 +282,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "core/KernelContracts;Ljava/util/Map;Ljava/util/IdentityHashMap;)V",
                 Reading.STRUCTURE, EVALUATION);
         row(out, c + "check/AdmissibleReading", "gather", "(" + core + "Ljava/util/Set;" + at + ")V",
-                Reading.EACH_SUBEXPRESSION, ASKS_EACH);
+                Reading.FIRST_HELD, FINDS_THE_FIRST_HELD);
         row(out, c + "check/AffineForms", "composed", "(" + core + "Ljava/lang/Object;L" + c
                 + "check/AffineForms$Reading;L" + c + "check/AffineForms$Walk;L" + c
                 + "check/AffineForms$Stop;)L" + c + "numeric/LinearForm;",
@@ -268,8 +309,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/InvariantChecker", "collectAlike", "(" + core + "L" + c + "check/Term;"
                 + at + "Ljava/util/Set;)V", Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "check/InvariantChecker", "relating", "(" + core + "L" + c
-                + "types/TypeSymbol$AtModule;" + at + "Ljava/util/Map;Ljava/util/Map;)V",
-                Reading.EACH_SUBEXPRESSION, ASKS_EACH);
+                + "types/TypeSymbol$AtModule;" + at + "L" + c
+                + "check/InvariantChecker$Coordinates;Ljava/util/Map;)V",
+                Reading.FIRST_HELD, FINDS_THE_FIRST_HELD);
         row(out, c + "check/InvariantChecker", "splitIn",
                 "(" + core + ")L" + c + "check/InvariantChecker$SplitSite;",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
@@ -299,12 +341,14 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/Predicates", "chosenCalls",
                 "(" + core + at + "Ljava/util/Map;Ljava/util/Set;)V",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
-        row(out, c + "check/Predicates", "names", "(" + core + "Ljava/util/Set;" + at + ")Z",
-                Reading.EACH_SUBEXPRESSION, ASKS_EACH);
+        row(out, c + "check/Predicates", "names", "(" + core + "L" + c + "check/Term$Chains;" + at
+                + ")Z",
+                Reading.FIRST_HELD, FINDS_THE_FIRST_HELD);
         row(out, c + "check/Predicates$Reads", "chain", "(" + core + ")Ljava/util/List;",
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "check/StatedByClauses$Reading", "gather",
-                "(" + core + "Ljava/util/Set;" + at + ")V", Reading.EACH_SUBEXPRESSION, ASKS_EACH);
+                "(" + core + "Ljava/util/Set;" + at + ")V", Reading.FIRST_HELD,
+                FINDS_THE_FIRST_HELD);
         row(out, c + "check/TermMeaning", "project", "(" + core + "Ljava/util/List;)V",
                 Reading.NAMES, "what a term says: a projection says what the accesses it"
                         + " stands for say, the last one first");
@@ -324,8 +368,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.ONE_ACCESS, ONE);
         row(out, c + "check/ValueOrigin", "of", "(" + core + "Ljava/lang/Object;L" + c
                 + "check/ValueOrigin$Reading;L" + c + "check/BindingWalk;)L" + c
-                + "check/ValueOrigin;", Reading.NAMES, "asks each projection from the"
-                        + " longest whether it is a position, as the descent would, and reads the"
+                + "check/ValueOrigin;", Reading.NAMES, "asks the reading which projection, the"
+                        + " longest first, is a position, as the descent would, and reads the"
                         + " names back up along them");
         row(out, c + "claims/UnreachableClaims", "claimedUnder", "(" + core + reads + "L" + c
                 + "check/Symbols;L" + c + "check/DeclarationNewtypes;L" + c

@@ -54,6 +54,8 @@ final class AdmissibleReading {
      * whether or not it is a number: which values a boolean has is as much an answer as which
      * values an integer has, and the reading that asked the carrier had no word for the first. */
     private final Map<FactSubject, Type> byName;
+    /** The same positions as chains of names, for asking which subexpression of a clause is one. */
+    private final Term.Chains chains;
     private final Symbols symbols;
     /** What the declarations a position names say about themselves. Beside {@link #symbols} and not
      *  read off it: what a declaration states is not what this module's world holds. */
@@ -93,11 +95,12 @@ final class AdmissibleReading {
      * which is what an alternative holding it turns on.
      */
     private final Set<Core> gaveUp = Collections.newSetFromMap(new IdentityHashMap<>());
-    private AdmissibleReading(Terms terms, Map<FactSubject, Type> byName,
+    private AdmissibleReading(Terms terms, Map<FactSubject, Type> byName, Term.Chains chains,
                               Symbols symbols, PublishedDeclarations published,
                               Allowance<FactSubject> allowed) {
         this.terms = terms;
         this.byName = byName;
+        this.chains = chains;
         this.symbols = symbols;
         this.published = published;
         this.allowed = allowed;
@@ -108,10 +111,10 @@ final class AdmissibleReading {
      *  <p>No environment is held. A leaf is read at where it stands, which the fold hands down; a
      *  reading holding the environment the clause began in would read a rule under a binding at
      *  names that mean nothing there, and every such rule came out as a form nothing reads. */
-    static AdmissibleReading of(Terms terms, Map<FactSubject, Type> byName,
+    static AdmissibleReading of(Terms terms, Map<FactSubject, Type> byName, Term.Chains chains,
                                 Symbols symbols, PublishedDeclarations published,
                                 Allowance<FactSubject> allowed) {
-        return new AdmissibleReading(terms, byName, symbols, published, allowed);
+        return new AdmissibleReading(terms, byName, chains, symbols, published, allowed);
     }
 
     /** What this reading is spending, for whoever meets its answer with the next rule's. */
@@ -562,12 +565,10 @@ final class AdmissibleReading {
         }
         // Every subexpression standing here, and not only the node: a projection's shorter
         // projections are not children, and each may be the position the clause names.
-        for (Core standing : Core.subexpressionsAt(e)) {
-            FactSubject here = terms.subjectOf(standing, at);
-            if (here != null && byName.containsKey(here)) {
-                found.add(here);
-                return;   // a position names itself, and nothing under it is a position of its own
-            }
+        FactSubject here = terms.heldAt(e, at, chains);
+        if (here != null) {
+            found.add(here);
+            return;   // a position names itself, and nothing under it is a position of its own
         }
         Core.forEachChild(e, child -> gather(child, found, at));
     }

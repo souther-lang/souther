@@ -3,6 +3,8 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 import souther.test.OnItsOwnStack;
 
+import java.util.StringJoiner;
+
 /**
  * A module chains its declarations as long as it likes, and a pass that follows the chain on the
  * call stack answers a long one by running out of room — so what the module means would depend on
@@ -18,6 +20,10 @@ class ADeclarationChainIsNotWalkedOnTheCallStackTest {
     private static final long STACK = 512L << 10;
 
     private static final int LINKS = 1000;
+
+    private static final int RECORDS = 300;
+
+    private static final long RECORD_STACK = 256L << 10;
 
     @Test
     void aChainOfBehaviorsEachCallingTheOneBefore() {
@@ -44,7 +50,31 @@ class ADeclarationChainIsNotWalkedOnTheCallStackTest {
         assertCompilesOnASmallStack(src.toString());
     }
 
+    /**
+     * Each record holds the one before in a field, down to a number with a rule on it, so the rule
+     * is about a position as deep as the chain and what it is made of is a chain as long.
+     *
+     * <p>Shorter than the other chains and on a smaller stack. Each record reads the rule at a
+     * projection as deep as itself, so the chain costs more than its length to compile; this length
+     * on this stack still ran out of it while what a value is made of was read recursively.
+     */
+    @Test
+    void aChainOfRecordsEachHoldingTheOneBefore() {
+        StringJoiner exposed = new StringJoiner(", ");
+        StringBuilder decls = new StringBuilder("data T1 = Int\n    invariant value >= 1 && value <= 9\n");
+        exposed.add("T1");
+        for (int i = 2; i <= RECORDS; i++) {
+            exposed.add("T" + i);
+            decls.append("data T").append(i).append(" = { x: T").append(i - 1).append(" }\n");
+        }
+        assertCompilesOn(RECORD_STACK, "module chain exposing ( " + exposed + " )\n\n" + decls);
+    }
+
     private static void assertCompilesOnASmallStack(String src) {
-        OnItsOwnStack.ask("a compile on a small stack", STACK, () -> Compiler.compile(src));
+        assertCompilesOn(STACK, src);
+    }
+
+    private static void assertCompilesOn(long stack, String src) {
+        OnItsOwnStack.ask("a compile on a small stack", stack, () -> Compiler.compile(src));
     }
 }

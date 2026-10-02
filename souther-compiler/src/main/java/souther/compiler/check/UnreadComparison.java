@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -333,52 +332,13 @@ public final class UnreadComparison {
      * looking at the model.
      */
     public static <K> BlockReason.RuleReadingStopped notAboutOwnValues(ValueOrigin<K> stoppedAt) {
-        return madeByAnOperation(stoppedAt)
+        // The word for a value an operation made promises the position was found and only
+        // following the operation back is missing. Where some value the side may be is a position's
+        // own values or a literal, that promise is false and what an author is owed is the other
+        // word.
+        return stoppedAt.madeByAnOperation()
                 ? new BlockReason.RuleAboutADerivedValue()
                 : new BlockReason.UnreadComparisonForm();
-    }
-
-    /** Whether what a reading stopped at is a value an operation made of a position. */
-    private static <K> boolean madeByAnOperation(ValueOrigin<K> stoppedAt) {
-        return stoppedAt.answered(UnreadComparison::madeByAnOperation);
-    }
-
-    /** The same of {@code stoppedAt}, given what each of its parts came to. */
-    private static <K> boolean madeByAnOperation(ValueOrigin<K> stoppedAt,
-                                                 Function<ValueOrigin<K>, Boolean> part) {
-        return switch (stoppedAt) {
-            case ValueOrigin.Applied<K> _, ValueOrigin.MadeFromAPosition<K> _ -> true;
-            // Arithmetic the terms do not take apart — unless what is under it came from a
-            // position, which is the same rule about a value made from one with a layer of
-            // arithmetic over it.
-            case ValueOrigin.Composed<K> composed -> composed.madeFrom() != null;
-            // A construction is not an operation, whatever it was given. The word this decides is
-            // about a value a closure of an operation made of what stands at a position, which is
-            // followed back by reading that operation backwards; a reader that cannot take a
-            // construction as a quantity has not got that to do. Reading what it was built with is
-            // a separate ability, and the side that has it is what a rule is filed from.
-            case ValueOrigin.Constructed<K> _ -> false;
-            // Every value it could be, and not any of them. The word this picks promises the
-            // position was found and only following the operation back is missing; where one arm of
-            // a choice is a position's own values or a literal, that promise is false and what an
-            // author is owed is the other word. What decided the choice is not asked: an operation
-            // over the test made none of the values the rule is about.
-            case ValueOrigin.OneOf<K> choice -> everyOne(choice.alternatives(), part);
-            case ValueOrigin.IsAPosition<K> _, ValueOrigin.Written<K> _,
-                 ValueOrigin.Unnameable<K> _, ValueOrigin.NoValue<K> _ -> false;
-        };
-    }
-
-    /** Whether every value in {@code of} is one an operation made of a position. Stops at the
-     *  first that is not. */
-    private static <K> boolean everyOne(List<ValueOrigin<K>> of,
-                                        Function<ValueOrigin<K>, Boolean> part) {
-        for (ValueOrigin<K> each : of) {
-            if (!part.apply(each)) {
-                return false;
-            }
-        }
-        return true;
     }
 
     private UnreadComparison() {}
