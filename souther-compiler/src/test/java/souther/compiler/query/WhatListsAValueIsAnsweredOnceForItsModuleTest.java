@@ -139,6 +139,20 @@ class WhatListsAValueIsAnsweredOnceForItsModuleTest {
     }
 
     /**
+     * And it finds the operands among the enumeration's cases through that answer too. Whether
+     * {@code Won} is a case of what orders {@code Qualified} is what lists {@code Won}; opening the
+     * enumeration to look reads what every case of it says, on every comparison.
+     */
+    @Test
+    void aCheckedComparisonOpensNoCaseItDoesNotName() {
+        Compilation c = compiled();
+        Set<Key<?>> read = c.db().dependenciesOf(new Bodies.CheckedBehavior(MODULE, "advance"));
+
+        assertTrue(read.stream().noneMatch(new Shapes.MeaningOf(key("Prospecting"))::equals),
+                () -> "the comparison opened its enumeration to find the operands: " + read);
+    }
+
+    /**
      * And a helper's body is checked against the same answer. The module's check is handed the
      * compilation's answers to what is asked of a declaration, and a helper checked under it is
      * checked with those, not with a walk of the module made again out of its scope.

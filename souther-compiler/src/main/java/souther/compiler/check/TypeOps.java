@@ -1715,26 +1715,31 @@ public final class TypeOps {
         if (named == null) {
             named = orderingEnumeration(rt, kinds, published, listings);
         }
-        return named != null && isValueOfEnumeration(lt, named, published)
-                && isValueOfEnumeration(rt, named, published) ? named : null;
+        return named != null && isValueOfEnumeration(lt, named, listings)
+                && isValueOfEnumeration(rt, named, listings) ? named : null;
     }
 
-    /** Whether {@code t} is that enumeration, one of its leaves, or a union of them. */
+    /**
+     * Whether {@code t} is that enumeration, one of its leaves, or a union of them.
+     *
+     * <p>A leaf is asked of what lists it and not found among the enumeration's cases: the
+     * enumeration is one {@link #orderingEnumeration} answered, so it is a sum of units, and what
+     * lists a unit is read off exactly those cases. Opening the enumeration here instead pays for
+     * every case of it on each comparison.
+     */
     private static boolean isValueOfEnumeration(Type t, TypeSymbol enumeration,
-                                                PublishedDeclarations published) {
+                                                EnumerationListings listings) {
         if (t instanceof Type.Union union) {
             for (TypeSymbol member : union.members()) {
-                if (!isValueOfEnumeration(Type.ref(member), enumeration, published)) {
+                if (!isValueOfEnumeration(Type.ref(member), enumeration, listings)) {
                     return false;
                 }
             }
             return !union.members().isEmpty();
         }
         return t instanceof Type.Ref ref && (ref.name().equals(enumeration)
-                || (enumeration instanceof TypeSymbol.AtModule at
-                    && published.of(at.key())
-                        instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Sum _)
-                    && AtomSpace.subjectAtoms(Type.ref(at), published).contains(ref.name())));
+                || (ref.name() instanceof TypeSymbol.AtModule at
+                    && listings.of(at).contains(enumeration)));
     }
 
     /**
