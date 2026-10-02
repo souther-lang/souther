@@ -4,7 +4,6 @@ import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.hash.ValueHash;
 import souther.compiler.inputs.ChoiceToLift;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
@@ -701,21 +700,6 @@ public final class FieldDomains {
         /** What the value's rules call where the end was to have been placed. */
         public RuleKey path() {
             return at.position();
-        }
-
-        /**
-         * Over where, which part and why, and not over the part as read.
-         *
-         * <p>Two findings that differ only in the part as read are one part of one rule, read at two
-         * places that came to one coordinate; they share a number and are still two findings by
-         * equality. What putting it in would cost is the whole of it: a rule under a chain of
-         * declarations is read at a projection as deep as the chain, and every finding is filed by
-         * hash.
-         */
-        @Override
-        public int hashCode() {
-            return ValueHash.ofItsParts(NoLine.class, at.hashCode(), part.hashCode(),
-                    why.hashCode());
         }
     }
 

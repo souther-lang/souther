@@ -1,5 +1,7 @@
 package souther.compiler.core;
 
+import souther.compiler.hash.KeepsTheNumberItIsAskedFor;
+import souther.compiler.hash.ValueHash;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
@@ -353,17 +355,37 @@ public sealed interface Core {
          * The names of a projection, the last one and the ones before it.
          *
          * <p>Shared rather than copied, so a reading one name further costs the same however many
-         * names came before it, and copies none of them. Compared and hashed along the names rather
-         * than by recursing, for the reason the node exists: how many names there are is not
-         * bounded by anything a stack is.
+         * names came before it, and copies none of them. Compared along the names rather than by
+         * recursing, for the reason the node exists: how many names there are is not bounded by
+         * anything a stack is.
          *
-         * @param before the names before the last one, or null where the last one is the first
-         * @param last   the name this projection answers
+         * <p>The number it is asked for is worked out when it is made, from the number of the chain
+         * before it and the name read last, and kept. A projection is as deep as a chain of
+         * declarations, and every value holding one — a rule as read, a finding about it — is
+         * filed by its number; worked out at each ask, the number walked the whole chain.
          */
-        public record Steps(Steps before, Step last) {
+        public static final class Steps implements KeepsTheNumberItIsAskedFor {
 
-            public Steps {
-                Objects.requireNonNull(last, "a projection reads some name");
+            /**
+             * What a chain of names is.
+             *
+             * @param before the names before the last one, or null where the last one is the first
+             * @param last   the name this projection answers
+             */
+            public record Parts(Steps before, Step last) {
+
+                public Parts {
+                    Objects.requireNonNull(last, "a projection reads some name");
+                }
+            }
+
+            private final Parts parts;
+            private final int hash;
+
+            private Steps(Steps before, Step last) {
+                this.parts = new Parts(before, last);
+                // The chain before this one answers the number it keeps, so this is one step.
+                this.hash = ValueHash.ofOnePart(Steps.class, parts.hashCode());
             }
 
             public static Steps of(Step first) {
@@ -374,11 +396,26 @@ public sealed interface Core {
                 return new Steps(this, next);
             }
 
+            /** The names before the last one, or null where the last one is the first. */
+            public Steps before() {
+                return parts.before();
+            }
+
+            /** The name this projection answers. */
+            public Step last() {
+                return parts.last();
+            }
+
+            @Override
+            public Parts standsFor() {
+                return parts;
+            }
+
             /** Every name, the first one first. */
             public List<Step> inOrder() {
                 List<Step> out = new ArrayList<>();
-                for (Steps at = this; at != null; at = at.before) {
-                    out.add(at.last);
+                for (Steps at = this; at != null; at = at.before()) {
+                    out.add(at.last());
                 }
                 return List.copyOf(out.reversed());
             }
@@ -394,21 +431,17 @@ public sealed interface Core {
                     if (a == b) {
                         return true;
                     }
-                    if (!a.last.equals(b.last)) {
+                    if (a.hash != b.hash || !a.last().equals(b.last())) {
                         return false;
                     }
-                    a = a.before;
-                    b = b.before;
+                    a = a.before();
+                    b = b.before();
                 }
                 return a == b;
             }
 
             @Override
             public int hashCode() {
-                int hash = 0;
-                for (Steps at = this; at != null; at = at.before) {
-                    hash = 31 * hash + at.last.hashCode();
-                }
                 return hash;
             }
 
