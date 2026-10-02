@@ -19,17 +19,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * are worn over the record.
  *
  * <p>A name wrapped round a value is not a step, so the record's fields stand where they stood and
- * the rule cuts the same number. What the line is drawn from is the rule as the reading of the
- * outermost name read it: its reads are bound to that name's value, and that is the one binding,
- * beside the record's own, the reading of lines knows the positions by
- * ({@link DeclaredThresholds}). A reading of the outer name that took the reading of a name beneath
- * it as its own would carry reads bound to the inner name's value, which the reading of lines has
- * no position for, and the line would not be drawn — while every bound the rules leave came out the
- * same.
+ * the rule cuts the same number. What the line is drawn from is the rule as a reading read it, and
+ * its reads are bound to the value of the declaration that reading is of. That binding, beside the
+ * record's own, is what the reading of lines knows the positions by ({@link DeclaredThresholds}).
  *
- * <p>Two names and not one. The first name over the record reads the rule as one the walk reached
- * and the record reads it as its own clause, so those two readings are made apart whatever is
- * shared; it is from the second name up that one reading could be mistaken for the next.
+ * <p>Two names and not one. The second name writes nothing over a first that writes nothing, so it
+ * is read as the first: its reads are bound to the first name's value and not to its own. Placed by
+ * the name the signature wrote, the line would be looked for under a binding the reading never
+ * made, and would not be drawn — while every bound the rules leave came out the same.
  */
 class ARuleUnderNamesThatWriteNothingDrawsItsLineTest {
 

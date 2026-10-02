@@ -6,6 +6,7 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.values.StringMachineAnswers;
 import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.values.StringFacts;
 
@@ -58,6 +59,14 @@ public final class Machines {
 
         @Override
         public Answer<StringFacts> compute(Db db) {
+            // A declaration whose reading is a name beneath it has that name's machines: the
+            // reading that builds them is the one reading of both. Made here again, it would read
+            // the owner's rules into a recorder nothing of the owner's reading writes to.
+            TypeSymbol.AtModule declared = TypeSymbols.declared(named);
+            TypeSymbol.AtModule owner = db.readings().ownerOf(declared);
+            if (!owner.equals(declared)) {
+                return db.ask(new OfDeclaration(owner.key()));
+            }
             Answer<RuleReadingSource> source = Shapes.ruleReading(db, named.module());
             Answer<ReadingPolicy> policy = db.ask(new Front.Reading());
             if (!source.present() || !policy.present()) {
@@ -67,7 +76,7 @@ public final class Machines {
                     StringMachineAnswers.unborrowed(db.readings().extents());
             RuleReadingContext reading =
                     RuleReadingContext.of(source.value(), policy.value(), db.readings());
-            FieldDomains domains = FieldDomains.of(TypeSymbols.declared(named),
+            FieldDomains domains = FieldDomains.of(declared,
                     reading.whileTheAnswerIsMade(named, recorder));
             // And whether the rules leave a value at all, which is the question every reading of
             // an input puts to the declaration and the one that meets each language with the

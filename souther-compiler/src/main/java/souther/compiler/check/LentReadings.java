@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.KnownExtents;
 import souther.compiler.values.StringMachineAnswers;
 import souther.compiler.values.TextExtent;
@@ -87,6 +88,13 @@ public final class LentReadings implements DeclarationReadings {
         return known;
     }
 
+    /** Asked of what this lends over, as the machines are: which declaration's reading another's
+     *  is, is an answer about the declarations and not work done under a revision. */
+    @Override
+    public TypeSymbol.AtModule ownerOf(TypeSymbol.AtModule declaration) {
+        return machines.ownerOf(declaration);
+    }
+
     /**
      * What this revision has worked out about where sets stop, as the readings made under it ask
      * and answer it.
@@ -110,10 +118,10 @@ public final class LentReadings implements DeclarationReadings {
     };
 
     @Override
-    public DeclarationReading reading(TypeKey declaration, RuleReadingSource.Origin origin,
-                                      ReadingPolicy policy,
+    public DeclarationReading reading(TypeSymbol.AtModule declaration,
+                                      RuleReadingSource.Origin origin, ReadingPolicy policy,
                                       Supplier<InvariantChecker.Seeded> read) {
-        Shared held = current().get(new OfDeclarationUnder(declaration, origin, policy));
+        Shared held = current().get(new OfDeclarationUnder(declaration.key(), origin, policy));
         if (held == null) {
             return readingForAnAnswer(declaration, origin, policy, read);
         }
@@ -124,13 +132,13 @@ public final class LentReadings implements DeclarationReadings {
     }
 
     @Override
-    public DeclarationReading readingForAnAnswer(TypeKey declaration,
+    public DeclarationReading readingForAnAnswer(TypeSymbol.AtModule declaration,
                                                  RuleReadingSource.Origin origin,
                                                  ReadingPolicy policy,
                                                  Supplier<InvariantChecker.Seeded> read) {
         StoreWork.Made<InvariantChecker.Seeded> made = work.watching(read);
-        DeclarationReading reading = DeclarationReading.of(made.value());
-        current().put(new OfDeclarationUnder(declaration, origin, policy),
+        DeclarationReading reading = DeclarationReading.of(declaration, made.value());
+        current().put(new OfDeclarationUnder(declaration.key(), origin, policy),
                 new Shared(reading, made.reads()));
         return reading;
     }

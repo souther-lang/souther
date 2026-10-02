@@ -756,13 +756,19 @@ public final class InvariantChecker {
         // borrower asks for the machines and then looks for the reading, rather than reading for
         // itself and standing a second reading beside the answer's.
         DeclarationReadings readings = reading.readings();
-        StringMachineAnswers answers = readings.of(named.key());
         if (!settled.isEmpty() || !reach.everything()) {
-            return DeclarationReading.of(
-                    seedFieldsFresh(named, reading, settled, reach, answers));
+            return DeclarationReading.of(named, seedFieldsFresh(named, reading, settled, reach,
+                    readings.of(named.key())));
         }
-        return readings.reading(named.key(), reading.source().origin(), reading.policy(),
-                () -> seedFieldsFresh(named, reading, settled, reach, answers));
+        // The canonical reading is the one of the declaration it is the same reading as, which is
+        // a name beneath this one where this one adds nothing to read. Whose that is, is an answer
+        // about the compilation's declarations, so it is taken only for a source that reads them as
+        // the compilation does: a source of a reader's own may say something else of the names.
+        TypeSymbol.AtModule owner = reading.source().origin() instanceof AModulesRules
+                ? readings.ownerOf(named) : named;
+        StringMachineAnswers answers = readings.of(owner.key());
+        return readings.reading(owner, reading.source().origin(), reading.policy(),
+                () -> seedFieldsFresh(owner, reading, settled, reach, answers));
     }
 
     /**

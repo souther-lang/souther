@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.types.TypeSymbol;
+
 import java.util.function.Function;
 
 /**
@@ -23,19 +25,34 @@ import java.util.function.Function;
  */
 public final class DeclarationReading {
 
+    /**
+     * The declaration this is a reading of: the one its terms are bound under.
+     *
+     * <p>Not always the declaration a question asked about. A name that writes nothing, worn over
+     * another that writes nothing, is lent this one's reading ({@link DeclarationReadings#ownerOf}),
+     * and what is derived here is derived under this declaration whichever of them asked first.
+     */
+    private final TypeSymbol.AtModule owner;
+
     private final InvariantChecker.Seeded seeded;
 
     /** What the rules leave the declaration's fields able to hold, made when the first question
      *  asks for it. Null until then, and the same object afterwards. */
     private FieldDomains fields;
 
-    private DeclarationReading(InvariantChecker.Seeded seeded) {
+    private DeclarationReading(TypeSymbol.AtModule owner, InvariantChecker.Seeded seeded) {
+        this.owner = owner;
         this.seeded = seeded;
     }
 
-    /** The reading {@code seeded} is, with nothing derived from it yet. */
-    static DeclarationReading of(InvariantChecker.Seeded seeded) {
-        return new DeclarationReading(seeded);
+    /** The reading {@code seeded} of {@code owner} is, with nothing derived from it yet. */
+    static DeclarationReading of(TypeSymbol.AtModule owner, InvariantChecker.Seeded seeded) {
+        return new DeclarationReading(owner, seeded);
+    }
+
+    /** The declaration this is a reading of. */
+    TypeSymbol.AtModule owner() {
+        return owner;
     }
 
     /** The reading itself: what the clauses came to, as the seeding left them. */
