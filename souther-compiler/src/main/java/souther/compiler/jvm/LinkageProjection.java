@@ -287,7 +287,7 @@ public sealed interface LinkageProjection {
                             && at.module().equals(key.module());
                     boolean placesItself = places.enumeration() instanceof TypeSymbol.AtModule at
                             && at.key().equals(key);
-                    if (!(form == Form.UNIT && ownModule || form == Form.SUM && placesItself)) {
+                    if (!((form == Form.UNIT && ownModule) || (form == Form.SUM && placesItself))) {
                         throw new IllegalArgumentException("`" + key + "` is a " + form.written()
                                 + " and is said to be placed by " + shown(places.enumeration())
                                 + ", where a unit is placed by an enumeration of its own module"

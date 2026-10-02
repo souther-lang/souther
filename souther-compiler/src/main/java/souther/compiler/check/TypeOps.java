@@ -32,6 +32,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 /**
@@ -1770,23 +1771,46 @@ public final class TypeOps {
      *  is asked. */
     static Function<TypeSymbol.AtModule, Set<TypeSymbol>> listingIn(
             Symbols symbols, DeclarationKinds kinds, PublishedDeclarations published) {
-        return value -> enumerationsListing(value.module(), symbols, kinds, published)
-                .getOrDefault(value, Set.of());
+        return value -> {
+            Set<TypeSymbol> owners = new LinkedHashSet<>();
+            forEachEnumeration(value.module(), symbols, kinds, published, (enumeration, listed) -> {
+                if (listed.contains(value)) {
+                    owners.add(enumeration);
+                }
+            });
+            return owners;
+        };
     }
 
     /**
      * Every enumeration {@code module} declares, by each value it lists: the cases it reaches,
-     * nested sums opened.
+     * nested sums opened. For a reader asking of many values of one module, which reads each of its
+     * sums once rather than once for each value.
+     */
+    public static Map<TypeSymbol, Set<TypeSymbol>> enumerationsListing(
+            String module, Symbols symbols, DeclarationKinds kinds,
+            PublishedDeclarations published) {
+        Map<TypeSymbol, Set<TypeSymbol>> listing = new HashMap<>();
+        forEachEnumeration(module, symbols, kinds, published, (enumeration, listed) -> {
+            for (TypeSymbol value : listed) {
+                listing.computeIfAbsent(value, _ -> new LinkedHashSet<>()).add(enumeration);
+            }
+        });
+        return listing;
+    }
+
+    /**
+     * Each enumeration {@code module} declares, with the values it lists, handed to {@code each}.
      *
      * <p>A sum and its cases are declared together (a case declared elsewhere cannot join a union
      * here, E1606), so every enumeration that lists a case is in the case's own module. Asking that
      * module rather than what is visible keeps the answer the same in every module that reads the
      * value.
      */
-    public static Map<TypeSymbol, Set<TypeSymbol>> enumerationsListing(
+    private static void forEachEnumeration(
             String module, Symbols symbols, DeclarationKinds kinds,
-            PublishedDeclarations published) {
-        Map<TypeSymbol, Set<TypeSymbol>> listing = new HashMap<>();
+            PublishedDeclarations published,
+            BiConsumer<TypeSymbol.AtModule, List<TypeSymbol>> each) {
         for (String declared : symbols.declaredNamesIn(module)) {
             // Which form the declaration is, first and on its own. What its cases are is asked only
             // of the ones that have any — a sweep that asked every declaration what it says would
@@ -1798,12 +1822,9 @@ public final class TypeOps {
             }
             if (TypeSymbols.declared(address) instanceof TypeSymbol.AtModule at
                     && isUnitOnlySum(at, kinds, published)) {
-                for (TypeSymbol listed : AtomSpace.subjectAtoms(Type.ref(at), published)) {
-                    listing.computeIfAbsent(listed, _ -> new LinkedHashSet<>()).add(at);
-                }
+                each.accept(at, AtomSpace.subjectAtoms(Type.ref(at), published));
             }
         }
-        return listing;
     }
 
     /**
