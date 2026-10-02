@@ -191,7 +191,7 @@ final class GuaranteeWalk {
         // chain by running out of room.
         Set<TypeSymbol> entered = new HashSet<>();
         Deque<Inside> inside = new ArrayDeque<>();
-        Inside first = enter(root, path, at, 0, scope, entered, reader);
+        Inside first = enter(root, new Followed(path), at, 0, scope, entered, reader);
         if (first != null) {
             inside.push(first);
         }
@@ -208,8 +208,8 @@ final class GuaranteeWalk {
             // Whether following the name reaches somewhere else is `Location.isStep`'s answer,
             // asked here because here is where the name is written down. A newtype's `value` is
             // this same value under a name, so a walk into one keeps the path it came with.
-            RuleKey there = Location.isStep(here.root().type(), under.name(), newtypes)
-                    ? here.path().then(under.name()) : here.path();
+            Followed there = Location.isStep(here.root().type(), under.name(), newtypes)
+                    ? new Followed(here.path(), under.name()) : here.path();
             Inside next = enter(under.value(), there, at, here.depth() + 1, scope, entered, reader);
             if (next != null) {
                 inside.push(next);
@@ -223,20 +223,77 @@ final class GuaranteeWalk {
      * @param name the declaration it was entered under, taken off the path when the walk leaves it,
      *             or null where none stands there
      */
-    private record Inside(Core root, RuleKey path, int depth, Iterator<TypeGuarantees.At.Readable> under,
+    private record Inside(Core root, Followed path, int depth, Iterator<TypeGuarantees.At.Readable> under,
                           TypeSymbol name) {}
+
+    /**
+     * The names a walk followed to reach a value: those it followed to the value one out, and the
+     * one it followed from there.
+     *
+     * <p>Not a {@link RuleKey} until a reader is told something at the value. A key holds every
+     * step of the name, and one made at every value entered would copy the whole name above it at
+     * each — a chain of records walked to its bottom would cost the square of how long it is,
+     * where reaching each value costs the same however deep it is.
+     */
+    private static final class Followed {
+
+        /** The value one out, or null where this is where the walk began. */
+        private final Followed out;
+
+        /** The name followed from {@link #out}, or null where this is where the walk began. */
+        private final String field;
+
+        /** What a rule calls this value, once a reader has been told something here. Kept, because
+         *  one value may tell a reader several things, and the names a newtype wears follow no step
+         *  and so share where they are with the value under them. */
+        private RuleKey key;
+
+        Followed(RuleKey began) {
+            this.out = null;
+            this.field = null;
+            this.key = began;
+        }
+
+        Followed(Followed out, String field) {
+            this.out = out;
+            this.field = field;
+        }
+    }
+
+    /**
+     * What a rule calls the value {@code at} reached.
+     *
+     * <p>Made here and not by {@link Followed} itself, because this walk is where the names a rule
+     * writes are followed and so where one is made. Read off the names followed in a loop, since
+     * how many there are is as long as the declarations chain.
+     */
+    private static RuleKey keyOf(Followed at) {
+        if (at.key == null) {
+            Deque<String> below = new ArrayDeque<>();
+            Followed known = at;
+            while (known.key == null) {
+                below.push(known.field);
+                known = known.out;
+            }
+            List<String> steps = new ArrayList<>(known.key.steps().size() + below.size());
+            steps.addAll(known.key.steps());
+            steps.addAll(below);
+            at.key = new RuleKey(steps);
+        }
+        return at.key;
+    }
 
     /**
      * Tells {@code reader} what stands at {@code root}, and answers what is left to walk under it —
      * or null where the walk goes no further here.
      */
-    private Inside enter(Core root, RuleKey path, Denotations at, int depth, Scope scope,
+    private Inside enter(Core root, Followed path, Denotations at, int depth, Scope scope,
                          Set<TypeSymbol> entered, Reader reader) {
         // Asked one at a time, because a stop says two things and only one of them is the same for
         // all of these: whether the rules under it were read, and whether a construction could have
         // got out of making the value they are about.
         if (!scope.extent().reaches(depth)) {
-            reader.stopped(path, root.type(), Stop.PAST_THE_DEPTH);
+            reader.stopped(keyOf(path), root.type(), Stop.PAST_THE_DEPTH);
             return null;
         }
         // The reading first, because what stands here is what this walk's own limits are about: the
@@ -246,14 +303,14 @@ final class GuaranteeWalk {
         TypeSymbol name = here.entered();
         if (name != null) {
             if (scope.stopAt().test(name)) {
-                reader.stopped(path, root.type(), Stop.ASKED_TO_STOP);
+                reader.stopped(keyOf(path), root.type(), Stop.ASKED_TO_STOP);
                 return null;
             }
             // A name already entered was read where it was met, so reading it again would be the
             // same reading done twice — which costs, and which a reader that remembers what it was
             // asked would see twice.
             if (entered.contains(name)) {
-                reader.stopped(path, root.type(), Stop.ALREADY_ENTERED);
+                reader.stopped(keyOf(path), root.type(), Stop.ALREADY_ENTERED);
                 return null;
             }
         }
@@ -271,17 +328,17 @@ final class GuaranteeWalk {
             }
         }
         if (!lost.isEmpty()) {
-            reader.lostAClause(path, lost);
+            reader.lostAClause(keyOf(path), lost);
         }
         for (TypeGuarantee guarantee : here.here()) {
             if (!scope.withoutClauses().excludes(guarantee.rule())) {
-                reader.guaranteed(path, guarantee);
+                reader.guaranteed(keyOf(path), guarantee);
             }
         }
         // Said whether or not anything was read here, and never instead of it. Both are true of a
         // sum whose cases share a spread.
         if (here.handedOn() instanceof TypeGuarantees.At.HandedOn.ToAnotherReading) {
-            reader.handedOn(path, root.type());
+            reader.handedOn(keyOf(path), root.type());
         }
         // Entered before anything under it is walked, so that the one name and the other stay
         // paired: a stop taken after entering would leave the name on the path with nothing to take

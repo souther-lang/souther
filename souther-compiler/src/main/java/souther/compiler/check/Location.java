@@ -91,18 +91,23 @@ public record Location(BindingId root, List<String> path) {
                 Location base = of(fa.target(), newtypes, rooted);
                 yield base == null ? null : base.then(fa.target().type(), fa.field(), newtypes);
             }
-            // The same step a name at a time, along the names rather than down the stack.
+            // The same step a name at a time, along the names rather than down the stack, and made
+            // into a location once: how many names there are is as long as the declarations chain,
+            // and a location per name would copy every name before it.
             case Core.FieldProjection p -> {
-                Location at = of(p.base(), newtypes, rooted);
+                Location base = of(p.base(), newtypes, rooted);
+                if (base == null) {
+                    yield null;
+                }
+                List<String> path = new ArrayList<>(base.path());
                 Type from = p.base().type();
                 for (Core.FieldProjection.Step step : p.steps().inOrder()) {
-                    if (at == null) {
-                        break;
+                    if (isStep(from, step.field(), newtypes)) {
+                        path.add(step.field());
                     }
-                    at = at.then(from, step.field(), newtypes);
                     from = step.type();
                 }
-                yield at;
+                yield new Location(base.root(), path);
             }
             default -> null;
         };
