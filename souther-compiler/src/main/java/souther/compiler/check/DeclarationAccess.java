@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.types.TypeKey;
+
 /**
  * What a check asks of a declaration it did not write: what the declaration says, which form it
  * is, what it wraps, what each field it reaches holds, the order a value of it lays those fields
@@ -58,15 +60,25 @@ public record DeclarationAccess(PublishedDeclarations published, DeclarationKind
     }
 
     /**
-     * The same answers, with what a declaration says read off {@code said} instead — and which
-     * enumerations list a value read off it too, each time it is asked.
+     * The same answers, with the one declaration whose meaning is being made taken out of what the
+     * declarations say.
      *
-     * <p>For a reader that takes a declaration out of what is said, which is how what a declaration
-     * says comes to be made. What lists a value is read off what the sums say, so an answer kept
-     * anywhere else would be read past that.
+     * <p>A clause of a declaration names other declarations — which case a comparison is over, what
+     * a sum an operand is of divides into — and those are looked up like anywhere else. The one
+     * that cannot be looked up is the declaration whose meaning is being made: asking would be
+     * asking for the answer being worked out, and answering nothing would say instead that nothing
+     * declares it, which every clause of it would then be reported under.
+     *
+     * <p>Only that one answer is narrowed. Which enumerations list a value is the one other answer
+     * read off what declarations say, and it is kept as it was handed: it reads what the sums of the
+     * value's module say, asked only of a declaration its form says is a sum, and a sum's meaning
+     * reads no clause. The only meaning made by reading clauses is a product's, so no answer of what
+     * lists a value is made out of the declaration being made.
      */
-    public DeclarationAccess saying(PublishedDeclarations said, Symbols symbols) {
-        return new DeclarationAccess(said, kinds, inners, fieldTypes, layout,
-                EnumerationListings.asWritten(symbols, kinds, said));
+    DeclarationAccess making(TypeKey made) {
+        PublishedDeclarations besidesIt = declaration -> made.equals(declaration)
+                ? PublishedDeclarations.THE_ONE_THAT_MAKES_THEM.of(declaration)
+                : published.of(declaration);
+        return new DeclarationAccess(besidesIt, kinds, inners, fieldTypes, layout, enumerations);
     }
 }

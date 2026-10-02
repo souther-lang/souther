@@ -31,8 +31,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * second way, which is why it is watched as one.
  *
  * <p>So the methods that make one are written down. What entitles one is that it has no compilation
- * to ask, or that it is making what a declaration says and has taken that declaration out of what
- * the compilation's answer would read, or that it records what it reads on its own terms.
+ * to ask, or that it records what it reads on its own terms. Making what a declaration says does
+ * not: the compilation's answer reads only what sums say, and a sum's meaning reads no clause.
  *
  * <p>Read off the compiled classes, per method and per overload ({@link AMethod}), and a method
  * handed over to be called later is a caller.
@@ -76,7 +76,7 @@ class WhoWorksOutWhatListsAValueIsWrittenDownTest {
      * of one reading does: a context, a source, and the sources of a compilation that hands them
      * nothing. The settling of a declaration's clauses on the way to what the declaration says,
      * which the compilation's answer is read off. The answer handed to a reading made of a scope
-     * alone, and to one making what a declaration says. The emitter, which is handed no answer of
+     * alone. The emitter, which is handed no answer of
      * the compilation's. The compilation's own answer for a module. And the linkage of a module,
      * which records what it reads as what its classes are built against.
      */
@@ -89,8 +89,6 @@ class WhoWorksOutWhatListsAValueIsWrittenDownTest {
                     THE_WALK_IN_AN_ACCESS),
             row(CHECK + "DeclarationAccess", "asWritten",
                     "(" + SYMBOLS + PUBLISHED + KINDS + ")" + ACCESS, THE_WALK),
-            row(CHECK + "DeclarationAccess", "saying", "(" + PUBLISHED + SYMBOLS + ")" + ACCESS,
-                    THE_WALK),
             row(CHECK + "RuleReadingSource", "<init>",
                     "(" + SYMBOLS + "L" + CHECK + "ExpandedClauseLookup;" + PUBLISHED + KINDS + "L"
                             + CHECK + "DeclarationNewtypes;L" + CHECK + "ClauseLocations;)V",

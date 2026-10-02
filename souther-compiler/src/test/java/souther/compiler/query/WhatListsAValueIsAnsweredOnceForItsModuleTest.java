@@ -162,6 +162,40 @@ class WhatListsAValueIsAnsweredOnceForItsModuleTest {
     }
 
     /**
+     * Making what a product says reads the answer for the value its invariant orders, the way a
+     * checked body does. Its meaning is made with itself taken out of what the declarations say,
+     * and that does not stop it from reading the compilation's answer: the answer reads only what
+     * the module's sums say, and a sum's meaning reads no clause, so it never reaches the product
+     * being made. Two products, so a walk of the module made again for each would show on each.
+     */
+    @Test
+    void whatAProductSaysDependsOnTheAnswerForTheValueItsInvariantOrders() {
+        Compilation c = Compilation.ofDocuments(Map.of("shop.sou", SOURCE + """
+
+                data Deal =
+                    { at: Qualified
+                    }
+                    invariant early = at < Won
+
+                data Lead =
+                    { at: Prospecting
+                    }
+                    invariant early = at < Won
+                """), Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+        assertTrue(c.db().allReports().isEmpty(), "the module compiles to begin with");
+
+        for (String product : List.of("Deal", "Lead")) {
+            Set<Key<?>> read = c.db().dependenciesOf(new Shapes.MeaningOf(key(product)));
+            assertTrue(read.stream().anyMatch(Shapes.EnumerationsListing.class::isInstance),
+                    () -> product + "'s invariant is ordered without the compilation's answer: "
+                            + read);
+            assertTrue(read.stream().noneMatch(Shapes.EnumerationsListingIn.class::isInstance),
+                    () -> product + " read what lists every value of the module: " + read);
+        }
+    }
+
+    /**
      * An enumeration added beside the others moves the module's answer and leaves the answer for a
      * value it does not list where it was — which is what keeps a reader of that value from being
      * asked again.
