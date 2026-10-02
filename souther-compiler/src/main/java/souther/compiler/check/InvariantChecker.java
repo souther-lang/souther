@@ -44,6 +44,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiConsumer;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
@@ -996,7 +997,7 @@ public final class InvariantChecker {
         Map<RuleRef.Invariant, ReadByClauses.OfARule> narrowedBy = new LinkedHashMap<>();
         // The numbers this value's clauses can be about, read before any of them is. Both the fold
         // below and the walk that classifies a comparison are given this one table.
-        Map<FactSubject, Coordinate> numbers = c.coordinatesOf(atoms, keys, held, typeAt);
+        Coordinates numbers = c.coordinatesOf(atoms, keys, held, typeAt);
         // One reader for this value's positions, used over however many clauses reach it, and
         // the one that decides the choices in what they came to.
         StatedByClauses.Reading reader = StatedByClauses
@@ -1945,6 +1946,40 @@ public final class InvariantChecker {
     }
 
     /**
+     * The numbers the clauses of one value can be about, each under the name they write for it, and
+     * the same names held as chains, so that a chain of names read off the value can be asked which
+     * of its shorter chains names one of them without naming each.
+     *
+     * <p>Made together and carried together, so the chains are of this table's names and no other.
+     */
+    private record Coordinates(Map<FactSubject, Coordinate> byName, Term.Chains chains) {
+
+        static Coordinates of(Map<FactSubject, Coordinate> byName) {
+            List<Term> held = new ArrayList<>(byName.size());
+            for (FactSubject each : byName.keySet()) {
+                held.add(each.identity());
+            }
+            return new Coordinates(Collections.unmodifiableMap(byName), new Term.Chains(held));
+        }
+
+        Coordinate get(FactSubject name) {
+            return byName.get(name);
+        }
+
+        boolean containsKey(FactSubject name) {
+            return byName.containsKey(name);
+        }
+
+        Set<Map.Entry<FactSubject, Coordinate>> entrySet() {
+            return byName.entrySet();
+        }
+
+        void forEach(BiConsumer<FactSubject, Coordinate> each) {
+            byName.forEach(each);
+        }
+    }
+
+    /**
      * What the clauses of one value place on its coordinates, and which declarations relate each of
      * them to something else.
      *
@@ -1986,10 +2021,10 @@ public final class InvariantChecker {
      * one whose end nothing worked out. Built twice, the two would answer about two tables the day
      * one of them learned a number the other had not.
      */
-    private Map<FactSubject, Coordinate> coordinatesOf(Map<RuleKey, FactSubject> atoms,
-                                                       Map<RuleKey, FactSubject> keys,
-                                                       Map<RuleKey, FieldDomains.Counted> held,
-                                                       Map<RuleKey, Type> typeAt) {
+    private Coordinates coordinatesOf(Map<RuleKey, FactSubject> atoms,
+                                      Map<RuleKey, FactSubject> keys,
+                                      Map<RuleKey, FieldDomains.Counted> held,
+                                      Map<RuleKey, Type> typeAt) {
         Map<FactSubject, Coordinate> byName = new LinkedHashMap<>();
         keys.forEach((path, key) -> {
             Carrier carrier =
@@ -2007,11 +2042,11 @@ public final class InvariantChecker {
         held.forEach((path, counted) -> byName.put(counted.atom(),
                 new Coordinate(NumberAt.takenOf(path, counted.by()),
                         Carrier.WHOLE)));
-        return byName;
+        return Coordinates.of(byName);
     }
 
     private Reading directsIn(List<Written> stated, Denotations at,
-                                   Map<FactSubject, Coordinate> byName,
+                                   Coordinates byName,
                                    ReadingEvidence took, RulesRead rules) {
         List<Direct> out = new ArrayList<>();
         List<FieldDomains.NoLine> noLines = new ArrayList<>();
@@ -2075,7 +2110,7 @@ public final class InvariantChecker {
     private void settle(Core part, RuleRef.Invariant rule, Written of,
                         InvariantStatementId statement, ClauseOccurrence at,
                         ClauseStates states, InvariantBound.Read placed,
-                        Map<FactSubject, Coordinate> byName, Map<RuleRef.Invariant, Required> raised,
+                        Coordinates byName, Map<RuleRef.Invariant, Required> raised,
                         ReadingEvidence took,
                         Map<ReadingPlace, Required> raisedByPart) {
         raises(raised, rule, states);
@@ -2176,7 +2211,7 @@ public final class InvariantChecker {
      */
     private void direct(ClauseExpr.Part said, InvariantStatementId statement,
                         Written of, PartId<RuleRef.Invariant> part, Denotations at,
-                        Map<FactSubject, Coordinate> byName, List<Direct> out,
+                        Coordinates byName, List<Direct> out,
                         List<FieldDomains.NoLine> noLines,
                         SequencedMap<HandOver, FieldDomains.WithoutAnEnd> withoutAnEnd,
                         SequencedMap<Candidate, Set<InvariantStatementId>> naming,
@@ -2382,7 +2417,7 @@ public final class InvariantChecker {
      * one would be a second place deciding what a choice does.
      */
     private void aChoiceAboutOneCoordinate(ClauseExpr.Part said, InvariantStatementId statement,
-                                           Denotations at, Map<FactSubject, Coordinate> byName,
+                                           Denotations at, Coordinates byName,
                                            SequencedMap<Candidate, Set<InvariantStatementId>> naming) {
         // The shape the walk is already holding. Read again from the node, this would be a second
         // reading of the clause's structure, and one made under a polarity of its own: a choice an
@@ -2414,7 +2449,7 @@ public final class InvariantChecker {
      *
      */
     private Set<NumberAt<RuleKey>> numbersALineIsStatedOn(ClauseExpr stated, Denotations at,
-                                                          Map<FactSubject, Coordinate> byName) {
+                                                          Coordinates byName) {
         switch (stated) {
             case ClauseExpr.Scoped it -> {
                 // A binding is crossed and never a leaf of its own: what the part states is what
@@ -2457,7 +2492,7 @@ public final class InvariantChecker {
      * ({@link DerivedNumber}).
      */
     private static BoundaryReading boundariesOf(Terms terms,
-                                                Map<FactSubject, Coordinate> byName) {
+                                                Coordinates byName) {
         Map<FactSubject, DerivedNumber> numbers = new LinkedHashMap<>();
         Map<DerivedNumber, Carrier> carriers = new LinkedHashMap<>();
         byName.forEach((name, coordinate) -> {
@@ -2480,7 +2515,7 @@ public final class InvariantChecker {
      * here is a fact about the clause, which is why it is asked of the reader holding the
      * arithmetic.
      */
-    private StatedLines linesStatedAgainst(Map<FactSubject, Coordinate> byName) {
+    private StatedLines linesStatedAgainst(Coordinates byName) {
         return new StatedLines() {
 
             @Override
@@ -2522,7 +2557,7 @@ public final class InvariantChecker {
     /** The positions of {@code named} that {@code number} is the value standing at. */
     private static Set<FactSubject> ownValuesAmong(Set<FactSubject> named,
                                                    NumberAt<RuleKey> number,
-                                                   Map<FactSubject, Coordinate> byName) {
+                                                   Coordinates byName) {
         Set<FactSubject> out = new LinkedHashSet<>();
         for (FactSubject each : named) {
             Coordinate here = byName.get(each);
@@ -2556,7 +2591,7 @@ public final class InvariantChecker {
      * looked for a name spelled as a whole side would call it a rule about nothing.
      */
     private StatedLines.Statement lineStatedIn(Core leaf, boolean positive, Denotations at,
-                                               Map<FactSubject, Coordinate> byName,
+                                               Coordinates byName,
                                                Arrivals answering) {
         if (!(Core.withoutStanding(leaf) instanceof Core.Binary bin)) {
             return NO_LINE;
@@ -2629,7 +2664,7 @@ public final class InvariantChecker {
      * narrower one.
      */
     private Coordinate heldAgainstAConstant(Core.Binary bin, Denotations at,
-                                            Map<FactSubject, Coordinate> byName,
+                                            Coordinates byName,
                                             Arrivals answering) {
         Coordinate left = byName.get(nameOf(bin.left(), at));
         Coordinate right = byName.get(nameOf(bin.right(), at));
@@ -2680,7 +2715,7 @@ public final class InvariantChecker {
      *             answer to that question
      */
     private ClauseStates states(Core clause, Denotations at,
-                                Map<FactSubject, Coordinate> byName, CanonicalForm read,
+                                Coordinates byName, CanonicalForm read,
                                 Arrivals answering, RunsRead runs) {
         List<RuleKey> found = new ArrayList<>();
         namedIn(clause, at, byName, answering, found);
@@ -2749,7 +2784,7 @@ public final class InvariantChecker {
      * answer about.
      */
     private SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> stoppedOnTheFormOf(
-            List<RuleKey> found, CanonicalForm read, Map<FactSubject, Coordinate> byName,
+            List<RuleKey> found, CanonicalForm read, Coordinates byName,
             Arrivals answering) {
         SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> out = new LinkedHashMap<>();
         // Only a rule that orders the values. An equality singles one out and puts no end anywhere,
@@ -2778,7 +2813,7 @@ public final class InvariantChecker {
      * {@link #relating} makes, and for the same reason: a coordinate names itself, and nothing under
      * it is a coordinate of its own.
      */
-    private void namedIn(Core e, Denotations at, Map<FactSubject, Coordinate> byName,
+    private void namedIn(Core e, Denotations at, Coordinates byName,
                          Arrivals answering, List<RuleKey> out) {
         for (Coordinate each : coordinatesIn(e, at, byName, answering)) {
             if (!out.contains(each.path())) {
@@ -2796,7 +2831,7 @@ public final class InvariantChecker {
      * its values are ordered on, and a count is ordered as a whole number whatever it counts.
      */
     private List<Coordinate> coordinatesIn(Core e, Denotations at,
-                                           Map<FactSubject, Coordinate> byName,
+                                           Coordinates byName,
                                            Arrivals answering) {
         Places places = placesIn(e, at, byName, answering);
         List<Coordinate> out = new ArrayList<>();
@@ -2814,7 +2849,7 @@ public final class InvariantChecker {
      * walk reached through a value the readers below have no reason to hold.
      */
     private List<Coordinate> coordinatesIn(StatedComparison comparison, Denotations at,
-                                           Map<FactSubject, Coordinate> byName,
+                                           Coordinates byName,
                                            Arrivals answering) {
         List<Coordinate> out =
                 new ArrayList<>(coordinatesIn(comparison.left(), at, byName, answering));
@@ -2847,7 +2882,7 @@ public final class InvariantChecker {
      * shape are taken apart the same way. What is this reader's own is the lookup: a clause names a
      * coordinate of the value it is written about, where a body names a position of an input.
      */
-    private Places placesIn(Core e, Denotations at, Map<FactSubject, Coordinate> byName,
+    private Places placesIn(Core e, Denotations at, Coordinates byName,
                             Arrivals answering) {
         Map<RuleKey, Coordinate> met = new LinkedHashMap<>();
         ValueOrigin<RuleKey> origin = ValueOrigin.of(e, at,
@@ -2862,6 +2897,20 @@ public final class InvariantChecker {
                 }
                 met.putIfAbsent(found.path(), found);
                 return found.path();
+            }
+
+            /** Looked up in the table's chains, the names walked once: the same subject
+             *  {@link #positionOf} names each projection by, without naming each. */
+            @Override
+            public ValueOrigin.Reading.Along<RuleKey> positionAlong(Core.FieldProjection p,
+                                                                    Denotations where) {
+                Terms.Along held = terms.longestHeld(p, where, byName.chains());
+                if (held == null) {
+                    return null;
+                }
+                Coordinate found = byName.get(held.subject());
+                met.putIfAbsent(found.path(), found);
+                return new ValueOrigin.Reading.Along<>(held.upTo(), found.path());
             }
 
             /** A clause is written about the value in front of it, and there is no operation here
@@ -2954,7 +3003,7 @@ public final class InvariantChecker {
      */
     private void noLineDrawn(CanonicalForm read, Core clause, PartId<RuleRef.Invariant> part,
                             Denotations at,
-                            Map<FactSubject, Coordinate> byName, Arrivals answering,
+                            Coordinates byName, Arrivals answering,
                             List<FieldDomains.NoLine> out) {
         if (!(read.comparison().claim() instanceof ComparisonClaim.Cut)) {
             return;
@@ -3025,7 +3074,7 @@ public final class InvariantChecker {
      */
     private void restricting(Core clause, ClauseOccurrence at, RuleRef.Invariant from,
                              Written of, PartId<RuleRef.Invariant> part,
-                             Map<FactSubject, Coordinate> byName, RulesRead rules,
+                             Coordinates byName, RulesRead rules,
                              List<FieldDomains.NoLine> noLines, RunsRead runs) {
         ReadByClauses.OfAPart account = of.adoptedAt(at);
         ReadByClauses.OfARule rule = rules.ruleIn(from);
@@ -3125,7 +3174,7 @@ public final class InvariantChecker {
      */
     private RunsRead runsOf(ReadingPlace stands,
                         Written of, InvariantStatementId statement,
-                        Map<FactSubject, Coordinate> byName, List<Direct> out) {
+                        Coordinates byName, List<Direct> out) {
         ReadByClauses.OfAPart account = of.adoptedAt(stands.at());
         if (account == null) {
             return RunsRead.NOTHING;
@@ -3288,7 +3337,7 @@ public final class InvariantChecker {
 
         /** What stopped the reading at each name it stopped at, for the classification to carry. */
         private SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> undecided(
-                Map<FactSubject, Coordinate> byName) {
+                Coordinates byName) {
             SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> out = new LinkedHashMap<>();
             byPosition.forEach((position, run) -> {
                 Coordinate found = byName.get(position);
@@ -3532,7 +3581,7 @@ public final class InvariantChecker {
      * two accounts and the answer would be inside the thing it is an answer about.
      */
     private UnreadComparison.Quantity<RuleKey> cuts(CanonicalForm form,
-                                                    Map<FactSubject, Coordinate> byName,
+                                                    Coordinates byName,
                                                     Arrivals answering) {
         return switch (form) {
             case CanonicalForm.NotRead it -> new UnreadComparison.Quantity.NotRead<>(
@@ -3559,7 +3608,7 @@ public final class InvariantChecker {
      * what {@code invariant Int.add(length.value, width.value) <= 150} and the guard beside it are.
      */
     private CanonicalForm canonicalFormOf(StatedComparison recognised, Denotations at,
-                                          Map<FactSubject, Coordinate> byName) {
+                                          Coordinates byName) {
         // Named against this reader's own coordinates rather than against every number the
         // discharge procedure can identify. A value that is a number and is no coordinate of the
         // subject is one the walk stops at, so the expression and its environment come back
@@ -3601,21 +3650,18 @@ public final class InvariantChecker {
      * moved even where the number came from somewhere further off.
      */
     private void relating(Core clause, TypeSymbol.AtModule from, Denotations at,
-                          Map<FactSubject, Coordinate> byName,
+                          Coordinates byName,
                           Map<RuleKey, List<TypeSymbol.AtModule>> narrowers) {
         // Every subexpression standing here and not only the node: a projection's shorter
         // projections are not children, and each may be the coordinate.
-        for (Core standing : Core.subexpressionsAt(clause)) {
-            FactSubject named = nameOf(standing, at);
-            Coordinate found = named == null ? null : byName.get(named);
-            if (found != null) {
-                List<TypeSymbol.AtModule> had =
-                        narrowers.computeIfAbsent(found.path(), _ -> new ArrayList<>());
-                if (!had.contains(from)) {
-                    had.add(from);
-                }
-                return;   // a coordinate names itself and nothing under it is one of its own
+        FactSubject named = terms.heldAt(clause, at, byName.chains());
+        if (named != null) {
+            List<TypeSymbol.AtModule> had =
+                    narrowers.computeIfAbsent(byName.get(named).path(), _ -> new ArrayList<>());
+            if (!had.contains(from)) {
+                had.add(from);
             }
+            return;   // a coordinate names itself and nothing under it is one of its own
         }
         Core.forEachChild(clause, child -> relating(child, from, at, byName, narrowers));
     }

@@ -179,13 +179,11 @@ final class Predicates {
      * same way: a binding is entered as what it was given ({@link Terms#inside}), so a read of the
      * binder is the value it was given, and the two spellings name the same thing.
      */
-    private boolean names(Core e, Set<FactSubject> handed, Denotations at) {
+    private boolean names(Core e, Term.Chains handed, Denotations at) {
         // Every subexpression standing here and not only the node: a projection's shorter
         // projections are not children, and each may be the value handed.
-        for (Core standing : Core.subexpressionsAt(e)) {
-            if (handed.contains(terms.subjectOf(standing, at))) {
-                return true;
-            }
+        if (terms.heldAt(e, at, handed) != null) {
+            return true;
         }
         // A binding is crossed as a binding. Its body is what the clause names, read inside it; what
         // it was given is reached through the name where the body reads it, and is not a part of the
@@ -196,6 +194,17 @@ final class Predicates {
         boolean[] found = {false};
         Core.forEachChild(e, child -> found[0] = found[0] || names(child, handed, at));
         return found[0];
+    }
+
+    /** {@code subjects} as chains of names, for asking which subexpression of a clause is one. */
+    private static Term.Chains chainsOf(Set<FactSubject> subjects) {
+        List<Term> held = new ArrayList<>(subjects.size());
+        for (FactSubject each : subjects) {
+            if (each != null) {
+                held.add(each.identity());
+            }
+        }
+        return new Term.Chains(held);
     }
 
     /** What each of {@code values} is, where the site that hands them over stands. */
@@ -824,7 +833,7 @@ final class Predicates {
         // A predicate over a value no guard could be written about is not a predicate a guard will
         // settle, so it is not owed as one — where the domain can say something of that value it has
         // already said it above, and where it cannot the run-time check stands for the clause.
-        List<FactSubject> keys = !unnamed.isEmpty() && names(polar.expr(), unnamed, at)
+        List<FactSubject> keys = !unnamed.isEmpty() && names(polar.expr(), chainsOf(unnamed), at)
                 ? List.of() : factKeys(polar.expr(), at);
         boolean stated = polar.positive();
         Fact fact = keys.isEmpty() ? null : new Fact(stated ? keys : firstOnly(keys), stated);

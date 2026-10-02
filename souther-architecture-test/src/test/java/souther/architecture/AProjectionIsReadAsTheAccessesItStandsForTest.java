@@ -35,7 +35,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  *       base is all there is to go down to.</li>
  *   <li>It asks each node it meets what it is — a position, a subject, a term — and asks it of every
  *       subexpression standing there ({@code Core.subexpressionsAt}), which is the node and the
- *       projections shorter than it, in the order the descent met them.</li>
+ *       projections shorter than it, in the order the descent met them. Or, where what it asks is
+ *       which of them a table of subjects holds, it asks {@code Terms.heldAt}, which answers that
+ *       going down the names once against the table rather than naming each projection.</li>
  *   <li>It is the rule for a field access itself, and reads it along a projection's names.</li>
  *   <li>It is handed one access and asks of it and its target alone.</li>
  *   <li>It reads only a tree that runs, which holds no projection.</li>
@@ -51,7 +53,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * <p>Asking through the one method is what is held, rather than each walk's own loop over a
  * projection's names. Which subexpressions stand at a node is a single answer
  * ({@code AValueAGuaranteeWalkReachesIsOneNodeHoweverFarDownTest} holds it to the accesses written
- * out), and a walk that wrote its own would be a second one nothing compares.
+ * out), and a walk that wrote its own would be a second one nothing compares. {@code Terms.heldAt}
+ * is the one other door, and what it answers is compared with that one
+ * ({@code ATableIsAskedOfAProjectionAsOfEachShorterOneTest}).
  */
 class AProjectionIsReadAsTheAccessesItStandsForTest {
 
@@ -63,6 +67,11 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
 
     /** What a walk asking each node names where it asks every subexpression standing there. */
     private static final String SUBEXPRESSIONS_AT = CORE + "#subexpressionsAt";
+
+    private static final String TERMS = "souther/compiler/check/Terms";
+
+    /** What a walk asking which subexpression a table holds names where it asks that. */
+    private static final String HELD_AT = TERMS + "#heldAt";
 
     private static final CompiledOutputs PUBLISHED = CompiledOutputs.ofWhatThisRepositoryPublishes();
 
@@ -107,14 +116,15 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
     void aWalkThatAsksEachNodeAsksEverySubexpressionStandingThere() {
         Set<String> unasked = new TreeSet<>();
         WALKS.forEach((method, row) -> {
+            Set<String> named = FOUND.getOrDefault(method, Set.of());
             if (row.reading() == Reading.EACH_SUBEXPRESSION
-                    && !FOUND.getOrDefault(method, Set.of()).contains(SUBEXPRESSIONS_AT)) {
+                    && !named.contains(SUBEXPRESSIONS_AT) && !named.contains(HELD_AT)) {
                 unasked.add(method);
             }
         });
         assertEquals(Set.of(), unasked,
                 "a walk that asks each node what it is, and does not ask it of every subexpression"
-                        + " standing there through Core.subexpressionsAt");
+                        + " standing there through Core.subexpressionsAt or Terms.heldAt");
     }
 
     @Test
@@ -161,6 +171,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                             if (call.owner().asInternalName().equals(CORE)
                                     && call.name().equalsString("subexpressionsAt")) {
                                 mentioned.add(SUBEXPRESSIONS_AT);
+                            }
+                            if (call.owner().asInternalName().equals(TERMS)
+                                    && call.name().equalsString("heldAt")) {
+                                mentioned.add(HELD_AT);
                             }
                             if (goesDown(call.owner().asInternalName(),
                                     call.name().stringValue())) {
@@ -268,7 +282,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/InvariantChecker", "collectAlike", "(" + core + "L" + c + "check/Term;"
                 + at + "Ljava/util/Set;)V", Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "check/InvariantChecker", "relating", "(" + core + "L" + c
-                + "types/TypeSymbol$AtModule;" + at + "Ljava/util/Map;Ljava/util/Map;)V",
+                + "types/TypeSymbol$AtModule;" + at + "L" + c
+                + "check/InvariantChecker$Coordinates;Ljava/util/Map;)V",
                 Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         row(out, c + "check/InvariantChecker", "splitIn",
                 "(" + core + ")L" + c + "check/InvariantChecker$SplitSite;",
@@ -299,7 +314,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/Predicates", "chosenCalls",
                 "(" + core + at + "Ljava/util/Map;Ljava/util/Set;)V",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
-        row(out, c + "check/Predicates", "names", "(" + core + "Ljava/util/Set;" + at + ")Z",
+        row(out, c + "check/Predicates", "names", "(" + core + "L" + c + "check/Term$Chains;" + at
+                + ")Z",
                 Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         row(out, c + "check/Predicates$Reads", "chain", "(" + core + ")Ljava/util/List;",
                 Reading.NAMES, READS_THE_NAMES);
@@ -324,8 +340,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.ONE_ACCESS, ONE);
         row(out, c + "check/ValueOrigin", "of", "(" + core + "Ljava/lang/Object;L" + c
                 + "check/ValueOrigin$Reading;L" + c + "check/BindingWalk;)L" + c
-                + "check/ValueOrigin;", Reading.NAMES, "asks each projection from the"
-                        + " longest whether it is a position, as the descent would, and reads the"
+                + "check/ValueOrigin;", Reading.NAMES, "asks the reading which projection, the"
+                        + " longest first, is a position, as the descent would, and reads the"
                         + " names back up along them");
         row(out, c + "claims/UnreachableClaims", "claimedUnder", "(" + core + reads + "L" + c
                 + "check/Symbols;L" + c + "check/DeclarationNewtypes;L" + c

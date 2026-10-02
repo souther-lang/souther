@@ -2639,19 +2639,90 @@ final class Terms {
             }
             unread.push(at);
         }
+        if (unread.isEmpty()) {
+            return out;
+        }
+        // Each chain worked out here is the next one's names short of its last, so all of them are
+        // one list as far as their own last name, and none of them is a copy of the one before.
+        List<String> names = new ArrayList<>(out);
+        List<Core.FieldProjection.Steps> chains = new ArrayList<>(unread.size());
+        int[] reaching = new int[unread.size()];
         while (!unread.isEmpty()) {
             Core.FieldProjection.Steps next = unread.pop();
             if (Location.isStep(from, next.last().field(), newtypes())) {
-                List<String> longer = new ArrayList<>(out.size() + 1);
-                longer.addAll(out);
-                longer.add(next.last().field());
-                out = List.copyOf(longer);
+                names.add(next.last().field());
             }
-            located.put(next, new Located(base, out));
+            reaching[chains.size()] = names.size();
+            chains.add(next);
             from = next.last().type();
         }
-        return out;
+        List<String> whole = List.copyOf(names);
+        for (int i = 0; i < chains.size(); i++) {
+            located.put(chains.get(i), new Located(base, whole.subList(0, reaching[i])));
+        }
+        return whole;
     }
+
+    /**
+     * Of {@code p} and the projections shorter than it, the longest whose subject is one {@code
+     * among} holds, or null where none is: what {@link #subjectOf} names each of them, asked of
+     * {@code among} in turn, the longest first.
+     *
+     * <p>Answered going down the names once and not by naming each projection. Each one's subject
+     * is a term as long as its names, so naming every shorter projection of a chain costs the square
+     * of the chain — and a chain the positions stop short of names all of them.
+     */
+    Along longestHeld(Core.FieldProjection p, Denotations at, Term.Chains among) {
+        Type base = p.base().type();
+        List<String> names = stepsOf(p);
+        Core.FieldProjection.Steps first = p.steps();
+        while (first.before() != null) {
+            first = first.before();
+        }
+        Term.Chains.Reached reached = among.longest(subjectKey(p.base(), at), names,
+                namesReached(first, base, p));
+        if (reached == null) {
+            return null;
+        }
+        // The longest projection whose names come to that many: a newtype's `value` is no step, so
+        // a projection reading one is the same subject as the one short of it.
+        for (Core.FieldProjection.Steps each = p.steps(); each != null; each = each.before()) {
+            if (namesReached(each, base, p) == reached.names()) {
+                return new Along(each, FactSubject.of(reached.term()));
+            }
+        }
+        throw new IllegalStateException("no projection of " + p + " reads " + reached.names()
+                + " of its names " + names);
+    }
+
+    /**
+     * The first of the subexpressions standing at {@code e} ({@link Core#subexpressionsAt}) whose
+     * subject {@code among} holds, or null where none is: {@code e}'s own, or for a projection, its
+     * own or that of the longest projection shorter than it ({@link #longestHeld}).
+     */
+    FactSubject heldAt(Core e, Denotations at, Term.Chains among) {
+        if (e instanceof Core.FieldProjection p) {
+            Along held = longestHeld(p, at, among);
+            return held == null ? null : held.subject();
+        }
+        FactSubject here = subjectOf(e, at);
+        return here != null && among.holds(here.identity()) ? here : null;
+    }
+
+    /** How many of {@code p}'s names that are steps the projection of {@code upTo} reads. */
+    private int namesReached(Core.FieldProjection.Steps upTo, Type base, Core.FieldProjection p) {
+        Located held = located.get(upTo);
+        return held != null && held.base().equals(base) ? held.steps().size()
+                : stepsOf(new Core.FieldProjection(p.base(), upTo, p.pos())).size();
+    }
+
+    /**
+     * A projection a table holds the subject of.
+     *
+     * @param upTo    the names of the projection
+     * @param subject what it is called
+     */
+    record Along(Core.FieldProjection.Steps upTo, FactSubject subject) {}
 
     /**
      * The names of each projection's chain that reach somewhere, by the chain, for this reading.

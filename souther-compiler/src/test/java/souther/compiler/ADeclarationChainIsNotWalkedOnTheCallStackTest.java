@@ -3,6 +3,8 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 import souther.test.OnItsOwnStack;
 
+import java.util.StringJoiner;
+
 /**
  * A module chains its declarations as long as it likes, and a pass that follows the chain on the
  * call stack answers a long one by running out of room — so what the module means would depend on
@@ -42,6 +44,20 @@ class ADeclarationChainIsNotWalkedOnTheCallStackTest {
                     .append(i - 1).append("(n) else f").append(i).append("(n - 1)\n");
         }
         assertCompilesOnASmallStack(src.toString());
+    }
+
+    /** Each record holds the one before in a field, down to a number with a rule on it, so the rule
+     *  is about a position as deep as the chain and what it is made of is a chain as long. */
+    @Test
+    void aChainOfRecordsEachHoldingTheOneBefore() {
+        StringJoiner exposed = new StringJoiner(", ");
+        StringBuilder decls = new StringBuilder("data T1 = Int\n    invariant value >= 1 && value <= 9\n");
+        exposed.add("T1");
+        for (int i = 2; i <= LINKS; i++) {
+            exposed.add("T" + i);
+            decls.append("data T").append(i).append(" = { x: T").append(i - 1).append(" }\n");
+        }
+        assertCompilesOnASmallStack("module chain exposing ( " + exposed + " )\n\n" + decls);
     }
 
     private static void assertCompilesOnASmallStack(String src) {

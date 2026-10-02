@@ -652,9 +652,16 @@ sealed interface StatedByClauses {
                              Symbols symbols, Alternatives alternatives,
                              Allowance<FactSubject> allowed, StringMachineAnswers machines,
                              StatedLines lines, BoundaryReading boundaries) {
+        // The positions as chains of names, made once beside the table for every reading that asks
+        // which subexpression of a clause is a position.
+        List<Term> held = new ArrayList<>(byName.size());
+        for (FactSubject each : byName.keySet()) {
+            held.add(each.identity());
+        }
+        Term.Chains chains = new Term.Chains(held);
         return new Reading(
-                AdmissibleReading.of(terms, byName, symbols, terms.published(), allowed),
-                OrderedReading.of(terms, byName), terms, byName, alternatives,
+                AdmissibleReading.of(terms, byName, chains, symbols, terms.published(), allowed),
+                OrderedReading.of(terms, byName), terms, byName, chains, alternatives,
                 machines, lines, boundaries);
     }
 
@@ -681,7 +688,7 @@ sealed interface StatedByClauses {
      * ({@link ConstraintState#positionEnvelope} is asked where the readings have finished.)
      */
     record Reading(AdmissibleReading values, OrderedReading ordered, Terms terms,
-                   Map<FactSubject, Type> byName, Alternatives alternatives,
+                   Map<FactSubject, Type> byName, Term.Chains chains, Alternatives alternatives,
                    StringMachineAnswers machines, StatedLines lines, BoundaryReading boundaries)
             implements ClauseReading<StatedByClauses, Denotations> {
 
@@ -802,12 +809,10 @@ sealed interface StatedByClauses {
                 return;
             }
             // Every subexpression standing here, for the reason AdmissibleReading.gather gives.
-            for (Core standing : Core.subexpressionsAt(e)) {
-                FactSubject here = terms.subjectOf(standing, at);
-                if (here != null && byName.containsKey(here)) {
-                    found.add(here);
-                    return;
-                }
+            FactSubject here = terms.heldAt(e, at, chains);
+            if (here != null) {
+                found.add(here);
+                return;
             }
             Core.forEachChild(e, child -> gather(child, found, at));
         }

@@ -545,9 +545,15 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "(" + core + "L" + c + "check/Denotations;Ljava/util/Map;Ljava/util/Set;)V", 2,
                 GOES_ON_INTO_IT);
         row(out, c + "check/Predicates", "names",
-                "(" + core + "Ljava/util/Set;L" + c + "check/Denotations;)Z", 1, GOES_ON_INTO_IT);
+                "(" + core + "L" + c + "check/Term$Chains;L" + c + "check/Denotations;)Z", 1,
+                GOES_ON_INTO_IT);
         row(out, c + "check/StatedByClauses$Reading", "gather",
                 "(" + core + "Ljava/util/Set;L" + c + "check/Denotations;)V", 1, GOES_ON_INTO_IT);
+        row(out, c + "check/Terms", "heldAt", "(" + core + "L" + c + "check/Denotations;L" + c
+                        + "check/Term$Chains;)L" + c + "check/FactSubject;", 1,
+                "Core.subexpressionsAt's own question, asked of the node a walk stands at: a Widen"
+                        + " has no names read off it and is named as what it holds, and the walk"
+                        + " asks what it holds one step down");
         row(out, c + "claims/UnreachableClaims", "claimedUnder",
                 "(" + core + "L" + c + "inputs/InputReads;L" + c + "check/Symbols;L" + c
                         + "check/DeclarationNewtypes;L" + c + "coverage/CoverageSites$Plan;L" + c

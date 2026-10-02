@@ -27,7 +27,6 @@ import souther.compiler.values.Sameness;
 import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -35,7 +34,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
 import java.util.Set;
-import java.util.function.Function;
 
 /**
  * What a behavior's rules about the strings at its positions state of those positions.
@@ -430,43 +428,35 @@ public final class BehaviorSetStatements {
      * says the provenance of before this compiles.
      */
     private static Set<TermPath> positionsItCameFrom(ValueOrigin<TermPath> origin) {
-        return origin.answered(BehaviorSetStatements::cameFrom);
+        return origin.gathered(BehaviorSetStatements::cameFrom);
     }
 
-    /** Where {@code origin} came from, given where each of its parts did. */
-    private static Set<TermPath> cameFrom(ValueOrigin<TermPath> origin,
-                                          Function<ValueOrigin<TermPath>, Set<TermPath>> part) {
+    /** Where {@code origin} came from, or which of its parts to ask. */
+    private static ValueOrigin.Gathering.Met<TermPath> cameFrom(ValueOrigin<TermPath> origin) {
         return switch (origin) {
-            case ValueOrigin.IsAPosition<TermPath> it -> Set.of(it.at());
-            case ValueOrigin.MadeFromAPosition<TermPath> it -> Set.of(it.at());
+            case ValueOrigin.IsAPosition<TermPath> it -> new ValueOrigin.Gathering.Holds<>(it.at());
+            case ValueOrigin.MadeFromAPosition<TermPath> it ->
+                    new ValueOrigin.Gathering.Holds<>(it.at());
             // What an operation answered came from whatever its arguments came from, each of them:
             // a string joined out of two positions is made out of both, and an author who wrote a
             // rule about the joined value is owed the sentence at each.
-            case ValueOrigin.Applied<TermPath> it -> across(it.arguments(), part);
+            case ValueOrigin.Applied<TermPath> it -> new ValueOrigin.Gathering.Into<>(it.arguments());
             // A value that is one of several came from wherever each of those came from, and from
             // nowhere else: what decided which of them it is holds none of the values the rule is
             // about, and an author sent there is sent to a position the rule says nothing of.
-            case ValueOrigin.OneOf<TermPath> it -> across(it.alternatives(), part);
+            case ValueOrigin.OneOf<TermPath> it ->
+                    new ValueOrigin.Gathering.Into<>(it.alternatives());
             // A value written where it stands came from no position, one nothing here can name came
             // from none this can name, and a path that comes to no value came from nowhere at all.
             case ValueOrigin.Written<TermPath> _, ValueOrigin.Unnameable<TermPath> _,
-                 ValueOrigin.NoValue<TermPath> _ -> Set.of();
+                 ValueOrigin.NoValue<TermPath> _ -> new ValueOrigin.Gathering.Into<>(List.of());
             // A constructed value was made out of everything the construction was given, each of
             // them. A field taken back out of one is that field's own value and reaches here as
             // whatever it was given, so this arm answers about the construction itself.
-            case ValueOrigin.Constructed<TermPath> it -> across(it.fields().values(), part);
-            case ValueOrigin.Composed<TermPath> _ -> Set.of();
+            case ValueOrigin.Constructed<TermPath> it ->
+                    new ValueOrigin.Gathering.Into<>(List.copyOf(it.fields().values()));
+            case ValueOrigin.Composed<TermPath> _ -> new ValueOrigin.Gathering.Into<>(List.of());
         };
-    }
-
-    /** The positions everything in {@code of} came from, in the order they were met. */
-    private static Set<TermPath> across(Collection<ValueOrigin<TermPath>> of,
-                                        Function<ValueOrigin<TermPath>, Set<TermPath>> part) {
-        Set<TermPath> out = new LinkedHashSet<>();
-        for (ValueOrigin<TermPath> each : of) {
-            out.addAll(part.apply(each));
-        }
-        return out;
     }
 
     /** A rule about a value that is what stands at one of {@code among}, said at each of them. */
