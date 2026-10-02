@@ -2059,7 +2059,7 @@ final class BodyGen {
                 return false;
             }
             Type t = ordered.type();
-            Ordering held = Ordering.held(t, ordered.ordering().get(), ctx.inners);
+            Ordering held = Ordering.held(t, ordered.ordering().get(), ctx.newtypes());
             return switch (held) {
                 case Ordering.Places places -> {
                     code.invokestatic(cd(places.enumeration()), ORDERING_METHOD, MTD_ordering, true);

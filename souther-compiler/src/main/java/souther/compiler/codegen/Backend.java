@@ -256,10 +256,10 @@ public final class Backend {
                 recHelpers.put(fn.name(), fn);
             }
         }
-        // What a name wraps is read off the declarations, one name at a time, and not taken from
-        // the compilation's answer. Each declaration read here is recorded as one the classes were
-        // built against, and whether a newtype's class is Comparable depends on every name under it:
-        // a projection of the name it wraps does not say whether that name's class is ordered.
+        // What a name wraps is read off the declarations, for the check a codec's expressions are
+        // elaborated in, so each declaration read through it is recorded as one the classes were
+        // built against. How a value is compared is not read through it: that is read off the
+        // projection of the declared type compared, which says it.
         CodegenContext ctx = new CodegenContext(module.name(), symbols, published, kinds,
                 NewtypeInners.asWritten(symbols), kernels,
                 caseToSums, typePackage,
@@ -1494,6 +1494,14 @@ public final class Backend {
      * pattern past a limit, and one whose machine has more states than a pattern may, which that
      * reader read and only its backend refused, is now refused where it is read.
      *
+     * <p>Version 39 changes what a declared type offers another module's classes and what a class
+     * comparing one is built against. A type's projection says how a value of it is compared as the
+     * JVM holds it — through its own {@code compareTo}, or by the {@code __order} of the enumeration
+     * that places it — and a newtype over a declared type is built against that one projection
+     * rather than every declaration under it. A module written under version 38 records neither
+     * the fact nor the projection alone, so what it says it provides and was built against is not
+     * what this compiler works out for it.
+     *
      * <p>That is also where this number stops. It says whether a jar and this compiler agree on
      * what the metadata says and on the rules a declaration is turned into JVM facts by — a
      * behavior's class and methods, how one is held and built, a type's layout and codecs. It does
@@ -1504,7 +1512,7 @@ public final class Backend {
      * {@code [#a-published-module-agrees-with-what-it-copied]}). An edit to a declaration moves
      * that and not this; an edit to a rule moves this.
      */
-    public static final int BOUNDARY_VERSION = 38;
+    public static final int BOUNDARY_VERSION = 39;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java

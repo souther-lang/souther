@@ -56,6 +56,11 @@ public final class LinkageProjections {
      * @param module          the module
      * @param publishedNames  the names it publishes ({@code Ast.Module#published})
      * @param declarations    its declared types, in the order it writes them
+     * @param orders          how a value of each of them is compared as the JVM holds it, by the
+     *                        declaration — settled before a projection is made, out of what the
+     *                        declarations mean and without reading through {@code foreign}: what
+     *                        a class elsewhere is built against is the projection saying it, and
+     *                        not the declarations that went into working it out
      * @param signatures      what each of its behaviors takes and answers, by the behavior
      * @param implementations where each of its behaviors gets its body
      * @param requirements    what each behavior with an implementation is handed, in order
@@ -64,6 +69,7 @@ public final class LinkageProjections {
      * @param published       what declarations say, reading into the same
      */
     public record Settled(String module, Set<String> publishedNames, List<TypeKey> declarations,
+                          Map<TypeKey, Optional<LinkageProjection.HeldOrder>> orders,
                           Map<String, Sig> signatures,
                           Map<String, BehaviorImplementation> implementations,
                           Map<String, List<ValueName.Behavior>> requirements,
@@ -77,6 +83,14 @@ public final class LinkageProjections {
             }
             publishedNames = Set.copyOf(publishedNames);
             declarations = List.copyOf(declarations);
+            orders = Map.copyOf(orders);
+            // An entry for each declaration, so one that is compared by nothing says so and is not
+            // a declaration nobody asked.
+            if (!orders.keySet().equals(Set.copyOf(declarations))) {
+                throw new IllegalArgumentException("how each declaration of " + module
+                        + " is compared is settled for " + orders.keySet() + " and it declares "
+                        + declarations);
+            }
         }
 
         boolean exposes(String name) {
@@ -217,20 +231,21 @@ public final class LinkageProjections {
         String carrier = classOf(new GeneratedClass.Value(def.declares()), foreign)
                 .descriptorString();
         boolean exposed = settled.exposes(def.name());
+        Optional<LinkageProjection.HeldOrder> order = settled.orders().get(declaration);
         return switch (def) {
             case Hir.Data data -> {
                 List<LinkageProjection.Field> fields = laidOut(data, settled.symbols());
                 yield new LinkageProjection.Data(data.declaredKey(),
                         data.newtype() ? LinkageProjection.Form.NEWTYPE
                                 : LinkageProjection.Form.PRODUCT,
-                        exposed, carrier, fields, List.of(),
+                        exposed, carrier, order, fields, List.of(),
                         Optional.of(construction(carrier, fields, foreign)));
             }
             case Hir.SumData sum -> new LinkageProjection.Data(sum.declaredKey(),
-                    LinkageProjection.Form.SUM, exposed, carrier,
+                    LinkageProjection.Form.SUM, exposed, carrier, order,
                     shared(sum, settled), cases(sum), Optional.empty());
             case Hir.UnitData unit -> new LinkageProjection.Data(unit.declaredKey(),
-                    LinkageProjection.Form.UNIT, exposed, carrier, List.of(), List.of(),
+                    LinkageProjection.Form.UNIT, exposed, carrier, order, List.of(), List.of(),
                     Optional.empty());
         };
     }

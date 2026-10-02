@@ -37,6 +37,7 @@ import souther.compiler.check.ValueEntries;
 import souther.compiler.core.CompleteSignature;
 import souther.compiler.check.CarriedBodyDependencies;
 import souther.compiler.check.DeclarationKinds;
+import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Expansion;
 import souther.compiler.check.HelperGraph;
@@ -2283,6 +2284,7 @@ public final class Bodies {
             }
             PublishedDeclarations declarations = Shapes.publishedDeclarations(db);
             DeclarationKinds kinds = Shapes.declarationKinds(db);
+            DeclarationNewtypes newtypes = Shapes.declarationNewtypes(db);
             List<Report> reports = new ArrayList<>();
             for (Hir.FnDef carried : carriedClosure(from, roots, against.value()).values()) {
                 if (carried.params().isEmpty()) {
@@ -2295,9 +2297,9 @@ public final class Bodies {
                         ? checked.value().emittedDefinitions()
                         .get(carried.name().substring(prefix.length())) : null;
                 Set<TypeSymbol.AtModule> named = emitted != null
-                        ? CarriedBodyDependencies.of(emitted, symbols.value())
+                        ? CarriedBodyDependencies.of(emitted, symbols.value(), newtypes)
                         : CarriedBodyDependencies.of(carried, symbols.value(), declarations, kinds,
-                        standingCalls);
+                        newtypes, standingCalls);
                 for (TypeSymbol.AtModule built : named) {
                     if (built.module().equals(name) && kept.contains(built.name())) {
                         String helper = carried.written().canonical();

@@ -29,10 +29,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * ({@code TypeOps#outermost}).
  *
  * <p>So the readers that do walk are written down. What entitles one is that it uses the names
- * themselves — puts them back on, reads the rules written at each, reports one — or that it is
- * code generation, whose reads of the declarations under a name are what its classes are recorded
- * as built against. A reader that wants the shape alone reads {@code TypeView#shapeOf}, and a
- * reader that wants the base reads {@code TypeOps#base}.
+ * themselves — puts them back on, reads the rules written at each, reports one. Code generation is
+ * not entitled by what it records: a class is built against the projection of the name it reads,
+ * which says what that class links by, and not against the declarations under it. A reader that
+ * wants the shape alone reads {@code TypeView#shapeOf}, and a reader that wants the base reads
+ * {@code TypeOps#base}.
  *
  * <p>Read off the compiled classes, per method and per overload ({@link AMethod}), and a method
  * handed over to be called later is a caller. The rows are named rather than counted: a walk that
@@ -84,9 +85,6 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
      * whole — which is that capability walking, and is answered once per module where the
      * compilation answers it.
      *
-     * <p>Code generation: the order a sort hands its values over in is read from every name, which
-     * is what the classes it emits are recorded as built against.
-     *
      * <p>A reading of the rules on each name: a value is read at the path each name it wears is
      * worn under.
      *
@@ -101,10 +99,6 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "ILjava/util/Map;Ljava/util/Map;Ljava/util/Map;Ljava/util/Map;)V",
                     THE_NAMES),
             row(CHECK + "NewtypeInners", "terminal", "(" + TYPE + ")" + TYPE, THE_SPINE),
-            row(CHECK + "Ordering", "held",
-                    "(" + TYPE + "Lsouther/compiler/core/Core$OrderingBasis;" + INNERS + ")L"
-                            + CHECK + "Ordering;",
-                    THE_SPINE),
             row(TYPE_OPS, "newtypeChain", "(" + TYPE + INNERS + ")Ljava/util/List;", THE_SPINE),
             row(TYPE_VIEW, "asWritten", "(" + TYPE + SYMBOLS + PUBLISHED + ")L" + TYPE_VIEW + ";",
                     THE_POSITION),

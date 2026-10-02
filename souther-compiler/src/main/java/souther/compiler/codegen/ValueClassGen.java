@@ -115,14 +115,14 @@ final class ValueClassGen {
             cb.withSuperclass(CD_Record);
             cb.with(recordComponents(fields));
             List<ClassDesc> ifaces = new ArrayList<>(List.of(caseInterfaces(data.name())));
-            boolean ordered = isOrderedNewtype(data, fields);
-            if (ordered) {
+            Ordering ordered = orderOfNewtype(data, fields);
+            if (ordered != null) {
                 ifaces.add(CD_Comparable);
             }
             if (!ifaces.isEmpty()) {
                 cb.withInterfaceSymbols(ifaces);
             }
-            if (ordered) {
+            if (ordered != null) {
                 cb.with(SignatureAttribute.of(ClassSignature.parseFrom(classSignature(cdName, ifaces))));
             }
             for (Map.Entry<String, Type> f : fields.entrySet()) {
@@ -131,8 +131,8 @@ final class ValueClassGen {
             emitCtor(cb, cdName, fields);
             emitValueEquality(cb, cdName, fields);
             emitToString(cb, cdName, data.name(), fields);
-            if (ordered) {
-                emitCompareTo(cb, cdName, fields.entrySet().iterator().next());
+            if (ordered != null) {
+                emitCompareTo(cb, cdName, fields.entrySet().iterator().next(), ordered);
             }
             emitConstructMethod(cb, cdName, data, fields);
             emitAccessors(cb, cdName, fields);
@@ -251,16 +251,15 @@ final class ValueClassGen {
             if (enumeration) {
                 emitTagMethod(cb, alternatives.wireCases());
             }
-            // Where a case stands in the declaration is the language's order (ADR-0069) and not how
-            // a value is written, so it is gated on what answers that — the same `Ordering` every
-            // reader of a comparison asks, which is what sends them to this class's `__order`. The
-            // two gates hold of the same sums today. Written as one, a wire form that stopped being
-            // a bare tag would take the ordering methods with it and leave a comparison calling a
-            // method nothing emitted.
-            if (Ordering.of(Type.ref(sum.declares()), ctx.inners, symbols, ctx.kinds,
-                    ctx.published)
-                    instanceof Ordering.Places places
-                    && places.enumeration().equals(sum.declares())) {
+            // Where a case stands in the declaration is the language's order and not how a value is
+            // written, so it is gated on what this sum offers as its order — what a class elsewhere
+            // that calls `__order` is built against — and not on the wire form. The two gates hold
+            // of the same sums today. Written as one, a wire form that stopped being a bare tag would
+            // take the ordering methods with it and leave a comparison calling a method nothing
+            // emitted. A sum that is ordered at all is ordered by itself, which its projection holds.
+            // Which place each case takes is the class's own and not offered: it is read off the
+            // cases the sum reaches, nested sums opened.
+            if (ctx.declaredType(sum.declaredKey()).order().isPresent()) {
                 emitOrderMethods(cb, cdX, alternatives.atoms());
             }
             codec.emitCodecFactory(cb, "decoder", CD_RDecoder, cd(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.VALUE)),
@@ -494,21 +493,50 @@ final class ValueClassGen {
                 });
     }
 
-    /** A single-value newtype over an ordered type — ordered by the value it wraps (ADR-0047), which
-     * the class carries as {@link Comparable} so {@code sort} / {@code max} / {@code min} compare it
-     * by natural order, and a Java reader can put it in a {@code TreeSet}. The order it carries is
-     * {@link #orderOfWrapped}: claiming one here that the {@code compareTo} below cannot emit is
-     * what left {@code data StageN = Stage} declaring {@code Comparable} and throwing on the first
-     * Java reader that compared two (issue #856). */
-    private boolean isOrderedNewtype(Hir.Data data, SequencedMap<String, Type> fields) {
-        return data.newtype() && fields.size() == 1
-                && orderOfWrapped(fields.values().iterator().next()) != null;
+    /**
+     * How the value a single-value newtype wraps is compared, where the newtype is ordered by it,
+     * or null where it is not ordered. An ordered newtype's class carries {@link Comparable} so
+     * {@code sort} / {@code max} / {@code min} compare it by natural order, and a Java reader can put
+     * it in a {@code TreeSet}.
+     *
+     * <p>Two projections say this, and they are held to each other before anything is written. The
+     * newtype's own says whether its class is {@code Comparable}, which is what a class elsewhere
+     * that compares one is built against. The one of what it wraps says how that value is compared,
+     * which is what its {@code compareTo} is emitted from. Were they to disagree, the class would
+     * declare {@code Comparable} with no {@code compareTo} to honour it and throw on the first Java
+     * reader that compared two, or carry one that nothing elsewhere was told of.
+     */
+    private Ordering orderOfNewtype(Hir.Data data, SequencedMap<String, Type> fields) {
+        boolean comparable = ctx.declaredType(data.declaredKey()).order().isPresent();
+        Ordering wrapped = data.newtype() && fields.size() == 1
+                ? orderOfWrapped(fields.values().iterator().next()) : null;
+        if (comparable != (wrapped != null)) {
+            throw new IllegalStateException("`" + data.name() + "` offers itself as "
+                    + (comparable ? "" : "not ") + "Comparable, and what it wraps is "
+                    + (wrapped == null ? "compared by nothing" : "compared as " + wrapped));
+        }
+        return wrapped;
     }
 
-    /** How the value a newtype wraps compares, as the newtype's own field holds it. */
+    /**
+     * How the value a newtype wraps is compared, as the newtype's own field holds it, or null where
+     * it is not compared.
+     *
+     * <p>A declared type is read off its projection, and only that one: a newtype over it hands the
+     * comparison to whatever that projection says — its own {@code compareTo}, or the
+     * {@code __order} of the enumeration that places it — and is built against no declaration under
+     * it. Anything else wears no name a module declares, and is answered by what it is.
+     */
     private Ordering orderOfWrapped(Type value) {
-        Ordering how = Ordering.of(value, ctx.inners, symbols, ctx.kinds, ctx.published);
-        return how == null ? null : how.asHeld();
+        if (value instanceof Type.Ref(TypeSymbol.AtModule at) && !at.isDeclaredByLanguage()) {
+            return switch (ctx.declaredType(at.key()).order().orElse(null)) {
+                case LinkageProjection.HeldOrder.Natural _ -> new Ordering.Natural(value);
+                case LinkageProjection.HeldOrder.Places places ->
+                        new Ordering.Places(places.enumeration());
+                case null -> null;
+            };
+        }
+        return Ordering.ofBare(value, symbols, ctx.kinds, ctx.published);
     }
 
     /** {@code Record} plus each interface, with {@code Comparable} bound to the class itself, so a
@@ -581,9 +609,9 @@ final class ValueClassGen {
      * declaring an interface it could not honour. The erased {@code compareTo(Object)} bridge is what
      * the runtime's natural-order compare calls.
      */
-    private void emitCompareTo(ClassBuilder cb, ClassDesc cdName, Map.Entry<String, Type> value) {
+    private void emitCompareTo(ClassBuilder cb, ClassDesc cdName, Map.Entry<String, Type> value,
+                               Ordering how) {
         ClassDesc fd = jvmType(value.getValue());
-        Ordering how = orderOfWrapped(value.getValue());
         cb.withMethodBody("compareTo", MethodTypeDesc.of(ConstantDescs.CD_int, cdName),
                 ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL, code -> {
                     code.aload(0);
@@ -604,12 +632,12 @@ final class ValueClassGen {
                             code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
                             code.invokestatic(CD_Integer, "compare", MTD_Integer_compare, false);
                         }
-                        // asHeld answers for the newtype as its own class holds it, and a newtype is
-                        // Comparable, so nothing reaches here.
+                        // A newtype wrapped is compared by the compareTo its own class carries, so
+                        // nothing reaches here.
                         case Ordering.Wrapped _ -> throw new IllegalStateException(
                                 "a wrapped order is never what a value is held as: " + value.getValue());
                         case null -> throw new IllegalStateException(
-                                "compareTo is emitted only where isOrderedNewtype found an order: "
+                                "compareTo is emitted only where orderOfNewtype found an order: "
                                         + value.getValue());
                     }
                     code.ireturn();

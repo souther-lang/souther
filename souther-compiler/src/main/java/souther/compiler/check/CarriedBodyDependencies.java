@@ -26,8 +26,9 @@ public final class CarriedBodyDependencies {
      * The classes emitting a definition that is a method of its own names: what it takes, and its
      * body.
      */
-    public static Set<TypeSymbol.AtModule> of(EmittedDefinition emitted, DerivedSymbols symbols) {
-        return EmittedClassReferences.of(emitted, NewtypeInners.asWritten(symbols), symbols);
+    public static Set<TypeSymbol.AtModule> of(EmittedDefinition emitted, DerivedSymbols symbols,
+                                              DeclarationNewtypes newtypes) {
+        return EmittedClassReferences.of(emitted, newtypes, symbols);
     }
 
     /**
@@ -38,11 +39,13 @@ public final class CarriedBodyDependencies {
      * as its reader types it is this compiler disagreeing with itself, and is said so.
      *
      * @param closed        a definition as it is handed to a reader
+     * @param newtypes      which declarations are newtypes, which is all a sort over one asks
      * @param standingCalls what the calls it leaves standing are typed against
      */
     public static Set<TypeSymbol.AtModule> of(Hir.FnDef closed, DerivedSymbols symbols,
                                               PublishedDeclarations published,
                                               DeclarationKinds kinds,
+                                              DeclarationNewtypes newtypes,
                                               Map<String, Type> standingCalls) {
         DeclarationAccess declarations = DeclarationAccess.asWritten(symbols, published, kinds);
         Type declared = closed.declaredReturn() == null
@@ -58,6 +61,6 @@ public final class CarriedBodyDependencies {
             throw new IllegalStateException("`" + closed.name() + "` was typed on its own and could"
                     + " not be typed as its reader types it: " + e.getMessage(), e);
         }
-        return EmittedClassReferences.of(typed, declarations.inners(), symbols);
+        return EmittedClassReferences.of(typed, newtypes, symbols);
     }
 }

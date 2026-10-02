@@ -5,10 +5,15 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.BehaviorRequirement;
+import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.Derived;
+import souther.compiler.check.NewtypeInners;
+import souther.compiler.check.Ordering;
 import souther.compiler.check.Preserved;
+import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Requirements;
 import souther.compiler.check.Sig;
+import souther.compiler.check.TypeOps;
 import souther.compiler.check.ValueEntries;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.codegen.LinkageProjections;
@@ -25,6 +30,7 @@ import souther.compiler.meta.CopyAgreement;
 import souther.compiler.meta.LinkageAgreement;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -34,6 +40,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -233,12 +240,17 @@ public final class Linkages {
                 }
                 declarations.add(declaration);
             }
+            Map<TypeKey, Optional<LinkageProjection.HeldOrder>> orders =
+                    orders(db, name, declarations);
+            if (orders == null) {
+                return Answer.absent();
+            }
             Map<String, List<ValueName.Behavior>> required = new LinkedHashMap<>();
             requirements.value().forEach((behavior, each) ->
                     required.put(behavior, Requirements.names(each)));
             SortedMap<LinkageTarget, LinkageProjection> provides = LinkageProjections.of(
                     new LinkageProjections.Settled(name, written.published(), declarations,
-                            signatures.value(), implementations.value().states(), required,
+                            orders, signatures.value(), implementations.value().states(), required,
                             values, symbols.value(),
                             reader.readingPublished(Shapes.publishedDeclarations(db))),
                     reader);
@@ -247,6 +259,55 @@ public final class Linkages {
             }
             return Answer.of(new Of(provides, reader.read()));
         }
+    }
+
+    /**
+     * How a value of each of {@code declarations} is compared as the JVM holds it, by the
+     * declaration — or null where what the module declares has no answer.
+     *
+     * <p>Worked out from what the declarations mean, through doors that record nothing. A class
+     * elsewhere that compares one of these is built against the projection saying how, and that
+     * projection moves wherever this answer does; the declarations read on the way to the answer —
+     * every name under a newtype, every sum of the module a case could be listed by — are not ones
+     * that class links by.
+     *
+     * <p>A declaration compared at all is compared as a newtype held as its own {@code Comparable}
+     * or as a value an enumeration places, since every other order belongs to a type no module
+     * declares.
+     */
+    private static Map<TypeKey, Optional<LinkageProjection.HeldOrder>> orders(
+            Db db, String name, List<TypeKey> declarations) {
+        Answer<DerivedSymbols> symbols = Names.derivedSymbols(db, name);
+        if (!symbols.present()) {
+            return null;
+        }
+        NewtypeInners inners = Shapes.newtypeInners(db);
+        DeclarationKinds kinds = Shapes.declarationKinds(db);
+        PublishedDeclarations published = Shapes.publishedDeclarations(db);
+        // Which enumerations list a value, worked out once for each module asked of: asked again
+        // for every unit, it would read every sum of the module once per unit it declares.
+        Map<String, Map<TypeSymbol, Set<TypeSymbol>>> listings = new HashMap<>();
+        Function<TypeSymbol.AtModule, Set<TypeSymbol>> listing = value -> listings
+                .computeIfAbsent(value.module(), module -> TypeOps.enumerationsListing(module,
+                        symbols.value(), kinds, published))
+                .getOrDefault(value, Set.of());
+        Map<TypeKey, Optional<LinkageProjection.HeldOrder>> out = new HashMap<>();
+        for (TypeKey declaration : declarations) {
+            Hir.Def def = symbols.value().declaredNode(declaration);
+            Ordering how = def == null ? null : Ordering.of(Type.ref(def.declares()), inners,
+                    kinds, published, listing);
+            LinkageProjection.HeldOrder held = switch (how) {
+                case null -> null;
+                case Ordering.Wrapped _ -> new LinkageProjection.HeldOrder.Natural();
+                case Ordering.Places places ->
+                        new LinkageProjection.HeldOrder.Places(places.enumeration());
+                case Ordering.Longs _, Ordering.Natural _, Ordering.Strings _ ->
+                        throw new IllegalStateException("`" + declaration + "` is ordered as "
+                                + how + ", which is the order of a type no module declares");
+            };
+            out.put(declaration, Optional.ofNullable(held));
+        }
+        return out;
     }
 
     /**
