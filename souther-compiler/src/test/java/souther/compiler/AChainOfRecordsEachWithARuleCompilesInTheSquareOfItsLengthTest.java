@@ -13,12 +13,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the chain is read in the square of its length and no faster; what this holds is that it is read in
  * no more than that — that a rule costs what it says and not how deep it was read.
  *
- * <p>Held over a doubling, as what compiling the chain allocates on the thread that compiles it.
- * Every reading that walked a projection at each rule — the names written out, a place copied, a
- * table of positions copied for one more, an origin a layer per name — allocated as it walked, and
- * what is allocated is the same each run whatever else the machine is doing, which the time is not.
- * One compile first, so what the first one makes of the compiler itself is not counted against the
- * shorter chain.
+ * <p>Held as what one more record costs, at a chain and at one twice as long: one more record reads
+ * as many rules as the chain is long, so in the square of the length it costs twice as much at twice
+ * the length, and four times as much where each rule costs as much as its depth. Asked of one more
+ * record rather than of the whole chain, the two are told apart at a length short enough to compile
+ * in a moment, where the whole chain's lower terms still blur them.
+ *
+ * <p>What a record costs is what compiling allocates on the thread that compiles. Every reading that
+ * walked a projection at each rule — the names written out, a place copied, a table of positions
+ * copied for one more, an origin a layer per name — allocated as it walked, and what is allocated is
+ * the same each run whatever else the machine is doing, which the time is not. One compile first, so
+ * what the first one makes of the compiler itself is not counted against the shorter chain.
  */
 class AChainOfRecordsEachWithARuleCompilesInTheSquareOfItsLengthTest {
 
@@ -43,12 +48,17 @@ class AChainOfRecordsEachWithARuleCompilesInTheSquareOfItsLengthTest {
         return thread.getCurrentThreadAllocatedBytes() - before;
     }
 
+    /** What the record after the {@code records}-th costs. */
+    private static long oneMoreAfter(int records) {
+        return allocatedCompiling(records + 1) - allocatedCompiling(records);
+    }
+
     @Test
-    void doublingTheChainAboutQuadruplesWhatCompilingItAllocates() {
-        allocatedCompiling(40);
-        long shorter = allocatedCompiling(80);
-        long longer = allocatedCompiling(160);
-        assertTrue(longer * 10 <= shorter * 42,
-                "80 records allocated " + shorter + " bytes and 160 allocated " + longer);
+    void oneMoreRecordCostsAboutTwiceAsMuchAtTwiceTheLength() {
+        allocatedCompiling(10);
+        long shorter = oneMoreAfter(20);
+        long longer = oneMoreAfter(40);
+        assertTrue(longer <= shorter * 2,
+                "one more record after 20 allocated " + shorter + " bytes and after 40 " + longer);
     }
 }
