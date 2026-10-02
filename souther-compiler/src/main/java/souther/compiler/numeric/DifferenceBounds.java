@@ -176,6 +176,15 @@ public final class DifferenceBounds<A> {
     private static <A> DifferenceBounds<A> closing(Map<Node<A>, Map<Node<A>, ExactCut>> edges) {
         Set<Node<A>> nodes = new LinkedHashSet<>(edges.keySet());
         edges.values().forEach(row -> nodes.addAll(row.keySet()));
+        // Nought last among the nodes a path goes through. Which order they are taken in does not
+        // change what the closure comes to, and nought is the one node every bounded position has
+        // an edge to or from: gone through first, it relates every two of them, and every node gone
+        // through after it composes every row with every hop. Last, the rows it fills are not
+        // composed again.
+        Node<A> nought = new Node.Nought<>();
+        if (nodes.remove(nought)) {
+            nodes.add(nought);
+        }
         Map<Node<A>, Map<Node<A>, ExactCut>> shortest = new LinkedHashMap<>();
         edges.forEach((from, row) -> shortest.put(from, new LinkedHashMap<>(row)));
         boolean everyHopWasComposed = true;
@@ -194,6 +203,10 @@ public final class DifferenceBounds<A> {
                     continue;
                 }
                 for (Map.Entry<Node<A>, ExactCut> hop : hops) {
+                    long[] counting = COUNTING_HOPS;
+                    if (counting != null) {
+                        counting[0]++;
+                    }
                     // A hop the exact arithmetic cannot sum is a hop this round does not compose,
                     // same as one that was never an edge: the closure is looser than the true one by
                     // exactly this hop, which is sound for every reading that asks whether something
@@ -225,6 +238,12 @@ public final class DifferenceBounds<A> {
         }
         return new DifferenceBounds<>(shortest, nothing, everyHopWasComposed);
     }
+
+    /** Where a test in this package counts the hops the closure composes, and null everywhere else.
+     *  What the closure comes to says nothing about how many hops it composed to get there, so a
+     *  closure that relates every two positions through nought before going through the rest and
+     *  one that does not answer alike, and what separates them has nowhere else to be read. */
+    static long[] COUNTING_HOPS;
 
     private static <A> ExactCut at(Map<Node<A>, Map<Node<A>, ExactCut>> table,
                                       Node<A> from, Node<A> to) {
