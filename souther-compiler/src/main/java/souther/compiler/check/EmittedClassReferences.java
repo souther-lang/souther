@@ -28,26 +28,26 @@ import java.util.Set;
  */
 final class EmittedClassReferences {
 
-    private final NewtypeInners inners;
+    private final DeclarationNewtypes newtypes;
     private final Symbols symbols;
     private final Set<TypeSymbol.AtModule> found = new LinkedHashSet<>();
 
-    private EmittedClassReferences(NewtypeInners inners, Symbols symbols) {
-        this.inners = inners;
+    private EmittedClassReferences(DeclarationNewtypes newtypes, Symbols symbols) {
+        this.newtypes = newtypes;
         this.symbols = symbols;
     }
 
     /** What a body emitted inline names. */
-    static Set<TypeSymbol.AtModule> of(Core body, NewtypeInners inners, Symbols symbols) {
-        EmittedClassReferences walk = new EmittedClassReferences(inners, symbols);
+    static Set<TypeSymbol.AtModule> of(Core body, DeclarationNewtypes newtypes, Symbols symbols) {
+        EmittedClassReferences walk = new EmittedClassReferences(newtypes, symbols);
         walk.visit(body, null);
         return walk.found;
     }
 
     /** What a definition emitted as a method of its own names: what it takes, and its body. */
-    static Set<TypeSymbol.AtModule> of(EmittedDefinition definition, NewtypeInners inners,
+    static Set<TypeSymbol.AtModule> of(EmittedDefinition definition, DeclarationNewtypes newtypes,
                                        Symbols symbols) {
-        EmittedClassReferences walk = new EmittedClassReferences(inners, symbols);
+        EmittedClassReferences walk = new EmittedClassReferences(newtypes, symbols);
         for (EmittedDefinition.Parameter parameter : definition.parameters()) {
             walk.add(parameter.type());
         }
@@ -196,7 +196,7 @@ final class EmittedClassReferences {
         if (call.settlement() instanceof Core.CallSettlement.AtKernel(
                 _, Core.KernelFact.OrderingSubject ordered)
                 && ordered.ordering().isPresent()) {
-            add(Ordering.enumerationOfHeld(ordered.type(), ordered.ordering().get(), inners));
+            add(Ordering.enumerationOfHeld(ordered.type(), ordered.ordering().get(), newtypes));
         }
     }
 

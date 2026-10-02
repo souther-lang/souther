@@ -6,8 +6,10 @@ import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
 import souther.compiler.core.KernelSignatures;
 import souther.compiler.core.ValueShape;
+import souther.compiler.Reserved;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.DeclarationKinds;
+import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.ast.Hir;
@@ -149,6 +151,18 @@ final class CodegenContext {
     /** What the declared type at {@code key} offers: its form, its class, what a read finds. */
     LinkageProjection.Data declaredType(TypeKey key) {
         return linkage.data(key);
+    }
+
+    /**
+     * Which declarations are newtypes, as their projections say, so asking it of one is reading
+     * that one projection and nothing under it.
+     *
+     * <p>The language declares no newtype, and nothing provides a projection of what it declares,
+     * so a declaration of its own is answered without one.
+     */
+    DeclarationNewtypes newtypes() {
+        return key -> !Reserved.isNamespace(key.module())
+                && declaredType(key).form() == LinkageProjection.Form.NEWTYPE;
     }
 
     /**

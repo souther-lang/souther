@@ -32,6 +32,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * The type-level questions the checker asks, independent of any expression being checked: resolving
@@ -1748,8 +1749,61 @@ public final class TypeOps {
      */
     static TypeSymbol orderingEnumeration(Type t, Symbols symbols, DeclarationKinds kinds,
                                           PublishedDeclarations published) {
-        Set<TypeSymbol> candidates = orderingCandidates(t, symbols, kinds, published);
+        return orderingEnumeration(t, kinds, published, listingIn(symbols, kinds, published));
+    }
+
+    /**
+     * The same, with which enumerations list a value read off {@code listing}: for a reader placing
+     * many values, which works a module's enumerations out once rather than once for each value.
+     *
+     * @param listing every enumeration that lists a value, as {@link #enumerationsListing} answers
+     *                it for the value's module
+     */
+    static TypeSymbol orderingEnumeration(Type t, DeclarationKinds kinds,
+                                          PublishedDeclarations published,
+                                          Function<TypeSymbol.AtModule, Set<TypeSymbol>> listing) {
+        Set<TypeSymbol> candidates = orderingCandidates(t, kinds, published, listing);
         return candidates != null && candidates.size() == 1 ? candidates.iterator().next() : null;
+    }
+
+    /** Every enumeration that lists a value, worked out from its module's declarations each time it
+     *  is asked. */
+    static Function<TypeSymbol.AtModule, Set<TypeSymbol>> listingIn(
+            Symbols symbols, DeclarationKinds kinds, PublishedDeclarations published) {
+        return value -> enumerationsListing(value.module(), symbols, kinds, published)
+                .getOrDefault(value, Set.of());
+    }
+
+    /**
+     * Every enumeration {@code module} declares, by each value it lists: the cases it reaches,
+     * nested sums opened.
+     *
+     * <p>A sum and its cases are declared together (a case declared elsewhere cannot join a union
+     * here, E1606), so every enumeration that lists a case is in the case's own module. Asking that
+     * module rather than what is visible keeps the answer the same in every module that reads the
+     * value.
+     */
+    public static Map<TypeSymbol, Set<TypeSymbol>> enumerationsListing(
+            String module, Symbols symbols, DeclarationKinds kinds,
+            PublishedDeclarations published) {
+        Map<TypeSymbol, Set<TypeSymbol>> listing = new HashMap<>();
+        for (String declared : symbols.declaredNamesIn(module)) {
+            // Which form the declaration is, first and on its own. What its cases are is asked only
+            // of the ones that have any — a sweep that asked every declaration what it says would
+            // ask that of the declaration whose own meaning is being worked out, which is asking for
+            // the answer being made.
+            TypeKey address = new TypeKey(module, declared);
+            if (kinds.of(address) != DeclarationKind.SUM) {
+                continue;
+            }
+            if (TypeSymbols.declared(address) instanceof TypeSymbol.AtModule at
+                    && isUnitOnlySum(at, kinds, published)) {
+                for (TypeSymbol listed : AtomSpace.subjectAtoms(Type.ref(at), published)) {
+                    listing.computeIfAbsent(listed, _ -> new LinkedHashSet<>()).add(at);
+                }
+            }
+        }
+        return listing;
     }
 
     /**
@@ -1758,14 +1812,14 @@ public final class TypeOps {
      * types, and what orders it is the enumeration that lists all of them — so the candidates are
      * intersected across the members rather than each member having to name one on its own.
      */
-    private static Set<TypeSymbol> orderingCandidates(Type t, Symbols symbols,
-                                                      DeclarationKinds kinds,
-                                                      PublishedDeclarations published) {
+    private static Set<TypeSymbol> orderingCandidates(
+            Type t, DeclarationKinds kinds, PublishedDeclarations published,
+            Function<TypeSymbol.AtModule, Set<TypeSymbol>> listing) {
         if (t instanceof Type.Union union) {
             Set<TypeSymbol> shared = null;
             for (TypeSymbol member : union.members()) {
                 Set<TypeSymbol> owners =
-                        orderingCandidates(Type.ref(member), symbols, kinds, published);
+                        orderingCandidates(Type.ref(member), kinds, published, listing);
                 if (owners == null) {
                     return null;
                 }
@@ -1788,27 +1842,7 @@ public final class TypeOps {
         if (kinds.of(named.key()) != DeclarationKind.UNIT) {
             return null;
         }
-        // A sum and its cases are declared together (a case declared elsewhere cannot join a union
-        // here, E1606), so every enumeration that lists this case is in the case's own module. Asking
-        // that module rather than what is visible keeps the answer the same in every module that
-        // reads the value.
-        Set<TypeSymbol> owners = new LinkedHashSet<>();
-        for (String declared : symbols.declaredNamesIn(named.module())) {
-            // Which form the declaration is, first and on its own. What its cases are is asked only
-            // of the ones that have any — a sweep that asked every declaration what it says would
-            // ask that of the declaration whose own meaning is being worked out, which is asking for
-            // the answer being made.
-            TypeKey address = new TypeKey(named.module(), declared);
-            if (kinds.of(address) != DeclarationKind.SUM) {
-                continue;
-            }
-            if (TypeSymbols.declared(address) instanceof TypeSymbol.AtModule at
-                    && isUnitOnlySum(at, kinds, published)
-                    && AtomSpace.subjectAtoms(Type.ref(at), published).contains(named)) {
-                owners.add(at);
-            }
-        }
-        return owners;
+        return listing.apply(named);
     }
 
     /**

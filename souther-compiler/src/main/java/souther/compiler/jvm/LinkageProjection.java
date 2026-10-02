@@ -248,6 +248,8 @@ public sealed interface LinkageProjection {
      * @param form         which of the four it was declared as
      * @param exposed      whether its module exposes it, which is whether its class is public
      * @param carrier      the descriptor of the class a value of it is
+     * @param order        how a value of it is compared as the JVM holds it, or empty where it is
+     *                     not compared at all
      * @param fields       what a read of a value finds, in the order a value lays them out: a
      *                     product's fields, a newtype's one value, and the fields a sum exposes
      *                     because every case spreads them
@@ -256,8 +258,8 @@ public sealed interface LinkageProjection {
      *                     newtype's {@code __construct}; a sum is built as one of its cases and a
      *                     unit is its one value, so neither has one
      */
-    record Data(TypeKey key, Form form, boolean exposed, String carrier, List<Field> fields,
-                List<TypeSymbol> cases, Optional<Invocation> construction)
+    record Data(TypeKey key, Form form, boolean exposed, String carrier, Optional<HeldOrder> order,
+                List<Field> fields, List<TypeSymbol> cases, Optional<Invocation> construction)
             implements LinkageProjection {
 
         public Data {
@@ -268,6 +270,31 @@ public sealed interface LinkageProjection {
                 throw new IllegalArgumentException("`" + key + "` is a " + form.written()
                         + ", and a class elsewhere builds exactly a product or a newtype through"
                         + " an entry");
+            }
+            switch (order.orElse(null)) {
+                case HeldOrder.Natural _ -> {
+                    if (form != Form.NEWTYPE) {
+                        throw new IllegalArgumentException("`" + key + "` is a " + form.written()
+                                + ", and the class that carries a compareTo of its own is a"
+                                + " newtype's");
+                    }
+                }
+                case HeldOrder.Places places -> {
+                    // Every enumeration that lists a case is in the case's own module, since a
+                    // case declared elsewhere cannot join a union there; and a sum that is ordered
+                    // is ordered by its own declaration.
+                    boolean ownModule = places.enumeration() instanceof TypeSymbol.AtModule at
+                            && at.module().equals(key.module());
+                    boolean placesItself = places.enumeration() instanceof TypeSymbol.AtModule at
+                            && at.key().equals(key);
+                    if (!(form == Form.UNIT && ownModule || form == Form.SUM && placesItself)) {
+                        throw new IllegalArgumentException("`" + key + "` is a " + form.written()
+                                + " and is said to be placed by " + shown(places.enumeration())
+                                + ", where a unit is placed by an enumeration of its own module"
+                                + " and a sum by itself");
+                    }
+                }
+                case null -> { }
             }
         }
 
@@ -282,6 +309,7 @@ public sealed interface LinkageProjection {
             facts.add(new Fact("declared as", form.written()));
             facts.add(new Fact("exposed", String.valueOf(exposed)));
             facts.add(new Fact("carried as", carrier));
+            order.ifPresent(how -> facts.add(new Fact("ordered as", how.written())));
             if (form == Form.PRODUCT || form == Form.NEWTYPE) {
                 // The order a constructor and __construct take the fields in, which two fields of
                 // one type can trade places in with nothing else about them moving.
@@ -310,6 +338,41 @@ public sealed interface LinkageProjection {
                 case NEWTYPE -> "newtype";
                 case SUM -> "sum";
                 case UNIT -> "unit";
+            };
+        }
+    }
+
+    /**
+     * How a value of a declared type is compared as the JVM holds it, which a class elsewhere that
+     * compares one decides by: through the {@code compareTo} the value's own class carries, or
+     * through the {@code __order} of the enumeration that lists it.
+     *
+     * <p>Only which of the two, and whose {@code __order}. What a newtype's {@code compareTo} does
+     * inside, and where each case stands in an enumeration's declaration, run inside the declaring
+     * module's classes, and a class elsewhere calls them without copying either.
+     */
+    sealed interface HeldOrder {
+
+        /** The value's own class is {@code Comparable}: a newtype over something ordered. */
+        record Natural() implements HeldOrder {}
+
+        /**
+         * The value is placed by the {@code __order} of {@code enumeration}: an enumeration placing
+         * its own values, or a unit exactly one enumeration lists.
+         */
+        record Places(TypeSymbol enumeration) implements HeldOrder {
+            public Places {
+                if (enumeration == null) {
+                    throw new IllegalArgumentException("a value is placed by some enumeration");
+                }
+            }
+        }
+
+        /** As an artifact writes it. */
+        default String written() {
+            return switch (this) {
+                case Natural _ -> "natural";
+                case Places places -> "by " + shown(places.enumeration());
             };
         }
     }

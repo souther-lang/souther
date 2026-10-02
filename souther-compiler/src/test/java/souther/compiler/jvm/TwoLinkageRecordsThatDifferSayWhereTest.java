@@ -75,7 +75,7 @@ class TwoLinkageRecordsThatDifferSayWhereTest {
 
     private static LinkageProjection.Data pair(String first, String second) {
         return new LinkageProjection.Data(new TypeKey("lib.c", "Pair"),
-                LinkageProjection.Form.PRODUCT, true, "Llib/c/Pair;",
+                LinkageProjection.Form.PRODUCT, true, "Llib/c/Pair;", Optional.empty(),
                 List.of(new LinkageProjection.Field(first, Type.INT),
                         new LinkageProjection.Field(second, Type.INT)),
                 List.of(), Optional.of(new LinkageProjection.Invocation(
