@@ -23,6 +23,11 @@ import java.util.Map;
  * the unguarded reading already refutes holds wherever the construction stands, and one only the full
  * reading refutes took something more than the values to settle. Which something is not recorded, so
  * it is not claimed either.
+ *
+ * <p>Equal by its parts, and its parts by which states they are: the numbers a state holds and the
+ * terms its assumptions named are compared as the objects they are and not by what they hold
+ * ({@link AppendOnly}). So two of these are equal where they were made of the same states, and
+ * nothing asks it whether two paths know alike — a reader with that question asks what each knows.
  */
 record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantified,
                      AppendOnly<FactSubject, Boolean> spoken, Unguarded unguarded) {
@@ -127,7 +132,7 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
     Known speaking(Collection<FactSubject> terms) {
         AppendOnly<FactSubject, Boolean> all = spoken;
         for (FactSubject term : terms) {
-            if (all.get(term) == null) {
+            if (!all.contains(term)) {
                 all = all.with(term, true);
             }
         }
@@ -136,7 +141,7 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
 
     /** Whether an assumption on this path named {@code term}. */
     boolean speaksOf(FactSubject term) {
-        return spoken.get(term) != null;
+        return spoken.contains(term);
     }
 
     Known and(List<Quantified> more) {

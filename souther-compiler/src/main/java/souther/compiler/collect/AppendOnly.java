@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -27,6 +28,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * to, and an entry is in it before any value that reads it is made, so a reader reads what it may
  * read whatever is being added beside it.
  *
+ * <p>Whether a key was told is its own question ({@link #contains}), answered by the entry being
+ * one this value reads, and never by what was told under it. A value is something told, so none is
+ * null — and a null from {@link #get} is the one answer that says nothing was.
+ *
  * <p>No equality of its own. Two of these told the same things are two lines, and what one is
  * equal to is decided by whoever holds it, over what it reads.
  *
@@ -43,7 +48,12 @@ public final class AppendOnly<K, V> {
     }
 
     /** A value, and where in the table it was written. */
-    private record Told<V>(V value, int at) {}
+    private record Told<V>(V value, int at) {
+
+        Told {
+            Objects.requireNonNull(value, "what is told is something");
+        }
+    }
 
     private final Table<K, V> table;
     private final int reads;
@@ -74,8 +84,19 @@ public final class AppendOnly<K, V> {
 
     /** What was told under {@code key}, or null where nothing was. */
     public V get(K key) {
+        Told<V> told = readable(key);
+        return told == null ? null : told.value();
+    }
+
+    /** Whether something was told under {@code key}. */
+    public boolean contains(K key) {
+        return readable(key) != null;
+    }
+
+    /** The entry under {@code key} where it is one this value reads, or null. */
+    private Told<V> readable(K key) {
         Told<V> told = table.told.get(key);
-        return told != null && told.at() < reads ? told.value() : null;
+        return told != null && told.at() < reads ? told : null;
     }
 
     /** Whether nothing was told. */
@@ -87,10 +108,12 @@ public final class AppendOnly<K, V> {
      * These and {@code value} under {@code key}.
      *
      * @throws IllegalArgumentException where something is told under {@code key} already, which is
-     *         the caller's to have asked
+     *         the caller's to have asked ({@link #contains})
+     * @throws NullPointerException where {@code value} is null, which is nothing told
      */
     public AppendOnly<K, V> with(K key, V value) {
-        if (get(key) != null) {
+        Objects.requireNonNull(value, "what is told is something");
+        if (contains(key)) {
             throw new IllegalArgumentException("`" + key + "` is told already");
         }
         synchronized (table) {

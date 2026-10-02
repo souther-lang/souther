@@ -460,7 +460,7 @@ public final class NumericDomain<A> {
             return true;   // an infeasible path discharges anything
         }
         Map<A, ExactRatio> coefs = weighed(f);
-        if (!coefs.keySet().stream().allMatch(atom -> kinds.get(atom) != null)) {
+        if (!coefs.keySet().stream().allMatch(kinds::contains)) {
             // A position this has never been told about is one nothing here bounds, so nothing here
             // proves about it either. Said before the reading, which would want its spacing.
             return false;
@@ -674,7 +674,7 @@ public final class NumericDomain<A> {
         if (isBottom()) {
             return new Projection.NothingIsLeft();
         }
-        return kinds.get(atom) != null
+        return kinds.contains(atom)
                 ? new Projection.Within(boundsOf(atom)) : new Projection.NotSpokenOf();
     }
 

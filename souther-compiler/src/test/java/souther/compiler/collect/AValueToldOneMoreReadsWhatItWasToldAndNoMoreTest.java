@@ -7,8 +7,10 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What one of these reads is what it was told and what the one it was told on read, whichever other
@@ -17,24 +19,43 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  */
 class AValueToldOneMoreReadsWhatItWasToldAndNoMoreTest {
 
-    private static long copiedTelling(int entries) {
+    /**
+     * A line told a thousand entries one at a time copies none of them, and a value told something
+     * from halfway along it copies the half it reads — which is also what says the count is being
+     * kept, since a count nobody kept says no copying happened either.
+     */
+    @Test
+    void aLineToldOneAtATimeCopiesNothingAndALineFromHalfwayCopiesWhatItReads() {
         long[] counting = {0};
         AppendOnly.COUNTING_COPIED = counting;
         try {
             AppendOnly<Integer, String> told = AppendOnly.empty();
-            for (int i = 0; i < entries; i++) {
+            AppendOnly<Integer, String> halfway = null;
+            for (int i = 0; i < 1000; i++) {
                 told = told.with(i, "v" + i);
+                if (i == 499) {
+                    halfway = told;
+                }
             }
-            assertEquals("v" + (entries - 1), told.get(entries - 1));
+            assertEquals("v999", told.get(999));
+            assertEquals(0, counting[0]);
+
+            AppendOnly<Integer, String> beside = halfway.with(-1, "beside");
+            assertEquals(500, counting[0]);
+            assertEquals("beside", beside.get(-1));
+            assertFalse(told.contains(-1));
         } finally {
             AppendOnly.COUNTING_COPIED = null;
         }
-        return counting[0];
     }
 
     @Test
-    void aLineToldOneAtATimeCopiesNothing() {
-        assertEquals(0, copiedTelling(1000));
+    void whetherAKeyWasToldIsAskedOfTheEntryAndNothingToldIsNull() {
+        AppendOnly<String, Integer> told = AppendOnly.<String, Integer>empty().with("a", 1);
+        assertTrue(told.contains("a"));
+        assertFalse(told.contains("b"));
+        assertThrows(NullPointerException.class, () -> told.with("b", null));
+        assertFalse(told.contains("b"));
     }
 
     @Test
