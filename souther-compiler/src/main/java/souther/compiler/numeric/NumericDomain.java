@@ -1,8 +1,9 @@
 package souther.compiler.numeric;
 
+import souther.compiler.collect.AppendOnly;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,7 +54,8 @@ public final class NumericDomain<A> {
     private static final int DIGITS_WHEN_IT_IS_NOT_A_DECIMAL = 34;
 
     private final StatedRules<A> stated;
-    private final Map<A, Granularity> kinds;
+    /** How the values at each position are spaced, told one rule at a time ({@link AppendOnly}). */
+    private final AppendOnly<A, Granularity> kinds;
     private final boolean readARuleNothingSatisfies;
 
     /**
@@ -69,7 +71,7 @@ public final class NumericDomain<A> {
     private List<AffineConstraint<A>> distinctRules;
     private ClosedState<A> closed;
 
-    private NumericDomain(StatedRules<A> stated, Map<A, Granularity> kinds,
+    private NumericDomain(StatedRules<A> stated, AppendOnly<A, Granularity> kinds,
                           boolean readARuleNothingSatisfies, CanonicalOrder<A> order) {
         this.stated = stated;
         this.kinds = kinds;
@@ -86,7 +88,7 @@ public final class NumericDomain<A> {
      * over and the caller is not — see {@link CanonicalOrder}.
      */
     public static <A> NumericDomain<A> top(CanonicalOrder<A> order) {
-        return new NumericDomain<>(StatedRules.none(), Map.of(), false, order);
+        return new NumericDomain<>(StatedRules.none(), AppendOnly.empty(), false, order);
     }
 
     /**
@@ -202,26 +204,23 @@ public final class NumericDomain<A> {
      * stop rather than to pick the safer of the two.
      */
     private NumericDomain<A> knowing(Set<A> atoms, Map<A, Granularity> atomKinds) {
-        Map<A, Granularity> next = null;
+        AppendOnly<A, Granularity> next = kinds;
         for (A atom : atoms) {
             Granularity given = atomKinds.get(atom);
             if (given == null) {
                 throw new IllegalStateException("no granularity given for atom `" + atom + "`");
             }
-            Granularity had = kinds.get(atom);
+            Granularity had = next.get(atom);
             if (had == given) {
                 continue;
             }
             if (had != null) {
                 throw new IllegalStateException("atom `" + atom + "` is " + had + " and " + given);
             }
-            if (next == null) {
-                next = new HashMap<>(kinds);
-            }
-            next.put(atom, given);
+            next = next.with(atom, given);
         }
-        return next == null ? this
-                : new NumericDomain<>(stated, Map.copyOf(next), readARuleNothingSatisfies, order);
+        return next == kinds ? this
+                : new NumericDomain<>(stated, next, readARuleNothingSatisfies, order);
     }
 
     // --- renaming and joining ---------------------------------------------------------------------
@@ -252,9 +251,9 @@ public final class NumericDomain<A> {
         // rule of it does. A rule asked whether a naming is one-to-one can only answer about its own
         // positions, so two independent rules would be carried across as two rules about one number
         // and a box holding something would come back holding nothing.
-        Renaming<A, B> called = Renaming.of(kinds.keySet(), naming);
+        Renaming<A, B> called = Renaming.of(kinds.keys(), naming);
         Map<B, Granularity> spacing = new LinkedHashMap<>();
-        kinds.forEach((atom, spaced) -> spacing.put(called.of(atom), spaced));
+        kinds.asMap().forEach((atom, spaced) -> spacing.put(called.of(atom), spaced));
         StatedRules<B> out = StatedRules.none();
         for (AffineConstraint<A> rule : rules()) {
             out = out.and(StatedRules.of(rule.over(called)));
@@ -262,7 +261,7 @@ public final class NumericDomain<A> {
         // The order of the names arrived at, and not this one carried across. What puts two
         // positions in an order is a fact about what a position of that vocabulary is, and the
         // caller is the one that knows it — the same reason the order is asked for at the top.
-        return new NumericDomain<>(out, Map.copyOf(spacing), readARuleNothingSatisfies, order);
+        return new NumericDomain<>(out, AppendOnly.of(spacing), readARuleNothingSatisfies, order);
     }
 
     /**
@@ -285,14 +284,17 @@ public final class NumericDomain<A> {
                 && !other.readARuleNothingSatisfies)) {
             return this;
         }
-        Map<A, Granularity> both = new LinkedHashMap<>(kinds);
-        other.kinds.forEach((atom, spacing) -> {
-            Granularity had = both.put(atom, spacing);
-            if (had != null && had != spacing) {
-                throw new IllegalStateException("atom `" + atom + "` is " + had + " and " + spacing);
+        AppendOnly<A, Granularity> both = kinds;
+        for (Map.Entry<A, Granularity> each : other.kinds.asMap().entrySet()) {
+            Granularity had = both.get(each.getKey());
+            if (had == null) {
+                both = both.with(each.getKey(), each.getValue());
+            } else if (had != each.getValue()) {
+                throw new IllegalStateException("atom `" + each.getKey() + "` is " + had + " and "
+                        + each.getValue());
             }
-        });
-        return new NumericDomain<>(stated.and(other.stated), Map.copyOf(both),
+        }
+        return new NumericDomain<>(stated.and(other.stated), both,
                 readARuleNothingSatisfies || other.readARuleNothingSatisfies, order);
     }
 
@@ -458,7 +460,7 @@ public final class NumericDomain<A> {
             return true;   // an infeasible path discharges anything
         }
         Map<A, ExactRatio> coefs = weighed(f);
-        if (!kinds.keySet().containsAll(coefs.keySet())) {
+        if (!coefs.keySet().stream().allMatch(kinds::contains)) {
             // A position this has never been told about is one nothing here bounds, so nothing here
             // proves about it either. Said before the reading, which would want its spacing.
             return false;
@@ -672,7 +674,7 @@ public final class NumericDomain<A> {
         if (isBottom()) {
             return new Projection.NothingIsLeft();
         }
-        return atomsSpokenOf().contains(atom)
+        return kinds.contains(atom)
                 ? new Projection.Within(boundsOf(atom)) : new Projection.NotSpokenOf();
     }
 
@@ -797,7 +799,7 @@ public final class NumericDomain<A> {
      * because it is one a rule was written about.
      */
     public Set<A> atomsSpokenOf() {
-        return kinds.keySet();
+        return kinds.keys();
     }
 
     /**

@@ -2624,13 +2624,17 @@ final class Terms {
 
     /** The names of {@code p} that are steps of a position, the first one first: a newtype's own
      *  {@code value} is the value under the name and no step ({@link Location#isStep}). */
-    private List<String> stepsOf(Core.FieldProjection p) {
-        Type base = p.base().type();
+    private FieldPath stepsOf(Core.FieldProjection p) {
+        return stepsOf(p.base().type(), p.steps());
+    }
+
+    /** The same, of the chain {@code steps} read off a value of {@code base}. */
+    private FieldPath stepsOf(Type base, Core.FieldProjection.Steps steps) {
         // The names not yet worked out under this base, the nearest to the base on top.
         Deque<Core.FieldProjection.Steps> unread = new ArrayDeque<>();
-        List<String> out = List.of();
+        FieldPath out = FieldPath.NONE;
         Type from = base;
-        for (Core.FieldProjection.Steps at = p.steps(); at != null; at = at.before()) {
+        for (Core.FieldProjection.Steps at = steps; at != null; at = at.before()) {
             Located held = located.get(at);
             if (held != null && held.base().equals(base)) {
                 out = held.steps();
@@ -2639,28 +2643,17 @@ final class Terms {
             }
             unread.push(at);
         }
-        if (unread.isEmpty()) {
-            return out;
-        }
-        // Each chain worked out here is the next one's names short of its last, so all of them are
-        // one list as far as their own last name, and none of them is a copy of the one before.
-        List<String> names = new ArrayList<>(out);
-        List<Core.FieldProjection.Steps> chains = new ArrayList<>(unread.size());
-        int[] reaching = new int[unread.size()];
+        // Each chain worked out here is the one before it with its last name read on, so none of
+        // them is a copy of the one before.
         while (!unread.isEmpty()) {
             Core.FieldProjection.Steps next = unread.pop();
             if (Location.isStep(from, next.last().field(), newtypes())) {
-                names.add(next.last().field());
+                out = out.then(next.last().field());
             }
-            reaching[chains.size()] = names.size();
-            chains.add(next);
+            located.put(next, new Located(base, out));
             from = next.last().type();
         }
-        List<String> whole = List.copyOf(names);
-        for (int i = 0; i < chains.size(); i++) {
-            located.put(chains.get(i), new Located(base, whole.subList(0, reaching[i])));
-        }
-        return whole;
+        return out;
     }
 
     /**
@@ -2668,32 +2661,49 @@ final class Terms {
      * among} holds, or null where none is: what {@link #subjectOf} names each of them, asked of
      * {@code among} in turn, the longest first.
      *
-     * <p>Answered going down the names once and not by naming each projection. Each one's subject
-     * is a term as long as its names, so naming every shorter projection of a chain costs the square
-     * of the chain — and a chain the positions stop short of names all of them.
+     * <p>Kept for each chain of names, under the value they are read off and what is asked. A chain
+     * shares every name but its last with the chain one shorter, and the clauses of a value read
+     * under a chain of declarations are read at projections sharing the chain down to that value —
+     * so the longest held under a chain is the chain's own subject where that is held and the answer
+     * for the chain one shorter where it is not, and going down a chain stops at the first chain
+     * already answered. Gone down the whole of each, a reading of the rules of every value under it
+     * would pay the depth of each rule's projection once per rule.
+     *
+     * <p>Where two chains name the same subject — a newtype's {@code value} is no step — the longer
+     * is the one met first going down, which is the one this answers with.
      */
     Along longestHeld(Core.FieldProjection p, Denotations at, Term.Chains among) {
-        Type base = p.base().type();
-        List<String> names = stepsOf(p);
-        Core.FieldProjection.Steps first = p.steps();
-        while (first.before() != null) {
-            first = first.before();
-        }
-        Term.Chains.Reached reached = among.longest(subjectKey(p.base(), at), names,
-                namesReached(first, base, p));
-        if (reached == null) {
-            return null;
-        }
-        // The longest projection whose names come to that many: a newtype's `value` is no step, so
-        // a projection reading one is the same subject as the one short of it.
+        Term base = subjectKey(p.base(), at);
+        Type baseType = p.base().type();
+        Map<Core.FieldProjection.Steps, Along> answered = heldAlong.computeIfAbsent(
+                new HeldUnder(among, base, baseType), _ -> new IdentityHashMap<>());
+        List<Core.FieldProjection.Steps> asked = new ArrayList<>();
+        Along found = null;
         for (Core.FieldProjection.Steps each = p.steps(); each != null; each = each.before()) {
-            if (namesReached(each, base, p) == reached.names()) {
-                return new Along(each, FactSubject.of(reached.term()));
+            if (answered.containsKey(each)) {
+                found = answered.get(each);
+                break;
+            }
+            asked.add(each);
+            Term named = interned.on(base, stepsOf(baseType, each));
+            if (among.holds(named)) {
+                found = new Along(each, FactSubject.of(named));
+                break;
             }
         }
-        throw new IllegalStateException("no projection of " + p + " reads " + reached.names()
-                + " of its names " + names);
+        for (Core.FieldProjection.Steps each : asked) {
+            answered.put(each, found);
+        }
+        return found;
     }
+
+    /** What {@link #longestHeld} answered, by what was asked, the value the names are read off and
+     *  its type, and then by the chain of names — which is shared, so held by which chain it is. */
+    private final Map<HeldUnder, Map<Core.FieldProjection.Steps, Along>> heldAlong =
+            new HashMap<>();
+
+    /** What a chain's longest held projection is asked of and read off. */
+    private record HeldUnder(Term.Chains among, Term base, Type baseType) {}
 
     /**
      * The first of the subexpressions standing at {@code e} ({@link Core#subexpressionsAt}) whose
@@ -2707,13 +2717,6 @@ final class Terms {
         }
         FactSubject here = subjectOf(e, at);
         return here != null && among.holds(here.identity()) ? here : null;
-    }
-
-    /** How many of {@code p}'s names that are steps the projection of {@code upTo} reads. */
-    private int namesReached(Core.FieldProjection.Steps upTo, Type base, Core.FieldProjection p) {
-        Located held = located.get(upTo);
-        return held != null && held.base().equals(base) ? held.steps().size()
-                : stepsOf(new Core.FieldProjection(p.base(), upTo, p.pos())).size();
     }
 
     /**
@@ -2737,7 +2740,7 @@ final class Terms {
 
     /** The names of a chain that reach somewhere, read off {@code base}: which of a chain's names
      *  are steps turns on what the first is read off. */
-    private record Located(Type base, List<String> steps) {}
+    private record Located(Type base, FieldPath steps) {}
 
     /**
      * The same, for a chain already found to be nowhere — so what it is read from is nowhere too.

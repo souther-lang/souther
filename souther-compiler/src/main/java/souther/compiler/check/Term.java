@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import souther.compiler.hash.SaysWhatStandsForIt;
 import souther.compiler.types.BinOp;
-import souther.compiler.types.BindingId;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
@@ -52,7 +51,7 @@ final class Term {
         /** A parameter of a closure, named by where it is bound rather than by which binding it is. */
         BOUND(Payload.of(At.class)),
         /** Fields read off a term that is not a place. */
-        ON(Payload.listOf(Payload.of(String.class))),
+        ON(Payload.of(FieldPath.class)),
         INT(Payload.of(Long.class)),
         DECIMAL(Payload.of(BigDecimal.class)),
         STRING(Payload.of(String.class)),
@@ -265,6 +264,14 @@ final class Term {
         ITS_ELEMENT_IF_ANY,
         /** The value it says stands for it ({@link SaysWhatStandsForIt}). */
         THE_PARTS_IT_NAMES,
+        /**
+         * The number it keeps, which it worked out from the number of the chain before it and the
+         * name read last ({@link FieldPath}). A chain is as long as a chain of declarations, so
+         * walking it at each term made one name longer would make naming every name of it cost the
+         * square of the chain; and what the kept number is taken from is a chain and a name, which
+         * are values, so it is a function of the names and of nothing else, as a walked number is.
+         */
+        ITS_NAMES,
         /** Nothing here takes a value of this class. */
         NONE_HERE
     }
@@ -302,6 +309,9 @@ final class Term {
         }
         if (type == Optional.class) {
             return Rule.ITS_ELEMENT_IF_ANY;
+        }
+        if (type == FieldPath.class) {
+            return Rule.ITS_NAMES;
         }
         // Asked before the question about records, because a value that keeps the number it is
         // asked for is a class here and may hold its parts in a record all the same: what it says
@@ -421,6 +431,7 @@ final class Term {
             case ITS_ELEMENTS -> elementsOf((List<?>) value);
             case ITS_UNORDERED_ELEMENTS -> unorderedOf((java.util.Set<?>) value);
             case ITS_ELEMENT_IF_ANY -> optionalOf((Optional<?>) value);
+            case ITS_NAMES -> value.hashCode();
             case NONE_HERE -> throw new IllegalStateException(
                     "nothing says what a term hashed from a " + type.getName() + " is hashed from");
         };
@@ -525,6 +536,7 @@ final class Term {
             case ITS_ELEMENTS -> elementTextOf((List<?>) value);
             case ITS_UNORDERED_ELEMENTS -> unorderedTextOf((java.util.Set<?>) value);
             case ITS_ELEMENT_IF_ANY -> optionalTextOf((Optional<?>) value);
+            case ITS_NAMES -> elementTextOf(((FieldPath) value).names());
             case NONE_HERE -> throw new IllegalStateException(
                     "nothing says what a term carrying a " + type.getName() + " is walked by");
         };
@@ -747,7 +759,7 @@ final class Term {
 
     private String path() {
         StringBuilder sb = new StringBuilder();
-        for (String field : fields()) {
+        for (String field : fields().names()) {
             sb.append('.').append(field);
         }
         return sb.toString();
@@ -783,9 +795,8 @@ final class Term {
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private List<String> fields() {
-        return (List<String>) of;
+    private FieldPath fields() {
+        return (FieldPath) of;
     }
 
     // --- how terms are built -------------------------------------------------------------------
@@ -833,22 +844,23 @@ final class Term {
          * chain from the root's own identity and a reader that builds it from the location answer
          * differently about one value, which is the identity question given two authorities.
          */
-        Term on(Term base, List<String> fields) {
+        Term on(Term base, FieldPath fields) {
             if (fields.isEmpty()) {
                 return base;
             }
             if (base.shape == Shape.AT) {
                 Location where = (Location) base.of;
-                List<String> whole = new ArrayList<>(where.path());
-                whole.addAll(fields);
-                return at(new Location(where.root(), whole));
+                return at(new Location(where.root(), where.fields().then(fields)));
             }
             if (base.shape == Shape.ON) {
-                List<String> whole = new ArrayList<>(base.fields());
-                whole.addAll(fields);
-                return of(Shape.ON, List.copyOf(whole), base.parts);
+                return of(Shape.ON, base.fields().then(fields), base.parts);
             }
-            return of(Shape.ON, List.copyOf(fields), List.of(base));
+            return of(Shape.ON, fields, List.of(base));
+        }
+
+        /** {@link #on(Term, FieldPath)}, the fields written out. */
+        Term on(Term base, List<String> fields) {
+            return on(base, FieldPath.of(fields));
         }
 
         Term written(long value) {
@@ -1050,93 +1062,25 @@ final class Term {
     }
 
     /**
-     * Terms held so that a chain of names read off a value can be asked which of its shorter chains
-     * comes to one of them, going down the names once.
+     * Terms a reading names its positions by, asked which of the chains of names read off a value
+     * is one of them ({@link Terms#longestHeld}).
      *
-     * <p>{@link Interner#on} read backwards. A place with names read off it is the place's root with
-     * a longer path, and anything else with names read off it is one chain over that thing, so each
-     * term here is held under what its chain starts from and then a name at a time. Asked instead by
-     * naming each shorter chain, every one of them is a term as long as itself, and a chain as long
-     * as a chain of declarations costs the square of that.
+     * <p>Told apart by which table it is, and not by what it holds: what {@link Terms} keeps of the
+     * answers it gave about one of these is kept for this one, so two tables holding alike are two
+     * tables to it.
      */
     static final class Chains {
 
-        /** Where one more name goes, and the term a chain stopping here is, where it is one held. */
-        private static final class Node {
-
-            private final Map<String, Node> next = new HashMap<>();
-            private Term held;
-        }
-
-        private final Map<BindingId, Node> fromPlaces = new HashMap<>();
-        private final Map<List<Term>, Node> fromValues = new HashMap<>();
         private final Set<Term> held = new HashSet<>();
 
         Chains(Collection<Term> terms) {
-            for (Term each : terms) {
-                held.add(each);
-                switch (each.shape) {
-                    case AT -> {
-                        Location where = (Location) each.of;
-                        down(fromPlaces.computeIfAbsent(where.root(), _ -> new Node()),
-                                where.path()).held = each;
-                    }
-                    case ON -> down(fromValues.computeIfAbsent(each.parts, _ -> new Node()),
-                            each.fields()).held = each;
-                    default -> { }
-                }
-            }
+            held.addAll(terms);
         }
 
         /** Whether {@code term} is one held here. */
         boolean holds(Term term) {
             return held.contains(term);
         }
-
-        private static Node down(Node from, List<String> names) {
-            Node at = from;
-            for (String name : names) {
-                at = at.next.computeIfAbsent(name, _ -> new Node());
-            }
-            return at;
-        }
-
-        /**
-         * Of {@code base} with {@code names} read off it, the most of the names that come to a term
-         * held here, no fewer than {@code least} of them — or null where none do.
-         */
-        Reached longest(Term base, List<String> names, int least) {
-            Reached out = least == 0 && held.contains(base) ? new Reached(0, base) : null;
-            Node at = switch (base.shape) {
-                case AT -> along(fromPlaces.get(((Location) base.of).root()),
-                        ((Location) base.of).path());
-                case ON -> along(fromValues.get(base.parts), base.fields());
-                default -> fromValues.get(List.of(base));
-            };
-            for (int read = 0; read < names.size() && at != null; read++) {
-                at = at.next.get(names.get(read));
-                if (at != null && at.held != null && read + 1 >= least) {
-                    out = new Reached(read + 1, at.held);
-                }
-            }
-            return out;
-        }
-
-        private static Node along(Node from, List<String> names) {
-            Node at = from;
-            for (int read = 0; read < names.size() && at != null; read++) {
-                at = at.next.get(names.get(read));
-            }
-            return at;
-        }
-
-        /**
-         * A chain that comes to a term held here.
-         *
-         * @param names how many of the names read off the value it is
-         * @param term  the term it is
-         */
-        record Reached(int names, Term term) {}
     }
 
     /** The parts, for a reader that walks one. */

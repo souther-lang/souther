@@ -1,11 +1,12 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.hash.SaysWhatStandsForIt;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Function;
 
 /**
@@ -26,15 +27,58 @@ import java.util.function.Function;
  *
  * <p>Which fields are steps is decided from what each is read from and not from how it is spelled
  * ({@link #isStep}), so two types that both declare {@code value} keep their locations apart.
+ *
+ * <p>The fields are held as a chain ({@link FieldPath}), so a location one field further is made in
+ * one step and shares the fields before it: a location is made at every field of a chain as deep as
+ * a chain of declarations.
  */
-public record Location(BindingId root, List<String> path) {
+public final class Location implements SaysWhatStandsForIt {
 
-    public Location {
-        path = List.copyOf(path);
+    /** What a location is: the binding and the fields. */
+    record Parts(BindingId root, FieldPath fields) {}
+
+    private final Parts parts;
+
+    public Location(BindingId root, List<String> path) {
+        this(root, FieldPath.of(path));
+    }
+
+    Location(BindingId root, FieldPath fields) {
+        this.parts = new Parts(Objects.requireNonNull(root, "a location is rooted"),
+                Objects.requireNonNull(fields, "a location has fields, if none"));
     }
 
     public static Location of(BindingId root) {
-        return new Location(root, List.of());
+        return new Location(root, FieldPath.NONE);
+    }
+
+    public BindingId root() {
+        return parts.root();
+    }
+
+    /** The fields read from the binding, the first read first. Written out each time it is asked
+     *  for; {@link #fields} is the chain itself. */
+    public List<String> path() {
+        return parts.fields().names();
+    }
+
+    FieldPath fields() {
+        return parts.fields();
+    }
+
+    @Override
+    public Parts standsFor() {
+        return parts;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof Location that && parts.equals(that.parts);
+    }
+
+    @Override
+    public int hashCode() {
+        return parts.hashCode();
     }
 
     /**
@@ -50,9 +94,7 @@ public record Location(BindingId root, List<String> path) {
         if (!isStep(readFrom, field, newtypes)) {
             return this;
         }
-        List<String> longer = new ArrayList<>(path);
-        longer.add(field);
-        return new Location(root, longer);
+        return new Location(root(), fields().then(field));
     }
 
     /**
@@ -83,9 +125,9 @@ public record Location(BindingId root, List<String> path) {
      * knows what its bindings were given answers with what they were given, and the rest of the walk
      * is the same walk.
      */
-    public static Location of(Core e, DeclarationNewtypes newtypes,
-                              Function<BindingId, Location> rooted,
-                              Function<Core.FieldProjection, List<String>> steps) {
+    static Location of(Core e, DeclarationNewtypes newtypes,
+                       Function<BindingId, Location> rooted,
+                       Function<Core.FieldProjection, FieldPath> steps) {
         // A value is where it is whatever type it stands as.
         return switch (Core.withoutStanding(e)) {
             case Core.Read read -> rooted.apply(read.binding());
@@ -99,12 +141,8 @@ public record Location(BindingId root, List<String> path) {
             // a caller reading many chains that share their names answers each name once.
             case Core.FieldProjection p -> {
                 Location base = of(p.base(), newtypes, rooted, steps);
-                if (base == null) {
-                    yield null;
-                }
-                List<String> path = new ArrayList<>(base.path());
-                path.addAll(steps.apply(p));
-                yield new Location(base.root(), path);
+                yield base == null ? null
+                        : new Location(base.root(), base.fields().then(steps.apply(p)));
             }
             default -> null;
         };
@@ -112,8 +150,8 @@ public record Location(BindingId root, List<String> path) {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder(String.valueOf(root));
-        for (String field : path) {
+        StringBuilder sb = new StringBuilder(String.valueOf(root()));
+        for (String field : path()) {
             sb.append('.').append(field);
         }
         return sb.toString();

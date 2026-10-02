@@ -69,6 +69,7 @@ class ANameThatWritesNothingIsReadAsTheNameBeneathItTest {
         long few = readingsMadeCompiling(chain(4));
         long many = readingsMadeCompiling(chain(40));
 
+        assertTrue(few > 0, "a chain of four names made no reading, so this measures nothing");
         assertEquals(few, many,
                 () -> "a chain of forty names was read " + many + " times against " + few
                         + " for four, so a name that writes nothing over another is read again"

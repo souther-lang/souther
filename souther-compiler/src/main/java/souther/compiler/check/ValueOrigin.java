@@ -596,21 +596,9 @@ public sealed interface ValueOrigin<K> {
         // of, and the field the reader asked for is the one it is answered about — the other fields
         // of the construction hold none of the values the rule is over.
         if (e instanceof Core.FieldAccess access) {
-            ValueOrigin<K> target = of(access.target(), at, reading, following);
-            if (target instanceof Constructed<K> built) {
-                ValueOrigin<K> given = built.fields().get(access.field());
-                if (given == null) {
-                    // A construction holds every declared field and a field access names a field of
-                    // the type it reads, so a field missing here is this compiler disagreeing with
-                    // itself rather than a provenance nothing can state. Said as the one it is.
-                    throw new IllegalStateException("a construction of " + built.fields().keySet()
-                            + " was read for a field it has none of: " + access.field());
-                }
-                return given;
-            }
             // A field of anything else is the one child this node has, read once here rather than
             // walked again below.
-            return new Composed<>(List.of(target));
+            return fieldOf(of(access.target(), at, reading, following), access.field());
         }
         // What a {@code let} is made of is its body, read in the binding. The initializer is not a
         // part of the value: {@code let $x = a in 0} is zero, and reading both made a helper that
@@ -643,43 +631,66 @@ public sealed interface ValueOrigin<K> {
      *
      * <p>A projection or one shorter than it that is a position is that position, and nothing
      * under it is asked; which one is, is the reading's one answer ({@link Reading#positionAlong}).
-     * Where none is, what the base is made of is read, and each name taken off it
-     * on the way back up is either the field a construction was given or one more value made of what
-     * it is read off — which is what the accesses written out come to. Gone down and back along the
-     * names rather than on the stack, because how many there are is as long as the declarations
-     * chain.
+     * Where none is, what the base is made of is read, and each name taken off it is either the
+     * field a construction was given or one more value made of what it is read off — which is what
+     * the accesses written out come to. Taken along the names rather than on the stack, because
+     * how many there are is as long as the declarations chain.
+     *
+     * <p>The names past the last a construction answers come to what the first of them does
+     * ({@link #madeOf}), so the walk stops there and the names above a position are not walked.
      */
     private static <K, E> ValueOrigin<K> projected(Core.FieldProjection p, E at,
                                                    Reading<K, E> reading,
                                                    BindingWalk<ValueOrigin<K>> following) {
         Reading.Along<K> found = reading.positionAlong(p, at);
-        ValueOrigin<K> origin = found == null ? of(p.base(), at, reading, following)
-                : new IsAPosition<>(found.at());
-        Core.FieldProjection.Steps under = found == null ? null : found.upTo();
-        // The names above the one that is a position, the outermost first, or every name where no
-        // projection of them is one.
-        List<Core.FieldProjection.Step> above = new ArrayList<>();
-        for (Core.FieldProjection.Steps each = p.steps(); each != under; each = each.before()) {
-            if (each == null) {
-                throw new IllegalStateException("a reading answered " + p + " with a position at "
-                        + under + ", which is no projection of its names");
-            }
-            above.add(each.last());
+        if (found != null) {
+            // A position is no construction, so the names above it come to what one of them does.
+            IsAPosition<K> position = new IsAPosition<>(found.at());
+            return found.upTo() == p.steps() ? position : madeOf(position);
         }
-        for (int i = above.size() - 1; i >= 0; i--) {
-            String field = above.get(i).field();
-            if (origin instanceof Constructed<K> built) {
-                ValueOrigin<K> given = built.fields().get(field);
-                if (given == null) {
-                    throw new IllegalStateException("a construction of " + built.fields().keySet()
-                            + " was read for a field it has none of: " + field);
-                }
-                origin = given;
-            } else {
-                origin = new Composed<>(List.of(origin));
+        ValueOrigin<K> origin = of(p.base(), at, reading, following);
+        for (Core.FieldProjection.Step step : p.steps().inOrder()) {
+            if (!(origin instanceof Constructed<K>)) {
+                return madeOf(origin);
             }
+            origin = fieldOf(origin, step.field());
         }
         return origin;
+    }
+
+    /**
+     * What a field read off {@code target} is made of: the expression a construction gave it, or a
+     * value made of what it is read off.
+     *
+     * <p>The one rule for a field, whether it is written as an access or stands among a
+     * projection's names, so the two spellings of one value are one origin.
+     */
+    private static <K> ValueOrigin<K> fieldOf(ValueOrigin<K> target, String field) {
+        if (!(target instanceof Constructed<K> built)) {
+            return madeOf(target);
+        }
+        ValueOrigin<K> given = built.fields().get(field);
+        if (given == null) {
+            // A construction holds every declared field and a field access names a field of the
+            // type it reads, so a field missing here is this compiler disagreeing with itself rather
+            // than a provenance nothing can state. Said as the one it is.
+            throw new IllegalStateException("a construction of " + built.fields().keySet()
+                    + " was read for a field it has none of: " + field);
+        }
+        return given;
+    }
+
+    /**
+     * A value made of {@code under}, which is not a construction: one layer over it, or {@code
+     * under} itself where it is already a value made of something.
+     *
+     * <p>A value made of one made of something is made of it the way the one under it is — what it
+     * is made from, whether an operation made it, which positions it names — so a layer over a
+     * layer says nothing one does not, and names read one after another as deep as a chain of
+     * declarations would hand every reader an origin as deep, to walk at each question.
+     */
+    private static <K> ValueOrigin<K> madeOf(ValueOrigin<K> under) {
+        return under instanceof Composed<K> ? under : new Composed<>(List.of(under));
     }
 
     /**

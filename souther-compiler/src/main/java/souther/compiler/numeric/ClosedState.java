@@ -1,5 +1,7 @@
 package souther.compiler.numeric;
 
+import souther.compiler.numeric.DifferenceBounds.Apart;
+
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -267,46 +269,47 @@ public final class ClosedState<A> {
      * differences only at the start would answer differently depending on whether a rule happened to
      * arrive as a difference or as a sum — which is the spelling deciding the answer again, one level
      * up.
+     *
+     * <p>Along the relations the differences hold and not along every two positions. A difference
+     * through nought is two positions' own bounds, and every box this is handed lies inside the
+     * bounds the differences were closed to — it starts there and is only narrowed — so a bound
+     * carried that way lands outside an end the box already has, unless the box has emptied, which
+     * the caller asks of the box itself.
      */
     private static <A> Carried<A> throughDifferences(Box<A> box, DifferenceBounds<A> differences,
                                                       Set<A> positions) {
         Map<A, ExactCut> least = new LinkedHashMap<>();
         Map<A, ExactCut> most = new LinkedHashMap<>();
-        boolean everyBoundWasComposed = true;
         for (A here : positions) {
-            ExactCut high = box.mostOf(here);
-            ExactCut low = box.leastOf(here);
-            for (A there : positions) {
-                if (here.equals(there)) {
-                    continue;
-                }
-                // `here - there <= d` with `there <= h` puts `here` at `h + d`. Where the exact sum
-                // cannot be held, this carries no bound from `there` onto `here` this round — the
-                // same as `apart` not having been found — which only ever leaves `here` wider.
-                ExactCut apart = differences.differenceBound(here, there);
-                if (apart != null && box.mostOf(there) != null) {
-                    switch (ExactCut.meetingBoth(box.mostOf(there), apart)) {
-                        case ExactAnswer.Held<ExactCut> composed ->
-                                high = ExactCut.tighterUpper(high, composed.value());
-                        case ExactAnswer.Unheld<ExactCut> _ -> everyBoundWasComposed = false;
-                    }
-                }
-                // `there - here <= d` with `there >= l` puts `here` at `l - d`.
-                ExactCut back = differences.differenceBound(there, here);
-                if (back != null && box.leastOf(there) != null) {
-                    switch (box.leastOf(there).at().minus(back.at())) {
-                        case ExactAnswer.Held<ExactRatio> at -> low = ExactCut.tighterLower(low,
-                                new ExactCut(at.value(),
-                                        box.leastOf(there).inclusive() && back.inclusive()));
-                        case ExactAnswer.Unheld<ExactRatio> _ -> everyBoundWasComposed = false;
-                    }
+            if (box.leastOf(here) != null) {
+                least.put(here, box.leastOf(here));
+            }
+            if (box.mostOf(here) != null) {
+                most.put(here, box.mostOf(here));
+            }
+        }
+        boolean everyBoundWasComposed = true;
+        for (Apart<A> apart : differences.relations()) {
+            // `above - below <= d` with `below <= h` puts `above` at `h + d`. Where the exact sum
+            // cannot be held, this carries no bound from `below` onto `above` this round — the same
+            // as the relation not having been found — which only ever leaves `above` wider.
+            ExactCut onto = box.mostOf(apart.below());
+            if (onto != null && positions.contains(apart.above())) {
+                switch (ExactCut.meetingBoth(onto, apart.by())) {
+                    case ExactAnswer.Held<ExactCut> composed ->
+                            most.merge(apart.above(), composed.value(), ExactCut::tighterUpper);
+                    case ExactAnswer.Unheld<ExactCut> _ -> everyBoundWasComposed = false;
                 }
             }
-            if (low != null) {
-                least.put(here, low);
-            }
-            if (high != null) {
-                most.put(here, high);
+            // `above - below <= d` with `above >= l` puts `below` at `l - d`.
+            ExactCut from = box.leastOf(apart.above());
+            if (from != null && positions.contains(apart.below())) {
+                switch (from.at().minus(apart.by().at())) {
+                    case ExactAnswer.Held<ExactRatio> at -> least.merge(apart.below(),
+                            new ExactCut(at.value(), from.inclusive() && apart.by().inclusive()),
+                            ExactCut::tighterLower);
+                    case ExactAnswer.Unheld<ExactRatio> _ -> everyBoundWasComposed = false;
+                }
             }
         }
         return new Carried<>(new Box<>(least, most), everyBoundWasComposed);

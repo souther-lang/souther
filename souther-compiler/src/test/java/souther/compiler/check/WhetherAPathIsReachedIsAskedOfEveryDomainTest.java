@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.Compiler;
+import souther.compiler.collect.AppendOnly;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Severity;
 import souther.compiler.numeric.Count;
@@ -20,7 +21,6 @@ import souther.compiler.values.ValueSet;
 import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -163,7 +163,7 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
     }
 
     private static Known reaching(ConstraintState<FactSubject> constraints) {
-        return new Known(constraints, List.of(), Set.of(), new Known.Unguarded(ConstraintState.top(FactSubject.inOneOrder())));
+        return new Known(constraints, List.of(), AppendOnly.empty(), new Known.Unguarded(ConstraintState.top(FactSubject.inOneOrder())));
     }
 
     private static ConstraintState<FactSubject> numbersAtBottom() {

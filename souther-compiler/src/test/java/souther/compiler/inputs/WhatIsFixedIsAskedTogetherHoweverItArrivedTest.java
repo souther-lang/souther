@@ -337,9 +337,13 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
      */
     @Test
     void settlingAPositionDoesNotReadTheDeclarationsAgain() {
+        long beforeReading = InvariantChecker.readingsMade();
         Read read = read(SOURCE, "take");
         Quantities asked = read.inputs().quantities(read.rules());
         long before = InvariantChecker.readingsMade();
+        // The count is kept on the path the source is read by, so settling that reads nothing is
+        // a count that stood still and not a count nobody kept.
+        assertTrue(before > beforeReading, "reading the source made no reading");
 
         Quantities twice = asked.given(X, count(1)).given(Y, count(1));
         twice.runsBetween(sum());

@@ -2,12 +2,11 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.Compiler;
+import souther.test.Growth;
 
 import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.SequencedMap;
 import java.util.StringJoiner;
-
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A record holding the one before it in a field, down to a number with a rule on it: each record
@@ -48,11 +47,10 @@ class ARuleUnderAChainOfRecordsNamesItsProjectionOnceTest {
 
     @Test
     void doublingTheChainAboutDoublesTheWalks() {
-        Map<Integer, Long> walks = new LinkedHashMap<>();
+        SequencedMap<Integer, Long> walks = new LinkedHashMap<>();
         for (int links : new int[] {40, 80, 160}) {
             walks.put(links, walksOver(links));
         }
-        assertTrue(walks.get(80) <= walks.get(40) * 5 / 2, "80 records: " + walks);
-        assertTrue(walks.get(160) <= walks.get(80) * 5 / 2, "160 records: " + walks);
+        Growth.eachAtMost(walks, 5, 2);
     }
 }

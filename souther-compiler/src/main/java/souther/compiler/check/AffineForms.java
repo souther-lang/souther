@@ -528,6 +528,12 @@ public final class AffineForms {
             // as it leaves every access above it standing when they are written out.
             case Core.FieldProjection p -> {
                 List<Standing<A, E>> reached = standing(p.base(), at, reading, following);
+                // Asked before the names are written out: a base standing at no construction has
+                // nothing written against its first name, and the names are as many as the chain
+                // is deep.
+                if (!allConstructions(reached)) {
+                    yield List.of(new Standing<>(e, at, reading));
+                }
                 for (Core.FieldProjection.Step step : p.steps().inOrder()) {
                     List<Standing<A, E>> written = given(reached, step.field());
                     if (written == null) {
@@ -610,11 +616,12 @@ public final class AffineForms {
      * giving it — one field taken off what a projection's target stands at.
      */
     private static <A, E> List<Standing<A, E>> given(List<Standing<A, E>> targets, String field) {
+        if (!allConstructions(targets)) {
+            return null;
+        }
         List<Standing<A, E>> out = new ArrayList<>();
         for (Standing<A, E> target : targets) {
-            if (!(Core.withoutStanding(target.value()) instanceof Core.Construct nd)) {
-                return null;
-            }
+            Core.Construct nd = (Core.Construct) Core.withoutStanding(target.value());
             Core written = ConstructionProjection.given(nd, field);
             if (written == null) {
                 return null;
@@ -624,6 +631,17 @@ public final class AffineForms {
             out.add(new Standing<>(written, target.at(), target.reading()));
         }
         return out;
+    }
+
+    /** Whether every one of {@code targets} stands at a construction, which is all a field can be
+     *  written against: one that does not has nothing written for any name taken off it. */
+    private static <A, E> boolean allConstructions(List<Standing<A, E>> targets) {
+        for (Standing<A, E> target : targets) {
+            if (!(Core.withoutStanding(target.value()) instanceof Core.Construct)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
