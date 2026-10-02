@@ -7,7 +7,6 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.TypeSymbol;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * How much the value at a name may hold, asked of the rules rather than read off them.
@@ -49,26 +48,15 @@ public final class OccurrenceCounts {
      * clauses.
      */
     public static OccurrenceCounts of(TypeSymbol.AtModule named, RuleReadingContext reading) {
-        return of(named, reading, Set.of());
-    }
-
-    /** The same counts, off a reading somebody has already made of the declaration. */
-    static OccurrenceCounts of(InvariantChecker.Seeded seeded) {
-        return new OccurrenceCounts(seeded);
+        return new OccurrenceCounts(InvariantChecker.seedFields(named, reading));
     }
 
     /**
-     * The same, with the declarations {@code granted} names supposed to hold values.
-     *
-     * <p>Read this way by whatever is asking what would be true if some declaration had values. Its
-     * rules are what say it has none — its own, and the ones under whatever it wraps — so supposing
-     * it has a value is not reading it at all.
+     * The same counts, off a reading somebody has already made of the declaration — the one a
+     * supposing made ({@link Supposing#readingOf}) among them.
      */
-    static OccurrenceCounts of(TypeSymbol.AtModule named, RuleReadingContext reading,
-                               Set<TypeSymbol> granted) {
-        return new OccurrenceCounts(
-                InvariantChecker.seedFields(named, reading, java.util.Map.of(),
-                        InvariantChecker.Reach.stoppingAt(granted)));
+    static OccurrenceCounts of(InvariantChecker.Seeded seeded) {
+        return new OccurrenceCounts(seeded);
     }
 
     /** Whether the value at {@code path} may hold no more than {@code count}. */

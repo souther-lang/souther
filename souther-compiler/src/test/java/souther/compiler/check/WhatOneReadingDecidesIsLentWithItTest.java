@@ -153,10 +153,12 @@ class WhatOneReadingDecidesIsLentWithItTest {
         FieldDomains canonical = asTheCompilationReads(compilation, "Held");
         TypeSymbol.AtModule held = declared("Held");
         RuleReadingSource source = RuleReadings.of(compilation, "demo");
-        FieldDomains granting = FieldDomains.granting(held,
-                RuleReadingContext.of(source, ReadAs.THE_COMPILATION_DOES,
-                        compilation.db().readings()),
-                Set.of(declared("Common")));
+        RuleReadingContext reading = RuleReadingContext.of(source, ReadAs.THE_COMPILATION_DOES,
+                compilation.db().readings());
+        Supposing supposing = Supposing.of(Set.of(declared("Common")),
+                new Supposing.Across(source));
+        FieldDomains granting = FieldDomains.of(supposing.readingOf(held, reading), reading,
+                supposing.reach());
 
         assertNotSame(canonical, granting,
                 "a reading that supposes a declaration has values is not the declaration's own");

@@ -712,35 +712,14 @@ public final class Shapes {
             return readAs;
         }
 
-        /**
-         * The newtype {@code named} is worn over, where both of them write nothing; null where
-         * either writes something or {@code named} is worn over anything else.
-         */
+        /** {@link DeclarationReadings#wornOverWritingNothing}, asked of the store. */
         private static TypeSymbol.AtModule wornOver(Db db, TypeKey named) {
-            if (!writesNothing(db, named)) {
-                return null;
-            }
-            Answer<Type> inner = db.ask(new NewtypeInnerOf(named));
-            return inner.present() && inner.value() instanceof Type.Ref ref
-                    && ref.name() instanceof TypeSymbol.AtModule beneath
-                    && writesNothing(db, beneath.key())
-                    ? beneath : null;
-        }
-
-        /**
-         * Whether {@code named} is a newtype that adds nothing a reading reads: no clause of its
-         * own and nothing spread into it.
-         *
-         * <p>Asked of what the declaration publishes and of nothing a reading made. A clause nobody
-         * could work out is published as one all the same, and a declaration whose meaning could
-         * not be read is not one that says nothing — so neither is taken for a name that writes
-         * nothing.
-         */
-        private static boolean writesNothing(Db db, TypeKey named) {
-            return db.ask(new MeaningOf(named)).value()
-                    instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Product product)
-                    && product.newtype() && product.includes().isEmpty()
-                    && product.clauses().isEmpty();
+            return DeclarationReadings.wornOverWritingNothing(named,
+                    each -> db.ask(new MeaningOf(each)).value(),
+                    each -> {
+                        Answer<Type> inner = db.ask(new NewtypeInnerOf(each));
+                        return inner.present() ? inner.value() : null;
+                    });
         }
     }
 

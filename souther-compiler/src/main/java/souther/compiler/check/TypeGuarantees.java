@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * What a type guarantees of a value, asked one value at a time.
@@ -238,6 +239,18 @@ final class TypeGuarantees {
      * a rule the walk has already gone one name down to, and no row can discharge it.
      */
     boolean anyRuleUnder(Type type) {
+        return anyRuleUnder(type, clauses.source(), owner -> !clauses.declared(owner).isEmpty());
+    }
+
+    /**
+     * The same, asked of {@code source} by a reader holding no reading of its own, with whether a
+     * declaration writes a rule answered by {@code writes}.
+     *
+     * <p>Here so that there is one closure over {@link ValueReading} and not two: a reader asking
+     * whether a reading would have anything to stop on is asking what a stop asks.
+     */
+    static boolean anyRuleUnder(Type type, RuleReadingSource source,
+                                Predicate<TypeSymbol.AtModule> writes) {
         // `seen` stops a type that holds its own kind. A name met on the way here was read
         // where it was met, so what it holds is accounted for and reaching it again adds nothing.
         // On a stack of its own, because what is under a type is as deep as its declarations chain.
@@ -246,13 +259,13 @@ final class TypeGuarantees {
         List<Type> under = new ArrayList<>();
         left.push(type);
         while (!left.isEmpty()) {
-            ValueReading written = ValueReading.of(left.pop(), inners(), kinds(), symbols,
-                    published());
+            ValueReading written = ValueReading.of(left.pop(), source.inners(), source.kinds(),
+                    source.symbols(), source.published());
             if (written.entering() != null && !seen.add(written.entering())) {
                 continue;
             }
             for (ValueReading.Owner owner : written.owners()) {
-                if (!clauses.declared(owner.named()).isEmpty()) {
+                if (writes.test(owner.named())) {
                     return true;
                 }
             }

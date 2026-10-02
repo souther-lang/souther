@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.KnownExtents;
@@ -88,6 +89,42 @@ public interface DeclarationReadings {
      */
     default TypeSymbol.AtModule ownerOf(TypeSymbol.AtModule declaration) {
         return declaration;
+    }
+
+    /**
+     * The newtype {@code named} is worn over, where both of them write nothing; null where either
+     * writes something or {@code named} is worn over anything else.
+     *
+     * <p>One edge of what {@link #ownerOf} follows, and the only edge: a reading of {@code named}
+     * is the reading of what this answers. Asked of what each declaration publishes and of what
+     * it wraps, in that order, so a reader whose answers are kept by what they read depends on the
+     * declaration beneath only where the one above writes nothing.
+     */
+    static TypeSymbol.AtModule wornOverWritingNothing(TypeKey named,
+                                                      PublishedDeclarations published,
+                                                      NewtypeInners inners) {
+        if (!writesNothing(published.of(named))) {
+            return null;
+        }
+        return inners.of(named) instanceof Type.Ref ref
+                && ref.name() instanceof TypeSymbol.AtModule beneath
+                && writesNothing(published.of(beneath.key()))
+                ? beneath : null;
+    }
+
+    /**
+     * Whether {@code declared} is a newtype that adds nothing a reading reads: no clause of its own
+     * and nothing spread into it.
+     *
+     * <p>Asked of what the declaration publishes and of nothing a reading made. A clause nobody
+     * could work out is published as one all the same, and a declaration whose meaning could not be
+     * read is not one that says nothing — so neither is taken for a name that writes nothing.
+     */
+    private static boolean writesNothing(PublishedDeclarationResult declared) {
+        return declared instanceof PublishedDeclarationResult.Found(
+                        DeclarationMeaning.Product product)
+                && product.newtype() && product.includes().isEmpty()
+                && product.clauses().isEmpty();
     }
 
     /**
