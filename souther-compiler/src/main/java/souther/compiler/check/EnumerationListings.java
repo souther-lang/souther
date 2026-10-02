@@ -32,9 +32,7 @@ public interface EnumerationListings {
      * The same question read off the declarations in {@code symbols}, each time it is asked: every
      * sum of the value's module, each asked whether it is an enumeration and opened if it is.
      *
-     * <p>For the walks that have not been handed the compilation's answer, and for the one that
-     * makes what a declaration says: there the declaration being made is taken out of
-     * {@code published}, and an answer held by the compilation would be read past that.
+     * <p>For the walks that have not been handed the compilation's answer.
      */
     static EnumerationListings asWritten(Symbols symbols, DeclarationKinds kinds,
                                          PublishedDeclarations published) {

@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
+import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Shape;
@@ -45,7 +46,7 @@ public final class Distinctions {
      * <p>Nothing about the rules on the position. What its type declares and what its rules leave
      * it able to hold are two facts, and this is the first of them.
      */
-    public static List<Case> ofType(Shape shape, Symbols symbols,
+    public static List<Case> ofType(Shape shape, Symbols symbols, DeclarationKinds kinds,
                                     PublishedDeclarations published) {
         return switch (shape) {
             // A `Bool` is two values. No other primitive has distinctions to read off its type:
@@ -55,8 +56,9 @@ public final class Distinctions {
             // here.
             case Shape.Scalar scalar -> scalar.prim() == Type.Prim.BOOL
                     ? List.of(new Case.Truth(true), new Case.Truth(false)) : List.of();
-            case Shape.Sum sum -> casesOf(Type.ref(sum.name()), symbols, published);
-            case Shape.Cases cases -> casesOf(Type.union(cases.members()), symbols, published);
+            case Shape.Sum sum -> casesOf(Type.ref(sum.name()), symbols, kinds, published);
+            case Shape.Cases cases ->
+                    casesOf(Type.union(cases.members()), symbols, kinds, published);
             case Shape.Optional _ ->
                     List.of(new Case.Presence(false), new Case.Presence(true));
             // Shapes whose types state no division of their own. A record is made of positions and
@@ -81,10 +83,10 @@ public final class Distinctions {
 
     /** A sum's cases as distinctions, folded to their leaves and in the order they are declared —
      *  which is the order a report names them in. */
-    private static List<Case> casesOf(Type sum, Symbols symbols,
+    private static List<Case> casesOf(Type sum, Symbols symbols, DeclarationKinds kinds,
                                       PublishedDeclarations published) {
         List<Case> out = new ArrayList<>();
-        for (TypeSymbol leaf : AtomSpace.subjectAtoms(sum, published)) {
+        for (TypeSymbol leaf : AtomSpace.subjectAtoms(sum, kinds, published)) {
             out.add(new Case.SumCase(leaf, oneValue(leaf, symbols)));
         }
         return List.copyOf(out);

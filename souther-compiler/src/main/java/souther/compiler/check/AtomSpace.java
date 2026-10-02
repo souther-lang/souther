@@ -56,10 +56,16 @@ public final class AtomSpace {
      * has is what that declaration says about itself, so a reader here means nothing by the tree it
      * was written in — and reading one would answer differently for the same sum every time a line
      * above it moved.
+     *
+     * <p>Whether a name is a sum to descend is asked of {@code kinds} first, and what it says only
+     * of the ones that are. A case may be a product, whose meaning is made by reading its clauses,
+     * and a clause that orders a value asks this of the sums of the value's module. Asking every
+     * case what it says would ask it of a product whose own meaning is being made.
      */
-    public static List<TypeSymbol> subjectAtoms(Type t, PublishedDeclarations published) {
+    public static List<TypeSymbol> subjectAtoms(Type t, DeclarationKinds kinds,
+                                                PublishedDeclarations published) {
         Set<TypeSymbol> atoms = new LinkedHashSet<>();
-        descend(roots(t), published, atoms, new HashSet<>());
+        descend(roots(t), kinds, published, atoms, new HashSet<>());
         return List.copyOf(atoms);
     }
 
@@ -95,16 +101,18 @@ public final class AtomSpace {
      * Such a declaration is refused where it is written ({@link DataChecker}); this only has to
      * come back.
      */
-    private static void descend(Iterable<TypeSymbol> names, PublishedDeclarations published,
-                                Set<TypeSymbol> atoms, Set<TypeSymbol> expanded) {
+    private static void descend(Iterable<TypeSymbol> names, DeclarationKinds kinds,
+                                PublishedDeclarations published, Set<TypeSymbol> atoms,
+                                Set<TypeSymbol> expanded) {
         for (TypeSymbol name : names) {
             // What the language declares is a case and never a sum, and it has no address to ask
             // about: a name that is not a module's is an atom without anything being asked.
             if (name instanceof TypeSymbol.AtModule at
+                    && kinds.isSum(at.key())
                     && published.of(at.key())
                         instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Sum sum)) {
                 if (expanded.add(name)) {
-                    descend(declaredCases(sum), published, atoms, expanded);
+                    descend(declaredCases(sum), kinds, published, atoms, expanded);
                 }
             } else {
                 atoms.add(name);

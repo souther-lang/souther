@@ -188,7 +188,7 @@ public final class SpecChecker {
      * definition, so a signature on one is rejected.
      */
     static void checkExposedPipeOutputs(Hir.Module module, Map<String, Sig> sigs,
-            PublishedDeclarations published) {
+            DeclarationKinds kinds, PublishedDeclarations published) {
         Set<String> named = Set.copyOf(module.exposing().named());
         Set<String> pipeNames = new HashSet<>();
         for (Hir.BehaviorDef b : module.behaviors()) {
@@ -215,7 +215,7 @@ public final class SpecChecker {
                 continue;
             }
             Set<TypeSymbol> inferred =
-                    new LinkedHashSet<>(AtomSpace.subjectAtoms(sig.outputType(), published));
+                    new LinkedHashSet<>(AtomSpace.subjectAtoms(sig.outputType(), kinds, published));
             Hir.RetType declared = module.exposedOutputs().get(pipe.name());
             if (declared == null) {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
@@ -231,7 +231,7 @@ public final class SpecChecker {
                 throw new Unanswerable(declared.pos());
             }
             Set<TypeSymbol> declaredCases =
-                    new LinkedHashSet<>(AtomSpace.subjectAtoms(declaredOut, published));
+                    new LinkedHashSet<>(AtomSpace.subjectAtoms(declaredOut, kinds, published));
             if (!inferred.equals(declaredCases)) {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
                                 
@@ -349,7 +349,7 @@ public final class SpecChecker {
                         .withDependencies(dependsOn)
                         .preserving(Preserved.valuesAlreadySettled(settledValues)), output);
         Type rt = answered.type();
-        if (!TypeOps.assignable(rt, output, published)) {
+        if (!TypeOps.assignable(rt, output, kinds, published)) {
             throw CompileException.of(Diagnostic
                             .at(body.pos())
                             .diff(Type.show(rt, output), Type.show(output, rt)).say(new BehaviorMessage.TheBodyIsNotWhatTheBehaviorReturns(spec.name(), Type.show(output), Type.show(rt))).build());
@@ -535,13 +535,15 @@ public final class SpecChecker {
      * well: two stages may depart cases of one spelling from two modules.
      */
     static void checkUnionMemberNames(Hir.Module module, Map<String, Sig> sigs,
+                                      DeclarationKinds kinds,
                                       PublishedDeclarations published) {
         for (Hir.BehaviorDef b : module.behaviors()) {
             Sig sig = sigs.get(b.name());
             if (sig == null) {
                 continue;
             }
-            TypeSymbol.AtModule[] clash = TypeOps.ambiguousMembers(sig.outputType(), published);
+            TypeSymbol.AtModule[] clash = TypeOps.ambiguousMembers(sig.outputType(), kinds,
+                    published);
             if (clash == null) {
                 continue;
             }
@@ -573,7 +575,8 @@ public final class SpecChecker {
                 continue;
             }
             TypeSymbol carrying =
-                    TypeOps.memberCarryingField(sig.outputType(), tagKey, symbols, published);
+                    TypeOps.memberCarryingField(sig.outputType(), tagKey, symbols, kinds,
+                            published);
             if (carrying == null) {
                 continue;
             }

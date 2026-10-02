@@ -89,7 +89,8 @@ class AReaderOfTheTerminalTakesItAndDoesNotWalkTheNamesTest {
         Counting inners = new Counting(true);
 
         assertEquals(new Shape.Scalar(Type.Prim.INT),
-                TypeView.shapeOf(TOP, inners, SYMBOLS, ScopedDeclarations.of(SYMBOLS)));
+                TypeView.shapeOf(TOP, inners, SYMBOLS, ScopedDeclarations.kindsOf(SYMBOLS),
+                        ScopedDeclarations.of(SYMBOLS)));
         assertEquals(1, inners.terminals);
         assertEquals(0, inners.asked, "the shape walked the names over it");
     }

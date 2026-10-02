@@ -280,7 +280,7 @@ public final class ExampleStatements {
     }
 
     private Set<TypeSymbol> outCases(Type out) {
-        return TypeOps.outputCases(out, published);
+        return TypeOps.outputCases(out, kinds, published);
     }
 
     // --- two statements about one behavior -----------------------------------------------------

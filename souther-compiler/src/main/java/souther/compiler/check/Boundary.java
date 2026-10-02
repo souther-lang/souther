@@ -61,7 +61,7 @@ public final class Boundary {
      */
     public static Alternatives of(Type subject, DeclarationKinds kinds,
                                   PublishedDeclarations published) {
-        List<TypeSymbol> atoms = AtomSpace.subjectAtoms(subject, published);
+        List<TypeSymbol> atoms = AtomSpace.subjectAtoms(subject, kinds, published);
         return new Alternatives(atoms, isEnumerationForm(subject, atoms, kinds)
                 ? new Representation.Enumeration()
                 : new Representation.Discriminated(DISCRIMINATOR, CONTENTS));

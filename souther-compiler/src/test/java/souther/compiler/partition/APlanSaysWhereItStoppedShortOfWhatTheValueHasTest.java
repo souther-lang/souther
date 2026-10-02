@@ -163,7 +163,8 @@ class APlanSaysWhereItStoppedShortOfWhatTheValueHasTest {
 
         ConstructionPlan.Result asked = ConstructionPlan.of(typeOf(DEEP), TermPath.of("query"),
                 ScopedDeclarations.wrapsOf(symbolsOf(DEEP)),
-                symbolsOf(DEEP), ScopedDeclarations.of(symbolsOf(DEEP)), Set.of(deeper),
+                symbolsOf(DEEP), ScopedDeclarations.kindsOf(symbolsOf(DEEP)),
+                ScopedDeclarations.of(symbolsOf(DEEP)), Set.of(deeper),
                 Requirements.NONE, ANY);
 
         assertEquals(Set.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS),
@@ -187,7 +188,8 @@ class APlanSaysWhereItStoppedShortOfWhatTheValueHasTest {
     void aNarrowingStatedUnderTheFigureIsRefusedRatherThanDropped() {
         ConstructionPlan.Result asked = ConstructionPlan.of(typeOf(DEEP), TermPath.of("query"),
                 ScopedDeclarations.wrapsOf(symbolsOf(DEEP)),
-                symbolsOf(DEEP), ScopedDeclarations.of(symbolsOf(DEEP)), Set.of(),
+                symbolsOf(DEEP), ScopedDeclarations.kindsOf(symbolsOf(DEEP)),
+                ScopedDeclarations.of(symbolsOf(DEEP)), Set.of(),
                 Requirements.NONE.and(down(9), Refinement.of(new Case.Presence(true))),
                 ANY);
 
@@ -211,7 +213,8 @@ class APlanSaysWhereItStoppedShortOfWhatTheValueHasTest {
     void aDemandUnderACollectionWithNoRoomIsTheModelsAnswerAndNotTheFigure() {
         ConstructionPlan.Result asked = ConstructionPlan.of(typeOf(TREE), TermPath.of("query"),
                 ScopedDeclarations.wrapsOf(symbolsOf(TREE)),
-                symbolsOf(TREE), ScopedDeclarations.of(symbolsOf(TREE)),
+                symbolsOf(TREE), ScopedDeclarations.kindsOf(symbolsOf(TREE)),
+                ScopedDeclarations.of(symbolsOf(TREE)),
                 Set.of(insideTheTree(6)), Requirements.NONE, NONE_OF_THEM);
 
         ConstructionPlan.ModelRefusal.NoRoom why = assertInstanceOf(
@@ -235,7 +238,8 @@ class APlanSaysWhereItStoppedShortOfWhatTheValueHasTest {
     void theSameDemandWhereThereIsRoomIsTheFigure() {
         ConstructionPlan.Result asked = ConstructionPlan.of(typeOf(TREE), TermPath.of("query"),
                 ScopedDeclarations.wrapsOf(symbolsOf(TREE)),
-                symbolsOf(TREE), ScopedDeclarations.of(symbolsOf(TREE)),
+                symbolsOf(TREE), ScopedDeclarations.kindsOf(symbolsOf(TREE)),
+                ScopedDeclarations.of(symbolsOf(TREE)),
                 Set.of(insideTheTree(6)), Requirements.NONE, ANY);
 
         assertEquals(Set.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS),
@@ -266,7 +270,8 @@ class APlanSaysWhereItStoppedShortOfWhatTheValueHasTest {
 
         ConstructionPlan.Result asked = ConstructionPlan.of(typeOf(DEEP), TermPath.of("query"),
                 ScopedDeclarations.wrapsOf(symbolsOf(DEEP)),
-                symbolsOf(DEEP), ScopedDeclarations.of(symbolsOf(DEEP)), Set.of(inside),
+                symbolsOf(DEEP), ScopedDeclarations.kindsOf(symbolsOf(DEEP)),
+                ScopedDeclarations.of(symbolsOf(DEEP)), Set.of(inside),
                 Requirements.NONE, ANY);
 
         ConstructionPlan plan = assertInstanceOf(ConstructionPlan.Result.Planned.class, asked,
@@ -363,6 +368,7 @@ class APlanSaysWhereItStoppedShortOfWhatTheValueHasTest {
         return assertInstanceOf(ConstructionPlan.Result.Planned.class,
                 ConstructionPlan.of(typeOf(source), TermPath.of("query"),
                         ScopedDeclarations.wrapsOf(symbolsOf(source)), symbolsOf(source),
+                        ScopedDeclarations.kindsOf(symbolsOf(source)),
                         ScopedDeclarations.of(symbolsOf(source)), decided, additional, ANY),
                 "nothing here asks one position to be two things").plan();
     }

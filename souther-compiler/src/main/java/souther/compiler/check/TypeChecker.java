@@ -590,11 +590,12 @@ public final class TypeChecker {
         });
         // a composition named by `exposing` must declare its output there, matching the inferred one
         // (spec §declared-composition-output, ADR-0024), so a far-away change cannot grow a published output silently.
-        collect(errors, abandoned, () -> SpecChecker.checkUnionMemberNames(module, sigs, published));
+        collect(errors, abandoned, () -> SpecChecker.checkUnionMemberNames(module, sigs, kinds,
+                published));
         collect(errors, abandoned, () -> SpecChecker.checkUnionMemberFields(module, sigs, symbols,
                 kinds, published));
         collect(errors, abandoned, () -> SpecChecker.checkExposedPipeOutputs(module,
-                sigs, published));
+                sigs, kinds, published));
         // What this module reaches out with may not rest on what it keeps to itself — a name in
         // `exposing`, and an injection target, whose base is public whatever `exposing` says. After
         // the exposing signature checks: a signature that should not be there at all (E1605), or one

@@ -36,8 +36,9 @@ final class PartitionClasses {
                                    java.util.Set<TypeSymbol> expanding) {
         RuleReadingSource ruleSource = reading.source();
         TypeView view = TypeView.of(type, ruleSource.inners(), ruleSource.symbols(),
-                ruleSource.published());
-        return of(Distinctions.ofType(view.shape(), ruleSource.symbols(), ruleSource.published()),
+                ruleSource.kinds(), ruleSource.published());
+        return of(Distinctions.ofType(view.shape(), ruleSource.symbols(), ruleSource.kinds(),
+                        ruleSource.published()),
                 view, reading, expanding);
     }
 
@@ -234,7 +235,8 @@ final class PartitionClasses {
         }
         boolean wrapped = TypeOps.outermost(Type.ref(declared), ruleSource.inners()) != null;
         if (!wrapped && !(TypeView.shapeOf(Type.ref(declared), ruleSource.inners(),
-                ruleSource.symbols(), ruleSource.published()) instanceof Shape.Product)) {
+                ruleSource.symbols(), ruleSource.kinds(), ruleSource.published())
+                instanceof Shape.Product)) {
             return namingItBuildsIt(leaf, is, writes, names);
         }
         if (wrapped) {

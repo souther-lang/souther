@@ -63,10 +63,10 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
      * where a value's base is.
      */
     public static TypeView of(Type type, NewtypeInners inners, Symbols symbols,
-                              PublishedDeclarations published) {
+                              DeclarationKinds kinds, PublishedDeclarations published) {
         TypeOps.NewtypeSpine spine = TypeOps.newtypeSpine(type, inners);
         return new TypeView(type, spine.layers().stream().map(TypeOps.Layer::named).toList(),
-                shapeOf(spine.terminal(), symbols, published));
+                shapeOf(spine.terminal(), symbols, kinds, published));
     }
 
     /**
@@ -77,8 +77,8 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
      * compilation's answer does not take the names off one at a time to learn what is under them.
      */
     public static Shape shapeOf(Type type, NewtypeInners inners, Symbols symbols,
-                                PublishedDeclarations published) {
-        return shapeOf(inners.terminal(type), symbols, published);
+                                DeclarationKinds kinds, PublishedDeclarations published) {
+        return shapeOf(inners.terminal(type), symbols, kinds, published);
     }
 
     /**
@@ -90,8 +90,9 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
      * already taken the step: asked through {@link #of}, the same question would be put to the
      * declarations a second time.
      */
-    static TypeView wearingNoName(Type type, Symbols symbols, PublishedDeclarations published) {
-        return new TypeView(type, List.of(), shapeOf(type, symbols, published));
+    static TypeView wearingNoName(Type type, Symbols symbols, DeclarationKinds kinds,
+                                  PublishedDeclarations published) {
+        return new TypeView(type, List.of(), shapeOf(type, symbols, kinds, published));
     }
 
     /**
@@ -102,8 +103,9 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
      * answer is kept when a declaration only moves, and read off the tree it is worked out again.
      * Every caller of this is a reader that has not been handed the first, and a test counts them.
      */
-    public static TypeView asWritten(Type type, Symbols symbols, PublishedDeclarations published) {
-        return of(type, NewtypeInners.asWritten(symbols), symbols, published);
+    public static TypeView asWritten(Type type, Symbols symbols, DeclarationKinds kinds,
+                                     PublishedDeclarations published) {
+        return of(type, NewtypeInners.asWritten(symbols), symbols, kinds, published);
     }
 
     /** Whether any name is worn over the shape — which is a fact about how the value is written,
@@ -122,7 +124,7 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
      * newtype here is one whose {@code value} the walk could not reach, which is a name that
      * resolved to nothing usable rather than a shape.
      */
-    private static Shape shapeOf(Type terminal, Symbols symbols,
+    private static Shape shapeOf(Type terminal, Symbols symbols, DeclarationKinds kinds,
                                  PublishedDeclarations published) {
         return switch (terminal) {
             case Type.Prim prim -> new Shape.Scalar(prim);
@@ -137,7 +139,7 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
             case Type.OptionOf option -> new Shape.Optional(option.element());
             case Type.TupleOf tuple -> new Shape.Tuple(tuple.elements());
             case Type.FnOf fn -> new Shape.Function(fn.params(), fn.result());
-            case Type.Ref ref -> denoted(ref.name(), symbols, published);
+            case Type.Ref ref -> denoted(ref.name(), symbols, kinds, published);
         };
     }
 
@@ -148,11 +150,11 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
      * <p>A newtype arriving here is one the spine stopped on — its {@code value} was not declared,
      * so there is no base to read a shape from.
      */
-    private static Shape denoted(TypeSymbol name, Symbols symbols,
+    private static Shape denoted(TypeSymbol name, Symbols symbols, DeclarationKinds kinds,
                                  PublishedDeclarations published) {
         return switch (symbols.declaredNode(name)) {
             case Hir.SumData sum ->
-                    new Shape.Sum(name, TypeOps.commonSpreadOf(sum, symbols, published));
+                    new Shape.Sum(name, TypeOps.commonSpreadOf(sum, symbols, kinds, published));
             case Hir.UnitData _ -> new Shape.Unit(name);
             case Hir.Data data when data.newtype() -> new Shape.Unresolved(name);
             // A product shape states an order, so the order is asked of what answers it and the

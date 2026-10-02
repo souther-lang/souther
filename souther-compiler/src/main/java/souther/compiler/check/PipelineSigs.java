@@ -185,6 +185,7 @@ public final class PipelineSigs {
      */
     public static Composition composition(Hir.PipeBehavior pipe, Hir.Composition.Stages written,
                                           Map<ValueName.Behavior, Sig> sigs,
+                                          DeclarationKinds kinds,
                                           PublishedDeclarations published,
                                           Map<ValueName.Behavior, List<Hir.Var>> pipeStages) {
         // flatten nested pipeline stages so `>->` is associative (spec §type-routing)
@@ -213,9 +214,9 @@ public final class PipelineSigs {
             walked.add(new Composition.Stage(reaches(stages.get(i)), g.outputType(),
                     TypeOps.isDataLike(mainline)
                             ? new Composition.Routing.OnCases(
-                                    mainlineCases(mainline, g, published))
+                                    mainlineCases(mainline, g, kinds, published))
                             : new Composition.Routing.Always()));
-            mainline = route(mainline, g, retired, published, pipe.pos());
+            mainline = route(mainline, g, retired, kinds, published, pipe.pos());
         }
         return new Composition(walked, withRetired(mainline, retired));
     }
@@ -225,7 +226,7 @@ public final class PipelineSigs {
                                Symbols symbols, PublishedDeclarations published,
                                DeclarationKinds kinds,
                                Map<ValueName.Behavior, List<Hir.Var>> pipeStages) {
-        Composition composed = composition(pipe, written, sigs, published, pipeStages);
+        Composition composed = composition(pipe, written, sigs, kinds, published, pipeStages);
         Type out = composed.answers();
         // an optional declared output must match the inferred one exactly (spec
         // §declared-composition-output): neither a missing case (too narrow) nor an extra one (too wide) is
@@ -238,9 +239,10 @@ public final class PipelineSigs {
             if (TypeOps.restsOnAnUnresolvedName(written.declaredOut())) {
                 throw new Unanswerable(written.declaredOut().pos());
             }
-            Set<TypeSymbol> inferred = new LinkedHashSet<>(AtomSpace.subjectAtoms(out, published));
+            Set<TypeSymbol> inferred =
+                    new LinkedHashSet<>(AtomSpace.subjectAtoms(out, kinds, published));
             Set<TypeSymbol> declared =
-                    new LinkedHashSet<>(AtomSpace.subjectAtoms(declaredOut, published));
+                    new LinkedHashSet<>(AtomSpace.subjectAtoms(declaredOut, kinds, published));
             if (!inferred.equals(declared)) {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
 
@@ -281,11 +283,11 @@ public final class PipelineSigs {
     }
 
     /** The main-line leaf cases {@code g} accepts — the ones the backend routes into it (spec §type-routing). */
-    private static List<TypeSymbol> mainlineCases(Type mainline, Sig g,
+    private static List<TypeSymbol> mainlineCases(Type mainline, Sig g, DeclarationKinds kinds,
                                                   PublishedDeclarations published) {
         List<TypeSymbol> accepted = new ArrayList<>();
-        for (TypeSymbol caseName : AtomSpace.subjectAtoms(mainline, published)) {
-            if (TypeOps.assignable(Type.ref(caseName), g.in(), published)) {
+        for (TypeSymbol caseName : AtomSpace.subjectAtoms(mainline, kinds, published)) {
+            if (TypeOps.assignable(Type.ref(caseName), g.in(), kinds, published)) {
                 accepted.add(caseName);
             }
         }
@@ -309,15 +311,16 @@ public final class PipelineSigs {
      * still has the merged sum `f`+`g` produce as its output.
      */
     private static Type route(Type mainline, Sig g, Set<TypeSymbol> retired,
-                              PublishedDeclarations published, SourcePos pos) {
+                              DeclarationKinds kinds, PublishedDeclarations published,
+                              SourcePos pos) {
         Type in = g.in();
         if (TypeOps.isDataLike(mainline)) {
             Set<TypeSymbol> consumed = new LinkedHashSet<>();
             Set<TypeSymbol> passed = new LinkedHashSet<>();
             // route over the leaf cases: a named sum output splits into its members, so a stage that
             // accepts one of them consumes it while the rest retire (spec §sum-data, §type-routing)
-            for (TypeSymbol caseName : AtomSpace.subjectAtoms(mainline, published)) {
-                if (TypeOps.assignable(Type.ref(caseName), in, published)) {
+            for (TypeSymbol caseName : AtomSpace.subjectAtoms(mainline, kinds, published)) {
+                if (TypeOps.assignable(Type.ref(caseName), in, kinds, published)) {
                     consumed.add(caseName);
                 } else {
                     passed.add(caseName);

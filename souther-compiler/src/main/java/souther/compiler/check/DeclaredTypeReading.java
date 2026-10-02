@@ -378,7 +378,7 @@ public record DeclaredTypeReading(DeclarationFacts facts,
         private boolean settles(Substitution decided, List<Type> declared, List<Type> arrived) {
             for (int i = 0; i < declared.size(); i++) {
                 if (declared.get(i) != null && arrived.get(i) != null
-                        && decided.decide(declared.get(i), arrived.get(i), published())
+                        && decided.decide(declared.get(i), arrived.get(i), kinds(), published())
                                 instanceof Fit.Disagrees) {
                     return false;
                 }
@@ -407,7 +407,7 @@ public record DeclaredTypeReading(DeclarationFacts facts,
                                  List<Type> arrived) {
             for (int i = 0; i < declared.size(); i++) {
                 if (declared.get(i) != null && arrived.get(i) != null
-                        && decided.hold(declared.get(i), arrived.get(i), published())
+                        && decided.hold(declared.get(i), arrived.get(i), kinds(), published())
                                 instanceof Fit.Disagrees) {
                     return false;
                 }
@@ -418,7 +418,8 @@ public record DeclaredTypeReading(DeclarationFacts facts,
                 Type arrives = given.arrivesAs() == null
                         ? null : TypeOps.resolveParamType(given.arrivesAs());
                 if (takes != null && arrives != null
-                        && decided.hold(takes, arrives, published()) instanceof Fit.Disagrees) {
+                        && decided.hold(takes, arrives, kinds(), published())
+                                instanceof Fit.Disagrees) {
                     return false;
                 }
             }
@@ -609,7 +610,7 @@ public record DeclaredTypeReading(DeclarationFacts facts,
                 // No position is read: what the declaration answers is what this reading is asking
                 // about, and there is nothing above the call requiring anything of it.
                 bindings = SignatureApplication.settledByValues(settling, answers, null,
-                        stated::get, published());
+                        stated::get, kinds(), published());
             } catch (CompileException _) {
                 // What a variable cannot be settled to at once is a disagreement between two
                 // arguments, and what is wrong with it is reported where the call is written.
@@ -617,7 +618,7 @@ public record DeclaredTypeReading(DeclarationFacts facts,
             }
             for (int i = 0; i < settling.size(); i++) {
                 if (!TypeOps.admits(TypeOps.substitute(settling.get(i), bindings), stated.get(i),
-                        published())) {
+                        kinds(), published())) {
                     return new Settlement.Disagrees();
                 }
             }

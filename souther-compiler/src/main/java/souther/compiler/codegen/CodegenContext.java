@@ -554,7 +554,7 @@ final class CodegenContext {
             return List.of();
         }
         List<TypeSymbol> bridged = new ArrayList<>();
-        for (TypeSymbol member : AtomSpace.subjectAtoms(out, published)) {
+        for (TypeSymbol member : AtomSpace.subjectAtoms(out, kinds, published)) {
             if (member.isDeclaredByLanguage()
                     || !(member instanceof TypeSymbol.AtModule at)
                     || !at.module().equals(module)) {

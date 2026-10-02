@@ -1661,7 +1661,8 @@ final class TermRealizations {
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         RuleReadingSource ruleSource = reading.source();
-        TypeView holder = TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(), ruleSource.published());
+        TypeView holder = TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
+                ruleSource.kinds(), ruleSource.published());
         // A name this module cannot write leaves no value to write, which is a position nothing
         // composes one for rather than a value written without the name. Said with the name that
         // stopped it, and asked of the position rather than of the count, since it is the same
@@ -1745,7 +1746,8 @@ final class TermRealizations {
                     .multiply(BigDecimal.valueOf(each.getKey().seconds())));
         }
         FixtureTemplate standing = WornNames.under(
-                TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(), ruleSource.published()).wrappers(),
+                TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
+                        ruleSource.kinds(), ruleSource.published()).wrappers(),
                 FixtureTemplate.on(observed, Count.of(seconds), ruleSource.symbols().scope()::reach),
                 ruleSource);
         return standing == null
@@ -1795,7 +1797,8 @@ final class TermRealizations {
                             Set.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED)));
         }
         FixtureTemplate standing = WornNames.under(
-                TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(), ruleSource.published()).wrappers(),
+                TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
+                        ruleSource.kinds(), ruleSource.published()).wrappers(),
                 FixtureTemplate.on(observed, Dates.dayOf(found.on()),
                         ruleSource.symbols().scope()::reach),
                 ruleSource);
@@ -1952,7 +1955,7 @@ final class TermRealizations {
         }
         return Realization.Built.whole(List.of(WornNames.under(
                 TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
-                        ruleSource.published()).wrappers(), bare, ruleSource)));
+                        ruleSource.kinds(), ruleSource.published()).wrappers(), bare, ruleSource)));
     }
 
     /**
@@ -1970,7 +1973,7 @@ final class TermRealizations {
      */
     private static WornNames namesOf(Type sourceType, RuleReadingSource ruleSource) {
         return WornNames.of(TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
-                ruleSource.published()).wrappers(), ruleSource);
+                ruleSource.kinds(), ruleSource.published()).wrappers(), ruleSource);
     }
 
     private TermRealizations() {}

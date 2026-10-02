@@ -2886,7 +2886,7 @@ public final class Generator {
         Type position = Type.ref(built);
         return TypeOps.outermost(position, subject.rules().inners()) == null
                         && TypeView.shapeOf(position, subject.rules().inners(), subject.symbols(),
-                                subject.rules().published())
+                                subject.rules().kinds(), subject.rules().published())
                                 instanceof Shape.Product(TypeSymbol _,
                                         SequencedMap<String, Type> fields)
                 ? List.copyOf(fields.sequencedKeySet()) : null;
@@ -5052,7 +5052,8 @@ public final class Generator {
         FieldDomains under = rulesOf(subject.types().get(p), subject.ruleReading(),
                 under(root, settled));
         ConstructionPlan.Result planned = ConstructionPlan.of(subject.types().get(p), root,
-                subject.rules().inners(), subject.symbols(), subject.rules().published(),
+                subject.rules().inners(), subject.symbols(), subject.rules().kinds(),
+                subject.rules().published(),
                 decided.keySet(), additional,
                 (at, building) -> heldRange(under, at, building, subject.ruleReading()));
         ConstructionPlan plan;
@@ -5785,7 +5786,8 @@ public final class Generator {
         // reading's. The rules are then read on the declaration the fields came off — a position
         // written under a name takes its fields from what that name wraps, and reading the rules on
         // the name instead would be asking a declaration that has no such field.
-        return TypeView.shapeOf(type, source.inners(), source.symbols(), source.published())
+        return TypeView.shapeOf(type, source.inners(), source.symbols(), source.kinds(),
+                source.published())
                         instanceof Shape.Product(TypeSymbol.AtModule declared, Map<String, Type> _)
                 ? FieldDomains.of(declared, reading, settled) : FieldDomains.NONE;
     }

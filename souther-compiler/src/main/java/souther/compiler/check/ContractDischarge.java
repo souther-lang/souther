@@ -55,7 +55,7 @@ public record ContractDischarge(List<RuleDischarge> rules,
             classified.addAll(of(stated, rule, reading));
         }
         return new ContractDischarge(classified,
-                unstatedCases(stated, reading.source().published()));
+                unstatedCases(stated, reading.source().kinds(), reading.source().published()));
     }
 
     /**
@@ -108,6 +108,7 @@ public record ContractDischarge(List<RuleDischarge> rules,
      * wanting to know asks.
      */
     private static List<TypeSymbol> unstatedCases(StatedContract contract,
+                                                  DeclarationKinds kinds,
                                                   PublishedDeclarations published) {
         // Over what the answer can be and not over what it declared. A rule may be written about a
         // case that has cases of its own, and it states something about each of them; counted by
@@ -119,7 +120,7 @@ public record ContractDischarge(List<RuleDischarge> rules,
             }
         }
         List<TypeSymbol> unstated = new ArrayList<>();
-        for (TypeSymbol atom : AtomSpace.subjectAtoms(contract.output(), published)) {
+        for (TypeSymbol atom : AtomSpace.subjectAtoms(contract.output(), kinds, published)) {
             if (!stated.contains(atom)) {
                 unstated.add(atom);
             }

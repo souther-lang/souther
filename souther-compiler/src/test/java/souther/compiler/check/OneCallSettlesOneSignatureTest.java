@@ -120,7 +120,7 @@ class OneCallSettlesOneSignatureTest {
                 Type.list(Type.INT), i -> {
                     reads[i]++;
                     return Type.list(Type.INT);
-                }, PublishedDeclarations.NONE);
+                }, DeclarationKinds.NONE, PublishedDeclarations.NONE);
 
         assertEquals(0, reads[0], "a function argument is typed after the values, not here");
         assertEquals(1, reads[1], "and a value argument is read once, however it is ordered");
