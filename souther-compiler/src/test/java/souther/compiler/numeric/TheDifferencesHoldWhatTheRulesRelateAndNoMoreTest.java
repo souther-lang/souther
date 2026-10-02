@@ -2,27 +2,29 @@ package souther.compiler.numeric;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.numeric.AffineConstraint.Read;
+import souther.compiler.numeric.DifferenceBounds.Apart;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Nought is the one node every bounded position has an edge to or from, so a record of pairs, each
- * bounded and each related only to its own other half, closes over every two of them once it has
- * gone through nought. Gone through last, that is one pass; gone through first, every position gone
- * through after it composes every row, and the closure costs the cube of how many positions there
- * are.
+ * A difference through nought is two positions' own bounds, and every bounded position has an edge
+ * to or from nought, so a closure that kept nought as a node would relate every two of them: a
+ * record of many bounded fields would close in the square of how many there were, and a box carried
+ * along every relation would be carried along all of those. What is held is what the rules relate.
  *
- * <p>Held as a count of the hops composed, over doublings, and beside it what the closure answers,
- * which does not turn on the order.
+ * <p>Held as a count of the hops composed, over doublings; as the relations the closure hands a
+ * carry; and beside both what the closure answers about a difference through nought, which it
+ * still answers.
  */
-class NoughtIsGoneThroughOnceWhenTheDifferencesCloseTest {
+class TheDifferencesHoldWhatTheRulesRelateAndNoMoreTest {
 
     private static AffineConstraint<String> stated(Map<String, ExactRatio> coefs, long constant,
                                                    Rel rel) {
@@ -64,17 +66,27 @@ class NoughtIsGoneThroughOnceWhenTheDifferencesCloseTest {
     }
 
     @Test
-    void doublingThePairsAboutQuadruplesTheHops() {
+    void doublingThePairsAboutDoublesTheHops() {
         Map<Integer, Long> hops = new LinkedHashMap<>();
         for (int pairs : new int[] {20, 40, 80}) {
             hops.put(pairs, hopsOver(pairs));
         }
-        assertTrue(hops.get(40) <= hops.get(20) * 5, "40 pairs: " + hops);
-        assertTrue(hops.get(80) <= hops.get(40) * 5, "80 pairs: " + hops);
+        assertTrue(hops.get(40) <= hops.get(20) * 5 / 2, "40 pairs: " + hops);
+        assertTrue(hops.get(80) <= hops.get(40) * 5 / 2, "80 pairs: " + hops);
     }
 
     @Test
-    void andWhatItClosesToIsEveryBoundThroughNought() {
+    void theRelationsAreTheOnesTheRulesState() {
+        DifferenceBounds<String> closed =
+                DifferenceBounds.over(pairs(3), CanonicalOrder.asTheyAreSpelled());
+        ExactCut atNought = ExactCut.inclusive(ExactRatio.ZERO);
+        assertEquals(Set.of(new Apart<>("a0", "b0", atNought), new Apart<>("a1", "b1", atNought),
+                        new Apart<>("a2", "b2", atNought)),
+                Set.copyOf(closed.relations()));
+    }
+
+    @Test
+    void andWhatItAnswersIsEveryBoundThroughNought() {
         DifferenceBounds<String> closed =
                 DifferenceBounds.over(pairs(3), CanonicalOrder.asTheyAreSpelled());
         assertEquals(ExactCut.inclusive(ExactRatio.of(100)), closed.upperBoundOf("a0"));
