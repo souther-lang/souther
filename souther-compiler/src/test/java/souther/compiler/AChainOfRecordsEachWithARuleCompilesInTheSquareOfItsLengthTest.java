@@ -2,8 +2,10 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 import souther.test.Allocated;
+import souther.test.Growth;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.util.LinkedHashMap;
+import java.util.SequencedMap;
 
 /**
  * A chain of records, each holding the one before and each with a rule of its own, reads at each
@@ -51,9 +53,12 @@ class AChainOfRecordsEachWithARuleCompilesInTheSquareOfItsLengthTest {
     @Test
     void oneMoreRecordCostsAboutTwiceAsMuchAtTwiceTheLength() {
         allocatedCompiling(10);
-        long shorter = oneMoreAfter(15);
-        long longer = oneMoreAfter(30);
-        assertTrue(longer * 10 <= shorter * 19,
-                "one more record after 15 allocated " + shorter + " bytes and after 30 " + longer);
+        // What is compared is what one more record costs, so that is what has to have been
+        // counted: two compiles that each allocated can differ by nothing where the work one more
+        // record adds is done somewhere this does not see.
+        SequencedMap<Integer, Long> oneMore = new LinkedHashMap<>();
+        oneMore.put(15, oneMoreAfter(15));
+        oneMore.put(30, oneMoreAfter(30));
+        Growth.eachAtMost(oneMore, 19, 10);
     }
 }

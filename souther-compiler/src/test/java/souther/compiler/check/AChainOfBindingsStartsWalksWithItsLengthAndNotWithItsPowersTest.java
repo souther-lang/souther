@@ -110,10 +110,16 @@ class AChainOfBindingsStartsWalksWithItsLengthAndNotWithItsPowersTest {
         for (int depth : new int[] {20, 40, 60, 80}) {
             walks.put(depth, walksOver(depth));
         }
-        Growth.counted(walks);
-        long first = walks.get(40) - walks.get(20);
-        long second = walks.get(60) - walks.get(40);
-        long third = walks.get(80) - walks.get(60);
+        // What is compared is what each step of depth adds, so that is what has to have been
+        // counted: totals that each counted something can add nothing from one depth to the next.
+        Map<Integer, Long> added = new LinkedHashMap<>();
+        added.put(40, walks.get(40) - walks.get(20));
+        added.put(60, walks.get(60) - walks.get(40));
+        added.put(80, walks.get(80) - walks.get(60));
+        Growth.counted(added);
+        long first = added.get(40);
+        long second = added.get(60);
+        long third = added.get(80);
         assertTrue(Math.abs(second - first) <= first / 4 + 2, "steps 1,2: " + walks);
         assertTrue(Math.abs(third - second) <= second / 4 + 2, "steps 2,3: " + walks);
     }
