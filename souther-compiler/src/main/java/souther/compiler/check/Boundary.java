@@ -59,9 +59,8 @@ public final class Boundary {
      * a bare tag — and is not a claim that the type crosses as a discriminated object. A reader
      * wanting the whole external representation of an arbitrary type is not asking this.
      */
-    public static Alternatives of(Type subject, DeclarationKinds kinds,
-                                  PublishedDeclarations published) {
-        List<TypeSymbol> atoms = AtomSpace.subjectAtoms(subject, kinds, published);
+    public static Alternatives of(Type subject, DeclarationKinds kinds, SumCases sums) {
+        List<TypeSymbol> atoms = AtomSpace.subjectAtoms(subject, kinds, sums);
         return new Alternatives(atoms, isEnumerationForm(subject, atoms, kinds)
                 ? new Representation.Enumeration()
                 : new Representation.Discriminated(DISCRIMINATOR, CONTENTS));

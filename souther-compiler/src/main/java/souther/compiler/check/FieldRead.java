@@ -31,20 +31,21 @@ import java.util.Map;
  * that does not read is a thing a check reports and a thing an editor is asked in front of.
  *
  * @param symbols    what the names in a position denote
- * @param world      what a declaration holds under each of its names, in the world this reading is
+ * @param sums       what a value of each sum a position names can be
+ * @param world     what a declaration holds under each of its names, in the world this reading is
  *                   being made in
  * @param unreadable what this reading does where the declarations at a position do not read
  */
-public record FieldRead(Symbols symbols, PublishedDeclarations published, DeclarationKinds kinds,
+public record FieldRead(Symbols symbols, SumCases sums, DeclarationKinds kinds,
                         NewtypeInners inners,
                         FieldTypes world,
                         Unreadable unreadable) {
 
     /** A reading that has not been handed what the declarations wrap, which reads it off
      *  {@code symbols} instead. Every caller of this is one that has not crossed the cut. */
-    public FieldRead(Symbols symbols, PublishedDeclarations published, DeclarationKinds kinds,
+    public FieldRead(Symbols symbols, SumCases sums, DeclarationKinds kinds,
                      FieldTypes world, Unreadable unreadable) {
-        this(symbols, published, kinds, NewtypeInners.asWritten(symbols), world, unreadable);
+        this(symbols, sums, kinds, NewtypeInners.asWritten(symbols), world, unreadable);
     }
 
     /**
@@ -76,7 +77,7 @@ public record FieldRead(Symbols symbols, PublishedDeclarations published, Declar
     }
 
     public FieldRead {
-        if (symbols == null || published == null || kinds == null || inners == null
+        if (symbols == null || sums == null || kinds == null || inners == null
                 || world == null || unreadable == null) {
             throw new IllegalArgumentException(
                     "a field read is made against declarations — what they say, which form each of"
@@ -175,7 +176,7 @@ public record FieldRead(Symbols symbols, PublishedDeclarations published, Declar
         }
         TypeView view;
         try {
-            view = TypeView.wearingNoName(position, symbols, kinds, published);
+            view = TypeView.wearingNoName(position, symbols, kinds, sums);
         } catch (CompileException doesNotRead) {
             if (unreadable == Unreadable.REFUSED) {
                 throw doesNotRead;

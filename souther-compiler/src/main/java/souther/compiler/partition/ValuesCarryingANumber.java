@@ -42,7 +42,7 @@ record ValuesCarryingANumber(TermPath fixed, FixtureTemplate value, RuleReadingC
                 ? WornNames.under(TypeView.of(slot.type(), reading.source().inners(),
                                 reading.source().symbols(),
                                 reading.source().kinds(),
-                                reading.source().published()).wrappers(),
+                                reading.source().sums()).wrappers(),
                         value, reading.source())
                 : null;
     }

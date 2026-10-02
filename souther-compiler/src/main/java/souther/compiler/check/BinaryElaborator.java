@@ -48,7 +48,7 @@ public final class BinaryElaborator {
             throw new Unanswerable(bin.pos());
         }
         if (bin.op().joinsTwoConditions()) {
-            return Elaborator.standing(e, read, Type.BOOL, ctx.kinds(), ctx.published(),
+            return Elaborator.standing(e, read, Type.BOOL, ctx.kinds(), ctx.sums(),
                     "operand of logical operator");
         }
         return read;
@@ -108,7 +108,7 @@ public final class BinaryElaborator {
                         // stands.
                         yield new Core.Binary(bin.op(), left,
                                 Elaborator.standing(bin.right(), right, lt, ctx.kinds(),
-                                        ctx.published(),
+                                        ctx.sums(),
                                         "operand of arithmetic"),
                                 Core.BinaryReading.AS_THEY_STAND,
                                 ctx.occurrenceOf(bin.origin()), lt, bin.pos());
@@ -219,7 +219,7 @@ public final class BinaryElaborator {
         // Two values of one enumeration that are not one type: a case value is a value of its sum
         // (spec §sum-data), so `stage < Won` compares in the sum both sides belong to (issue #161).
         TypeSymbol enumeration = TypeOps.comparisonEnumeration(lt, rt, declarations.kinds(),
-                declarations.published(), declarations.enumerations());
+                declarations.sums(), declarations.enumerations());
         if (enumeration != null) {
             Type sum = Type.ref(enumeration);
             return new OrderedReading(new Core.BinaryReading.In(sum), new Core.OrderingBasis(sum));
@@ -279,8 +279,8 @@ public final class BinaryElaborator {
         if (eqCoercible(lt, rt, le, re, ctx.inners(), ctx.symbols())) {
             return new Core.BinaryReading.In(newtypeOfThePair(lt, rt, ctx.symbols()));
         }
-        List<TypeSymbol> lCases = AtomSpace.subjectAtoms(lt, ctx.kinds(), ctx.published());
-        List<TypeSymbol> rCases = AtomSpace.subjectAtoms(rt, ctx.kinds(), ctx.published());
+        List<TypeSymbol> lCases = AtomSpace.subjectAtoms(lt, ctx.kinds(), ctx.sums());
+        List<TypeSymbol> rCases = AtomSpace.subjectAtoms(rt, ctx.kinds(), ctx.sums());
         if (!lCases.isEmpty() && !rCases.isEmpty()
                 && (lCases.containsAll(rCases) || rCases.containsAll(lCases))) {
             // Read in the cases both sides range over, and not in either side's name: two sums

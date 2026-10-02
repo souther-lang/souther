@@ -416,7 +416,7 @@ public final class Bodies {
             try {
                 return Answer.of(Ordered.map(SignatureDeclarations.of(
                         settling.value().behaviors(), scope.value(),
-                        Shapes.declarationKinds(db), Shapes.publishedDeclarations(db))));
+                        Shapes.declarationKinds(db), Shapes.sumCases(db))));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -473,7 +473,7 @@ public final class Bodies {
             declared.value().forEach((behavior, sig) -> boundaries.put(behavior, sig.boundary()));
             try {
                 return Answer.of(PipelineSigs.signatures(name, settling.value().behaviors(),
-                        boundaries, scope.value(), Shapes.publishedDeclarations(db),
+                        boundaries, scope.value(), Shapes.sumCases(db),
                         Shapes.declarationKinds(db), imported.value()));
             } catch (CompileException e) {
                 return Answer.absent(e);
@@ -952,7 +952,8 @@ public final class Bodies {
                     try {
                         BehaviorContract contract = BehaviorChecker.contractAsRead(each.getValue(),
                                 name, signatures.value().get(each.getKey()),
-                                Shapes.publishedDeclarations(db), Shapes.declarationKinds(db));
+                                Shapes.publishedDeclarations(db), Shapes.declarationKinds(db),
+                                Shapes.sumCases(db));
                         out.put(each.getKey(), StatedContract.of(contract, declaring, scope.value(),
                                 Shapes.declarationAccess(db), helpers.value()));
                     } catch (Unanswerable | CompileException _) {

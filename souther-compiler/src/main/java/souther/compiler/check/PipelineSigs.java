@@ -49,7 +49,7 @@ public final class PipelineSigs {
                                                          List<Hir.BehaviorDef> behaviors,
                                                          Map<String, Sig> declared,
                                                          Symbols symbols,
-                                                         PublishedDeclarations published,
+                                                         SumCases sums,
                                                          DeclarationKinds kinds,
                                                          Map<ValueName.Behavior, Sig> imported) {
         Map<ValueName.Behavior, Sig> sigs = new HashMap<>(imported);
@@ -61,10 +61,10 @@ public final class PipelineSigs {
                     sigs.put(new ValueName.Behavior(module, pipe.name()),
                             switch (pipe.composition()) {
                                 case Hir.Composition.Stages written -> pipeSig(pipe, written, sigs,
-                                        symbols, published, kinds, pipeStages);
+                                        symbols, sums, kinds, pipeStages);
                                 case Hir.Composition.Elsewhere elsewhere ->
                                         SignatureBoundary.publishedComposition(pipe, elsewhere,
-                                                symbols, kinds, published);
+                                                symbols, kinds, sums);
                             });
                 } catch (Unanswerable _) {
                     // A stage that names nothing was reported where it was written, and this
@@ -186,7 +186,7 @@ public final class PipelineSigs {
     public static Composition composition(Hir.PipeBehavior pipe, Hir.Composition.Stages written,
                                           Map<ValueName.Behavior, Sig> sigs,
                                           DeclarationKinds kinds,
-                                          PublishedDeclarations published,
+                                          SumCases sums,
                                           Map<ValueName.Behavior, List<Hir.Var>> pipeStages) {
         // flatten nested pipeline stages so `>->` is associative (spec §type-routing)
         List<Hir.Var> stages = flattenStages(written.stages(), pipeStages, pipe.pos());
@@ -214,19 +214,19 @@ public final class PipelineSigs {
             walked.add(new Composition.Stage(reaches(stages.get(i)), g.outputType(),
                     TypeOps.isDataLike(mainline)
                             ? new Composition.Routing.OnCases(
-                                    mainlineCases(mainline, g, kinds, published))
+                                    mainlineCases(mainline, g, kinds, sums))
                             : new Composition.Routing.Always()));
-            mainline = route(mainline, g, retired, kinds, published, pipe.pos());
+            mainline = route(mainline, g, retired, kinds, sums, pipe.pos());
         }
         return new Composition(walked, withRetired(mainline, retired));
     }
 
     private static Sig pipeSig(Hir.PipeBehavior pipe, Hir.Composition.Stages written,
                                Map<ValueName.Behavior, Sig> sigs,
-                               Symbols symbols, PublishedDeclarations published,
+                               Symbols symbols, SumCases sums,
                                DeclarationKinds kinds,
                                Map<ValueName.Behavior, List<Hir.Var>> pipeStages) {
-        Composition composed = composition(pipe, written, sigs, kinds, published, pipeStages);
+        Composition composed = composition(pipe, written, sigs, kinds, sums, pipeStages);
         Type out = composed.answers();
         // an optional declared output must match the inferred one exactly (spec
         // §declared-composition-output): neither a missing case (too narrow) nor an extra one (too wide) is
@@ -240,9 +240,9 @@ public final class PipelineSigs {
                 throw new Unanswerable(written.declaredOut().pos());
             }
             Set<TypeSymbol> inferred =
-                    new LinkedHashSet<>(AtomSpace.subjectAtoms(out, kinds, published));
+                    new LinkedHashSet<>(AtomSpace.subjectAtoms(out, kinds, sums));
             Set<TypeSymbol> declared =
-                    new LinkedHashSet<>(AtomSpace.subjectAtoms(declaredOut, kinds, published));
+                    new LinkedHashSet<>(AtomSpace.subjectAtoms(declaredOut, kinds, sums));
             if (!inferred.equals(declared)) {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
 
@@ -257,7 +257,7 @@ public final class PipelineSigs {
         Sig first = sigs.get(composed.stages().get(0).behavior());
         return new Sig(first.ins(),
                 SignatureBoundary.composedOutput(pipe.name(), pipe.pos(), out, symbols, kinds,
-                        published));
+                        sums));
     }
 
     /** Formats a set of case names as {@code A | B} (sorted, for a stable diagnostic). */
@@ -284,10 +284,10 @@ public final class PipelineSigs {
 
     /** The main-line leaf cases {@code g} accepts — the ones the backend routes into it (spec §type-routing). */
     private static List<TypeSymbol> mainlineCases(Type mainline, Sig g, DeclarationKinds kinds,
-                                                  PublishedDeclarations published) {
+                                                  SumCases sums) {
         List<TypeSymbol> accepted = new ArrayList<>();
-        for (TypeSymbol caseName : AtomSpace.subjectAtoms(mainline, kinds, published)) {
-            if (TypeOps.assignable(Type.ref(caseName), g.in(), kinds, published)) {
+        for (TypeSymbol caseName : AtomSpace.subjectAtoms(mainline, kinds, sums)) {
+            if (TypeOps.assignable(Type.ref(caseName), g.in(), kinds, sums)) {
                 accepted.add(caseName);
             }
         }
@@ -311,7 +311,7 @@ public final class PipelineSigs {
      * still has the merged sum `f`+`g` produce as its output.
      */
     private static Type route(Type mainline, Sig g, Set<TypeSymbol> retired,
-                              DeclarationKinds kinds, PublishedDeclarations published,
+                              DeclarationKinds kinds, SumCases sums,
                               SourcePos pos) {
         Type in = g.in();
         if (TypeOps.isDataLike(mainline)) {
@@ -319,8 +319,8 @@ public final class PipelineSigs {
             Set<TypeSymbol> passed = new LinkedHashSet<>();
             // route over the leaf cases: a named sum output splits into its members, so a stage that
             // accepts one of them consumes it while the rest retire (spec §sum-data, §type-routing)
-            for (TypeSymbol caseName : AtomSpace.subjectAtoms(mainline, kinds, published)) {
-                if (TypeOps.assignable(Type.ref(caseName), in, kinds, published)) {
+            for (TypeSymbol caseName : AtomSpace.subjectAtoms(mainline, kinds, sums)) {
+                if (TypeOps.assignable(Type.ref(caseName), in, kinds, sums)) {
                     consumed.add(caseName);
                 } else {
                     passed.add(caseName);

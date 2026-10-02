@@ -90,7 +90,7 @@ class AReaderOfTheTerminalTakesItAndDoesNotWalkTheNamesTest {
 
         assertEquals(new Shape.Scalar(Type.Prim.INT),
                 TypeView.shapeOf(TOP, inners, SYMBOLS, ScopedDeclarations.kindsOf(SYMBOLS),
-                        ScopedDeclarations.of(SYMBOLS)));
+                        ScopedDeclarations.sumsOf(SYMBOLS)));
         assertEquals(1, inners.terminals);
         assertEquals(0, inners.asked, "the shape walked the names over it");
     }
@@ -101,7 +101,7 @@ class AReaderOfTheTerminalTakesItAndDoesNotWalkTheNamesTest {
         Counting inners = new Counting(true);
 
         assertEquals(new Ordering.Wrapped(Ordering.LONGS), Ordering.of(TOP, inners,
-                ScopedDeclarations.kindsOf(SYMBOLS), ScopedDeclarations.of(SYMBOLS),
+                ScopedDeclarations.kindsOf(SYMBOLS), ScopedDeclarations.sumsOf(SYMBOLS),
                 EnumerationListings.NONE));
         assertEquals(1, inners.terminals);
         assertEquals(1, inners.asked, "the order read more than the outermost name");

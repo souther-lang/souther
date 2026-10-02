@@ -43,6 +43,7 @@ import souther.compiler.check.FixtureValueEntries;
 import souther.compiler.check.Sig;
 import souther.compiler.check.StatedContract;
 import souther.compiler.check.SpecImplementation;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
@@ -1743,7 +1744,7 @@ public final class Adequacy {
                                 SignatureEvidence.notMeasurable(behavior, why);
                         case BoundaryForMeasurement.Derived(Sig sig, InputForMeasurement input) ->
                                 evidenceOf(behavior.name(), sig,
-                                        Shapes.publishedDeclarations(db),
+                                        Shapes.sumCases(db),
                                         Shapes.declarationKinds(db), Shapes.newtypeInners(db),
                                         RowReadings.readingFor(byTarget, behavior.name()),
                                         InputPositions.of(input),
@@ -7433,8 +7434,8 @@ public final class Adequacy {
     private static Set<TypeSymbol> inputCoverableCases(Type t,
                                                        souther.compiler.check.NewtypeInners inners,
                                                        DeclarationKinds kinds,
-                                                       PublishedDeclarations published) {
-        return casesOfSum(TypeOps.base(t, inners), kinds, published);
+                                                       SumCases sums) {
+        return casesOfSum(TypeOps.base(t, inners), kinds, sums);
     }
 
     /**
@@ -7451,16 +7452,16 @@ public final class Adequacy {
      * not a sum at all to catch a row that wrote the wrong one.
      */
     private static Set<TypeSymbol> outputCoverableCases(Type t, DeclarationKinds kinds,
-                                                        PublishedDeclarations published) {
-        return casesOfSum(t, kinds, published);
+                                                        SumCases sums) {
+        return casesOfSum(t, kinds, sums);
     }
 
     /** What a sum divides into, and nothing for a type that is not one. The one thing the two
      *  measures above share; what tells them apart is which type each hands it. */
     private static Set<TypeSymbol> casesOfSum(Type t, DeclarationKinds kinds,
-                                              PublishedDeclarations published) {
+                                              SumCases sums) {
         return TypeOps.isSumType(t, kinds)
-                ? new LinkedHashSet<>(AtomSpace.subjectAtoms(t, kinds, published))
+                ? new LinkedHashSet<>(AtomSpace.subjectAtoms(t, kinds, sums))
                 : Set.of();
     }
 
@@ -7472,7 +7473,7 @@ public final class Adequacy {
      *                 behavior with no reading of its own has nothing to be handed in its place
      */
     static SignatureEvidence evidenceOf(String name, Sig sig,
-                                        PublishedDeclarations published, DeclarationKinds kinds,
+                                        SumCases sums, DeclarationKinds kinds,
                                         souther.compiler.check.NewtypeInners inners,
                                         RowReading seen,
                                         InputPositions layout,
@@ -7485,7 +7486,7 @@ public final class Adequacy {
         // no reachable producer answers with is not a gap in the rows.
         Set<TypeSymbol> declaredOut = souther.compiler.partition.ProducedCases.of(
                 body, plan, reachable.answers(),
-                outputCoverableCases(sig.outputType(), kinds, published));
+                outputCoverableCases(sig.outputType(), kinds, sums));
         Set<TypeSymbol> specified = new LinkedHashSet<>();
         Set<TypeSymbol> observed = new LinkedHashSet<>();
         Set<TypeSymbol> verified = new LinkedHashSet<>();
@@ -7500,7 +7501,7 @@ public final class Adequacy {
         List<Set<TypeSymbol>> inExcluded = new ArrayList<>(ins.size());
         int[] unreadableIn = new int[ins.size()];
         for (int i = 0; i < ins.size(); i++) {
-            Set<TypeSymbol> declared = inputCoverableCases(ins.get(i), inners, kinds, published);
+            Set<TypeSymbol> declared = inputCoverableCases(ins.get(i), inners, kinds, sums);
             declaredIn.add(declared);
             inSpecified.add(new LinkedHashSet<>());
             inExecuted.add(new LinkedHashSet<>());

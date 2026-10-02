@@ -475,6 +475,7 @@ final class IndexEdges {
         names(out, Shapes.NewtypeTerminalOf.class, "named");
         names(out, Shapes.ReadingOwnerOf.class, "named");
         names(out, Shapes.NormalizedDef.class, "named");
+        names(out, Shapes.SumCasesOf.class, "sum");
         return out;
     }
 

@@ -1380,7 +1380,7 @@ public final class InvariantChecker {
         // that returns to itself. Its `value` is this very value, so following it names the same
         // thing again a step deeper than anything asks about.
         Map<String, Type> under = switch (ValueReading.of(
-                worn, terms.newtypeInners(), terms.kinds(), symbols, terms.published())) {
+                worn, terms.newtypeInners(), terms.kinds(), symbols, terms.sums())) {
             case ValueReading.AtAValue read -> read.named();
             // Every name that comes off has come off above, so a name still worn is a declaration
             // that returns to itself: what it wraps is the value already being read, and reading it

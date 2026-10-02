@@ -134,7 +134,7 @@ public final class CheckSurface implements Assembly {
      * @param stdlib               the library, so {@link TypedFixtureValues#of} can leave it out of
      *     the candidates it discovers
      * @param symbols    what the names a candidate's body wears denote
-     * @param published  what a declaration a candidate reaches states of itself
+     * @param sums       what a value of each sum a candidate reaches can be
      * @param kinds      which form each of those declarations was written in
      * @param fieldWraps what a newtype a candidate's body builds wraps
      */
@@ -149,7 +149,7 @@ public final class CheckSurface implements Assembly {
                                         Set<ValueName.Helper> importedLeaves,
                                         Stdlib stdlib,
                                         Symbols symbols,
-                                        PublishedDeclarations published,
+                                        SumCases sums,
                                         DeclarationKinds kinds,
                                         NewtypeInners fieldWraps) {
         Hir.Module settled = settling.module();
@@ -217,7 +217,7 @@ public final class CheckSurface implements Assembly {
         // FixtureValueEntries mints entries for below, rather than finding one only later and
         // falling back to interpreting its body.
         Map<TypeSymbol, List<ReachName.Declaration>> typedFixtureValues = TypedFixtureValues.of(
-                written.module(), importedForEvidence, importedLeaves, stdlib, symbols, published,
+                written.module(), importedForEvidence, importedLeaves, stdlib, symbols, sums,
                 kinds, fieldWraps, signatures);
         // Every operand a row or a fake writes, walked once: RowFixtures.emitted mints a method for
         // each and FixtureValueEntries reads the same list for the names among them, rather than

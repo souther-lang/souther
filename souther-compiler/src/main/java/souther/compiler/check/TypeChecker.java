@@ -258,7 +258,7 @@ public final class TypeChecker {
                                         Map<String, Hir.FnDef> publishedToHere,
                                         Set<String> settled,
                                         Map<TypeSymbol.AtModule, ValueShape> shapes) {
-        PublishedDeclarations published = declarations.published();
+        SumCases sums = declarations.sums();
         DeclarationKinds kinds = declarations.kinds();
         // Both components, because what reads this walks both: a helper is checked whether the module
         // declared it or took it on to emit, and one missing here is a helper checked against a body
@@ -367,7 +367,7 @@ public final class TypeChecker {
                                     CheckContext.of(symbols, declarations).forData(data));
                         }
                     }
-                    case Hir.SumData sum -> DataChecker.checkSum(sum, symbols, kinds, published);
+                    case Hir.SumData sum -> DataChecker.checkSum(sum, symbols, kinds, sums);
                     case Hir.UnitData _ -> { }
                 }
             });
@@ -591,11 +591,11 @@ public final class TypeChecker {
         // a composition named by `exposing` must declare its output there, matching the inferred one
         // (spec §declared-composition-output, ADR-0024), so a far-away change cannot grow a published output silently.
         collect(errors, abandoned, () -> SpecChecker.checkUnionMemberNames(module, sigs, kinds,
-                published));
+                sums));
         collect(errors, abandoned, () -> SpecChecker.checkUnionMemberFields(module, sigs, symbols,
-                kinds, published));
+                kinds, sums));
         collect(errors, abandoned, () -> SpecChecker.checkExposedPipeOutputs(module,
-                sigs, kinds, published));
+                sigs, kinds, sums));
         // What this module reaches out with may not rest on what it keeps to itself — a name in
         // `exposing`, and an injection target, whose base is public whatever `exposing` says. After
         // the exposing signature checks: a signature that should not be there at all (E1605), or one

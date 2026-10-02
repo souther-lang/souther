@@ -55,9 +55,9 @@ final class TypeGuarantees {
         this.predicates = predicates;
     }
 
-    /** What the declarations these guarantees are read against say. */
-    private PublishedDeclarations published() {
-        return clauses.source().published();
+    /** What a value of each sum these guarantees are read against can be. */
+    private SumCases sums() {
+        return clauses.source().sums();
     }
 
     /** What each name this reading goes through wraps, for the walk that takes the names off. */
@@ -92,7 +92,7 @@ final class TypeGuarantees {
      * asked about.
      */
     At at(Core root, Denotations denotations, PartsLeftOut withoutParts) {
-        ValueReading written = ValueReading.of(root.type(), inners(), kinds(), symbols, published());
+        ValueReading written = ValueReading.of(root.type(), inners(), kinds(), symbols, sums());
         Map<String, Core> values = new LinkedHashMap<>();
         List<At.Readable> readable = new ArrayList<>();
         for (Map.Entry<String, Type> field : written.named().entrySet()) {
@@ -162,7 +162,7 @@ final class TypeGuarantees {
     /** Whether {@code type} holds a rule that is not one this value already stated, nor one under a
      * name this reading already reaches. */
     private boolean beyond(Type type, ValueReading here, Set<Object> stated) {
-        ValueReading there = ValueReading.of(type, inners(), kinds(), symbols, published());
+        ValueReading there = ValueReading.of(type, inners(), kinds(), symbols, sums());
         for (ValueReading.Owner owner : there.owners()) {
             for (ClauseMeaning each : clauses.declared(owner.named())) {
                 if (!stated.contains(each.ref())) {
@@ -260,7 +260,7 @@ final class TypeGuarantees {
         left.push(type);
         while (!left.isEmpty()) {
             ValueReading written = ValueReading.of(left.pop(), source.inners(), source.kinds(),
-                    source.symbols(), source.published());
+                    source.symbols(), source.sums());
             if (written.entering() != null && !seen.add(written.entering())) {
                 continue;
             }

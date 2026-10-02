@@ -57,7 +57,7 @@ class AnEnumerationIsOneAnswerToTheLanguageAndTheBoundaryTest {
     private final Hir.Module module = derive(MODULE);
     private final Symbols symbols = TypeChecker.symbols(module, DefaultStdlib.get());
 
-    private final PublishedDeclarations said = ScopedDeclarations.of(symbols);
+    private final SumCases sums = ScopedDeclarations.sumsOf(symbols);
 
     private final DeclarationKinds forms = ScopedDeclarations.kindsOf(symbols);
 
@@ -66,8 +66,8 @@ class AnEnumerationIsOneAnswerToTheLanguageAndTheBoundaryTest {
         for (Hir.Def def : module.defs()) {
             if (def instanceof Hir.SumData sum) {
                 Type type = Type.ref(sum.declares());
-                assertEquals(TypeOps.isUnitOnlySum(type, forms, said),
-                        Boundary.of(type, forms, said).representation()
+                assertEquals(TypeOps.isUnitOnlySum(type, forms, sums),
+                        Boundary.of(type, forms, sums).representation()
                                 instanceof Boundary.Representation.Enumeration,
                         sum.name() + ": the language and the boundary disagree about the form");
             }
@@ -93,9 +93,9 @@ class AnEnumerationIsOneAnswerToTheLanguageAndTheBoundaryTest {
      */
     @Test
     void aUnitDataOnItsOwnIsNotAnEnumeration() {
-        assertFalse(Boundary.of(Type.ref(named("Draft")), forms, said).representation()
+        assertFalse(Boundary.of(Type.ref(named("Draft")), forms, sums).representation()
                 instanceof Boundary.Representation.Enumeration);
-        assertFalse(TypeOps.isUnitOnlySum(Type.ref(named("Draft")), forms, said));
+        assertFalse(TypeOps.isUnitOnlySum(Type.ref(named("Draft")), forms, sums));
     }
 
     /**
@@ -118,14 +118,14 @@ class AnEnumerationIsOneAnswerToTheLanguageAndTheBoundaryTest {
     void aUnionOfUnitsIsWrittenAsABareTagAndIsNoNamedSum() {
         Type union = Type.union(new java.util.LinkedHashSet<>(
                 java.util.List.of(named("Prospecting"), named("Won"))));
-        assertTrue(Boundary.of(union, forms, said).representation()
+        assertTrue(Boundary.of(union, forms, sums).representation()
                 instanceof Boundary.Representation.Enumeration);
-        assertFalse(TypeOps.isUnitOnlySum(union, forms, said),
+        assertFalse(TypeOps.isUnitOnlySum(union, forms, sums),
                 "a union is not a declaration, so the language's question does not reach it");
     }
 
     private boolean isEnumeration(String sum) {
-        return Boundary.of(Type.ref(named(sum)), forms, said).representation()
+        return Boundary.of(Type.ref(named(sum)), forms, sums).representation()
                 instanceof Boundary.Representation.Enumeration;
     }
 

@@ -405,6 +405,8 @@ final class HelperParams {
         private final DeclarationAccess declarations;
         /** What the declarations this body names say about themselves. */
         private final PublishedDeclarations published;
+        /** What a value of each sum this body names can be. */
+        private final SumCases sums;
         /** Which form each of those declarations was written in. */
         private final DeclarationKinds kinds;
         private final CheckContext ctx;
@@ -441,6 +443,7 @@ final class HelperParams {
             this.symbols = symbols;
             this.declarations = declarations;
             this.published = declarations.published();
+            this.sums = declarations.sums();
             this.kinds = declarations.kinds();
             this.ctx = new CheckContext(symbols, declarations, null, reqSigs);
             this.reqSigs = reqSigs;
@@ -818,7 +821,7 @@ final class HelperParams {
                         Type t = new BodyTyping(symbols, declarations, reqSigs, recursiveHelperFns, freshening)
                                 .typeOf(lambda.params().get(i), lambda.body(), inner, step.result());
                         if (t != null   // a position the lambda's body leaves open says nothing
-                                && decided.decide(step.params().get(i), t, kinds, published)
+                                && decided.decide(step.params().get(i), t, kinds, sums)
                                         instanceof Fit.Disagrees) {
                             return new Substitution();   // it does not agree; settle nothing from it
                         }
@@ -829,7 +832,7 @@ final class HelperParams {
                     Type answers = typed(lambda.body(), walking(env, lambda,
                             decided.zonk(step) instanceof Type.FnOf f ? f : step));
                     if (answers != null
-                            && decided.decide(step.result(), answers, kinds, published)
+                            && decided.decide(step.result(), answers, kinds, sums)
                                     instanceof Fit.Disagrees) {
                         return new Substitution();   // it does not agree; settle nothing from it
                     }
@@ -880,7 +883,7 @@ final class HelperParams {
         /** The type a binding carries into its body, or null where this scope cannot type its value. */
         private Type carried(Hir.RetType declared, Hir.Expr value, Scope env) {
             Type is = typed(value, env);
-            return is == null ? null : Elaborator.carriedType(declared, is, kinds, published);
+            return is == null ? null : Elaborator.carriedType(declared, is, kinds, sums);
         }
 
         /**
@@ -914,7 +917,7 @@ final class HelperParams {
             // What the case refines the value to, asked of the subject's cases rather than worked
             // out from the subject's shape a second time.
             ResolvedCase selected =
-                    CaseSpace.of(scrutinee, kinds, published).selector(arm, kinds, published);
+                    CaseSpace.of(scrutinee, kinds, published, sums).selector(arm, kinds, sums);
             Type bound = selected == null ? null : selected.bound();
             return bound == null ? env : MatchElaborator.bound(env, c.binding(), bound);
         }
@@ -967,7 +970,7 @@ final class HelperParams {
                 if (t != null) {
                     // only a position the closure's body settled: unifying an undetermined one
                     // against the variable the signature wrote would bind that variable to itself
-                    Fit fit = TypeOps.unify(step.params().get(i), t, bind, kinds, published);
+                    Fit fit = TypeOps.unify(step.params().get(i), t, bind, kinds, sums);
                     if (fit instanceof Fit.Disagrees) {
                         return fit;
                     }
@@ -1012,7 +1015,7 @@ final class HelperParams {
                     // carries a variable this walk minted says as much as a stated one: the variable
                     // is this parameter's, so solving the callee's against it is what links the two
                     // positions the body read together.
-                    BottomInfer.pinResultTypeVars(sig.result(), expected, bind, kinds, published);
+                    BottomInfer.pinResultTypeVars(sig.result(), expected, bind, kinds, sums);
                 }
                 // The stages `CallElaborator.applySignature` types a call in, in that order and
                 // for its reason: an argument that is not a closure binds the variables, and the
@@ -1026,7 +1029,7 @@ final class HelperParams {
                     }               // being typed, and typing it is the question being worked out
                     Type actual = typed(arg, env);
                     if (actual != null
-                            && TypeOps.unify(param, actual, bind, kinds, published)
+                            && TypeOps.unify(param, actual, bind, kinds, sums)
                                     instanceof Fit.Disagrees) {
                         return sig.params();   // the call does not fit; the check reports it
                     }

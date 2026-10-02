@@ -211,8 +211,8 @@ class AnObservedValueIsReadByWhatIsReadableAndNotByWhatItCarriesTest {
         Symbols symbols = rules.symbols();
         TypeSymbol wanted = sym(leaf);
         for (Case one : Distinctions.ofType(
-                TypeView.asWritten(named(sum), symbols, rules.kinds(), rules.published()).shape(),
-                symbols, rules.kinds(), rules.published())) {
+                TypeView.asWritten(named(sum), symbols, rules.kinds(), rules.sums()).shape(),
+                symbols, rules.kinds(), rules.sums())) {
             if (one instanceof Case.SumCase found && found.leaf().equals(wanted)) {
                 return Refinement.of(one);
             }

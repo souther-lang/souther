@@ -959,7 +959,7 @@ final class CodecGen {
      * whatever it says today.
      */
     private boolean readsABareTag(Hir.SumData sum) {
-        return Boundary.of(Type.ref(sum.declares()), ctx.kinds, ctx.published)
+        return Boundary.of(Type.ref(sum.declares()), ctx.kinds, ctx.sums)
                 .representation() instanceof Boundary.Representation.Enumeration;
     }
 

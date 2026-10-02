@@ -156,7 +156,7 @@ public sealed interface Ordering {
      * cannot emit a comparison for is what #856 was.
      */
     static Ordering of(Type type, DeclarationAccess declarations) {
-        return of(type, declarations.inners(), declarations.kinds(), declarations.published(),
+        return of(type, declarations.inners(), declarations.kinds(), declarations.sums(),
                 declarations.enumerations());
     }
 
@@ -164,9 +164,9 @@ public sealed interface Ordering {
      * The same, asking each question of the declarations where it is handed — for a reader that
      * holds its own answer to one of them.
      */
-    static Ordering of(Type type, NewtypeInners inners, DeclarationKinds kinds,
-                       PublishedDeclarations published, EnumerationListings listings) {
-        Ordering terminal = ofBare(inners.terminal(type), kinds, published, listings);
+    static Ordering of(Type type, NewtypeInners inners, DeclarationKinds kinds, SumCases sums,
+                       EnumerationListings listings) {
+        Ordering terminal = ofBare(inners.terminal(type), kinds, sums, listings);
         if (terminal == null) {
             return null;
         }
@@ -232,16 +232,16 @@ public sealed interface Ordering {
      * <p>Reads no name off: handed a newtype, it answers null, as it does for a product, and says
      * nothing about what the newtype wraps.
      */
-    public static Ordering ofBare(Type terminal, DeclarationKinds kinds,
-                                  PublishedDeclarations published, EnumerationListings listings) {
+    public static Ordering ofBare(Type terminal, DeclarationKinds kinds, SumCases sums,
+                                  EnumerationListings listings) {
         return switch (terminal) {
             case Type.Prim p -> ofPrimitive(p);
             // A sum every one of whose cases is a unit data, one of its cases, or a union of them.
             // Null where more than one enumeration lists the case: the order belongs to the sum, so
             // a value two sums place differently has none of its own, and that is refused rather
             // than guessed (ADR-0069).
-            case Type.Ref r -> placesIn(r, kinds, published, listings);
-            case Type.Union u -> placesIn(u, kinds, published, listings);
+            case Type.Ref r -> placesIn(r, kinds, sums, listings);
+            case Type.Union u -> placesIn(u, kinds, sums, listings);
             // A collection has no order of its own whatever it holds, a function and a tuple none at
             // all, and a type standing for a type has no values to order.
             case Type.ListOf _, Type.SetOf _, Type.OptionOf _, Type.MapOf _, Type.TupleOf _,
@@ -249,10 +249,9 @@ public sealed interface Ordering {
         };
     }
 
-    private static Ordering placesIn(Type t, DeclarationKinds kinds,
-                                     PublishedDeclarations published,
+    private static Ordering placesIn(Type t, DeclarationKinds kinds, SumCases sums,
                                      EnumerationListings listings) {
-        TypeSymbol enumeration = TypeOps.orderingEnumeration(t, kinds, published, listings);
+        TypeSymbol enumeration = TypeOps.orderingEnumeration(t, kinds, sums, listings);
         return enumeration == null ? null : new Places(enumeration);
     }
 }

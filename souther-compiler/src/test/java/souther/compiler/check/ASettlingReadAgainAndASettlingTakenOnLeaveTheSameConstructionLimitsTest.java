@@ -236,7 +236,7 @@ class ASettlingReadAgainAndASettlingTakenOnLeaveTheSameConstructionLimitsTest {
      */
     private static void under(Type type, RuleReadingSource source, ReadingPolicy policy,
                               DeclarationReadings lent, Set<TypeSymbol> seen, List<Record> out) {
-        Shape shape = TypeView.asWritten(type, source.symbols(), source.kinds(), source.published())
+        Shape shape = TypeView.asWritten(type, source.symbols(), source.kinds(), source.sums())
                 .shape();
         switch (shape) {
             case Shape.Product(TypeSymbol name, Map<String, Type> fields) -> {

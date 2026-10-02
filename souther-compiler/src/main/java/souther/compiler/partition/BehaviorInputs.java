@@ -2,10 +2,10 @@ package souther.compiler.partition;
 
 import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.NewtypeInners;
-import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.ReadableFields;
 import souther.compiler.check.Shape;
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Refinement;
@@ -53,9 +53,9 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
         return rules.symbols();
     }
 
-    /** What the declarations the reading was made against say. */
-    public PublishedDeclarations published() {
-        return rules.published();
+    /** What a value of each sum the reading was made against can be. */
+    public SumCases sums() {
+        return rules.sums();
     }
 
     /**
@@ -170,7 +170,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
             List<Standing> next = new ArrayList<>();
             int took = 0;
             for (Standing each : standing) {
-                if (each.step(step, rules.inners(), symbols(), rules.kinds(), published(), next)) {
+                if (each.step(step, rules.inners(), symbols(), rules.kinds(), sums(), next)) {
                     took++;
                 }
             }
@@ -223,7 +223,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
         Type here = types.get(at);
         for (TermPath.Step step : path.steps()) {
             here = stepWrittenValue(step, here, rules.inners(), symbols(), rules.kinds(),
-                    published());
+                    sums());
             if (here == null) {
                 return null;
             }
@@ -254,8 +254,8 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      */
     static Type stepWrittenValue(TermPath.Step step, Type from, NewtypeInners inners,
                                  Symbols symbols, DeclarationKinds kinds,
-                                 PublishedDeclarations published) {
-        Shape shape = TypeView.shapeOf(from, inners, symbols, kinds, published);
+                                 SumCases sums) {
+        Shape shape = TypeView.shapeOf(from, inners, symbols, kinds, sums);
         return switch (step) {
             case TermPath.Step.Field named -> shape instanceof Shape.Product product
                     ? product.fields().get(named.name()) : null;
@@ -307,13 +307,13 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
          * second as a row that is somewhere else.
          */
         boolean step(TermPath.Step step, NewtypeInners inners, Symbols symbols,
-                     DeclarationKinds kinds, PublishedDeclarations published,
+                     DeclarationKinds kinds, SumCases sums,
                      List<Standing> out) {
             if (value.unread() != null) {
                 out.add(this);
                 return true;
             }
-            TypeView view = TypeView.of(type, inners, symbols, kinds, published);
+            TypeView view = TypeView.of(type, inners, symbols, kinds, sums);
             ObservedValue here = Classifier.inside(view.wrappers(), value);
             if (here.unread() != null) {
                 out.add(new Standing(here, type, reached, at));

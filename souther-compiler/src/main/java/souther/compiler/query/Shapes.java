@@ -37,6 +37,7 @@ import souther.compiler.check.GoverningInvariant;
 import souther.compiler.check.InvariantSettled;
 import souther.compiler.check.InvariantStatements;
 import souther.compiler.check.SettledInvariant;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.Cardinality;
 import souther.compiler.check.CardinalityPremise;
@@ -248,7 +249,7 @@ public final class Shapes {
 
         @Override
         public Answer<Boundary.Alternatives> compute(Db db) {
-            return Answer.of(Boundary.of(type, declarationKinds(db), publishedDeclarations(db)));
+            return Answer.of(Boundary.of(type, declarationKinds(db), sumCases(db)));
         }
     }
 
@@ -534,6 +535,44 @@ public final class Shapes {
     }
 
     /**
+     * What a value of a sum can be, for a reader ordering it, counting its places or writing how it
+     * crosses — each answered once for the sum.
+     *
+     * <p>One of these for the whole compilation, for the reason {@link #expandedClauses} gives. A
+     * reader taking one depends on the sums it asks about and on nothing else: each is answered by
+     * {@link SumCasesOf}, and the cases under it are that answer's to read.
+     */
+    public static SumCases sumCases(Db db) {
+        return sum -> {
+            Answer<SumCases.Cases> cases = db.ask(new SumCasesOf(sum));
+            return cases.present() ? cases.value() : null;
+        };
+    }
+
+    /**
+     * The leaf cases a value of one sum can be, and whether every one of them is a unit.
+     *
+     * <p>The descent is made inside this one answer and not out of the answers for the sums under
+     * it. A sum may reach itself, which is refused where it is written and has to come back here;
+     * asked as one answer of another, it would be a cycle of the compilation's answers instead.
+     *
+     * <p>Absent where the name is not a sum, which is the one thing it can be asked of.
+     */
+    public record SumCasesOf(TypeSymbol.AtModule sum) implements Key<SumCases.Cases> {
+        @Override
+        public String module() {
+            return sum.module();
+        }
+
+        @Override
+        public Answer<SumCases.Cases> compute(Db db) {
+            SumCases.Cases cases = SumCases.asWritten(declarationKinds(db), publishedDeclarations(db))
+                    .of(sum);
+            return cases == null ? Answer.absent() : Answer.of(cases);
+        }
+    }
+
+    /**
      * Which enumerations list a unit value among their cases, for a reader working out what orders
      * it — each answered once for the value's module.
      *
@@ -571,7 +610,7 @@ public final class Shapes {
                 return Answer.absent();
             }
             return Answer.of(TypeOps.enumerationsListing(name, declared.value(),
-                    declarationKinds(db), publishedDeclarations(db)));
+                    declarationKinds(db), sumCases(db)));
         }
     }
 
@@ -1037,7 +1076,7 @@ public final class Shapes {
                 // way.
                 souther.compiler.check.Derived.Def derived =
                         souther.compiler.check.Derived.Def.derive(def, scope.value(),
-                                declarationKinds(db), publishedDeclarations(db));
+                                declarationKinds(db), sumCases(db));
                 if (derived != null) {
                     out.put(declared, derived);
                 }
@@ -1193,7 +1232,7 @@ public final class Shapes {
                                 signatures.present() ? signatures.value() : Map.of(),
                                 declared.value(), bodies.value(), importedForEvidence,
                                 importedLeaves, stdlib.value(), scope.value(),
-                                publishedDeclarations(db), declarationKinds(db), newtypeInners(db));
+                                sumCases(db), declarationKinds(db), newtypeInners(db));
                 // A definition that did not desugar is missing from what was handed in, and a
                 // surface without it would be this module read as one that does not write it.
                 return assembled == null ? Answer.absent() : Answer.of(assembled);
@@ -2042,7 +2081,7 @@ public final class Shapes {
      */
     public static DeclarationAccess declarationAccess(Db db) {
         return new DeclarationAccess(publishedDeclarations(db), declarationKinds(db),
-                newtypeInners(db), effectiveFieldTypes(db), fieldLayout(db),
+                newtypeInners(db), effectiveFieldTypes(db), fieldLayout(db), sumCases(db),
                 enumerationListings(db));
     }
 

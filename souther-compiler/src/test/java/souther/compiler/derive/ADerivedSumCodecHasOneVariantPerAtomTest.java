@@ -87,13 +87,13 @@ class ADerivedSumCodecHasOneVariantPerAtomTest {
     private Boundary.Alternatives settled(String sum) {
         return Boundary.of(Type.ref(sumData(sum).declares()),
                 ScopedDeclarations.kindsOf(TypeChecker.symbols(derived, DefaultStdlib.get())),
-                ScopedDeclarations.of(TypeChecker.symbols(derived, DefaultStdlib.get())));
+                ScopedDeclarations.sumsOf(TypeChecker.symbols(derived, DefaultStdlib.get())));
     }
 
     private List<TypeSymbol> atomsOf(String sum) {
         return AtomSpace.subjectAtoms(Type.ref(sumData(sum).declares()),
                 ScopedDeclarations.kindsOf(TypeChecker.symbols(derived, DefaultStdlib.get())),
-                ScopedDeclarations.of(TypeChecker.symbols(derived, DefaultStdlib.get())));
+                ScopedDeclarations.sumsOf(TypeChecker.symbols(derived, DefaultStdlib.get())));
     }
 
     private static List<String> names(List<TypeSymbol> atoms) {

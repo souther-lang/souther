@@ -40,7 +40,7 @@ class WhatAPositionIsOfferedDoesNotTurnOnHowTheRuleWasSpeltTest {
 
         TypeView view(String type) {
             return TypeView.asWritten(new Type.Ref(TypeSymbols.declared(new TypeKey(module, type))),
-                    rules.symbols(), rules.kinds(), rules.published());
+                    rules.symbols(), rules.kinds(), rules.sums());
         }
 
         /** The world these readings are made in, with nothing to borrow from. */

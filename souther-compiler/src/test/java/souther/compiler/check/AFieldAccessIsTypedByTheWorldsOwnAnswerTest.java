@@ -148,7 +148,7 @@ class AFieldAccessIsTypedByTheWorldsOwnAnswerTest {
                 "the clause did not elaborate, so the check settled nothing about `Bad`");
 
         assertEquals(Type.INT,
-                new FieldRead(scope, ScopedDeclarations.of(scope),
+                new FieldRead(scope, ScopedDeclarations.sumsOf(scope),
                         ScopedDeclarations.kindsOf(scope), new ResolvedFieldTypes(scope, ScopedDeclarations.wrapsOf(scope)),
                         FieldRead.Unreadable.REFUSED)
                         .of(Type.ref(bad), "n"),
@@ -157,7 +157,7 @@ class AFieldAccessIsTypedByTheWorldsOwnAnswerTest {
 
     /** The reading of a {@code .} this walk is handed, in {@code world}. */
     private FieldRead reading(FieldTypes world) {
-        return new FieldRead(symbols, ScopedDeclarations.of(symbols),
+        return new FieldRead(symbols, ScopedDeclarations.sumsOf(symbols),
                 ScopedDeclarations.kindsOf(symbols), world,
                 FieldRead.Unreadable.REFUSED);
     }

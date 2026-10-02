@@ -227,7 +227,7 @@ final class ValueClassGen {
         // that generates from it. Each of them holding the type and the symbols instead would be
         // each of them able to work the form and the tag out again, which is what five of them did.
         Boundary.Alternatives alternatives =
-                Boundary.of(Type.ref(sum.declares()), ctx.kinds, ctx.published);
+                Boundary.of(Type.ref(sum.declares()), ctx.kinds, ctx.sums);
         boolean enumeration = alternatives.representation() instanceof Boundary.Representation.Enumeration;
         out.put(valueOf(sum), build(cdX, cb -> {
             cb.withFlags(pub(sum.name()) | ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT);
@@ -537,8 +537,8 @@ final class ValueClassGen {
                 case null -> null;
             };
         }
-        return Ordering.ofBare(value, ctx.kinds, ctx.published,
-                EnumerationListings.asWritten(symbols, ctx.kinds, ctx.published));
+        return Ordering.ofBare(value, ctx.kinds, ctx.sums,
+                EnumerationListings.asWritten(symbols, ctx.kinds, ctx.sums));
     }
 
     /** {@code Record} plus each interface, with {@code Comparable} bound to the class itself, so a

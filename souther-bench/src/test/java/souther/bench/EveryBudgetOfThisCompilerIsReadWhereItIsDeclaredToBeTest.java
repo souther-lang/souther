@@ -184,7 +184,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/check/NewtypeInners;"
                             + "Lsouther/compiler/check/Symbols;"
                             + "Lsouther/compiler/check/DeclarationKinds;"
-                            + "Lsouther/compiler/check/PublishedDeclarations;I"
+                            + "Lsouther/compiler/check/SumCases;I"
                             + "Ljava/util/Set;"
                             + "Lsouther/compiler/inputs/Requirements;"
                             + "Lsouther/compiler/partition/ConstructionPlan$HowManyItHolds;)"

@@ -117,6 +117,10 @@ public record RuleReadingSource(Symbols symbols, ExpandedClauseLookup invariants
         return declarations.layout();
     }
 
+    public SumCases sums() {
+        return declarations.sums();
+    }
+
     /**
      * Which source a reading was made from.
      *

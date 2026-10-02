@@ -204,7 +204,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                         + "product among them: what a product needs derived is a representation, "
                         + "which is the rung below and not this one");
         assertEquals(
-                Set.of("derive(Def, ResolvedSymbols, DeclarationKinds, PublishedDeclarations)",
+                Set.of("derive(Def, ResolvedSymbols, DeclarationKinds, SumCases)",
                         "ofLanguage(Def)"),
                 waysInto(Derived.Def.class),
                 "the second is for what the language declares, where there is no representation to "
@@ -748,7 +748,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
         }
         assertEquals(List.of("CheckSurface.assemble(InvariantSettled, Map, Map,"
                                 + " DeclarationNewtypes, Map, FakeTables, BehaviorBodies, Map, Set,"
-                                + " Stdlib, Symbols, PublishedDeclarations, DeclarationKinds,"
+                                + " Stdlib, Symbols, SumCases, DeclarationKinds,"
                                 + " NewtypeInners)",
                         "CheckSurface.<init>(InvariantSettled, List, List, List, List, FakeTables,"
                                 + " List, Map, Map, Map, BehaviorBodies)",
@@ -892,10 +892,10 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
 
         Derived.Def ofA = Derived.Def.derive(Normalized.Def.of(defNamed(a, "Amount"),
                         DeclarationNewtypes.asWritten(scopeA)),
-                scopeA, ScopedDeclarations.kindsOf(scopeA), ScopedDeclarations.of(scopeA));
+                scopeA, ScopedDeclarations.kindsOf(scopeA), ScopedDeclarations.sumsOf(scopeA));
         Derived.Def ofB = Derived.Def.derive(Normalized.Def.of(defNamed(b, "Amount"),
                         DeclarationNewtypes.asWritten(scopeB)),
-                scopeB, ScopedDeclarations.kindsOf(scopeB), ScopedDeclarations.of(scopeB));
+                scopeB, ScopedDeclarations.kindsOf(scopeB), ScopedDeclarations.sumsOf(scopeB));
         assertEquals("Amount", ofB.name(), "the same bare name, so the map key does not tell them apart");
         assertNotEquals(ofA.declaredKey(), ofB.declaredKey());
 
@@ -918,7 +918,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                         ScopedDeclarations.kindsOf(scopeA), Map.of()), "Amount"),
                         DeclarationNewtypes.asWritten(scopeA)),
                         scopeA, ScopedDeclarations.kindsOf(scopeA),
-                        ScopedDeclarations.of(scopeA))));
+                        ScopedDeclarations.sumsOf(scopeA))));
         Hir.FnDef ofA = a.fns().get(0);
         Hir.FnDef ofB = new Hir.FnDef(ofA.written(), "b", ofA.params(), ofA.declaredReturn(),
                 ofA.body(), ofA.modifiers(), ofA.pos());

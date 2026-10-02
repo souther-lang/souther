@@ -35,7 +35,7 @@ class ObservedValuesTest {
         Symbols symbols = Symbols.none(DefaultStdlib.get());
         // No module is being read, so nothing here declares a data whose fields could be asked for.
         return ObservedValues.of(live, symbols,
-                new NeutralForm(symbols, ScopedDeclarations.of(symbols),
+                new NeutralForm(symbols, ScopedDeclarations.sumsOf(symbols),
                         ScopedDeclarations.kindsOf(symbols),
                         FieldTypes.over(new CheckedDeclarations(_ -> null, _ -> null))), limits);
     }

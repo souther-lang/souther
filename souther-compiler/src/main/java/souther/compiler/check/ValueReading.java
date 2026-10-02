@@ -106,7 +106,7 @@ sealed interface ValueReading {
 
     /** What the model writes where a value of {@code type} stands. */
     static ValueReading of(Type type, NewtypeInners inners, DeclarationKinds kinds, Symbols symbols,
-                           PublishedDeclarations published) {
+                           SumCases sums) {
         // The outermost name and nothing under it. What stands under the name is read where a walk
         // reaches it, so the rest of the names are not this reading's to take off.
         TypeOps.Unwrapped outer = TypeOps.outermost(type, inners);
@@ -120,8 +120,8 @@ sealed interface ValueReading {
         }
         // Where the step found no name, the spine is empty and the step is not asked again.
         Shape shape = outer == null
-                ? TypeView.wearingNoName(type, symbols, kinds, published).shape()
-                : TypeView.shapeOf(type, inners, symbols, kinds, published);
+                ? TypeView.wearingNoName(type, symbols, kinds, sums).shape()
+                : TypeView.shapeOf(type, inners, symbols, kinds, sums);
         // What a field access may write here is one question with one owner, asked once for every
         // shape. What is left for the switch is which declarations state something of every value
         // here and what stands below that this does not take in.
@@ -135,7 +135,7 @@ sealed interface ValueReading {
             // case, and a reading of it is opened where a match opens the case.
             case Shape.Sum sum ->
                     new AtAValue(sum.name(), owning(readable.declaredBy(), kinds), readable,
-                            cases(sum.name(), kinds, published));
+                            cases(sum.name(), kinds, sums));
             // A unit data holds nothing and may write no rule about it (spec §unit-data), and a
             // primitive is written under no declaration of its own.
             case Shape.Unit unit -> new AtAValue(unit.name(), List.of(), readable, List.of());
@@ -169,9 +169,9 @@ sealed interface ValueReading {
 
     /** A sum's cases, as the one closure over them answers. */
     private static List<Type> cases(TypeSymbol sum, DeclarationKinds kinds,
-                                    PublishedDeclarations published) {
+                                    SumCases sums) {
         List<Type> out = new ArrayList<>();
-        for (TypeSymbol leaf : AtomSpace.subjectAtoms(Type.ref(sum), kinds, published)) {
+        for (TypeSymbol leaf : AtomSpace.subjectAtoms(Type.ref(sum), kinds, sums)) {
             out.add(Type.ref(leaf));
         }
         return out;

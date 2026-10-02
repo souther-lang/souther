@@ -48,10 +48,10 @@ final class CoveringNames {
      * set however odd the subject is.
      */
     static List<String> of(Type subject, List<TypeSymbol> atoms, DeclarationKinds kinds,
-                           PublishedDeclarations published) {
+                           PublishedDeclarations published, SumCases sums) {
         Set<TypeSymbol> left = new LinkedHashSet<>(atoms);
         List<String> named = new ArrayList<>();
-        name(subject, left, kinds, published, named, new HashSet<>());
+        name(subject, left, kinds, published, sums, named, new HashSet<>());
         for (TypeSymbol atom : left) {
             named.add(atom.name());
         }
@@ -69,9 +69,9 @@ final class CoveringNames {
      * others terminates on.
      */
     private static void name(Type subject, Set<TypeSymbol> left, DeclarationKinds kinds,
-                             PublishedDeclarations published,
+                             PublishedDeclarations published, SumCases sums,
                              List<String> out, Set<TypeSymbol> opened) {
-        for (ResolvedCase selected : CaseSpace.of(subject, kinds, published).selectors()) {
+        for (ResolvedCase selected : CaseSpace.of(subject, kinds, published, sums).selectors()) {
             if (left.isEmpty()) {
                 return;
             }
@@ -86,7 +86,7 @@ final class CoveringNames {
                     && opened.add(selected.name())) {
                 // Some of what it covers is missing and some is answered, so the case itself is not
                 // what is missing — what is inside it is.
-                name(selected.bound(), left, kinds, published, out, opened);
+                name(selected.bound(), left, kinds, published, sums, out, opened);
             }
         }
     }

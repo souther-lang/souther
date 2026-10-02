@@ -188,7 +188,7 @@ public final class SpecChecker {
      * definition, so a signature on one is rejected.
      */
     static void checkExposedPipeOutputs(Hir.Module module, Map<String, Sig> sigs,
-            DeclarationKinds kinds, PublishedDeclarations published) {
+            DeclarationKinds kinds, SumCases sums) {
         Set<String> named = Set.copyOf(module.exposing().named());
         Set<String> pipeNames = new HashSet<>();
         for (Hir.BehaviorDef b : module.behaviors()) {
@@ -215,7 +215,7 @@ public final class SpecChecker {
                 continue;
             }
             Set<TypeSymbol> inferred =
-                    new LinkedHashSet<>(AtomSpace.subjectAtoms(sig.outputType(), kinds, published));
+                    new LinkedHashSet<>(AtomSpace.subjectAtoms(sig.outputType(), kinds, sums));
             Hir.RetType declared = module.exposedOutputs().get(pipe.name());
             if (declared == null) {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
@@ -231,7 +231,7 @@ public final class SpecChecker {
                 throw new Unanswerable(declared.pos());
             }
             Set<TypeSymbol> declaredCases =
-                    new LinkedHashSet<>(AtomSpace.subjectAtoms(declaredOut, kinds, published));
+                    new LinkedHashSet<>(AtomSpace.subjectAtoms(declaredOut, kinds, sums));
             if (!inferred.equals(declaredCases)) {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
                                 
@@ -260,7 +260,7 @@ public final class SpecChecker {
                                     Map<String, Type> recursiveHelperFns,
                                     Map<String, DataChecker.Constructs> recHelperConstructs,
                                     Preserved.SettledValues settledValues) {
-        PublishedDeclarations published = declarations.published();
+        SumCases sums = declarations.sums();
         DeclarationKinds kinds = declarations.kinds();
         if (fn.declaredReturn() != null) {
             throw CompileException.of(Diagnostic
@@ -349,7 +349,7 @@ public final class SpecChecker {
                         .withDependencies(dependsOn)
                         .preserving(Preserved.valuesAlreadySettled(settledValues)), output);
         Type rt = answered.type();
-        if (!TypeOps.assignable(rt, output, kinds, published)) {
+        if (!TypeOps.assignable(rt, output, kinds, sums)) {
             throw CompileException.of(Diagnostic
                             .at(body.pos())
                             .diff(Type.show(rt, output), Type.show(output, rt)).say(new BehaviorMessage.TheBodyIsNotWhatTheBehaviorReturns(spec.name(), Type.show(output), Type.show(rt))).build());
@@ -536,14 +536,14 @@ public final class SpecChecker {
      */
     static void checkUnionMemberNames(Hir.Module module, Map<String, Sig> sigs,
                                       DeclarationKinds kinds,
-                                      PublishedDeclarations published) {
+                                      SumCases sums) {
         for (Hir.BehaviorDef b : module.behaviors()) {
             Sig sig = sigs.get(b.name());
             if (sig == null) {
                 continue;
             }
             TypeSymbol.AtModule[] clash = TypeOps.ambiguousMembers(sig.outputType(), kinds,
-                    published);
+                    sums);
             if (clash == null) {
                 continue;
             }
@@ -561,7 +561,7 @@ public final class SpecChecker {
      */
     static void checkUnionMemberFields(Hir.Module module, Map<String, Sig> sigs, Symbols symbols,
                                        DeclarationKinds kinds,
-                                       PublishedDeclarations published) {
+                                       SumCases sums) {
         for (Hir.BehaviorDef b : module.behaviors()) {
             Sig sig = sigs.get(b.name());
             if (sig == null || !(sig.outputType() instanceof Type.Union)) {
@@ -570,13 +570,13 @@ public final class SpecChecker {
             // The key is the settled representation's, the same one a named sum's cases are held to
             // (`DataChecker`). Written here as a constant of its own, this checker and the codec that
             // writes the key were two places the language's own spelling was kept.
-            if (!(Boundary.of(sig.outputType(), kinds, published).representation()
+            if (!(Boundary.of(sig.outputType(), kinds, sums).representation()
                     instanceof Boundary.Representation.Discriminated(String tagKey, String _))) {
                 continue;
             }
             TypeSymbol carrying =
                     TypeOps.memberCarryingField(sig.outputType(), tagKey, symbols, kinds,
-                            published);
+                            sums);
             if (carrying == null) {
                 continue;
             }

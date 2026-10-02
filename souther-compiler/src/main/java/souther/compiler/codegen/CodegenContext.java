@@ -12,6 +12,7 @@ import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.PublishedDeclarations;
+import souther.compiler.check.SumCases;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.PhysicalPos;
 import souther.compiler.diag.QuotedFrom;
@@ -59,6 +60,10 @@ final class CodegenContext {
     /** Which form each declaration was written in, for the emissions that only have to tell a sum
      *  from anything else. */
     final DeclarationKinds kinds;
+
+    /** What a value of each sum an emitted class names can be, read off {@link #published} and so
+     *  through the same door: what a class is built against is what its reads record. */
+    final SumCases sums;
 
     /** What each declaration that wears one value wraps, for the readings that go through the
      *  name. */
@@ -427,6 +432,20 @@ final class CodegenContext {
         this.symbols = symbols;
         this.published = published;
         this.kinds = kinds;
+        // Each sum descended once for the emission, which asks it of every class naming the sum.
+        // What the descent reads is recorded the first time; reading it again records nothing new.
+        SumCases descended = SumCases.asWritten(kinds, published);
+        Map<TypeSymbol.AtModule, SumCases.Cases> reached = new HashMap<>();
+        this.sums = sum -> {
+            SumCases.Cases cases = reached.get(sum);
+            if (cases == null) {
+                cases = descended.of(sum);
+                if (cases != null) {
+                    reached.put(sum, cases);
+                }
+            }
+            return cases;
+        };
         this.inners = inners;
         this.kernels = kernels;
         this.caseToSums = caseToSums;
@@ -554,7 +573,7 @@ final class CodegenContext {
             return List.of();
         }
         List<TypeSymbol> bridged = new ArrayList<>();
-        for (TypeSymbol member : AtomSpace.subjectAtoms(out, kinds, published)) {
+        for (TypeSymbol member : AtomSpace.subjectAtoms(out, kinds, sums)) {
             if (member.isDeclaredByLanguage()
                     || !(member instanceof TypeSymbol.AtModule at)
                     || !at.module().equals(module)) {

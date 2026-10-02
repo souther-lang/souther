@@ -380,7 +380,7 @@ public final class SemanticSnapshot {
      * also told that the buffer cannot answer what may follow a {@code .}.
      */
     private FieldRead fieldRead() {
-        return new FieldRead(symbols, souther.compiler.query.Shapes.publishedDeclarations(db),
+        return new FieldRead(symbols, souther.compiler.query.Shapes.sumCases(db),
                 souther.compiler.query.Shapes.declarationKinds(db),
                 souther.compiler.query.Shapes.newtypeInners(db),
                 fields(), FieldRead.Unreadable.MAKES_NOTHING_READABLE);

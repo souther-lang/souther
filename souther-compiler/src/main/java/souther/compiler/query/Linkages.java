@@ -11,9 +11,9 @@ import souther.compiler.check.EnumerationListings;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.Ordering;
 import souther.compiler.check.Preserved;
-import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Requirements;
 import souther.compiler.check.Sig;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.ValueEntries;
 import souther.compiler.check.DerivedSymbols;
@@ -249,12 +249,16 @@ public final class Linkages {
             Map<String, List<ValueName.Behavior>> required = new LinkedHashMap<>();
             requirements.value().forEach((behavior, each) ->
                     required.put(behavior, Requirements.names(each)));
+            // Read through the reader, so what the projection reads of the declarations is what it
+            // records it rests on: the compilation's own answer for what a sum's cases are would be
+            // read past it.
+            DeclarationKinds kinds = reader.readingKinds(Shapes.declarationKinds(db));
+            SumCases sums = SumCases.asWritten(kinds,
+                    reader.readingPublished(Shapes.publishedDeclarations(db)));
             SortedMap<LinkageTarget, LinkageProjection> provides = LinkageProjections.of(
                     new LinkageProjections.Settled(name, written.published(), declarations,
                             orders, signatures.value(), implementations.value().states(), required,
-                            values, symbols.value(),
-                            reader.readingKinds(Shapes.declarationKinds(db)),
-                            reader.readingPublished(Shapes.publishedDeclarations(db))),
+                            values, symbols.value(), kinds, sums),
                     reader);
             if (onThePath != null) {
                 itOffersWhatItsClassesOffer(name, provides, onThePath.provides());
@@ -285,19 +289,19 @@ public final class Linkages {
         }
         NewtypeInners inners = Shapes.newtypeInners(db);
         DeclarationKinds kinds = Shapes.declarationKinds(db);
-        PublishedDeclarations published = Shapes.publishedDeclarations(db);
+        SumCases sums = Shapes.sumCases(db);
         // Which enumerations list a value, worked out once for each module asked of: asked again
         // for every unit, it would read every sum of the module once per unit it declares.
         Map<String, Map<TypeKey, Set<TypeSymbol>>> listings = new HashMap<>();
         EnumerationListings listing = value -> listings
                 .computeIfAbsent(value.module(), module -> TypeOps.enumerationsListing(module,
-                        symbols.value().declaredNamesIn(module), kinds, published))
+                        symbols.value().declaredNamesIn(module), kinds, sums))
                 .getOrDefault(value.key(), Set.of());
         Map<TypeKey, Optional<LinkageProjection.HeldOrder>> out = new HashMap<>();
         for (TypeKey declaration : declarations) {
             Hir.Def def = symbols.value().declaredNode(declaration);
             Ordering how = def == null ? null : Ordering.of(Type.ref(def.declares()), inners,
-                    kinds, published, listing);
+                    kinds, sums, listing);
             LinkageProjection.HeldOrder held = switch (how) {
                 case null -> null;
                 case Ordering.Wrapped _ -> new LinkageProjection.HeldOrder.Natural();

@@ -95,7 +95,7 @@ public final class TypedFixtureValues {
      */
     public static Map<TypeSymbol, List<ReachName.Declaration>> of(Hir.Module module,
             Map<String, Hir.FnDef> importedForEvidence, Set<ValueName.Helper> importedLeaves,
-            Stdlib stdlib, Symbols symbols, PublishedDeclarations published, DeclarationKinds kinds,
+            Stdlib stdlib, Symbols symbols, SumCases sums, DeclarationKinds kinds,
             NewtypeInners fieldWraps, Map<ValueName.Behavior, Sig> behaviors) {
         Set<String> generated = new LinkedHashSet<>();
         for (Hir.BehaviorDef behavior : module.behaviors()) {
@@ -134,7 +134,7 @@ public final class TypedFixtureValues {
         }
         DeclaredTypeReading evidence = new DeclaredTypeReading(
                 new DeclarationFacts(
-                        new FieldRead(symbols, published, kinds,
+                        new FieldRead(symbols, sums, kinds,
                                 new ResolvedFieldTypes(symbols, fieldWraps),
                                 FieldRead.Unreadable.MAKES_NOTHING_READABLE),
                         DeclarationNewtypes.asWritten(symbols)),

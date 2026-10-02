@@ -63,10 +63,10 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
      * where a value's base is.
      */
     public static TypeView of(Type type, NewtypeInners inners, Symbols symbols,
-                              DeclarationKinds kinds, PublishedDeclarations published) {
+                              DeclarationKinds kinds, SumCases sums) {
         TypeOps.NewtypeSpine spine = TypeOps.newtypeSpine(type, inners);
         return new TypeView(type, spine.layers().stream().map(TypeOps.Layer::named).toList(),
-                shapeOf(spine.terminal(), symbols, kinds, published));
+                shapeOf(spine.terminal(), symbols, kinds, sums));
     }
 
     /**
@@ -77,8 +77,8 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
      * compilation's answer does not take the names off one at a time to learn what is under them.
      */
     public static Shape shapeOf(Type type, NewtypeInners inners, Symbols symbols,
-                                DeclarationKinds kinds, PublishedDeclarations published) {
-        return shapeOf(inners.terminal(type), symbols, kinds, published);
+                                DeclarationKinds kinds, SumCases sums) {
+        return shapeOf(inners.terminal(type), symbols, kinds, sums);
     }
 
     /**
@@ -91,8 +91,8 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
      * declarations a second time.
      */
     static TypeView wearingNoName(Type type, Symbols symbols, DeclarationKinds kinds,
-                                  PublishedDeclarations published) {
-        return new TypeView(type, List.of(), shapeOf(type, symbols, kinds, published));
+                                  SumCases sums) {
+        return new TypeView(type, List.of(), shapeOf(type, symbols, kinds, sums));
     }
 
     /**
@@ -104,8 +104,8 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
      * Every caller of this is a reader that has not been handed the first, and a test counts them.
      */
     public static TypeView asWritten(Type type, Symbols symbols, DeclarationKinds kinds,
-                                     PublishedDeclarations published) {
-        return of(type, NewtypeInners.asWritten(symbols), symbols, kinds, published);
+                                     SumCases sums) {
+        return of(type, NewtypeInners.asWritten(symbols), symbols, kinds, sums);
     }
 
     /** Whether any name is worn over the shape — which is a fact about how the value is written,
@@ -125,7 +125,7 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
      * resolved to nothing usable rather than a shape.
      */
     private static Shape shapeOf(Type terminal, Symbols symbols, DeclarationKinds kinds,
-                                 PublishedDeclarations published) {
+                                 SumCases sums) {
         return switch (terminal) {
             case Type.Prim prim -> new Shape.Scalar(prim);
             case Type.Never _ -> new Shape.Uninhabited();
@@ -139,7 +139,7 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
             case Type.OptionOf option -> new Shape.Optional(option.element());
             case Type.TupleOf tuple -> new Shape.Tuple(tuple.elements());
             case Type.FnOf fn -> new Shape.Function(fn.params(), fn.result());
-            case Type.Ref ref -> denoted(ref.name(), symbols, kinds, published);
+            case Type.Ref ref -> denoted(ref.name(), symbols, kinds, sums);
         };
     }
 
@@ -151,10 +151,10 @@ public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
      * so there is no base to read a shape from.
      */
     private static Shape denoted(TypeSymbol name, Symbols symbols, DeclarationKinds kinds,
-                                 PublishedDeclarations published) {
+                                 SumCases sums) {
         return switch (symbols.declaredNode(name)) {
             case Hir.SumData sum ->
-                    new Shape.Sum(name, TypeOps.commonSpreadOf(sum, symbols, kinds, published));
+                    new Shape.Sum(name, TypeOps.commonSpreadOf(sum, symbols, kinds, sums));
             case Hir.UnitData _ -> new Shape.Unit(name);
             case Hir.Data data when data.newtype() -> new Shape.Unresolved(name);
             // A product shape states an order, so the order is asked of what answers it and the

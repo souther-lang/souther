@@ -221,7 +221,7 @@ class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
                 TermPath.of("query"), ScopedDeclarations.wrapsOf(symbolsOf(BESIDE_A_LIST)),
                 symbolsOf(BESIDE_A_LIST),
                 ScopedDeclarations.kindsOf(symbolsOf(BESIDE_A_LIST)),
-                ScopedDeclarations.of(symbolsOf(BESIDE_A_LIST)),
+                ScopedDeclarations.sumsOf(symbolsOf(BESIDE_A_LIST)),
                 Set.of(TermPath.of("query").then("item").then("method").then("amount"),
                         bag.element()),
                 Requirements.NONE,
@@ -248,7 +248,7 @@ class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
                 TermPath.of("query"), ScopedDeclarations.wrapsOf(symbolsOf(BESIDE_A_LIST)),
                 symbolsOf(BESIDE_A_LIST),
                 ScopedDeclarations.kindsOf(symbolsOf(BESIDE_A_LIST)),
-                ScopedDeclarations.of(symbolsOf(BESIDE_A_LIST)),
+                ScopedDeclarations.sumsOf(symbolsOf(BESIDE_A_LIST)),
                 Set.of(TermPath.of("query").then("item").then("method").then("amount"),
                         TermPath.of("query").then("item").then("bag").element()),
                 Requirements.NONE, ANY);
@@ -274,7 +274,7 @@ class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
         return ConstructionPlan.of(typeOf(source), TermPath.of("query"),
                 ScopedDeclarations.wrapsOf(symbolsOf(source)), symbolsOf(source),
                 ScopedDeclarations.kindsOf(symbolsOf(source)),
-                ScopedDeclarations.of(symbolsOf(source)), decided, Requirements.NONE, ANY);
+                ScopedDeclarations.sumsOf(symbolsOf(source)), decided, Requirements.NONE, ANY);
     }
 
     private static Type typeOf(String source) {
