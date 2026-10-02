@@ -176,11 +176,13 @@ public final class DifferenceBounds<A> {
     private static <A> DifferenceBounds<A> closing(Map<Node<A>, Map<Node<A>, ExactCut>> edges) {
         Set<Node<A>> nodes = new LinkedHashSet<>(edges.keySet());
         edges.values().forEach(row -> nodes.addAll(row.keySet()));
-        // Nought last among the nodes a path goes through. Which order they are taken in does not
-        // change what the closure comes to, and nought is the one node every bounded position has
-        // an edge to or from: gone through first, it relates every two of them, and every node gone
-        // through after it composes every row with every hop. Last, the rows it fills are not
-        // composed again.
+        // Nought last among the nodes a path goes through. Where every hop composes, which order
+        // they are taken in does not change what the closure comes to; where one does not, the
+        // closure is looser than the true one either way and says so (`everyHopWasComposed`),
+        // and which bounds it still reached may turn on the order. Nought is the one node every
+        // bounded position has an edge to or from: gone through first, it relates every two of
+        // them, and every node gone through after it composes every row with every hop. Last, the
+        // rows it fills are not composed again.
         Node<A> nought = new Node.Nought<>();
         if (nodes.remove(nought)) {
             nodes.add(nought);
