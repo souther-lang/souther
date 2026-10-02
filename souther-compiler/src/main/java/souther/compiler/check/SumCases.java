@@ -2,7 +2,9 @@ package souther.compiler.check;
 
 import souther.compiler.types.TypeSymbol;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * What a value of a sum can be: the leaf cases it reaches, and whether every one of them is a unit.
@@ -49,6 +51,31 @@ public interface SumCases {
         return sum -> kinds.isSum(sum.key())
                 ? Cases.of(AtomSpace.leavesUnder(List.of(sum), kinds, published), kinds)
                 : null;
+    }
+
+    /**
+     * The same descent, each sum descended once for as long as what this returns is held.
+     *
+     * <p>For a reader that records what it reads as what it is built against, and so cannot take
+     * the compilation's answer: that answer would be read past the record. Such a reader asks one
+     * sum of every class or projection naming it, and a record is of what was read and not of how
+     * many times, so what the descent reads is recorded the first time and descending again
+     * records nothing new. Held for the one piece of work the reader does, it answers what the
+     * declarations said while that work was done.
+     */
+    static SumCases asWrittenOnceEach(DeclarationKinds kinds, PublishedDeclarations published) {
+        SumCases descended = asWritten(kinds, published);
+        Map<TypeSymbol.AtModule, Cases> reached = new HashMap<>();
+        return sum -> {
+            Cases cases = reached.get(sum);
+            if (cases == null) {
+                cases = descended.of(sum);
+                if (cases != null) {
+                    reached.put(sum, cases);
+                }
+            }
+            return cases;
+        };
     }
 
     /**

@@ -1,8 +1,10 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.check.Boundary;
 import souther.compiler.check.SumCases;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
@@ -134,6 +136,29 @@ class WhatASumCanBeIsAnsweredOnceForTheSumTest {
                                     + read);
                 }
             }
+        }
+    }
+
+    /**
+     * How the enumeration crosses a boundary reads the same answer. That every leaf of it is a
+     * unit is the sum's fact and is held there; what is the boundary's is only that such a set is
+     * written as a bare tag, so it asks nothing of the cases beside the answer.
+     */
+    @Test
+    void howTheEnumerationCrossesReadsTheAnswerAndNoCaseBesideIt() {
+        Compilation c = compiled(SOURCE);
+        Shapes.TypeAlternatives crossing =
+                new Shapes.TypeAlternatives(MODULE, Type.ref(named("Stage")));
+        assertInstanceOf(Boundary.Representation.Enumeration.class,
+                c.db().ask(crossing).value().representation(), "Stage crosses as a bare tag");
+
+        Set<Key<?>> read = c.db().dependenciesOf(crossing);
+        assertTrue(read.contains(new Shapes.SumCasesOf(named("Stage"))),
+                () -> "how Stage crosses was decided without the answer for it: " + read);
+        for (String unnamed : List.of("Prospecting", "Qualified", "Won")) {
+            assertTrue(read.stream().noneMatch(new Names.DeclarationKindOf(key(unnamed))::equals),
+                    () -> "how Stage crosses read what " + unnamed + " is beside the answer: "
+                            + read);
         }
     }
 

@@ -432,20 +432,7 @@ final class CodegenContext {
         this.symbols = symbols;
         this.published = published;
         this.kinds = kinds;
-        // Each sum descended once for the emission, which asks it of every class naming the sum.
-        // What the descent reads is recorded the first time; reading it again records nothing new.
-        SumCases descended = SumCases.asWritten(kinds, published);
-        Map<TypeSymbol.AtModule, SumCases.Cases> reached = new HashMap<>();
-        this.sums = sum -> {
-            SumCases.Cases cases = reached.get(sum);
-            if (cases == null) {
-                cases = descended.of(sum);
-                if (cases != null) {
-                    reached.put(sum, cases);
-                }
-            }
-            return cases;
-        };
+        this.sums = SumCases.asWrittenOnceEach(kinds, published);
         this.inners = inners;
         this.kernels = kernels;
         this.caseToSums = caseToSums;

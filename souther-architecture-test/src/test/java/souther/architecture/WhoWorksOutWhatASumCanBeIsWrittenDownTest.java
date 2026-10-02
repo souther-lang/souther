@@ -21,8 +21,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * Which methods work out for themselves what a value of a sum can be.
  *
- * <p>Two ways do it: the capability that descends a sum each time it is asked
- * ({@code SumCases#asWritten}), and the descent it is made of ({@code AtomSpace#leavesUnder}). Each
+ * <p>Three ways do it: the capability that descends a sum each time it is asked
+ * ({@code SumCases#asWritten}), the same one remembering each sum for the piece of work it is held
+ * for ({@code SumCases#asWrittenOnceEach}), and the descent they are made of
+ * ({@code AtomSpace#leavesUnder}). Each
  * reads what every case of the sum is, so a reader holding the capability and ordering many values
  * of an enumeration pays for every case of it each time — and the compilation already holds the
  * answer once for each sum ({@code Shapes#sumCases}, handed in a {@code DeclarationAccess}). The
@@ -54,6 +56,8 @@ class WhoWorksOutWhatASumCanBeIsWrittenDownTest {
 
     private static final String THE_WALK = SUM_CASES + "#asWritten";
 
+    private static final String THE_WALK_ONCE_EACH = SUM_CASES + "#asWrittenOnceEach";
+
     private static final String THE_DESCENT = ATOM_SPACE + "#leavesUnder";
 
     private static final String SYMBOLS = "L" + CHECK + "Symbols;";
@@ -68,24 +72,28 @@ class WhoWorksOutWhatASumCanBeIsWrittenDownTest {
      * Every method that works it out, and the way it does.
      *
      * <p>The declaration questions read off a scope, for a reading made of a scope alone. The
-     * capability, which is the descent asked of one sum. The emitter's context, which is handed no
-     * answer of the compilation's and records what it reads. The linkage of a module, which reads
-     * through what records it as what the module's classes are built against. And the compilation's
+     * capability, which is the descent asked of one sum, and the one remembering it, which is that
+     * capability. The emitter's context, which is handed no answer of the compilation's and records
+     * what it reads. The linkage of a module, which reads through what records it as what the
+     * module's classes are built against. Both of those ask one sum of many classes and
+     * projections and record a read once, so they take the remembering one. And the compilation's
      * own answer for a sum.
      */
     private static final List<String> WORKING_IT_OUT = List.of(
             row(CHECK + "DeclarationAccess", "asWritten",
                     "(" + SYMBOLS + PUBLISHED + KINDS + ")" + ACCESS, THE_WALK),
             CHECK + "SumCases#asWritten, in a lambda -> " + THE_DESCENT,
+            row(SUM_CASES, "asWrittenOnceEach",
+                    "(" + KINDS + PUBLISHED + ")L" + SUM_CASES + ";", THE_WALK),
             row(CODEGEN + "CodegenContext", "<init>",
                     "(Ljava/lang/String;L" + CHECK + "DerivedSymbols;" + PUBLISHED + KINDS + "L"
                             + CHECK + "NewtypeInners;Lsouther/compiler/core/KernelSignatures;"
                             + "Ljava/util/Map;Ljava/util/Map;Ljava/util/Set;Ljava/util/Map;"
                             + "Lsouther/compiler/diag/SourceLayouts;"
                             + "Lsouther/compiler/diag/QuotedFrom;L" + CODEGEN + "LinkageReader;)V",
-                    THE_WALK),
+                    THE_WALK_ONCE_EACH),
             row(QUERY + "Linkages$Provided", "compute",
-                    "(L" + QUERY + "Db;)L" + QUERY + "Answer;", THE_WALK),
+                    "(L" + QUERY + "Db;)L" + QUERY + "Answer;", THE_WALK_ONCE_EACH),
             row(QUERY + "Shapes$SumCasesOf", "compute",
                     "(L" + QUERY + "Db;)L" + QUERY + "Answer;", THE_WALK));
 
@@ -155,6 +163,9 @@ class WhoWorksOutWhatASumCanBeIsWrittenDownTest {
     private static Optional<String> aWay(String owner, String name) {
         if (SUM_CASES.equals(owner) && name.equals("asWritten")) {
             return Optional.of(THE_WALK);
+        }
+        if (SUM_CASES.equals(owner) && name.equals("asWrittenOnceEach")) {
+            return Optional.of(THE_WALK_ONCE_EACH);
         }
         if (ATOM_SPACE.equals(owner) && name.equals("leavesUnder")) {
             return Optional.of(THE_DESCENT);

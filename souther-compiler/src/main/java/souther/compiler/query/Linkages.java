@@ -253,7 +253,7 @@ public final class Linkages {
             // records it rests on: the compilation's own answer for what a sum's cases are would be
             // read past it.
             DeclarationKinds kinds = reader.readingKinds(Shapes.declarationKinds(db));
-            SumCases sums = SumCases.asWritten(kinds,
+            SumCases sums = SumCases.asWrittenOnceEach(kinds,
                     reader.readingPublished(Shapes.publishedDeclarations(db)));
             SortedMap<LinkageTarget, LinkageProjection> provides = LinkageProjections.of(
                     new LinkageProjections.Settled(name, written.published(), declarations,

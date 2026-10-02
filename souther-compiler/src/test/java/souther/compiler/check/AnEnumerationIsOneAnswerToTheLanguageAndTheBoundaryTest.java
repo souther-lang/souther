@@ -27,11 +27,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * kept apart on purpose: folding them would make one answer decide both, and the day either moved
  * the other would move with it unasked.
  *
- * <p>Kept apart, they walk the atoms twice, so this holds the relation the spec states between them
- * (spec §sum-discrimination): a unit-only sum crosses as its case's name. It is not a test that two
- * implementations agree — it is the rule that lets them be two. Breaking it deliberately means
- * saying, here, that a sum can be an enumeration in the language and a discriminated object on the
- * wire.
+ * <p>What both read for a named sum is one fact about its declarations — whether every leaf is a
+ * unit — and both read it from {@link SumCases} rather than working it out. What is kept apart is
+ * what each makes of it, so this holds the relation the spec states between the two (spec
+ * §sum-discrimination): a unit-only sum crosses as its case's name. It is not a test that two
+ * implementations agree — it is the rule that lets them be two policies. Breaking it deliberately
+ * means saying, here, that a sum can be an enumeration in the language and a discriminated object
+ * on the wire.
  */
 class AnEnumerationIsOneAnswerToTheLanguageAndTheBoundaryTest {
 
