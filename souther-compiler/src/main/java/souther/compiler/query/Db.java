@@ -9,6 +9,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TheCompilationsSources;
 import souther.compiler.source.SourceId;
 import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.StringFacts;
 import souther.compiler.values.StringMachineAnswers;
 
@@ -188,7 +189,21 @@ public final class Db implements StoreWork {
      */
     public DeclarationReadings readings() {
         if (readings == null) {
-            readings = new LentReadings(this::machinesOf, this::revision, this);
+            readings = new LentReadings(new DeclarationReadings() {
+
+                @Override
+                public StringMachineAnswers of(TypeKey declaration) {
+                    return machinesOf(declaration);
+                }
+
+                @Override
+                public TypeSymbol.AtModule ownerOf(TypeSymbol.AtModule declaration) {
+                    Answer<Shapes.ReadAs> owner = ask(new Shapes.ReadingOwnerOf(declaration.key()));
+                    return owner.present() && owner.value()
+                            instanceof Shapes.ReadAs.TheNameBeneath(TypeSymbol.AtModule beneath)
+                            ? beneath : declaration;
+                }
+            }, this::revision, this);
         }
         return readings;
     }

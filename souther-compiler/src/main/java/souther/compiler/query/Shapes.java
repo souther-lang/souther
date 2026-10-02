@@ -15,6 +15,7 @@ import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.DeclarationLocations;
 import souther.compiler.check.DeclarationMeaning;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.DeclarationReadings;
 import souther.compiler.check.DeclaredNames;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.Normalized;
@@ -69,6 +70,7 @@ import souther.compiler.types.WrittenOwner;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -527,6 +529,185 @@ public final class Shapes {
             }
             Type terminal = terminals.value().get(named);
             return terminal == null ? Answer.absent() : Answer.of(terminal);
+        }
+    }
+
+    /**
+     * Whose canonical reading each newtype a module declares is read as
+     * ({@link DeclarationReadings#ownerOf}): its own, or the reading of the name beneath it where
+     * both write nothing.
+     *
+     * <p>One answer for the module and one step out of it, for the reason {@link NewtypeTerminals}
+     * is: the chains inside a module are followed here, each name once, and where one leaves the
+     * module this asks {@link ReadingOwnerOf} of the name it reaches and stops.
+     *
+     * <p>A name read as itself is answered as that and not as a name: the one it is read as is the
+     * name its reader already holds, so nothing here makes an identity out of an address. A name
+     * read as another is answered with the name a declaration was written wearing.
+     *
+     * <p>A walk that comes back round to a name it took leaves every name it took read as itself.
+     * Nothing on a ring is beneath the others, and a reading entered at one name of it stops at a
+     * different name from a reading entered at the next.
+     */
+    public record ReadingOwners(String name) implements Key<Map<TypeKey, ReadAs>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<TypeKey, ReadAs>> compute(Db db) {
+            Answer<DeclaredNames.Index<Ast.Def>> declared = db.ask(new Names.Declarations(name));
+            if (!declared.present()) {
+                return Answer.absent();
+            }
+            List<TypeKey> newtypes = new ArrayList<>();
+            declared.value().declarations().forEach((named, def) -> {
+                if (def instanceof Ast.Data data && data.newtype()) {
+                    newtypes.add(new TypeKey(name, named));
+                }
+            });
+            return Answer.of(Ordered.map(within(name, newtypes, worn -> wornOver(db, worn),
+                    elsewhere -> {
+                        Answer<ReadAs> owner = db.ask(new ReadingOwnerOf(elsewhere.key()));
+                        return owner.present() && owner.value()
+                                instanceof ReadAs.TheNameBeneath(TypeSymbol.AtModule beneath)
+                                ? beneath : elsewhere;
+                    })));
+        }
+
+        /**
+         * What each name in {@code newtypes} is read as, reading what each name of {@code module} is
+         * worn over once.
+         *
+         * <p>{@code wornOver} answers the newtype that writes nothing a name is worn over, where the
+         * name writes nothing either, and null where that is not so. {@code elsewhere} answers for a
+         * name of another module what it is read as, itself included.
+         */
+        static Map<TypeKey, ReadAs> within(
+                String module, List<TypeKey> newtypes,
+                Function<TypeKey, TypeSymbol.AtModule> wornOver,
+                Function<TypeSymbol.AtModule, TypeSymbol.AtModule> elsewhere) {
+            Map<TypeKey, ReadAs> readAs = new LinkedHashMap<>();
+            // The names a walk left read as themselves because it went round a ring. A later walk
+            // reaching one of those is in the same place, and taking the name for an owner would
+            // share a reading with a ring depending on which walk came first.
+            Set<TypeKey> unshared = new HashSet<>();
+            for (TypeKey start : newtypes) {
+                if (readAs.containsKey(start)) {
+                    continue;
+                }
+                // The names this walk passed over, each read as the reading beneath it, and every
+                // name it stood at.
+                List<TypeKey> taken = new ArrayList<>();
+                Set<TypeKey> walked = new HashSet<>();
+                TypeKey at = start;
+                // The name `at` was reached wearing, from the name worn over it; none at the start.
+                TypeSymbol.AtModule reached = null;
+                TypeSymbol.AtModule owner = null;
+                boolean ring = false;
+                while (true) {
+                    if (unshared.contains(at) || !walked.add(at)) {
+                        ring = true;
+                        break;
+                    }
+                    ReadAs answered = readAs.get(at);
+                    if (answered instanceof ReadAs.TheNameBeneath(TypeSymbol.AtModule lentFrom)) {
+                        owner = lentFrom;
+                        break;
+                    }
+                    if (answered != null) {
+                        owner = reached;
+                        break;
+                    }
+                    TypeSymbol.AtModule beneath = wornOver.apply(at);
+                    if (beneath == null) {
+                        readAs.put(at, new ReadAs.Itself());
+                        owner = reached;
+                        break;
+                    }
+                    taken.add(at);
+                    if (!beneath.key().module().equals(module)) {
+                        owner = elsewhere.apply(beneath);
+                        break;
+                    }
+                    at = beneath.key();
+                    reached = beneath;
+                }
+                if (ring) {
+                    // Round a ring: no reading beneath is the same reading as any of these.
+                    walked.forEach(each -> readAs.put(each, new ReadAs.Itself()));
+                    unshared.addAll(walked);
+                } else if (owner != null) {
+                    for (TypeKey each : taken) {
+                        readAs.put(each, new ReadAs.TheNameBeneath(owner));
+                    }
+                }
+            }
+            return readAs;
+        }
+
+        /**
+         * The newtype {@code named} is worn over, where both of them write nothing; null where
+         * either writes something or {@code named} is worn over anything else.
+         */
+        private static TypeSymbol.AtModule wornOver(Db db, TypeKey named) {
+            if (!writesNothing(db, named)) {
+                return null;
+            }
+            Answer<Type> inner = db.ask(new NewtypeInnerOf(named));
+            return inner.present() && inner.value() instanceof Type.Ref ref
+                    && ref.name() instanceof TypeSymbol.AtModule beneath
+                    && writesNothing(db, beneath.key())
+                    ? beneath : null;
+        }
+
+        /**
+         * Whether {@code named} is a newtype that adds nothing a reading reads: no clause of its
+         * own and nothing spread into it.
+         *
+         * <p>Asked of what the declaration publishes and of nothing a reading made. A clause nobody
+         * could work out is published as one all the same, and a declaration whose meaning could
+         * not be read is not one that says nothing — so neither is taken for a name that writes
+         * nothing.
+         */
+        private static boolean writesNothing(Db db, TypeKey named) {
+            return db.ask(new MeaningOf(named)).value()
+                    instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Product product)
+                    && product.newtype() && product.includes().isEmpty()
+                    && product.clauses().isEmpty();
+        }
+    }
+
+    /** What a newtype's canonical reading is read as ({@link ReadingOwners}). */
+    public sealed interface ReadAs {
+
+        /** Its own reading. */
+        record Itself() implements ReadAs {}
+
+        /** The reading of {@code name}, a newtype beneath it, every name between them writing
+         *  nothing. */
+        record TheNameBeneath(TypeSymbol.AtModule name) implements ReadAs {}
+    }
+
+    /**
+     * What one newtype is read as, read off its module's {@link ReadingOwners}. Absent for a
+     * declaration that is no newtype, which is read as itself.
+     */
+    public record ReadingOwnerOf(TypeKey named) implements Key<ReadAs> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<ReadAs> compute(Db db) {
+            Answer<Map<TypeKey, ReadAs>> owners = db.ask(new ReadingOwners(named.module()));
+            if (!owners.present()) {
+                return Answer.absent();
+            }
+            ReadAs owner = owners.value().get(named);
+            return owner == null ? Answer.absent() : Answer.of(owner);
         }
     }
 

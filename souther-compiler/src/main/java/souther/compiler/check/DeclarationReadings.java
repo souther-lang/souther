@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.KnownExtents;
 import souther.compiler.values.StringMachineAnswers;
 
@@ -64,10 +65,29 @@ public interface DeclarationReadings {
      * source left, which is not the declaration's own. Which source it is, is what its origin says
      * ({@link RuleReadingSource.Origin}), so that is what is handed here and not the source.
      */
-    default DeclarationReading reading(TypeKey declaration, RuleReadingSource.Origin origin,
-                                       ReadingPolicy policy,
+    default DeclarationReading reading(TypeSymbol.AtModule declaration,
+                                       RuleReadingSource.Origin origin, ReadingPolicy policy,
                                        Supplier<InvariantChecker.Seeded> read) {
-        return DeclarationReading.of(read.get());
+        return DeclarationReading.of(declaration, read.get());
+    }
+
+    /**
+     * Whose canonical reading {@code declaration}'s is: the declaration itself, or the name
+     * beneath it whose reading is the same reading.
+     *
+     * <p>A newtype that writes nothing, worn over another newtype that writes nothing, adds nothing
+     * a reading reads: its value is the same location as the value beneath, no rule of its own is
+     * read there, and the walk goes on into the same names. So its reading is the one beneath, and
+     * a chain of such names is read once rather than once per name with the whole chain under each.
+     * Only that edge: a name worn over one that writes rules reads them as a walk reaches them, and
+     * the name beneath reads them as its own, which are two readings.
+     *
+     * <p>Answered by whoever answers for the compilation's declarations, and here by the
+     * declaration itself. A lender with nothing to ask shares nothing, which is the reading every
+     * declaration has of its own.
+     */
+    default TypeSymbol.AtModule ownerOf(TypeSymbol.AtModule declaration) {
+        return declaration;
     }
 
     /**
@@ -78,11 +98,11 @@ public interface DeclarationReadings {
      * nothing. What it makes is kept, because it is the declaration's canonical reading and the
      * question that asked for the answer is the next to want it.
      */
-    default DeclarationReading readingForAnAnswer(TypeKey declaration,
+    default DeclarationReading readingForAnAnswer(TypeSymbol.AtModule declaration,
                                                   RuleReadingSource.Origin origin,
                                                   ReadingPolicy policy,
                                                   Supplier<InvariantChecker.Seeded> read) {
-        return DeclarationReading.of(read.get());
+        return DeclarationReading.of(declaration, read.get());
     }
 
     /**
@@ -121,7 +141,12 @@ public interface DeclarationReadings {
             }
 
             @Override
-            public DeclarationReading reading(TypeKey declaration,
+            public TypeSymbol.AtModule ownerOf(TypeSymbol.AtModule declaration) {
+                return lender.ownerOf(declaration);
+            }
+
+            @Override
+            public DeclarationReading reading(TypeSymbol.AtModule declaration,
                                               RuleReadingSource.Origin origin,
                                               ReadingPolicy policy,
                                               Supplier<InvariantChecker.Seeded> read) {
@@ -129,7 +154,7 @@ public interface DeclarationReadings {
             }
 
             @Override
-            public DeclarationReading readingForAnAnswer(TypeKey declaration,
+            public DeclarationReading readingForAnAnswer(TypeSymbol.AtModule declaration,
                                                          RuleReadingSource.Origin origin,
                                                          ReadingPolicy policy,
                                                          Supplier<InvariantChecker.Seeded> read) {

@@ -185,7 +185,9 @@ public final class FieldDomains {
      * question about all of it and is asked of it; the numbers are read out of it where a bound is
      * what a caller is after. */
     private final ConstraintState<FactSubject> constraints;
-    /** What this was read from, so that it can be read again without one declaration's clauses. */
+    /** What this was read from, so that it can be read again without one declaration's clauses —
+     *  the declaration the reading is of, which a lent reading may have of a name beneath the one
+     *  asked about. */
     private final TypeSymbol.AtModule named;
     /** The scope and the representation together, so that a second reading of this declaration reads
      *  the same tree. Held apart, a counterfactual could be taken against the other form and what
@@ -432,8 +434,12 @@ public final class FieldDomains {
         // declaration again without each of them — so a second asker working this out again puts
         // the whole attribution a second time. Which readings are kept and which belong to one
         // question is settled where a reading is asked for, and is not asked again here.
-        return InvariantChecker.readFields(named, reading, settled, reach)
-                .fields(seeded -> leftBy(seeded, named, reading, settled, reach));
+        //
+        // Under the declaration the reading is of, which a lent reading may have of a name beneath
+        // the one asked about: the terms are bound under that one, and what is derived is kept with
+        // the reading for every asker after the first.
+        DeclarationReading read = InvariantChecker.readFields(named, reading, settled, reach);
+        return read.fields(seeded -> leftBy(seeded, read.owner(), reading, settled, reach));
     }
 
     /** What the reading {@code seeded} leaves the fields able to hold, under the terms it was made
@@ -1729,6 +1735,9 @@ public final class FieldDomains {
      * is read as a governing declaration of its own, and the clauses of the record beneath it are
      * read under that name — so the bindings its reads carry are this declaration's, and a caller
      * matching them against the writing declaration's alone finds none of them.
+     *
+     * <p>Nor always the one a caller asked about. A name that writes nothing over another that
+     * writes nothing is lent that one's reading, and this is the one the reading is of.
      */
     public TypeSymbol.AtModule named() {
         return named;

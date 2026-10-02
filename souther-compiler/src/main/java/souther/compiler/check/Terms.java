@@ -25,7 +25,9 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -2637,16 +2639,48 @@ final class Terms {
     /** The names of {@code p} that are steps of a position, the first one first: a newtype's own
      *  {@code value} is the value under the name and no step ({@link Location#isStep}). */
     private List<String> stepsOf(Core.FieldProjection p) {
-        List<String> out = new ArrayList<>();
-        Type from = p.base().type();
-        for (Core.FieldProjection.Step step : p.steps().inOrder()) {
-            if (Location.isStep(from, step.field(), newtypes())) {
-                out.add(step.field());
+        Type base = p.base().type();
+        // The names not yet worked out under this base, the nearest to the base on top.
+        Deque<Core.FieldProjection.Steps> unread = new ArrayDeque<>();
+        List<String> out = List.of();
+        Type from = base;
+        for (Core.FieldProjection.Steps at = p.steps(); at != null; at = at.before()) {
+            Located held = located.get(at);
+            if (held != null && held.base().equals(base)) {
+                out = held.steps();
+                from = at.last().type();
+                break;
             }
-            from = step.type();
+            unread.push(at);
+        }
+        while (!unread.isEmpty()) {
+            Core.FieldProjection.Steps next = unread.pop();
+            if (Location.isStep(from, next.last().field(), newtypes())) {
+                List<String> longer = new ArrayList<>(out.size() + 1);
+                longer.addAll(out);
+                longer.add(next.last().field());
+                out = List.copyOf(longer);
+            }
+            located.put(next, new Located(base, out));
+            from = next.last().type();
         }
         return out;
     }
+
+    /**
+     * The names of each projection's chain that reach somewhere, by the chain, for this reading.
+     *
+     * <p>A chain shares its names with every chain one name shorter, and a value read under a chain
+     * of names is asked about at every name of it — so worked out from the whole chain each time,
+     * a chain as long as the names are deep costs the square of that for one reading. Kept by
+     * identity because a chain is shared rather than copied, and a chain made again elsewhere is
+     * worked out again rather than hashed along its whole length.
+     */
+    private final Map<Core.FieldProjection.Steps, Located> located = new IdentityHashMap<>();
+
+    /** The names of a chain that reach somewhere, read off {@code base}: which of a chain's names
+     *  are steps turns on what the first is read off. */
+    private record Located(Type base, List<String> steps) {}
 
     /**
      * The same, for a chain already found to be nowhere — so what it is read from is nowhere too.
@@ -2726,7 +2760,7 @@ final class Terms {
      * term grammar names a chain by. A reader that only wants to know whether there is one asks
      * {@link #isAPlace}. */
     Location locationOf(Core e, Denotations at) {
-        return Location.of(e, newtypes(), at::locationOf);
+        return Location.of(e, newtypes(), at::locationOf, this::stepsOf);
     }
 
     /**

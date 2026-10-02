@@ -6,6 +6,7 @@ import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * Where a value is, as the thing itself rather than as the text that named it: the binding it is
@@ -83,30 +84,26 @@ public record Location(BindingId root, List<String> path) {
      * is the same walk.
      */
     public static Location of(Core e, DeclarationNewtypes newtypes,
-                              java.util.function.Function<BindingId, Location> rooted) {
+                              Function<BindingId, Location> rooted,
+                              Function<Core.FieldProjection, List<String>> steps) {
         // A value is where it is whatever type it stands as.
         return switch (Core.withoutStanding(e)) {
             case Core.Read read -> rooted.apply(read.binding());
             case Core.FieldAccess fa -> {
-                Location base = of(fa.target(), newtypes, rooted);
+                Location base = of(fa.target(), newtypes, rooted, steps);
                 yield base == null ? null : base.then(fa.target().type(), fa.field(), newtypes);
             }
-            // The same step a name at a time, along the names rather than down the stack, and made
-            // into a location once: how many names there are is as long as the declarations chain,
-            // and a location per name would copy every name before it.
+            // The same step a name at a time, made into a location once: how many names there are is
+            // as long as the declarations chain, and a location per name would copy every name
+            // before it. Which of the names are steps is the caller's to answer, by the rule above:
+            // a caller reading many chains that share their names answers each name once.
             case Core.FieldProjection p -> {
-                Location base = of(p.base(), newtypes, rooted);
+                Location base = of(p.base(), newtypes, rooted, steps);
                 if (base == null) {
                     yield null;
                 }
                 List<String> path = new ArrayList<>(base.path());
-                Type from = p.base().type();
-                for (Core.FieldProjection.Step step : p.steps().inOrder()) {
-                    if (isStep(from, step.field(), newtypes)) {
-                        path.add(step.field());
-                    }
-                    from = step.type();
-                }
+                path.addAll(steps.apply(p));
                 yield new Location(base.root(), path);
             }
             default -> null;

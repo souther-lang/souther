@@ -280,7 +280,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(" + core + "Ljava/util/Set;" + core + ")" + core,
                 Reading.STRUCTURE, REWRITES_THE_BASE);
         row(out, c + "check/Location", "of", "(" + core + "L" + c
-                + "check/DeclarationNewtypes;Ljava/util/function/Function;)L" + c
+                + "check/DeclarationNewtypes;Ljava/util/function/Function;"
+                + "Ljava/util/function/Function;)L" + c
                 + "check/Location;", Reading.NAMES, READS_THE_NAMES);
         row(out, c + "check/PathReachability", "pathUnder",
                 "(" + core + reads + ")L" + c + "inputs/TermPath;",
