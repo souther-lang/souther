@@ -2346,9 +2346,11 @@ public final class Partitions {
      * that wants the meet, and a third that only asks how many there are would each be paying for
      * every machine to find out.
      *
-     * <p>Read in the representation the analysis reads, which is where a library predicate is still
-     * the operation it was written as. In the settled form it is the body it expands to, and this
-     * reading has no word for that.
+     * <p>Read off the clauses the checker typed, which is where a pattern is the meaning the checker
+     * settled ({@link StringPredicates#statedOn}). The parts are the ones the author wrote, in the
+     * order the author wrote them ({@link DeclaredClauses}); what each of them says comes from the
+     * declaration that wrote it. Read again off the written tree, a pattern built out of a value of
+     * the module came back as text nothing worked out, and the position was offered {@code "x"}.
      *
      * <p>Asked of what the predicate means and not of what the decoder is told. The two are
      * different questions: a constraint is what a generated class declares to the runtime, which is
@@ -2372,15 +2374,23 @@ public final class Partitions {
         List<Stated> read = new ArrayList<>();
         List<StringOfferShortfall.NotOffered> unread = new ArrayList<>();
         for (int name = written.size() - 1; name >= 0; name--) {
+            // A name the language declares writes no clause, so it has nothing to say here.
+            if (!(written.get(name).worn() instanceof TypeSymbol.AtModule named)) {
+                continue;
+            }
+            StringPredicates.StatedOn stated = StringPredicates.statedOn(named, ruleSource);
             for (DeclaredClauses.Conjunct each : written.get(name).conjuncts()) {
-                switch (StringPredicates.statedByWritten(each.expr(), ruleSource.symbols())) {
+                // A clause the checker has no form for says nothing anybody worked out about the
+                // strings, which is a rule not read rather than a rule about something else.
+                if (!stated.typed(each.part())) {
+                    unread.add(StringOfferShortfall.NotOffered.ofARuleNotRead(
+                            each.part(), new BlockReason.UnreadValueRule()));
+                    continue;
+                }
+                switch (stated.of(each.part())) {
                     case StringPredicates.Reading.Accepting it ->
                             read.add(new Stated(each.part(), it.accepts()));
-                    case StringPredicates.Reading.PatternNotRead _ ->
-                            unread.add(StringOfferShortfall.NotOffered.ofARuleNotRead(
-                                    each.part(), BlockReason.forAPatternNotRead()));
-                    // A rule whose text this compiler did not work out is a rule it did not read,
-                    // the same as one whose text is no pattern.
+                    // A rule whose text this compiler did not work out is a rule it did not read.
                     case StringPredicates.Reading.WrittenArgumentNotKnown _ ->
                             unread.add(StringOfferShortfall.NotOffered.ofARuleNotRead(
                                     each.part(), new BlockReason.UnreadValueRule()));

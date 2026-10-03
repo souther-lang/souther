@@ -1,14 +1,17 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
-import net.unit8.notation199x.pattern.PatternParser;
-import net.unit8.notation199x.pattern.PatternRead;
 import net.unit8.notation199x.pattern.PatternMeaning;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * A library predicate over a string, as the strings it accepts.
@@ -165,26 +168,6 @@ public enum StringPredicates {
         }
 
         /**
-         * A pattern it states that is not read, and what the reader said instead.
-         *
-         * <p>Only in a program the checker refuses. A pattern that is no pattern of the language, or
-         * one past a limit every implementation holds to, is a compile error where the call is
-         * checked — but a reading of the rules goes on over a module with errors in it, and what it
-         * meets there is this rather than an answer nobody could give. Only an entry whose text is
-         * a pattern arrives here. One that composes what it accepts out of text has nothing in that
-         * to be stopped by.
-         */
-        record PatternNotRead(PatternRead why) implements Reading {
-
-            public PatternNotRead {
-                if (why == null || why instanceof PatternRead.Read) {
-                    throw new IllegalArgumentException(
-                            "a pattern nothing read was stopped by something: " + why);
-                }
-            }
-        }
-
-        /**
          * The predicate is one of these, and what the author wrote in it is not a string this
          * compiler works out.
          *
@@ -250,67 +233,106 @@ public enum StringPredicates {
     /**
      * What this predicate says, given the text written in it.
      *
-     * <p>The one copy of the reading for the written tree and for the predicates that look for text
-     * on a checked one. A pattern on a checked tree is not read here: the checker read it and the
-     * call carries what it means ({@link #statedBy}). The written tree is walked before any call is
-     * settled, so its patterns are read here by the language's one reader, {@link PatternParser} —
-     * the same reader the checker uses, so the two answers are one.
+     * <p>Never asked of {@link #MATCHES}. A pattern is not read here: the checker read it and the
+     * call carries what it means ({@link #statedBy}), so a tree has one reading of its patterns and
+     * it is the checker's.
      */
     private Reading readingOf(String written) {
-        if (!takesAPattern()) {
-            return new Reading.Accepting(accepting(written));
-        }
-        return switch (PatternParser.read(written)) {
-            case PatternRead.Read read -> new Reading.Accepting(read.meaning());
-            case PatternRead.Refused refused -> new Reading.PatternNotRead(refused);
-            case PatternRead.Beyond beyond -> new Reading.PatternNotRead(beyond);
-        };
+        return new Reading.Accepting(accepting(written));
     }
 
     /**
-     * What one written clause says about the value it is about, or null where it is no predicate of
-     * this kind.
+     * What the rules governing {@code named} say about strings, part by part, as the declarations
+     * that wrote them publish them.
      *
-     * <p>Off the written tree, for the readers that hold one — what a declaration's rules propose a
-     * value from is walked before a body is checked, and there is no {@link Core} there to ask. What
-     * it is <em>not</em> is a second table: which operations are predicates over strings and what
-     * each says is above, and both readers take that from there.
+     * <p>For a reader that proposes a value out of a declaration's rules. The clauses are the ones
+     * the checker typed, so a pattern is the meaning the checker settled on the call
+     * ({@link #statedBy}) — whatever the author built it out of. Read again off the tree the author
+     * wrote, the same rule would have a second reading, and one that could not follow what the
+     * checker followed: a pattern written as a value of the module joined to a literal reads there
+     * as text nothing worked out.
      *
-     * <p>About the value the newtype carries and not about any position: a caller here is looking at
-     * the clauses of one declaration, where {@code value} is what the rule is about, so which
-     * argument carries the subject is checked and nothing is resolved through it.
+     * <p>A part is read where it stands. The bindings above it are put in place of the names they
+     * give before the text of a predicate is folded, so a rule reached through a helper says what
+     * the same rule written out says.
      *
-     * <p>A call of another number of arguments is no statement of this kind, the same as a call of
-     * another operation. This reads the tree a body is checked from, where an application is typed
-     * against what it names but a malformed one has not yet been refused.
+     * <p>Only a part stated outright is a predicate here. A denial and a choice each state
+     * something about the strings, and neither is one set of strings to take a value out of.
      */
-    public static Reading statedByWritten(Hir.Expr clause, Symbols symbols) {
-        if (!(clause instanceof Hir.Apply call) || call.answered() == null) {
-            return null;
+    public static StatedOn statedOn(TypeSymbol.AtModule named, RuleReadingSource source) {
+        Clauses clauses = new Clauses(source);
+        Map<PartId<RuleRef.Invariant>, Reading> read = new HashMap<>();
+        Set<Clause.Ref> notTyped = new HashSet<>();
+        for (ClauseMeaning each : clauses.declared(named)) {
+            Clauses.AsStated stated = clauses.stated(each);
+            if (stated == null) {
+                notTyped.add(each.ref());
+                continue;
+            }
+            for (Clauses.StatedPart part : clauses.partsOf(stated)) {
+                Stated said = statedIn(part.of(), source.symbols(), Map.of());
+                if (said != null) {
+                    read.put(part.id(), said.reading());
+                }
+            }
         }
-        StringPredicates predicate = call.answered().denotes()
-                instanceof ValueName.Stdlib.Operation operation
-                ? of(symbols.kernelOf(operation)) : null;
-        if (predicate == null || call.args().size() != predicate.arity()) {
-            return null;
+        return new StatedOn(read, notTyped);
+    }
+
+    /**
+     * What the rules governing one declaration say about strings, part by part.
+     *
+     * @param read     what each part that is a predicate of this kind came to, by the part
+     * @param notTyped the clauses the checker has no form for. What their parts say about strings
+     *                 is not known, which is not the same as their saying nothing
+     */
+    public record StatedOn(Map<PartId<RuleRef.Invariant>, Reading> read, Set<Clause.Ref> notTyped) {
+
+        public StatedOn {
+            read = Map.copyOf(read);
+            notTyped = Set.copyOf(notTyped);
         }
-        // Under nothing: what is read here is a clause of a declaration, which stands beneath no
-        // binding — and the call is the clause itself, so nothing between the two binds a name
-        // either.
-        String written = ConstEval.against(symbols)
-                .evalString(BoundExpr.root(call.args().get(predicate.written()))).orElse(null);
-        return written == null
-                ? new Reading.WrittenArgumentNotKnown() : predicate.readingOf(written);
+
+        /** What {@code part} came to, or null where it is no predicate of this kind. */
+        public Reading of(PartId<RuleRef.Invariant> part) {
+            return read.get(part);
+        }
+
+        /** Whether the checker typed the clause {@code part} is a part of. */
+        public boolean typed(PartId<RuleRef.Invariant> part) {
+            return !notTyped.contains(part.rule().clause());
+        }
+    }
+
+    /**
+     * What one shape of a clause states as a predicate of this kind, read under {@code given}, or
+     * null where it states none.
+     *
+     * <p>A binding is crossed by putting what it gives in place of the name, each value read under
+     * the bindings above it.
+     */
+    private static Stated statedIn(ClauseExpr shape, Symbols symbols, Map<BindingId, Core> given) {
+        return switch (shape) {
+            case ClauseExpr.Scoped scoped -> {
+                Map<BindingId, Core> inside = new HashMap<>(given);
+                inside.put(scoped.binding().binder().binding(),
+                        Clauses.substituted(scoped.binding().value(), given));
+                yield statedIn(scoped.body(), symbols, inside);
+            }
+            case ClauseExpr.Leaf leaf when leaf.positive() -> statedBy(leaf.of(), symbols,
+                    e -> Terms.folded(Clauses.substituted(e, given), symbols, Denotations.none())
+                            instanceof String written ? written : null);
+            case ClauseExpr.Leaf _, ClauseExpr.Joined _ -> null;
+        };
     }
 
     /**
      * The same off a checked clause, or null where it is no predicate of this kind.
      *
-     * <p>Beside {@link #statedByWritten} and in the same file on purpose. One question — which
-     * operations say which strings stand at a position — and two trees to ask it of: a declaration's
-     * rules are walked before a body is checked and hold no {@link Core}, and the reading of what a
-     * position admits holds nothing else. Two entry points and one table, so a predicate learned is
-     * learned by both.
+     * <p>Beside {@link #statedOn} and in the same file on purpose. One question — which operations
+     * say which strings stand at a position — asked of a declaration's published clauses by a reader
+     * proposing values, and of the clause in hand by the reading of what a position admits. Every
+     * entry point comes down to {@link #statedBy}, so a predicate learned is learned by all of them.
      *
      * <p><b>Reaching the text is the whole of the difference, and it is handed in.</b> What the
      * author wrote is reached through whatever knows the names in force where the rule stands —
