@@ -80,6 +80,9 @@ public final class ExactArithmetic {
             numerator = numerator.negate();
             denominator = denominator.negate();
         }
+        if (numerator.bitLength() < Long.SIZE - 1 && denominator.bitLength() < Long.SIZE - 1) {
+            return canonical(numerator.longValue(), denominator.longValue(), twos, fives);
+        }
         BigInteger common = numerator.gcd(denominator);
         if (!common.equals(BigInteger.ONE)) {
             numerator = numerator.divide(common);
@@ -121,6 +124,52 @@ public final class ExactArithmetic {
             fives = ExactPowers.added(fives, -1);
         }
         return new ExactParts(numerator, denominator, twos, fives);
+    }
+
+    /**
+     * The same canonical form, of a numerator and a positive denominator a long holds with a bit to
+     * spare, worked out in longs.
+     *
+     * <p>Nearly every value the constraint algebra and a model's rationals make is this small, and
+     * the steps are the ones above: the common factor off, then the twos where the bits stop, then
+     * the fives one division each. In longs none of them allocates, where each division of a
+     * {@code BigInteger} answers a new one, and a remainder check answers two. The spare bit is what
+     * lets the magnitude of the numerator be taken without the least long, which has none.
+     */
+    private static ExactParts canonical(long numerator, long denominator, long twos, long fives) {
+        long common = commonFactor(Math.abs(numerator), denominator);
+        numerator /= common;
+        denominator /= common;
+        int inNumerator = Long.numberOfTrailingZeros(numerator);
+        if (inNumerator > 0) {
+            numerator >>= inNumerator;
+            twos = ExactPowers.added(twos, inNumerator);
+        }
+        int inDenominator = Long.numberOfTrailingZeros(denominator);
+        if (inDenominator > 0) {
+            denominator >>= inDenominator;
+            twos = ExactPowers.added(twos, -inDenominator);
+        }
+        while (numerator % 5 == 0) {
+            numerator /= 5;
+            fives = ExactPowers.added(fives, 1);
+        }
+        while (denominator % 5 == 0) {
+            denominator /= 5;
+            fives = ExactPowers.added(fives, -1);
+        }
+        return new ExactParts(BigInteger.valueOf(numerator), BigInteger.valueOf(denominator),
+                twos, fives);
+    }
+
+    /** The greatest common factor of two positive longs. */
+    private static long commonFactor(long a, long b) {
+        while (b != 0) {
+            long rest = a % b;
+            a = b;
+            b = rest;
+        }
+        return a;
     }
 
     /**
