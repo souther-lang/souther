@@ -312,12 +312,10 @@ class AFunctionArgumentIsCheckedInTheScopeItIsWrittenInTest {
                 refused(source).diagnostic().said());
     }
 
-    /*
-     * Where the language refuses what brings a binding into force, what it governs is never read,
-     * so there is no scope to check a call in — not the one around it either. Each row below hands
-     * over {@code k}, a value known outside the refused construct, so a check that read the
-     * construct's body in the scope around it would name {@code k} ahead of the refusal.
-     */
+    // Where the language refuses what brings a binding into force, what it governs is never read,
+    // so there is no scope to check a call in — not the one around it either. Each row below hands
+    // over `k`, a value known outside the refused construct, so a check that read the construct's
+    // body in the scope around it would name `k` ahead of the refusal.
 
     @Test
     void aRefusedAttemptLeavesItsBranchUnread() {
