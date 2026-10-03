@@ -1,9 +1,11 @@
 package souther.compiler.regex;
 
+import net.unit8.notation199x.pattern.Meter;
 import net.unit8.notation199x.pattern.PatternParser;
 import net.unit8.notation199x.pattern.PatternRead;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -27,6 +29,29 @@ class WhatAnAnswerNeedsIsAdmittedAtOnceTest {
     private static PatternPlan plan(String regex) {
         return PatternPlan.of(assertInstanceOf(PatternRead.Read.class,
                 PatternParser.read(regex), regex).meaning());
+    }
+
+    /** What one answer of a declaration is allowed, unspent. */
+    private static Meter allowed() {
+        return PatternPlan.Budget.OF_ADMITTED_VALUES.meter();
+    }
+
+    private static Language language(String regex) {
+        Language said = plan(regex).compile(PatternPlan.Budget.OF_ADMITTED_VALUES.meter());
+        assertNotNull(said, regex + " is one a rule may be answered about");
+        return said;
+    }
+
+    /** A plan of one pattern is that pattern's language. */
+    @Test
+    void aPlanOfOnePatternIsThatPattern() {
+        Language one = language("T[0-9]{13}");
+
+        assertTrue(one.has("T1234567890123"));
+        assertFalse(one.has("T123456789012"));
+        assertFalse(one.isEmpty());
+        assertFalse(one.isEverything());
+        assertEquals("T0000000000000", one.some());
     }
 
     /** A plan of several is what those several come to. */
@@ -86,5 +111,28 @@ class WhatAnAnswerNeedsIsAdmittedAtOnceTest {
                 "each of them is small, and together they fit where there is room for them");
         assertNull(several.compile(roomForOne.meter()),
                 "and not where there is room for one of them at a time");
+    }
+
+    /**
+     * What comes back can be asked anything, and putting two of them together is what is allowed.
+     *
+     * <p>The two halves of what a language is. Asking is free — a compiled language holds the one
+     * machine that accepts its strings, so every question below is read off what is in front of it.
+     * Composing is charged, so each of these says what it is allowed and would answer null past it;
+     * here there is room, and what the answers are is the point.
+     */
+    @Test
+    void whatComesBackAnswersEverythingAskedOfIt() {
+        Language one = language("[0-9]{2}");
+        Language two = language("[0-4][0-9]");
+
+        // A meter each, since one is spent as it is used and what is under test here is the
+        // answers rather than what they cost between them.
+        assertFalse(one.and(two, allowed()).isEmpty());
+        assertFalse(one.or(two, allowed()).isEmpty());
+        assertTrue(one.and(one.not(allowed()), allowed()).isEmpty());
+        assertTrue(one.or(one.not(allowed()), allowed()).isEverything());
+        assertEquals("00", one.and(two, allowed()).some());
+        assertTrue(one.and(two, allowed()).has("40"));
     }
 }
