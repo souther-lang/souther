@@ -413,8 +413,7 @@ sealed interface ComparisonAssessment {
         // The line and not one of its points. A rule drawing where the quantity never reaches
         // divides the position into nothing, and a reader told that the rule went unread would go
         // looking for a limit of this compiler that is not there.
-        if (!Border.reaches(cutting.at(), () -> parted, cutting.claim(), drawnByAnInvariant,
-                cutting.within())) {
+        if (!cutting.reached(() -> parted, drawnByAnInvariant)) {
             return new OutsideTheDomain(cutting);
         }
         ExactAnswer<Places> places = places(cutting);

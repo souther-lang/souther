@@ -16,6 +16,7 @@ import souther.compiler.numeric.Towards;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * What one comparison cuts, and where — the one place that decides it.
@@ -237,6 +238,24 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return null;
         }
         return new Cutting(moved, at, claim, quantities.runsBetween(moved.direction()));
+    }
+
+    /**
+     * Whether the quantity runs as far as this line, which is what makes it a line the rule draws.
+     *
+     * <p>Asked where the comparison is read and again at every position filing moves the line to
+     * ({@link #movedTo}). The move takes the quantity somewhere the rules may leave it less room: a
+     * case whose invariant stops short of the line is a quantity the line does not reach, however
+     * far the name it was written at runs. One question at both places, so the reading and the
+     * filing cannot come to disagree about one line.
+     *
+     * @param parts              where the rule parts the quantity's values, as the caller already
+     *                           holds it
+     * @param drawnByAnInvariant whether a clause of a value's own declarations drew the line, which
+     *                           has no far side for anything to stand on
+     */
+    boolean reached(Supplier<ExactAnswer<Seam>> parts, boolean drawnByAnInvariant) {
+        return Border.reaches(at, parts, claim, drawnByAnInvariant, within);
     }
 
     /**

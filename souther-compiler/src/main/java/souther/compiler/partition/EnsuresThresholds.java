@@ -73,7 +73,7 @@ public final class EnsuresThresholds {
      *                is a sentence about the model, and the model says otherwise in its own
      *                declaration
      */
-    public record Clauses(List<RuleEvidence> evidence,
+    public record Clauses(List<LineEvidence> evidence,
                           List<LineDrawn> between, RulesWithNoLine noLine) {
 
         public static final Clauses NONE =
@@ -87,12 +87,12 @@ public final class EnsuresThresholds {
         /** The lines, read off what the walk said. Not a list of their own, for the reason
          *  {@link GuardThresholds.Guards#thresholds} is not one. */
         public List<Threshold> thresholds() {
-            return RuleEvidence.linesIn(evidence);
+            return RuleEvidence.linesIn(LineEvidence.statedIn(evidence));
         }
 
         /** The values singled out, likewise. */
         public List<GuardThresholds.Guards.Singled> singled() {
-            return RuleEvidence.pointsIn(evidence);
+            return RuleEvidence.pointsIn(LineEvidence.statedIn(evidence));
         }
     }
 
@@ -158,7 +158,7 @@ public final class EnsuresThresholds {
 
     /** What the walk has found so far, and the behavior a line between two positions is named
      *  after. Together because they are filled together and are one answer. */
-    private record Drawn(String behavior, List<RuleEvidence> evidence,
+    private record Drawn(String behavior, List<LineEvidence> evidence,
                          List<LineDrawn> between,
                          RulesWithNoLine.Gathered noLine) {}
 

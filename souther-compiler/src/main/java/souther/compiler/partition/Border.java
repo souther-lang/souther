@@ -1234,7 +1234,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * they do not: both order the values either side of the number, and only one of the two has a
      * far side anything can stand on.
      */
-    private static boolean drawnByAnInvariant(LineOrigin origin) {
+    static boolean drawnByAnInvariant(LineOrigin origin) {
         return switch (origin) {
             case LineOrigin.InvariantOrigin _ -> true;
             case LineOrigin.NarrowedOrigin n -> drawnByAnInvariant(n.bound());

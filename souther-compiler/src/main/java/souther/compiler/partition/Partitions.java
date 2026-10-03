@@ -803,13 +803,15 @@ public final class Partitions {
             // Read off the value instead, a line between two of the position's values is one the
             // rules leave nothing at.
             //
-            // No disposition, and that is the point: this is not a way evidence may leave this
-            // stage. The reader that produces it already refuses a line falling outside what the
-            // quantity it cuts ever holds and names the rule, against a type's own range and
-            // against the range the record it sits in leaves. So a line that gets past that reader
-            // and is dropped here is a line lost with nothing said, and the account below says so.
+            // No disposition, because this is not a way evidence may leave this stage. A line
+            // falling outside what the quantity it cuts ever holds is refused, with the rule named,
+            // where the comparison is read and again at each position its name is filed at — a
+            // case's own rules can hold its quantity to less than the name's. Reaching here is one
+            // of those two disagreeing with this stage about one line.
             if (domain != null && !admits(domain, line.parts())) {
-                continue;
+                throw new IllegalStateException(
+                        "a line outside what " + term + " ever holds was handed to the stage that"
+                                + " measures it: " + line.origin());
             }
             account.measured(each, id);
             reachable.add(line);
