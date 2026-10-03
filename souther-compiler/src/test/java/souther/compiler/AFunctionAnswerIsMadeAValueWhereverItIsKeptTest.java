@@ -119,6 +119,30 @@ class AFunctionAnswerIsMadeAValueWhereverItIsKeptTest {
         assertEquals(0L, answer(source, 0L));
     }
 
+    /**
+     * A binding written ahead of the block is bound at what it declares, as one is anywhere: the
+     * {@code match} inside the block is over the sum {@code S}, whatever case the value was built as.
+     */
+    @Test
+    void aBindingAheadOfTheBlockIsBoundAtWhatItDeclares() throws Exception {
+        assertEquals(11L, answer("""
+                data A = { n: Int }
+                data B = { k: Int }
+                data S = A | B
+
+                behavior use : (n: Int) -> Int
+                let use (n) = {
+                    let f: (Int) -> Int = {
+                        let s: S = A { n = 1 }
+                        (m) -> match s with
+                            | A as a -> a.n + m
+                            | B as b -> b.k + m
+                    }
+                    f(n)
+                }
+                """, 10L));
+    }
+
     @Test
     void aBlockInATupleOfThreeIsApplied() throws Exception {
         assertEquals(16L, answer(ADDER + """

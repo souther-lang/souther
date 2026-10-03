@@ -1515,12 +1515,13 @@ public final class Elaborator {
                 yield applied.wrap(body, body.type(), ex.pos());
             }
             case Hir.LetIn li -> {
-                // a capture binding around the function (e.g. `let $n = 5 in (x) -> x + $n`)
-                Core bound = elaborate(li.value(), env, ctx);
-                Scope inner = env.with(li.binder(), bound.type());
+                // a capture binding around the function (e.g. `let $n = 5 in (x) -> x + $n`), bound
+                // at what any binding is bound at: written `let s: S = A { ... }`, `s` is the sum
+                Bound bound = bound(li, li.value(), env, ctx);
+                Scope inner = env.binding(li.binder(), bound.type(), li.value());
                 Core body = functionValue(li.body(), paramTypes, result, inner, ctx);
-                yield new Core.LetIn(CoreBinders.of(li.binder()), bound.type(), bound, body, body.type(),
-                        li.pos());
+                yield new Core.LetIn(CoreBinders.of(li.binder()), bound.type(),
+                        Core.standingAs(bound.value(), bound.type()), body, body.type(), li.pos());
             }
             default -> elaborate(value, env, ctx);
         };
