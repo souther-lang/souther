@@ -512,12 +512,12 @@ public sealed interface Core {
                 throw new IllegalArgumentException("operands read as they stand stand as one type: "
                         + left.type() + " " + op + " " + right.type());
             }
-            if (reading instanceof BinaryReading.Opened(Type newtype, Type inner)
-                    && !(left.type().equals(newtype) && right.type().equals(inner)
-                        || left.type().equals(inner) && right.type().equals(newtype))) {
+            if (reading instanceof BinaryReading.Opened(Type newtype, Type base)
+                    && !((left.type().equals(newtype) && right.type().equals(base))
+                        || (left.type().equals(base) && right.type().equals(newtype)))) {
                 throw new IllegalArgumentException("a newtype opened beside what it wraps is one "
                         + "of the two: " + left.type() + " " + op + " " + right.type()
-                        + " opening " + newtype + " to " + inner);
+                        + " opening " + newtype + " to " + base);
             }
         }
 
@@ -599,19 +599,23 @@ public sealed interface Core {
         /**
          * A newtype beside a literal of what it wraps under every name it wears: the side that is
          * {@code newtype} is opened through each of those names, and the pair is read as
-         * {@code inner}, which the literal already is. {@code amount <= 100} reads the
+         * {@code base}, which the literal already is. {@code amount <= 100} reads the
          * {@code Amount} as the {@code Int} it wraps, and the {@code 100} as it stands.
+         *
+         * <p>{@code base} is what is under every name and not what the outermost one wraps: for
+         * {@code data Code = Inner} and {@code data Inner = Int} it is the {@code Int}, the base
+         * {@code TypeOps.base} answers.
          *
          * <p>Which side is opened is the side whose type is {@code newtype}, so the reading is the
          * same written either way round. The literal is never a newtype, which is what lets the
          * two be told apart.
          */
-        record Opened(Type newtype, Type inner) implements BinaryReading {
+        record Opened(Type newtype, Type base) implements BinaryReading {
             public Opened {
-                if (newtype == null || inner == null) {
+                if (newtype == null || base == null) {
                     throw new IllegalArgumentException("a newtype is opened to what it wraps");
                 }
-                if (newtype.equals(inner)) {
+                if (newtype.equals(base)) {
                     throw new IllegalArgumentException(
                             "a type opened to itself is read as it stands: " + newtype);
                 }

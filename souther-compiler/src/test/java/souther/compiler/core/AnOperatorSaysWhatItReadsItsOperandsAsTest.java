@@ -141,14 +141,14 @@ class AnOperatorSaysWhatItReadsItsOperandsAsTest {
         Core.BinaryReading.Opened opened = assertInstanceOf(Core.BinaryReading.Opened.class,
                 compared.reading());
         assertEquals("Amount", Type.show(opened.newtype()));
-        assertEquals(Type.INT, opened.inner());
+        assertEquals(Type.INT, opened.base());
         assertEquals(Type.INT, compared.right().type(),
                 "the literal is an Int, and nothing widened it to stand as the newtype");
 
         Core.BinaryReading.Opened deep = assertInstanceOf(Core.BinaryReading.Opened.class,
                 applying("aDeepCodeIsSeven", BinOp.EQ).reading());
         assertEquals("Code", Type.show(deep.newtype()));
-        assertEquals(Type.INT, deep.inner(), "opened through every name it wears");
+        assertEquals(Type.INT, deep.base(), "the base under every name it wears");
     }
 
     /**
