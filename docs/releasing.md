@@ -98,10 +98,18 @@ The `snapshot` profile is what holds the coordinate to that meaning, as the `rel
 a release to its tag. The repository keeps one coordinate per version and every publication
 overwrites it, so a publication from anywhere else would silently replace what develop published.
 The profile refuses a version that is not a snapshot, a tree holding anything HEAD does not, and a
-HEAD that is not the commit develop points at on origin (`bin/require-develop-tip.sh`). A run
-overtaken by a later push stops there and leaves the publication to the later run, and CI publishes
-one at a time, so an earlier commit never lands after a later one. A plain `mvn deploy` publishes
-nothing: the publishing plugin is used only by the two profiles.
+HEAD that is not the commit develop points at on origin (`bin/require-develop-tip.sh`). A plain
+`mvn deploy` publishes nothing: the publishing plugin is used only by the two profiles.
+
+Which commit ends up published is decided by that check and not by the order CI runs the jobs in,
+which follows when each run's checks finished rather than when its push came. A job for an older
+commit stops at the check whenever it runs. CI runs one publication at a time and keeps every job
+waiting for its turn (`queue: max`), so the tip's job is never dropped and, waiting behind an older
+one already past the check, publishes after it.
+
+The publication is a second build of the commit CI checked, so both resolve the same dependencies
+only because none of them can change: the `snapshot` profile, like the `release` profile, refuses a
+dependency outside this reactor that is a snapshot.
 
 A release and a snapshot go through the same plugin and not to the same place. A release is
 uploaded to the Portal as one deployment, validated there and then published to Maven Central; a

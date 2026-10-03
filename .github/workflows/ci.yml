@@ -71,15 +71,24 @@ jobs:
 
   # develop's snapshot, published from a push to develop once every shard above has passed, and
   # from nowhere else: the snapshot coordinate is overwritten by each publication, and this is what
-  # makes it the last develop that passed. The `snapshot` profile refuses any tree but the tip of
-  # develop, so a run overtaken by a later push stops before it publishes and leaves it to that
-  # push's run; one publication at a time, so an earlier one cannot land after a later one.
+  # makes it the last develop that passed.
+  #
+  # Which run's job is right is the `snapshot` profile's to decide, not the order jobs run in: a
+  # job reaches the group when its own shards finish, which is not the order the pushes came in,
+  # and GitHub does not promise an order among those waiting. The profile publishes only the tip
+  # of develop, so a job for an older commit stops before publishing whenever it runs. What the
+  # group has to give is two things. One publication at a time, so the tip's job, waiting behind
+  # an older one already past the check, publishes after it. And no waiting job dropped: by
+  # default a job arriving cancels the one already waiting, so an older commit's job finishing its
+  # shards late would cancel the tip's and then stop itself, and nothing would publish the tip.
+  # `queue: max` keeps every waiting job, up to a hundred.
   publish-snapshot:
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
     needs: build
     runs-on: ubuntu-latest
     concurrency:
       group: publish-snapshot
+      queue: max
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

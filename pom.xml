@@ -685,7 +685,8 @@
             </properties>
         </profile>
         <!-- Activate for a Central release: `mvn -Prelease deploy`. Holds the build to a clean
-             checkout of the tag for its version, attaches sources and javadoc, GPG-signs every
+             checkout of the tag for its version and to dependencies that are releases, attaches
+             sources and javadoc, GPG-signs every
              artifact, and uploads them to the Central Portal as one deployment, which is
              published once the Portal has validated it (autoPublish). A snapshot is the
              `snapshot` profile's. Normal build/test is untouched. -->
@@ -693,6 +694,30 @@
             <id>release</id>
             <build>
                 <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-enforcer-plugin</artifactId>
+                        <version>3.5.0</version>
+                        <executions>
+                            <execution>
+                                <id>a-release-depends-on-releases</id>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>enforce</goal>
+                                </goals>
+                                <configuration>
+                                    <rules>
+                                        <requireReleaseDeps>
+                                            <message>A release is what its tag builds, and a snapshot dependency builds to whatever was published under it last.</message>
+                                            <excludes>
+                                                <exclude>org.souther-lang:*</exclude>
+                                            </excludes>
+                                        </requireReleaseDeps>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
                     <!-- A release is a clean checkout of the commit tagged for its version. The
                          revision written into the manifest names a commit, which describes the
                          jar only if nothing uncommitted went into it. Whether the tree is clean is
@@ -801,9 +826,10 @@
              push runs in CI once every check has passed. The snapshot repository keeps one
              coordinate per version and every publication overwrites it, so what the coordinate
              holds is whatever was published last; this profile is what makes that the tip of
-             develop. It refuses a version that is not a snapshot, a tree holding anything HEAD
-             does not, and a HEAD that is not the commit develop points at on origin. Sources,
-             javadoc and signatures are a release's and are not made. -->
+             develop. It refuses a version that is not a snapshot, a dependency outside this
+             reactor that is one, a tree holding anything HEAD does not, and a HEAD that is not the
+             commit develop points at on origin. Sources, javadoc and signatures are a release's
+             and are not made. -->
         <profile>
             <id>snapshot</id>
             <build>
@@ -812,10 +838,9 @@
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-enforcer-plugin</artifactId>
                         <version>3.5.0</version>
-                        <inherited>false</inherited>
                         <executions>
                             <execution>
-                                <id>a-snapshot-is-a-snapshot-version</id>
+                                <id>a-snapshot-version-built-from-releases</id>
                                 <phase>initialize</phase>
                                 <goals>
                                     <goal>enforce</goal>
@@ -825,6 +850,13 @@
                                         <requireSnapshotVersion>
                                             <message>The snapshot profile publishes develop's snapshot, and ${project.version} is not one. develop never carries a release version.</message>
                                         </requireSnapshotVersion>
+                                        <requireReleaseDeps>
+                                            <message>What is published is built from what it depends on, and a snapshot dependency can resolve to something else between the build CI checked and this one.</message>
+                                            <failWhenParentIsSnapshot>false</failWhenParentIsSnapshot>
+                                            <excludes>
+                                                <exclude>org.souther-lang:*</exclude>
+                                            </excludes>
+                                        </requireReleaseDeps>
                                     </rules>
                                 </configuration>
                             </execution>
