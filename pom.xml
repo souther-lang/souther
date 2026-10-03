@@ -149,6 +149,10 @@
              real work has room, and reached in milliseconds by one that loops. Named here so
              -Dtest.example.step.limit=N reaches it. -->
         <test.example.step.limit>1000000</test.example.step.limit>
+        <!-- Whether this module is left out of what is published to Central. A module that is not
+             a Maven artifact anyone depends on sets it in its own pom, so it is left out of a
+             release and of a snapshot alike. -->
+        <souther.publish.skip>false</souther.publish.skip>
     </properties>
 
     <dependencyManagement>
@@ -331,6 +335,20 @@
                         </dependency>
                     </dependencies>
                 </plugin>
+                <!-- What publishes to the Sonatype Central Portal, and only from the `release`
+                     and `snapshot` profiles, each of which holds the tree to the source its
+                     coordinate names before anything goes up. A plain `deploy` has nowhere to
+                     go. A module that is not a Maven artifact sets `souther.publish.skip`. -->
+                <plugin>
+                    <groupId>org.sonatype.central</groupId>
+                    <artifactId>central-publishing-maven-plugin</artifactId>
+                    <version>0.11.0</version>
+                    <configuration>
+                        <publishingServerId>central</publishingServerId>
+                        <autoPublish>true</autoPublish>
+                        <skipPublishing>${souther.publish.skip}</skipPublishing>
+                    </configuration>
+                </plugin>
             </plugins>
         </pluginManagement>
         <plugins>
@@ -411,21 +429,6 @@
                             <Implementation-Revision>${git.commit.id.full}</Implementation-Revision>
                         </manifestEntries>
                     </archive>
-                </configuration>
-            </plugin>
-            <!-- What `deploy` publishes to, the Sonatype Central Portal. A -SNAPSHOT version goes
-                 to its snapshot repository with a plain `mvn deploy`; a release is the `release`
-                 profile's, which holds it to a clean tagged checkout and signs it, and is
-                 published once the Portal has validated the bundle (autoPublish). A module that
-                 ships nothing says `skipPublishing` in its own pom. -->
-            <plugin>
-                <groupId>org.sonatype.central</groupId>
-                <artifactId>central-publishing-maven-plugin</artifactId>
-                <version>0.11.0</version>
-                <extensions>true</extensions>
-                <configuration>
-                    <publishingServerId>central</publishingServerId>
-                    <autoPublish>true</autoPublish>
                 </configuration>
             </plugin>
         </plugins>
@@ -682,9 +685,10 @@
             </properties>
         </profile>
         <!-- Activate for a Central release: `mvn -Prelease deploy`. Holds the build to a clean
-             checkout of the tag for its version, attaches sources and javadoc, and GPG-signs
-             every artifact; the publishing plugin in the build above uploads the bundle. A
-             snapshot is deployed without this profile. Normal build/test is untouched. -->
+             checkout of the tag for its version, attaches sources and javadoc, GPG-signs every
+             artifact, and uploads them to the Central Portal as one deployment, which is
+             published once the Portal has validated it (autoPublish). A snapshot is the
+             `snapshot` profile's. Normal build/test is untouched. -->
         <profile>
             <id>release</id>
             <build>
@@ -784,6 +788,80 @@
                                 </goals>
                             </execution>
                         </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <extensions>true</extensions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <!-- Activate to publish develop's snapshot: `mvn -Psnapshot deploy`, which the `develop`
+             push runs in CI once every check has passed. The snapshot repository keeps one
+             coordinate per version and every publication overwrites it, so what the coordinate
+             holds is whatever was published last; this profile is what makes that the tip of
+             develop. It refuses a version that is not a snapshot, a tree holding anything HEAD
+             does not, and a HEAD that is not the commit develop points at on origin. Sources,
+             javadoc and signatures are a release's and are not made. -->
+        <profile>
+            <id>snapshot</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-enforcer-plugin</artifactId>
+                        <version>3.5.0</version>
+                        <inherited>false</inherited>
+                        <executions>
+                            <execution>
+                                <id>a-snapshot-is-a-snapshot-version</id>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>enforce</goal>
+                                </goals>
+                                <configuration>
+                                    <rules>
+                                        <requireSnapshotVersion>
+                                            <message>The snapshot profile publishes develop's snapshot, and ${project.version} is not one. develop never carries a release version.</message>
+                                        </requireSnapshotVersion>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.5.1</version>
+                        <inherited>false</inherited>
+                        <executions>
+                            <execution>
+                                <id>require-clean-checkout</id>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>${project.basedir}/bin/require-clean-checkout.sh</executable>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>require-develop-tip</id>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>${project.basedir}/bin/require-develop-tip.sh</executable>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <extensions>true</extensions>
                     </plugin>
                 </plugins>
             </build>

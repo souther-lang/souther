@@ -59,11 +59,10 @@ more, and both existed only because develop had been made to claim a number it w
    bypass. A tag pushed for the wrong commit is not moved: the next version is released instead.
 
    `autoPublish` is true, so what this uploads is released once the Portal has validated it, with
-   nothing left to do there. souther-runtime, souther-syntax, souther-compiler, souther-build-driver
-   and souther-fmt go up, and souther-parent with them, being the pom they name as their parent.
-   souther-cli, souther-lsp and souther-bench do not: the really-executable jar and the language
-   server are distributed through GitHub Releases, and the benchmarks are not an artifact anyone
-   depends on.
+   nothing left to do there. Every module goes up except the ones whose pom sets
+   `souther.publish.skip`, each saying there why it is not a Maven artifact; souther-parent goes up
+   with them, being the pom they name as their parent. The really-executable jar and the language
+   server are distributed through GitHub Releases instead.
 
 6. Take main into develop and move develop to the next snapshot, in one commit straight to develop:
 
@@ -89,28 +88,35 @@ more, and both existed only because develop had been made to claim a number it w
    it to review, and it is the tail of a release rather than work anyone is proposing. This is the
    one change to develop that goes straight there; anything carrying a decision still opens one.
 
-   `souther-lang/examples` names the snapshot, so it moves with this.
+## The snapshot
 
-## Publishing a snapshot
+`<version>-SNAPSHOT` on the Central Portal's snapshot repository is the last commit of develop
+that passed CI. CI publishes it from a push to develop once every check has passed, with
+`mvn -Psnapshot deploy`, and nothing else publishes it.
 
-What develop carries is published to the Central Portal's snapshot repository with a plain deploy,
-from any checkout of develop:
+The `snapshot` profile is what holds the coordinate to that meaning, as the `release` profile holds
+a release to its tag. The repository keeps one coordinate per version and every publication
+overwrites it, so a publication from anywhere else would silently replace what develop published.
+The profile refuses a version that is not a snapshot, a tree holding anything HEAD does not, and a
+HEAD that is not the commit develop points at on origin (`bin/require-develop-tip.sh`). A run
+overtaken by a later push stops there and leaves the publication to the later run, and CI publishes
+one at a time, so an earlier commit never lands after a later one. A plain `mvn deploy` publishes
+nothing: the publishing plugin is used only by the two profiles.
 
-```sh
-mvn deploy
-```
+A release and a snapshot go through the same plugin and not to the same place. A release is
+uploaded to the Portal as one deployment, validated there and then published to Maven Central; a
+snapshot is deployed straight to the snapshot repository, which Maven Central does not serve. A
+build resolves a snapshot only if it declares
+`https://central.sonatype.com/repository/maven-snapshots/` as a snapshot repository. The modules
+left out are the same for both, being the ones that set `souther.publish.skip`.
 
-Without `-Prelease`. That profile is a release's: it refuses any tree but a clean checkout of
-`v<version>`, which a snapshot never has, and it signs and attaches sources and javadoc, which a
-snapshot does not need. The publishing plugin itself is in the plain build, so both go to the same
-place, and the modules a release leaves out are left out of a snapshot as well.
-
-`souther-lang/examples` resolves the snapshot from there, so it sees a change on develop once one
-is published.
+CI publishes with the repository secrets `CENTRAL_USERNAME` and `CENTRAL_TOKEN`, a Central Portal
+user token.
 
 ## The examples
 
 `souther-lang/examples` pins the compiler in four places and has a `bin/set-version.sh` of its own.
-It tracks the snapshot rather than a release, so a release does not move it. Building it against a
-release is a check on the release, and worth doing before cutting one — but it is not a step of the
-release, and a red examples build is a thing to fix there rather than a reason to hold the tag.
+What it builds against is the version its own build names, and a snapshot only resolves there if
+its build declares the snapshot repository above. Building it against a release is a check on the
+release, and worth doing before cutting one — but it is not a step of the release, and a red
+examples build is a thing to fix there rather than a reason to hold the tag.
