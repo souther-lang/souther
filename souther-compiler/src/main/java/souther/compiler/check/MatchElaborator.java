@@ -429,6 +429,40 @@ public final class MatchElaborator {
         };
     }
 
+    /**
+     * The type arm {@code c} binds its name at over a subject of type {@code subject}, for a reader
+     * that has the subject's type and is not elaborating the match: the case the arm selects, read
+     * through {@link #armBinding} as the elaboration reads it.
+     *
+     * <p>Null where the arm binds nothing, where the subject's type is not known, and where the arm
+     * is something the elaboration refuses — a subject that is no sum, a name that is no case of
+     * it, an or-pattern over an optional. What is wrong with those is the elaboration's to say.
+     */
+    static Type armBinds(Hir.Case c, Type subject, DeclarationKinds kinds,
+                         PublishedDeclarations published, SumCases sums) {
+        if (c.binding() == null || subject == null) {
+            return null;
+        }
+        CaseSpace space = CaseSpace.of(subject, kinds, published, sums);
+        if (space instanceof CaseSpace.Plain
+                || (space instanceof CaseSpace.Optional && c.caseTypes().size() != 1)) {
+            return null;
+        }
+        List<ResolvedCase> alternatives = new ArrayList<>();
+        for (Hir.Name written : c.caseTypes()) {
+            ResolvedCase resolved = written instanceof Hir.Name.Denoting named
+                    ? space.selector(named.type(), kinds, sums) : null;
+            if (resolved == null) {
+                return null;
+            }
+            alternatives.add(resolved);
+        }
+        Core.ResolvedPattern pattern = alternatives.size() == 1
+                ? new Core.ResolvedPattern.Single(alternatives.get(0))
+                : new Core.ResolvedPattern.AnyOf(alternatives, subject);
+        return armBinding(c.binding(), pattern, subject).type();
+    }
+
     /** Extends {@code env} with {@code binding} when both it and its type are present; otherwise
      * returns it as is. */
     static Scope bound(Scope env, Hir.Binder binding, Type type) {

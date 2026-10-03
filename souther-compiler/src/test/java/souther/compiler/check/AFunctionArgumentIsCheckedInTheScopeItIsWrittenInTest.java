@@ -98,6 +98,99 @@ class AFunctionArgumentIsCheckedInTheScopeItIsWrittenInTest {
         assertEquals("x", aValueWhereAFunctionIsTaken(source, "x,").written());
     }
 
+    /** What {@code Some} opens is the element, so {@code x} is the {@code Int} the list holds. */
+    @Test
+    void anOptionArmsBindingHandedOverIsReportedAtTheName() {
+        String source = """
+                module m
+
+                behavior f : (xs: List<Int>) -> List<Int>
+                let f (xs) =
+                    match List.get(0, xs) with
+                        | Some x -> List.map(x, xs)
+                        | None -> xs
+                """;
+
+        assertEquals("x", aValueWhereAFunctionIsTaken(source, "x,").written());
+    }
+
+    @Test
+    void aCaseArmsBindingHandedOverIsReportedAtTheName() {
+        String source = """
+                module m
+
+                data A = { n: Int }
+                data B = { k: Int }
+                data S = A | B
+
+                behavior f : (s: S, xs: List<Int>) -> List<Int>
+                let f (s, xs) =
+                    match s with
+                        | A as a -> List.map(a, xs)
+                        | B -> xs
+                """;
+
+        assertEquals("a", aValueWhereAFunctionIsTaken(source, "a,").written());
+    }
+
+    /** An or-pattern binds the subject itself, since no one case's type fits every alternative. */
+    @Test
+    void anOrPatternsBindingHandedOverIsReportedAtTheName() {
+        String source = """
+                module m
+
+                data A = { n: Int }
+                data B = { k: Int }
+                data S = A | B
+
+                behavior f : (s: S, xs: List<Int>) -> List<Int>
+                let f (s, xs) =
+                    match s with
+                        | A | B as v -> List.map(v, xs)
+                """;
+
+        assertEquals("v", aValueWhereAFunctionIsTaken(source, "v,").written());
+    }
+
+    /** The value an attempted construction built is in force over the branch it succeeds into. */
+    @Test
+    void whatAnAttemptBuiltHandedOverIsReportedAtTheName() {
+        String source = """
+                module m
+
+                data Pos = Int
+                    invariant positive = value >= 1
+
+                behavior f : (n: Int, xs: List<Int>) -> List<Int>
+                    constructs Pos
+                let f (n, xs) =
+                    if Pos(n) as p then List.map(p, xs) else xs
+                """;
+
+        assertEquals("p", aValueWhereAFunctionIsTaken(source, "p,").written());
+    }
+
+    /**
+     * A block whose body does not type still has the parameters the position gives it, since what
+     * they are is the position's and not the body's. So a mistake the check can name inside it is
+     * named, as one is anywhere else in a body that also holds a mistake only the elaboration can
+     * name: the check reads the whole body before the elaboration reads any of it.
+     */
+    @Test
+    void insideABlockThatDoesNotTypeTheParametersAreStillInForce() {
+        String source = """
+                module m
+
+                behavior f : (xs: List<Int>, ys: List<Int>) -> List<List<Int>>
+                let f (xs, ys) = List.map(x -> {
+                    let bad = x + "one"
+                    List.map(x, ys)
+                }, xs)
+                """;
+
+        assertEquals("x", aValueWhereAFunctionIsTaken(source, "x,").written());
+    }
+
     /** The inner {@code j} holds a function and the outer one an {@code Int}. A scope that found the
      *  name by its spelling would hold the call to the outer one and refuse it. */
     @Test
