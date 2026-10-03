@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingContext;
-import souther.compiler.check.SettledWork;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleKey;
@@ -47,6 +46,8 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.regex.Language;
 import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.regex.PatternPlan;
+import souther.compiler.revision.RevisionKnowledge;
+import souther.compiler.revision.RevisionWork;
 import net.unit8.notation199x.pattern.PatternMeaning;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -1595,14 +1596,19 @@ public final class Partitions {
      * own rules were written closest to. It is {@link #patternsStatedOn}'s order, read once for
      * every reader of it here.
      *
-     * <p>Each value is the revision's ({@link PatternWitness}).
+     * <p>Each value is the revision's ({@link PatternForAWitness}). A pattern whose machine could
+     * not be built and one none of whose strings anybody can paste both offer nothing, and are not
+     * told apart here: a row is offered or it is not, and what the offer was short of is said where
+     * a search came back without one.
      */
     private static List<FixtureTemplate> whatAFormatAsksFor(List<PatternMeaning> stated,
                                                             RuleReadingContext reading) {
         List<FixtureTemplate> out = new ArrayList<>();
         for (PatternMeaning each : stated) {
-            reading.settled(new PatternWitness(PatternPlan.of(each)))
-                    .ifPresent(text -> out.add(FixtureTemplate.string(text)));
+            if (reading.revision().settled(new PatternForAWitness(PatternPlan.of(each)))
+                    instanceof PatternForAWitness.Made.Built(var _, Optional<String> written)) {
+                written.ifPresent(text -> out.add(FixtureTemplate.string(text)));
+            }
         }
         return out;
     }
@@ -1896,7 +1902,7 @@ public final class Partitions {
         PatternsStated stated = patternsStatedOn(view, reading.source());
         RulesRead rules = rulesReadOn(stated, view, reading);
         return rules == null ? stated.unread()
-                : reading.settled(new WhatTheOfferIsShortOf(rules));
+                : reading.revision().settled(new WhatTheOfferIsShortOf(rules));
     }
 
     /**
@@ -2092,12 +2098,6 @@ public final class Partitions {
         return range == null || range.admits(at);
     }
 
-    /** The strings {@code syntax} accepts, or null where making the machine costs more than
-     *  {@code meter} allows. */
-    private static Language languageOf(PatternMeaning syntax, Meter meter) {
-        return PatternPlan.of(syntax).compile(meter);
-    }
-
     /**
      * Up to {@code many} strings the rules on {@code type} admit, written under the names the
      * position wears, and none of them the same string twice.
@@ -2163,7 +2163,8 @@ public final class Partitions {
         DeclaredBounds.CountRange exactly = new DeclaredBounds.CountRange(
                 Math.max(rules.characters().least(), size),
                 Math.min(rules.characters().most(), size));
-        return reading.settled(new StringsTheRulesAdmit(new RulesRead(rules.stated(), exactly), 1))
+        return reading.revision()
+                .settled(new StringsTheRulesAdmit(new RulesRead(rules.stated(), exactly), 1))
                 .stream()
                 .map(FixtureTemplate::string)
                 .toList();
@@ -2191,7 +2192,8 @@ public final class Partitions {
         if (stated.read().size() + (countsTheCharacters(characters) ? 1 : 0) < 2) {
             return List.of();
         }
-        return reading.settled(new StringsTheRulesAdmit(new RulesRead(stated, characters), 1))
+        return reading.revision()
+                .settled(new StringsTheRulesAdmit(new RulesRead(stated, characters), 1))
                 .stream()
                 .map(FixtureTemplate::string)
                 .toList();
@@ -2205,24 +2207,51 @@ public final class Partitions {
             return List.of();
         }
         RulesRead rules = rulesReadOn(view, reading);
-        return rules == null ? List.of() : reading.settled(new StringsTheRulesAdmit(rules, many));
+        return rules == null ? List.of()
+                : reading.revision().settled(new StringsTheRulesAdmit(rules, many));
     }
 
     /**
-     * The value a single pattern offers a row, as work settled by the pattern.
+     * The machine of one pattern a value is composed out of, and the string it offers a row, built
+     * once for the revision.
      *
-     * <p>The revision's and not the search's ({@link SettledWork}). A search asks for a position's
-     * values from every settling of the positions around it, and the pattern's machine depends on
-     * none of them, so worked out where it is asked it is compiled once per visit. A pattern whose
-     * machine costs more than writing a value is allowed and one none of whose strings anybody can
-     * paste both offer nothing, and are not told apart: a row is offered or it is not.
+     * <p>The producer of both. A pattern's machine is settled by the pattern, so every question
+     * that composes a value out of it — the value one rule asks for, what several rules meet in,
+     * what the offer was short of — borrows it from here rather than building it again, and pays
+     * nothing for it ({@link PatternPlan.Budget#OF_A_WITNESS}). What it may spend is the
+     * allowance one pattern has ({@link PatternPlan.Budget#OF_A_PATTERN_FOR_A_WITNESS}), minted
+     * here for it alone.
+     *
+     * <p>The string is worked out with the machine, because both are what a search asks of the
+     * pattern from every settling it visits, and neither depends on where the search is.
      */
-    record PatternWitness(PatternPlan plan) implements SettledWork<Optional<String>> {
+    record PatternForAWitness(PatternPlan plan) implements RevisionWork<PatternForAWitness.Made> {
+
+        /** What building the pattern came to. */
+        sealed interface Made {
+
+            /**
+             * The machine, and a string a source can carry that it accepts, or none where every
+             * string it accepts is one nobody can paste.
+             */
+            record Built(Language language, Optional<String> written) implements Made {}
+
+            /**
+             * Building it ran past the allowance one pattern has, and which limit refused it.
+             *
+             * <p>About this pattern and nothing else, since the allowance was its own: what a
+             * question that wanted it says is that this pattern gave nothing, and not that the
+             * question ran out ({@link StringOfferShortfall.Why.PatternTooCostly}).
+             */
+            record NotBuilt(Meter.Stopped stopped) implements Made {}
+        }
 
         @Override
-        public Optional<String> workedOut() {
-            Language language = plan.compile(PatternPlan.Budget.OF_A_WITNESS.meter());
-            return language == null ? Optional.empty() : Optional.ofNullable(language.someWritten());
+        public Made workedOut(RevisionKnowledge revision) {
+            Meter meter = PatternPlan.Budget.OF_A_PATTERN_FOR_A_WITNESS.meter();
+            Language language = plan.compile(meter);
+            return language == null ? new Made.NotBuilt(meter.stoppedBy())
+                    : new Made.Built(language, Optional.ofNullable(language.someWritten()));
         }
     }
 
@@ -2232,18 +2261,21 @@ public final class Partitions {
      *
      * <p>One allowance for the whole of the question, which is what looking for these values may
      * cost: the meet and every string taken out of it are steps of one search, and a fresh figure
-     * per step would be this spending as much as the number asked for.
+     * per step would be this spending as much as the number asked for. The machines of the
+     * patterns and of the count are borrowed ({@link PatternForAWitness}), so what it is spent on is
+     * what this question makes out of them.
      *
-     * <p>The revision's for the reason {@link PatternWitness} is. What the meet comes to is read off the
-     * rules and the count and nothing about where the search is, and a position carrying a format
-     * and a count is asked about from every settling the search visits.
+     * <p>The revision's for the reason a pattern's machine is. What the meet comes to is read off
+     * the rules and the count and nothing about where the search is, and a position carrying a
+     * format and a count is asked about from every settling the search visits.
      */
-    record StringsTheRulesAdmit(RulesRead rules, int many) implements SettledWork<List<String>> {
+    record StringsTheRulesAdmit(RulesRead rules, int many) implements RevisionWork<List<String>> {
 
         @Override
-        public List<String> workedOut() {
+        public List<String> workedOut(RevisionKnowledge revision) {
             Meter meter = PatternPlan.Budget.OF_A_WITNESS.meter();
-            Language left = admittedBy(rules.stated(), rules.characters(), meter).language();
+            Language left =
+                    admittedBy(rules.stated(), rules.characters(), meter, revision).language();
             List<String> out = new ArrayList<>();
             while (left != null && out.size() < many) {
                 String some = left.someWritten();
@@ -2251,26 +2283,30 @@ public final class Partitions {
                     break;   // nothing left in it that anybody could paste
                 }
                 out.add(some);
-                left = left.without(List.of(some), meter);
+                // The strings left only where one more is wanted: taking one out is a machine of
+                // its own, and the last one taken needs nothing after it.
+                if (out.size() < many) {
+                    left = left.without(List.of(some), meter);
+                }
             }
             return List.copyOf(out);
         }
     }
 
     /**
-     * What the rules read at a position left out of what {@link StringsTheRulesAdmit} offers there, as work
-     * settled by those rules.
+     * What the rules read at a position left out of what {@link StringsTheRulesAdmit} offers
+     * there, as work settled by those rules.
      *
-     * <p>The same meet built the same way and under the same allowance, so what this says ran out
-     * is what ran out when the values were looked for: built any other way, a report could name a
-     * rule as too costly beside a value composed out of it.
+     * <p>The same meet built the same way, out of the same borrowed machines and under the same
+     * allowance, so what this says ran out is what ran out when the values were looked for: built
+     * any other way, a report could name a rule as too costly beside a value composed out of it.
      */
-    record WhatTheOfferIsShortOf(RulesRead rules) implements SettledWork<StringOfferShortfall> {
+    record WhatTheOfferIsShortOf(RulesRead rules) implements RevisionWork<StringOfferShortfall> {
 
         @Override
-        public StringOfferShortfall workedOut() {
+        public StringOfferShortfall workedOut(RevisionKnowledge revision) {
             return admittedBy(rules.stated(), rules.characters(),
-                    PatternPlan.Budget.OF_A_WITNESS.meter()).shortfall();
+                    PatternPlan.Budget.OF_A_WITNESS.meter(), revision).shortfall();
         }
     }
 
@@ -2454,34 +2490,45 @@ public final class Partitions {
      * them with. What comes back is a meet of the rest, which is a set to propose values out of and
      * not what the position admits — every value taken from it is put to the decoder, and the rules
      * that are missing from it are the ones the decoder may still refuse it for.
+     *
+     * <p>Each rule's machine is borrowed from {@code revision} and costs {@code meter} nothing
+     * ({@link PatternForAWitness}); what {@code meter} pays for is the meet and the count.
      */
     private static CandidateStrings admittedBy(PatternsStated stated,
-                                               DeclaredBounds.CountRange characters, Meter meter) {
+                                               DeclaredBounds.CountRange characters, Meter meter,
+                                               RevisionKnowledge revision) {
         StringOfferShortfall shortfall = stated.unread();
         Language all = null;
         for (Stated each : stated.read()) {
-            // The rule whose machine this is, so that a run that cannot afford it names the rule
-            // rather than the position. Read where the build came back with nothing and not
-            // afterwards: a meter is the whole question's, and the next construction on it says
-            // which limit refused that one.
-            Language one = languageOf(each.accepts(), meter);
-            if (one == null) {
-                return new CandidateStrings(null, shortfall.and(StringOfferShortfall.of(
-                        StringOfferShortfall.NotOffered.whileMaking(
-                                new StringOfferShortfall.Subject.ARule(each.part()), meter))));
+            switch (revision.settled(new PatternForAWitness(PatternPlan.of(each.accepts())))) {
+                // The rule whose machine this is, so that what could not build it names the rule
+                // rather than the position. Whichever limit it was: the allowance it ran past was
+                // that pattern's own.
+                case PatternForAWitness.Made.NotBuilt(Meter.Stopped stopped) -> {
+                    return new CandidateStrings(null, shortfall.and(StringOfferShortfall.of(
+                            StringOfferShortfall.NotOffered.patternNotBuilt(
+                                    new StringOfferShortfall.Subject.ARule(each.part()),
+                                    stopped))));
+                }
+                case PatternForAWitness.Made.Built(Language one, var _) -> {
+                    // And what it comes to with the rules before it, which is nobody's rule: an
+                    // author sent to either of them would be sent to one this compiler read from
+                    // end to end. Read where the build came back with nothing and not afterwards:
+                    // the meter is the whole question's, and the next construction on it says
+                    // which limit refused that one.
+                    Language both = all == null ? one : all.and(one, meter);
+                    if (both == null) {
+                        return new CandidateStrings(null, shortfall.and(StringOfferShortfall.of(
+                                StringOfferShortfall.NotOffered.whileMaking(
+                                        new StringOfferShortfall.Subject.WhatTheyLeaveTogether(),
+                                        meter))));
+                    }
+                    all = both;
+                }
             }
-            // And what it comes to with the rules before it, which is nobody's rule: an author sent
-            // to either of them would be sent to one this compiler read from end to end.
-            Language both = all == null ? one : all.and(one, meter);
-            if (both == null) {
-                return new CandidateStrings(null, shortfall.and(StringOfferShortfall.of(
-                        StringOfferShortfall.NotOffered.whileMaking(
-                                new StringOfferShortfall.Subject.WhatTheyLeaveTogether(), meter))));
-            }
-            all = both;
         }
         return all == null ? new CandidateStrings(null, shortfall)
-                : withinTheCount(all, characters, meter, shortfall);
+                : withinTheCount(all, characters, meter, revision, shortfall);
     }
 
     /**
@@ -2499,7 +2546,8 @@ public final class Partitions {
      */
     private static CandidateStrings withinTheCount(Language strings,
                                                    DeclaredBounds.CountRange characters,
-                                                   Meter meter, StringOfferShortfall shortfall) {
+                                                   Meter meter, RevisionKnowledge revision,
+                                                   StringOfferShortfall shortfall) {
         if (characters.empty()) {
             // No count at all, so no string of the position holds one. An answer about the rules
             // and not a shortfall of this compiler's, which is why nothing is added beside it.
@@ -2508,16 +2556,28 @@ public final class Partitions {
         if (!countsTheCharacters(characters)) {
             return new CandidateStrings(strings, shortfall);  // every count, nothing to take away
         }
-        Language counted = languageOf(PatternMeaning.ofAnySymbols(characters.least(),
+        // The count as the machine of the strings that many characters long, borrowed like a
+        // rule's: what it is is settled by the count, whatever else the question met it with.
+        PatternPlan count = PatternPlan.of(PatternMeaning.ofAnySymbols(characters.least(),
                 characters.most() == Integer.MAX_VALUE
-                        ? PatternMeaning.Repeated.NO_CEILING : characters.most()), meter);
-        Language within = counted == null ? null : strings.and(counted, meter);
-        // The count met with the strings, which is again nobody's one rule.
-        return within == null
-                ? new CandidateStrings(null, shortfall.and(StringOfferShortfall.of(
-                        StringOfferShortfall.NotOffered.whileMaking(
-                                new StringOfferShortfall.Subject.WhatTheyLeaveTogether(), meter))))
-                : new CandidateStrings(within, shortfall);
+                        ? PatternMeaning.Repeated.NO_CEILING : characters.most()));
+        return switch (revision.settled(new PatternForAWitness(count))) {
+            // What the count leaves together with the strings, which is nobody's one rule.
+            case PatternForAWitness.Made.NotBuilt(Meter.Stopped stopped) ->
+                    new CandidateStrings(null, shortfall.and(StringOfferShortfall.of(
+                            StringOfferShortfall.NotOffered.patternNotBuilt(
+                                    new StringOfferShortfall.Subject.WhatTheyLeaveTogether(),
+                                    stopped))));
+            case PatternForAWitness.Made.Built(Language counted, var _) -> {
+                Language within = strings.and(counted, meter);
+                yield within == null
+                        ? new CandidateStrings(null, shortfall.and(StringOfferShortfall.of(
+                                StringOfferShortfall.NotOffered.whileMaking(
+                                        new StringOfferShortfall.Subject.WhatTheyLeaveTogether(),
+                                        meter))))
+                        : new CandidateStrings(within, shortfall);
+            }
+        };
     }
 
     /** A count the position holds, or null where it holds none. The ends decide it, so nothing here

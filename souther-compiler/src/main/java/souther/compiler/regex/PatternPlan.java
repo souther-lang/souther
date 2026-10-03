@@ -5,6 +5,8 @@ import net.unit8.notation199x.pattern.CodePoints;
 import net.unit8.notation199x.pattern.Meter;
 import net.unit8.notation199x.pattern.PatternMeaning;
 
+import java.util.concurrent.atomic.AtomicLong;
+
 /**
  * What would be built out of some patterns, said before anything is made of it.
  *
@@ -111,10 +113,33 @@ public final class PatternPlan {
          * one pattern taken a string out of, the figure would be tuned for the cheapest of the
          * questions it actually pays for.
          *
+         * <p><b>And not what the patterns of those rules cost to build.</b> A pattern's machine is
+         * built once, under an allowance of its own ({@link #OF_A_PATTERN_FOR_A_WITNESS}), and
+         * every question that composes a value out of it borrows it. What is borrowed is not spent:
+         * what this pays for is what the question makes on top of what it borrowed — the meet of
+         * the rules, the count laid over it, the strings taken out of it. Charged again here, the
+         * same machine would cost each question that happened to need it, and what a question
+         * could afford would turn on which other questions had been asked first.
+         *
          * <p>The same numbers today, and that is a coincidence rather than a fact. Written as one
          * constant, the day either question wants a different size the other would move with it.
          */
         public static final Budget OF_A_WITNESS = new Budget(50_000, 200_000, 50_000_000);
+
+        /**
+         * What building the machine of one pattern a value is composed out of is allowed to cost.
+         *
+         * <p>The producer's, and not the question's that composes the value. A pattern's machine
+         * is settled by the pattern, so it is built once for every question that composes a value
+         * out of it, and each of those borrows it ({@link #OF_A_WITNESS}). So what one pattern
+         * may spend is a figure of its own: what running out of it says is that this pattern is
+         * too large to build, which is about the rule an author wrote, while running out of what
+         * composing a value may spend is about the question and about no rule of it.
+         *
+         * <p>The same numbers as the others today, and a coincidence rather than a fact.
+         */
+        public static final Budget OF_A_PATTERN_FOR_A_WITNESS =
+                new Budget(50_000, 200_000, 50_000_000);
 
         /**
          * What working out where one rule's strings stop on the order is allowed to cost.
@@ -417,6 +442,7 @@ public final class PatternPlan {
      * the guess refused answers this could afford and charged for states nobody built.
      */
     public Language compile(Meter meter) {
+        COMPILED.incrementAndGet();
         // A construction is beginning. The meter is the position's whole allowance and outlives any
         // one of these, so what refused an earlier build is not what refused this.
         meter.starting();
@@ -426,6 +452,19 @@ public final class PatternPlan {
         // there is no allowance and nobody counting.
         return Language.canonical(built(step, meter), meter);
     }
+
+    /**
+     * How many plans have been compiled, whoever asked and whatever came of it, for a test holding
+     * a reader to how many machines it builds.
+     *
+     * <p>What a caller is held to is that a machine settled by its plan is built for the first
+     * question that wants it and borrowed by the rest — a shape, and not a speed.
+     */
+    public static long compilationsMade() {
+        return COMPILED.get();
+    }
+
+    private static final AtomicLong COMPILED = new AtomicLong();
 
     /**
      * One step, or null where it ran past what the meter allows.

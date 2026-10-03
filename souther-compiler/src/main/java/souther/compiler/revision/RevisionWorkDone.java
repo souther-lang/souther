@@ -1,16 +1,16 @@
-package souther.compiler.check;
+package souther.compiler.revision;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Where {@link SettledWork#done} counts what it works out, by the kind of work.
+ * Where {@link RevisionKnowledge#done} counts what it works out, by the kind of work.
  *
  * <p>Its own class because an interface has no private state, and a count anybody could reset is
  * not one a test can hold a reader to.
  */
-final class SettledWorkDone {
+final class RevisionWorkDone {
 
     private static final Map<Class<?>, AtomicLong> DONE = new ConcurrentHashMap<>();
 
@@ -23,5 +23,5 @@ final class SettledWorkDone {
         return done == null ? 0 : done.get();
     }
 
-    private SettledWorkDone() {}
+    private RevisionWorkDone() {}
 }

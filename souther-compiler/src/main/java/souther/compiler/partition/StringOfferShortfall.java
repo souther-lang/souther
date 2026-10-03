@@ -85,6 +85,21 @@ public record StringOfferShortfall(List<NotOffered> these) {
                 throw new IllegalArgumentException("an allowance spent is what composing a value"
                         + " came to and not what one rule of it is: " + of);
             }
+            if (why instanceof Why.PatternTooCostly && of instanceof Subject.ComposingAValue) {
+                throw new IllegalArgumentException("one pattern's machine is the pattern's, and"
+                        + " composing a value is not one pattern");
+            }
+        }
+
+        /**
+         * One where the machine of {@code pattern}, built under the allowance one pattern has, was
+         * refused by {@code stopped}.
+         *
+         * <p>Whichever limit it was, it is about what was being built: that allowance was spent on
+         * this pattern and on nothing else.
+         */
+        static NotOffered patternNotBuilt(Subject pattern, Meter.Stopped stopped) {
+            return new NotOffered(pattern, new Why.PatternTooCostly(stopped));
         }
 
         /**
@@ -140,9 +155,11 @@ public record StringOfferShortfall(List<NotOffered> these) {
     /**
      * What stopped it, in this compiler's own terms.
      *
-     * <p>Two, and they are not one fact. A rule this compiler could not read is one somebody may be
-     * able to write another way, and what would let it through is a wider reading; a machine it
-     * could not afford is a figure, and the rule may be perfectly ordinary.
+     * <p>A reading that stopped and a machine nobody could afford are not one fact. A rule this
+     * compiler could not read is one somebody may be able to write another way, and what would let
+     * it through is a wider reading; a machine it could not afford is a figure, and the rule may be
+     * perfectly ordinary. Which allowance refused the machine is a third distinction, kept as two
+     * arms rather than a field, because each allowance pairs with different subjects.
      */
     public sealed interface Why {
 
@@ -173,6 +190,24 @@ public record StringOfferShortfall(List<NotOffered> these) {
         record TooCostly(Meter.Stopped stopped) implements Why {
 
             public TooCostly {
+                if (stopped == null) {
+                    throw new IllegalArgumentException("a construction that stopped was stopped by"
+                            + " a limit");
+                }
+            }
+        }
+
+        /**
+         * Building one pattern's machine ran past what building one may spend.
+         *
+         * <p>Apart from {@link TooCostly}, because the allowance is another one. That one is what
+         * composing a value for a row may spend, shared by everything the question builds; this is
+         * what one pattern's machine is built under, once, before any question borrows it — so
+         * running out of it is about the pattern however it ran out.
+         */
+        record PatternTooCostly(Meter.Stopped stopped) implements Why {
+
+            public PatternTooCostly {
                 if (stopped == null) {
                     throw new IllegalArgumentException("a construction that stopped was stopped by"
                             + " a limit");

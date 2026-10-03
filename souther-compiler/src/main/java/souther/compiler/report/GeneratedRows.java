@@ -914,6 +914,12 @@ public final class GeneratedRows {
                 case THE_ANSWER -> "gave none of them: working the values out spent what composing"
                         + " one for a row may spend";
             };
+            case StringOfferShortfall.Why.PatternTooCostly it -> switch (it.stopped()) {
+                case ONE_MACHINE -> "gave none of them: working a value out of it asks for a larger"
+                        + " machine than one may be";
+                case THE_ANSWER -> "gave none of them: building its machine spent what building one"
+                        + " pattern may spend";
+            };
         };
     }
 

@@ -3,7 +3,8 @@ package souther.compiler.check;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
-import souther.compiler.values.KnownExtents;
+import souther.compiler.revision.RevisionKnowledge;
+import souther.compiler.revision.RevisionWork;
 import souther.compiler.values.StringMachineAnswers;
 
 import java.util.function.Supplier;
@@ -35,28 +36,18 @@ public interface DeclarationReadings {
     StringMachineAnswers of(TypeKey declaration);
 
     /**
-     * Where the sets met anywhere in this revision were found to stop.
+     * What the revision this lends under has worked out.
      *
      * <p>Beside the two above and on a lifetime of its own, because it is about neither a
-     * declaration nor a reading. Where a set's strings stop is settled by the set and by an
-     * allowance minted for that set, so the answer is one the revision has rather than one a
-     * declaration came to — every reading made under the revision asks the same one, and a reading
-     * with no revision behind it has {@link KnownExtents#NONE} and walks what it meets.
+     * declaration nor a reading: every answer it holds is settled by the work it answers and the
+     * allowance that work mints for itself ({@link RevisionWork}). One capability whatever the work
+     * is, so that a reader rebuilding a lender hands the whole of what the revision knows on with
+     * one call, and a kind of work added later is nothing such a reader has to hear about. A
+     * reading with no revision behind it has {@link RevisionKnowledge#NONE} and does every piece
+     * of work it meets.
      */
-    default KnownExtents extents() {
-        return KnownExtents.NONE;
-    }
-
-    /**
-     * What {@code work} comes to, as this revision already worked it out or works it out now.
-     *
-     * <p>On the lifetime {@link #extents} is on and for the same reason: the answer is settled by
-     * the work and the allowance it mints for itself ({@link SettledWork}), so it is one the
-     * revision has and not one any declaration came to. A reading with no revision behind it does
-     * the work every time it is asked.
-     */
-    default <A> A settled(SettledWork<A> work) {
-        return SettledWork.done(work);
+    default RevisionKnowledge revision() {
+        return RevisionKnowledge.NONE;
     }
 
     /**
@@ -166,7 +157,7 @@ public interface DeclarationReadings {
      * is a reading like any other, and what it comes to is what its own counterfactual is handed.
      *
      * <p>Worked out is not walked again. Where the sets those readings meet were found to stop is
-     * the revision's ({@link #extents}), and a set two declarations both reach is walked for the
+     * the revision's ({@link #revision}), and a set two declarations both reach is walked for the
      * first of them — which is a fact about the set and about no declaration, so neither reading
      * comes to anything it would not have come to alone.
      *
@@ -181,17 +172,12 @@ public interface DeclarationReadings {
             @Override
             public StringMachineAnswers of(TypeKey declaration) {
                 return declaration.equals(named)
-                        ? recorder : StringMachineAnswers.unborrowed(lender.extents());
+                        ? recorder : StringMachineAnswers.unborrowed(lender.revision());
             }
 
             @Override
-            public KnownExtents extents() {
-                return lender.extents();
-            }
-
-            @Override
-            public <A> A settled(SettledWork<A> work) {
-                return lender.settled(work);
+            public RevisionKnowledge revision() {
+                return lender.revision();
             }
 
             @Override
@@ -230,5 +216,5 @@ public interface DeclarationReadings {
      * counterfactual is handed. Handing out one shared object would make every such reading write
      * into the same maps.
      */
-    DeclarationReadings NONE = _ -> StringMachineAnswers.unborrowed(KnownExtents.NONE);
+    DeclarationReadings NONE = _ -> StringMachineAnswers.unborrowed(RevisionKnowledge.NONE);
 }

@@ -2,6 +2,8 @@ package souther.compiler.values;
 
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.regex.Language;
+import souther.compiler.revision.RevisionKnowledge;
+import souther.compiler.revision.RevisionWork;
 import net.unit8.notation199x.pattern.Meter;
 
 import java.util.LinkedHashMap;
@@ -44,42 +46,42 @@ public final class StringMachineAnswers {
      * reads like it.
      */
     public static final StringMachineAnswers NONE =
-            new StringMachineAnswers(StringFacts.NONE, false, KnownExtents.NONE);
+            new StringMachineAnswers(StringFacts.NONE, false, RevisionKnowledge.NONE);
 
     private final StringFacts borrowed;
     /** Whether what is made here is kept, which is what a reading's own answers do and what the
      *  shared {@link #NONE} must not. */
     private final boolean keeps;
-    /** Where the sets this meets stopped when anything else in the revision met them, and where
-     *  what this works out is said for the rest of it. */
-    private final KnownExtents known;
+    /** What the revision has worked out, which is where a set this meets is walked once for every
+     *  reading of the revision. */
+    private final RevisionKnowledge revision;
     private final Map<AdmittedPlan, ValueSet> realized = new LinkedHashMap<>();
     private final Map<ValueSet, TextExtent> extents = new LinkedHashMap<>();
     private final Map<StringFacts.Stretch, Emptiness> inside = new LinkedHashMap<>();
 
-    private StringMachineAnswers(StringFacts borrowed, boolean keeps, KnownExtents known) {
+    private StringMachineAnswers(StringFacts borrowed, boolean keeps, RevisionKnowledge revision) {
         this.borrowed = borrowed;
         this.keeps = keeps;
-        this.known = known;
+        this.revision = revision;
     }
 
     /**
-     * A reading's own answers, made from {@code facts} and from what {@code known} says the
-     * revision has already worked out, and keeping what it works out beside them.
+     * A reading's own answers, made from {@code facts} and from what {@code revision} has already
+     * worked out, and keeping what it works out beside them.
      *
      * <p>{@link #unborrowed} where there is nothing to borrow, which is the same thing over no
      * facts at all.
      */
-    public static StringMachineAnswers borrowing(StringFacts facts, KnownExtents known) {
+    public static StringMachineAnswers borrowing(StringFacts facts, RevisionKnowledge revision) {
         if (facts == null) {
             throw new IllegalArgumentException("a reading borrows from some facts, or from none");
         }
-        return new StringMachineAnswers(facts, true, known);
+        return new StringMachineAnswers(facts, true, revision);
     }
 
     /**
      * A reading's own answers with nothing to borrow: it works out every machine it meets that
-     * {@code known} has no answer for, and holds every one it worked out.
+     * {@code revision} has no answer for, and holds every one it worked out.
      *
      * <p>Which is what a reading with no lender is, and what a reading of a declaration the lender
      * has nothing for is. Not {@link #NONE}: having nothing to borrow and keeping nothing are two
@@ -89,8 +91,8 @@ public final class StringMachineAnswers {
      * to it — an extent is a fact about a set, so a reading that takes one from there came to what
      * it would have come to on its own.
      */
-    public static StringMachineAnswers unborrowed(KnownExtents known) {
-        return new StringMachineAnswers(StringFacts.NONE, true, known);
+    public static StringMachineAnswers unborrowed(RevisionKnowledge revision) {
+        return new StringMachineAnswers(StringFacts.NONE, true, revision);
     }
 
     /** What {@code plan} admits where somebody has made it, or null; asking makes nothing and
@@ -113,21 +115,35 @@ public final class StringMachineAnswers {
         if (lent != null) {
             return lent;
         }
-        TextExtent had = known.of(set);
-        if (had != null) {
-            keep(set, had);
-            return had;
+        TextExtent extent = revision.settled(new ExtentOf(set));
+        keep(set, extent);
+        return extent;
+    }
+
+    /**
+     * Where the strings of one set stop, as work the revision does once.
+     *
+     * <p>Settled by the set. The walk is handed nothing else, and what it may spend is an allowance
+     * of its own, minted for that set and for no other question ({@link TextExtents}), so the
+     * answer is the same whoever asked — and one worked out under one declaration is the answer
+     * under every other.
+     *
+     * <p><b>Including the walks that ran past their allowance.</b> That too is settled by the set,
+     * because the allowance it ran past is the one every set is walked under; left out, the sets
+     * that cost the most would be the ones walked again by every declaration that reaches them.
+     * What a declaration keeps of it is another matter ({@link #keep}).
+     */
+    record ExtentOf(ValueSet set) implements RevisionWork<TextExtent> {
+
+        @Override
+        public TextExtent workedOut(RevisionKnowledge revision) {
+            WALKED.incrementAndGet();
+            TextExtent made = TextExtents.of(set);
+            if (!(made instanceof TextExtent.NotBuilt)) {
+                MADE.incrementAndGet();
+            }
+            return made;
         }
-        WALKED.incrementAndGet();
-        TextExtent made = TextExtents.of(set);
-        // Whatever it came to, including a walk that ran past what it may spend: an extent is
-        // settled by its set, and the allowance it ran past is the one every set is walked under.
-        known.remember(set, made);
-        if (!(made instanceof TextExtent.NotBuilt)) {
-            MADE.incrementAndGet();
-        }
-        keep(set, made);
-        return made;
     }
 
     /**

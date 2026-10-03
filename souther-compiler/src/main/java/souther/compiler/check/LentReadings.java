@@ -1,11 +1,9 @@
 package souther.compiler.check;
 
+import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
-import souther.compiler.values.KnownExtents;
 import souther.compiler.values.StringMachineAnswers;
-import souther.compiler.values.TextExtent;
-import souther.compiler.values.ValueSet;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -27,11 +25,10 @@ import java.util.function.Supplier;
  * the reading is of that world. {@code revision} is what says which one is current; when it moves,
  * what was lent under the old one is dropped rather than carried into a world it was not read from.
  *
- * <p>What was worked out about the sets those readings met is held here on the same terms and under
- * a key of its own. Where a set's strings stop is settled by the set, so it is not one declaration's
- * to lend to another — it is what this revision has found out, and every reading made under the
- * revision asks the one table. Any other work whose answer is settled by the work itself is held
- * the same way, keyed by the work ({@link SettledWork}).
+ * <p>What the revision has worked out beside those readings is held on the same terms and handed
+ * out whole ({@link #revision}). Where a set's strings stop, and every other piece of work settled
+ * by what it is about, is not one declaration's to lend to another — it is what this revision has
+ * found out, and every reading made under the revision asks the one table.
  *
  * <p>What a reading decides on its own goes with it. The ends a declaration's conjuncts moved are
  * read by asking what its rules leave without each of them, and each of those is a reading of the
@@ -60,13 +57,16 @@ public final class LentReadings implements DeclarationReadings {
     private final LongSupplier revision;
     private final StoreWork work;
     private final Map<OfDeclarationUnder, Shared> lent = new HashMap<>();
-    /** Where the sets met under this revision were found to stop. Beside the readings because the
-     *  lifetime is the same one, and apart from them because it is keyed by the set and by nothing
-     *  about who met it. */
-    private final Map<ValueSet, TextExtent> extents = new HashMap<>();
-    /** What each piece of work asked for under this revision came to, empty answers included. Keyed
-     *  by the work for the reason the extents are keyed by the set. */
-    private final Map<SettledWork<?>, Object> settled = new HashMap<>();
+
+    /**
+     * What this revision has worked out, as the readings made under it ask and answer it.
+     *
+     * <p>One object over a table that is dropped when the revision moves, rather than one made per
+     * revision: what holds it is the reading a question was handed long before anybody asks it
+     * anything, and a lender that handed out a table made for one revision would have handed out
+     * one the next revision no longer keeps.
+     */
+    private final RevisionKnowledge known;
 
     /** The revision the readings in hand were made under. */
     private long lentAt;
@@ -80,6 +80,7 @@ public final class LentReadings implements DeclarationReadings {
         this.revision = revision;
         this.work = work;
         this.lentAt = revision.getAsLong();
+        this.known = RevisionKnowledge.keptFor(revision);
     }
 
     @Override
@@ -88,16 +89,8 @@ public final class LentReadings implements DeclarationReadings {
     }
 
     @Override
-    public KnownExtents extents() {
+    public RevisionKnowledge revision() {
         return known;
-    }
-
-    // The cast holds because an entry is only ever put by doing its key, and a key of type
-    // SettledWork<A> comes to an A.
-    @SuppressWarnings("unchecked")
-    @Override
-    public <A> A settled(SettledWork<A> work) {
-        return (A) currentSettled().computeIfAbsent(work, SettledWork::done);
     }
 
     /** Asked of what this lends over, as the machines are: which declaration's reading another's
@@ -106,28 +99,6 @@ public final class LentReadings implements DeclarationReadings {
     public TypeSymbol.AtModule ownerOf(TypeSymbol.AtModule declaration) {
         return machines.ownerOf(declaration);
     }
-
-    /**
-     * What this revision has worked out about where sets stop, as the readings made under it ask
-     * and answer it.
-     *
-     * <p>One object over a table that is dropped when the revision moves, rather than one made per
-     * revision: what holds it is the reading a question was handed long before anybody asks it
-     * anything, and a lender that handed out the table itself would have handed out one the next
-     * revision no longer keeps.
-     */
-    private final KnownExtents known = new KnownExtents() {
-
-        @Override
-        public TextExtent of(ValueSet set) {
-            return currentExtents().get(set);
-        }
-
-        @Override
-        public void remember(ValueSet set, TextExtent extent) {
-            currentExtents().put(set, extent);
-        }
-    };
 
     @Override
     public DeclarationReading reading(TypeSymbol.AtModule declaration,
@@ -164,30 +135,11 @@ public final class LentReadings implements DeclarationReadings {
      * lent at all.
      */
     private Map<OfDeclarationUnder, Shared> current() {
-        atTheCurrentRevision();
-        return lent;
-    }
-
-    /** The same for what was worked out about sets, which is dropped by the same move. */
-    private Map<ValueSet, TextExtent> currentExtents() {
-        atTheCurrentRevision();
-        return extents;
-    }
-
-    /** The same for the settled work. */
-    private Map<SettledWork<?>, Object> currentSettled() {
-        atTheCurrentRevision();
-        return settled;
-    }
-
-    /** Drops what was shared under a revision that has been left behind. */
-    private void atTheCurrentRevision() {
         long now = revision.getAsLong();
         if (now != lentAt) {
             lent.clear();
-            extents.clear();
-            settled.clear();
             lentAt = now;
         }
+        return lent;
     }
 }

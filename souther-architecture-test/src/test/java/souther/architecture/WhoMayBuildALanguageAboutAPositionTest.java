@@ -163,14 +163,25 @@ class WhoMayBuildALanguageAboutAPositionTest {
      * <p>One owner, and inside it the pieces of work a revision keeps. What the rules about a
      * position's strings offer a row, and what that offer was short of, are settled by the rules,
      * so each is a piece of work of its own that mints this allowance for itself
-     * ({@code SettledWork}): minted at the call instead, the work would be done again at every
-     * visit of a search.
+     * ({@code RevisionWork}): minted at the call instead, the work would be done again at every
+     * visit of a search. What it pays for is what those questions make, and not the machines of the
+     * patterns they borrow ({@link #OF_A_PATTERN_FOR_A_WITNESS}).
      */
     private static final List<String> OF_A_WITNESS = List.of(
             "souther/compiler/partition/Partitions",
-            "souther/compiler/partition/Partitions$PatternWitness",
             "souther/compiler/partition/Partitions$StringsTheRulesAdmit",
             "souther/compiler/partition/Partitions$WhatTheOfferIsShortOf");
+
+    /**
+     * What building one pattern's machine for those questions may cost, named by its one producer.
+     *
+     * <p>The producer's and not any question's. A pattern's machine is settled by the pattern and
+     * built once for every question that composes a value out of it, so a second namer is a
+     * question building the machine for itself — which is a second cost for one artifact, and a
+     * second answer to whether the pattern can be built.
+     */
+    private static final List<String> OF_A_PATTERN_FOR_A_WITNESS =
+            List.of("souther/compiler/partition/Partitions$PatternForAWitness");
 
     /**
      * What walking a set for where it stops on the order may cost.
@@ -187,13 +198,13 @@ class WhoMayBuildALanguageAboutAPositionTest {
      * And who turns a plan into a machine at all, which is the capability the three allowances are
      * about.
      *
-     * <p>{@code Realizer} is what a position's answer is built by, and the witness is the one
-     * caller that builds a machine to write a value out of rather than to answer with, a single
-     * pattern's in the work that offers it. Everything else takes what one of them left.
+     * <p>{@code Realizer} is what a position's answer is built by, and a pattern's producer is the
+     * one caller that builds a machine to write a value out of rather than to answer with. Every
+     * question composing a value borrows what the producer built, and everything else takes what
+     * one of them left.
      */
     private static final List<String> BUILDS_A_MACHINE = List.of(
-            "souther/compiler/partition/Partitions",
-            "souther/compiler/partition/Partitions$PatternWitness",
+            "souther/compiler/partition/Partitions$PatternForAWitness",
             "souther/compiler/values/Realizer");
 
     @Test
@@ -255,6 +266,13 @@ class WhoMayBuildALanguageAboutAPositionTest {
         assertEquals(OF_A_WITNESS, namingTheBudget("OF_A_WITNESS"),
                 "a value pasted into a row is not an answer about a position, and the reverse is"
                         + " what naming this budget elsewhere would make it");
+    }
+
+    @Test
+    void whatAPatternForAWitnessMayCostIsNamedByItsProducerAlone() {
+        assertEquals(OF_A_PATTERN_FOR_A_WITNESS, namingTheBudget("OF_A_PATTERN_FOR_A_WITNESS"),
+                "a pattern's machine is built once by its producer and borrowed by every question:"
+                        + " a second namer is a question building it again for itself");
     }
 
     @Test

@@ -73,7 +73,7 @@ public final class Machines {
                 return Answer.absent();
             }
             StringMachineAnswers recorder =
-                    StringMachineAnswers.unborrowed(db.readings().extents());
+                    StringMachineAnswers.unborrowed(db.readings().revision());
             RuleReadingContext reading =
                     RuleReadingContext.of(source.value(), policy.value(), db.readings());
             FieldDomains domains = FieldDomains.of(declared,

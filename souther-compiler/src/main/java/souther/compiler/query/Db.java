@@ -246,8 +246,8 @@ public final class Db implements StoreWork {
     private StringMachineAnswers machinesOf(TypeKey declaration) {
         Answer<StringFacts> facts = ask(new Machines.OfDeclaration(declaration));
         return facts.present()
-                ? StringMachineAnswers.borrowing(facts.value(), readings().extents())
-                : StringMachineAnswers.unborrowed(readings().extents());
+                ? StringMachineAnswers.borrowing(facts.value(), readings().revision())
+                : StringMachineAnswers.unborrowed(readings().revision());
     }
 
     private final Map<Filed, Memo> memos = new HashMap<>();

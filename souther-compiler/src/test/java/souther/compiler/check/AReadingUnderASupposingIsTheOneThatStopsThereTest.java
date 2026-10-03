@@ -9,7 +9,7 @@ import souther.compiler.query.ReadAs;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.values.KnownExtents;
+import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.values.StringMachineAnswers;
 
 import java.util.ArrayList;
@@ -235,8 +235,8 @@ class AReadingUnderASupposingIsTheOneThatStopsThereTest {
             }
 
             @Override
-            public KnownExtents extents() {
-                return lender.extents();
+            public RevisionKnowledge revision() {
+                return lender.revision();
             }
 
             @Override
