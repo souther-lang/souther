@@ -234,7 +234,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         };
     }
 
-    public static final int SCHEMA_VERSION = 23;
+    public static final int SCHEMA_VERSION = 24;
 
     /**
      * Where the schema this writes documents ships.

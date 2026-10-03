@@ -252,6 +252,73 @@ class WhatTheOfferWasShortOfReachesTheAccountTest {
                         + " would be sent to one that reads perfectly");
     }
 
+    /**
+     * A rule nothing could type, in a model that compiles.
+     *
+     * <p>The clause calls a recursive helper, and the reading of a declaration's clauses leaves
+     * such a call standing with no signature for it, so the clause has no form there. The helper
+     * is handed a case with no fields because a rule may not build a value, and that is the one
+     * value of a recursive type it can name.
+     */
+    private static final String A_CLAUSE_NOTHING_TYPED = """
+            module example.untyped
+
+            data Empty
+            data More = { next: Chain }
+            data Chain = Empty | More
+
+            let reaches (c: Chain, s: String): Bool = match c with
+                | More as m -> reaches(m.next, s)
+                | Empty -> String.length(s) == 7
+
+            data Code = String
+                invariant shape = reaches(Empty, value)
+
+            data Flag = Yes | No
+
+            data T = { flag: Flag, code: Code }
+
+            data Ok
+
+            behavior look : (t: T) -> Ok
+
+            let look (t) = Ok
+            """;
+
+    /**
+     * And a clause nothing typed is one hole said in one word, under the position and under the
+     * rule the offer got nothing from.
+     *
+     * <p>The reading of the position and the offer of values meet the same clause, and both file it
+     * as rules no reading reached. The offer also knows which rule it was, because it holds the
+     * part the author wrote — so it names the rule beside the word, and the word says no more than
+     * it says under the position. Said in two words, one document would carry two accounts of one
+     * clause.
+     */
+    @Test
+    void aClauseNothingTypedIsOneWordUnderThePositionAndUnderTheRule() {
+        String document = json(A_CLAUSE_NOTHING_TYPED);
+
+        List<JsonNode> underThePosition = new ArrayList<>();
+        JSON.readTree(document).get("modules").get(0).get("behaviors").forEach(behavior ->
+                behavior.get("partition").get("notRead").forEach(each -> {
+                    if (each.get("position").stringValue().equals("t.code")) {
+                        underThePosition.add(each);
+                    }
+                }));
+        assertEquals(1, underThePosition.size(), () -> "the position is short of its rules: "
+                + underThePosition);
+        assertEquals("rules_not_read_at_all",
+                underThePosition.get(0).get("reason").stringValue());
+
+        JsonNode underTheRule = onlyCause(document);
+        assertEquals("a_rule", underTheRule.get("attribution").stringValue());
+        assertEquals("invariant Code (shape)", underTheRule.get("rule").stringValue());
+        assertEquals(underThePosition.get(0).get("reason").stringValue(),
+                underTheRule.get("unread").stringValue(),
+                "the rule the offer got nothing from is said in the position's word for it");
+    }
+
     /** The line the page counts the rules nothing settled under. */
     private static String whereNothingCouldShowARow(String page) {
         List<String> found = new ArrayList<>();
