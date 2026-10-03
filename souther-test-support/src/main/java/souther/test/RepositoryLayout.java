@@ -152,18 +152,39 @@ public final class RepositoryLayout {
     }
 
     /**
-     * The {@code artifactId} each module the root pom names declares for itself, in the order it
-     * names them: what this reactor builds, as a coordinate names it.
+     * What each module the root pom names builds, as {@code groupId:artifactId:version}, in the
+     * order it names them.
      *
-     * <p>Read from each module's own pom rather than from the name the root pom writes, which is a
-     * directory and only happens to be spelled the same.
+     * <p>The whole coordinate, because that is what an artifact is: the same group and artifact at
+     * another version is something this reactor does not build and a build resolves from elsewhere.
+     * Each part is the module's own where its pom states it and its parent's where it inherits it,
+     * as Maven reads them, and read from each module's own pom rather than from the name the root
+     * pom writes, which is a directory and only happens to be spelled the same.
      */
-    public List<String> artifactIdsBuilt() {
+    public List<String> coordinatesBuilt() {
         List<String> out = new ArrayList<>();
         for (Path module : modules) {
-            out.add(artifactIdOf(module.resolve("pom.xml")));
+            Element project = parse(module.resolve("pom.xml")).getDocumentElement();
+            out.add(ownOrInherited(project, "groupId") + ":" + childText(project, "artifactId") + ":"
+                    + ownOrInherited(project, "version"));
         }
         return List.copyOf(out);
+    }
+
+    /** {@code name} as {@code project} states it, or as its {@code parent} does where it does not. */
+    private static String ownOrInherited(Element project, String name) {
+        String own = childText(project, name);
+        if (!own.isEmpty()) {
+            return own;
+        }
+        for (Element parent : childElements(project, "parent")) {
+            String inherited = childText(parent, name);
+            if (!inherited.isEmpty()) {
+                return inherited;
+            }
+        }
+        throw new IllegalStateException("a pom states no " + name + " and inherits none: Maven could"
+                + " not build it");
     }
 
     /**

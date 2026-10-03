@@ -852,25 +852,25 @@
                                             <failWhenParentIsSnapshot>false</failWhenParentIsSnapshot>
                                             <!-- What this reactor builds, which is a snapshot here
                                                  and is built in this same invocation, so it cannot
-                                                 resolve to anything else. Named one module at a
-                                                 time and not by groupId, because the group holds
-                                                 artifacts released from elsewhere too, such as
-                                                 souther-build-api. The modules listed are the
-                                                 ones <modules> names, which
-                                                 TheSnapshotProfileExemptsExactlyTheReactorTest
-                                                 holds. -->
+                                                 resolve to anything else. Each artifact whole, with
+                                                 its version: the group holds artifacts released from
+                                                 elsewhere too, such as souther-build-api, and one of
+                                                 these modules at another version is not built here
+                                                 and resolves from a repository.
+                                                 TheSnapshotProfileExemptsExactlyTheReactorTest holds
+                                                 these to what the root pom's modules build. -->
                                             <excludes>
-                                                <exclude>org.souther-lang:souther-test-support</exclude>
-                                                <exclude>org.souther-lang:souther-runtime</exclude>
-                                                <exclude>org.souther-lang:souther-syntax</exclude>
-                                                <exclude>org.souther-lang:souther-compiler</exclude>
-                                                <exclude>org.souther-lang:souther-build-driver</exclude>
-                                                <exclude>org.souther-lang:souther-fmt</exclude>
-                                                <exclude>org.souther-lang:souther-lsp</exclude>
-                                                <exclude>org.souther-lang:souther-cli</exclude>
-                                                <exclude>org.souther-lang:souther-bench</exclude>
-                                                <exclude>org.souther-lang:souther-program-api-test</exclude>
-                                                <exclude>org.souther-lang:souther-architecture-test</exclude>
+                                                <exclude>org.souther-lang:souther-test-support:${project.version}</exclude>
+                                                <exclude>org.souther-lang:souther-runtime:${project.version}</exclude>
+                                                <exclude>org.souther-lang:souther-syntax:${project.version}</exclude>
+                                                <exclude>org.souther-lang:souther-compiler:${project.version}</exclude>
+                                                <exclude>org.souther-lang:souther-build-driver:${project.version}</exclude>
+                                                <exclude>org.souther-lang:souther-fmt:${project.version}</exclude>
+                                                <exclude>org.souther-lang:souther-lsp:${project.version}</exclude>
+                                                <exclude>org.souther-lang:souther-cli:${project.version}</exclude>
+                                                <exclude>org.souther-lang:souther-bench:${project.version}</exclude>
+                                                <exclude>org.souther-lang:souther-program-api-test:${project.version}</exclude>
+                                                <exclude>org.souther-lang:souther-architecture-test:${project.version}</exclude>
                                             </excludes>
                                         </requireReleaseDeps>
                                     </rules>
