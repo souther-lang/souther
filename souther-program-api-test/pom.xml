@@ -23,6 +23,11 @@
         against, and no test living inside souther-compiler is separate from it.
     </description>
 
+    <properties>
+        <!-- Nothing ships from here; not published to Central. -->
+        <souther.publish.skip>true</souther.publish.skip>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.souther-lang</groupId>
@@ -42,22 +47,4 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
-    <profiles>
-        <!-- Nothing ships from here; keep it out of the Central bundle. -->
-        <profile>
-            <id>release</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.sonatype.central</groupId>
-                        <artifactId>central-publishing-maven-plugin</artifactId>
-                        <configuration>
-                            <skipPublishing>true</skipPublishing>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 </project>

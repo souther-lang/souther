@@ -19,6 +19,13 @@
         document symbols, hover, definition, semantic tokens) reads the lossless CST and the compiler.
     </description>
 
+    <properties>
+        <!-- What this module ships is the shaded LSP server, a runnable binary rather than a
+             library, distributed through GitHub Releases and not published to Central. The plain
+             jar is a dependency inside this reactor and is not published either. -->
+        <souther.publish.skip>true</souther.publish.skip>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.souther-lang</groupId>
@@ -162,24 +169,4 @@
             </plugin>
         </plugins>
     </build>
-
-    <profiles>
-        <!-- What this module ships is the shaded LSP server, a runnable binary rather than a
-             library; keep it out of the Central bundle (distribute via GitHub Releases instead).
-             The plain jar is a dependency inside this reactor and is not published either. -->
-        <profile>
-            <id>release</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.sonatype.central</groupId>
-                        <artifactId>central-publishing-maven-plugin</artifactId>
-                        <configuration>
-                            <skipPublishing>true</skipPublishing>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 </project>

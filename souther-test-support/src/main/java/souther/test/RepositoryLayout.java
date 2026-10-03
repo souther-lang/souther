@@ -152,6 +152,78 @@ public final class RepositoryLayout {
     }
 
     /**
+     * What each module the root pom names builds, as {@code groupId:artifactId:version}, in the
+     * order it names them.
+     *
+     * <p>The whole coordinate, because that is what an artifact is: the same group and artifact at
+     * another version is something this reactor does not build and a build resolves from elsewhere.
+     * Each part is the module's own where its pom states it and its parent's where it inherits it,
+     * as Maven reads them, and read from each module's own pom rather than from the name the root
+     * pom writes, which is a directory and only happens to be spelled the same.
+     */
+    public List<String> coordinatesBuilt() {
+        List<String> out = new ArrayList<>();
+        for (Path module : modules) {
+            Element project = parse(module.resolve("pom.xml")).getDocumentElement();
+            out.add(ownOrInherited(project, "groupId") + ":" + childText(project, "artifactId") + ":"
+                    + ownOrInherited(project, "version"));
+        }
+        return List.copyOf(out);
+    }
+
+    /** {@code name} as {@code project} states it, or as its {@code parent} does where it does not. */
+    private static String ownOrInherited(Element project, String name) {
+        String own = childText(project, name);
+        if (!own.isEmpty()) {
+            return own;
+        }
+        for (Element parent : childElements(project, "parent")) {
+            String inherited = childText(parent, name);
+            if (!inherited.isEmpty()) {
+                return inherited;
+            }
+        }
+        throw new IllegalStateException("a pom states no " + name + " and inherits none: Maven could"
+                + " not build it");
+    }
+
+    /**
+     * The text of every element the root pom's profile {@code id} holds at {@code path}, a step a
+     * child element's name, in document order.
+     *
+     * <p>For a check holding what a profile says to what the repository is. Refused where the root
+     * pom has no such profile, so a profile renamed out from under a check stops the check. Nothing
+     * at {@code path} is an answer, the empty one, and a check expecting something there fails on
+     * it as on any other wrong answer.
+     */
+    public List<String> rootProfileTexts(String id, String... path) {
+        Element project = parse(root.resolve("pom.xml")).getDocumentElement();
+        List<Element> at = new ArrayList<>();
+        for (Element profiles : childElements(project, "profiles")) {
+            for (Element profile : childElements(profiles, "profile")) {
+                if (childText(profile, "id").equals(id)) {
+                    at.add(profile);
+                }
+            }
+        }
+        if (at.size() != 1) {
+            throw new IllegalArgumentException("the root pom has " + at.size() + " profiles called " + id);
+        }
+        for (String step : path) {
+            List<Element> next = new ArrayList<>();
+            for (Element each : at) {
+                next.addAll(childElements(each, step));
+            }
+            at = next;
+        }
+        List<String> out = new ArrayList<>();
+        for (Element each : at) {
+            out.add(each.getTextContent().trim());
+        }
+        return List.copyOf(out);
+    }
+
+    /**
      * The directory of the module called {@code named}.
      *
      * <p>What a check reaching another module's files wants, and the whole of what it should have

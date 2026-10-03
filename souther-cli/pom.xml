@@ -16,6 +16,12 @@
     <description>Bundles the compiler, runtime, and their dependencies into one really-executable
         jar so `souther` runs a .sou file without a Maven build.</description>
 
+    <properties>
+        <!-- The really-executable jar is a distributable binary, not a library; it is distributed
+             through GitHub Releases and not published to Central. -->
+        <souther.publish.skip>true</souther.publish.skip>
+    </properties>
+
     <dependencies>
         <!-- The compiler pulls raoh + Jackson transitively (both compile-scope), and it declares
              souther-runtime as provided; this module adds it back at runtime so the uber jar is
@@ -242,23 +248,4 @@
             </plugin>
         </plugins>
     </build>
-
-    <profiles>
-        <!-- The really-executable jar is a distributable binary, not a library; keep it out of
-             the Central bundle (distribute via GitHub Releases instead). -->
-        <profile>
-            <id>release</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.sonatype.central</groupId>
-                        <artifactId>central-publishing-maven-plugin</artifactId>
-                        <configuration>
-                            <skipPublishing>true</skipPublishing>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 </project>

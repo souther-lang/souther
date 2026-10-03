@@ -27,6 +27,14 @@
         resources into its own artifact at build time, so a replayed measurement needs nothing here.
     </description>
 
+    <properties>
+        <!-- Infrastructure for checking this repository, not an API anyone outside it writes
+             against; not published to Central. Published, it would look like an artifact with a
+             compatibility promise, and the repository's own shape would become part of what this
+             project supports. -->
+        <souther.publish.skip>true</souther.publish.skip>
+    </properties>
+
     <dependencies>
         <!-- The listener interface `CoverageByClass` implements. The launcher is on every test
              run's classpath already, brought by surefire's provider; naming it here is what lets
@@ -58,25 +66,4 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
-    <profiles>
-        <!-- Infrastructure for checking this repository, not an API anyone outside it writes
-             against; keep it out of the Central bundle. Published, it would look like an artifact
-             with a compatibility promise, and the repository's own shape would become part of what
-             this project supports. -->
-        <profile>
-            <id>release</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.sonatype.central</groupId>
-                        <artifactId>central-publishing-maven-plugin</artifactId>
-                        <configuration>
-                            <skipPublishing>true</skipPublishing>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 </project>

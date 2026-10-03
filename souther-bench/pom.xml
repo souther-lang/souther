@@ -20,6 +20,11 @@
         answers, and how the whole-workspace compile grows with the number of modules.
     </description>
 
+    <properties>
+        <!-- A measurement tool, not a library; not published to Central. -->
+        <souther.publish.skip>true</souther.publish.skip>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.souther-lang</groupId>
@@ -156,22 +161,4 @@
             </plugin>
         </plugins>
     </build>
-
-    <profiles>
-        <!-- A measurement tool, not a library; keep it out of the Central bundle. -->
-        <profile>
-            <id>release</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.sonatype.central</groupId>
-                        <artifactId>central-publishing-maven-plugin</artifactId>
-                        <configuration>
-                            <skipPublishing>true</skipPublishing>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 </project>
