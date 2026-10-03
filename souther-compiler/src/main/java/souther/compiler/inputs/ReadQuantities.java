@@ -60,7 +60,7 @@ final class ReadQuantities implements Quantities {
      */
     private final RuleReadingContext ruleReading;
     /** What the behavior takes, which is what a path of this input starts at. */
-    private final Set<TermPath> roots;
+    private final Roots roots;
     /** Every position that was read, by where it sits. What one of them was read to hold is what
      *  its own term runs between, and the reading that relates positions has a name for some of
      *  those terms and not for others. */
@@ -199,7 +199,7 @@ final class ReadQuantities implements Quantities {
         }
     }
 
-    private ReadQuantities(Map<TermPath, OpenedRules> byRoot, Set<TermPath> roots,
+    private ReadQuantities(Map<TermPath, OpenedRules> byRoot, Roots roots,
                            Map<TermPath, Position> byPath, List<CasesRead> cases,
                            java.util.function.Function<TermPath, Type> typeAt,
                            Map<NumericTerm, Fixed> fixed,
@@ -212,7 +212,7 @@ final class ReadQuantities implements Quantities {
         // and a report is a document compared against the one written last time, so an order read
         // off a hash would move which parameter is named between runs.
         this.byRoot = Collections.unmodifiableMap(new LinkedHashMap<>(byRoot));
-        this.roots = Set.copyOf(roots);
+        this.roots = roots;
         this.byPath = Map.copyOf(byPath);
         // Kept in the order the fixings arrived, so that the order they are answered in is chosen
         // here rather than inherited. An immutable copy iterates in an order salted once per JVM
@@ -226,8 +226,8 @@ final class ReadQuantities implements Quantities {
                              Map<TermPath, Position> byPath, List<CasesRead> cases,
                              java.util.function.Function<TermPath, Type> typeAt,
                              RuleReadingContext ruleReading) {
-        return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, Map.of(), ruleReading,
-                List.of());
+        return new ReadQuantities(byRoot, new Roots(roots), byPath, cases, typeAt, Map.of(),
+                ruleReading, List.of());
     }
 
     /**
@@ -321,20 +321,48 @@ final class ReadQuantities implements Quantities {
      * given is one whose rules name the place, so there is no such case to answer for.
      */
     private UnderARoot rootOf(TermPath path) {
-        UnderARoot nearest = null;
-        for (TermPath root : roots) {
-            RuleKey named = path.ruleKeyUnder(root);
-            if (named != null
-                    && (nearest == null || root.isAtOrUnder(nearest.root()))) {
-                nearest = new UnderARoot(root, named);
-            }
-        }
-        return nearest;
+        return roots.nearestTo(path);
     }
 
     /** A value whose rules reach a place, and what those rules call it. Made only by
-     *  {@link #rootOf}, so holding one is holding a root that can name what was asked about. */
+     *  {@link Roots#nearestTo}, so holding one is holding a root that can name what was asked
+     *  about. */
     private record UnderARoot(TermPath root, RuleKey named) {}
+
+    /**
+     * What the behavior takes, and which of them is nearest to each place asked about.
+     *
+     * <p>The answer turns on the roots and the place and on nothing a reading fixes or assumes, so it
+     * is kept here, with the roots, and every reading made from this one by fixing or assuming
+     * something shares it. Kept on a reading instead, each of those would work it out again — and
+     * they are made per question, so the same place was walked against every root once per atom of
+     * every question asked.
+     */
+    private static final class Roots {
+
+        private final Set<TermPath> all;
+        private final Map<TermPath, Optional<UnderARoot>> nearest = new ConcurrentHashMap<>();
+
+        Roots(Set<TermPath> all) {
+            this.all = Set.copyOf(all);
+        }
+
+        /** The nearest root whose rules can name {@code path}, or null where none can. */
+        UnderARoot nearestTo(TermPath path) {
+            return nearest.computeIfAbsent(path, this::walk).orElse(null);
+        }
+
+        private Optional<UnderARoot> walk(TermPath path) {
+            UnderARoot found = null;
+            for (TermPath root : all) {
+                RuleKey named = path.ruleKeyUnder(root);
+                if (named != null && (found == null || root.isAtOrUnder(found.root()))) {
+                    found = new UnderARoot(root, named);
+                }
+            }
+            return Optional.ofNullable(found);
+        }
+    }
 
     /**
      * The rules of every value this context says stands, read with what is fixed under each and
