@@ -36,6 +36,24 @@ class WhatARevisionKnowsIsWorkedOutOnceAndGoesWithItTest {
         }
     }
 
+    /** Work that borrows the work it was borrowed by, which comes round to itself. */
+    private record Round(String side) implements RevisionWork<String> {
+
+        @Override
+        public String workedOut(RevisionKnowledge revision) {
+            return revision.settled(new Round(side.equals("there") ? "back" : "there"));
+        }
+    }
+
+    /** Work that fails on its own account, for what a failure leaves behind. */
+    private record Failing(String word) implements RevisionWork<String> {
+
+        @Override
+        public String workedOut(RevisionKnowledge revision) {
+            throw new IllegalArgumentException("it could not: " + word);
+        }
+    }
+
     /** Work that comes to no answer at all, which is not one of the answers work can come to. */
     private record Nothing() implements RevisionWork<String> {
 
@@ -111,6 +129,52 @@ class WhatARevisionKnowsIsWorkedOutOnceAndGoesWithItTest {
         RevisionKnowledge.NONE.settled(new Echo("a"));
 
         assertEquals(2, RevisionKnowledge.timesDone(Echo.class) - before);
+    }
+
+    /**
+     * Work that borrows itself, through another, is refused at the second entry and the way round
+     * is named — whether or not anything is kept.
+     */
+    @Test
+    void workThatComesRoundToItselfIsRefusedWithTheWayRound() {
+        for (RevisionKnowledge known : new RevisionKnowledge[] {
+                RevisionKnowledge.keptFor(() -> 1), RevisionKnowledge.NONE}) {
+            IllegalStateException refused = assertThrows(IllegalStateException.class,
+                    () -> known.settled(new Round("back")));
+            assertEquals("revision work borrows itself: Round[side=back] -> Round[side=there]"
+                            + " -> Round[side=back]", refused.getMessage(),
+                    "refused rather than done again until the stack ran out");
+        }
+    }
+
+    /** And work that failed leaves nothing under way behind it, so asking again is not a cycle. */
+    @Test
+    void workThatFailedIsNotLeftUnderWay() {
+        RevisionKnowledge known = RevisionKnowledge.keptFor(() -> 1);
+
+        assertThrows(IllegalArgumentException.class, () -> known.settled(new Failing("x")));
+        assertThrows(IllegalArgumentException.class, () -> known.settled(new Failing("x")),
+                "the second asking fails on its own account and not as work borrowing itself");
+    }
+
+    /** The same work done for two revisions at once is two pieces of work and not a cycle. */
+    @Test
+    void theSameWorkForAnotherRevisionIsNotACycle() {
+        RevisionKnowledge other = RevisionKnowledge.keptFor(() -> 2);
+
+        assertEquals("done in the other",
+                RevisionKnowledge.keptFor(() -> 1).settled(new Across(other)),
+                "asked of the other revision while being done for this one, which is not the same"
+                        + " piece of work");
+    }
+
+    /** Work that, done anywhere but in {@code other}, asks {@code other} for itself. */
+    private record Across(RevisionKnowledge other) implements RevisionWork<String> {
+
+        @Override
+        public String workedOut(RevisionKnowledge revision) {
+            return revision == other ? "done in the other" : other.settled(this);
+        }
     }
 
     @Test

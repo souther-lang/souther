@@ -15,6 +15,12 @@ package souther.compiler.revision;
  * So a piece of work that borrows does it through the knowledge it is handed rather than by doing
  * the borrowed work itself, and the producer's cost is charged once, to the producer.
  *
+ * <p><b>What work borrows never comes round to it.</b> A piece of work that borrows itself,
+ * through however many others, has no answer to be kept: it would be done again inside itself for
+ * as long as there was stack. So the borrowing is a graph with no cycle, and a piece of work asked
+ * for while it is being done is refused with the way round it named
+ * ({@link RevisionKnowledge#done}).
+ *
  * <p>Two of these are the same work where they are equal, so an implementation is a value: a record
  * of everything the answer is worked out from. A component left out is two pieces of work answered
  * alike, and a component compared by identity is the same work done twice.

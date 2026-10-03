@@ -198,12 +198,14 @@ class WhoMayBuildALanguageAboutAPositionTest {
      * And who turns a plan into a machine at all, which is the capability the three allowances are
      * about.
      *
-     * <p>{@code Realizer} is what a position's answer is built by, and a pattern's producer is the
-     * one caller that builds a machine to write a value out of rather than to answer with. Every
-     * question composing a value borrows what the producer built, and everything else takes what
-     * one of them left.
+     * <p>{@code Realizer} is what a position's answer is built by. A value to write into a row is
+     * built out of the machines of the patterns rules state, which their producer builds and every
+     * question borrows, and out of the strings so many characters long a question composes for
+     * itself, which {@code Partitions} builds out of the question's own allowance. Everything else
+     * takes what one of them left.
      */
     private static final List<String> BUILDS_A_MACHINE = List.of(
+            "souther/compiler/partition/Partitions",
             "souther/compiler/partition/Partitions$PatternForAWitness",
             "souther/compiler/values/Realizer");
 

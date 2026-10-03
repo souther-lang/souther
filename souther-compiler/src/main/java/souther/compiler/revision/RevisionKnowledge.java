@@ -31,12 +31,19 @@ public interface RevisionKnowledge {
      * what this says.
      */
     static <A> A done(RevisionWork<A> work, RevisionKnowledge revision) {
-        RevisionWorkDone.count(work.getClass());
-        A answer = work.workedOut(revision);
-        if (answer == null) {
-            throw new IllegalStateException("work comes to an answer, empty or not: " + work);
+        RevisionWorkDone.entering(revision, work);
+        try {
+            // Counted once it is known to be done, and not where it was refused as one already
+            // under way: a piece of work asked for while it is being done was not worked out.
+            RevisionWorkDone.count(work.getClass());
+            A answer = work.workedOut(revision);
+            if (answer == null) {
+                throw new IllegalStateException("work comes to an answer, empty or not: " + work);
+            }
+            return answer;
+        } finally {
+            RevisionWorkDone.leaving(revision, work);
         }
-        return answer;
     }
 
     /**

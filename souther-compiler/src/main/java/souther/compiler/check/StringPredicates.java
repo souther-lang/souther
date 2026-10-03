@@ -302,6 +302,63 @@ public enum StringPredicates {
         public boolean typed(PartId<RuleRef.Invariant> part) {
             return !notTyped.contains(part.rule().clause());
         }
+
+        /**
+         * The pattern {@code part} states, as a rule an author wrote states it, or null where it
+         * states none this reads.
+         *
+         * <p>The one way to come by a {@link StatedPattern}: what this hands out is what a
+         * declaration's rule said, and nothing a reader composed on its way to a value.
+         */
+        public StatedPattern patternOf(PartId<RuleRef.Invariant> part) {
+            return read.get(part) instanceof Reading.Accepting it
+                    ? new StatedPattern(it.accepts()) : null;
+        }
+    }
+
+    /**
+     * A pattern a rule an author wrote states, as the checker read it.
+     *
+     * <p>Apart from the patterns a reader composes on its way to a value — the strings of so many
+     * characters a count leaves, a meet, a complement — which say the same kind of thing about
+     * strings and are not anybody's rule. A reader that holds one of these holds something an
+     * author can be sent to; one holding a pattern it built has nobody to send them to. So this is
+     * made here, out of what a rule was read to state, and nowhere else ({@link StatedOn#patternOf}).
+     *
+     * <p>Two of these are one where they state the same strings, whichever rules stated them: two
+     * rules writing one pattern are one pattern to build. Which rule it was is the caller's to keep
+     * beside it.
+     */
+    public static final class StatedPattern {
+
+        private final PatternMeaning meaning;
+
+        private StatedPattern(PatternMeaning meaning) {
+            if (meaning == null) {
+                throw new IllegalArgumentException("a stated pattern states some strings");
+            }
+            this.meaning = meaning;
+        }
+
+        /** The strings it accepts. */
+        public PatternMeaning meaning() {
+            return meaning;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof StatedPattern it && meaning.equals(it.meaning);
+        }
+
+        @Override
+        public int hashCode() {
+            return meaning.hashCode();
+        }
+
+        @Override
+        public String toString() {
+            return "StatedPattern[" + meaning + "]";
+        }
     }
 
     /**

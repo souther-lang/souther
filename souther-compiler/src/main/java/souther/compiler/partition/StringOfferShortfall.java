@@ -85,21 +85,22 @@ public record StringOfferShortfall(List<NotOffered> these) {
                 throw new IllegalArgumentException("an allowance spent is what composing a value"
                         + " came to and not what one rule of it is: " + of);
             }
-            if (why instanceof Why.PatternTooCostly && of instanceof Subject.ComposingAValue) {
-                throw new IllegalArgumentException("one pattern's machine is the pattern's, and"
-                        + " composing a value is not one pattern");
+            if (why instanceof Why.PatternTooCostly && !(of instanceof Subject.ARule)) {
+                throw new IllegalArgumentException("one pattern's machine is the rule's that"
+                        + " states it, and this is no rule: " + of);
             }
         }
 
         /**
-         * One where the machine of {@code pattern}, built under the allowance one pattern has, was
-         * refused by {@code stopped}.
+         * One where the machine of the pattern {@code rule} states, built under the allowance one
+         * pattern has, was refused by {@code stopped}.
          *
-         * <p>Whichever limit it was, it is about what was being built: that allowance was spent on
-         * this pattern and on nothing else.
+         * <p>Whichever limit it was, it is about the rule: that allowance was spent on its pattern
+         * and on nothing else. A rule and nothing wider, because only a rule states a pattern an
+         * author can write smaller.
          */
-        static NotOffered patternNotBuilt(Subject pattern, Meter.Stopped stopped) {
-            return new NotOffered(pattern, new Why.PatternTooCostly(stopped));
+        static NotOffered patternNotBuilt(Subject.ARule rule, Meter.Stopped stopped) {
+            return new NotOffered(rule, new Why.PatternTooCostly(stopped));
         }
 
         /**
@@ -198,12 +199,13 @@ public record StringOfferShortfall(List<NotOffered> these) {
         }
 
         /**
-         * Building one pattern's machine ran past what building one may spend.
+         * Building the machine of the pattern a rule states ran past what building one may spend.
          *
          * <p>Apart from {@link TooCostly}, because the allowance is another one. That one is what
          * composing a value for a row may spend, shared by everything the question builds; this is
-         * what one pattern's machine is built under, once, before any question borrows it — so
-         * running out of it is about the pattern however it ran out.
+         * what the machine of one rule's pattern is built under, once, before any question borrows
+         * it — so running out of it is about that rule however it ran out, and it is said of a rule
+         * and of nothing else.
          */
         record PatternTooCostly(Meter.Stopped stopped) implements Why {
 

@@ -117,7 +117,9 @@ public final class PatternPlan {
          * built once, under an allowance of its own ({@link #OF_A_PATTERN_FOR_A_WITNESS}), and
          * every question that composes a value out of it borrows it. What is borrowed is not spent:
          * what this pays for is what the question makes on top of what it borrowed — the meet of
-         * the rules, the count laid over it, the strings taken out of it. Charged again here, the
+         * the rules, the strings so many characters long a count leaves and their meet with the
+         * rest, the strings taken out of it. Those it builds itself, since they are machines the
+         * question composes and no rule an author wrote. Charged again here, the
          * same machine would cost each question that happened to need it, and what a question
          * could afford would turn on which other questions had been asked first.
          *
@@ -127,14 +129,16 @@ public final class PatternPlan {
         public static final Budget OF_A_WITNESS = new Budget(50_000, 200_000, 50_000_000);
 
         /**
-         * What building the machine of one pattern a value is composed out of is allowed to cost.
+         * What building the machine of one pattern a rule states, for a value to be composed out
+         * of, is allowed to cost.
          *
          * <p>The producer's, and not the question's that composes the value. A pattern's machine
          * is settled by the pattern, so it is built once for every question that composes a value
          * out of it, and each of those borrows it ({@link #OF_A_WITNESS}). So what one pattern
          * may spend is a figure of its own: what running out of it says is that this pattern is
          * too large to build, which is about the rule an author wrote, while running out of what
-         * composing a value may spend is about the question and about no rule of it.
+         * composing a value may spend is about the question and about no rule of it. A machine a
+         * question composes for itself is the question's, and is never built out of this.
          *
          * <p>The same numbers as the others today, and a coincidence rather than a fact.
          */

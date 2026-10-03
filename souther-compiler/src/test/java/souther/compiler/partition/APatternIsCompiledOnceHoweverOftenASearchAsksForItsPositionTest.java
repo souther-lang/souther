@@ -122,55 +122,66 @@ class APatternIsCompiledOnceHoweverOftenASearchAsksForItsPositionTest {
     }
 
     /**
-     * How many different machines each model's generation needs: the format, and where a count is
-     * written, the strings of every length the questions lay over it.
+     * How many machines each model's generation builds: the format, and where a count is written,
+     * the strings of each length a question lays over it.
      *
-     * <p>Worked out from the model and not read off a run. The count beside the format is met at
-     * every length from four up, by what the rules offer together, and at exactly four, by a value
-     * of the length the count asks for.
+     * <p>Worked out from the model and not read off a run. The format is built once by its
+     * producer and borrowed by every question. The count beside it is met at every length from four
+     * up, by what the rules offer together, and at exactly four, by a value of the length the count
+     * asks for — two questions, each worked out once, each building its own strings of that length.
      */
-    private static final Map<String, Integer> MACHINES_NEEDED = Map.of(
+    private static final Map<String, Integer> MACHINES_BUILT = Map.of(
             A_FORMAT, 1,
             A_FORMAT_AND_A_COUNT, 3,
             A_SET_OF_THEM, 1,
             A_FORMAT_IN_ONE_VALUE, 1);
 
+    /** How many patterns the rules of each model state, which is how many machines a producer
+     *  builds. */
+    private static final Map<String, Integer> PATTERNS_STATED = Map.of(
+            A_FORMAT, 1,
+            A_FORMAT_AND_A_COUNT, 1,
+            A_SET_OF_THEM, 1,
+            A_FORMAT_IN_ONE_VALUE, 1);
+
     /**
-     * Each machine a generation needs is built once, whichever questions met it and however often
-     * the search asked them.
+     * Each pattern a rule states is built once, by its producer, whichever questions met it and
+     * however often the search asked them.
      *
-     * <p>The format is among them in every model, and it is met by more than one question in the
-     * one with a count: offered on its own, met with the count, and met with a count of four.
+     * <p>Met by more than one question in the model with a count: offered on its own, met with the
+     * strings of four or more characters, and met with the strings of exactly four.
      */
     @Test
-    void eachMachineAGenerationNeedsIsBuiltOnce() {
+    void eachPatternARuleStatesIsBuiltOnceByItsProducer() {
+        models().forEach((model, check) -> {
+            MeasuredInput subject = subjectOf(model, null);
+
+            long before = RevisionKnowledge.timesDone(Partitions.PatternForAWitness.class);
+            fill(subject, check);
+
+            assertEquals(PATTERNS_STATED.get(model).longValue(),
+                    RevisionKnowledge.timesDone(Partitions.PatternForAWitness.class) - before,
+                    "one producer per pattern a rule states: " + model);
+        });
+    }
+
+    /**
+     * And every machine the generation builds is accounted for: the patterns, once each, and the
+     * strings so many characters long each question builds for itself, once each since the
+     * question is worked out once.
+     */
+    @Test
+    void everyMachineAGenerationBuildsIsAPatternOnceOrAQuestionsOwnOnce() {
         models().forEach((model, check) -> {
             MeasuredInput subject = subjectOf(model, null);
 
             long before = PatternPlan.compilationsMade();
             fill(subject, check);
 
-            assertEquals(MACHINES_NEEDED.get(model).longValue(),
+            assertEquals(MACHINES_BUILT.get(model).longValue(),
                     PatternPlan.compilationsMade() - before,
-                    "each machine built for the first question about it and lent to the rest: "
-                            + model);
-        });
-    }
-
-    /** And every one of them is built by the one producer a pattern's machine has. */
-    @Test
-    void everyMachineAGenerationBuildsIsAProducersWork() {
-        models().forEach((model, check) -> {
-            MeasuredInput subject = subjectOf(model, null);
-
-            long compiled = PatternPlan.compilationsMade();
-            long produced = RevisionKnowledge.timesDone(Partitions.PatternForAWitness.class);
-            fill(subject, check);
-
-            assertEquals(
-                    RevisionKnowledge.timesDone(Partitions.PatternForAWitness.class) - produced,
-                    PatternPlan.compilationsMade() - compiled,
-                    "no question builds a pattern's machine for itself: " + model);
+                    "each pattern built once and lent, and each question's own machine built"
+                            + " for the one time the question is worked out: " + model);
         });
     }
 

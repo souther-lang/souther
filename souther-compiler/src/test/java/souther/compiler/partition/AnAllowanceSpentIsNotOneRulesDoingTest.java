@@ -138,7 +138,13 @@ class AnAllowanceSpentIsNotOneRulesDoingTest {
                 () -> new StringOfferShortfall.NotOffered(
                         new StringOfferShortfall.Subject.ComposingAValue(),
                         new StringOfferShortfall.Why.PatternTooCostly(Meter.Stopped.THE_ANSWER)))
-                .getMessage(), "and composing a value is not one pattern");
+                .getMessage(), "composing a value is not a rule's pattern");
+        assertNotNull(assertThrows(IllegalArgumentException.class,
+                () -> new StringOfferShortfall.NotOffered(
+                        new StringOfferShortfall.Subject.WhatTheyLeaveTogether(),
+                        new StringOfferShortfall.Why.PatternTooCostly(Meter.Stopped.ONE_MACHINE)))
+                .getMessage(), "and neither is what the rules leave together, which nobody"
+                        + " wrote: the word for one pattern's allowance is a rule's alone");
     }
 
     /**

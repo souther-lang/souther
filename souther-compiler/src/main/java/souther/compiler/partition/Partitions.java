@@ -1601,11 +1601,11 @@ public final class Partitions {
      * told apart here: a row is offered or it is not, and what the offer was short of is said where
      * a search came back without one.
      */
-    private static List<FixtureTemplate> whatAFormatAsksFor(List<PatternMeaning> stated,
-                                                            RuleReadingContext reading) {
+    private static List<FixtureTemplate> whatAFormatAsksFor(
+            List<StringPredicates.StatedPattern> stated, RuleReadingContext reading) {
         List<FixtureTemplate> out = new ArrayList<>();
-        for (PatternMeaning each : stated) {
-            if (reading.revision().settled(new PatternForAWitness(PatternPlan.of(each)))
+        for (StringPredicates.StatedPattern each : stated) {
+            if (reading.revision().settled(new PatternForAWitness(each))
                     instanceof PatternForAWitness.Made.Built(var _, Optional<String> written)) {
                 written.ifPresent(text -> out.add(FixtureTemplate.string(text)));
             }
@@ -2212,8 +2212,8 @@ public final class Partitions {
     }
 
     /**
-     * The machine of one pattern a value is composed out of, and the string it offers a row, built
-     * once for the revision.
+     * The machine of one pattern a rule states, and the string it offers a row, built once for the
+     * revision.
      *
      * <p>The producer of both. A pattern's machine is settled by the pattern, so every question
      * that composes a value out of it — the value one rule asks for, what several rules meet in,
@@ -2222,10 +2222,17 @@ public final class Partitions {
      * allowance one pattern has ({@link PatternPlan.Budget#OF_A_PATTERN_FOR_A_WITNESS}), minted
      * here for it alone.
      *
+     * <p><b>A pattern a rule states, and no other.</b> Running out of that allowance is said
+     * under the rule, as a pattern an author can write smaller. A machine a question composes on
+     * its way to a value — the strings of so many characters a count leaves — is nobody's rule, so
+     * it is the question's to build and to pay for, and the type taken here is one only a rule's
+     * reading hands out ({@link StringPredicates.StatedPattern}).
+     *
      * <p>The string is worked out with the machine, because both are what a search asks of the
      * pattern from every settling it visits, and neither depends on where the search is.
      */
-    record PatternForAWitness(PatternPlan plan) implements RevisionWork<PatternForAWitness.Made> {
+    record PatternForAWitness(StringPredicates.StatedPattern pattern)
+            implements RevisionWork<PatternForAWitness.Made> {
 
         /** What building the pattern came to. */
         sealed interface Made {
@@ -2249,7 +2256,7 @@ public final class Partitions {
         @Override
         public Made workedOut(RevisionKnowledge revision) {
             Meter meter = PatternPlan.Budget.OF_A_PATTERN_FOR_A_WITNESS.meter();
-            Language language = plan.compile(meter);
+            Language language = PatternPlan.of(pattern.meaning()).compile(meter);
             return language == null ? new Made.NotBuilt(meter.stoppedBy())
                     : new Made.Built(language, Optional.ofNullable(language.someWritten()));
         }
@@ -2261,9 +2268,10 @@ public final class Partitions {
      *
      * <p>One allowance for the whole of the question, which is what looking for these values may
      * cost: the meet and every string taken out of it are steps of one search, and a fresh figure
-     * per step would be this spending as much as the number asked for. The machines of the
-     * patterns and of the count are borrowed ({@link PatternForAWitness}), so what it is spent on is
-     * what this question makes out of them.
+     * per step would be this spending as much as the number asked for. The machines of the rules'
+     * patterns are borrowed ({@link PatternForAWitness}), so what it is spent on is what this
+     * question makes: the meet, the strings the count leaves and their meet with it, the strings
+     * taken out.
      *
      * <p>The revision's for the reason a pattern's machine is. What the meet comes to is read off
      * the rules and the count and nothing about where the search is, and a position carrying a
@@ -2424,8 +2432,8 @@ public final class Partitions {
                     continue;
                 }
                 switch (stated.of(each.part())) {
-                    case StringPredicates.Reading.Accepting it ->
-                            read.add(new Stated(each.part(), it.accepts()));
+                    case StringPredicates.Reading.Accepting _ ->
+                            read.add(new Stated(each.part(), stated.patternOf(each.part())));
                     // A rule whose text this compiler did not work out is a rule it did not read.
                     case StringPredicates.Reading.WrittenArgumentNotKnown _ ->
                             unread.add(StringOfferShortfall.NotOffered.ofARuleNotRead(
@@ -2462,7 +2470,7 @@ public final class Partitions {
         }
 
         /** Just the patterns, for a caller that offers a value per rule and names none of them. */
-        private List<PatternMeaning> patterns() {
+        private List<StringPredicates.StatedPattern> patterns() {
             return read.stream().map(Stated::accepts).toList();
         }
     }
@@ -2472,9 +2480,12 @@ public final class Partitions {
      *
      * <p>Carried together because a rule whose machine cannot be afforded is named to an author by
      * the rule and not by the pattern: two rules of one declaration state two patterns, and a
-     * sentence about "the pattern here" leaves them to guess which.
+     * sentence about "the pattern here" leaves them to guess which. The pattern is the one the
+     * rule's reading handed out, which is what lets its machine be a rule's
+     * ({@link PatternForAWitness}).
      */
-    private record Stated(PartId<RuleRef.Invariant> part, PatternMeaning accepts) {}
+    private record Stated(PartId<RuleRef.Invariant> part,
+                          StringPredicates.StatedPattern accepts) {}
 
     /** Whether a rule counts the characters, which leaves out every string of another length and
      *  is a thing to be met with the patterns like any other. */
@@ -2500,7 +2511,7 @@ public final class Partitions {
         StringOfferShortfall shortfall = stated.unread();
         Language all = null;
         for (Stated each : stated.read()) {
-            switch (revision.settled(new PatternForAWitness(PatternPlan.of(each.accepts())))) {
+            switch (revision.settled(new PatternForAWitness(each.accepts()))) {
                 // The rule whose machine this is, so that what could not build it names the rule
                 // rather than the position. Whichever limit it was: the allowance it ran past was
                 // that pattern's own.
@@ -2528,7 +2539,7 @@ public final class Partitions {
             }
         }
         return all == null ? new CandidateStrings(null, shortfall)
-                : withinTheCount(all, characters, meter, revision, shortfall);
+                : withinTheCount(all, characters, meter, shortfall);
     }
 
     /**
@@ -2543,11 +2554,15 @@ public final class Partitions {
      * <p>The two ways of coming back with nothing are not one answer. A count that leaves no string
      * is what the rules say, and a narrowing this could not afford is what this compiler did — so
      * the second is carried and the first is the ordinary absence of anything to paste.
+     *
+     * <p>The question's own work, paid out of {@code meter}. The strings so many characters long
+     * are a machine this composes on the way to a value and no rule an author wrote, so it is not
+     * a pattern's producer that builds it; and the question it is built for is itself worked out
+     * once for the revision, so it is built once for every asking of that question.
      */
     private static CandidateStrings withinTheCount(Language strings,
                                                    DeclaredBounds.CountRange characters,
-                                                   Meter meter, RevisionKnowledge revision,
-                                                   StringOfferShortfall shortfall) {
+                                                   Meter meter, StringOfferShortfall shortfall) {
         if (characters.empty()) {
             // No count at all, so no string of the position holds one. An answer about the rules
             // and not a shortfall of this compiler's, which is why nothing is added beside it.
@@ -2556,28 +2571,16 @@ public final class Partitions {
         if (!countsTheCharacters(characters)) {
             return new CandidateStrings(strings, shortfall);  // every count, nothing to take away
         }
-        // The count as the machine of the strings that many characters long, borrowed like a
-        // rule's: what it is is settled by the count, whatever else the question met it with.
-        PatternPlan count = PatternPlan.of(PatternMeaning.ofAnySymbols(characters.least(),
+        Language counted = PatternPlan.of(PatternMeaning.ofAnySymbols(characters.least(),
                 characters.most() == Integer.MAX_VALUE
-                        ? PatternMeaning.Repeated.NO_CEILING : characters.most()));
-        return switch (revision.settled(new PatternForAWitness(count))) {
-            // What the count leaves together with the strings, which is nobody's one rule.
-            case PatternForAWitness.Made.NotBuilt(Meter.Stopped stopped) ->
-                    new CandidateStrings(null, shortfall.and(StringOfferShortfall.of(
-                            StringOfferShortfall.NotOffered.patternNotBuilt(
-                                    new StringOfferShortfall.Subject.WhatTheyLeaveTogether(),
-                                    stopped))));
-            case PatternForAWitness.Made.Built(Language counted, var _) -> {
-                Language within = strings.and(counted, meter);
-                yield within == null
-                        ? new CandidateStrings(null, shortfall.and(StringOfferShortfall.of(
-                                StringOfferShortfall.NotOffered.whileMaking(
-                                        new StringOfferShortfall.Subject.WhatTheyLeaveTogether(),
-                                        meter))))
-                        : new CandidateStrings(within, shortfall);
-            }
-        };
+                        ? PatternMeaning.Repeated.NO_CEILING : characters.most())).compile(meter);
+        Language within = counted == null ? null : strings.and(counted, meter);
+        // The count met with the strings, which is again nobody's one rule.
+        return within == null
+                ? new CandidateStrings(null, shortfall.and(StringOfferShortfall.of(
+                        StringOfferShortfall.NotOffered.whileMaking(
+                                new StringOfferShortfall.Subject.WhatTheyLeaveTogether(), meter))))
+                : new CandidateStrings(within, shortfall);
     }
 
     /** A count the position holds, or null where it holds none. The ends decide it, so nothing here
