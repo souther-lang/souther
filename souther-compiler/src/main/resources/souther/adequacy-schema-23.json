@@ -259,7 +259,7 @@
       }
     },
     "ruleStoppedReadingReason": {
-      "description": "A rule this compiler read and could not use, which is what both surfaces below share. Such a rule is at a position — so a position's reading is short of it — and it is a shortfall about the rule, so a question the rule raised stands on it. Written once because the two surfaces really do share it, and not because their vocabularies happen to look alike. `exact_values_too_costly` is what a reader is told where working the values out was more than this compiler does. It is one published word over two facts this compiler tells apart: one rule names a set of strings whose machine it will not make, which is about that rule; or every rule was made into the set it names and what those come to between them was not, which is about the answer and names no rule. Sharing a word is not sharing a capability — what a document may say about the second is not what it may say about the first — so a reader is told what stopped and never which rule to go and change, and which of the two it was stays this compiler's question. Schema 22 had `pattern_too_deeply_nested`, for a pattern nested more deeply than the reading goes; a document of that version may carry that word, nothing writes it now, and such a pattern is refused where it is checked, so no document is written of a program holding one. `line_at_a_number_no_ratio_holds` is a line with no place, and `line_side_not_worked_out` is a line that is placed with a value beside it this compiler could not write out — two facts that call for looking at different things in the rule. `unread_alternative_of_a_choice` is a rule offering an alternative this compiler does not read, where what the rule leaves at the position is what its alternatives leave together — its own word beside `unsupported_syntax` because the rule written at the position was read and places what it places, so an author told that one would rewrite a clause that is not the difficulty and the branch beside it would stand as unread as it was. `rules_not_read_at_all` is a clause of the rule the checker has no form for, so nothing read it — the word a position's reading writes for rules it never arrived at, a clause with no form among them — and not `unsupported_syntax`, which says the rule was read and sends an author after the form it is written in.",
+      "description": "A rule this compiler read and could not use, which is what both surfaces below share. Such a rule is at a position — so a position's reading is short of it — and it is a shortfall about the rule, so a question the rule raised stands on it. Written once because the two surfaces really do share it, and not because their vocabularies happen to look alike. `exact_values_too_costly` is what a reader is told where working the values out was more than this compiler does. It is one published word over two facts this compiler tells apart: one rule names a set of strings whose machine it will not make, which is about that rule; or every rule was made into the set it names and what those come to between them was not, which is about the answer and names no rule. Sharing a word is not sharing a capability — what a document may say about the second is not what it may say about the first — so a reader is told what stopped and never which rule to go and change, and which of the two it was stays this compiler's question. Schema 22 had `pattern_too_deeply_nested`, for a pattern nested more deeply than the reading goes; a document of that version may carry that word, nothing writes it now, and such a pattern is refused where it is checked, so no document is written of a program holding one. `line_at_a_number_no_ratio_holds` is a line with no place, and `line_side_not_worked_out` is a line that is placed with a value beside it this compiler could not write out — two facts that call for looking at different things in the rule. `unread_alternative_of_a_choice` is a rule offering an alternative this compiler does not read, where what the rule leaves at the position is what its alternatives leave together — its own word beside `unsupported_syntax` because the rule written at the position was read and places what it places, so an author told that one would rewrite a clause that is not the difficulty and the branch beside it would stand as unread as it was.",
       "enum": [
         "unsupported_syntax",
         "unsupported_domain",
@@ -270,8 +270,20 @@
         "rule_about_a_derived_value",
         "rule_about_an_element_of_several_sequences",
         "unread_alternative_of_a_choice",
-        "exact_values_too_costly",
-        "rules_not_read_at_all"
+        "exact_values_too_costly"
+      ]
+    },
+    "ruleOfferShortfallReason": {
+      "description": "What stopped the reading of a rule an offer of values got nothing from. Every word a reading that gave up on a rule writes, and `rules_not_read_at_all` beside them. That word keeps the meaning it has under `notRead`: the reading of the position never arrived at the rules written about it. It is written here for a clause nothing could type, where it names a rule because what an offer holds is the parts an author wrote, and it knows which part gave it nothing without any reading having got that far. A rule named beside it is not a rule that was read. The same clause is said in the same word under `notRead` at the position it stands at, so the two are one piece of news.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ruleStoppedReadingReason"
+        },
+        {
+          "enum": [
+            "rules_not_read_at_all"
+          ]
+        }
       ]
     },
     "answerRealizationStoppedReason": {
@@ -3681,8 +3693,8 @@
                       "description": "Which rule the entry is about, present exactly with `rule`."
                     },
                     "unread": {
-                      "$ref": "#/$defs/notReadReason",
-                      "description": "What stopped the reading of it, where what gave nothing was a reading that stopped. The vocabulary `notRead` writes, so a rule reported unread here and the same rule reported unread under the position are one piece of news rather than two. Present exactly where `limit` is absent."
+                      "$ref": "#/$defs/ruleOfferShortfallReason",
+                      "description": "What stopped the reading of it, where what gave nothing was a reading that stopped. Words `notRead` writes, so a rule reported unread here and the same rule reported unread under the position are one piece of news rather than two. Present exactly where `limit` is absent."
                     },
                     "limit": {
                       "description": "Which limit refused it, where a limit did. `a_machine_larger_than_one_may_be` is a pattern that can be written smaller; `what_composing_a_value_may_spend` is an allowance already spent, which the same pattern asked for first would not have met. Present exactly where `unread` is absent, and no reading stopped: the rule was read from end to end.",

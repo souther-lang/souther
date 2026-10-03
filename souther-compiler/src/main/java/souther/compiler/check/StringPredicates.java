@@ -2,13 +2,13 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
+import souther.compiler.inputs.BlockReason;
 import net.unit8.notation199x.pattern.PatternMeaning;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -262,11 +262,11 @@ public enum StringPredicates {
     public static StatedOn statedOn(TypeSymbol.AtModule named, RuleReadingSource source) {
         Clauses clauses = new Clauses(source);
         Map<PartId<RuleRef.Invariant>, Reading> read = new HashMap<>();
-        Set<Clause.Ref> notTyped = new HashSet<>();
+        Map<Clause.Ref, BlockReason.RuleOfferShortfallReason> notTyped = new HashMap<>();
         for (ClauseMeaning each : clauses.declared(named)) {
             Clauses.AsStated stated = clauses.stated(each);
             if (stated == null) {
-                notTyped.add(each.ref());
+                notTyped.put(each.ref(), WHY_A_CLAUSE_NOTHING_TYPED_WAS_NOT_READ);
                 continue;
             }
             for (Clauses.StatedPart part : clauses.partsOf(stated)) {
@@ -280,17 +280,31 @@ public enum StringPredicates {
     }
 
     /**
+     * Why a clause nothing typed went unread, in the words the reading of a position has for it.
+     *
+     * <p>That reading files such a clause as a rule it missed ({@link RulesMissed.ClauseNotTyped}),
+     * and what it writes for the position follows from that. Worked out here by the same two steps
+     * rather than named, so a rule an offer got nothing from and the position it stands at are said
+     * in one word for as long as that reading says it.
+     */
+    private static final BlockReason.RuleOfferShortfallReason
+            WHY_A_CLAUSE_NOTHING_TYPED_WAS_NOT_READ = BlockReason.ofARuleAnOfferGotNothingFrom(
+                    FieldDomains.whyNothingReached(Set.of(new RulesMissed.ClauseNotTyped())));
+
+    /**
      * What the rules governing one declaration say about strings, part by part.
      *
      * @param read     what each part that is a predicate of this kind came to, by the part
-     * @param notTyped the clauses the checker has no form for. What their parts say about strings
-     *                 is not known, which is not the same as their saying nothing
+     * @param notTyped the clauses the checker has no form for, each with why it went unread. What
+     *                 their parts say about strings is not known, which is not the same as their
+     *                 saying nothing
      */
-    public record StatedOn(Map<PartId<RuleRef.Invariant>, Reading> read, Set<Clause.Ref> notTyped) {
+    public record StatedOn(Map<PartId<RuleRef.Invariant>, Reading> read,
+                           Map<Clause.Ref, BlockReason.RuleOfferShortfallReason> notTyped) {
 
         public StatedOn {
             read = Map.copyOf(read);
-            notTyped = Set.copyOf(notTyped);
+            notTyped = Map.copyOf(notTyped);
         }
 
         /** What {@code part} came to, or null where it is no predicate of this kind. */
@@ -298,9 +312,11 @@ public enum StringPredicates {
             return read.get(part);
         }
 
-        /** Whether the checker typed the clause {@code part} is a part of. */
-        public boolean typed(PartId<RuleRef.Invariant> part) {
-            return !notTyped.contains(part.rule().clause());
+        /**
+         * Why the clause {@code part} is a part of went unread, or null where the checker typed it.
+         */
+        public BlockReason.RuleOfferShortfallReason whyNotTyped(PartId<RuleRef.Invariant> part) {
+            return notTyped.get(part.rule().clause());
         }
     }
 

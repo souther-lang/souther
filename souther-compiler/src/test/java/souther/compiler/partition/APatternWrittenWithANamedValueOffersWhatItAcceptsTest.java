@@ -80,20 +80,24 @@ class APatternWrittenWithANamedValueOffersWhatItAcceptsTest {
      *
      * <p>The value is read off what the checker typed, so a clause it could not type offers no
      * value — and a search that had every other value refused has not shown the model refuses them.
-     * Here the outer name's rule hands the inner name's value to a call that takes a string, which
-     * the checker refuses.
+     * Here the rule calls a recursive helper, which the reading of a declaration's clauses leaves
+     * standing and has no signature for; the model itself compiles.
      */
     @Test
     void aRuleTheCheckerHasNoFormForIsSaidToBeNotRead() {
         RuleReadingSource rules = RuleReadings.ofSource("""
                 module demo
 
-                import String ( endsWith )
+                data Empty
+                data More = { next: Chain }
+                data Chain = Empty | More
 
-                data B = String
+                let reaches (c: Chain, s: String): Bool = match c with
+                    | More as m -> reaches(m.next, s)
+                    | Empty -> String.length(s) == 7
 
-                data A = B
-                    invariant ended = endsWith("Z", value)
+                data A = String
+                    invariant ended = reaches(Empty, value)
                 """);
         TypeSymbol at = TypeSymbols.declared(new TypeKey(rules.symbols().module(), "A"));
 
@@ -105,15 +109,13 @@ class APatternWrittenWithANamedValueOffersWhatItAcceptsTest {
                         ? rule.part().rule().clause().name().map(ClauseName::value).orElse("?")
                         : each.of().toString())
                 .toList(), "the one rule about the strings is named as not read");
-        // And not read because nothing could type it, which is not a form nothing takes apart: an
-        // author told the second rewrites a rule whose form was never the matter.
-        assertEquals(List.of(new StringOfferShortfall.Why.NotRead(new BlockReason.ClauseNotTyped())),
+        // And not read because no reading reached it, which is not a form nothing takes apart: an
+        // author told the second rewrites a rule whose form was never the matter. Said in the
+        // reason the reading of the position gives the same clause.
+        assertEquals(List.of(new StringOfferShortfall.Why.NotRead(
+                        new BlockReason.ValueRulesNotReached())),
                 shortfall.these().stream().map(StringOfferShortfall.NotOffered::why).toList(),
-                "said as a clause nothing could type");
-        assertEquals(UndividedPosition.Reason.RULES_NOT_READ_AT_ALL,
-                ReportedReason.of(new BlockReason.ClauseNotTyped()),
-                "and published as a rule not read at all, which is the hole a clause with no form"
-                        + " leaves");
+                "said as rules no reading reached");
     }
 
     private static FillResult filled(String source) {

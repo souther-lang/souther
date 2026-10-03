@@ -153,6 +153,24 @@ public sealed interface BlockReason {
     }
 
     /**
+     * A stop that may be said of a rule an offer of values got nothing from.
+     *
+     * <p>Not a reason about the rule. What an offer holds is the parts an author wrote, so it can
+     * name the rule a stop left it without whether or not any reading got as far as that rule — and
+     * that is what this says may be done. A rule a reading gave up on is one of these. So is a
+     * position whose rules the reading never arrived at, where the walk stopping is not a figure:
+     * nothing reached the rule, and the offer still knows which rule it was.
+     *
+     * <p>Not every stop at a position. One at the depth a run could afford is said of the position
+     * and of no rule, since a run allowed further reads the rule; and a type nothing could work
+     * out, a path back to a declaration already read and a place the walk does not enter are not
+     * met at one rule of the position rather than another. Held as {@link ReadingStopReason}, any of
+     * those could be filed under a rule that nothing was wrong with.
+     */
+    sealed interface RuleOfferShortfallReason extends ReadingStopReason {
+    }
+
+    /**
      * A rule a reading stopped on, which is the half of {@link RuleWithoutLineReason} that says
      * this compiler fell short.
      *
@@ -174,7 +192,8 @@ public sealed interface BlockReason {
      * asking about a stop may be handed, and the only member of {@link QuestionStandingReason}
      * that names a rule.
      */
-    sealed interface RuleReadingStopped extends StoppedWithoutALine, QuestionStandingReason {
+    sealed interface RuleReadingStopped extends StoppedWithoutALine, QuestionStandingReason,
+            RuleOfferShortfallReason {
 
         /**
          * These in a steady order, which is one two of them are equal in only where they are equal.
@@ -216,7 +235,6 @@ public sealed interface BlockReason {
                 case CasePairingNotDetermined _ -> 3;
                 case RuleAboutADerivedValue _ -> 4;
                 case UnreadValueRule _ -> 5;
-                case ClauseNotTyped _ -> 6;
                 case PatternTooCostly _ -> 7;
                 case OrderedExtentTooCostly _ -> 8;
                 case RuleAboutAnElementOfSeveralSequences _ -> 9;
@@ -260,7 +278,7 @@ public sealed interface BlockReason {
                 // the position holds whatever a value taking the unread branch may hold.
                 case PatternTooCostly _, OrderedExtentTooCostly _,
                      UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                     RuleAboutAnElementOfSeveralSequences _, UnreadValueRule _, ClauseNotTyped _,
+                     RuleAboutAnElementOfSeveralSequences _, UnreadValueRule _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
                      ValueRuleRelatingTwoPositions _, CasePairingNotDetermined _ -> true;
@@ -278,15 +296,14 @@ public sealed interface BlockReason {
                 // into, and the machines that say where the strings it admits stop. A run allowed
                 // more of either need not stop at the same rule.
                 case PatternTooCostly _, OrderedExtentTooCostly _ -> RunSensitivity.MAY_CHANGE;
-                // And the rest, where nothing was compared against anything. A form nothing takes
+                // And eight where nothing was compared against anything. A form nothing takes
                 // apart, values no line can be drawn on, a rule about a value made from this one, a
                 // rule about an element of one of several sequences, a relation between two
                 // positions and a pairing nothing worked out are all met again by a run allowed
                 // more of everything. So is an end a choice left open: what the reading of ends
-                // stops on is a form it does not enter, and there is no figure it stopped at. And
-                // so is a clause nothing could type, which no allowance makes into one.
+                // stops on is a form it does not enter, and there is no figure it stopped at.
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                     RuleAboutAnElementOfSeveralSequences _, UnreadValueRule _, ClauseNotTyped _,
+                     RuleAboutAnElementOfSeveralSequences _, UnreadValueRule _,
                      ValueRuleRelatingTwoPositions _, EndLeftOpenByAChoice _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
@@ -418,7 +435,7 @@ public sealed interface BlockReason {
      */
     static ReadingStopReason of(souther.compiler.values.UnreadReason why) {
         return switch (why) {
-            case NOT_REACHED -> new ValueRulesNotReached();
+            case NOT_REACHED -> ofARuleAnOfferGotNothingFrom(why);
             case NOT_REACHED_PAST_DEPTH_LIMIT -> new ValueRulesNotReachedPastDepthLimit();
             // And every other way this reading is short by the one below, since all of them leave a
             // question of a rule standing. Written out rather than defaulted to: a reason added to
@@ -473,6 +490,30 @@ public sealed interface BlockReason {
             case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY,
                  NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT ->
                     throw new IllegalStateException("refused above: " + why);
+        };
+    }
+
+    /**
+     * The same, for a caller holding the rule an offer of values got nothing from.
+     *
+     * <p>A rule a reading gave up on is filed as that rule, and a rule nothing reached is filed as
+     * the reading of the position files it — so the rule an offer names is said in the word the
+     * position's own account has for the same clause, and the two never come apart.
+     * {@link #of(UnreadReason)} asks this for a rule nothing reached, which keeps that one
+     * classification here.
+     *
+     * <p>Refused for the rest. A depth a run could afford is no fact about the rule it stopped
+     * above, and an answer nothing built names no rule at all.
+     */
+    static RuleOfferShortfallReason ofARuleAnOfferGotNothingFrom(UnreadReason why) {
+        return switch (why) {
+            case NOT_REACHED -> new ValueRulesNotReached();
+            case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY ->
+                    ofARuleTheValueReadingLeft(why);
+            case NOT_REACHED_PAST_DEPTH_LIMIT, EXACT_VALUES_TOO_COSTLY ->
+                    throw new IllegalArgumentException(
+                            "a reason about " + why.about() + " is said of no rule an offer holds: "
+                                    + why);
         };
     }
 
@@ -614,21 +655,6 @@ public sealed interface BlockReason {
      * values that follows a rule into a shape it does not enter today.
      */
     record UnreadValueRule() implements RuleReadingStopped {}
-
-    /**
-     * A clause of the rule is one the checker has no form for, so nothing read it at all.
-     *
-     * <p>Its own case beside {@link UnreadValueRule}, and the difference is what an author does
-     * about it. That one says the rule was read and is written in a form nothing here takes apart,
-     * which sends them to write it another way; here no reading ever saw which position the clause
-     * was about, because what was written could not be made into anything to read — what they can
-     * act on is the clause failing to type. Said as the other word, an author rewrites a rule whose
-     * form was never the matter.
-     *
-     * <p>The rule's reading and not the position's walk: the walk arrived, and the clause it found
-     * there is the one with no form. A wider run meets it again.
-     */
-    record ClauseNotTyped() implements RuleReadingStopped {}
 
     /**
      * A choice in the rule offers an alternative this compiler does not read, and where the values
@@ -813,8 +839,13 @@ public sealed interface BlockReason {
      *
      * <p>And none of them is a figure this compiler stopped at, which is what
      * {@link ValueRulesNotReachedPastDepthLimit} is beside this for.
+     *
+     * <p>A {@link RuleOfferShortfallReason} as well. A clause nothing could type is one an offer
+     * holds as a part the author wrote, so the offer can say which rule gave it nothing; it says so
+     * in this reason, which is the one the reading of the position writes for that clause, and not
+     * in one of its own.
      */
-    record ValueRulesNotReached() implements AboutThePosition {}
+    record ValueRulesNotReached() implements AboutThePosition, RuleOfferShortfallReason {}
 
     /**
      * The same, where what stopped the reading was how far down it could afford to read.

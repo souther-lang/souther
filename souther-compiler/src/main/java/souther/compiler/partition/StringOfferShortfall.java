@@ -26,8 +26,8 @@ import java.util.List;
  * <p><b>And what stopped it, in the vocabulary that already tells those apart.</b> A rule written
  * in a construct nothing here reads and one written more deeply than this reads are different work
  * for an author, and a run allowed more reaches the second and not the first
- * ({@link BlockReason.RuleReadingStopped}). Flattened to "could not be read", a carrier put here to
- * stop two states sharing a word would have gone on to share one of its own.
+ * ({@link BlockReason.RuleOfferShortfallReason}). Flattened to "could not be read", a carrier put
+ * here to stop two states sharing a word would have gone on to share one of its own.
  */
 public record StringOfferShortfall(List<NotOffered> these) {
 
@@ -103,8 +103,7 @@ public record StringOfferShortfall(List<NotOffered> these) {
 
         /** One about a rule this compiler did not read, which is that rule's own answer. */
         static NotOffered ofARuleNotRead(PartId<RuleRef.Invariant> part,
-                                         souther.compiler.inputs.BlockReason.RuleReadingStopped
-                                                 why) {
+                                         BlockReason.RuleOfferShortfallReason why) {
             return new NotOffered(new Subject.ARule(part), new Why.NotRead(why));
         }
     }
@@ -152,8 +151,12 @@ public record StringOfferShortfall(List<NotOffered> these) {
          * <p>The reading's own answer carried over rather than reworded. Which of them it was
          * decides what an author does and whether a wider run reaches it, and a second vocabulary
          * for the same reasons is one that goes stale the first time the first one gains a word.
+         *
+         * <p>Whatever may be said of a rule an offer holds, which is wider than a rule a reading
+         * gave up on: a clause nothing typed was never reached by any reading, and the offer still
+         * names it, in the reason the position's account gives for it.
          */
-        record NotRead(BlockReason.RuleReadingStopped why) implements Why {
+        record NotRead(BlockReason.RuleOfferShortfallReason why) implements Why {
 
             public NotRead {
                 if (why == null) {

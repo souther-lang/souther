@@ -1367,6 +1367,7 @@ class EverySchemaWordIsAccountedForTest {
         // `WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnce`. What decides them is which reasons
         // reach the surface, and a list of words here would say the same thing without saying why.
         held.add("/$defs/ruleStoppedReadingReason");
+        held.add("/$defs/ruleOfferShortfallReason/anyOf/1");
         held.add("/$defs/answerRealizationStoppedReason");
         held.add("/$defs/notReadReason/anyOf/1");
         held.add("/$defs/behavior/properties/implementation");
