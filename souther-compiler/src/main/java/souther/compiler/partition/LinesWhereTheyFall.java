@@ -26,7 +26,9 @@ import java.util.List;
  * at a position. Where the location is already the position, nothing happens here. Where it is not —
  * a field every case of a sum spreads is readable on the sum and a row writes it under one case —
  * one line comes out as one line per case, on the same number and from the same rule, wherever this
- * reading got as far as those positions.
+ * reading got as far as those positions — and wherever the quantity there runs as far as the line.
+ * A case can hold its share of the field to less than the field allows, and a line the field reaches
+ * is then one that case's quantity never does.
  *
  * <p><b>What comes out.</b> Every name a rule is written at is either left where the model wrote it
  * or filed at one or more positions. An end put on a number and a value singled out are about one
@@ -49,17 +51,21 @@ import java.util.List;
 public final class LinesWhereTheyFall {
 
     /**
-     * The measurements, each where the name it is written at was filed or left as written, and the
-     * lines this had nowhere to put.
+     * The measurements, each where the name it is written at was filed or left as written, and what
+     * the positions this drew no line at are left with.
      *
      * <p>A line that could not be placed is not among the first: passed on at the name it was
      * written at, it reaches the generator, which answers that it could not build a value there — a
      * place nobody meant and a reason nobody established. So it comes back as a finding naming the
      * rule, and a reader is told what actually happened to it.
+     *
+     * <p>Nor is a line at a position whose quantity stops short of it. The name it was written at runs
+     * as far as the line, or the reading would have said the rule draws nothing there; a position it
+     * was filed at is held by a case's own rules to less, and it is said so at that position.
      */
     public record Filed(List<RuleEvidence> evidence, List<ClassingBlocker> blocked,
                         List<LineDrawn> between,
-                        RulesWithNoLine notPlaced) {
+                        RulesWithNoLine noLine) {
 
         public Filed {
             evidence = List.copyOf(evidence);
@@ -79,26 +85,48 @@ public final class LinesWhereTheyFall {
         }
     }
 
-    /** Every measurement where its name was filed, and the lines this had nowhere to put. */
-    public static Filed of(InputReading read, List<RuleEvidence> evidence,
+    /**
+     * Every measurement where its name was filed, and the lines this had nowhere to put.
+     *
+     * @param lines what the comparisons state about a position, each with the line it was read off
+     * @param sets  what the rules state as sets of a position's values, which are read off no line
+     */
+    public static Filed of(InputReading read, List<LineEvidence> lines, List<RuleEvidence> sets,
                            List<ClassingBlocker> blocked, List<LineDrawn> between) {
         InputDomain inputs = read.domain();
         Symbols symbols = read.symbols();
         List<RuleEvidence> out = new ArrayList<>();
         List<LineDrawn> outBetween = new ArrayList<>();
-        RulesWithNoLine.Gathered notPlaced = new RulesWithNoLine.Gathered();
+        RulesWithNoLine.Gathered noLine = new RulesWithNoLine.Gathered();
         // One pass in the order the rules were read, so what comes out is in that order too. A pass
         // per kind of thing a rule can say puts every range before every equality, whatever order a
         // body wrote them in, and every reader downstream takes the numbers in that order.
-        for (RuleEvidence each : evidence) {
-            // Every number the name stands at, filed together. Filing is one rule to as many
-            // positions as its name reaches, so a piece put out one part at a time can leave the
-            // others behind — and the account that runs after this begins with what comes out of
-            // here, so it has nothing to say those others were ever expected. There is no partial
-            // filing to write: what a name stands at is one list and this maps it.
-            List<NumericTerm> destinations =
-                    standingOf(inputs, each.at(), read.rules().inners(), symbols, each.by()).all();
-            destinations.forEach(at -> out.add(measuredAt(each, at)));
+        for (LineEvidence each : lines) {
+            RuleEvidence stated = each.evidence();
+            switch (standingOf(inputs, stated.at(), read.rules().inners(), symbols, stated.by())) {
+                // Where the model wrote it, which is the quantity the comparison was read on. Whether
+                // the line reaches it was asked there, and a line that does not never got this far.
+                case WhereTheNameStands.AsWritten _ -> out.add(stated);
+                // Every number the name stands at, filed together. Filing is one rule to as many
+                // positions as its name reaches, so a piece put out one part at a time can leave the
+                // others behind — and the account that runs after this begins with what comes out
+                // of here, so it has nothing to say those others were ever expected. There is no
+                // partial filing to write: what a name stands at is one list and this maps it.
+                case WhereTheNameStands.FiledAt filed -> filed.all().forEach(to -> {
+                    Cutting moved = lineAt(each.line(), stated.at(), to, read.quantities());
+                    if (reaches(moved, each.by())) {
+                        out.add(measuredAt(stated, to));
+                    } else {
+                        outside(to, each.by(), noLine);
+                    }
+                });
+            }
+        }
+        for (RuleEvidence each : sets) {
+            // A set told from the rest is held to what a position takes where its classes are
+            // composed ({@link Classing}), so there is nothing here to ask before it moves.
+            standingOf(inputs, each.at(), read.rules().inners(), symbols, each.by()).all()
+                    .forEach(at -> out.add(measuredAt(each, at)));
         }
         // And the rules that would have divided a position and did not, through the same authority
         // and in the same act. What a name reaches is one answer, and a blocker filed by anything
@@ -122,9 +150,34 @@ public final class LinesWhereTheyFall {
             });
         }
         for (LineDrawn each : between) {
-            place(read, each, outBetween, notPlaced);
+            place(read, each, outBetween, noLine);
         }
-        return new Filed(out, outBlocked, outBetween, notPlaced.found());
+        return new Filed(out, outBlocked, outBetween, noLine.found());
+    }
+
+    /**
+     * Whether the quantity a line was moved to runs as far as it — the question the reading asked
+     * of the quantity the rule was written about, asked of this one.
+     */
+    private static boolean reaches(Cutting moved, LineOrigin by) {
+        return moved.reached(moved::seam, Border.drawnByAnInvariant(by));
+    }
+
+    /**
+     * What the position the line was moved to, and does not reach, is left with.
+     *
+     * <p>At that position and nowhere else. What failed is the filing of one name at one case, so
+     * the other names of the line — a position it is drawn against, which the line reaches under
+     * every other case — are told nothing: the rule draws its line there, at the cases that reach
+     * it. In the words a quantity the line never reaches is left with
+     * ({@link ComparisonAssessment.OutsideTheDomain#leaves}), since that is what this position is.
+     *
+     * <p>Nothing is passed on from here either. A piece of evidence passed on is one the stage after
+     * this owes an answer about, and there is no border here for it to answer with.
+     */
+    private static void outside(NumericTerm at, LineOrigin by, RulesWithNoLine.Gathered noLine) {
+        noLine.add(by.cited(), FilingCoordinate.of(at),
+                ComparisonAssessment.OutsideTheDomain.leaves());
     }
 
 
@@ -181,7 +234,7 @@ public final class LinesWhereTheyFall {
      * name left where it was written would be the same answer.
      */
     private static void place(InputReading read, LineDrawn line,
-                              List<LineDrawn> out, RulesWithNoLine.Gathered notPlaced) {
+                              List<LineDrawn> out, RulesWithNoLine.Gathered noLine) {
         InputDomain inputs = read.domain();
         Quantities quantities = read.quantities();
         Symbols symbols = read.symbols();
@@ -199,7 +252,7 @@ public final class LinesWhereTheyFall {
             // nobody meant. What an author is owed is the pairing, and it is said here.
             // The line is what has nowhere to go: the rule was read, an end came out of it, and
             // which of the positions it runs between is what nothing worked out.
-            notPlaced.boundaryUndetermined(line.by().cited(),
+            noLine.boundaryUndetermined(line.by().cited(),
                     new FilingCoordinate.OfTerm(filed.getFirst().name()),
                     new BlockReason.CasePairingNotDetermined());
             return;
@@ -209,12 +262,16 @@ public final class LinesWhereTheyFall {
             return;
         }
         FiledName moves = filed.getFirst();
-        List<LineDrawn> made = new ArrayList<>();
-        made.add(lineAt(line, moves.name(), moves.at().first(), quantities));
-        for (NumericTerm to : moves.at().rest()) {
-            made.add(lineAt(line, moves.name(), to, quantities));
+        // At each position, and asked at each whether the quantity there reaches the line: a case's
+        // own rules can stop it short of a line the name it was written at runs past.
+        for (NumericTerm to : moves.at().all()) {
+            Cutting moved = lineAt(line.cuts(), moves.name(), to, quantities);
+            if (reaches(moved, line.by())) {
+                out.add(new LineDrawn(moved, line.by()));
+            } else {
+                outside(to, line.by(), noLine);
+            }
         }
-        out.addAll(made);
     }
 
     /**
@@ -225,15 +282,15 @@ public final class LinesWhereTheyFall {
      * at none, and a subset is this compiler contradicting itself rather than a line to place at
      * fewer places than the name was filed.
      */
-    private static LineDrawn lineAt(LineDrawn line, NumericTerm moves, NumericTerm to,
-                                    Quantities quantities) {
-        Cutting cut = line.cuts().movedTo(moves, to, quantities);
+    private static Cutting lineAt(Cutting line, NumericTerm moves, NumericTerm to,
+                                  Quantities quantities) {
+        Cutting cut = line.movedTo(moves, to, quantities);
         if (cut == null) {
             throw new IllegalStateException(
                     "`" + moves + "` was filed at " + to + " and the line on it cannot be taken "
                             + "there, though a name is filed at one field on one order");
         }
-        return new LineDrawn(cut, line.by());
+        return cut;
     }
 
     /** One of a line's names that was filed, and where. */

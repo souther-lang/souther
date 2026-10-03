@@ -1018,9 +1018,14 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                     return new PointAnswer.NotWorkedOut(unheld.why());
                 }
                 case ExactAnswer.Held<Boolean> held -> {
-                    // Admitted already: a threshold the rules refuse is a line this never made.
+                    // Asked of the range like every other point. A line is kept where the side it
+                    // is satisfied on holds a value ({@link #reaches}), and that says nothing of the
+                    // number the rule wrote: `> 10` over values from eleven up parts them where
+                    // `>= 11` does, at the end of the range, and wrote a number the range refuses.
                     if (held.value()) {
-                        return new PointAnswer.AtLine(new Criterion.AtTheLevel(cut));
+                        return admitted(reach, cut)
+                                ? new PointAnswer.AtLine(new Criterion.AtTheLevel(cut))
+                                : new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
                     }
                 }
             }
@@ -1033,15 +1038,21 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         if (at.isEmpty()) {
             return new PointAnswer.NotOwed(NotOwedReason.THE_CARRIER_NAMES_NO_NEIGHBOUR);
         }
-        // Whether a row may be written at it, which is the range's own reading and takes its ends
-        // as they are written — unlike whether the line is inside the range at all ({@link
-        // #admits}). Asked of the number the level is: a quantity stepping by a third stands at one
-        // and no place is it, and what the range says about a number does not depend on which
-        // arithmetic it is asked in.
-        ExactRatio number = at.get().asANumber();
-        return (number == null ? reach.admits(at.get().asAPlace()) : reach.admits(number))
+        return admitted(reach, at.get())
                 ? new PointAnswer.AtLine(new Criterion.AtTheLevel(at.get()))
                 : new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT);
+    }
+
+    /**
+     * Whether a row may be written at {@code level}, which is the range's own reading and takes its
+     * ends as they are written — unlike whether the line is inside the range at all
+     * ({@link #admits}). Asked of the number the level is: a quantity stepping by a third stands at
+     * one and no place is it, and what the range says about a number does not depend on which
+     * arithmetic it is asked in.
+     */
+    private static boolean admitted(NumericDomain.Bounds reach, Level level) {
+        ExactRatio number = level.asANumber();
+        return number == null ? reach.admits(level.asAPlace()) : reach.admits(number);
     }
 
     /**
@@ -1234,7 +1245,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * they do not: both order the values either side of the number, and only one of the two has a
      * far side anything can stand on.
      */
-    private static boolean drawnByAnInvariant(LineOrigin origin) {
+    static boolean drawnByAnInvariant(LineOrigin origin) {
         return switch (origin) {
             case LineOrigin.InvariantOrigin _ -> true;
             case LineOrigin.NarrowedOrigin n -> drawnByAnInvariant(n.bound());

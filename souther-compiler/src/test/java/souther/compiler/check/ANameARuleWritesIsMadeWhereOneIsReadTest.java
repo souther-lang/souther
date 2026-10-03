@@ -77,7 +77,7 @@ class ANameARuleWritesIsMadeWhereOneIsReadTest {
                 "a position is turned into a name somewhere, or this is watching a name nothing"
                         + " calls");
         assertEquals(List.of("souther.compiler.inputs.PlacedRules",
-                        "souther.compiler.inputs.ReadQuantities",
+                        "souther.compiler.inputs.ReadQuantities$Roots",
                         "souther.compiler.inputs.RuleAddress",
                         "souther.compiler.partition.Generator"),
                 callersOf(souther.compiler.inputs.TermPath.class, "ruleKeyUnder"),

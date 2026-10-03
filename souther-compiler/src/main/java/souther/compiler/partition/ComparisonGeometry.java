@@ -20,7 +20,7 @@ import java.util.function.Function;
  * supplies. What each place this comparison names is left with, where no line was drawn, is
  * {@link ComparisonAssessment#whatEachPlaceIsLeftWith}'s answer and is not read again here.
  */
-record ComparisonGeometry(List<RuleEvidence> evidence, List<LineDrawn> between) {
+record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between) {
 
     private static final ComparisonGeometry NONE = new ComparisonGeometry(List.of(), List.of());
 
@@ -52,24 +52,25 @@ record ComparisonGeometry(List<RuleEvidence> evidence, List<LineDrawn> between) 
 
     private static ComparisonGeometry atAPosition(ComparisonAssessment.AtAPosition at,
                                                    LineOrigin origin) {
-        List<RuleEvidence> evidence = new ArrayList<>();
+        List<LineEvidence> evidence = new ArrayList<>();
         // The value the rule names, which is where its line falls and not the value beside it. A
         // rule that names no value of the position singles nothing out here — the position is
         // divided all the same, and what divides it is the line.
         switch (at.cutting().claim()) {
             case ComparisonClaim.Singled _ -> {
                 if (at.value() != null) {
-                    evidence.add(new RuleEvidence.Singles(
-                            new GuardThresholds.Guards.Singled(at.position(), at.value(), origin)));
+                    evidence.add(new LineEvidence(new RuleEvidence.Singles(
+                            new GuardThresholds.Guards.Singled(at.position(), at.value(), origin)),
+                            at.cutting()));
                 }
             }
             // The seam is one the assessment asked for and held: a line whose sides were not worked
             // out is assessed as unread and never reaches here as a line on a position.
-            case ComparisonClaim.Cut order -> evidence.add(new RuleEvidence.Divides(
+            case ComparisonClaim.Cut order -> evidence.add(new LineEvidence(new RuleEvidence.Divides(
                     new Threshold(at.position(),
                             at.cutting().seam().orFail("a line on a position was assessed"
                                     + " with the values beside it not worked out"),
-                            order.valueBelongs(), origin)));
+                            order.valueBelongs(), origin)), at.cutting()));
         }
         // And the line itself, where the position has no value beside it for a row to be owed at.
         List<LineDrawn> between = at.value() == null && at.drawsABorder()

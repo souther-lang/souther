@@ -172,7 +172,7 @@ final class Coverages {
         // the same rule.
         souther.compiler.partition.LinesWhereTheyFall.Filed filed =
                 souther.compiler.partition.LinesWhereTheyFall.of(read,
-                        both(both(clauses.evidence(), guards.evidence()), sets.statements()),
+                        both(clauses.evidence(), guards.evidence()), sets.statements(),
                         sets.blocked(),
                         both(declared, both(clauses.between(), guards.between())));
         return new Partitioned(Partitions.withEvidence(partitioning, quantities,
@@ -233,7 +233,7 @@ final class Coverages {
         // is about.
         sets.forks().forEach(each ->
                 each.filed().forEach((at, why) -> found.unclassified(each.cited(), at, why)));
-        return clauses.noLine().and(guards.noLine()).and(filed.notPlaced()).and(found.found());
+        return clauses.noLine().and(guards.noLine()).and(filed.noLine()).and(found.found());
     }
 
     /** The two producers' lines, in one list. */

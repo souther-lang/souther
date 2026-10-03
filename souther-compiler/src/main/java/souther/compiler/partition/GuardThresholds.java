@@ -84,7 +84,7 @@ public final class GuardThresholds {
      * {@code c} on the low side and are two different rules about it — so it is read where the
      * operator is still in hand, and which values arrive is asked of the reading of the whole body.
      */
-    public record Guards(List<RuleEvidence> evidence,
+    public record Guards(List<LineEvidence> evidence,
                          RulesWithNoLine noLine,
                          List<LineDrawn> between,
                          ReachingCuts reaching,
@@ -105,12 +105,12 @@ public final class GuardThresholds {
         /** The lines, read off what the walk said. Not a list of their own: the walk met these and
          *  the values it singled out in one order, and holding two lists loses it. */
         public List<Threshold> thresholds() {
-            return RuleEvidence.linesIn(evidence);
+            return RuleEvidence.linesIn(LineEvidence.statedIn(evidence));
         }
 
         /** The values singled out, likewise. */
         public List<Singled> singled() {
-            return RuleEvidence.pointsIn(evidence);
+            return RuleEvidence.pointsIn(LineEvidence.statedIn(evidence));
         }
 
         /**
@@ -171,7 +171,7 @@ public final class GuardThresholds {
         // every comparison here, which restricts nothing and is what an unread body looks like.
         arrives.requireNumbering(plan.identity());
         InputDomain inputs = read.domain();
-        List<RuleEvidence> found = new ArrayList<>();
+        List<LineEvidence> found = new ArrayList<>();
         RulesWithNoLine.Gathered withoutALine = new RulesWithNoLine.Gathered();
         List<LineDrawn> between = new ArrayList<>();
         // One reading of what the model states, and everything below is that reading asked
@@ -579,7 +579,7 @@ public final class GuardThresholds {
                                SourceConstructOrigin wrote, Citation where,
                                RuleReachNumbering reaches,
                                ComparisonAssessment read,
-                               List<RuleEvidence> out,
+                               List<LineEvidence> out,
                                List<LineDrawn> between,
                                RulesWithNoLine.Gathered withoutALine) {
         // Which question places this comparison, asked once here. The two readers below say the

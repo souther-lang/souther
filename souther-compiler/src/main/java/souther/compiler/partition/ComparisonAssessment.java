@@ -147,6 +147,18 @@ sealed interface ComparisonAssessment {
                 throw new IllegalArgumentException("a line outside the domain is still a line");
             }
         }
+
+        /**
+         * What a place whose quantity a line does not reach is left with.
+         *
+         * <p>Said here once, for the two that say it: this assessment, at every coordinate of the
+         * quantity it read, and the filing of a name, at the one position it moved the line to
+         * and found short of it. The second is a fact about that position and not about the
+         * quantity the line was moved onto, whose other coordinates the line reaches elsewhere.
+         */
+        static BlockReason.RuleWithoutLineReason leaves() {
+            return new BlockReason.ComparisonCuttingOutsideDomain();
+        }
     }
 
     /**
@@ -413,8 +425,7 @@ sealed interface ComparisonAssessment {
         // The line and not one of its points. A rule drawing where the quantity never reaches
         // divides the position into nothing, and a reader told that the rule went unread would go
         // looking for a limit of this compiler that is not there.
-        if (!Border.reaches(cutting.at(), () -> parted, cutting.claim(), drawnByAnInvariant,
-                cutting.within())) {
+        if (!cutting.reached(() -> parted, drawnByAnInvariant)) {
             return new OutsideTheDomain(cutting);
         }
         ExactAnswer<Places> places = places(cutting);
@@ -544,8 +555,7 @@ sealed interface ComparisonAssessment {
                     ? new BlockReason.ComparisonOverARun()
                     : new BlockReason.ComparisonBetweenPositions());
             case CutsNothing _ -> sameAtEachPlace(new BlockReason.ComparisonCuttingNothing());
-            case OutsideTheDomain _ ->
-                    sameAtEachPlace(new BlockReason.ComparisonCuttingOutsideDomain());
+            case OutsideTheDomain _ -> sameAtEachPlace(OutsideTheDomain.leaves());
             // Not the reason above: there the declarations never run as far as the line, and here
             // they do — what stops short of it is the values that arrive at the comparison, ruled
             // out by the guards on the way. An author reading the first would look at one rule for

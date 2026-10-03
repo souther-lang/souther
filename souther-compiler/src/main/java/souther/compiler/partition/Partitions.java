@@ -782,45 +782,35 @@ public final class Partitions {
                     partedOf(axis), narrowedOf(axis),
                     new BodyCutInspection.Evidence(), stated);
         }
-        // Filtered once, and both answers read the filtered list. A line outside what the
-        // position holds divides nothing, and it is not a boundary either: leaving it in the
-        // cuts while the intervals dropped it asks for a row at a value the record refuses,
-        // which is the thing being fixed here happening again one field over. The end the
-        // position stops short of is outside it as much as anything past it is.
+        // Every line handed here is one the quantity reaches, and nothing here asks again. Whether
+        // it does is {@link Cutting#reached}'s answer, given where the comparison is read and again
+        // at each position its name is filed at; a line it refuses never becomes evidence. Asked
+        // again here, the question would be read off where the rule wrote its number rather than
+        // off where the values part — and `> 10` over values from eleven up, which parts them at
+        // the end of what the position holds, would be dropped while `>= 11`, the same division,
+        // was kept. The intervals and the cuts below both read this one list, so a line at the end
+        // of the position is a cut and a border there, and an interval on its empty side is no
+        // class.
         List<Threshold> reachable = new ArrayList<>();
         for (RuleEvidence each : taken) {
             if (each instanceof RuleEvidence.BySet) {
                 continue;   // already answered for above, as a class the vocabularies will not hold
             }
-            if (!(each instanceof RuleEvidence.Divides(Threshold line))) {
-                // A value singled out beside an ordering. The model has drawn the further
-                // distinction itself, so the value is one more line among the ranges and it is
-                // merged with them below.
-                account.measured(each, id);
-                continue;
-            }
-            // Asked of the place the line falls at, which the position need not hold a value at.
-            // Read off the value instead, a line between two of the position's values is one the
-            // rules leave nothing at.
-            //
-            // No disposition, and that is the point: this is not a way evidence may leave this
-            // stage. The reader that produces it already refuses a line falling outside what the
-            // quantity it cuts ever holds and names the rule, against a type's own range and
-            // against the range the record it sits in leaves. So a line that gets past that reader
-            // and is dropped here is a line lost with nothing said, and the account below says so.
-            if (domain != null && !admits(domain, line.parts())) {
-                continue;
-            }
             account.measured(each, id);
-            reachable.add(line);
+            // A value singled out beside an ordering is one more line among the ranges, which the
+            // model drew itself, and it is merged with them below.
+            if (each instanceof RuleEvidence.Divides(Threshold line)) {
+                reachable.add(line);
+            }
         }
         // Through `excluding`, so that a class list replaced by the intervals a threshold cuts
         // keeps only the exclusions it still has classes for.
         //
-        // A rule read and left outside what the position holds divided nothing, and it is not
-        // a rule that went unread either: what it says was understood. So the answer there is
-        // that the rules were exhausted, which is what keeps `NoLine` meaning that a rule was
-        // written about the position rather than everything that came to nothing.
+        // A line at the end of what the position holds leaves values on one side only, so it
+        // divides the position into nothing, and it is not a rule that went unread either: what
+        // it says was understood. So the answer there is that the rules were exhausted, which is
+        // what keeps `NoLine` meaning that a rule was written about the position rather than
+        // everything that came to nothing.
         NumericDomain.Bounds within = domain;
         return made(out, at, behavior, term,
                 made.classesFor(axis, () -> Intervals.classesOf(
@@ -1245,12 +1235,6 @@ public final class Partitions {
                     _ -> new ArrayList<>()).addAll(axis.parted());
         }
         return out;
-    }
-
-    /** Whether the rules leave the quantity anything at the place a line falls. */
-    private static boolean admits(NumericDomain.Bounds within, Seam parts) {
-        return (within.min() == null || parts.at().compare(within.min().at()) <= 0)
-                && (within.max() == null || parts.at().compare(within.max().at()) >= 0);
     }
 
     private static List<Cut> merged(List<Cut> had, List<Threshold> thresholds, Carrier carrier) {
