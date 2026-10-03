@@ -10,6 +10,7 @@ import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.ValueSet;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -55,8 +56,10 @@ final class Crossing {
                             BlockReason.RuleReadingStopped stopped) {
         List<Case> kept = admits(constructibleWithin(declared, view, within, declarations),
                 admitted);
+        // Asked of a set, so that each declared distinction is looked for in one step and not along
+        // every one kept, which for a sum is as many as it has cases.
         List<Case> refused = new ArrayList<>(declared);
-        refused.removeAll(kept);
+        refused.removeAll(new HashSet<>(kept));
         BlockReason.ReadingStopReason why =
                 admitted.whyPartial() != null ? stopped(admitted.whyPartial()) : stopped;
         if (why != null) {
