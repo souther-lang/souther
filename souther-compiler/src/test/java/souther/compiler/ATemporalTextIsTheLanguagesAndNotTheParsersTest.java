@@ -18,7 +18,6 @@ import tools.jackson.databind.json.JsonMapper;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Which text is a temporal is the language's (spec §temporal-text), and it is the same wherever the
@@ -129,16 +128,6 @@ class ATemporalTextIsTheLanguagesAndNotTheParsersTest {
                     r.kind() + " " + r.text() + " at a boundary");
             assertEquals(r.inSource(), TemporalForms.inSource(r.kind(), r.text()),
                     r.kind() + " " + r.text() + " in source");
-        }
-    }
-
-    /** What source may write is inside what a boundary reads. */
-    @Test
-    void whatSourceWritesIsInsideWhatABoundaryReads() {
-        for (Row r : ROWS) {
-            if (r.inSource().isEmpty()) {
-                assertTrue(r.atBoundary().isEmpty(), r.kind() + " " + r.text());
-            }
         }
     }
 

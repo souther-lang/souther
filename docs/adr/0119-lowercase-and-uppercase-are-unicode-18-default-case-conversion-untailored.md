@@ -15,6 +15,8 @@ mapping that reads them, `Final_Sigma` included, are in
 for the mapped text within the length a `String` holds and canonicalize the answer to NFC, which
 stay Souther's. Taking a later Unicode version is still a change to the specification, made by
 moving to a release of 199x-notation that implements it, and is never taken by a dependency update.
+The witness cases the *Consequences* below name are lines of its `suite/case.txt`, which every
+implementation of it runs, and Souther holds no copy of them.
 
 ## Context
 
