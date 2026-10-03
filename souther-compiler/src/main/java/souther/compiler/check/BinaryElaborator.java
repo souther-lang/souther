@@ -9,6 +9,7 @@ import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -280,8 +281,7 @@ public final class BinaryElaborator {
         }
         List<TypeSymbol> lCases = AtomSpace.subjectAtoms(lt, ctx.kinds(), ctx.sums());
         List<TypeSymbol> rCases = AtomSpace.subjectAtoms(rt, ctx.kinds(), ctx.sums());
-        if (!lCases.isEmpty() && !rCases.isEmpty()
-                && (lCases.containsAll(rCases) || rCases.containsAll(lCases))) {
+        if (!lCases.isEmpty() && !rCases.isEmpty() && oneHoldsTheOther(lCases, rCases)) {
             // Read in the cases both sides range over, and not in either side's name: two sums
             // listing one set of cases are both that set, and a sum and the union of its cases are
             // one set spelled twice. Taken from a side, the reading would turn on which side was
@@ -294,6 +294,19 @@ public final class BinaryElaborator {
             return new Core.BinaryReading.In(rt);
         }
         return BottomInfer.isBottom(rt) ? new Core.BinaryReading.In(lt) : null;
+    }
+
+    /**
+     * Whether every case of one side is a case of the other.
+     *
+     * <p>Each side lists a case once, so only the side with more cases can hold the other, and the
+     * two are one set where they hold the same number. That side is read into a set once, so a case
+     * of the other is found in one step and not by reading along every case of two large sums.
+     */
+    private static boolean oneHoldsTheOther(List<TypeSymbol> left, List<TypeSymbol> right) {
+        List<TypeSymbol> wider = left.size() >= right.size() ? left : right;
+        List<TypeSymbol> narrower = wider == left ? right : left;
+        return new HashSet<>(wider).containsAll(narrower);
     }
 
     /**
