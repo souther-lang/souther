@@ -317,7 +317,7 @@ public final class InvariantChecker {
         this.engine = new PathEngine(reading, contracts, Terms.Of.THE_DISCHARGE_TREE, templates);
         // Borrowing nothing, since no declaration is being seeded yet, and knowing what the
         // revision knows: where a set stops is the same answer whoever met it.
-        this.answers = StringMachineAnswers.unborrowed(reading.readings().extents());
+        this.answers = StringMachineAnswers.unborrowed(reading.readings().revision());
         // Named here because this check reads them directly and often. They are the engine's, not a
         // second copy: one engine builds them once and everything below sees those.
         this.kinds = reading.source().kinds();

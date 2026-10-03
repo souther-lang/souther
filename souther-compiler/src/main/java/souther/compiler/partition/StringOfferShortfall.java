@@ -85,6 +85,22 @@ public record StringOfferShortfall(List<NotOffered> these) {
                 throw new IllegalArgumentException("an allowance spent is what composing a value"
                         + " came to and not what one rule of it is: " + of);
             }
+            if (why instanceof Why.PatternTooCostly && !(of instanceof Subject.ARule)) {
+                throw new IllegalArgumentException("one pattern's machine is the rule's that"
+                        + " states it, and this is no rule: " + of);
+            }
+        }
+
+        /**
+         * One where the machine of the pattern {@code rule} states, built under the allowance one
+         * pattern has, was refused by {@code stopped}.
+         *
+         * <p>Whichever limit it was, it is about the rule: that allowance was spent on its pattern
+         * and on nothing else. A rule and nothing wider, because only a rule states a pattern an
+         * author can write smaller.
+         */
+        static NotOffered patternNotBuilt(Subject.ARule rule, Meter.Stopped stopped) {
+            return new NotOffered(rule, new Why.PatternTooCostly(stopped));
         }
 
         /**
@@ -139,9 +155,11 @@ public record StringOfferShortfall(List<NotOffered> these) {
     /**
      * What stopped it, in this compiler's own terms.
      *
-     * <p>Two, and they are not one fact. A rule this compiler could not read is one somebody may be
-     * able to write another way, and what would let it through is a wider reading; a machine it
-     * could not afford is a figure, and the rule may be perfectly ordinary.
+     * <p>A reading that stopped and a machine nobody could afford are not one fact. A rule this
+     * compiler could not read is one somebody may be able to write another way, and what would let
+     * it through is a wider reading; a machine it could not afford is a figure, and the rule may be
+     * perfectly ordinary. Which allowance refused the machine is a third distinction, kept as two
+     * arms rather than a field, because each allowance pairs with different subjects.
      */
     public sealed interface Why {
 
@@ -176,6 +194,25 @@ public record StringOfferShortfall(List<NotOffered> these) {
         record TooCostly(Meter.Stopped stopped) implements Why {
 
             public TooCostly {
+                if (stopped == null) {
+                    throw new IllegalArgumentException("a construction that stopped was stopped by"
+                            + " a limit");
+                }
+            }
+        }
+
+        /**
+         * Building the machine of the pattern a rule states ran past what building one may spend.
+         *
+         * <p>Apart from {@link TooCostly}, because the allowance is another one. That one is what
+         * composing a value for a row may spend, shared by everything the question builds; this is
+         * what the machine of one rule's pattern is built under, once, before any question borrows
+         * it — so running out of it is about that rule however it ran out, and it is said of a rule
+         * and of nothing else.
+         */
+        record PatternTooCostly(Meter.Stopped stopped) implements Why {
+
+            public PatternTooCostly {
                 if (stopped == null) {
                     throw new IllegalArgumentException("a construction that stopped was stopped by"
                             + " a limit");

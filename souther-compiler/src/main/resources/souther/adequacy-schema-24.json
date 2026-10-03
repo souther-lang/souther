@@ -3697,10 +3697,11 @@
                       "description": "What stopped the reading of it, where what gave nothing was a reading that stopped. Words `notRead` writes, so a rule reported unread here and the same rule reported unread under the position are one piece of news rather than two. Present exactly where `limit` is absent."
                     },
                     "limit": {
-                      "description": "Which limit refused it, where a limit did. `a_machine_larger_than_one_may_be` is a pattern that can be written smaller; `what_composing_a_value_may_spend` is an allowance already spent, which the same pattern asked for first would not have met. Present exactly where `unread` is absent, and no reading stopped: the rule was read from end to end.",
+                      "description": "Which limit refused it, where a limit did. `a_machine_larger_than_one_may_be` is a pattern that can be written smaller; `what_composing_a_value_may_spend` is an allowance already spent, which the same pattern asked for first would not have met; `what_one_pattern_may_spend` is the allowance the pattern a rule states is built under, spent on that pattern alone, which a smaller pattern would not run past whatever else was asked; it is written only where `attribution` is `a_rule`. Present exactly where `unread` is absent, and no reading stopped: the rule was read from end to end.",
                       "enum": [
                         "a_machine_larger_than_one_may_be",
-                        "what_composing_a_value_may_spend"
+                        "what_composing_a_value_may_spend",
+                        "what_one_pattern_may_spend"
                       ]
                     }
                   }

@@ -100,14 +100,51 @@ class AnAllowanceSpentIsNotOneRulesDoingTest {
         assertEquals(ReportedShortfall.Attribution.COMPOSING_A_VALUE,
                 ReportedShortfall.attribution(made.of()));
         assertEquals(ReportedShortfall.Limit.WHAT_COMPOSING_A_VALUE_MAY_SPEND,
-                ReportedShortfall.limit(Meter.Stopped.THE_ANSWER));
+                ReportedShortfall.limit(new StringOfferShortfall.Why.TooCostly(
+                        Meter.Stopped.THE_ANSWER)));
         // And a machine larger than a machine may be keeps its own word, which is the one an author
         // writes a smaller pattern about.
         assertEquals(ReportedShortfall.Attribution.A_RULE,
                 ReportedShortfall.attribution(StringOfferShortfall.NotOffered.whileMaking(
                         aRule(), stoppedBy(Meter.Stopped.ONE_MACHINE)).of()));
         assertEquals(ReportedShortfall.Limit.A_MACHINE_LARGER_THAN_ONE_MAY_BE,
-                ReportedShortfall.limit(Meter.Stopped.ONE_MACHINE));
+                ReportedShortfall.limit(new StringOfferShortfall.Why.TooCostly(
+                        Meter.Stopped.ONE_MACHINE)));
+    }
+
+    /**
+     * An allowance spent on one pattern's own machine is that pattern's, and said in a word of its
+     * own.
+     *
+     * <p>The pattern's machine is built under an allowance of its own before any question borrows
+     * it, so nothing else was spent from it: running out there is about the rule however it ran
+     * out, and not about composing a value. Under the word for composing a value, an author would be
+     * sent to raise a figure no question of theirs had reached.
+     */
+    @Test
+    void anAllowanceSpentOnOnePatternIsThatRulesOwn() {
+        StringOfferShortfall.NotOffered spent = StringOfferShortfall.NotOffered.patternNotBuilt(
+                aRule(), Meter.Stopped.THE_ANSWER);
+
+        assertEquals(ReportedShortfall.Attribution.A_RULE,
+                ReportedShortfall.attribution(spent.of()));
+        assertEquals(ReportedShortfall.Limit.WHAT_ONE_PATTERN_MAY_SPEND,
+                ReportedShortfall.limit((StringOfferShortfall.Why.PatternTooCostly) spent.why()));
+        assertEquals(ReportedShortfall.Limit.A_MACHINE_LARGER_THAN_ONE_MAY_BE,
+                ReportedShortfall.limit(new StringOfferShortfall.Why.PatternTooCostly(
+                        Meter.Stopped.ONE_MACHINE)),
+                "a machine larger than one may be is the same word whoever's allowance it was");
+        assertNotNull(assertThrows(IllegalArgumentException.class,
+                () -> new StringOfferShortfall.NotOffered(
+                        new StringOfferShortfall.Subject.ComposingAValue(),
+                        new StringOfferShortfall.Why.PatternTooCostly(Meter.Stopped.THE_ANSWER)))
+                .getMessage(), "composing a value is not a rule's pattern");
+        assertNotNull(assertThrows(IllegalArgumentException.class,
+                () -> new StringOfferShortfall.NotOffered(
+                        new StringOfferShortfall.Subject.WhatTheyLeaveTogether(),
+                        new StringOfferShortfall.Why.PatternTooCostly(Meter.Stopped.ONE_MACHINE)))
+                .getMessage(), "and neither is what the rules leave together, which nobody"
+                        + " wrote: the word for one pattern's allowance is a rule's alone");
     }
 
     /**

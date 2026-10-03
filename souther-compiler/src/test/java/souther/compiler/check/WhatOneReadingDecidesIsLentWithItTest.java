@@ -9,7 +9,7 @@ import souther.compiler.query.ReadAs;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.values.KnownExtents;
+import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.values.StringMachineAnswers;
 
 import java.util.List;
@@ -259,8 +259,8 @@ class WhatOneReadingDecidesIsLentWithItTest {
             }
 
             @Override
-            public KnownExtents extents() {
-                return store.extents();
+            public RevisionKnowledge revision() {
+                return store.revision();
             }
         };
     }

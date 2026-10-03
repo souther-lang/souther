@@ -11,7 +11,7 @@ import souther.compiler.query.Shapes;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.values.KnownExtents;
+import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.values.StringFacts;
 import souther.compiler.values.StringMachineAnswers;
 
@@ -246,7 +246,7 @@ class ANameThatWritesNothingIsReadAsTheNameBeneathItTest {
 
             @Override
             public StringMachineAnswers of(TypeKey declaration) {
-                return StringMachineAnswers.unborrowed(KnownExtents.NONE);
+                return StringMachineAnswers.unborrowed(RevisionKnowledge.NONE);
             }
 
             @Override

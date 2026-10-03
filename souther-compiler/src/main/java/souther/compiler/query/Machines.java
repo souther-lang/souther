@@ -30,7 +30,7 @@ import souther.compiler.values.StringFacts;
  * <p>Which is about what a store keeps and not about what a walk may be spared. Where a set's
  * strings stop is settled by the set, under an allowance minted for that set, so it is the same
  * answer wherever it is met — and what the revision has worked out about sets is held for the
- * revision and dropped with it ({@link souther.compiler.check.DeclarationReadings#extents}).
+ * revision and dropped with it ({@link souther.compiler.check.DeclarationReadings#revision}).
  * Nothing there is an answer of anything, and nothing there outlives the world it was worked out
  * in.
  *
@@ -73,7 +73,7 @@ public final class Machines {
                 return Answer.absent();
             }
             StringMachineAnswers recorder =
-                    StringMachineAnswers.unborrowed(db.readings().extents());
+                    StringMachineAnswers.unborrowed(db.readings().revision());
             RuleReadingContext reading =
                     RuleReadingContext.of(source.value(), policy.value(), db.readings());
             FieldDomains domains = FieldDomains.of(declared,

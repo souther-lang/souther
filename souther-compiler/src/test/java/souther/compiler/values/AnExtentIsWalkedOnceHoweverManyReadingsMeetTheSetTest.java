@@ -7,11 +7,10 @@ import souther.compiler.regex.Language;
 import net.unit8.notation199x.pattern.Meter;
 import net.unit8.notation199x.pattern.PatternParser;
 import souther.compiler.regex.PatternPlan;
+import souther.compiler.revision.RevisionKnowledge;
 import net.unit8.notation199x.pattern.PatternRead;
 
-import java.util.HashMap;
 import java.util.LinkedHashSet;
-import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -54,7 +53,7 @@ class AnExtentIsWalkedOnceHoweverManyReadingsMeetTheSetTest {
 
     @Test
     void aReadingAnsweredFromTheRevisionComesToTheRunAsIfItHadWalkedIt() {
-        KnownExtents known = aRevisionsKnowledge();
+        RevisionKnowledge known = aRevisionsKnowledge();
         long walked = StringMachineAnswers.extentsWalked();
 
         StringMachineAnswers walking = StringMachineAnswers.unborrowed(known);
@@ -75,7 +74,7 @@ class AnExtentIsWalkedOnceHoweverManyReadingsMeetTheSetTest {
 
     @Test
     void aReadingAnsweredFromTheRevisionComesToNothingWhereTheWalkRanOut() {
-        KnownExtents known = aRevisionsKnowledge();
+        RevisionKnowledge known = aRevisionsKnowledge();
         long walked = StringMachineAnswers.extentsWalked();
 
         StringMachineAnswers walking = StringMachineAnswers.unborrowed(known);
@@ -99,8 +98,8 @@ class AnExtentIsWalkedOnceHoweverManyReadingsMeetTheSetTest {
     void twoReadingsWithNothingSharedWalkARunEach() {
         long walked = StringMachineAnswers.extentsWalked();
 
-        StringMachineAnswers.unborrowed(KnownExtents.NONE).extentOf(ADMITS_A_RUN);
-        StringMachineAnswers.unborrowed(KnownExtents.NONE).extentOf(ADMITS_A_RUN);
+        StringMachineAnswers.unborrowed(RevisionKnowledge.NONE).extentOf(ADMITS_A_RUN);
+        StringMachineAnswers.unborrowed(RevisionKnowledge.NONE).extentOf(ADMITS_A_RUN);
 
         assertEquals(2, StringMachineAnswers.extentsWalked() - walked,
                 "nothing to answer from, so each reading walks it");
@@ -110,8 +109,8 @@ class AnExtentIsWalkedOnceHoweverManyReadingsMeetTheSetTest {
     void twoReadingsWithNothingSharedWalkAnUnaffordableSetEach() {
         long walked = StringMachineAnswers.extentsWalked();
 
-        StringMachineAnswers.unborrowed(KnownExtents.NONE).extentOf(COSTS_TOO_MUCH);
-        StringMachineAnswers.unborrowed(KnownExtents.NONE).extentOf(COSTS_TOO_MUCH);
+        StringMachineAnswers.unborrowed(RevisionKnowledge.NONE).extentOf(COSTS_TOO_MUCH);
+        StringMachineAnswers.unborrowed(RevisionKnowledge.NONE).extentOf(COSTS_TOO_MUCH);
 
         assertEquals(2, StringMachineAnswers.extentsWalked() - walked,
                 "the expensive ones are the ones walked again");
@@ -162,21 +161,9 @@ class AnExtentIsWalkedOnceHoweverManyReadingsMeetTheSetTest {
         return StringMachineAnswers.extentsWalked() - walked;
     }
 
-    /** What a revision knows, as the store keeps it: answered by the set and by nothing else. */
-    private static KnownExtents aRevisionsKnowledge() {
-        Map<ValueSet, TextExtent> known = new HashMap<>();
-        return new KnownExtents() {
-
-            @Override
-            public TextExtent of(ValueSet set) {
-                return known.get(set);
-            }
-
-            @Override
-            public void remember(ValueSet set, TextExtent extent) {
-                known.put(set, extent);
-            }
-        };
+    /** What a revision knows, as the store keeps it: one revision that does not move. */
+    private static RevisionKnowledge aRevisionsKnowledge() {
+        return RevisionKnowledge.keptFor(() -> 1L);
     }
 
     /** The strings {@code pattern} accepts. */

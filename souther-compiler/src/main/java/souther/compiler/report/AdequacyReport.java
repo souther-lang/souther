@@ -5594,7 +5594,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     case StringOfferShortfall.Why.NotRead it ->
                             said.put("unread", word(ReportedReason.of(it.why())));
                     case StringOfferShortfall.Why.TooCostly it ->
-                            said.put("limit", word(ReportedShortfall.limit(it.stopped())));
+                            said.put("limit", word(ReportedShortfall.limit(it)));
+                    case StringOfferShortfall.Why.PatternTooCostly it ->
+                            said.put("limit", word(ReportedShortfall.limit(it)));
                 }
             }
         }

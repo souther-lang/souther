@@ -9,10 +9,10 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Rel;
+import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
-import souther.compiler.values.KnownExtents;
 import souther.compiler.values.StringFacts;
 import souther.compiler.values.StringMachineAnswers;
 import souther.compiler.values.UnreadReason;
@@ -78,7 +78,8 @@ public final class FieldDomains {
                     NOTHING_NAMED,
                     ConstraintState.top(FactSubject.inOneOrder()), null, null, Map.of(),
                     Set.of(RuleKey.THE_VALUE),
-                    Map.of(), Map.of(), List.of(), Map.of(), StringFacts.NONE, KnownExtents.NONE,
+                    Map.of(), Map.of(), List.of(), Map.of(), StringFacts.NONE,
+                    RevisionKnowledge.NONE,
                     Map.of(), Map.of(), BoundaryState.nothing(),
                     SettledOrderEnvelope.nothing());
 
@@ -224,13 +225,15 @@ public final class FieldDomains {
     private final StringFacts stringMachines;
 
     /**
-     * Where the sets met under this revision were found to stop, for the readings this one makes
-     * of what its rules would leave without a clause.
+     * What the revision this was read under has worked out, for the readings this one makes of
+     * what its rules would leave without a clause.
      *
      * <p>A capability and not facts, and here rather than in what a reading came to: it is the
      * revision's and is dropped with it, while what a reading came to is a value a store keeps.
+     * Held whole, so that a counterfactual of this reading knows everything the revision does
+     * without this having to hear about each kind of work.
      */
-    private final KnownExtents known;
+    private final RevisionKnowledge revision;
 
     /**
      * The counterfactual readings this one has been asked for, kept under what each leaves out
@@ -263,7 +266,7 @@ public final class FieldDomains {
                          Map<RuleKey, FactSubject> atomAt, Map<RuleKey, Counted> countAt,
                          List<InvariantChecker.Written> readings,
                          Map<FactSubject, souther.compiler.numeric.Granularity> spacing,
-                         StringFacts stringMachines, KnownExtents known,
+                         StringFacts stringMachines, RevisionKnowledge revision,
                          Map<RuleRef.Invariant, Map<FactSubject, Set<ChoiceToLift>>> endsLeftOpen,
                          Map<RuleRef.Invariant, Map<OpenEnd, Set<ChoiceToLift>>> boundsLeftOpen,
                          BoundaryState derived, SettledOrderEnvelope settledOrder) {
@@ -277,7 +280,7 @@ public final class FieldDomains {
         // ({@link #borrowingMachines}) — and nothing where no reading was made.
         this.source = readIn == null ? null : readIn.source();
         this.policy = readIn == null ? null : readIn.policy();
-        this.known = known;
+        this.revision = revision;
         this.byName = byName;
         this.heldByName = heldByName;
         this.admittedByName = admittedByName;
@@ -504,9 +507,9 @@ public final class FieldDomains {
                 seeded.constraints(), named, reading, settled,
                 seeded.unreadOfEveryValue(), seeded.atoms(), seeded.held(),
                 seeded.readings(), seeded.spacing(), seeded.stringMachines(),
-                // Where the sets this reading met were found to stop, which is the revision's and
-                // is what a counterfactual of this reading walks them by.
-                reading.readings().extents(),
+                // What the revision has worked out, which is what a counterfactual of this reading
+                // borrows its work from.
+                reading.readings().revision(),
                 seeded.endsLeftOpen(), seeded.boundsLeftOpen(), seeded.derived(),
                 seeded.settledOrder());
     }
@@ -881,9 +884,10 @@ public final class FieldDomains {
      * comparison has no way to reach — so a reading of one of those borrows nothing and keeps what
      * it builds, which is what {@link StringMachineAnswers#unborrowed} is.
      *
-     * <p>What the revision has worked out about sets goes with it either way. A counterfactual
-     * meets the sets its reading met wherever what it leaves out is about something else, and where
-     * a set stops is settled by the set — so a walk here is one the revision has already made.
+     * <p>What the revision has worked out goes with it either way, whole. A counterfactual meets
+     * the sets its reading met wherever what it leaves out is about something else, and where a set
+     * stops is settled by the set — so a walk here is one the revision has already made, and so is
+     * every other piece of work the revision holds.
      *
      * <p>Nothing of the reading itself is lent. What a counterfactual is depends on what it leaves
      * out, so no counterfactual is the declaration's canonical reading and none is kept as one —
@@ -896,13 +900,13 @@ public final class FieldDomains {
             @Override
             public StringMachineAnswers of(TypeKey declaration) {
                 return declaration.equals(named.key())
-                        ? StringMachineAnswers.borrowing(stringMachines, known)
-                        : StringMachineAnswers.unborrowed(known);
+                        ? StringMachineAnswers.borrowing(stringMachines, revision)
+                        : StringMachineAnswers.unborrowed(revision);
             }
 
             @Override
-            public KnownExtents extents() {
-                return known;
+            public RevisionKnowledge revision() {
+                return revision;
             }
         };
     }

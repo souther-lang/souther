@@ -9,7 +9,7 @@ import souther.compiler.query.ReadAs;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.values.KnownExtents;
+import souther.compiler.revision.RevisionKnowledge;
 import souther.compiler.values.StringFacts;
 import souther.compiler.values.StringMachineAnswers;
 
@@ -111,7 +111,7 @@ class ACounterfactualBorrowsTheMachinesTheReadingMadeTest {
         FieldDomains reading = FieldDomains.of(TypeSymbols.declared(held),
                 RuleReadingContext.of(RuleReadings.of(compilation, compilation.modules().get(0)),
                         ReadAs.THE_COMPILATION_DOES,
-                        _ -> StringMachineAnswers.borrowing(part, KnownExtents.NONE)));
+                        _ -> StringMachineAnswers.borrowing(part, RevisionKnowledge.NONE)));
         assertTrue(StringMachineAnswers.machinesMade() > beforeReading,
                 "the reading builds what the lender had nothing to say about");
 

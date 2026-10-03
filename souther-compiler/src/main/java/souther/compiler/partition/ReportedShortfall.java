@@ -1,7 +1,5 @@
 package souther.compiler.partition;
 
-import net.unit8.notation199x.pattern.Meter;
-
 /**
  * The words an adequacy document writes for what gave an offer no value.
  *
@@ -42,11 +40,14 @@ public final class ReportedShortfall {
      * <p>Kept apart from the reasons a reading stops. A machine larger than a machine may be is a
      * pattern somebody can write smaller; an allowance already spent is not, and the same pattern
      * asked for first would have been built. Under one word, a consumer counting what a wider
-     * allowance would reach would count both.
+     * allowance would reach would count both. And what one pattern's own machine may spend is a
+     * third: it is about that pattern and was spent on nothing else, so a smaller pattern is what
+     * gets past it.
      */
     public enum Limit {
         A_MACHINE_LARGER_THAN_ONE_MAY_BE,
-        WHAT_COMPOSING_A_VALUE_MAY_SPEND
+        WHAT_COMPOSING_A_VALUE_MAY_SPEND,
+        WHAT_ONE_PATTERN_MAY_SPEND
     }
 
     /** What {@code of} is attributed to, in the word a document writes for it. */
@@ -60,10 +61,24 @@ public final class ReportedShortfall {
     }
 
     /** The same of what refused a value, where what refused it was a limit. */
-    public static Limit limit(Meter.Stopped stopped) {
-        return switch (stopped) {
+    public static Limit limit(StringOfferShortfall.Why.TooCostly why) {
+        return switch (why.stopped()) {
             case ONE_MACHINE -> Limit.A_MACHINE_LARGER_THAN_ONE_MAY_BE;
             case THE_ANSWER -> Limit.WHAT_COMPOSING_A_VALUE_MAY_SPEND;
+        };
+    }
+
+    /**
+     * The same where one pattern's machine was what could not be built.
+     *
+     * <p>A machine larger than one may be is the same word whoever's allowance it was, since what
+     * an author does about it is the same. An allowance spent is not: this one is the pattern's
+     * own, so running out of it is about the pattern and not about the question that wanted it.
+     */
+    public static Limit limit(StringOfferShortfall.Why.PatternTooCostly why) {
+        return switch (why.stopped()) {
+            case ONE_MACHINE -> Limit.A_MACHINE_LARGER_THAN_ONE_MAY_BE;
+            case THE_ANSWER -> Limit.WHAT_ONE_PATTERN_MAY_SPEND;
         };
     }
 }

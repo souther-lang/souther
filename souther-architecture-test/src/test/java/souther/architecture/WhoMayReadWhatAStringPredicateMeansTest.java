@@ -89,6 +89,18 @@ class WhoMayReadWhatAStringPredicateMeansTest {
 
     private static final String WITNESS = "souther/compiler/partition/Partitions -> " + OWNER;
 
+    /** The producer of a stated pattern's machine, inside the reading that offers a value. */
+    private static final String A_PATTERNS_PRODUCER =
+            "souther/compiler/partition/Partitions$PatternForAWitness -> " + OWNER;
+
+    /** What the rules about a position's strings came to, as that reading holds it. */
+    private static final String THE_PATTERNS_STATED =
+            "souther/compiler/partition/Partitions$PatternsStated -> " + OWNER;
+
+    /** One of those rules, with the pattern it states. */
+    private static final String ONE_STATED_RULE =
+            "souther/compiler/partition/Partitions$Stated -> " + OWNER;
+
     /**
      * The walk of a body reads one, because a rule about the strings at a position can be written
      * there and something has to recognise it.
@@ -187,7 +199,6 @@ class WhoMayReadWhatAStringPredicateMeansTest {
                     + "Lsouther/compiler/check/RuleReadingSource;)L" + OWNER + "$StatedOn;",
             WITNESS + "$Reading",
             WITNESS + "$Reading$Accepting",
-            WITNESS + "$Reading$Accepting#accepts()Lnet/unit8/notation199x/pattern/PatternMeaning;",
             // And the outcome a witness was not composed from, which is not a second answer about
             // the position. What is taken here is that this reading yielded no pattern to compose
             // out of — so the value offered came from the rules beside it, and a search that had
@@ -197,11 +208,31 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             WITNESS + "$Reading$WrittenArgumentNotKnown",
             WITNESS + "$StatedOn",
             WITNESS + "$StatedOn#of(Lsouther/compiler/check/PartId;)L" + OWNER + "$Reading;",
+            // The pattern a part states, as the reading of the rule hands it out, which is what a
+            // value is composed out of and what a pattern's producer builds.
+            WITNESS + "$StatedOn#patternOf(Lsouther/compiler/check/PartId;)L"
+                    + OWNER + "$StatedPattern;",
             // And why the clause a part is of went untyped, which is the same outcome reached
             // before any predicate is: a clause with no form composes nothing either, and what it
             // is said with is decided there and only carried here.
             WITNESS + "$StatedOn#whyNotTyped(Lsouther/compiler/check/PartId;)"
                     + "Lsouther/compiler/inputs/BlockReason$RuleOfferShortfallReason;",
+            WITNESS + "$StatedPattern",
+            // The producer of a stated pattern's machine, which takes the pattern as the rule's
+            // reading handed it out and asks it the strings it accepts.
+            A_PATTERNS_PRODUCER,
+            A_PATTERNS_PRODUCER + IN_A_DESCRIPTOR,
+            A_PATTERNS_PRODUCER + "$StatedPattern",
+            A_PATTERNS_PRODUCER
+                    + "$StatedPattern#meaning()Lnet/unit8/notation199x/pattern/PatternMeaning;",
+            // And what carries the stated patterns from the reading to the offer, naming the type
+            // and asking it nothing.
+            THE_PATTERNS_STATED,
+            THE_PATTERNS_STATED + IN_A_DESCRIPTOR,
+            THE_PATTERNS_STATED + "$StatedPattern",
+            ONE_STATED_RULE,
+            ONE_STATED_RULE + IN_A_DESCRIPTOR,
+            ONE_STATED_RULE + "$StatedPattern",
             A_BODYS_RULES,
             A_BODYS_RULES + IN_A_DESCRIPTOR,
             A_BODYS_RULES + "#statedBy(Lsouther/compiler/core/Core;"
