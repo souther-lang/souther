@@ -171,6 +171,58 @@ public final class RepositoryLayout {
         return List.copyOf(out);
     }
 
+    /**
+     * What {@code module}'s pom copies into what it builds, from every {@code resource} it declares
+     * with a {@code directory}: that directory, or each file it names where it names files and
+     * nothing else.
+     *
+     * <p>The directory as Maven resolves it, against the module, with {@code ${project.basedir}}
+     * read as the module. An include holding a wildcard reads the directory, so the directory is
+     * what is answered. Refused where a directory names a property this does not resolve, so a pom
+     * reaching somewhere new by a property stops the check asking rather than being read as
+     * somewhere else.
+     */
+    public List<Path> pathsCopiedFrom(Path module) {
+        Document pom = parse(module.resolve("pom.xml"));
+        NodeList resources = pom.getElementsByTagName("resource");
+        List<Path> out = new ArrayList<>();
+        for (int i = 0; i < resources.getLength(); i++) {
+            Element resource = (Element) resources.item(i);
+            if (childElements(resource, "directory").isEmpty()) {
+                // Not a resource of the build but a plugin's own element of the name, such as a
+                // shade transformer's, which names an entry and copies nothing.
+                continue;
+            }
+            String written = childText(resource, "directory")
+                    .replace("${project.basedir}", module.toString())
+                    .replace("${basedir}", module.toString());
+            if (written.contains("${")) {
+                throw new IllegalStateException(module + " copies from " + written
+                        + ", which names a property this does not read");
+            }
+            Path directory = module.resolve(written).normalize();
+            List<String> named = new ArrayList<>();
+            boolean wholeDirectory = false;
+            for (Element includes : childElements(resource, "includes")) {
+                for (Element include : childElements(includes, "include")) {
+                    String pattern = include.getTextContent().trim();
+                    if (pattern.contains("*") || pattern.contains("?")) {
+                        wholeDirectory = true;
+                    }
+                    named.add(pattern);
+                }
+            }
+            if (named.isEmpty() || wholeDirectory) {
+                out.add(directory);
+            } else {
+                for (String file : named) {
+                    out.add(directory.resolve(file).normalize());
+                }
+            }
+        }
+        return List.copyOf(out);
+    }
+
     /** {@code name} as {@code project} states it, or as its {@code parent} does where it does not. */
     private static String ownOrInherited(Element project, String name) {
         String own = childText(project, name);

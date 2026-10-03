@@ -157,6 +157,12 @@
              TheSnapshotProfileExemptsExactlyTheReactorTest asks how it reads the profile's
              exemptions: one version, so the test asks the matcher the build uses. -->
         <enforcer.version>3.5.0</enforcer.version>
+        <!-- What the build copies into an artifact from outside every module's own src, as paths
+             from the root. A publication refuses an ignored file in any of them, as each module
+             refuses one in its src (bin/require-clean-checkout.sh), because a copy would carry it
+             into a jar though git never sees it. WhatACleanCheckoutAsksIsWhatTheBuildReadsTest holds
+             this to what the poms copy from. -->
+        <souther.build.reads>syntax specification.adoc</souther.build.reads>
     </properties>
 
     <dependencyManagement>
@@ -688,12 +694,12 @@
                 <build.test.classes>${project.basedir}/target/jdt-test-classes</build.test.classes>
             </properties>
         </profile>
-        <!-- Activate for a Central release: `mvn -Prelease deploy`. Holds the build to a clean
-             checkout of the tag for its version and to dependencies that are releases, attaches
-             sources and javadoc, GPG-signs every
-             artifact, and uploads them to the Central Portal as one deployment, which is
-             published once the Portal has validated it (autoPublish). A snapshot is the
-             `snapshot` profile's. Normal build/test is untouched. -->
+        <!-- Activate for a Central release: `mvn -Prelease deploy`. Holds the build to what the
+             tag for its version records and to dependencies that are releases, cleans every module
+             before building it, attaches sources and javadoc, GPG-signs every artifact, and uploads
+             them to the Central Portal as one deployment, which is published once the Portal has
+             validated it (autoPublish). A snapshot is the `snapshot` profile's. Normal build/test
+             is untouched. -->
         <profile>
             <id>release</id>
             <build>
@@ -719,27 +725,57 @@
                             </execution>
                         </executions>
                     </plugin>
-                    <!-- A release is a clean checkout of the commit tagged for its version. The
-                         revision written into the manifest names a commit, which describes the
-                         jar only if nothing uncommitted went into it. Whether the tree is clean is
-                         asked of git in the tree being built: the git-commit-id plugin's own
-                         `git.dirty` ignores untracked files and, in a linked worktree, answers for
-                         the main checkout. -->
+                    <!-- A release is built from the commit tagged for its version and nothing else.
+                         The revision written into the manifest names a commit, which describes the
+                         jar only if nothing that commit does not record went into it. Asked of git
+                         in the tree being built: the git-commit-id plugin's own `git.dirty` ignores
+                         untracked files and, in a linked worktree, answers for the main checkout.
+                         The tree as a whole, and what the build reads from outside every module's
+                         src, are asked once; each module asks of its own src; and each module is
+                         cleaned before it is built, so nothing an earlier build wrote is in it. -->
                     <plugin>
                         <groupId>org.codehaus.mojo</groupId>
                         <artifactId>exec-maven-plugin</artifactId>
                         <version>3.5.1</version>
-                        <inherited>false</inherited>
                         <executions>
                             <execution>
                                 <id>require-clean-checkout</id>
                                 <phase>initialize</phase>
+                                <inherited>false</inherited>
                                 <goals>
                                     <goal>exec</goal>
                                 </goals>
                                 <configuration>
                                     <executable>${project.basedir}/bin/require-clean-checkout.sh</executable>
+                                    <commandlineArgs>${souther.build.reads}</commandlineArgs>
                                 </configuration>
+                            </execution>
+                            <execution>
+                                <id>require-recorded-sources</id>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>${maven.multiModuleProjectDirectory}/bin/require-clean-checkout.sh</executable>
+                                    <arguments>
+                                        <argument>${project.basedir}/src</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-clean-plugin</artifactId>
+                        <version>3.5.0</version>
+                        <executions>
+                            <execution>
+                                <id>clean-before-building</id>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>clean</goal>
+                                </goals>
                             </execution>
                         </executions>
                     </plugin>
@@ -824,14 +860,14 @@
             </build>
         </profile>
         <!-- Activate to publish develop's snapshot: `mvn -Psnapshot deploy`, run by hand from a
-             fresh clone of develop, as a release is; CI publishes nothing. The snapshot repository
-             keeps one
-             coordinate per version and every publication overwrites it, so what the coordinate
-             holds is whatever was published last; this profile is what makes that the tip of
-             develop. It refuses a version that is not a snapshot, a dependency outside this
-             reactor that is one, a tree holding anything HEAD does not, and a HEAD that is not the
-             commit develop points at on origin. Sources, javadoc and signatures are a release's
-             and are not made. -->
+             checkout of develop, as a release is from its tag; CI publishes nothing. The snapshot
+             repository keeps one coordinate per version and every publication overwrites it, so
+             what the coordinate holds is whatever was published last; this profile is what makes
+             that the tip of develop. It refuses a version that is not a snapshot, a dependency
+             outside this reactor that is one, a change HEAD does not record, an ignored file where
+             the build reads, and a HEAD that is not the commit develop points at on origin, and it
+             cleans every module before building it. Sources, javadoc and signatures are a
+             release's and are not made. -->
         <profile>
             <id>snapshot</id>
             <build>
@@ -890,27 +926,56 @@
                         <groupId>org.codehaus.mojo</groupId>
                         <artifactId>exec-maven-plugin</artifactId>
                         <version>3.5.1</version>
-                        <inherited>false</inherited>
                         <executions>
                             <execution>
                                 <id>require-clean-checkout</id>
                                 <phase>initialize</phase>
+                                <inherited>false</inherited>
                                 <goals>
                                     <goal>exec</goal>
                                 </goals>
                                 <configuration>
                                     <executable>${project.basedir}/bin/require-clean-checkout.sh</executable>
+                                    <commandlineArgs>${souther.build.reads}</commandlineArgs>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>require-recorded-sources</id>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>${maven.multiModuleProjectDirectory}/bin/require-clean-checkout.sh</executable>
+                                    <arguments>
+                                        <argument>${project.basedir}/src</argument>
+                                    </arguments>
                                 </configuration>
                             </execution>
                             <execution>
                                 <id>require-develop-tip</id>
                                 <phase>initialize</phase>
+                                <inherited>false</inherited>
                                 <goals>
                                     <goal>exec</goal>
                                 </goals>
                                 <configuration>
                                     <executable>${project.basedir}/bin/require-develop-tip.sh</executable>
                                 </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-clean-plugin</artifactId>
+                        <version>3.5.0</version>
+                        <executions>
+                            <execution>
+                                <id>clean-before-building</id>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>clean</goal>
+                                </goals>
                             </execution>
                         </executions>
                     </plugin>
