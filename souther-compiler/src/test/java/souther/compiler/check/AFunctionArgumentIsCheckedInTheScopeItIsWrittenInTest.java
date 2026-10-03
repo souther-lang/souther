@@ -177,7 +177,9 @@ class AFunctionArgumentIsCheckedInTheScopeItIsWrittenInTest {
      * A block whose body does not type still has the parameters the position gives it, since what
      * they are is the position's and not the body's. So a mistake the check can name inside it is
      * named, as one is anywhere else in a body that also holds a mistake only the elaboration can
-     * name: the check reads the whole body before the elaboration reads any of it.
+     * name: the check reads the whole body before the elaboration reads any of it. The call is in
+     * what the binding is given, which is read wherever the binding is written, and not under the
+     * binding, which the mistake after it does not refuse either.
      */
     @Test
     void insideABlockThatDoesNotTypeTheParametersAreStillInForce() {
@@ -186,8 +188,8 @@ class AFunctionArgumentIsCheckedInTheScopeItIsWrittenInTest {
 
                 behavior f : (xs: List<Int>, ys: List<Int>) -> List<List<Int>>
                 let f (xs, ys) = List.map(x -> {
-                    let bad = x + "one"
-                    List.map(x, ys)
+                    let mapped = List.map(x, ys)
+                    mapped + "one"
                 }, xs)
                 """;
 
@@ -307,6 +309,117 @@ class AFunctionArgumentIsCheckedInTheScopeItIsWrittenInTest {
                 """;
 
         assertInstanceOf(MatchMessage.TheNewtypeWrapsAnotherType.class,
+                refused(source).diagnostic().said());
+    }
+
+    /*
+     * Where the language refuses what brings a binding into force, what it governs is never read,
+     * so there is no scope to check a call in — not the one around it either. Each row below hands
+     * over {@code k}, a value known outside the refused construct, so a check that read the
+     * construct's body in the scope around it would name {@code k} ahead of the refusal.
+     */
+
+    @Test
+    void aRefusedAttemptLeavesItsBranchUnread() {
+        String source = """
+                module m
+
+                behavior f : (n: Int, k: Int, xs: List<Int>) -> List<Int>
+                let f (n, k, xs) = {
+                    guard n > 0 as c else xs
+                    List.map(k, xs)
+                }
+                """;
+
+        assertInstanceOf(AttemptMessage.ThisIsNotAConstruction.class,
+                refused(source).diagnostic().said());
+    }
+
+    @Test
+    void andItsDeparturesUnreadToo() {
+        String source = """
+                module m
+
+                behavior f : (n: Int, k: Int, xs: List<Int>) -> List<Int>
+                let f (n, k, xs) =
+                    if n > 0 as c then xs else List.map(k, xs)
+                """;
+
+        assertInstanceOf(AttemptMessage.ThisIsNotAConstruction.class,
+                refused(source).diagnostic().said());
+    }
+
+    @Test
+    void aRefusedLetLeavesItsBodyUnread() {
+        String source = """
+                module m
+
+                data Line = { sku: String, qty: Int }
+
+                behavior f : (l: Line, k: Int, xs: List<Int>) -> List<Int>
+                let f (l, k, xs) = {
+                    let Line(x) = l
+                    List.map(k, xs)
+                }
+                """;
+
+        assertInstanceOf(TypeMessage.NotANewtypeToOpenInABinding.class,
+                refused(source).diagnostic().said());
+    }
+
+    @Test
+    void anArmOpeningWhatIsNotANewtypeLeavesItsBodyUnread() {
+        String source = """
+                module m
+
+                data A = { value: Int }
+                data B = { k: Int }
+                data S = A | B
+
+                behavior f : (s: S, k: Int, xs: List<Int>) -> List<Int>
+                let f (s, k, xs) =
+                    match s with
+                        | A(v) -> List.map(k, xs)
+                        | B -> xs
+                """;
+
+        assertInstanceOf(MatchMessage.NotANewtypeToOpen.class, refused(source).diagnostic().said());
+    }
+
+    @Test
+    void anArmNamingNoCaseLeavesItsBodyUnread() {
+        String source = """
+                module m
+
+                data A = { n: Int }
+                data B = { k: Int }
+                data C = { c: Int }
+                data S = A | B
+
+                behavior f : (s: S, k: Int, xs: List<Int>) -> List<Int>
+                let f (s, k, xs) =
+                    match s with
+                        | C -> List.map(k, xs)
+                        | A -> xs
+                        | B -> xs
+                """;
+
+        assertInstanceOf(MatchMessage.NotACaseOf.class, refused(source).diagnostic().said());
+    }
+
+    @Test
+    void aMatchWhoseSubjectDoesNotTypeLeavesItsArmsUnread() {
+        String source = """
+                module m
+
+                behavior f : (n: Int, k: Int, xs: List<Int>) -> List<Int>
+                let f (n, k, xs) =
+                    match n + "one" with
+                        | Some x -> List.map(k, xs)
+                        | None -> xs
+                """;
+
+        assertInstanceOf(ArithmeticMessage.AnOperandIsNotANumber.class,
                 refused(source).diagnostic().said());
     }
 

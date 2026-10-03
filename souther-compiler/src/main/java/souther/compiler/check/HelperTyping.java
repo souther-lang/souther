@@ -27,8 +27,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Supplier;
-import java.util.function.UnaryOperator;
 
 /**
  * Typing for {@code let} helpers: checking each one standalone against its parameter types, taking
@@ -201,11 +201,13 @@ public final class HelperTyping {
             // declaration it shadows (spec §fn-rules), so `let use (depth: Int)` reads its `depth` as
             // the Int it declares and not as the helper it is spelled like.
             Scope tenv = env.reaching(standingCalls);
+            CheckContext typing = new CheckContext(symbols, declarations, null, reachable)
+                    .preserving(emitted != null || reading ? standing : Preserved.NONE);
             // a helper that returns a function (e.g. `let adder (n) = (x) -> x + n`) has no application
             // here to infer the lambda's parameter types from; it is checked where it is inlined and
-            // applied (spec §blocks).
-            checkFunctionArgs(h.writtenBody(), inliner.bodyOf(h.name()), tenv, symbols,
-                    declarations, reachable, inliner);
+            // applied (spec §blocks). Typed with what the body is elaborated with, so what the check
+            // cannot type is what the elaboration refuses.
+            checkFunctionArgs(h.writtenBody(), inliner.bodyOf(h.name()), tenv, typing, inliner);
             // push a declared return type into the body so an empty-collection body (Map.empty, [])
             // takes the declared element/value type rather than a bottom
             Type declaredReturn = h.declaredReturn() == null ? null : TypeOps.successType(h.declaredReturn());
@@ -234,10 +236,7 @@ public final class HelperTyping {
                 // cannot reach an injected behavior — put the effect in the behavior that calls it.
                 rejectInjectedCalls(body, h.name(), reqSigs.keySet());
             }
-            Core elaboratedBody = Elaborator.elaborate(body, tenv,
-                    new CheckContext(symbols, declarations, null, reachable)
-                            .preserving(emitted != null || reading ? standing : Preserved.NONE),
-                    declaredReturn);
+            Core elaboratedBody = Elaborator.elaborate(body, tenv, typing, declaredReturn);
             Type bodyType = elaboratedBody.type();
             // A definition standing at a row's position computes what the row writes there, and a
             // position holds a value. One that answers none — `unreachable` on its own — is refused
@@ -760,98 +759,98 @@ public final class HelperTyping {
      * elaboration's decision, asked of the one place each kind of binding is decided
      * ({@link Elaborator#bound}, {@link MatchElaborator#inArm}, {@link Elaborator#attempted}); a
      * block's parameters are the function parameter's, which says them whatever the block's body
-     * does. A binding the elaboration refuses is not entered, and neither is one that does not
-     * type here — a block no call says the parameters of, what an expansion binds — and what reads
-     * it is skipped as above.
+     * does. Where the elaboration refuses what governs a body — a binding, an attempt that is no
+     * construction, an arm that selects nothing, a subject that does not type — that body is never
+     * elaborated, so it has no scope at all, and the check says nothing inside it: the refusal is
+     * what is reported. A binding the walk cannot type for want of a position — a block no call
+     * says the parameters of, what an expansion binds — is left out, and what reads it is skipped
+     * as above.
      *
      * <p>{@code into} is the body being walked, which is what anything expanded to be typed here is
-     * written into.
+     * written into. {@code typing} is what the body is elaborated with, so what the walk cannot
+     * type or enter is what the elaboration refuses.
      */
-    static void checkFunctionArgs(Hir.Expr e, BindingOwner into, Scope env, Symbols symbols,
-                                  DeclarationAccess declarations,
-                                  Map<ValueName.Behavior, ReqSig> reqs, HelperInliner inliner) {
-        walk(e, Here.at(env), new Walk(into,
-                new CheckContext(symbols, declarations, null, reqs), inliner));
+    static void checkFunctionArgs(Hir.Expr e, BindingOwner into, Scope env, CheckContext typing,
+                                  HelperInliner inliner) {
+        walk(e, Here.at(env), new Walk(into, typing, inliner));
     }
 
     /** What every step of one walk reads alike: the body it walks, and what it types with. */
     private record Walk(BindingOwner into, CheckContext context, HelperInliner inliner) {
 
         /**
-         * The type of {@code e} read in {@code env}, or null where it does not type here.
-         *
-         * <p>Null is where the walk stops asking, and not a verdict: the elaboration of the body
-         * says what is wrong. Nor is abandoning the definition the walk's to decide. It types with
-         * no values settled, so anything that invokes one is abandoned here whatever the
-         * elaboration makes of it.
+         * The type of {@code e} read in {@code env}, or null where the elaboration refuses it or
+         * abandons the definition over it. Null is where the walk stops asking, and not a verdict:
+         * the elaboration of the body says what is wrong.
          */
         Type typeOf(Hir.Expr e, Scope env) {
-            try {
-                return Elaborator.typeOf(inliner.inline(e, into), env, context);
-            } catch (CompileException | Unanswerable _) {
-                return null;
-            }
+            return refusedAsAbsent(() -> Elaborator.typeOf(inliner.inline(e, into), env, context))
+                    .orElse(null);
         }
 
         /**
-         * {@code env} with what {@code entry} brings into force, which is the elaboration's own
-         * decision of whether the binding exists and what it is bound at. {@code env} as it is
-         * where the elaboration refuses the binding or it does not type here: there is then no
-         * binding for a check to read, and why is the elaboration's to say, as for typeOf.
+         * What {@code answer} answers, or nothing where the elaboration refuses it or abandons the
+         * definition over it — whose to say, and how, is the elaboration's.
          */
-        Scope entering(Scope env, UnaryOperator<Scope> entry) {
+        <T> Optional<T> refusedAsAbsent(Supplier<T> answer) {
             try {
-                return entry.apply(env);
+                return Optional.of(answer.get());
             } catch (CompileException | Unanswerable _) {
-                return env;
+                return Optional.empty();
             }
         }
 
-        Scope pastLet(Hir.LetIn let, Scope env) {
-            return entering(env, outer -> Elaborator.bound(let,
-                    inliner.inline(let.value(), into), outer, context).inner());
+        Optional<Scope> pastLet(Hir.LetIn let, Scope env) {
+            return refusedAsAbsent(() -> Elaborator.bound(let, inliner.inline(let.value(), into),
+                    env, context).inner());
         }
 
-        Scope inArm(Hir.Case c, Type subject, Scope env) {
-            return entering(env, outer -> MatchElaborator.inArm(c, subject, outer, context));
+        Optional<Scope> inArm(Hir.Case c, Type subject, Scope env) {
+            return refusedAsAbsent(() -> MatchElaborator.inArm(c, subject, env, context))
+                    .flatMap(scope -> scope);
         }
 
-        Scope succeeding(Hir.IfConstructed ic, Scope env) {
-            return entering(env, outer -> Elaborator.attempted(ic,
-                    inliner.inline(ic.construct(), into), outer, context).then());
+        Optional<Elaborator.Attempted> attempted(Hir.IfConstructed ic, Scope env) {
+            return refusedAsAbsent(() -> Elaborator.attempted(ic,
+                    inliner.inline(ic.construct(), into), env, context));
         }
     }
 
     /**
-     * The scope at one point of the walk.
+     * The scope at one point of the walk, or nothing where what governs that point is refused.
      *
      * <p>Where a binding comes into force it is worked out when a check first reads it, and once.
      * Working it out is typing what the binding was given, and most bindings are read by no check:
-     * a check reads the scope only at a call that hands a function over.
+     * a check reads the scope only at a call that hands a function over. Nothing is not the scope
+     * around it: a body under a refused binding is never elaborated, and is read in no scope.
      */
     private static final class Here {
         private final Here outer;
-        private final UnaryOperator<Scope> entering;
-        private Scope scope;
+        private final Function<Scope, Optional<Scope>> entering;
+        private Optional<Scope> scope;
+        private boolean workedOut;
 
-        private Here(Here outer, UnaryOperator<Scope> entering, Scope scope) {
+        private Here(Here outer, Function<Scope, Optional<Scope>> entering, Optional<Scope> scope,
+                     boolean workedOut) {
             this.outer = outer;
             this.entering = entering;
             this.scope = scope;
+            this.workedOut = workedOut;
         }
 
         static Here at(Scope scope) {
-            return new Here(null, null, scope);
+            return new Here(null, null, Optional.of(scope), true);
         }
 
-        /** The scope {@code entering} makes of this one. */
-        Here entering(UnaryOperator<Scope> entering) {
-            return new Here(this, entering, null);
+        /** The scope {@code entering} makes of this one, or nothing where it refuses. */
+        Here entering(Function<Scope, Optional<Scope>> entering) {
+            return new Here(this, entering, Optional.empty(), false);
         }
 
-        Scope scope() {
-            if (scope == null) {
-                scope = entering.apply(outer.scope());
+        Optional<Scope> scope() {
+            if (!workedOut) {
+                scope = outer.scope().flatMap(entering);
+                workedOut = true;
             }
             return scope;
         }
@@ -896,19 +895,26 @@ public final class HelperTyping {
                 walk(let.value(), here, walk);
                 walk(let.body(), here.entering(env -> walk.pastLet(let, env)), walk);
             }
+            // Every arm is entered, binding or not: an arm that selects nothing of the subject, or
+            // a subject that does not type, is a match the elaboration refuses before any arm.
             case Hir.Match m -> {
                 walk(m.scrutinee(), here, walk);
-                Once<Type> subject = new Once<>(() -> walk.typeOf(m.scrutinee(), here.scope()));
+                Once<Type> subject = new Once<>(() -> here.scope()
+                        .map(env -> walk.typeOf(m.scrutinee(), env)).orElse(null));
                 for (Hir.Case c : m.cases()) {
-                    walk(c.body(), c.binding() == null ? here
-                            : here.entering(env -> walk.inArm(c, subject.get(), env)), walk);
+                    walk(c.body(), here.entering(env -> walk.inArm(c, subject.get(), env)), walk);
                 }
             }
+            // The departures are read where the attempt stood, and only where it is one: a refused
+            // attempt is elaborated no further, on either side.
             case Hir.IfConstructed ic -> {
                 walk(ic.construct(), here, walk);
-                walk(ic.then(), here.entering(env -> walk.succeeding(ic, env)), walk);
+                Once<Optional<Elaborator.Attempted>> attempt = new Once<>(() -> here.scope()
+                        .flatMap(env -> walk.attempted(ic, env)));
+                walk(ic.then(), here.entering(_ -> attempt.get().map(Elaborator.Attempted::then)),
+                        walk);
                 for (Hir.ElseArm arm : ic.els()) {
-                    walk(arm.body(), here, walk);
+                    walk(arm.body(), here.entering(env -> attempt.get().map(_ -> env)), walk);
                 }
             }
             // A block's parameters are in force at what the position gives them, and the one
@@ -949,7 +955,11 @@ public final class HelperTyping {
         if (!hasFn) {
             return argScopes;
         }
-        Scope env = here.scope();
+        Optional<Scope> known = here.scope();
+        if (known.isEmpty()) {
+            return argScopes;   // under something refused, which is what is reported
+        }
+        Scope env = known.get();
         // the collection (non-function) arguments bind the signature's type variables — `'a` from a
         // `List<'a>` collection — so the function parameters become concrete before the check.
         Map<String, Type> bind = new HashMap<>();
