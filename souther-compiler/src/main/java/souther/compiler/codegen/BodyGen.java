@@ -1863,6 +1863,9 @@ final class BodyGen {
                 // already holds as such, so nothing reaches here read in a newtype.
                 case Core.BinaryReading.In in -> throw new IllegalStateException(
                         "arithmetic reads numbers, not values in " + Type.show(in.type()));
+                case Core.BinaryReading.Opened opened -> throw new IllegalStateException(
+                        "arithmetic reads numbers, not a " + Type.show(opened.newtype())
+                                + " opened beside one");
                 case Core.BinaryReading.AsTheyStand _ -> { }
             }
             // Read as they stand, the operator may still answer an exact value: a quotient of two
