@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://souther-lang.org/schema/adequacy-23.json",
+  "$id": "https://souther-lang.org/schema/adequacy-24.json",
   "title": "Souther adequacy report",
   "description": "How well a model's `example`s cover it. Emitted by `souther examples --format json`. A reader keys on `schemaVersion`: a change that removes or renames anything here raises it, and something added since does not — a key added since is optional, and a word added to an enumerated field is one no earlier document carried, so a document written before either existed is still a document of this version. That is one direction: every object here is closed, so an older copy of this schema refuses a document carrying a key added since. A reader that has to accept newer documents wants the newer schema, not a higher number.",
   "type": "object",
@@ -45,7 +45,7 @@
   "properties": {
     "schemaVersion": {
       "type": "integer",
-      "const": 23
+      "const": 24
     },
     "compilerVersion": {
       "type": "string",
@@ -271,6 +271,19 @@
         "rule_about_an_element_of_several_sequences",
         "unread_alternative_of_a_choice",
         "exact_values_too_costly"
+      ]
+    },
+    "ruleOfferShortfallReason": {
+      "description": "What stopped the reading of a rule an offer of values got nothing from. Every word a reading that gave up on a rule writes, and `rules_not_read_at_all` beside them. That word keeps the meaning it has under `notRead`: the reading of the position never arrived at the rules written about it. It is written here for a clause nothing could type, where it names a rule because what an offer holds is the parts an author wrote, and it knows which part gave it nothing without any reading having got that far. A rule named beside it is not a rule that was read. The same clause is said in the same word under `notRead` at the position it stands at, so the two are one piece of news. Schema 23 admitted every word of `notReadReason` in this field; a document of that version carries only words this definition admits, since no other was ever written there, and narrowing what the field admits is what raised the version.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ruleStoppedReadingReason"
+        },
+        {
+          "enum": [
+            "rules_not_read_at_all"
+          ]
+        }
       ]
     },
     "answerRealizationStoppedReason": {
@@ -3680,14 +3693,15 @@
                       "description": "Which rule the entry is about, present exactly with `rule`."
                     },
                     "unread": {
-                      "$ref": "#/$defs/notReadReason",
-                      "description": "What stopped the reading of it, where what gave nothing was a reading that stopped. The vocabulary `notRead` writes, so a rule reported unread here and the same rule reported unread under the position are one piece of news rather than two. Present exactly where `limit` is absent."
+                      "$ref": "#/$defs/ruleOfferShortfallReason",
+                      "description": "What stopped the reading of it, where what gave nothing was a reading that stopped. Words `notRead` writes, so a rule reported unread here and the same rule reported unread under the position are one piece of news rather than two. Present exactly where `limit` is absent."
                     },
                     "limit": {
-                      "description": "Which limit refused it, where a limit did. `a_machine_larger_than_one_may_be` is a pattern that can be written smaller; `what_composing_a_value_may_spend` is an allowance already spent, which the same pattern asked for first would not have met. Present exactly where `unread` is absent, and no reading stopped: the rule was read from end to end.",
+                      "description": "Which limit refused it, where a limit did. `a_machine_larger_than_one_may_be` is a pattern that can be written smaller; `what_composing_a_value_may_spend` is an allowance already spent, which the same pattern asked for first would not have met; `what_one_pattern_may_spend` is the allowance the pattern a rule states is built under, spent on that pattern alone, which a smaller pattern would not run past whatever else was asked; it is written only where `attribution` is `a_rule`. Present exactly where `unread` is absent, and no reading stopped: the rule was read from end to end.",
                       "enum": [
                         "a_machine_larger_than_one_may_be",
-                        "what_composing_a_value_may_spend"
+                        "what_composing_a_value_may_spend",
+                        "what_one_pattern_may_spend"
                       ]
                     }
                   }

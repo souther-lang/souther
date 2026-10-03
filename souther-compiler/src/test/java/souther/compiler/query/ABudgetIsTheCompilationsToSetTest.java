@@ -155,7 +155,7 @@ class ABudgetIsTheCompilationsToSetTest {
      * <p>What is asked of the document here is its shape, which is the walk's question and not the
      * word's. Whether every reason this compiler may write in that field is one some compilation
      * writes is asked of the whole of them in one place
-     * ({@link EveryNotReadReasonIsWrittenBySomeCompilationTest}), and that table says down an
+     * ({@link EveryPublishedReasonIsWrittenBySomeCompilationTest}), and that table says down an
      * allowance for this word as this does — so the two are told apart by what they ask rather than
      * by what their models are allowed.
      *

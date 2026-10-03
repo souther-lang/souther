@@ -212,9 +212,11 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             // value is composed out of and what a pattern's producer builds.
             WITNESS + "$StatedOn#patternOf(Lsouther/compiler/check/PartId;)L"
                     + OWNER + "$StatedPattern;",
-            // And whether the checker typed the clause a part is of, which is the same outcome
-            // reached before any predicate is: a clause with no form composes nothing either.
-            WITNESS + "$StatedOn#typed(Lsouther/compiler/check/PartId;)Z",
+            // And why the clause a part is of went untyped, which is the same outcome reached
+            // before any predicate is: a clause with no form composes nothing either, and what it
+            // is said with is decided there and only carried here.
+            WITNESS + "$StatedOn#whyNotTyped(Lsouther/compiler/check/PartId;)"
+                    + "Lsouther/compiler/inputs/BlockReason$RuleOfferShortfallReason;",
             WITNESS + "$StatedPattern",
             // The producer of a stated pattern's machine, which takes the pattern as the rule's
             // reading handed it out and asks it the strings it accepts.

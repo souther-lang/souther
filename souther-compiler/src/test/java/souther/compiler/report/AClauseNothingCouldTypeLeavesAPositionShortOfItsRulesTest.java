@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Two questions about one model, and neither is whether the vocabulary's words reach a document
  * at all. That is asked of every word of it in one place
- * ({@link souther.compiler.query.EveryNotReadReasonIsWrittenBySomeCompilationTest}), which is
+ * ({@link souther.compiler.query.EveryPublishedReasonIsWrittenBySomeCompilationTest}), which is
  * where a word added arrives as a question — so what a model writes is settled there, and what is
  * left here is what that answer does not say.
  *

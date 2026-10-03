@@ -2425,10 +2425,12 @@ public final class Partitions {
             StringPredicates.StatedOn stated = StringPredicates.statedOn(named, ruleSource);
             for (DeclaredClauses.Conjunct each : written.get(name).conjuncts()) {
                 // A clause the checker has no form for says nothing anybody worked out about the
-                // strings, which is a rule not read rather than a rule about something else.
-                if (!stated.typed(each.part())) {
+                // strings, which is a rule not read rather than a rule about something else — said
+                // in the reason the reading of the position has for it, and not decided here.
+                BlockReason.RuleOfferShortfallReason notTyped = stated.whyNotTyped(each.part());
+                if (notTyped != null) {
                     unread.add(StringOfferShortfall.NotOffered.ofARuleNotRead(
-                            each.part(), new BlockReason.UnreadValueRule()));
+                            each.part(), notTyped));
                     continue;
                 }
                 switch (stated.of(each.part())) {

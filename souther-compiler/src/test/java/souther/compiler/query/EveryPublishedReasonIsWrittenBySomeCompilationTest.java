@@ -24,8 +24,13 @@ import java.util.TreeMap;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Every reason this compiler may write in a document's {@code notRead} is one a compilation of it
- * writes there.
+ * Every reason this compiler may publish is one a compilation of it writes into a document.
+ *
+ * <p>Two fields carry the vocabulary: {@code notRead}, under a position, and what stopped the
+ * reading of a rule an offer of values got nothing from
+ * ({@code synthesisShortfallCauses[].unread}). The second is the first's words said of a rule, so a word either of them writes is a word of the
+ * vocabulary kept — read off one of them alone, a word only the other writes would arrive here as
+ * a promise nothing keeps.
  *
  * <p>A published word is a promise to a reader that there is a state of the model this compiler
  * answers with it. Nothing else here holds that promise: the writer and the schema are held to each
@@ -53,13 +58,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * would arrive as a word owed a model no compilation can make — and the arm that would let it pass
  * is the one this has none of.
  *
- * <p><b>Named for the field and not for what the field is called.</b> {@code notRead} is the
- * document's word and it is wider than the word: a rule read from end to end that draws no line is
- * written there too, and nothing in this compiler calls such a rule one it could not read
- * ({@link PartitionEvidence.NotRead}). So what these models are held to reach is the field, and a
- * name saying "unread" would fold a distinction the reasons themselves are split by — a reading
- * that stopped and a rule read to the end are separate capabilities of {@link BlockReason}, and
- * having been one is what that split was made after.
+ * <p><b>Named for the vocabulary and not for either field.</b> {@code notRead} is the document's
+ * word and it is wider than the word: a rule read from end to end that draws no line is written
+ * there too, and nothing in this compiler calls such a rule one it could not read
+ * ({@link PartitionEvidence.NotRead}). So what these models are held to reach is the published
+ * vocabulary, and a name saying "unread" would lose a distinction the reasons themselves are split
+ * by — a reading that stopped and a rule read to the end are separate capabilities of
+ * {@link BlockReason}, and having been one is what that split was made after.
  *
  * <p><b>A model here need not compile without a diagnostic.</b> What is claimed is that a
  * compilation writes the word, and this compiler writes an adequacy document about a model it has
@@ -71,7 +76,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * carried, so a document written before it existed is still a document of this version. So what an
  * arrival owes is a model here, and not a version.
  */
-class EveryNotReadReasonIsWrittenBySomeCompilationTest {
+class EveryPublishedReasonIsWrittenBySomeCompilationTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -467,7 +472,7 @@ class EveryNotReadReasonIsWrittenBySomeCompilationTest {
                         + " one");
     }
 
-    /** The reasons a document of this model names in {@code notRead}. */
+    /** The reasons a document of this model publishes, in either field that carries them. */
     private static Set<String> wordsWritten(Witness witness) {
         Compilation compilation = Compilation.ofSource(witness.source(), "Main");
         compilation = switch (witness.allowance()) {
@@ -489,7 +494,8 @@ class EveryNotReadReasonIsWrittenBySomeCompilationTest {
     }
 
     /**
-     * Every {@code notRead} entry's reason, wherever in the document it stands.
+     * Every {@code notRead} entry's reason and every shortfall cause's {@code unread}, wherever in
+     * the document they stand.
      *
      * <p>Walked rather than reached by a path, because what is being asked is whether the word was
      * written at all: a path written out here would be a second statement of where the writer puts
@@ -500,6 +506,14 @@ class EveryNotReadReasonIsWrittenBySomeCompilationTest {
             for (String name : node.propertyNames()) {
                 if (name.equals("notRead")) {
                     node.get(name).forEach(each -> out.add(each.get("reason").asString()));
+                }
+                // A cause a limit refused carries no reason, and is not one of these.
+                if (name.equals("synthesisShortfallCauses")) {
+                    node.get(name).forEach(each -> {
+                        if (each.has("unread")) {
+                            out.add(each.get("unread").asString());
+                        }
+                    });
                 }
                 collect(node.get(name), out);
             }

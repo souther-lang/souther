@@ -153,6 +153,24 @@ public sealed interface BlockReason {
     }
 
     /**
+     * A stop that may be said of a rule an offer of values got nothing from.
+     *
+     * <p>Not a reason about the rule. What an offer holds is the parts an author wrote, so it can
+     * name the rule a stop left it without whether or not any reading got as far as that rule — and
+     * that is what this says may be done. A rule a reading gave up on is one of these. So is a
+     * position whose rules the reading never arrived at, where the walk stopping is not a figure:
+     * nothing reached the rule, and the offer still knows which rule it was.
+     *
+     * <p>Not every stop at a position. One at the depth a run could afford is said of the position
+     * and of no rule, since a run allowed further reads the rule; and a type nothing could work
+     * out, a path back to a declaration already read and a place the walk does not enter are not
+     * met at one rule of the position rather than another. Held as {@link ReadingStopReason}, any of
+     * those could be filed under a rule that nothing was wrong with.
+     */
+    sealed interface RuleOfferShortfallReason extends ReadingStopReason {
+    }
+
+    /**
      * A rule a reading stopped on, which is the half of {@link RuleWithoutLineReason} that says
      * this compiler fell short.
      *
@@ -174,7 +192,8 @@ public sealed interface BlockReason {
      * asking about a stop may be handed, and the only member of {@link QuestionStandingReason}
      * that names a rule.
      */
-    sealed interface RuleReadingStopped extends StoppedWithoutALine, QuestionStandingReason {
+    sealed interface RuleReadingStopped extends StoppedWithoutALine, QuestionStandingReason,
+            RuleOfferShortfallReason {
 
         /**
          * These in a steady order, which is one two of them are equal in only where they are equal.
@@ -416,7 +435,7 @@ public sealed interface BlockReason {
      */
     static ReadingStopReason of(souther.compiler.values.UnreadReason why) {
         return switch (why) {
-            case NOT_REACHED -> new ValueRulesNotReached();
+            case NOT_REACHED -> ofANamedRule(why);
             case NOT_REACHED_PAST_DEPTH_LIMIT -> new ValueRulesNotReachedPastDepthLimit();
             // And every other way this reading is short by the one below, since all of them leave a
             // question of a rule standing. Written out rather than defaulted to: a reason added to
@@ -471,6 +490,29 @@ public sealed interface BlockReason {
             case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY,
                  NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT ->
                     throw new IllegalStateException("refused above: " + why);
+        };
+    }
+
+    /**
+     * The same, for a caller holding the rule the reason is said beside.
+     *
+     * <p>A rule a reading gave up on is filed as that rule, and a rule nothing reached as rules no
+     * reading reached — which is what {@link #of(UnreadReason)} files it as too, by asking this.
+     * So a caller that names the rule, an offer of values that got nothing from it among them,
+     * says it in the word the position's own account has for the same clause.
+     *
+     * <p>Refused for the rest. A depth a run could afford is no fact about the rule it stopped
+     * above, and an answer nothing built names no rule at all.
+     */
+    static RuleOfferShortfallReason ofANamedRule(UnreadReason why) {
+        return switch (why) {
+            case NOT_REACHED -> new ValueRulesNotReached();
+            case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY ->
+                    ofARuleTheValueReadingLeft(why);
+            case NOT_REACHED_PAST_DEPTH_LIMIT, EXACT_VALUES_TOO_COSTLY ->
+                    throw new IllegalArgumentException(
+                            "a reason about " + why.about() + " is said of no rule an offer holds: "
+                                    + why);
         };
     }
 
@@ -796,8 +838,13 @@ public sealed interface BlockReason {
      *
      * <p>And none of them is a figure this compiler stopped at, which is what
      * {@link ValueRulesNotReachedPastDepthLimit} is beside this for.
+     *
+     * <p>A {@link RuleOfferShortfallReason} as well. A clause nothing could type is one an offer
+     * holds as a part the author wrote, so the offer can say which rule gave it nothing; it says so
+     * in this reason, which is the one the reading of the position writes for that clause, and not
+     * in one of its own.
      */
-    record ValueRulesNotReached() implements AboutThePosition {}
+    record ValueRulesNotReached() implements AboutThePosition, RuleOfferShortfallReason {}
 
     /**
      * The same, where what stopped the reading was how far down it could afford to read.

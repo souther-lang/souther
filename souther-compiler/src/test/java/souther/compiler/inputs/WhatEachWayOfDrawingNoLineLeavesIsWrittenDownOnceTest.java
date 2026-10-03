@@ -502,6 +502,9 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         assertEquals(projected(everyRuleReadingStopped()),
                 words(schema, "ruleStoppedReadingReason"),
                 "what a question's rule left admits what a reading can stop on");
+        assertEquals(projected(everyStopARuleAnOfferHeldMayCarry()),
+                words(schema, "ruleOfferShortfallReason"),
+                "what a rule an offer got nothing from is said with admits what may be said of it");
         assertEquals(projected(everyLimitAQuestionCanStandOn()),
                 words(schema, "answerRealizationStoppedReason"),
                 "and what its position was short of admits what an answer a question waited on can"
@@ -725,6 +728,17 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         return everyReason().stream()
                 .filter(BlockReason.RuleReadingStopped.class::isInstance)
                 .map(BlockReason.RuleReadingStopped.class::cast).toList();
+    }
+
+    /**
+     * Those of them an offer of values may say of a rule it got nothing from, which is a third
+     * surface: wider than what a question's rule left by a position whose rules nothing reached,
+     * since the offer holds the rule whether or not a reading arrived at it.
+     */
+    private static List<BlockReason.RuleOfferShortfallReason> everyStopARuleAnOfferHeldMayCarry() {
+        return everyReason().stream()
+                .filter(BlockReason.RuleOfferShortfallReason.class::isInstance)
+                .map(BlockReason.RuleOfferShortfallReason.class::cast).toList();
     }
 
     /**
