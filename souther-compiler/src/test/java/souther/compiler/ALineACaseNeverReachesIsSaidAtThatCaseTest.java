@@ -6,6 +6,12 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -133,7 +139,98 @@ class ALineACaseNeverReachesIsSaidAtThatCaseTest {
         assertTrue(said.contains(outsideAt("r@P.deadline")), said);
         assertTrue(said.contains("read as f/r@Q.deadline: = s.n + 11"), said);
         assertFalse(said.contains("read as f/r@P.deadline: = s.n + 11"), said);
+        // What failed is the filing of the field at P. The other position the line is drawn
+        // against is drawn against at Q, so it is told nothing.
+        assertFalse(said.contains(outsideAt("s.n")), said);
     }
+
+    /**
+     * A line at the very end of what a case holds is a line there, however it was written.
+     *
+     * <p>{@code > 10} and {@code >= 11} part the whole numbers in one place, which for a case
+     * holding nothing below eleven is the end of what it holds. Both are kept, and both owe the same
+     * rows: what is measured is where the values part, and not the number the rule was written with.
+     */
+    @Test
+    void aLineAtTheLowerEndOfWhatACaseHoldsIsMeasuredThereHoweverItIsWritten() {
+        String strict = report(guarded("    invariant deadline >= 11", "", "r.deadline > 10",
+                "Q { deadline = 3 }"));
+        String inclusive = report(guarded("    invariant deadline >= 11", "",
+                "r.deadline >= 11", "Q { deadline = 3 }"));
+
+        assertFalse(strict.contains("draws its line outside"), strict);
+        assertTrue(strict.contains("read as f/r@P.deadline: = 11"), strict);
+        assertEquals(owed(inclusive), owed(strict), strict);
+    }
+
+    /** And at the upper end, the other way round. */
+    @Test
+    void andAtTheUpperEnd() {
+        String strict = report(guarded("    invariant deadline <= 9", "", "r.deadline < 10",
+                "Q { deadline = 30 }"));
+        String inclusive = report(guarded("    invariant deadline <= 9", "", "r.deadline <= 9",
+                "Q { deadline = 30 }"));
+
+        assertFalse(strict.contains("draws its line outside"), strict);
+        assertTrue(strict.contains("read as f/r@P.deadline: = 9"), strict);
+        assertEquals(owed(inclusive), owed(strict), strict);
+    }
+
+    /**
+     * The same where nothing is filed: a value of its own, holding nothing below eleven, and the
+     * line written either way. Which is where the reading of the line and the stage that measures it
+     * first disagreed, before any case was filed at.
+     */
+    @Test
+    void aLineAtTheEndOfWhatAValueHoldsIsMeasuredThereWhereNothingIsFiled() {
+        for (String[] spellings : new String[][] {
+                {"deadline >= 11", "r.deadline > 10", "r.deadline >= 11", "30"},
+                {"deadline <= 9", "r.deadline < 10", "r.deadline <= 9", "3"}}) {
+            String strict = report(alone(spellings[0], spellings[1], spellings[3]));
+            String inclusive = report(alone(spellings[0], spellings[2], spellings[3]));
+
+            assertFalse(strict.contains("draws its line outside"), strict);
+            assertEquals(owed(inclusive), owed(strict), strict);
+        }
+    }
+
+    /** A value of one record, held as {@code bound} says, and a guard. */
+    private static String alone(String bound, String guard, String deadline) {
+        return """
+                module probe.r exposing ( P, f )
+
+                data P = { deadline: Int }
+                    invariant deadline >= 0 && deadline <= 100 && %s
+
+                behavior f : (r: P) -> Int
+
+                let f (r) = if %s then 1 else 0
+
+                example f
+                    | "one" : (P { deadline = %s }) -> 0
+                """.formatted(bound, guard, deadline);
+    }
+
+    /**
+     * What a report holds a model to: how many obligations each measure has and how many of them
+     * rows meet, and how many gaps it marks. Not the words a point is named by, which carry the
+     * number the rule was written with.
+     */
+    private static List<String> owed(String said) {
+        List<String> out = new ArrayList<>();
+        for (String line : said.lines().toList()) {
+            Matcher counted = OBLIGATIONS.matcher(line);
+            if (counted.find()) {
+                out.add(counted.group());
+            }
+            if (line.contains("gaps marked")) {
+                out.add(line.trim());
+            }
+        }
+        return out;
+    }
+
+    private static final Pattern OBLIGATIONS = Pattern.compile("obligations \\d+/\\d+");
 
     /**
      * A line the field itself never reaches is said about the field, as it always was, and not about

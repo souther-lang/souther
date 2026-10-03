@@ -334,13 +334,25 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
     /**
      * Whether the rules leave nothing at the place this seam parts the values.
      *
-     * <p>Asked of the place and not of the values either side of it. A line at the very edge of what
-     * the rules leave has one of its two values outside them and parts what is left all the same —
-     * read off that value, a bound's own line was dropped from the arrangement and the run it starts
-     * belonged to no seam at all.
+     * <p>Asked of the value on the side that faces what the rules leave, and not of the other. A
+     * line at the very edge of what the rules leave has one of its two values outside them and parts
+     * what is left all the same — read off that value, a bound's own line was dropped from the
+     * arrangement and the run it starts belonged to no seam at all.
+     *
+     * <p>And not of the number the rule wrote. {@code > 10} and {@code >= 11} part the whole numbers
+     * between ten and eleven, so over values from eleven up both are lines at the edge; read off the
+     * number written, the first was outside and the second was not, and one division came out as two
+     * arrangements. Where the order names no value on that side the line itself is what there is to
+     * ask about ({@link Seam#leaving}).
      */
     private static boolean outside(Seam seam, Bound from, Bound to) {
-        return (from != null && seam.at().compareTo(from.at()) < 0)
-                || (to != null && seam.at().compareTo(to.at()) > 0);
+        return (from != null && facing(seam, Towards.ABOVE).compareTo(from.at()) < 0)
+                || (to != null && facing(seam, Towards.BELOW).compareTo(to.at()) > 0);
+    }
+
+    /** Where {@code seam} leaves off on {@code side}, as a place to hold against an end. */
+    private static CutPosition facing(Seam seam, Towards side) {
+        Level leaves = seam.leaving(side);
+        return leaves == null ? seam.at() : CutPosition.at(leaves);
     }
 }

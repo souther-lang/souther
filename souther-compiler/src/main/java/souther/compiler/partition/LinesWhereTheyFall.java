@@ -117,7 +117,7 @@ public final class LinesWhereTheyFall {
                     if (reaches(moved, each.by())) {
                         out.add(measuredAt(stated, to));
                     } else {
-                        outside(moved, each.by(), noLine);
+                        outside(to, each.by(), noLine);
                     }
                 });
             }
@@ -164,18 +164,20 @@ public final class LinesWhereTheyFall {
     }
 
     /**
-     * What a position the line was moved to and does not reach is left with.
+     * What the position the line was moved to, and does not reach, is left with.
      *
-     * <p>What a quantity the line never reaches is left with wherever it stands, at the moved
-     * quantity's own coordinates ({@link ComparisonAssessment.OutsideTheDomain}). The rule was read
-     * and its line stands at the other positions the name was filed at; this one is a quantity of its
-     * own, and its own rules stop short of the line. So nothing is passed on from here: a piece of
-     * evidence passed on is one the stage after this owes an answer about, and there is no border
-     * here for it to answer with.
+     * <p>At that position and nowhere else. What failed is the filing of one name at one case, so
+     * the other names of the line — a position it is drawn against, which the line reaches under
+     * every other case — are told nothing: the rule draws its line there, at the cases that reach
+     * it. In the words a quantity the line never reaches is left with
+     * ({@link ComparisonAssessment.OutsideTheDomain#leaves}), since that is what this position is.
+     *
+     * <p>Nothing is passed on from here either. A piece of evidence passed on is one the stage after
+     * this owes an answer about, and there is no border here for it to answer with.
      */
-    private static void outside(Cutting moved, LineOrigin by, RulesWithNoLine.Gathered noLine) {
-        new ComparisonAssessment.OutsideTheDomain(moved).whatEachPlaceIsLeftWith()
-                .forEach((at, why) -> noLine.add(by.cited(), at, why));
+    private static void outside(NumericTerm at, LineOrigin by, RulesWithNoLine.Gathered noLine) {
+        noLine.add(by.cited(), FilingCoordinate.of(at),
+                ComparisonAssessment.OutsideTheDomain.leaves());
     }
 
 
@@ -267,7 +269,7 @@ public final class LinesWhereTheyFall {
             if (reaches(moved, line.by())) {
                 out.add(new LineDrawn(moved, line.by()));
             } else {
-                outside(moved, line.by(), noLine);
+                outside(to, line.by(), noLine);
             }
         }
     }
