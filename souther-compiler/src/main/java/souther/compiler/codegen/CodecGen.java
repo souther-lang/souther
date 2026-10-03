@@ -492,7 +492,11 @@ final class CodecGen {
             cb.withInterfaceSymbols(CD_RDecoder);
             emitDefaultCtor(cb);
             emitSharedInstance(cb, cdDec);
-            cb.withMethodBody("decode", MTD_Rdecode, ClassFile.ACC_PUBLIC, code -> {
+            // The reader is a constant of the class, built once when it is first used: `oneOf`
+            // sorts the names and words its message when it is made, which a decode is not to
+            // pay for every time.
+            cb.withMethodBody(READER, MTD_reader, ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC,
+                    code -> {
                 emitStringLeaf(code, srcLeafOwner(src));
                 code.loadConstant(cases.size());
                 code.anewarray(CD_String);
@@ -505,6 +509,12 @@ final class CodecGen {
                 code.invokevirtual(CD_StringDecoder, "oneOf", MTD_stringOneOf);
                 code.invokedynamic(fromNameCallSite(cdDec));
                 code.invokeinterface(CD_RDecoder, "flatMapWithPath", MTD_flatMapWithPath);
+                code.areturn();
+            });
+            cb.withMethodBody("decode", MTD_Rdecode, ClassFile.ACC_PUBLIC, code -> {
+                code.ldc(DynamicConstantDesc.ofNamed(ConstantDescs.BSM_INVOKE, "reader",
+                        CD_RDecoder, MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC,
+                                cdDec, READER, MTD_reader)));
                 code.aload(1);
                 code.aload(2);
                 code.invokeinterface(CD_RDecoder, "decode", MTD_Rdecode);
@@ -541,6 +551,12 @@ final class CodecGen {
             code.athrow();
         });
     }
+
+    /** What an enumeration's decoder builds the reader it decodes with in, once. */
+    private static final String READER = "__reader";
+
+    /** {@code static Decoder __reader()}. */
+    private static final MethodTypeDesc MTD_reader = MethodTypeDesc.of(CD_RDecoder);
 
     private static DynamicCallSiteDesc fromNameCallSite(ClassDesc cdDec) {
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
