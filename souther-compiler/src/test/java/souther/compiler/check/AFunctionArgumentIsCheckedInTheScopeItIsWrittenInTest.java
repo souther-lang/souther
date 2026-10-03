@@ -6,8 +6,11 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.PhysicalPos;
 import souther.compiler.diag.Primary;
 import souther.compiler.diag.msg.ArithmeticMessage;
+import souther.compiler.diag.msg.AttemptMessage;
 import souther.compiler.diag.msg.HelperMessage;
+import souther.compiler.diag.msg.MatchMessage;
 import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.TypeMessage;
 
 import org.junit.jupiter.api.Test;
 
@@ -189,6 +192,122 @@ class AFunctionArgumentIsCheckedInTheScopeItIsWrittenInTest {
                 """;
 
         assertEquals("x", aValueWhereAFunctionIsTaken(source, "x,").written());
+    }
+
+    /**
+     * {@code as} names what a construction builds, and {@code n > 0} builds nothing, so there is no
+     * {@code c} for the call to be checked against: what is reported is why there is none.
+     */
+    @Test
+    void anAttemptOnWhatIsNotAConstructionBindsNothing() {
+        String source = """
+                module m
+
+                behavior f : (n: Int, xs: List<Int>) -> List<Int>
+                let f (n, xs) = {
+                    guard n > 0 as c else xs
+                    List.map(c, xs)
+                }
+                """;
+
+        assertInstanceOf(AttemptMessage.ThisIsNotAConstruction.class,
+                refused(source).diagnostic().said());
+    }
+
+    @Test
+    void anAttemptAtATypeWithNoInvariantBindsNothing() {
+        String source = """
+                module m
+
+                data Plain = Int
+
+                behavior f : (n: Int, xs: List<Int>) -> List<Int>
+                    constructs Plain
+                let f (n, xs) =
+                    if Plain(n) as p then List.map(p, xs) else xs
+                """;
+
+        assertInstanceOf(AttemptMessage.TheTypeDeclaresNoInvariant.class,
+                refused(source).diagnostic().said());
+    }
+
+    @Test
+    void aLetOpeningWhatIsNotANewtypeBindsNothing() {
+        String source = """
+                module m
+
+                data Line = { sku: String, qty: Int }
+
+                behavior f : (l: Line, xs: List<Int>) -> List<Int>
+                let f (l, xs) = {
+                    let Line(x) = l
+                    List.map(x, xs)
+                }
+                """;
+
+        assertInstanceOf(TypeMessage.NotANewtypeToOpenInABinding.class,
+                refused(source).diagnostic().said());
+    }
+
+    @Test
+    void aLetOpeningAnotherNewtypeBindsNothing() {
+        String source = """
+                module m
+
+                data Tags = List<String>
+                data Labels = List<String>
+
+                behavior f : (t: Tags, xs: List<Int>) -> List<Int>
+                let f (t, xs) = {
+                    let Labels(x) = t
+                    List.map(x, xs)
+                }
+                """;
+
+        assertInstanceOf(TypeMessage.ThePatternOpensAnotherType.class,
+                refused(source).diagnostic().said());
+    }
+
+    /** {@code A} has a field called {@code value}, so reading what the pattern names types; what
+     *  the pattern opens is still no newtype. */
+    @Test
+    void anArmOpeningWhatIsNotANewtypeBindsNothing() {
+        String source = """
+                module m
+
+                data A = { value: Int }
+                data B = { k: Int }
+                data S = A | B
+
+                behavior f : (s: S, xs: List<Int>) -> List<Int>
+                let f (s, xs) =
+                    match s with
+                        | A(v) -> List.map(v, xs)
+                        | B -> xs
+                """;
+
+        assertInstanceOf(MatchMessage.NotANewtypeToOpen.class, refused(source).diagnostic().said());
+    }
+
+    /** The element is a {@code Count}, which wraps an {@code Int} as {@code Amount} does, so what the
+     *  pattern opens types; it is still not the newtype the element is. */
+    @Test
+    void anOptionArmOpeningAnotherTypeBindsNothing() {
+        String source = """
+                module m
+
+                data Amount = Int
+                data Count = Int
+
+                behavior f : (cs: List<Count>, xs: List<Int>) -> List<Int>
+                let f (cs, xs) =
+                    match List.get(0, cs) with
+                        | Some(Amount(v)) -> List.map(v, xs)
+                        | None -> xs
+                """;
+
+        assertInstanceOf(MatchMessage.TheNewtypeWrapsAnotherType.class,
+                refused(source).diagnostic().said());
     }
 
     /** The inner {@code j} holds a function and the outer one an {@code Int}. A scope that found the

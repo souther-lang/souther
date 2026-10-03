@@ -7,7 +7,6 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.MatchMessage;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.CaseSelector;
 import souther.compiler.types.Refinement;
 import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.Type;
@@ -220,13 +219,7 @@ public final class MatchElaborator {
             Core.ResolvedPattern pattern = alternatives.size() == 1
                     ? new Core.ResolvedPattern.Single(alternatives.get(0))
                     : new Core.ResolvedPattern.AnyOf(alternatives, scrutinee);
-            Core.ArmBinding binding = armBinding(c.binding(), pattern, scrutinee);
-            if (c.unwrapAsserts() != null) {
-                if (!(pattern instanceof Core.ResolvedPattern.Single)) {
-                    throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.AnOrPatternOpensNothing()).build());
-                }
-                checkUnwrapAsserts(c, ctx.symbols());
-            }
+            Core.ArmBinding binding = entered(c, pattern, scrutinee, ctx.symbols());
             // What this arm's body says, and what a match inside it could not answer on its own. An
             // arm written for this match that the layout rule gave to an inner one arrives as a case
             // that match has no case of, and this is where there is a space to read it against.
@@ -278,16 +271,8 @@ public final class MatchElaborator {
             if (resolved == null) {
                 throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.NotACaseOfAnOptional(caseType)).build());
             }
-            CaseSelector selector = resolved.selector();
             Core.ResolvedPattern pattern = new Core.ResolvedPattern.Single(resolved);
-            Core.ArmBinding binding = armBinding(c.binding(), pattern, scrutineeCore.type());
-            if (c.unwrapAsserts() != null) {
-                // Only the carrier that holds something has something to open.
-                if (!(selector.refinement() instanceof Refinement.OptionPresent wrapped)) {
-                    throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.TheCaseHasNoValueToOpen(caseType)).build());
-                }
-                checkOptionUnwrapAsserts(c, wrapped.bound(), ctx.symbols());
-            }
+            Core.ArmBinding binding = entered(c, pattern, scrutineeCore.type(), ctx.symbols());
             if (!covered.add(armName)) {
                 throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.MatchedByMoreThanOneCase(caseType)).build());
             }
@@ -430,37 +415,66 @@ public final class MatchElaborator {
     }
 
     /**
-     * The type arm {@code c} binds its name at over a subject of type {@code subject}, for a reader
-     * that has the subject's type and is not elaborating the match: the case the arm selects, read
-     * through {@link #armBinding} as the elaboration reads it.
+     * What arm {@code c} brings into force over its body, once what it selects of {@code subject}
+     * is resolved as {@code pattern}: held to what its pattern opens, and bound through
+     * {@link #armBinding}. An arm whose pattern the language refuses is refused here and brings
+     * nothing into force.
      *
-     * <p>Null where the arm binds nothing, where the subject's type is not known, and where the arm
-     * is something the elaboration refuses — a subject that is no sum, a name that is no case of
-     * it, an or-pattern over an optional. What is wrong with those is the elaboration's to say.
+     * <p>The one place that decides it, for both forms of {@code match} and for {@link #inArm}.
      */
-    static Type armBinds(Hir.Case c, Type subject, DeclarationKinds kinds,
-                         PublishedDeclarations published, SumCases sums) {
-        if (c.binding() == null || subject == null) {
-            return null;
+    private static Core.ArmBinding entered(Hir.Case c, Core.ResolvedPattern pattern, Type subject,
+                                           Symbols symbols) {
+        if (c.unwrapAsserts() != null) {
+            if (!(pattern instanceof Core.ResolvedPattern.Single(ResolvedCase selected))) {
+                throw CompileException.of(Diagnostic.at(c.pos())
+                        .say(new MatchMessage.AnOrPatternOpensNothing()).build());
+            }
+            switch (selected.refinement()) {
+                case Refinement.OptionPresent wrapped ->
+                        checkOptionUnwrapAsserts(c, wrapped.bound(), symbols);
+                // Only the carrier that holds something has something to open.
+                case Refinement.OptionAbsent _ -> throw CompileException.of(Diagnostic.at(c.pos())
+                        .say(new MatchMessage.TheCaseHasNoValueToOpen(
+                                c.caseTypes().get(0).written()))
+                        .build());
+                case Refinement.Direct _ -> checkUnwrapAsserts(c, symbols);
+            }
         }
-        CaseSpace space = CaseSpace.of(subject, kinds, published, sums);
+        return armBinding(c.binding(), pattern, subject);
+    }
+
+    /**
+     * The scope arm {@code c}'s body is read in over a subject of type {@code subject}, for a
+     * reader that has the subject's type and is not elaborating the match: what the arm selects,
+     * resolved as the elaboration resolves it, and brought into force through {@link #entered}.
+     *
+     * <p>{@code env} as it is where the arm binds nothing or where what it selects is not resolved
+     * here — the subject's type not known, a subject that is no sum, a name that is no case of it,
+     * an or-pattern over an optional. Those are the elaboration's to report. An arm that selects a
+     * case and opens it wrongly is refused as the elaboration refuses it.
+     */
+    static Scope inArm(Hir.Case c, Type subject, Scope env, CheckContext ctx) {
+        if (c.binding() == null || subject == null) {
+            return env;
+        }
+        CaseSpace space = CaseSpace.of(subject, ctx.kinds(), ctx.published(), ctx.sums());
         if (space instanceof CaseSpace.Plain
                 || (space instanceof CaseSpace.Optional && c.caseTypes().size() != 1)) {
-            return null;
+            return env;
         }
         List<ResolvedCase> alternatives = new ArrayList<>();
         for (Hir.Name written : c.caseTypes()) {
             ResolvedCase resolved = written instanceof Hir.Name.Denoting named
-                    ? space.selector(named.type(), kinds, sums) : null;
+                    ? space.selector(named.type(), ctx.kinds(), ctx.sums()) : null;
             if (resolved == null) {
-                return null;
+                return env;
             }
             alternatives.add(resolved);
         }
         Core.ResolvedPattern pattern = alternatives.size() == 1
                 ? new Core.ResolvedPattern.Single(alternatives.get(0))
                 : new Core.ResolvedPattern.AnyOf(alternatives, subject);
-        return armBinding(c.binding(), pattern, subject).type();
+        return bound(env, c.binding(), entered(c, pattern, subject, ctx.symbols()).type());
     }
 
     /** Extends {@code env} with {@code binding} when both it and its type are present; otherwise

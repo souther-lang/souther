@@ -754,13 +754,15 @@ public final class HelperTyping {
      * inlined check still applies.
      *
      * <p>What is in scope is what the body has bound where the call is written, so the walk carries
-     * the scope down and widens it wherever a binding comes into force, at the type the elaboration
-     * binds it at: past a {@code let}; in a {@code match} arm, at what the arm selects of the
-     * subject; in the branch an attempted construction succeeds into, at what it built; and inside a
-     * block handed to a function parameter, at the types that parameter gives the block's own
-     * parameters. A binding is left out where that type cannot be worked out here — a {@code let}
-     * or a subject that does not type, a block no call says the parameters of, what an expansion
-     * binds — and what reads it is skipped as above.
+     * the scope down and widens it wherever a binding comes into force: past a {@code let}, in a
+     * {@code match} arm, in the branch an attempted construction succeeds into, and inside a block
+     * handed to a function parameter. Whether a binding exists, and what it is bound at, is the
+     * elaboration's decision, asked of the one place each kind of binding is decided
+     * ({@link Elaborator#bound}, {@link MatchElaborator#inArm}, {@link Elaborator#attempted}); a
+     * block's parameters are the function parameter's, which says them whatever the block's body
+     * does. A binding the elaboration refuses is not entered, and neither is one that does not
+     * type here — a block no call says the parameters of, what an expansion binds — and what reads
+     * it is skipped as above.
      *
      * <p>{@code into} is the body being walked, which is what anything expanded to be typed here is
      * written into.
@@ -791,21 +793,32 @@ public final class HelperTyping {
             }
         }
 
-        /** {@code env} with what {@code let} binds, at the type the elaboration binds it at. */
-        Scope pastLet(Hir.LetIn let, Scope env) {
+        /**
+         * {@code env} with what {@code entry} brings into force, which is the elaboration's own
+         * decision of whether the binding exists and what it is bound at. {@code env} as it is
+         * where the elaboration refuses the binding or it does not type here: there is then no
+         * binding for a check to read, and why is the elaboration's to say, as for typeOf.
+         */
+        Scope entering(Scope env, UnaryOperator<Scope> entry) {
             try {
-                Hir.Expr value = inliner.inline(let.value(), into);
-                return env.binding(let.binder(), Elaborator.bound(let, value, env, context).type(),
-                        value);
+                return entry.apply(env);
             } catch (CompileException | Unanswerable _) {
-                return env;   // as for typeOf
+                return env;
             }
         }
 
-        /** {@code env} with what arm {@code c} binds over a subject of type {@code subject}. */
+        Scope pastLet(Hir.LetIn let, Scope env) {
+            return entering(env, outer -> Elaborator.bound(let,
+                    inliner.inline(let.value(), into), outer, context).inner());
+        }
+
         Scope inArm(Hir.Case c, Type subject, Scope env) {
-            return MatchElaborator.bound(env, c.binding(), MatchElaborator.armBinds(c, subject,
-                    context.kinds(), context.published(), context.sums()));
+            return entering(env, outer -> MatchElaborator.inArm(c, subject, outer, context));
+        }
+
+        Scope succeeding(Hir.IfConstructed ic, Scope env) {
+            return entering(env, outer -> Elaborator.attempted(ic,
+                    inliner.inline(ic.construct(), into), outer, context).then());
         }
     }
 
@@ -893,8 +906,7 @@ public final class HelperTyping {
             }
             case Hir.IfConstructed ic -> {
                 walk(ic.construct(), here, walk);
-                walk(ic.then(), here.entering(env -> MatchElaborator.bound(env, ic.binder(),
-                        walk.typeOf(ic.construct(), env))), walk);
+                walk(ic.then(), here.entering(env -> walk.succeeding(ic, env)), walk);
                 for (Hir.ElseArm arm : ic.els()) {
                     walk(arm.body(), here, walk);
                 }
