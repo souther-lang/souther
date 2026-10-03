@@ -13,9 +13,11 @@ import souther.compiler.diag.msg.InvariantMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Deque;
 import java.util.ArrayDeque;
@@ -25,6 +27,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * Typing for {@code let} helpers: checking each one standalone against its parameter types, taking
@@ -197,10 +201,13 @@ public final class HelperTyping {
             // declaration it shadows (spec §fn-rules), so `let use (depth: Int)` reads its `depth` as
             // the Int it declares and not as the helper it is spelled like.
             Scope tenv = env.reaching(standingCalls);
+            CheckContext typing = new CheckContext(symbols, declarations, null, reachable)
+                    .preserving(emitted != null || reading ? standing : Preserved.NONE);
             // a helper that returns a function (e.g. `let adder (n) = (x) -> x + n`) has no application
             // here to infer the lambda's parameter types from; it is checked where it is inlined and
-            // applied (spec §blocks).
-            checkFunctionArgs(h.writtenBody(), tenv, symbols, declarations, reachable, inliner);
+            // applied (spec §blocks). Typed with what the body is elaborated with, so what the check
+            // cannot type is what the elaboration refuses.
+            checkFunctionArgs(h.writtenBody(), inliner.bodyOf(h.name()), tenv, typing, inliner);
             // push a declared return type into the body so an empty-collection body (Map.empty, [])
             // takes the declared element/value type rather than a bottom
             Type declaredReturn = h.declaredReturn() == null ? null : TypeOps.successType(h.declaredReturn());
@@ -229,10 +236,7 @@ public final class HelperTyping {
                 // cannot reach an injected behavior — put the effect in the behavior that calls it.
                 rejectInjectedCalls(body, h.name(), reqSigs.keySet());
             }
-            Core elaboratedBody = Elaborator.elaborate(body, tenv,
-                    new CheckContext(symbols, declarations, null, reachable)
-                            .preserving(emitted != null || reading ? standing : Preserved.NONE),
-                    declaredReturn);
+            Core elaboratedBody = Elaborator.elaborate(body, tenv, typing, declaredReturn);
             Type bodyType = elaboratedBody.type();
             // A definition standing at a row's position computes what the row writes there, and a
             // position holds a value. One that answers none — `unreachable` on its own — is refused
@@ -745,27 +749,199 @@ public final class HelperTyping {
      * <p>It walks the un-inlined body. Every helper call binds its signature's type variables from
      * its collection arguments ({@code 'a} from a {@code List<'a>}), then checks each function
      * argument against the resulting concrete function type. The check is best-effort: when an
-     * argument's type cannot be determined in the available scope (a value bound further out), it is
-     * skipped and the ordinary inlined check still applies.
+     * argument's type cannot be determined in the available scope, it is skipped and the ordinary
+     * inlined check still applies.
+     *
+     * <p>What is in scope is what the body has bound where the call is written, so the walk carries
+     * the scope down and widens it wherever a binding comes into force: past a {@code let}, in a
+     * {@code match} arm, in the branch an attempted construction succeeds into, and inside a block
+     * handed to a function parameter. Whether a binding exists, and what it is bound at, is the
+     * elaboration's decision, asked of the one place each kind of binding is decided
+     * ({@link Elaborator#bound}, {@link MatchElaborator#inArm}, {@link Elaborator#attempted}); a
+     * block's parameters are the function parameter's, which says them whatever the block's body
+     * does. Where the elaboration refuses what governs a body — a binding, an attempt that is no
+     * construction, an arm that selects nothing, a subject that does not type — that body is never
+     * elaborated, so it has no scope at all, and the check says nothing inside it: the refusal is
+     * what is reported. A binding the walk cannot type for want of a position — a block no call
+     * says the parameters of, what an expansion binds — is left out, and what reads it is skipped
+     * as above.
+     *
+     * <p>{@code into} is the body being walked, which is what anything expanded to be typed here is
+     * written into. {@code typing} is what the body is elaborated with, so what the walk cannot
+     * type or enter is what the elaboration refuses.
      */
-    static void checkFunctionArgs(Hir.Expr e, Scope env, Symbols symbols,
-                                          DeclarationAccess declarations,
-                                          Map<ValueName.Behavior, ReqSig> reqs, HelperInliner inliner) {
-        if (e instanceof Hir.Apply call) {
-            checkHelperCallFnArgs(call, env, symbols, declarations, reqs, inliner);
-        }
-        TypeChecker.forEachChild(e, sub ->
-                checkFunctionArgs(sub, env, symbols, declarations, reqs, inliner));
+    static void checkFunctionArgs(Hir.Expr e, BindingOwner into, Scope env, CheckContext typing,
+                                  HelperInliner inliner) {
+        walk(e, Here.at(env), new Walk(into, typing, inliner));
     }
 
-    private static void checkHelperCallFnArgs(Hir.Apply call, Scope env, Symbols symbols,
-                                              DeclarationAccess declarations,
-                                              Map<ValueName.Behavior, ReqSig> reqs, HelperInliner inliner) {
+    /** What every step of one walk reads alike: the body it walks, and what it types with. */
+    private record Walk(BindingOwner into, CheckContext context, HelperInliner inliner) {
+
+        /**
+         * The type of {@code e} read in {@code env}, or null where the elaboration refuses it or
+         * abandons the definition over it. Null is where the walk stops asking, and not a verdict:
+         * the elaboration of the body says what is wrong.
+         */
+        Type typeOf(Hir.Expr e, Scope env) {
+            return refusedAsAbsent(() -> Elaborator.typeOf(inliner.inline(e, into), env, context))
+                    .orElse(null);
+        }
+
+        /**
+         * What {@code answer} answers, or nothing where the elaboration refuses it or abandons the
+         * definition over it — whose to say, and how, is the elaboration's.
+         */
+        <T> Optional<T> refusedAsAbsent(Supplier<T> answer) {
+            try {
+                return Optional.of(answer.get());
+            } catch (CompileException | Unanswerable _) {
+                return Optional.empty();
+            }
+        }
+
+        Optional<Scope> pastLet(Hir.LetIn let, Scope env) {
+            return refusedAsAbsent(() -> Elaborator.bound(let, inliner.inline(let.value(), into),
+                    env, context).inner());
+        }
+
+        Optional<Scope> inArm(Hir.Case c, Type subject, Scope env) {
+            return refusedAsAbsent(() -> MatchElaborator.inArm(c, subject, env, context))
+                    .flatMap(scope -> scope);
+        }
+
+        Optional<Elaborator.Attempted> attempted(Hir.IfConstructed ic, Scope env) {
+            return refusedAsAbsent(() -> Elaborator.attempted(ic,
+                    inliner.inline(ic.construct(), into), env, context));
+        }
+    }
+
+    /**
+     * The scope at one point of the walk, or nothing where what governs that point is refused.
+     *
+     * <p>Where a binding comes into force it is worked out when a check first reads it, and once.
+     * Working it out is typing what the binding was given, and most bindings are read by no check:
+     * a check reads the scope only at a call that hands a function over. Nothing is not the scope
+     * around it: a body under a refused binding is never elaborated, and is read in no scope.
+     */
+    private static final class Here {
+        private final Here outer;
+        private final Function<Scope, Optional<Scope>> entering;
+        private Optional<Scope> scope;
+        private boolean workedOut;
+
+        private Here(Here outer, Function<Scope, Optional<Scope>> entering, Optional<Scope> scope,
+                     boolean workedOut) {
+            this.outer = outer;
+            this.entering = entering;
+            this.scope = scope;
+            this.workedOut = workedOut;
+        }
+
+        static Here at(Scope scope) {
+            return new Here(null, null, Optional.of(scope), true);
+        }
+
+        /** The scope {@code entering} makes of this one, or nothing where it refuses. */
+        Here entering(Function<Scope, Optional<Scope>> entering) {
+            return new Here(this, entering, Optional.empty(), false);
+        }
+
+        Optional<Scope> scope() {
+            if (!workedOut) {
+                scope = outer.scope().flatMap(entering);
+                workedOut = true;
+            }
+            return scope;
+        }
+    }
+
+    /** A value worked out the first time it is asked for, and kept. */
+    private static final class Once<T> {
+        private Supplier<T> making;
+        private T value;
+
+        Once(Supplier<T> making) {
+            this.making = making;
+        }
+
+        T get() {
+            if (making != null) {
+                value = making.get();
+                making = null;
+            }
+            return value;
+        }
+    }
+
+    /**
+     * Walks {@code e} in the scope {@code here} stands for.
+     *
+     * <p>No {@code default}: a kind of expression the language gains is placed here, as one that
+     * brings a binding into force or as one that does not, before anything compiles. Falling
+     * through to a walk that hands every child the scope it was given is how a binding went
+     * unread here.
+     */
+    private static void walk(Hir.Expr e, Here here, Walk walk) {
+        switch (e) {
+            case Hir.Apply call -> {
+                List<Here> argScopes = checkHelperCallFnArgs(call, here, walk);
+                walk(call.function(), here, walk);
+                for (int i = 0; i < call.args().size(); i++) {
+                    walk(call.args().get(i), argScopes.get(i), walk);
+                }
+            }
+            case Hir.LetIn let -> {
+                walk(let.value(), here, walk);
+                walk(let.body(), here.entering(env -> walk.pastLet(let, env)), walk);
+            }
+            // Every arm is entered, binding or not: an arm that selects nothing of the subject, or
+            // a subject that does not type, is a match the elaboration refuses before any arm.
+            case Hir.Match m -> {
+                walk(m.scrutinee(), here, walk);
+                Once<Type> subject = new Once<>(() -> here.scope()
+                        .map(env -> walk.typeOf(m.scrutinee(), env)).orElse(null));
+                for (Hir.Case c : m.cases()) {
+                    walk(c.body(), here.entering(env -> walk.inArm(c, subject.get(), env)), walk);
+                }
+            }
+            // The departures are read where the attempt stood, and only where it is one: a refused
+            // attempt is elaborated no further, on either side.
+            case Hir.IfConstructed ic -> {
+                walk(ic.construct(), here, walk);
+                Once<Optional<Elaborator.Attempted>> attempt = new Once<>(() -> here.scope()
+                        .flatMap(env -> walk.attempted(ic, env)));
+                walk(ic.then(), here.entering(_ -> attempt.get().map(Elaborator.Attempted::then)),
+                        walk);
+                for (Hir.ElseArm arm : ic.els()) {
+                    walk(arm.body(), here.entering(env -> attempt.get().map(_ -> env)), walk);
+                }
+            }
+            // A block's parameters are in force at what the position gives them, and the one
+            // position this walk knows that of is a function parameter, entered where the call is
+            // checked; anywhere else nothing here says them.
+            case Hir.Block block -> walk(block.body(), here, walk);
+            // What an expansion binds is the inliner's writing, at types the elaboration settles
+            // from the application as a whole.
+            case Hir.Expansion _ -> TypeChecker.forEachChild(e, sub -> walk(sub, here, walk));
+            case Hir.IntLit _, Hir.DecimalLit _, Hir.StringLit _, Hir.BoolLit _, Hir.Var _,
+                 Hir.FieldAccess _, Hir.Binary _, Hir.Neg _, Hir.NewData _, Hir.If _,
+                 Hir.ListLit _, Hir.RowCollection _, Hir.ListComp _, Hir.Materialised _,
+                 Hir.ValueBuild _, Hir.ValueInvocation _, Hir.Tuple _, Hir.TupleGet _,
+                 Hir.Unreachable _ -> TypeChecker.forEachChild(e, sub -> walk(sub, here, walk));
+        }
+    }
+
+    /** Checks {@code call}'s function arguments, answering the scope each of its arguments is read
+     *  in: a block handed to a function parameter reads its own parameters at the types that
+     *  parameter gives them, and every other argument reads {@code here}. */
+    private static List<Here> checkHelperCallFnArgs(Hir.Apply call, Here here, Walk walk) {
+        List<Here> argScopes = new ArrayList<>(Collections.nCopies(call.args().size(), here));
         // what the call applies, which a binding of a helper's spelling is not: applying a
         // function-typed parameter is not a call to the helper it happens to be named after
-        Hir.FnDef h = inliner.applied(call);
+        Hir.FnDef h = walk.inliner().applied(call);
         if (h == null || call.args().size() != h.params().size()) {
-            return;   // applies no body, or an arity mismatch the inliner reports
+            return argScopes;   // applies no body, or an arity mismatch the inliner reports
         }
         List<Type> declared = new ArrayList<>();
         boolean hasFn = false;
@@ -777,8 +953,13 @@ public final class HelperTyping {
             hasFn |= pt instanceof Type.FnOf;
         }
         if (!hasFn) {
-            return;
+            return argScopes;
         }
+        Optional<Scope> known = here.scope();
+        if (known.isEmpty()) {
+            return argScopes;   // under something refused, which is what is reported
+        }
+        Scope env = known.get();
         // the collection (non-function) arguments bind the signature's type variables — `'a` from a
         // `List<'a>` collection — so the function parameters become concrete before the check.
         Map<String, Type> bind = new HashMap<>();
@@ -786,16 +967,13 @@ public final class HelperTyping {
             if (declared.get(i) == null || declared.get(i) instanceof Type.FnOf) {
                 continue;
             }
-            try {
-                Type at = Elaborator.typeOf(inliner.inline(call.args().get(i), inliner.bodyOf(h.name())),
-                        env, new CheckContext(symbols, declarations, null, reqs));
-                if (TypeOps.unify(declared.get(i), at, bind, declarations.kinds(),
-                        declarations.sums())
-                        instanceof Fit.Disagrees) {
-                    return;   // the argument does not fit; leave it to the inlined check
-                }
-            } catch (CompileException _) {
-                return;   // can't type the argument here; leave it to the inlined check
+            Type at = walk.typeOf(call.args().get(i), env);
+            if (at == null) {
+                return argScopes;   // can't type the argument here; leave it to the inlined check
+            }
+            if (TypeOps.unify(declared.get(i), at, bind, walk.context().kinds(),
+                    walk.context().sums()) instanceof Fit.Disagrees) {
+                return argScopes;   // the argument does not fit; leave it to the inlined check
             }
         }
         for (int i = 0; i < declared.size(); i++) {
@@ -808,10 +986,11 @@ public final class HelperTyping {
                     // here; the inlined check, which sees the expected type pushed down, decides.
                     continue;
                 }
-                checkFunctionArg(h, h.params().get(i).name(), want,
-                        call.args().get(i), env, symbols, declarations, reqs, inliner, bind);
+                argScopes.set(i, Here.at(checkFunctionArg(call, h.params().get(i).name(), want,
+                        call.args().get(i), env, walk, bind)));
             }
         }
+        return argScopes;
     }
 
     /** Whether a step's signature still carries an empty-collection bottom in a parameter or in its
@@ -833,10 +1012,10 @@ public final class HelperTyping {
      * (`'b?` / `String`), not in the checker's own spelling. It takes the block rather than a
      * position, so where the report is drawn is decided here from the value being refused and not by
      * whichever position a caller had to hand. */
-    private static CompileException blockReturnMismatch(Hir.FnDef h, String paramName, Type want,
+    private static CompileException blockReturnMismatch(Hir.Apply call, String paramName, Type want,
                                                         Type got, Hir.Expr block) {
         return CompileException.of(Diagnostic.at(Elaborator.answerRegion(block))
-                .say(new HelperMessage.TheBlockAnswersAnotherType(paramName, h.name(),
+                .say(new HelperMessage.TheBlockAnswersAnotherType(paramName, call.written(),
                         Type.show(want), Type.show(got)))
                 .build());
     }
@@ -848,55 +1027,59 @@ public final class HelperTyping {
         return Type.mentions(t, x -> x instanceof Type.Var);
     }
 
-    private static void checkFunctionArg(Hir.FnDef h, String paramName, Type.FnOf want, Hir.Expr arg,
-                                         Scope env, Symbols symbols,
-                                         DeclarationAccess declarations,
-                                         Map<ValueName.Behavior, ReqSig> reqs, HelperInliner inliner,
-                                         Map<String, Type> bind) {
-        SumCases sums = declarations.sums();
+    /** Checks the argument {@code call} hands its function parameter {@code paramName}, answering
+     *  the scope the argument is read in: a block's own parameters bound at what {@code want}
+     *  gives them where that is settled, and {@code env} otherwise. */
+    private static Scope checkFunctionArg(Hir.Apply call, String paramName, Type.FnOf want,
+                                          Hir.Expr arg, Scope env, Walk walk,
+                                          Map<String, Type> bind) {
+        DeclarationKinds kinds = walk.context().kinds();
+        SumCases sums = walk.context().sums();
         if (arg instanceof Hir.Block lambda) {
             if (lambda.params().size() != want.params().size()) {
                 throw CompileException.of(Diagnostic.at(arg.pos())
                         .say(new HelperMessage.TheBlockTakesAnotherNumberOfArguments(paramName,
-                                h.name(), String.valueOf(want.params().size()),
+                                call.written(), String.valueOf(want.params().size()),
                                 String.valueOf(lambda.params().size())))
                         .build());
             }
             Scope lenv = env;
             for (int j = 0; j < lambda.params().size(); j++) {
                 if (isOpen(want.params().get(j))) {
-                    return;   // the parameter type is still open; nothing concrete to check
+                    return env;   // the parameter type is still open; nothing concrete to check
                 }
                 lenv = lenv.with(lambda.params().get(j), want.params().get(j));
             }
-            Type got;
-            try {
-                got = Elaborator.typeOf(inliner.inline(lambda.body(), inliner.bodyOf(h.name())), lenv,
-                        new CheckContext(symbols, declarations, null, reqs));
-            } catch (CompileException _) {
-                return;   // best-effort; the inlined check reports a genuine error with full context
+            Type got = walk.typeOf(lambda.body(), lenv);
+            if (got == null) {
+                // What it answers is left to the elaboration, which says why the body does not type.
+                // The parameters are still the position's, and stay in force for the walk inside.
+                return lenv;
             }
             if (isOpen(want.result())) {
                 // The declared result still has a variable in it, so the shape around the variable is
                 // what there is to check: `'b?` accepts a block answering with an optional and rejects
                 // one answering with a plain value. Unifying also pins `'b` for the arguments after
                 // this one. A failure is reported as the mismatch it is, in written types.
-                if (TypeOps.unify(want.result(), got, bind, declarations.kinds(), sums)
+                if (TypeOps.unify(want.result(), got, bind, kinds, sums)
                         instanceof Fit.Disagrees) {
-                    throw blockReturnMismatch(h, paramName, want.result(), got, lambda);
+                    throw blockReturnMismatch(call, paramName, want.result(), got, lambda);
                 }
-                return;
+                return lenv;
             }
-            if (!TypeOps.assignable(got, want.result(), declarations.kinds(), sums)) {
-                throw blockReturnMismatch(h, paramName, want.result(), got, lambda);
+            if (!TypeOps.assignable(got, want.result(), kinds, sums)) {
+                throw blockReturnMismatch(call, paramName, want.result(), got, lambda);
             }
-        } else if (arg instanceof Hir.Var.Denoting v
+            return lenv;
+        }
+        if (arg instanceof Hir.Var.Denoting v
                 && env.of(v.denotes(), v.name()) instanceof Type vt && !(vt instanceof Type.FnOf)) {
             throw CompileException.of(Diagnostic.at(arg.pos())
-                    .say(new HelperMessage.AValueWhereAFunctionIsTaken(paramName, h.name(),
+                    .say(new HelperMessage.AValueWhereAFunctionIsTaken(paramName, call.written(),
                             v.name()))
                     .build());
         }
+        return env;
     }
 
     /**

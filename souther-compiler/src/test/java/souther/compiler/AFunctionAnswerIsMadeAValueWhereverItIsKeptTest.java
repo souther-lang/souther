@@ -1,8 +1,13 @@
 package souther.compiler;
 
+import souther.compiler.diag.CompileException;
+import souther.compiler.diag.msg.TypeMessage;
+
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * A block is expanded where it is applied, and made a function value of its own only where a
@@ -117,6 +122,49 @@ class AFunctionAnswerIsMadeAValueWhereverItIsKeptTest {
                 """;
         assertEquals(20L, answer(source, 10L));
         assertEquals(0L, answer(source, 0L));
+    }
+
+    /**
+     * A binding written ahead of the block is bound at what it declares, as one is anywhere: the
+     * {@code match} inside the block is over the sum {@code S}, whatever case the value was built as.
+     */
+    @Test
+    void aBindingAheadOfTheBlockIsBoundAtWhatItDeclares() throws Exception {
+        assertEquals(11L, answer("""
+                data A = { n: Int }
+                data B = { k: Int }
+                data S = A | B
+
+                behavior use : (n: Int) -> Int
+                let use (n) = {
+                    let f: (Int) -> Int = {
+                        let s: S = A { n = 1 }
+                        (m) -> match s with
+                            | A as a -> a.n + m
+                            | B as b -> b.k + m
+                    }
+                    f(n)
+                }
+                """, 10L));
+    }
+
+    /** And held to what it opens, as one is anywhere: {@code Line} is no newtype to open. */
+    @Test
+    void aBindingAheadOfTheBlockIsHeldToWhatItOpens() {
+        CompileException e = assertThrows(CompileException.class, () -> answer("""
+                data Line = { sku: String, qty: Int }
+
+                behavior use : (n: Int) -> Int
+                let use (n) = {
+                    let f: (Int) -> Int = {
+                        let Line(x) = Line { sku = "s", qty = 1 }
+                        (m) -> m
+                    }
+                    f(n)
+                }
+                """, 10L));
+        assertInstanceOf(TypeMessage.NotANewtypeToOpenInABinding.class, e.diagnostic().said(),
+                e.getMessage());
     }
 
     @Test

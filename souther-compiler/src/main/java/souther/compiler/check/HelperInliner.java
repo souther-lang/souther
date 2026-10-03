@@ -288,17 +288,17 @@ public final class HelperInliner {
         }
     }
 
-    /** Where a lambda given to a function parameter was written: the parameter it fills, the helper
-     * that declares that parameter, and the lambda's own position. Asked by the binding and not by
-     * the spelling: two combinators nested one inside the other give their function parameters the
-     * same name as often as not, and a report that found the outer one's lambda would point at
-     * another author's line.
+    /** Where a lambda given to a function parameter was written: the parameter it fills, the call
+     * it was handed to as the source spells it, and the lambda's own position. Asked by the
+     * binding and not by the spelling: two combinators nested one inside the other give their
+     * function parameters the same name as often as not, and a report that found the outer one's
+     * lambda would point at another author's line.
      *
      * <p>What a report needs, and nothing else. Where the block crossed into an operation is a
      * separate fact and is kept where identity is settled ({@code Writing#suppliedFrom}): held here
      * as well it was a second answer to one question, and the two came apart the moment one
      * operation handed a block on to another. */
-    private record LambdaOrigin(String param, String owner, SourcePos pos) {}
+    private record LambdaOrigin(String param, String call, SourcePos pos) {}
 
     private HelperInliner(HelperTable table, HelperGraph graph, ValueAtAReference reading) {
         if (reading == ValueAtAReference.SETTLED_REFERENCE) {
@@ -1987,7 +1987,9 @@ public final class HelperInliner {
      *
      * <p>A lambda given to a function parameter is inlined under a synthetic name, so a report that
      * quoted the callee would quote a name nowhere in the source. Where the callee is one of those,
-     * the parameter count is reported against the lambda instead.
+     * the parameter count is reported against the lambda instead. Otherwise the callee is named as
+     * the call spells it, and not by its declaration, whose name is the library's own where the
+     * call reached it through a module.
      */
     private CompileException wrongArity(Hir.Apply call, Hir.FnDef helper, int given) {
         ScopedLambda applied = call.answered() != null
@@ -1997,12 +1999,12 @@ public final class HelperInliner {
         if (origin != null) {
             return CompileException.of(Diagnostic.at(origin.pos())
                     .say(new HelperMessage.TheBlockTakesAnotherNumberOfArguments(origin.param(),
-                            origin.owner(), String.valueOf(given),
+                            origin.call(), String.valueOf(given),
                             String.valueOf(helper.params().size())))
                     .build());
         }
         return CompileException.of(Diagnostic.at(call.appliedAt())
-                .say(new HelperMessage.CalledWithAnotherNumberOfArguments(helper.name(),
+                .say(new HelperMessage.CalledWithAnotherNumberOfArguments(call.written(),
                         String.valueOf(helper.params().size()), String.valueOf(given)))
                 .build());
     }
@@ -2151,7 +2153,7 @@ public final class HelperInliner {
                             Hir.FnDef.lambda(f.name(), lparams,
                                     declares == null ? null : declares.result(),
                                     new Hir.FnBody.Written(lambda.body()), lambda.pos()),
-                            new LambdaOrigin(p.name(), helper.name(), lambda.pos())));
+                            new LambdaOrigin(p.name(), rawCall.written(), lambda.pos())));
                     // A block written at this call was written by whoever wrote the call, so what it
                     // crosses into is this copy whatever stood before it. Recorded in the one place
                     // a crossing is, so that handing it on from inside reads the same as handing on
