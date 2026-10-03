@@ -6545,7 +6545,7 @@ Reported at the stage (<<a-pipeline-composes-behaviors>>). The decoder and the e
 
 [,text]
 ----
-Helper `let depth` takes 2 argument(s), but is called with 1.
+`depth` takes 2 argument(s), but is called with 1.
 ----
 
 Reported at the application (<<an-application-gives-the-arguments-it-takes>>). It covers a helper, a newtype applied to more than the one value it wraps, a lambda, and a block whose parameter list does not match the position it was written in.

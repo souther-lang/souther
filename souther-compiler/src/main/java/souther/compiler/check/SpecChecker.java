@@ -334,8 +334,8 @@ public final class SpecChecker {
         // Check functions passed to helper parameters (e.g. a combinator's predicate) against their
         // declared types first, so a mismatch names the parameter, not the derivation it expands to.
         // A nested fold reaches `List.foldFrom` inside a block, so its signature must be in scope here.
-        HelperTyping.checkFunctionArgs(fn.writtenBody(), tenv, symbols, declarations, reqSigs,
-                inliner);
+        HelperTyping.checkFunctionArgs(fn.writtenBody(), inliner.bodyOf(fn.name()), tenv, symbols,
+                declarations, reqSigs, inliner);
         // The body arrives with helper calls already expanded (the Lower stage, ADR-0021): it is
         // checked as one expression, so a helper's constructions and injected calls count toward this
         // behavior's permission and dependencies — exactly as if the code had been written inline (§blocks).

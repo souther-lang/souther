@@ -161,40 +161,9 @@ public final class Elaborator {
                 yield new Core.Neg(operand, t, neg.pos());
             }
             case Hir.LetIn li -> {
-                Type annotation = annotatedType(li, ctx.symbols());
-                Core value;
-                Type bindType;
-                if (annotation instanceof Type.FnOf declared && producesFunction(li.value())) {
-                    // the written type says what the function takes, so nothing has to be read off
-                    // the applications — which is what a function passed on rather than applied has
-                    // none of, and what a function applied only inside a lambda cannot give
-                    value = elaborateFunctionValue(li.value(), declared, env, ctx);
-                    checkLetAnnotation(li, declared, value.type(), ctx.kinds(), ctx.sums());
-                    bindType = declared;
-                } else if (isFunctionSelection(li.value())) {
-                    // a function bound to a local that could not be inlined (e.g. chosen by an `if`):
-                    // it is a first-class function value. A name is the function it names, and its
-                    // declaration says what it takes. A lambda's parameter types are unannotated,
-                    // so infer them from how the body applies it (spec §blocks).
-                    if (annotation != null) {
-                        throw functionAnnotation(li);   // an ordinary type does not describe a function
-                    }
-                    List<Type> paramTypes = declaredTakes(li.value(), env, ctx);
-                    if (paramTypes == null) {
-                        paramTypes = inferFnParamTypes(li.binder(), li.body(), env, ctx);
-                    }
-                    value = elaborateFunctionValueOfUnknownAnswer(li.value(), paramTypes, env, ctx);
-                    bindType = value.type();
-                } else if (annotation != null) {
-                    // the written type is the value's expected type, so an empty collection bound here
-                    // takes its element/value type from the annotation rather than staying a bottom
-                    value = elaborate(li.value(), env, ctx, annotation);
-                    checkLetAnnotation(li, annotation, value.type(), ctx.kinds(), ctx.sums());
-                    bindType = annotation;
-                } else {
-                    value = elaborate(li.value(), env, ctx);
-                    bindType = carriedType(li, value.type(), ctx.kinds(), ctx.sums());
-                }
+                Bound bound = bound(li, li.value(), env, ctx);
+                Core value = bound.value();
+                Type bindType = bound.type();
                 if (li.opens() != null) {
                     checkOpens(li, bindType, ctx.symbols());
                 }
@@ -803,6 +772,53 @@ public final class Elaborator {
                             .at(li.pos())
                             .diff(actual, shown).say(new TypeMessage.ThePatternOpensAnotherType(shown, actual)).build());
         }
+    }
+
+    /** What a {@code let} gives its name: the value as elaborated, and the type the name is bound at. */
+    record Bound(Core value, Type type) {}
+
+    /**
+     * What {@code li} binds its name to, with {@code value} standing for what it was given.
+     *
+     * <p>The one place that decides the type a binding is read at, for the elaboration and for a
+     * check that reads the body before it is expanded and needs the binding in force where it
+     * reads. That check hands the value expanded and the binding as written, which is why the
+     * value is a parameter of its own.
+     */
+    static Bound bound(Hir.LetIn li, Hir.Expr value, Scope env, CheckContext ctx) {
+        Type annotation = annotatedType(li, ctx.symbols());
+        if (annotation instanceof Type.FnOf declared && producesFunction(value)) {
+            // the written type says what the function takes, so nothing has to be read off
+            // the applications — which is what a function passed on rather than applied has
+            // none of, and what a function applied only inside a lambda cannot give
+            Core elaborated = elaborateFunctionValue(value, declared, env, ctx);
+            checkLetAnnotation(li, declared, elaborated.type(), ctx.kinds(), ctx.sums());
+            return new Bound(elaborated, declared);
+        }
+        if (isFunctionSelection(value)) {
+            // a function bound to a local that could not be inlined (e.g. chosen by an `if`):
+            // it is a first-class function value. A name is the function it names, and its
+            // declaration says what it takes. A lambda's parameter types are unannotated,
+            // so infer them from how the body applies it (spec §blocks).
+            if (annotation != null) {
+                throw functionAnnotation(li);   // an ordinary type does not describe a function
+            }
+            List<Type> paramTypes = declaredTakes(value, env, ctx);
+            if (paramTypes == null) {
+                paramTypes = inferFnParamTypes(li.binder(), li.body(), env, ctx);
+            }
+            Core elaborated = elaborateFunctionValueOfUnknownAnswer(value, paramTypes, env, ctx);
+            return new Bound(elaborated, elaborated.type());
+        }
+        if (annotation != null) {
+            // the written type is the value's expected type, so an empty collection bound here
+            // takes its element/value type from the annotation rather than staying a bottom
+            Core elaborated = elaborate(value, env, ctx, annotation);
+            checkLetAnnotation(li, annotation, elaborated.type(), ctx.kinds(), ctx.sums());
+            return new Bound(elaborated, annotation);
+        }
+        Core elaborated = elaborate(value, env, ctx);
+        return new Bound(elaborated, carriedType(li, elaborated.type(), ctx.kinds(), ctx.sums()));
     }
 
     /** The type a source annotation declares on a binding ({@code let x: T = e}), or null when the
