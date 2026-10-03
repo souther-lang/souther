@@ -7,6 +7,7 @@ import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -104,6 +105,15 @@ class APatternWrittenWithANamedValueOffersWhatItAcceptsTest {
                         ? rule.part().rule().clause().name().map(ClauseName::value).orElse("?")
                         : each.of().toString())
                 .toList(), "the one rule about the strings is named as not read");
+        // And not read because nothing could type it, which is not a form nothing takes apart: an
+        // author told the second rewrites a rule whose form was never the matter.
+        assertEquals(List.of(new StringOfferShortfall.Why.NotRead(new BlockReason.ClauseNotTyped())),
+                shortfall.these().stream().map(StringOfferShortfall.NotOffered::why).toList(),
+                "said as a clause nothing could type");
+        assertEquals(UndividedPosition.Reason.RULES_NOT_READ_AT_ALL,
+                ReportedReason.of(new BlockReason.ClauseNotTyped()),
+                "and published as a rule not read at all, which is the hole a clause with no form"
+                        + " leaves");
     }
 
     private static FillResult filled(String source) {

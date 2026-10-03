@@ -196,6 +196,10 @@ public final class ReportedReason {
             case BlockReason.UnreadComparisonForm _ ->
                     UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
             case BlockReason.UnreadValueRule _ -> UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
+            // Not the word above, which promises the rule was read and sends an author after the
+            // form it is written in. A clause nothing could type was never read, and that is the
+            // hole the word for rules not read at all is said of, a clause with no form among them.
+            case BlockReason.ClauseNotTyped _ -> UndividedPosition.Reason.RULES_NOT_READ_AT_ALL;
             // Its own word, and not the one above. That one promises the rule at this position is
             // written in a form nothing here takes apart, and an author acting on it rewrites a
             // bound that reads perfectly well. What they can act on is the branch beside it.

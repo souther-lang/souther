@@ -216,6 +216,7 @@ public sealed interface BlockReason {
                 case CasePairingNotDetermined _ -> 3;
                 case RuleAboutADerivedValue _ -> 4;
                 case UnreadValueRule _ -> 5;
+                case ClauseNotTyped _ -> 6;
                 case PatternTooCostly _ -> 7;
                 case OrderedExtentTooCostly _ -> 8;
                 case RuleAboutAnElementOfSeveralSequences _ -> 9;
@@ -259,7 +260,7 @@ public sealed interface BlockReason {
                 // the position holds whatever a value taking the unread branch may hold.
                 case PatternTooCostly _, OrderedExtentTooCostly _,
                      UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                     RuleAboutAnElementOfSeveralSequences _, UnreadValueRule _,
+                     RuleAboutAnElementOfSeveralSequences _, UnreadValueRule _, ClauseNotTyped _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
                      ValueRuleRelatingTwoPositions _, CasePairingNotDetermined _ -> true;
@@ -277,14 +278,15 @@ public sealed interface BlockReason {
                 // into, and the machines that say where the strings it admits stop. A run allowed
                 // more of either need not stop at the same rule.
                 case PatternTooCostly _, OrderedExtentTooCostly _ -> RunSensitivity.MAY_CHANGE;
-                // And eight where nothing was compared against anything. A form nothing takes
+                // And the rest, where nothing was compared against anything. A form nothing takes
                 // apart, values no line can be drawn on, a rule about a value made from this one, a
                 // rule about an element of one of several sequences, a relation between two
                 // positions and a pairing nothing worked out are all met again by a run allowed
                 // more of everything. So is an end a choice left open: what the reading of ends
-                // stops on is a form it does not enter, and there is no figure it stopped at.
+                // stops on is a form it does not enter, and there is no figure it stopped at. And
+                // so is a clause nothing could type, which no allowance makes into one.
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                     RuleAboutAnElementOfSeveralSequences _, UnreadValueRule _,
+                     RuleAboutAnElementOfSeveralSequences _, UnreadValueRule _, ClauseNotTyped _,
                      ValueRuleRelatingTwoPositions _, EndLeftOpenByAChoice _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
@@ -612,6 +614,21 @@ public sealed interface BlockReason {
      * values that follows a rule into a shape it does not enter today.
      */
     record UnreadValueRule() implements RuleReadingStopped {}
+
+    /**
+     * A clause of the rule is one the checker has no form for, so nothing read it at all.
+     *
+     * <p>Its own case beside {@link UnreadValueRule}, and the difference is what an author does
+     * about it. That one says the rule was read and is written in a form nothing here takes apart,
+     * which sends them to write it another way; here no reading ever saw which position the clause
+     * was about, because what was written could not be made into anything to read — what they can
+     * act on is the clause failing to type. Said as the other word, an author rewrites a rule whose
+     * form was never the matter.
+     *
+     * <p>The rule's reading and not the position's walk: the walk arrived, and the clause it found
+     * there is the one with no form. A wider run meets it again.
+     */
+    record ClauseNotTyped() implements RuleReadingStopped {}
 
     /**
      * A choice in the rule offers an alternative this compiler does not read, and where the values
