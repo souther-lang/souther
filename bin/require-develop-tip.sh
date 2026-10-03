@@ -4,9 +4,6 @@
 # coordinate is said to hold is the tip of develop: a commit anywhere else, a feature branch's or an
 # older one of develop's, would be published as if it were.
 #
-# Exits 3 where HEAD is not that commit, and otherwise only where git could not answer, so that CI,
-# publishing after its checks, can tell a run overtaken by a later push from one that went wrong.
-#
 # The tree that is asked is the one the script is in, so a linked worktree answers for itself.
 set -euo pipefail
 
@@ -18,5 +15,5 @@ tip="$(git ls-remote --exit-code origin refs/heads/develop | cut -f1)"
 
 if [ "$head" != "$tip" ]; then
   echo "HEAD is $head, and develop on origin is $tip: this is not what develop holds." >&2
-  exit 3
+  exit 1
 fi

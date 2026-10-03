@@ -823,8 +823,9 @@
                 </plugins>
             </build>
         </profile>
-        <!-- Activate to publish develop's snapshot: `mvn -Psnapshot deploy`, which the `develop`
-             push runs in CI once every check has passed. The snapshot repository keeps one
+        <!-- Activate to publish develop's snapshot: `mvn -Psnapshot deploy`, run by hand from a
+             fresh clone of develop, as a release is; CI publishes nothing. The snapshot repository
+             keeps one
              coordinate per version and every publication overwrites it, so what the coordinate
              holds is whatever was published last; this profile is what makes that the tip of
              develop. It refuses a version that is not a snapshot, a dependency outside this
@@ -852,7 +853,7 @@
                                             <message>The snapshot profile publishes develop's snapshot, and ${project.version} is not one. develop never carries a release version.</message>
                                         </requireSnapshotVersion>
                                         <requireReleaseDeps>
-                                            <message>What is published is built from what it depends on, and a snapshot dependency can resolve to something else between the build CI checked and this one.</message>
+                                            <message>What is published is built from what it depends on, and a snapshot dependency can resolve to something else between the build CI checked and this one, or between this publication and the next.</message>
                                             <failWhenParentIsSnapshot>false</failWhenParentIsSnapshot>
                                             <!-- What this reactor builds, which is a snapshot here
                                                  and is built in this same invocation, so it cannot

@@ -69,52 +69,6 @@ jobs:
             -Dsurefire.failIfNoSpecifiedTests=false \
             '-Dtest=${{ matrix.shard.tests }}'
 
-  # develop's snapshot, published from a push to develop once every shard above has passed, and
-  # from nowhere else: the snapshot coordinate is overwritten by each publication, and this is what
-  # makes it the last develop that passed.
-  #
-  # Which run's job is right is the `snapshot` profile's to decide, not the order jobs run in: a
-  # job reaches the group when its own shards finish, which is not the order the pushes came in,
-  # and GitHub does not promise an order among those waiting. The profile publishes only the tip
-  # of develop, so a job for an older commit stops before publishing whenever it runs. What the
-  # group has to give is two things. One publication at a time, so the tip's job, waiting behind
-  # an older one already past the check, publishes after it. And no waiting job dropped: by
-  # default a job arriving cancels the one already waiting, so an older commit's job finishing its
-  # shards late would cancel the tip's and then stop itself, and nothing would publish the tip.
-  # `queue: max` keeps every waiting job, up to a hundred.
-  publish-snapshot:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
-    needs: build
-    runs-on: ubuntu-latest
-    concurrency:
-      group: publish-snapshot
-      queue: max
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Set up JDK 25
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
-        with:
-          distribution: temurin
-          java-version: '25'
-          cache: maven
-          server-id: central
-          server-username: CENTRAL_USERNAME
-          server-password: CENTRAL_TOKEN
-      - name: Publish develop's snapshot
-        env:
-          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
-          CENTRAL_TOKEN: ${{ secrets.CENTRAL_TOKEN }}
-        run: |
-          code=0
-          bin/require-develop-tip.sh || code=$?
-          if [ "$code" -eq 3 ]; then
-            echo "develop has moved past $GITHUB_SHA; the run for where it is now publishes."
-            exit 0
-          fi
-          [ "$code" -eq 0 ] || exit "$code"
-          mvn -B --no-transfer-progress -Psnapshot -DskipTests deploy
-
   # And the slow ones, asked where waiting for them costs nobody an edit: once a night, and nowhere
   # a change is on its way in. Emptying the property is what asks them; everything the job above
   # runs is run here too, so this is the whole suite and not the remainder of it.

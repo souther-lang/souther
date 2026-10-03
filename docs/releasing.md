@@ -90,26 +90,27 @@ more, and both existed only because develop had been made to claim a number it w
 
 ## The snapshot
 
-`<version>-SNAPSHOT` on the Central Portal's snapshot repository is the last commit of develop
-that passed CI. CI publishes it from a push to develop once every check has passed, with
-`mvn -Psnapshot deploy`, and nothing else publishes it.
+`<version>-SNAPSHOT` on the Central Portal's snapshot repository is a commit of develop, published
+by hand like a release. CI publishes nothing, a snapshot or a release. Publish once CI has passed
+on develop's tip, from a fresh clone of it:
 
-The `snapshot` profile is what holds the coordinate to that meaning, as the `release` profile holds
-a release to its tag. The repository keeps one coordinate per version and every publication
+```sh
+git clone --branch develop git@github.com:souther-lang/souther.git souther-snapshot
+cd souther-snapshot
+mvn -Psnapshot deploy
+```
+
+The `snapshot` profile holds the coordinate to that meaning, as the `release` profile holds a
+release to its tag. The repository keeps one coordinate per version and every publication
 overwrites it, so a publication from anywhere else would silently replace what develop published.
-The profile refuses a version that is not a snapshot, a tree holding anything HEAD does not, and a
+The profile refuses a version that is not a snapshot, a tree holding anything HEAD does not
+(`bin/require-clean-checkout.sh`, ignored files included, which is why the clone is fresh), and a
 HEAD that is not the commit develop points at on origin (`bin/require-develop-tip.sh`). A plain
 `mvn deploy` publishes nothing: the publishing plugin is used only by the two profiles.
 
-Which commit ends up published is decided by that check and not by the order CI runs the jobs in,
-which follows when each run's checks finished rather than when its push came. A job for an older
-commit stops at the check whenever it runs. CI runs one publication at a time and keeps every job
-waiting for its turn (`queue: max`), so the tip's job is never dropped and, waiting behind an older
-one already past the check, publishes after it.
-
-The publication is a second build of the commit CI checked, so both resolve the same dependencies
-only because none of them can change: the `snapshot` profile, like the `release` profile, refuses a
-dependency outside this reactor that is a snapshot.
+The publication is a build of its own, so the build CI checked and the one published resolve the
+same dependencies only because none of them can change: the `snapshot` profile, like the `release`
+profile, refuses a dependency outside this reactor that is a snapshot.
 
 A release and a snapshot go through the same plugin and not to the same place. A release is
 uploaded to the Portal as one deployment, validated there and then published to Maven Central; a
@@ -117,9 +118,6 @@ snapshot is deployed straight to the snapshot repository, which Maven Central do
 build resolves a snapshot only if it declares
 `https://central.sonatype.com/repository/maven-snapshots/` as a snapshot repository. The modules
 left out are the same for both, being the ones that set `souther.publish.skip`.
-
-CI publishes with the repository secrets `CENTRAL_USERNAME` and `CENTRAL_TOKEN`, a Central Portal
-user token.
 
 ## The examples
 
