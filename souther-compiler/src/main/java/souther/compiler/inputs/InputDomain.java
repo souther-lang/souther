@@ -27,10 +27,12 @@ import souther.compiler.types.ValueName;
 import souther.compiler.values.AdmissibleSet;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * What can arrive at each position of one behavior's input, read once.
@@ -1098,6 +1100,7 @@ public final class InputDomain {
             case StructuralInspection.Continuation.Branches branches -> {
                 // Asked where the branches are, which is the only place a name can cross one.
                 List<String> shared = sharedAt(input);
+                Set<Refinement> owed = owed(here);
                 List<StructuralInspection.Branch> standing = new ArrayList<>();
                 List<TermPath> passedTo = new ArrayList<>();
                 for (StructuralInspection.Branch branch : branches.branches()) {
@@ -1120,7 +1123,7 @@ public final class InputDomain {
                     // on its own wherever it holds nothing — which is a case with no value being
                     // recorded as the plainest kind of value there is, and read as one by everything
                     // that asks whether a sum has a value.
-                    if (!owed(here, branch.refinement())) {
+                    if (!owed.contains(branch.refinement())) {
                         observed.became(path, branch.refinement(),
                                 new CaseOutcome.RefusedByTheRules());
                         continue;
@@ -1307,19 +1310,24 @@ public final class InputDomain {
     }
 
     /**
-     * Whether the reading of {@code position} still owes a row at this branch.
+     * The branches at which the reading of {@code position} still owes a row.
      *
-     * <p>Asked in the words the obligations are in, through the one relating of the two
+     * <p>Said in the words a branch is in, through the one relating of the two
      * ({@link Refinement#of}). Matched on the kind of distinction here, a branch of a kind this
      * happened not to name would be a branch nothing owes and nothing walks.
+     *
+     * <p>Read once for every branch of the position, so each branch is found in one step rather than
+     * by reading every case the position owes, which for a sum is as many as it has branches.
      */
-    private static boolean owed(Position position, Refinement refinement) {
+    private static Set<Refinement> owed(Position position) {
+        Set<Refinement> owed = new HashSet<>();
         for (Case each : position.obligationCases()) {
-            if (refinement.equals(Refinement.of(each))) {
-                return true;
+            Refinement refinement = Refinement.of(each);
+            if (refinement != null) {
+                owed.add(refinement);
             }
         }
-        return false;
+        return owed;
     }
 
     /**

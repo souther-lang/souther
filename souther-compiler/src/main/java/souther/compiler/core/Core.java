@@ -512,6 +512,13 @@ public sealed interface Core {
                 throw new IllegalArgumentException("operands read as they stand stand as one type: "
                         + left.type() + " " + op + " " + right.type());
             }
+            if (reading instanceof BinaryReading.Opened(Type newtype, Type base)
+                    && !((left.type().equals(newtype) && right.type().equals(base))
+                        || (left.type().equals(base) && right.type().equals(newtype)))) {
+                throw new IllegalArgumentException("a newtype opened beside what it wraps is one "
+                        + "of the two: " + left.type() + " " + op + " " + right.type()
+                        + " opening " + newtype + " to " + base);
+            }
         }
 
         /** What the source wrote, for a reader whose question is about the construct alone. */
@@ -555,6 +562,12 @@ public sealed interface Core {
      * reads its numbers as they stand.
      *
      * <p>Every one of these reads the two sides alike, so a comparison turned round keeps it.
+     *
+     * <p>A reading also says how far each operand is opened before it is read, which a backend
+     * lowers and does not work out from the types. Read as they stand, the two are one type, and
+     * a newtype compares and orders as what it wraps, so opening both through every name they
+     * wear answers what comparing them unopened does. Read at their exact values, neither wears a
+     * name. Read {@link In} a type, neither is opened, and {@link Opened}, the newtype's side is.
      */
     sealed interface BinaryReading {
 
@@ -562,10 +575,14 @@ public sealed interface Core {
         record AsTheyStand() implements BinaryReading {}
 
         /**
-         * The pair as values of {@code type}, for this operator only: a literal beside the newtype it
-         * is compared with, a case beside the enumeration that orders it, two values tested for
-         * sameness across one set of cases, a value beside one that states nothing about its own
-         * type.
+         * The pair as values of {@code type}, for this operator only: a case beside the enumeration
+         * that orders it, two values tested for sameness across one set of cases, a value beside one
+         * that states nothing about its own type.
+         *
+         * <p>Each side is a value of {@code type} as it stands, and neither is opened. A newtype one
+         * of them is may be what {@code type} lists as a case: {@code Code} beside a {@code Key}
+         * listing it is that {@code Key}, and opened it would be the {@code Int} it wraps, which
+         * the {@code Key} beside it is not.
          *
          * <p>Never which side came first: what an operator reads its operands as is the same
          * written either way round, so the type is one both sides settle and not one of theirs
@@ -575,6 +592,32 @@ public sealed interface Core {
             public In {
                 if (type == null) {
                     throw new IllegalArgumentException("a pair is read in some type");
+                }
+            }
+        }
+
+        /**
+         * A newtype beside a literal of what it wraps under every name it wears: the side that is
+         * {@code newtype} is opened through each of those names, and the pair is read as
+         * {@code base}, which the literal already is. {@code amount <= 100} reads the
+         * {@code Amount} as the {@code Int} it wraps, and the {@code 100} as it stands.
+         *
+         * <p>{@code base} is what is under every name and not what the outermost one wraps: for
+         * {@code data Code = Inner} and {@code data Inner = Int} it is the {@code Int}, the base
+         * {@code TypeOps.base} answers.
+         *
+         * <p>Which side is opened is the side whose type is {@code newtype}, so the reading is the
+         * same written either way round. The literal is never a newtype, which is what lets the
+         * two be told apart.
+         */
+        record Opened(Type newtype, Type base) implements BinaryReading {
+            public Opened {
+                if (newtype == null || base == null) {
+                    throw new IllegalArgumentException("a newtype is opened to what it wraps");
+                }
+                if (newtype.equals(base)) {
+                    throw new IllegalArgumentException(
+                            "a type opened to itself is read as it stands: " + newtype);
                 }
             }
         }

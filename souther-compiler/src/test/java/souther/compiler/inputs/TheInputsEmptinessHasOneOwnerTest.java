@@ -224,17 +224,19 @@ class TheInputsEmptinessHasOneOwnerTest {
      * anything at all — which is exactly what this change removed and nothing else would notice.
      *
      * <p>So what a parameter hands over may not answer whether anything is left. It hands over
-     * rules; the question belongs to whatever those rules were said together with.
+     * rules and what each of their subjects is called ({@link FieldDomains#constraintsOver}); the
+     * question belongs to whatever those rules were said together with.
      */
     @Test
     void whatAParameterHandsOverAnswersNoSuchQuestion() {
-        List<String> offered = java.util.Arrays.stream(FieldDomains.Settled.class.getMethods())
-                .filter(each -> each.getDeclaringClass() == FieldDomains.Settled.class)
+        List<String> offered = java.util.Arrays.stream(FieldDomains.Carried.class.getMethods())
+                .filter(each -> each.getDeclaringClass() == FieldDomains.Carried.class)
                 .map(Method::getName)
+                .filter(each -> !List.of("equals", "hashCode", "toString").contains(each))
                 .sorted()
                 .toList();
 
-        assertEquals(List.of("constraintsOver"), offered,
+        assertEquals(List.of("constraints", "named"), offered,
                 "a reading of one parameter supplies rules and answers nothing, so handing them"
                         + " over is the whole of what it offers. Whatever was added here answers"
                         + " something, and whether anything is left is answered by the state the"

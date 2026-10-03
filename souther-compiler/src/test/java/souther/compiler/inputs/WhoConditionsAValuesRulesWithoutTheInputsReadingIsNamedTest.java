@@ -38,10 +38,14 @@ class WhoConditionsAValuesRulesWithoutTheInputsReadingIsNamedTest {
 
     private static final String CONDITIONS = "souther.compiler.check.FieldDomains";
 
-    /** Who settles a position of a value's rules, and why each of them does. */
+    /**
+     * Who settles a position of a value's rules, and why each of them does.
+     *
+     * <p>The reading of an input is not among them. It says every value's rules together first and
+     * settles a position over the whole of that, in its own names, so a value's rules reach it with
+     * nothing settled in them.
+     */
     private static final Set<String> MAY_CONDITION = Set.of(
-            // The reading of an input asking on the input's behalf, which is what the boundary is.
-            "souther.compiler.inputs.PlacedRules",
             // A representative value of a declaration, composed field by field. Its subject is the
             // declaration and not an input — no behavior, no parameter, no path rooted at one — so
             // the declaration's own words are the right ones and there is nothing to translate.
@@ -106,7 +110,7 @@ class WhoConditionsAValuesRulesWithoutTheInputsReadingIsNamedTest {
      * the day one was added, which is a check that reads nothing while reporting nothing.
      */
     private static boolean conditions(String member, java.lang.constant.MethodTypeDesc taken) {
-        if (member.equals("given") || member.equals("composing")) {
+        if (member.equals("composing")) {
             return true;
         }
         return (member.equals("of") || member.equals("unshared"))

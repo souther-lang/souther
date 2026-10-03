@@ -1863,6 +1863,9 @@ final class BodyGen {
                 // already holds as such, so nothing reaches here read in a newtype.
                 case Core.BinaryReading.In in -> throw new IllegalStateException(
                         "arithmetic reads numbers, not values in " + Type.show(in.type()));
+                case Core.BinaryReading.Opened opened -> throw new IllegalStateException(
+                        "arithmetic reads numbers, not a " + Type.show(opened.newtype())
+                                + " opened beside one");
                 case Core.BinaryReading.AsTheyStand _ -> { }
             }
             // Read as they stand, the operator may still answer an exact value: a quotient of two
@@ -1935,15 +1938,38 @@ final class BodyGen {
          * instead, the same six would be divided a second time and the two divisions would agree
          * only for as long as somebody kept them so.
          *
-         * <p>A single-value newtype compares by its underlying value, so each operand is opened to
-         * that value right after it is pushed (金額 &lt;= 金額, 金額 &lt;= 100 — the checker allows
-         * only same newtype or a bare literal).
+         * <p>Each operand is pushed as the pair is read ({@link #operand}), which says how far it
+         * is opened.
          */
         private void emitComparison(Comparison comparison) {
             switch (comparison.claim()) {
                 case ComparisonClaim.Cut cut -> ordered(comparison, cut);
                 case ComparisonClaim.Singled singled -> same(comparison, singled);
             }
+        }
+
+        /**
+         * Pushes one operand of {@code comparison} as the checker read the pair, and answers the
+         * type it is pushed as.
+         *
+         * <p>How far an operand is opened is the reading's answer and not its type's. Read as they
+         * stand, the two are one type and a newtype compares as what it wraps, so both are opened
+         * through every name they wear. Opened beside a literal, the newtype's side is. Read in a
+         * type, neither is: {@code Code} beside a {@code Key} listing it is that {@code Key}, and
+         * opened to the {@code Int} it wraps it would be pushed beside a reference as a long. Read
+         * at their exact values, each is pushed as the Rational it is read as.
+         */
+        private Type operand(Comparison comparison, Core side) {
+            return switch (comparison.reading()) {
+                case Core.BinaryReading.ExactNumbers _ -> {
+                    pushExact(side);
+                    yield Type.RATIONAL;
+                }
+                case Core.BinaryReading.AsTheyStand _ -> unwrapNewtypeValue(genExpr(side));
+                case Core.BinaryReading.Opened opened -> side.type().equals(opened.newtype())
+                        ? unwrapNewtypeValue(genExpr(side)) : genExpr(side);
+                case Core.BinaryReading.In _ -> genExpr(side);
+            };
         }
 
         /**
@@ -1962,16 +1988,16 @@ final class BodyGen {
                             + cut.statedRelation() + " " + comparison.right().type()));
             switch (Ordering.ofBasis(basis)) {
                 case Ordering.Longs _ -> {
-                    unwrapNewtypeValue(genExpr(comparison.left()));
-                    unwrapNewtypeValue(genExpr(comparison.right()));
+                    operand(comparison, comparison.left());
+                    operand(comparison, comparison.right());
                     comparisonMaterialize(cut.statedRelation(), true);
                 }
                 case Ordering.Strings _ -> {
                     // Text's own compareTo orders UTF-16 code units, which is not the language's
                     // order on it (spec §equality).
-                    unwrapNewtypeValue(genExpr(comparison.left()));
+                    operand(comparison, comparison.left());
                     code.checkcast(CD_String);
-                    unwrapNewtypeValue(genExpr(comparison.right()));
+                    operand(comparison, comparison.right());
                     code.checkcast(CD_String);
                     code.invokestatic(CD_Strings, "compare", MTD_Strings_compare);
                     code.iconst_0();
@@ -1983,13 +2009,8 @@ final class BodyGen {
                     // reduces the order to its sign against 0. BigDecimal.compareTo ignores scale,
                     // which matches Decimal equality (spec §equality); a Rational compares by exact
                     // value; the others order in time.
-                    if (comparison.reading() instanceof Core.BinaryReading.ExactNumbers) {
-                        pushExact(comparison.left());
-                        pushExact(comparison.right());
-                    } else {
-                        unwrapNewtypeValue(genExpr(comparison.left()));
-                        unwrapNewtypeValue(genExpr(comparison.right()));
-                    }
+                    operand(comparison, comparison.left());
+                    operand(comparison, comparison.right());
                     code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
                     code.iconst_0();
                     comparisonMaterialize(cut.statedRelation(), false);
@@ -1998,9 +2019,9 @@ final class BodyGen {
                     // An enumeration compares by where its case stands in the declaration, which
                     // the sum answers for both operands — `stage < Won` pairs a sum with one of its
                     // cases, and `x < StageN(Qualified)` two wrappers over one sum.
-                    unwrapNewtypeValue(genExpr(comparison.left()));
+                    operand(comparison, comparison.left());
                     code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
-                    unwrapNewtypeValue(genExpr(comparison.right()));
+                    operand(comparison, comparison.right());
                     code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
                     comparisonMaterialize(cut.statedRelation(), false);
                 }
@@ -2019,17 +2040,11 @@ final class BodyGen {
          * inverted.
          */
         private void same(Comparison comparison, ComparisonClaim.Singled singled) {
-            if (comparison.reading() instanceof Core.BinaryReading.ExactNumbers) {
-                // Equal by exact mathematical value, which is what the runtime value's own equality
-                // is: one representation per value, so `Values.equal` asking it is asking this.
-                pushExact(comparison.left());
-                pushExact(comparison.right());
-                emitValueEquals(code, false);
-                selecting(singled);
-                return;
-            }
-            Type lt = unwrapNewtypeValue(genExpr(comparison.left()));
-            unwrapNewtypeValue(genExpr(comparison.right()));
+            // Read at their exact values, the two are Rationals, equal by exact mathematical value,
+            // which is what the runtime value's own equality is: one representation per value, so
+            // `Values.equal` asking it is asking this.
+            Type lt = operand(comparison, comparison.left());
+            operand(comparison, comparison.right());
             if (lt == Type.STRING) {
                 code.invokevirtual(CD_String, "equals",
                         MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
