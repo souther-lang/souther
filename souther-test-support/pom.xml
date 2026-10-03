@@ -59,24 +59,19 @@
         </dependency>
     </dependencies>
 
-    <profiles>
-        <!-- Infrastructure for checking this repository, not an API anyone outside it writes
-             against; keep it out of the Central bundle. Published, it would look like an artifact
-             with a compatibility promise, and the repository's own shape would become part of what
-             this project supports. -->
-        <profile>
-            <id>release</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.sonatype.central</groupId>
-                        <artifactId>central-publishing-maven-plugin</artifactId>
-                        <configuration>
-                            <skipPublishing>true</skipPublishing>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
+    <build>
+        <plugins>
+            <!-- Infrastructure for checking this repository, not an API anyone outside it writes
+                 against; keep it out of what Central is sent, release or snapshot. Published, it
+                 would look like an artifact with a compatibility promise, and the repository's own
+                 shape would become part of what this project supports. -->
+            <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <configuration>
+                    <skipPublishing>true</skipPublishing>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

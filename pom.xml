@@ -413,6 +413,21 @@
                     </archive>
                 </configuration>
             </plugin>
+            <!-- What `deploy` publishes to, the Sonatype Central Portal. A -SNAPSHOT version goes
+                 to its snapshot repository with a plain `mvn deploy`; a release is the `release`
+                 profile's, which holds it to a clean tagged checkout and signs it, and is
+                 published once the Portal has validated the bundle (autoPublish). A module that
+                 ships nothing says `skipPublishing` in its own pom. -->
+            <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <version>0.11.0</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <publishingServerId>central</publishingServerId>
+                    <autoPublish>true</autoPublish>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 
@@ -666,10 +681,10 @@
                 <build.test.classes>${project.basedir}/target/jdt-test-classes</build.test.classes>
             </properties>
         </profile>
-        <!-- Activate for a Central release: `mvn -Prelease deploy`. Attaches sources and
-             javadoc, GPG-signs every artifact, and publishes the reactor to the Sonatype
-             Central Portal (autoPublish=true, so a validated bundle is released without a further
-             step in the Portal). Normal build/test is untouched. -->
+        <!-- Activate for a Central release: `mvn -Prelease deploy`. Holds the build to a clean
+             checkout of the tag for its version, attaches sources and javadoc, and GPG-signs
+             every artifact; the publishing plugin in the build above uploads the bundle. A
+             snapshot is deployed without this profile. Normal build/test is untouched. -->
         <profile>
             <id>release</id>
             <build>
@@ -769,16 +784,6 @@
                                 </goals>
                             </execution>
                         </executions>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.sonatype.central</groupId>
-                        <artifactId>central-publishing-maven-plugin</artifactId>
-                        <version>0.11.0</version>
-                        <extensions>true</extensions>
-                        <configuration>
-                            <publishingServerId>central</publishingServerId>
-                            <autoPublish>true</autoPublish>
-                        </configuration>
                     </plugin>
                 </plugins>
             </build>

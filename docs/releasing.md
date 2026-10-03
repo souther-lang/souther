@@ -91,6 +91,23 @@ more, and both existed only because develop had been made to claim a number it w
 
    `souther-lang/examples` names the snapshot, so it moves with this.
 
+## Publishing a snapshot
+
+What develop carries is published to the Central Portal's snapshot repository with a plain deploy,
+from any checkout of develop:
+
+```sh
+mvn deploy
+```
+
+Without `-Prelease`. That profile is a release's: it refuses any tree but a clean checkout of
+`v<version>`, which a snapshot never has, and it signs and attaches sources and javadoc, which a
+snapshot does not need. The publishing plugin itself is in the plain build, so both go to the same
+place, and the modules a release leaves out are left out of a snapshot as well.
+
+`souther-lang/examples` resolves the snapshot from there, so it sees a change on develop once one
+is published.
+
 ## The examples
 
 `souther-lang/examples` pins the compiler in four places and has a `bin/set-version.sh` of its own.

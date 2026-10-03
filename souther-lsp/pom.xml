@@ -160,26 +160,17 @@
                     </execution>
                 </executions>
             </plugin>
+            <!-- What this module ships is the shaded LSP server, a runnable binary rather than a
+                 library; keep it out of what Central is sent, release or snapshot (distribute via
+                 GitHub Releases instead). The plain jar is a dependency inside this reactor and is
+                 not published either. -->
+            <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <configuration>
+                    <skipPublishing>true</skipPublishing>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
-
-    <profiles>
-        <!-- What this module ships is the shaded LSP server, a runnable binary rather than a
-             library; keep it out of the Central bundle (distribute via GitHub Releases instead).
-             The plain jar is a dependency inside this reactor and is not published either. -->
-        <profile>
-            <id>release</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.sonatype.central</groupId>
-                        <artifactId>central-publishing-maven-plugin</artifactId>
-                        <configuration>
-                            <skipPublishing>true</skipPublishing>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 </project>
