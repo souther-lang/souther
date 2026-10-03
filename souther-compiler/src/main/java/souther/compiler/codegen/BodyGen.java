@@ -464,7 +464,15 @@ final class BodyGen {
                     code.invokestatic(CD_ConstraintViolation, "orThrow", MTD_orThrow);
                     returnValue();
                 }
-                default -> {
+                // None of these answers with one of its parts, so what it answers is computed as a
+                // value and returned. Every construct is named on one side or the other: one added
+                // to Core does not compile here until it is placed.
+                case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
+                     Core.Read _, Core.UnitValue _, Core.MaterialisedValue _, Core.Neg _,
+                     Core.FieldAccess _, Core.FieldProjection _, Core.Binary _, Core.Call _,
+                     Core.PreservedCall _, Core.Apply _, Core.Block _, Core.ListLit _,
+                     Core.OptionSome _, Core.OptionNone _, Core.Tuple _, Core.TupleGet _,
+                     Core.Construct _, Core.Unreachable _ -> {
                     Type rt = emitValue(e, expected);
                     box(code, rt);
                     returnValue();
@@ -2181,7 +2189,14 @@ final class BodyGen {
                 // is, emitted at the parameter types it was checked at.
                 case Core.Widen w -> emitFunctionValue(w.value(),
                         ((Type.FnOf) w.value().type()).params());
-                default -> genExpr(value);
+                // None of these answers with one of its parts, so the function it answers is the
+                // value genExpr leaves.
+                case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
+                     Core.Read _, Core.UnitValue _, Core.MaterialisedValue _, Core.Neg _,
+                     Core.FieldAccess _, Core.FieldProjection _, Core.Binary _, Core.Call _,
+                     Core.PreservedCall _, Core.Apply _, Core.ListLit _, Core.OptionSome _,
+                     Core.OptionNone _, Core.Tuple _, Core.TupleGet _, Core.Construct _,
+                     Core.Unreachable _ -> genExpr(value);
             }
         }
 
