@@ -90,6 +90,17 @@ class AnOperatorSaysWhatItReadsItsOperandsAsTest {
 
             behavior quantitiesAgainstEachOther : (a: Amount, b: Amount) -> Bool
             let quantitiesAgainstEachOther (a, b) = a < b
+
+            data Inner = Int
+            data Code = Inner
+            data Name = String
+            data Key = Code | Name
+
+            behavior isSeven : (k: Key) -> Bool
+            let isSeven (k) = k == Code(Inner(7))
+
+            behavior aDeepCodeIsSeven : (c: Code) -> Bool
+            let aDeepCodeIsSeven (c) = 7 == c
             """;
 
     @Test
@@ -125,13 +136,47 @@ class AnOperatorSaysWhatItReadsItsOperandsAsTest {
     }
 
     @Test
-    void aLiteralBesideANewtypeIsReadAsTheNewtypeAndStaysWhatItIs() {
+    void aLiteralBesideANewtypeIsReadAsWhatTheNewtypeWrapsAndStaysWhatItIs() {
         Core.Binary compared = applying("underALimit", BinOp.LE);
-        Core.BinaryReading.In in = assertInstanceOf(Core.BinaryReading.In.class,
+        Core.BinaryReading.Opened opened = assertInstanceOf(Core.BinaryReading.Opened.class,
                 compared.reading());
-        assertEquals("Amount", Type.show(in.type()));
+        assertEquals("Amount", Type.show(opened.newtype()));
+        assertEquals(Type.INT, opened.base());
         assertEquals(Type.INT, compared.right().type(),
                 "the literal is an Int, and nothing widened it to stand as the newtype");
+
+        Core.BinaryReading.Opened deep = assertInstanceOf(Core.BinaryReading.Opened.class,
+                applying("aDeepCodeIsSeven", BinOp.EQ).reading());
+        assertEquals("Code", Type.show(deep.newtype()));
+        assertEquals(Type.INT, deep.base(), "the base under every name it wears");
+    }
+
+    /**
+     * A newtype a sum lists as a case is a value of that sum as it stands. Beside the sum, the pair
+     * is read in the cases both range over and neither side is opened: opened, the {@code Code}
+     * would be the {@code Int} it wraps, and no {@code Key} is one.
+     */
+    @Test
+    void aNewtypeBesideTheSumListingItIsReadInTheCasesAndNotOpened() {
+        Core.Binary compared = applying("isSeven", BinOp.EQ);
+        Core.BinaryReading.In in = assertInstanceOf(Core.BinaryReading.In.class,
+                compared.reading());
+        Type.Union cases = assertInstanceOf(Type.Union.class, in.type());
+        assertEquals(List.of("Code", "Name"),
+                cases.members().stream().map(each -> each.name()).toList());
+    }
+
+    @Test
+    void aNewtypeIsOpenedBesideWhatItWrapsAndNothingElse() {
+        Core whole = new Core.Int(1, Type.INT, null);
+        Core.BinaryReading.Opened toAWholeNumber =
+                assertInstanceOf(Core.BinaryReading.Opened.class,
+                        applying("underALimit", BinOp.LE).reading());
+        Core decimal = new Core.Decimal(BigDecimal.ONE, Type.DECIMAL, null);
+        assertThrows(IllegalArgumentException.class, () -> new Core.Binary(BinOp.EQ, whole,
+                decimal, toAWholeNumber, ConstructOccurrence.unwritten(), Type.BOOL, null));
+        assertThrows(IllegalArgumentException.class,
+                () -> new Core.BinaryReading.Opened(Type.INT, Type.INT));
     }
 
     @Test

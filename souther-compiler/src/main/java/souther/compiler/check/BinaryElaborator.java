@@ -235,8 +235,7 @@ public final class BinaryElaborator {
         Ordering how = Ordering.of(lt, declarations);
         return how != null && TypeOps.base(lt, inners).equals(TypeOps.base(rt, inners))
                 && literalPairsNewtype(lt, rt, le, re, symbols)
-                ? new OrderedReading(new Core.BinaryReading.In(newtypeOfThePair(lt, rt, symbols)),
-                        basisOf(how))
+                ? new OrderedReading(openedPair(lt, rt, inners, symbols), basisOf(how))
                 : null;
     }
 
@@ -277,7 +276,7 @@ public final class BinaryElaborator {
             return Core.BinaryReading.EXACT_NUMBERS;
         }
         if (eqCoercible(lt, rt, le, re, ctx.inners(), ctx.symbols())) {
-            return new Core.BinaryReading.In(newtypeOfThePair(lt, rt, ctx.symbols()));
+            return openedPair(lt, rt, ctx.inners(), ctx.symbols());
         }
         List<TypeSymbol> lCases = AtomSpace.subjectAtoms(lt, ctx.kinds(), ctx.sums());
         List<TypeSymbol> rCases = AtomSpace.subjectAtoms(rt, ctx.kinds(), ctx.sums());
@@ -297,10 +296,14 @@ public final class BinaryElaborator {
         return BottomInfer.isBottom(rt) ? new Core.BinaryReading.In(lt) : null;
     }
 
-    /** The side of a newtype-and-literal pair that wears the newtype, which is what the literal is
-     *  read as. */
-    private static Type newtypeOfThePair(Type lt, Type rt, Symbols symbols) {
-        return TypeOps.isSingleValueNewtype(lt, symbols) ? lt : rt;
+    /**
+     * A newtype-and-literal pair, read as what the newtype wraps under every name it wears: the
+     * newtype's side is opened to that, and the literal already is it.
+     */
+    private static Core.BinaryReading.Opened openedPair(Type lt, Type rt, NewtypeInners inners,
+                                                        Symbols symbols) {
+        Type newtype = TypeOps.isSingleValueNewtype(lt, symbols) ? lt : rt;
+        return new Core.BinaryReading.Opened(newtype, TypeOps.base(newtype, inners));
     }
 
     /**
