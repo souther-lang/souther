@@ -69,10 +69,10 @@ class WhoMayReadWhatAStringPredicateMeansTest {
      * minimum does, and which of them the whole of the rules admits is settled elsewhere.
      *
      * <p>{@code Partitions} is licensed for the reading it takes and for nothing else, which is
-     * what keeps the two apart: {@code statedByWritten} answers what a rule accepts as written, and
-     * a witness is what that is for. The reading the analysis takes is the other entry point, and a
-     * row saying {@code Partitions} names it would be a second reader of what a rule means about a
-     * position.
+     * what keeps the two apart: {@code statedOn} answers what each rule a declaration publishes
+     * accepts, and a witness is what that is for. The reading the analysis takes is the other entry
+     * point, and a row saying {@code Partitions} names it would be a second reader of what a rule
+     * means about a position.
      *
      * <p>A row for a class in {@code inputs} or {@code report} is the edge this exists to refuse:
      * those name what a position came to, and a rule's meaning reaching them except through the
@@ -160,7 +160,6 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             READS + "$Reading",
             READS + "$Reading$Accepting",
             READS + "$Reading$Accepting#accepts()Lnet/unit8/notation199x/pattern/PatternMeaning;",
-            READS + "$Reading$PatternNotRead",
             READS + "$Reading$WrittenArgumentNotKnown",
             READS + "$Stated",
             READS + "$Stated#reading()L" + OWNER + "$Reading;",
@@ -171,7 +170,6 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             WHAT_A_RULE_STATES + "$Reading$Accepting",
             WHAT_A_RULE_STATES
                     + "$Reading$Accepting#accepts()Lnet/unit8/notation199x/pattern/PatternMeaning;",
-            WHAT_A_RULE_STATES + "$Reading$PatternNotRead",
             WHAT_A_RULE_STATES + "$Reading$WrittenArgumentNotKnown",
             WHAT_A_CLAUSE_STATES,
             WHAT_A_CLAUSE_STATES + IN_A_DESCRIPTOR,
@@ -185,19 +183,23 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             A_CLAUSES_RULE + "$Stated",
             WITNESS,
             WITNESS + IN_A_DESCRIPTOR,
-            WITNESS + "#statedByWritten(Lsouther/compiler/ast/Hir$Expr;"
-                    + "Lsouther/compiler/check/Symbols;)L" + OWNER + "$Reading;",
+            WITNESS + "#statedOn(Lsouther/compiler/types/TypeSymbol$AtModule;"
+                    + "Lsouther/compiler/check/RuleReadingSource;)L" + OWNER + "$StatedOn;",
             WITNESS + "$Reading",
             WITNESS + "$Reading$Accepting",
             WITNESS + "$Reading$Accepting#accepts()Lnet/unit8/notation199x/pattern/PatternMeaning;",
-            // And the outcomes a witness was not composed from, which is not a second answer about
+            // And the outcome a witness was not composed from, which is not a second answer about
             // the position. What is taken here is that this reading yielded no pattern to compose
             // out of — so the value offered came from the rules beside it, and a search that had
             // every one of those refused may not report that as the model refusing what it states.
             // The strings such a rule admits stay unasked: nothing here reads one, and what the
             // position is left admitting is settled where the row above says it is.
-            WITNESS + "$Reading$PatternNotRead",
             WITNESS + "$Reading$WrittenArgumentNotKnown",
+            WITNESS + "$StatedOn",
+            WITNESS + "$StatedOn#of(Lsouther/compiler/check/PartId;)L" + OWNER + "$Reading;",
+            // And whether the checker typed the clause a part is of, which is the same outcome
+            // reached before any predicate is: a clause with no form composes nothing either.
+            WITNESS + "$StatedOn#typed(Lsouther/compiler/check/PartId;)Z",
             A_BODYS_RULES,
             A_BODYS_RULES + IN_A_DESCRIPTOR,
             A_BODYS_RULES + "#statedBy(Lsouther/compiler/core/Core;"

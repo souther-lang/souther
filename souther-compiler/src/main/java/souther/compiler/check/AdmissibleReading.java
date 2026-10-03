@@ -199,13 +199,10 @@ final class AdmissibleReading {
             case StringPredicates.Reading.Accepting it -> asking(part, position,
                     new AdmittedPlan.Pattern(states ? PatternPlan.of(it.accepts())
                             : PatternPlan.notMatching(it.accepts())));
-            // A rule whose text this could not work out, or whose text is no pattern the compiler
-            // reads, is a rule this did not read, and what that costs is the leaf's to say — over
-            // every position the clause names, which is more than this one wherever the text is
-            // written out of another. The second is a compile error where the call is checked, and
-            // this is what a reading of a module with that error in it says.
-            case StringPredicates.Reading.PatternNotRead _,
-                 StringPredicates.Reading.WrittenArgumentNotKnown _ -> null;
+            // A rule whose text this could not work out is a rule this did not read, and what that
+            // costs is the leaf's to say — over every position the clause names, which is more
+            // than this one wherever the text is written out of another.
+            case StringPredicates.Reading.WrittenArgumentNotKnown _ -> null;
         };
     }
 
@@ -467,8 +464,6 @@ final class AdmissibleReading {
         return Map.of(position, switch (stated.reading()) {
             case StringPredicates.Reading.Accepting _ ->
                     new StringRestriction.Admitting(said.at(position));
-            case StringPredicates.Reading.PatternNotRead _ ->
-                    new StringRestriction.NotKnown(BlockReason.forAPatternNotRead());
             case StringPredicates.Reading.WrittenArgumentNotKnown _ ->
                     new StringRestriction.NotKnown(new BlockReason.UnreadValueRule());
         });
