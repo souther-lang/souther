@@ -288,7 +288,7 @@ public enum StringPredicates {
      * in one word for as long as that reading says it.
      */
     private static final BlockReason.RuleOfferShortfallReason
-            WHY_A_CLAUSE_NOTHING_TYPED_WAS_NOT_READ = BlockReason.ofARuleAnOfferGotNothingFrom(
+            WHY_A_CLAUSE_NOTHING_TYPED_WAS_NOT_READ = BlockReason.ofANamedRule(
                     FieldDomains.whyNothingReached(Set.of(new RulesMissed.ClauseNotTyped())));
 
     /**

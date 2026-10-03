@@ -435,7 +435,7 @@ public sealed interface BlockReason {
      */
     static ReadingStopReason of(souther.compiler.values.UnreadReason why) {
         return switch (why) {
-            case NOT_REACHED -> ofARuleAnOfferGotNothingFrom(why);
+            case NOT_REACHED -> ofANamedRule(why);
             case NOT_REACHED_PAST_DEPTH_LIMIT -> new ValueRulesNotReachedPastDepthLimit();
             // And every other way this reading is short by the one below, since all of them leave a
             // question of a rule standing. Written out rather than defaulted to: a reason added to
@@ -494,18 +494,17 @@ public sealed interface BlockReason {
     }
 
     /**
-     * The same, for a caller holding the rule an offer of values got nothing from.
+     * The same, for a caller holding the rule the reason is said beside.
      *
-     * <p>A rule a reading gave up on is filed as that rule, and a rule nothing reached is filed as
-     * the reading of the position files it — so the rule an offer names is said in the word the
-     * position's own account has for the same clause, and the two never come apart.
-     * {@link #of(UnreadReason)} asks this for a rule nothing reached, which keeps that one
-     * classification here.
+     * <p>A rule a reading gave up on is filed as that rule, and a rule nothing reached as rules no
+     * reading reached — which is what {@link #of(UnreadReason)} files it as too, by asking this.
+     * So a caller that names the rule, an offer of values that got nothing from it among them,
+     * says it in the word the position's own account has for the same clause.
      *
      * <p>Refused for the rest. A depth a run could afford is no fact about the rule it stopped
      * above, and an answer nothing built names no rule at all.
      */
-    static RuleOfferShortfallReason ofARuleAnOfferGotNothingFrom(UnreadReason why) {
+    static RuleOfferShortfallReason ofANamedRule(UnreadReason why) {
         return switch (why) {
             case NOT_REACHED -> new ValueRulesNotReached();
             case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY ->
