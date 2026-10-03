@@ -30,7 +30,8 @@ import java.util.function.Supplier;
  * <p>What was worked out about the sets those readings met is held here on the same terms and under
  * a key of its own. Where a set's strings stop is settled by the set, so it is not one declaration's
  * to lend to another — it is what this revision has found out, and every reading made under the
- * revision asks the one table.
+ * revision asks the one table. Any other work whose answer is settled by the work itself is held
+ * the same way, keyed by the work ({@link SettledWork}).
  *
  * <p>What a reading decides on its own goes with it. The ends a declaration's conjuncts moved are
  * read by asking what its rules leave without each of them, and each of those is a reading of the
@@ -63,6 +64,9 @@ public final class LentReadings implements DeclarationReadings {
      *  lifetime is the same one, and apart from them because it is keyed by the set and by nothing
      *  about who met it. */
     private final Map<ValueSet, TextExtent> extents = new HashMap<>();
+    /** What each piece of work asked for under this revision came to, empty answers included. Keyed
+     *  by the work for the reason the extents are keyed by the set. */
+    private final Map<SettledWork<?>, Object> settled = new HashMap<>();
 
     /** The revision the readings in hand were made under. */
     private long lentAt;
@@ -86,6 +90,14 @@ public final class LentReadings implements DeclarationReadings {
     @Override
     public KnownExtents extents() {
         return known;
+    }
+
+    // The cast holds because an entry is only ever put by doing its key, and a key of type
+    // SettledWork<A> comes to an A.
+    @SuppressWarnings("unchecked")
+    @Override
+    public <A> A settled(SettledWork<A> work) {
+        return (A) currentSettled().computeIfAbsent(work, SettledWork::done);
     }
 
     /** Asked of what this lends over, as the machines are: which declaration's reading another's
@@ -162,12 +174,19 @@ public final class LentReadings implements DeclarationReadings {
         return extents;
     }
 
+    /** The same for the settled work. */
+    private Map<SettledWork<?>, Object> currentSettled() {
+        atTheCurrentRevision();
+        return settled;
+    }
+
     /** Drops what was shared under a revision that has been left behind. */
     private void atTheCurrentRevision() {
         long now = revision.getAsLong();
         if (now != lentAt) {
             lent.clear();
             extents.clear();
+            settled.clear();
             lentAt = now;
         }
     }

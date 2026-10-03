@@ -159,9 +159,18 @@ class WhoMayBuildALanguageAboutAPositionTest {
      * the values coming from the rules beside the one that gave nothing, and what an author does
      * about them differs, so the two travel apart from the offer to the block
      * ({@code StringOfferShortfall}).
+     *
+     * <p>One owner, and inside it the pieces of work a revision keeps. What the rules about a
+     * position's strings offer a row, and what that offer was short of, are settled by the rules,
+     * so each is a piece of work of its own that mints this allowance for itself
+     * ({@code SettledWork}): minted at the call instead, the work would be done again at every
+     * visit of a search.
      */
-    private static final List<String> OF_A_WITNESS =
-            List.of("souther/compiler/partition/Partitions");
+    private static final List<String> OF_A_WITNESS = List.of(
+            "souther/compiler/partition/Partitions",
+            "souther/compiler/partition/Partitions$PatternWitness",
+            "souther/compiler/partition/Partitions$StringsTheRulesAdmit",
+            "souther/compiler/partition/Partitions$WhatTheOfferIsShortOf");
 
     /**
      * What walking a set for where it stops on the order may cost.
@@ -179,11 +188,12 @@ class WhoMayBuildALanguageAboutAPositionTest {
      * about.
      *
      * <p>{@code Realizer} is what a position's answer is built by, and the witness is the one
-     * caller that builds a machine to write a value out of rather than to answer with. Everything
-     * else takes what one of them left.
+     * caller that builds a machine to write a value out of rather than to answer with, a single
+     * pattern's in the work that offers it. Everything else takes what one of them left.
      */
     private static final List<String> BUILDS_A_MACHINE = List.of(
             "souther/compiler/partition/Partitions",
+            "souther/compiler/partition/Partitions$PatternWitness",
             "souther/compiler/values/Realizer");
 
     @Test

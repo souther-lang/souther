@@ -103,6 +103,16 @@ public final class RuleReadingContext {
     }
 
     /**
+     * What {@code work} comes to in this revision ({@link DeclarationReadings#settled}).
+     *
+     * <p>That one capability of the lender and not the lender: a reader outside this package that
+     * offers values has no business borrowing readings, and handed the lender it could.
+     */
+    public <A> A settled(SettledWork<A> work) {
+        return readings.settled(work);
+    }
+
+    /**
      * What a result of the walk keeps for readers of the same declarations that start after the
      * walk is over.
      *

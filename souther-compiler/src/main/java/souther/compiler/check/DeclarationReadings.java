@@ -48,6 +48,18 @@ public interface DeclarationReadings {
     }
 
     /**
+     * What {@code work} comes to, as this revision already worked it out or works it out now.
+     *
+     * <p>On the lifetime {@link #extents} is on and for the same reason: the answer is settled by
+     * the work and the allowance it mints for itself ({@link SettledWork}), so it is one the
+     * revision has and not one any declaration came to. A reading with no revision behind it does
+     * the work every time it is asked.
+     */
+    default <A> A settled(SettledWork<A> work) {
+        return SettledWork.done(work);
+    }
+
+    /**
      * The declaration's canonical reading as the source {@code origin} names and {@code policy}
      * decide it: the one somebody has already made under those terms, or the one {@code read} makes,
      * kept for whoever asks next. A lender that keeps none does the reading every time.
@@ -175,6 +187,11 @@ public interface DeclarationReadings {
             @Override
             public KnownExtents extents() {
                 return lender.extents();
+            }
+
+            @Override
+            public <A> A settled(SettledWork<A> work) {
+                return lender.settled(work);
             }
 
             @Override

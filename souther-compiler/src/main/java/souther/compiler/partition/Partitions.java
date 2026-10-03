@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingContext;
+import souther.compiler.check.SettledWork;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleKey;
@@ -57,6 +58,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.function.Supplier;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
 
@@ -1503,9 +1505,9 @@ public final class Partitions {
         DeclaredBounds.CountRange characters = DeclaredBounds.countsHeld(view, reading, null);
         // What the rules ask for, and then what the position is where nothing was written about it.
         List<FixtureTemplate> bare = new ArrayList<>();
-        bare.addAll(whatEveryRuleAdmits(stated, characters));
+        bare.addAll(whatEveryRuleAdmits(stated, characters, reading));
         bare.addAll(whereTheRulesLeaveTheValue(view, reading, within));
-        bare.addAll(whatAFormatAsksFor(stated.patterns()));
+        bare.addAll(whatAFormatAsksFor(stated.patterns(), reading));
         // What the rules say the value holds, before the value that would hold nothing.
         bare.addAll(Witnesses.holding(view, characters.least(), reading, inside));
         List<FixtureTemplate> ofTheShape =
@@ -1592,14 +1594,15 @@ public final class Partitions {
      * proposal a bounded search reaches before it stops, and the value a name wraps is the one its
      * own rules were written closest to. It is {@link #patternsStatedOn}'s order, read once for
      * every reader of it here.
+     *
+     * <p>Each value is the revision's ({@link PatternWitness}).
      */
-    private static List<FixtureTemplate> whatAFormatAsksFor(List<PatternMeaning> stated) {
+    private static List<FixtureTemplate> whatAFormatAsksFor(List<PatternMeaning> stated,
+                                                            RuleReadingContext reading) {
         List<FixtureTemplate> out = new ArrayList<>();
         for (PatternMeaning each : stated) {
-            String text = writtenFor(each);
-            if (text != null) {
-                out.add(FixtureTemplate.string(text));
-            }
+            reading.settled(new PatternWitness(PatternPlan.of(each)))
+                    .ifPresent(text -> out.add(FixtureTemplate.string(text)));
         }
         return out;
     }
@@ -1890,8 +1893,10 @@ public final class Partitions {
         }
         TypeView view = TypeView.of(type, reading.source().inners(), reading.source().symbols(),
                         reading.source().kinds(), reading.source().sums());
-        return stringsTheRulesReadAdmit(view, reading, PatternPlan.Budget.OF_A_WITNESS.meter())
-                .shortfall();
+        PatternsStated stated = patternsStatedOn(view, reading.source());
+        RulesRead rules = rulesReadOn(stated, view, reading);
+        return rules == null ? stated.unread()
+                : reading.settled(new WhatTheOfferIsShortOf(rules));
     }
 
     /**
@@ -2087,24 +2092,6 @@ public final class Partitions {
         return range == null || range.admits(at);
     }
 
-    /**
-     * A value a source can carry that {@code regex} accepts, or null where there is none to offer.
-     *
-     * <p>Null two ways, and they are one answer here: a pattern whose machine costs more than
-     * writing a value is allowed, and one every string of which is something nobody can paste. What
-     * a caller does with each of them is offer no candidate, so they are not told apart — a row is
-     * offered or it is not. Text that is no pattern of the language never reaches here: the
-     * reading says so, and the caller offers no candidate for the same reason.
-     *
-     * <p>Read by the one thing here that reads patterns. What this used to have was a reader of its
-     * own, which meant two answers to "what does this pattern accept" and one model where they
-     * could differ.
-     */
-    private static String writtenFor(PatternMeaning syntax) {
-        Language language = languageOf(syntax, PatternPlan.Budget.OF_A_WITNESS.meter());
-        return language == null ? null : language.someWritten();
-    }
-
     /** The strings {@code syntax} accepts, or null where making the machine costs more than
      *  {@code meter} allows. */
     private static Language languageOf(PatternMeaning syntax, Meter meter) {
@@ -2165,17 +2152,21 @@ public final class Partitions {
      */
     static List<FixtureTemplate> admittedStringOfSize(TypeView view, RuleReadingContext reading,
                                                       int size) {
-        if (size < 0 || !(view.shape() instanceof Shape.Scalar scalar)
-                || scalar.prim() != Type.Prim.STRING) {
+        if (size < 0) {
             return List.of();
         }
-        Meter meter = PatternPlan.Budget.OF_A_WITNESS.meter();
-        Language admits = stringsTheRulesReadAdmit(view, reading, meter).language();
-        Language counted = admits == null ? null
-                : languageOf(PatternMeaning.ofAnySymbols(size, size), meter);
-        Language both = counted == null ? null : admits.and(counted, meter);
-        String some = both == null ? null : both.someWritten();
-        return some == null ? List.of() : List.of(FixtureTemplate.string(some));
+        RulesRead rules = rulesReadOn(view, reading);
+        if (rules == null) {
+            return List.of();
+        }
+        // That many and no other is one more count the rules leave, met with the one they wrote.
+        DeclaredBounds.CountRange exactly = new DeclaredBounds.CountRange(
+                Math.max(rules.characters().least(), size),
+                Math.min(rules.characters().most(), size));
+        return reading.settled(new StringsTheRulesAdmit(new RulesRead(rules.stated(), exactly), 1))
+                .stream()
+                .map(FixtureTemplate::string)
+                .toList();
     }
 
     /**
@@ -2193,48 +2184,108 @@ public final class Partitions {
      * arrived at through a machine, and every position carrying a format would pay for one.
      */
     private static List<FixtureTemplate> whatEveryRuleAdmits(PatternsStated stated,
-                                                             DeclaredBounds.CountRange characters) {
+                                                             DeclaredBounds.CountRange characters,
+                                                             RuleReadingContext reading) {
         // A rule counting the characters says which strings as much as a format does: it leaves out
         // every string of another length.
         if (stated.read().size() + (countsTheCharacters(characters) ? 1 : 0) < 2) {
             return List.of();
         }
-        Meter meter = PatternPlan.Budget.OF_A_WITNESS.meter();
-        Language admits = admittedBy(stated, characters, meter).language();
-        String some = admits == null ? null : admits.someWritten();
-        return some == null ? List.of() : List.of(FixtureTemplate.string(some));
+        return reading.settled(new StringsTheRulesAdmit(new RulesRead(stated, characters), 1))
+                .stream()
+                .map(FixtureTemplate::string)
+                .toList();
+    }
+
+    /** Up to {@code many} of the strings the rules on {@code view} admit, no two of them the
+     *  same. */
+    private static List<String> textsTheRulesAdmit(TypeView view, RuleReadingContext reading,
+                                                   int many) {
+        if (many <= 0) {
+            return List.of();
+        }
+        RulesRead rules = rulesReadOn(view, reading);
+        return rules == null ? List.of() : reading.settled(new StringsTheRulesAdmit(rules, many));
     }
 
     /**
-     * Up to {@code many} of the strings the rules on {@code view} admit, no two of them the same.
+     * The value a single pattern offers a row, as work settled by the pattern.
+     *
+     * <p>The revision's and not the search's ({@link SettledWork}). A search asks for a position's
+     * values from every settling of the positions around it, and the pattern's machine depends on
+     * none of them, so worked out where it is asked it is compiled once per visit. A pattern whose
+     * machine costs more than writing a value is allowed and one none of whose strings anybody can
+     * paste both offer nothing, and are not told apart: a row is offered or it is not.
+     */
+    record PatternWitness(PatternPlan plan) implements SettledWork<Optional<String>> {
+
+        @Override
+        public Optional<String> workedOut() {
+            Language language = plan.compile(PatternPlan.Budget.OF_A_WITNESS.meter());
+            return language == null ? Optional.empty() : Optional.ofNullable(language.someWritten());
+        }
+    }
+
+    /**
+     * Up to {@code many} of the strings the rules read at a position admit together, as work
+     * settled by those rules.
      *
      * <p>One allowance for the whole of the question, which is what looking for these values may
      * cost: the meet and every string taken out of it are steps of one search, and a fresh figure
      * per step would be this spending as much as the number asked for.
+     *
+     * <p>The revision's for the reason {@link PatternWitness} is. What the meet comes to is read off the
+     * rules and the count and nothing about where the search is, and a position carrying a format
+     * and a count is asked about from every settling the search visits.
      */
-    private static List<String> textsTheRulesAdmit(TypeView view, RuleReadingContext reading,
-                                                   int many) {
-        if (many <= 0 || !(view.shape() instanceof Shape.Scalar scalar)
-                || scalar.prim() != Type.Prim.STRING) {
-            return List.of();
-        }
-        Meter meter = PatternPlan.Budget.OF_A_WITNESS.meter();
-        Language left = stringsTheRulesReadAdmit(view, reading, meter).language();
-        List<String> out = new ArrayList<>();
-        while (left != null && out.size() < many) {
-            String some = left.someWritten();
-            if (some == null) {
-                break;   // nothing left in it that anybody could paste
+    record StringsTheRulesAdmit(RulesRead rules, int many) implements SettledWork<List<String>> {
+
+        @Override
+        public List<String> workedOut() {
+            Meter meter = PatternPlan.Budget.OF_A_WITNESS.meter();
+            Language left = admittedBy(rules.stated(), rules.characters(), meter).language();
+            List<String> out = new ArrayList<>();
+            while (left != null && out.size() < many) {
+                String some = left.someWritten();
+                if (some == null) {
+                    break;   // nothing left in it that anybody could paste
+                }
+                out.add(some);
+                left = left.without(List.of(some), meter);
             }
-            out.add(some);
-            left = left.without(List.of(some), meter);
+            return List.copyOf(out);
         }
-        return List.copyOf(out);
     }
 
     /**
-     * The strings every rule about them read on {@code view} admits, or null where nothing says
-     * which strings or the machine costs more than {@code meter} allows.
+     * What the rules read at a position left out of what {@link StringsTheRulesAdmit} offers there, as work
+     * settled by those rules.
+     *
+     * <p>The same meet built the same way and under the same allowance, so what this says ran out
+     * is what ran out when the values were looked for: built any other way, a report could name a
+     * rule as too costly beside a value composed out of it.
+     */
+    record WhatTheOfferIsShortOf(RulesRead rules) implements SettledWork<StringOfferShortfall> {
+
+        @Override
+        public StringOfferShortfall workedOut() {
+            return admittedBy(rules.stated(), rules.characters(),
+                    PatternPlan.Budget.OF_A_WITNESS.meter()).shortfall();
+        }
+    }
+
+    /**
+     * What the rules at a position say about its strings, read to compose a value from: the
+     * patterns and how many characters.
+     *
+     * <p>Everything the meet is worked out from, so it is what the work over it is keyed by. Which
+     * rule each pattern was written as is part of it, because a shortfall names the rule.
+     */
+    private record RulesRead(PatternsStated stated, DeclaredBounds.CountRange characters) {}
+
+    /**
+     * What the rules on {@code view} say about its strings, or null where none of them says which
+     * strings.
      *
      * <p><b>Both vocabularies the rules reach a string in.</b> Which strings is a predicate over
      * them; how many characters is a number, counted by the measure the type is written in
@@ -2253,18 +2304,19 @@ public final class Partitions {
      * answered where counts are answered. Answered here as well, every string a length rule leaves
      * would come from a machine built to say what stepping already says.
      */
-    private static CandidateStrings stringsTheRulesReadAdmit(TypeView view,
-                                                             RuleReadingContext reading,
-                                                             Meter meter) {
-        PatternsStated stated = patternsStatedOn(view, reading.source());
+    private static RulesRead rulesReadOn(TypeView view, RuleReadingContext reading) {
+        return rulesReadOn(patternsStatedOn(view, reading.source()), view, reading);
+    }
+
+    /** The same, of patterns already read off {@code view}. */
+    private static RulesRead rulesReadOn(PatternsStated stated, TypeView view,
+                                         RuleReadingContext reading) {
         // The count narrows what was said about the strings and is not read where nothing was said:
         // there is nothing for it to narrow, and what one more value of such a position is is a
         // character on the end of the last. Read before the patterns are looked at, every position
         // whose rules say nothing about its strings pays for a reading of its counts.
-        if (stated.read().isEmpty()) {
-            return new CandidateStrings(null, stated.unread());
-        }
-        return admittedBy(stated, DeclaredBounds.countsHeld(view, reading, null), meter);
+        return stated.read().isEmpty() ? null
+                : new RulesRead(stated, DeclaredBounds.countsHeld(view, reading, null));
     }
 
     /**
