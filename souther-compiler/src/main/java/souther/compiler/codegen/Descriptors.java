@@ -352,6 +352,9 @@ final class Descriptors {
      *  into a {@link CD_StringDecoder} so the fluent constraint methods after it (following
      *  {@code Strings.admission}, not {@code StringDecoder.normalize()}) still resolve. */
     static final MethodTypeDesc MTD_stringDecoderFrom = MethodTypeDesc.of(CD_StringDecoder, CD_RDecoder);
+    /** {@code StringDecoder.oneOf(String...)}: Raoh's constraint that a string is one of these. */
+    static final MethodTypeDesc MTD_stringOneOf =
+            MethodTypeDesc.of(CD_StringDecoder, CD_String.arrayType());
     static final MethodTypeDesc MTD_leafLong = MethodTypeDesc.of(CD_LongDecoder);
     /** {@code new LongDecoder(Decoder)} and its siblings, over a decoder that asks the language
      *  first. */
