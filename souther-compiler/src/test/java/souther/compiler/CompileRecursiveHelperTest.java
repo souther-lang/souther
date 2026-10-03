@@ -115,6 +115,31 @@ class CompileRecursiveHelperTest {
         assertEquals(20000100000L, (long) Codecs.encode(loader, "demo.Out", out));
     }
 
+    /** The tail position is the body of a {@code let}: the binding is a value, and the {@code if}
+     * after it is what the helper answers, so the self call in it is a jump. */
+    @Test
+    void aSelfTailRecursiveHelperUnderALetRunsInConstantStack() throws Exception {
+        String src = """
+                module demo
+                data N = Int
+                data Out = Int
+                behavior run : (n: N) -> Out constructs Out
+                partial let loop (acc: Int, n: Int): Int = {
+                    let m = n - 1
+                    if n == 0 then acc else loop(acc + m + 1, m)
+                }
+                let run (n) = Out(loop(0, n.value))
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        Object n = Codecs.decoded(loader, "demo.N", 200_000L);
+
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
+        Object out = Codecs.apply(behavior, n);
+
+        assertEquals(20000100000L, (long) Codecs.encode(loader, "demo.Out", out),
+                "a depth this far past the stack only returns if the tail call became a jump");
+    }
+
     @Test
     void recursiveHelperWithoutAReturnTypeIsRejected() {
         // depth calls itself, so its result type can't be inferred through the cycle; it must be declared.
