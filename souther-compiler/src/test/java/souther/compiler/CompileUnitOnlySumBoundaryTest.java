@@ -74,6 +74,39 @@ class CompileUnitOnlySumBoundaryTest {
     }
 
     @Test
+    void aKeyNoCaseAnswersToFailsAtTheKeyAsANameInAFieldDoes() throws Exception {
+        String src = """
+                module demo
+
+                data Stage = Prospecting | Won | Lost
+                data In = { byStage: Map<Stage, Int> }
+                data Out = { n: Int }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = Out { n = Map.size(i.byStage) }
+                """;
+        BytesClassLoader loader =
+                new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        JsonNode node = JsonMapper.builder().build().readTree("{\"byStage\":{\"Closed\":1}}");
+
+        // One rule, so one issue whether the name stands in a field or keys a map: only where it is
+        // reported differs.
+        for (Result<?> read : List.of(
+                Codecs.decode(loader, "demo.In", Map.of("byStage", Map.of("Closed", 1L))),
+                Codecs.decode(loader, "demo.In", "jsonDecoder", node))) {
+            List<Issue> issues = assertInstanceOf(Err.class, read).issues().asList();
+
+            assertEquals(1, issues.size(), issues.toString());
+            Issue issue = issues.get(0);
+            assertEquals("/byStage/Closed", issue.path().toString());
+            assertEquals("not_allowed", issue.code());
+            assertEquals(Map.of("allowed", List.of("Lost", "Prospecting", "Won"), "actual", "Closed"),
+                    issue.meta());
+        }
+    }
+
+    @Test
     void anExampleWritesAnEnumerationCaseByName() {
         String src = """
                 module demo

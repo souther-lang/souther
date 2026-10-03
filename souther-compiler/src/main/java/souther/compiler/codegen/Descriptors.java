@@ -234,8 +234,6 @@ final class Descriptors {
     static final MethodTypeDesc MTD_size = MethodTypeDesc.of(ConstantDescs.CD_int);
     static final MethodTypeDesc MTD_ArrayList_add = MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object);
     static final MethodTypeDesc MTD_List_copyOf = MethodTypeDesc.of(CD_List, CD_Collection);
-    /** {@code List.of(E...)}: a list of what an array holds. */
-    static final MethodTypeDesc MTD_List_ofArray = MethodTypeDesc.of(CD_List, CD_Object.arrayType());
     static final MethodTypeDesc MTD_Lists_concat = MethodTypeDesc.of(CD_List, CD_List, CD_List);
     static final MethodTypeDesc MTD_Lists_append = MethodTypeDesc.of(CD_List, CD_List, CD_Object);
     static final MethodTypeDesc MTD_Lists_sort = MethodTypeDesc.of(CD_List, CD_List);
@@ -354,6 +352,9 @@ final class Descriptors {
      *  into a {@link CD_StringDecoder} so the fluent constraint methods after it (following
      *  {@code Strings.admission}, not {@code StringDecoder.normalize()}) still resolve. */
     static final MethodTypeDesc MTD_stringDecoderFrom = MethodTypeDesc.of(CD_StringDecoder, CD_RDecoder);
+    /** {@code StringDecoder.oneOf(String...)}: Raoh's constraint that a string is one of these. */
+    static final MethodTypeDesc MTD_stringOneOf =
+            MethodTypeDesc.of(CD_StringDecoder, CD_String.arrayType());
     static final MethodTypeDesc MTD_leafLong = MethodTypeDesc.of(CD_LongDecoder);
     /** {@code new LongDecoder(Decoder)} and its siblings, over a decoder that asks the language
      *  first. */

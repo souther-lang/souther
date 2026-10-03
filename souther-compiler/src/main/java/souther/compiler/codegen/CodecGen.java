@@ -42,7 +42,6 @@ import java.lang.constant.DynamicConstantDesc;
 import java.lang.constant.MethodHandleDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -478,11 +477,16 @@ final class CodecGen {
 
     /**
      * Decodes a sum all of whose cases are unit data: the value is its case's name, so it reads a
-     * bare string and answers that case's singleton (issue #161). A name no case answers to fails at
-     * the value's path as {@code not_allowed}, rather than being read as some other case.
+     * bare string and answers that case's singleton (issue #161).
+     *
+     * <p>Which names are allowed is held by Raoh's {@code oneOf} over strings, because that
+     * constraint states the rule a name is held to — one of these, compared exactly, case and all —
+     * so a name no case answers to fails at the value's path as {@code oneOf} reports it (spec
+     * §sum-discrimination). What is the enumeration's own is which case each allowed name is.
      */
     byte[] generateEnumSumDecoder(Hir.SumData sum, Boundary.Alternatives alternatives, Src src) {
         ClassDesc cdDec = cd(decoderOf(sum, src));
+        List<Boundary.WireCase> cases = alternatives.wireCases();
         return buildDecoder(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_RDecoder);
@@ -490,6 +494,15 @@ final class CodecGen {
             emitSharedInstance(cb, cdDec);
             cb.withMethodBody("decode", MTD_Rdecode, ClassFile.ACC_PUBLIC, code -> {
                 emitStringLeaf(code, srcLeafOwner(src));
+                code.loadConstant(cases.size());
+                code.anewarray(CD_String);
+                for (int i = 0; i < cases.size(); i++) {
+                    code.dup();
+                    code.loadConstant(i);
+                    code.loadConstant(cases.get(i).tag());
+                    code.aastore();
+                }
+                code.invokevirtual(CD_StringDecoder, "oneOf", MTD_stringOneOf);
                 code.invokedynamic(fromNameCallSite(cdDec));
                 code.invokeinterface(CD_RDecoder, "flatMapWithPath", MTD_flatMapWithPath);
                 code.aload(1);
@@ -497,21 +510,18 @@ final class CodecGen {
                 code.invokeinterface(CD_RDecoder, "decode", MTD_Rdecode);
                 code.areturn();
             });
-            emitFromNameHelper(cb, alternatives.wireCases());
+            emitFromNameHelper(cb, cases);
         });
     }
 
     /**
-     * {@code static Result __fromName(String name, Path path)}: the case that name denotes, or the
-     * failure saying it denotes none of them.
+     * {@code static Result __fromName(String name, Path path)}: the case that name denotes.
      *
-     * <p>The failure is the one Raoh's {@code oneOf} over strings reports, because that constraint
-     * states the same rule: the value is one of these names, compared exactly. So it is
-     * {@code not_allowed}, with the names in {@code allowed} in code point order and the name that
-     * was written as {@code actual} (spec §sum-discrimination).
+     * <p>Handed only a name {@code oneOf} allowed, which is the name of a case. One that is not
+     * would be this compiler handing {@code oneOf} other names than it maps, so it throws rather
+     * than answering a failure the language never states.
      */
     private void emitFromNameHelper(ClassBuilder cb, List<Boundary.WireCase> cases) {
-        List<String> allowed = inCodePointOrder(cases.stream().map(Boundary.WireCase::tag).toList());
         cb.withMethodBody("__fromName", MTD_fromName,
                 ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
             for (Boundary.WireCase c : cases) {
@@ -525,33 +535,11 @@ final class CodecGen {
                 code.areturn();
                 code.labelBinding(next);
             }
-            code.aload(1);                                             // path
-            code.loadConstant("not_allowed");
-            code.loadConstant("must be one of " + allowed);
-            code.loadConstant("allowed");
-            code.loadConstant(allowed.size());
-            code.anewarray(CD_Object);
-            for (int i = 0; i < allowed.size(); i++) {
-                code.dup();
-                code.loadConstant(i);
-                code.loadConstant(allowed.get(i));
-                code.aastore();
-            }
-            code.invokestatic(CD_List, "of", MTD_List_ofArray, true);
-            code.loadConstant("actual");
-            code.aload(0);
-            code.invokestatic(CD_Map, "of", MTD_mapOf2, true);
-            code.invokestatic(CD_RResult, "fail", MTD_Rfail4, true);
-            code.areturn();
+            code.new_(CD_IllegalStateException);
+            code.dup();
+            code.invokespecial(CD_IllegalStateException, "<init>", MTD_void);
+            code.athrow();
         });
-    }
-
-    /** The names in code point order, which is Raoh's order and not {@link String}'s past the BMP. */
-    private static List<String> inCodePointOrder(List<String> names) {
-        return names.stream()
-                .sorted((one, other) -> Arrays.compare(
-                        one.codePoints().toArray(), other.codePoints().toArray()))
-                .toList();
     }
 
     private static DynamicCallSiteDesc fromNameCallSite(ClassDesc cdDec) {
