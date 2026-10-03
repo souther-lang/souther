@@ -37,14 +37,13 @@ class WhoMayReadPatternTextTest {
      * The places that read a pattern's text.
      *
      * <p>{@code CallElaborator} is where a call's pattern is settled. {@code ConstantAlgebra} folds
-     * the written tree, which is evaluated before any call in it is settled. {@code StringPredicates}
-     * reads a declaration's rules off the written tree for the same reason. Nothing in an output is
-     * here.
+     * the written tree, which is evaluated before any call in it is settled. Nothing in an output is
+     * here, and neither is a reader of a declaration's rules: those are read off the clauses the
+     * checker typed, where the pattern is already the meaning it settled.
      */
     private static final List<String> READS_PATTERN_TEXT = List.of(
             "souther/compiler/check/CallElaborator",
-            "souther/compiler/check/ConstantAlgebra",
-            "souther/compiler/check/StringPredicates");
+            "souther/compiler/check/ConstantAlgebra");
 
     @Test
     void everyPlaceThatReadsPatternTextIsWrittenDownHere() {

@@ -84,7 +84,7 @@ class WhichNamesRulesAreReadWhenAValueIsProposedTest {
                 data B = String
 
                 data A = B
-                    invariant tagged = startsWith("X", value)
+                    invariant tagged = startsWith("X", value.value)
                 """, "A");
 
         assertEquals(List.of("A(B(\"X\"))", "A(B(\"x\"))"), proposed,
@@ -107,7 +107,7 @@ class WhichNamesRulesAreReadWhenAValueIsProposedTest {
                     invariant tagged = startsWith("X", value)
 
                 data A = B
-                    invariant ended = endsWith("Z", value)
+                    invariant ended = endsWith("Z", value.value)
                 """, "A"));
     }
 

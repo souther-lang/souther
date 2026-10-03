@@ -678,22 +678,6 @@ public sealed interface BlockReason {
     record PatternTooCostly() implements RuleReadingStopped {}
 
     /**
-     * What a pattern nothing read is, in the words a rule left unread is said in.
-     *
-     * <p>Only in a module the checker refuses. A pattern that is no pattern of the language, and one
-     * nested more deeply than the compiler reads, are compile errors where the call is checked; a
-     * reading of the rules goes on over a module with errors in it, and what it says of such a
-     * pattern is that the rule was not read, whichever of the two it was. The error beside it says
-     * which.
-     *
-     * <p>Here because three readings ask it — a declaration's clauses, a behavior's body and what a
-     * behavior's rules divide — and all of them meet the same patterns.
-     */
-    static RuleReadingStopped forAPatternNotRead() {
-        return new UnreadValueRule();
-    }
-
-    /**
      * A rule whose strings this read, and whose place on the order they are measured on would take
      * more machines than this compiler will make.
      *
