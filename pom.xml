@@ -153,6 +153,10 @@
              a Maven artifact anyone depends on sets it in its own pom, so it is left out of a
              release and of a snapshot alike. -->
         <souther.publish.skip>false</souther.publish.skip>
+        <!-- The Enforcer the release and snapshot profiles check dependencies with, and the one
+             TheSnapshotProfileExemptsExactlyTheReactorTest asks how it reads the profile's
+             exemptions: one version, so the test asks the matcher the build uses. -->
+        <enforcer.version>3.5.0</enforcer.version>
     </properties>
 
     <dependencyManagement>
@@ -697,7 +701,7 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-enforcer-plugin</artifactId>
-                        <version>3.5.0</version>
+                        <version>${enforcer.version}</version>
                         <executions>
                             <execution>
                                 <id>a-release-depends-on-releases</id>
@@ -834,7 +838,7 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-enforcer-plugin</artifactId>
-                        <version>3.5.0</version>
+                        <version>${enforcer.version}</version>
                         <executions>
                             <execution>
                                 <id>a-snapshot-version-built-from-releases</id>
@@ -852,25 +856,28 @@
                                             <failWhenParentIsSnapshot>false</failWhenParentIsSnapshot>
                                             <!-- What this reactor builds, which is a snapshot here
                                                  and is built in this same invocation, so it cannot
-                                                 resolve to anything else. Each artifact whole, with
-                                                 its version: the group holds artifacts released from
-                                                 elsewhere too, such as souther-build-api, and one of
-                                                 these modules at another version is not built here
-                                                 and resolves from a repository.
-                                                 TheSnapshotProfileExemptsExactlyTheReactorTest holds
-                                                 these to what the root pom's modules build. -->
+                                                 resolve to anything else. Each artifact whole, at
+                                                 exactly its version: the group holds artifacts
+                                                 released from elsewhere too, such as
+                                                 souther-build-api, and one of these modules at any
+                                                 other version is not built here and resolves from a
+                                                 repository. The version is a range of one,
+                                                 [version], because the Enforcer reads a bare
+                                                 version as that version or any later one.
+                                                 TheSnapshotProfileExemptsExactlyTheReactorTest asks
+                                                 the Enforcer's own matcher what these exempt. -->
                                             <excludes>
-                                                <exclude>org.souther-lang:souther-test-support:${project.version}</exclude>
-                                                <exclude>org.souther-lang:souther-runtime:${project.version}</exclude>
-                                                <exclude>org.souther-lang:souther-syntax:${project.version}</exclude>
-                                                <exclude>org.souther-lang:souther-compiler:${project.version}</exclude>
-                                                <exclude>org.souther-lang:souther-build-driver:${project.version}</exclude>
-                                                <exclude>org.souther-lang:souther-fmt:${project.version}</exclude>
-                                                <exclude>org.souther-lang:souther-lsp:${project.version}</exclude>
-                                                <exclude>org.souther-lang:souther-cli:${project.version}</exclude>
-                                                <exclude>org.souther-lang:souther-bench:${project.version}</exclude>
-                                                <exclude>org.souther-lang:souther-program-api-test:${project.version}</exclude>
-                                                <exclude>org.souther-lang:souther-architecture-test:${project.version}</exclude>
+                                                <exclude>org.souther-lang:souther-test-support:[${project.version}]</exclude>
+                                                <exclude>org.souther-lang:souther-runtime:[${project.version}]</exclude>
+                                                <exclude>org.souther-lang:souther-syntax:[${project.version}]</exclude>
+                                                <exclude>org.souther-lang:souther-compiler:[${project.version}]</exclude>
+                                                <exclude>org.souther-lang:souther-build-driver:[${project.version}]</exclude>
+                                                <exclude>org.souther-lang:souther-fmt:[${project.version}]</exclude>
+                                                <exclude>org.souther-lang:souther-lsp:[${project.version}]</exclude>
+                                                <exclude>org.souther-lang:souther-cli:[${project.version}]</exclude>
+                                                <exclude>org.souther-lang:souther-bench:[${project.version}]</exclude>
+                                                <exclude>org.souther-lang:souther-program-api-test:[${project.version}]</exclude>
+                                                <exclude>org.souther-lang:souther-architecture-test:[${project.version}]</exclude>
                                             </excludes>
                                         </requireReleaseDeps>
                                     </rules>
