@@ -1,12 +1,15 @@
 package souther.compiler;
 
 import net.unit8.raoh.Err;
+import net.unit8.raoh.Issue;
 import net.unit8.raoh.Ok;
+import net.unit8.raoh.Result;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -157,11 +160,50 @@ class CompileUnitOnlySumBoundaryTest {
     }
 
     @Test
-    void aNameNoCaseAnswersToFailsTheDecode() throws Exception {
+    void aNameNoCaseAnswersToFailsTheDecodeAsRaohsOneOfDoes() throws Exception {
         BytesClassLoader loader =
                 new BytesClassLoader(Compiler.compile(STAGE_FIELD), getClass().getClassLoader());
 
-        assertInstanceOf(Err.class, Codecs.decode(loader, "demo.In", Map.of("stage", "Closed")));
+        // A name is compared exactly, case and all, which is the rule Raoh's `oneOf` over strings
+        // states and not the one its `enum` does: that folds ASCII case and would read `won`.
+        for (String written : List.of("Closed", "won")) {
+            Result<?> read = Codecs.decode(loader, "demo.In", Map.of("stage", written));
+            List<Issue> issues = assertInstanceOf(Err.class, read).issues().asList();
+
+            assertEquals(1, issues.size(), written);
+            Issue issue = issues.get(0);
+            assertEquals("/stage", issue.path().toString(), written);
+            assertEquals("not_allowed", issue.code(), written);
+            assertEquals("not_allowed", issue.messageKey(), written);
+            assertEquals(Map.of("allowed", List.of("Lost", "Prospecting", "Won"), "actual", written),
+                    issue.meta(), written);
+        }
+    }
+
+    @Test
+    void theNamesARefusalAllowsAreInCodePointOrder() throws Exception {
+        // U+FF21 is before U+1D400, and `String` puts the second first: its high surrogate, U+D835,
+        // is below U+FF21. Raoh lists what a value may be in code point order.
+        String src = """
+                module demo
+
+                data Ａlpha
+                data 𝐀lpha
+                data Mark = 𝐀lpha | Ａlpha
+                data In = { mark: Mark }
+                data Out = { mark: Mark }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = Out { mark = i.mark }
+                """;
+        BytesClassLoader loader =
+                new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+
+        Result<?> read = Codecs.decode(loader, "demo.In", Map.of("mark", "Beta"));
+        Issue issue = assertInstanceOf(Err.class, read).issues().asList().get(0);
+
+        assertEquals(List.of("Ａlpha", "𝐀lpha"), issue.meta().get("allowed"));
     }
 
     @Test

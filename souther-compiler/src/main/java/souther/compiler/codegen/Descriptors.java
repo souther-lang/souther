@@ -234,6 +234,8 @@ final class Descriptors {
     static final MethodTypeDesc MTD_size = MethodTypeDesc.of(ConstantDescs.CD_int);
     static final MethodTypeDesc MTD_ArrayList_add = MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object);
     static final MethodTypeDesc MTD_List_copyOf = MethodTypeDesc.of(CD_List, CD_Collection);
+    /** {@code List.of(E...)}: a list of what an array holds. */
+    static final MethodTypeDesc MTD_List_ofArray = MethodTypeDesc.of(CD_List, CD_Object.arrayType());
     static final MethodTypeDesc MTD_Lists_concat = MethodTypeDesc.of(CD_List, CD_List, CD_List);
     static final MethodTypeDesc MTD_Lists_append = MethodTypeDesc.of(CD_List, CD_List, CD_Object);
     static final MethodTypeDesc MTD_Lists_sort = MethodTypeDesc.of(CD_List, CD_List);

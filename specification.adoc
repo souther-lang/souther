@@ -2088,7 +2088,7 @@ The invariant check on construction and spread (`+...+`) follow the same semanti
 [#sum-discrimination]
 === Discrimination of sum data
 
-The derived Decoder of a sum data reads the discriminator field `+"type"+` and dispatches to the case's derived Decoder. The tag is the case name.
+The derived Decoder of a sum data reads the discriminator field `+"type"+` and dispatches to the case's derived Decoder. The tag is the case name. A tag that names no case fails at the discriminator's path with Raoh's `+not_allowed+`, its `+allowed+` the case names in code point order: what Raoh's `+discriminate+` reports.
 
 [,souther]
 ----
@@ -2096,7 +2096,7 @@ data TravelRequest = Drafting | Submitted | AwaitingPreApproval | PreApproved
 // derived Decoder: reads "type" and dispatches "Drafting" -> Drafting, "Submitted" -> Submitted, ...
 ----
 
-A sum every one of whose cases is a unit data (folded to the leaves) is an *enumeration*: it carries nothing but which case it is, so it travels as that case's name — a bare string — and not as an object holding a discriminator alone. The name is the form of the enumeration, written wherever the enumeration is the declared type — a field, an element, a `+Map+`'s key — and not the form of the unit case: a unit declared on its own writes `+{}+` (<<a-unit-writes-an-empty-object>>), and one unit may be a case of several sums, some of them enumerations and some not. That the enumeration writes one form in every such position is what lets it key a `+Map+` at the boundary (<<collections>>): a JSON object's key cannot be an object. A name no case answers to fails the decode at that value's path. One field-bearing case is enough to make the sum an object with `+"type"+` again.
+A sum every one of whose cases is a unit data (folded to the leaves) is an *enumeration*: it carries nothing but which case it is, so it travels as that case's name — a bare string — and not as an object holding a discriminator alone. The name is the form of the enumeration, written wherever the enumeration is the declared type — a field, an element, a `+Map+`'s key — and not the form of the unit case: a unit declared on its own writes `+{}+` (<<a-unit-writes-an-empty-object>>), and one unit may be a case of several sums, some of them enumerations and some not. That the enumeration writes one form in every such position is what lets it key a `+Map+` at the boundary (<<collections>>): a JSON object's key cannot be an object. A name no case answers to fails the decode at that value's path with `+not_allowed+`, its `+allowed+` the case names in code point order and its `+actual+` the name that was written. That is what Raoh's `+oneOf+` over strings reports, and it is the constraint that states the same rule: a name is compared exactly, case and all. Raoh's `+enum+` is not, since it folds ASCII case and would read `+won+` as `+Won+`. One field-bearing case is enough to make the sum an object with `+"type"+` again.
 
 [,souther]
 ----

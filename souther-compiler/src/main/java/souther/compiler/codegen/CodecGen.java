@@ -42,6 +42,7 @@ import java.lang.constant.DynamicConstantDesc;
 import java.lang.constant.MethodHandleDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -478,7 +479,7 @@ final class CodecGen {
     /**
      * Decodes a sum all of whose cases are unit data: the value is its case's name, so it reads a
      * bare string and answers that case's singleton (issue #161). A name no case answers to fails at
-     * the value's path, the way a newtype's invariant does, rather than being read as some other case.
+     * the value's path as {@code not_allowed}, rather than being read as some other case.
      */
     byte[] generateEnumSumDecoder(Hir.SumData sum, Boundary.Alternatives alternatives, Src src) {
         ClassDesc cdDec = cd(decoderOf(sum, src));
@@ -496,13 +497,21 @@ final class CodecGen {
                 code.invokeinterface(CD_RDecoder, "decode", MTD_Rdecode);
                 code.areturn();
             });
-            emitFromNameHelper(cb, sum.name(), alternatives.wireCases());
+            emitFromNameHelper(cb, alternatives.wireCases());
         });
     }
 
-    /** {@code static Result __fromName(String name, Path path)}: the case that name denotes, or the
-     *  failure saying it denotes none of them. */
-    private void emitFromNameHelper(ClassBuilder cb, String sumName, List<Boundary.WireCase> cases) {
+    /**
+     * {@code static Result __fromName(String name, Path path)}: the case that name denotes, or the
+     * failure saying it denotes none of them.
+     *
+     * <p>The failure is the one Raoh's {@code oneOf} over strings reports, because that constraint
+     * states the same rule: the value is one of these names, compared exactly. So it is
+     * {@code not_allowed}, with the names in {@code allowed} in code point order and the name that
+     * was written as {@code actual} (spec §sum-discrimination).
+     */
+    private void emitFromNameHelper(ClassBuilder cb, List<Boundary.WireCase> cases) {
+        List<String> allowed = inCodePointOrder(cases.stream().map(Boundary.WireCase::tag).toList());
         cb.withMethodBody("__fromName", MTD_fromName,
                 ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
             for (Boundary.WireCase c : cases) {
@@ -517,18 +526,32 @@ final class CodecGen {
                 code.labelBinding(next);
             }
             code.aload(1);                                             // path
-            code.loadConstant("invalid_format");
-            code.loadConstant("not a case of " + sumName);
-            // A detail of the failure and not the sum's discriminator, which an enumeration does not
-            // have — this says which type the name was read against. The two are spelled alike and
-            // are not the same key: reading this one off `Boundary` would tie what a failure reports
-            // to how a value is written, and an enumeration has no key to read.
-            code.loadConstant("type");
-            code.loadConstant(sumName);
-            code.invokestatic(CD_Map, "of", MethodTypeDesc.of(CD_Map, CD_Object, CD_Object), true);
+            code.loadConstant("not_allowed");
+            code.loadConstant("must be one of " + allowed);
+            code.loadConstant("allowed");
+            code.loadConstant(allowed.size());
+            code.anewarray(CD_Object);
+            for (int i = 0; i < allowed.size(); i++) {
+                code.dup();
+                code.loadConstant(i);
+                code.loadConstant(allowed.get(i));
+                code.aastore();
+            }
+            code.invokestatic(CD_List, "of", MTD_List_ofArray, true);
+            code.loadConstant("actual");
+            code.aload(0);
+            code.invokestatic(CD_Map, "of", MTD_mapOf2, true);
             code.invokestatic(CD_RResult, "fail", MTD_Rfail4, true);
             code.areturn();
         });
+    }
+
+    /** The names in code point order, which is Raoh's order and not {@link String}'s past the BMP. */
+    private static List<String> inCodePointOrder(List<String> names) {
+        return names.stream()
+                .sorted((one, other) -> Arrays.compare(
+                        one.codePoints().toArray(), other.codePoints().toArray()))
+                .toList();
     }
 
     private static DynamicCallSiteDesc fromNameCallSite(ClassDesc cdDec) {
