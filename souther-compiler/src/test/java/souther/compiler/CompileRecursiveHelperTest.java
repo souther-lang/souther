@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.msg.HelperMessage;
 import souther.runtime.Behavior;
 
 import org.junit.jupiter.api.Test;
@@ -10,6 +11,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -349,7 +351,10 @@ class CompileRecursiveHelperTest {
                 """;
         CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile(src));
         assertFalse(ex.getMessage().contains("unknown function"), ex.getMessage());
-        assertTrue(ex.getMessage().contains("expects a block"), ex.getMessage());
+        HelperMessage.AValueWhereAFunctionIsTaken said = assertInstanceOf(
+                HelperMessage.AValueWhereAFunctionIsTaken.class, ex.diagnostic().said(),
+                ex::getMessage);
+        assertEquals("twice", said.written());
     }
 
     @Test

@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** A lambda given to a combinator is registered under a synthetic name while it is inlined. A wrong
  * number of parameters must be reported against the parameter it fills, not against that internal
- * name. */
+ * name, and the combinator is named as the call spells it, not by the library's declaration. */
 class CompileLambdaArityTest {
 
     @Test
@@ -29,6 +29,7 @@ class CompileLambdaArityTest {
         String rendered = new HumanRenderer(false).render(e.diagnostic(), null, Locale.ENGLISH);
         assertFalse(rendered.contains("$"), "internal lambda name leaked:\n" + rendered);
         assertTrue(rendered.contains("`f`"), rendered);
-        assertTrue(rendered.contains("let map"), rendered);
+        assertTrue(rendered.contains("`List.map`"), rendered);
+        assertFalse(rendered.contains("let map"), rendered);
     }
 }

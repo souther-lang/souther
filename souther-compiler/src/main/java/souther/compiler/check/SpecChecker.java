@@ -331,10 +331,16 @@ public final class SpecChecker {
         // A parameter of the same name wins: a binding in force wins over the declaration it shadows
         // (spec §fn-rules), so an input written `depth` is the input and not the helper spelled that way.
         Scope tenv = env.reaching(recursiveHelperFns);
+        CheckContext typing = new CheckContext(symbols, declarations, null, reqSigs)
+                .withCallees(calleeSigs)
+                .withDependencies(dependsOn)
+                .preserving(Preserved.valuesAlreadySettled(settledValues));
         // Check functions passed to helper parameters (e.g. a combinator's predicate) against their
         // declared types first, so a mismatch names the parameter, not the derivation it expands to.
         // A nested fold reaches `List.foldFrom` inside a block, so its signature must be in scope here.
-        HelperTyping.checkFunctionArgs(fn.writtenBody(), tenv, symbols, declarations, reqSigs,
+        // Typed with what the body is elaborated with, so what the check cannot type is what the
+        // elaboration refuses.
+        HelperTyping.checkFunctionArgs(fn.writtenBody(), inliner.bodyOf(fn.name()), tenv, typing,
                 inliner);
         // The body arrives with helper calls already expanded (the Lower stage, ADR-0021): it is
         // checked as one expression, so a helper's constructions and injected calls count toward this
@@ -343,11 +349,7 @@ public final class SpecChecker {
 
         // push the declared output type into the body so a body that is directly an empty collection
         // (or a construction whose field is one) takes the declared type rather than a bottom
-        Core answered = Elaborator.elaborate(body, tenv,
-                new CheckContext(symbols, declarations, null, reqSigs)
-                        .withCallees(calleeSigs)
-                        .withDependencies(dependsOn)
-                        .preserving(Preserved.valuesAlreadySettled(settledValues)), output);
+        Core answered = Elaborator.elaborate(body, tenv, typing, output);
         Type rt = answered.type();
         if (!TypeOps.assignable(rt, output, kinds, sums)) {
             throw CompileException.of(Diagnostic
