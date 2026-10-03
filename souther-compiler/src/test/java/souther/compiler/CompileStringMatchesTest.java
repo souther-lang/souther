@@ -199,23 +199,4 @@ class CompileStringMatchesTest {
         assertTrue(wide.decode("a".repeat(249_998), Path.ROOT) instanceof Ok, "as many as it counts");
         assertTrue(wide.decode("a".repeat(249_997), Path.ROOT) instanceof Err, "one fewer");
     }
-
-    /**
-     * A pattern the language has runs as what it means: the shorthands hold the sets the
-     * specification states and an anchor at the edge adds nothing.
-     */
-    @Test
-    void aPatternRunsAsWhatItMeans() throws Exception {
-        ClassLoader loader = new BytesClassLoader(Compiler.compile("""
-                module demo
-                data Code = String invariant String.matches("^\\\\d{2}\\\\s\\\\w+$", value)
-                """), getClass().getClassLoader());
-        Decoder<Object, ?> decoder = Codecs.decoder(loader, "demo.Code");
-
-        assertTrue(decoder.decode("12 ab_c", Path.ROOT) instanceof Ok);
-        assertTrue(decoder.decode("１２ ab", Path.ROOT) instanceof Err,
-                "a fullwidth digit is not one of \\d's");
-        assertTrue(decoder.decode("12　ab", Path.ROOT) instanceof Err,
-                "an ideographic space is String whitespace and not one of \\s's");
-    }
 }

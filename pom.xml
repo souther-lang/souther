@@ -64,7 +64,7 @@
              space, the temporal grammar and the pattern language. Which strings these accept is a
              rule of the specification, so a version that changes an answer is a change to the
              language and is taken by hand, never by a dependency update. -->
-        <notation199x.version>0.1.0</notation199x.version>
+        <notation199x.version>0.2.0-SNAPSHOT</notation199x.version>
         <jspecify.version>1.0.1</jspecify.version>
         <!-- Where compiled classes go, named so the `m2e` profile below can send the editor's
              somewhere else. A build outside the editor uses the Maven defaults. -->
@@ -164,6 +164,21 @@
              this to what the poms copy from. -->
         <souther.build.reads>syntax specification.adoc</souther.build.reads>
     </properties>
+
+    <!-- Where a -SNAPSHOT of 199x-notation is resolved from while `notation199x.version` names
+         one. Snapshots only: every release still comes from Maven Central. -->
+    <repositories>
+        <repository>
+            <id>central-portal-snapshots</id>
+            <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
 
     <dependencyManagement>
         <dependencies>
