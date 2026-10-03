@@ -5,6 +5,7 @@ import souther.compiler.semantics.TakenArguments;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.ChoiceToLift;
+import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
@@ -30,6 +31,7 @@ import java.util.SequencedMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * What a record leaves each of its fields able to hold.
@@ -912,8 +914,8 @@ public final class FieldDomains {
     }
 
     /**
-     * The same rules with these coordinates settled at these values, for the questions that read
-     * the constraints themselves.
+     * The same rules with these coordinates settled, for a caller building a value at a position
+     * under them.
      *
      * <p><b>The clauses are not read again.</b> A settling is an equality on an atom taken onto
      * everything else the clauses came to, which is exactly what the reading does with one at the
@@ -921,28 +923,99 @@ public final class FieldDomains {
      * there are the same statement, and reading a declaration once per settled number is paying
      * for the clauses over again to arrive where this already is.
      *
-     * <p>What comes back answers about the constraints and not about a reading. Where a form runs
-     * and whether anything is left are read off the rules themselves; what a reading derives beside
-     * them — which values may stand at a name, what it must hold, which rule placed an end — is not
-     * recomputed and is not offered, so nothing can read a settled state for an answer that was
-     * worked out before the settling.
-     */
-    public Settled given(Map<NumberAt<RuleKey>, Count> fixed) {
-        return new Settled(settling(fixed), namedBy, atomAt, countAt);
-    }
-
-    /**
-     * The same rules with these coordinates settled, for a caller building a value at a position
-     * under them.
-     *
-     * <p>Beside {@link #given} and not part of it. What a caller settling on behalf of an input
-     * wants is the constraints themselves, to be said together with another parameter's; what a
-     * caller composing a value wants is where one position stops and how many it holds. The second
-     * is a question one value's rules answer alone, and the first is a question they must not — so
-     * the two are handed over as two, and neither of them can be asked for the other.
+     * <p>Not {@link #constraintsOver}. What a caller composing a value wants is where one position
+     * stops and how many it holds, which is a question one value's rules answer alone; what a caller
+     * reading an input wants is the constraints themselves, said together with another parameter's
+     * before anything is settled — so the two are handed over as two, and neither of them can be
+     * asked for the other.
      */
     public Composing composing(Map<NumberAt<RuleKey>, Count> fixed) {
         return new Composing(settling(fixed), atomAt, countAt);
+    }
+
+    /**
+     * The rules these came to, about the same subjects under a caller's names.
+     *
+     * <p>For a caller that holds the readings of several values at once and has to say what they
+     * leave together. What a rule says is a relation between subjects, and it says the same thing
+     * whatever they are called — so what is handed over is these rules renamed and never a fresh
+     * reading of the declaration.
+     *
+     * <p>Nothing settled. A caller that fixes a position does so over everything it holds, once and
+     * in its own names, after the readings are said together; settled here, the same position would
+     * be settled once per reading that names it, and the answer the caller keeps would turn on what
+     * it fixed.
+     *
+     * <p><b>The whole state and not the numbers alone.</b> Which values a name admits, which
+     * predicates hold and where an ordering stops are as much a part of what the rules leave as
+     * the arithmetic is, and a caller given the numbers alone would have to ask this reading
+     * whether anything is left — which makes two answerers of one question, the weaker of them
+     * the one with a place to name, and which of them speaks settled by the order they are asked
+     * in. Handed over whole, the caller has one state to ask and this has none.
+     *
+     * <p><b>Every subject a rule is about is carried, whether or not the caller has a coordinate
+     * for it.</b> A reading relates subjects at coordinates and subjects at none, and a rule
+     * reaching one of the latter still holds two of the former apart: left behind, that rule
+     * would be gone and what the rules leave would come back wider than it is. So a subject with
+     * no coordinate is named by {@code otherwise}, out of the subject itself, and the caller is
+     * given something to be equal to rather than something to read — what makes two of them one
+     * subject was settled here, and a caller inventing its own answer to that would put two
+     * apart or two together.
+     *
+     * <p>The naming is held to naming two subjects two subjects, across every domain of
+     * <em>this</em> reading at once ({@link InjectiveRenaming}). A caller whose {@code named}
+     * and {@code otherwise} send two of these subjects to one name is told so rather than handed
+     * a state where a predicate of one subject settles another and an ordering of one bounds
+     * another. What keeps two readings apart is not this — each of them is renamed under a
+     * renaming of its own — and is whatever the caller's names carry of where a subject came
+     * from.
+     */
+    public <B> Carried<B> constraintsOver(Function<NumberAt<RuleKey>, B> named,
+                                          Function<Object, B> otherwise,
+                                          CanonicalOrder<B> order) {
+        Map<FactSubject, NumberAt<RuleKey>> where = new LinkedHashMap<>();
+        atomAt.forEach((path, atom) -> at(where, atom, NumberAt.valueOf(path)));
+        countAt.forEach((path, counted) -> at(where, counted.atom(),
+                NumberAt.takenOf(path, counted.by())));
+        // And every other subject this reading knows a name for, which is what a caller can
+        // name and what these two maps are narrower than: they hold the numbers, and a name
+        // holds whatever stands there. Left to `otherwise`, a subject of a name would be
+        // carried as something to be equal to and nothing more — so a rule of one value about a
+        // name its cases share and a rule of the case about the same name would arrive as two
+        // subjects, and every reading that has no word for a number would stop meeting at the
+        // narrowing.
+        namedBy.forEach((atom, path) -> {
+            if (!where.containsKey(atom)) {
+                at(where, atom, NumberAt.valueOf(path));
+            }
+        });
+        InjectiveRenaming<FactSubject, B> naming = InjectiveRenaming.of(atom -> {
+            NumberAt<RuleKey> claim = where.get(atom);
+            return claim == null ? otherwise.apply(atom) : named.apply(claim);
+        });
+        // Spelled, because what a caller does with these is name a place to a reader. The
+        // names themselves belong to the value whose rules these are, and a caller holding the
+        // state has renamed its subjects to its own.
+        SequencedMap<B, String> carried = new LinkedHashMap<>();
+        namedBy.forEach((atom, path) -> carried.put(naming.apply(atom), path.toString()));
+        return new Carried<>(constraints.renamed(naming, order), carried);
+    }
+
+    /**
+     * One number filed at one coordinate.
+     *
+     * <p>Refused rather than overwritten where a subject arrives at two of them. Two coordinates
+     * that are one number is this reading saying something a caller has two names for, and
+     * whichever of them went unnamed would be a coordinate the constraints say nothing about —
+     * so what the caller was told the rules leave there would be everything.
+     */
+    private static void at(Map<FactSubject, NumberAt<RuleKey>> where, FactSubject atom,
+                           NumberAt<RuleKey> claim) {
+        NumberAt<RuleKey> had = where.put(atom, claim);
+        if (had != null && !had.equals(claim)) {
+            throw new IllegalStateException("one number is at `" + had.position() + "` and at `"
+                    + claim.position() + "`, so neither name is the whole of it");
+        }
     }
 
     /** These constraints with an equality on each settled coordinate taken onto them. */
@@ -965,7 +1038,7 @@ public final class FieldDomains {
     /**
      * One value's rules with some of its coordinates settled, read for building a value under them.
      *
-     * <p>Not a {@link FieldDomains} and not a {@link Settled}. What it answers is read off the
+     * <p>Not a {@link FieldDomains}. What it answers is read off the
      * constraints as they now stand, so a position is told where it stops under everything chosen
      * before it — which is the reading a search choosing one position at a time is entitled to, and
      * the one it would otherwise get by reading the declaration over at every position.
@@ -1007,112 +1080,6 @@ public final class FieldDomains {
             }
             NumericDomain.Bounds bounds = constraints.numbers().boundsOf(atom);
             return bounds.saysNothing() ? null : bounds;
-        }
-    }
-
-    /**
-     * The rules of one value with some of its coordinates settled.
-     *
-     * <p>Not a {@link FieldDomains}. What a reading of a declaration hands over is derived from the
-     * constraints and would have to be derived again under a settling; what a caller settling one
-     * wants is the constraints themselves. Kept apart so that the derived answers cannot be read
-     * off a state they were not worked out under.
-     */
-    public static final class Settled {
-
-        private final ConstraintState<FactSubject> constraints;
-        private final SequencedMap<FactSubject, RuleKey> namedBy;
-        private final Map<RuleKey, FactSubject> atomAt;
-        private final Map<RuleKey, Counted> countAt;
-
-        private Settled(ConstraintState<FactSubject> constraints,
-                        SequencedMap<FactSubject, RuleKey> namedBy,
-                        Map<RuleKey, FactSubject> atomAt, Map<RuleKey, Counted> countAt) {
-            this.constraints = constraints;
-            this.namedBy = namedBy;
-            this.atomAt = atomAt;
-            this.countAt = countAt;
-        }
-
-        /**
-         * The rules these came to, about the same subjects under a caller's names.
-         *
-         * <p>For a caller that holds the readings of several values at once and has to say what they
-         * leave together. What a rule says is a relation between subjects, and it says the same
-         * thing whatever they are called — so what is handed over is these rules renamed and never a
-         * fresh reading of the declaration.
-         *
-         * <p><b>The whole state and not the numbers alone.</b> Which values a name admits, which
-         * predicates hold and where an ordering stops are as much a part of what the rules leave as
-         * the arithmetic is, and a caller given the numbers alone would have to ask this reading
-         * whether anything is left — which makes two answerers of one question, the weaker of them
-         * the one with a place to name, and which of them speaks settled by the order they are asked
-         * in. Handed over whole, the caller has one state to ask and this has none.
-         *
-         * <p><b>Every subject a rule is about is carried, whether or not the caller has a coordinate
-         * for it.</b> A reading relates subjects at coordinates and subjects at none, and a rule
-         * reaching one of the latter still holds two of the former apart: left behind, that rule
-         * would be gone and what the rules leave would come back wider than it is. So a subject with
-         * no coordinate is named by {@code otherwise}, out of the subject itself, and the caller is
-         * given something to be equal to rather than something to read — what makes two of them one
-         * subject was settled here, and a caller inventing its own answer to that would put two
-         * apart or two together.
-         *
-         * <p>The naming is held to naming two subjects two subjects, across every domain of
-         * <em>this</em> reading at once ({@link InjectiveRenaming}). A caller whose {@code named}
-         * and {@code otherwise} send two of these subjects to one name is told so rather than handed
-         * a state where a predicate of one subject settles another and an ordering of one bounds
-         * another. What keeps two readings apart is not this — each of them is renamed under a
-         * renaming of its own — and is whatever the caller's names carry of where a subject came
-         * from.
-         */
-        public <B> Carried<B> constraintsOver(
-                java.util.function.Function<NumberAt<RuleKey>, B> named,
-                java.util.function.Function<Object, B> otherwise,
-                souther.compiler.numeric.CanonicalOrder<B> order) {
-            Map<FactSubject, NumberAt<RuleKey>> where = new LinkedHashMap<>();
-            atomAt.forEach((path, atom) -> at(where, atom, NumberAt.valueOf(path)));
-            countAt.forEach((path, counted) -> at(where, counted.atom(),
-                    NumberAt.takenOf(path, counted.by())));
-            // And every other subject this reading knows a name for, which is what a caller can
-            // name and what these two maps are narrower than: they hold the numbers, and a name
-            // holds whatever stands there. Left to `otherwise`, a subject of a name would be
-            // carried as something to be equal to and nothing more — so a rule of one value about a
-            // name its cases share and a rule of the case about the same name would arrive as two
-            // subjects, and every reading that has no word for a number would stop meeting at the
-            // narrowing.
-            namedBy.forEach((atom, path) -> {
-                if (!where.containsKey(atom)) {
-                    at(where, atom, NumberAt.valueOf(path));
-                }
-            });
-            InjectiveRenaming<FactSubject, B> naming = InjectiveRenaming.of(atom -> {
-                NumberAt<RuleKey> claim = where.get(atom);
-                return claim == null ? otherwise.apply(atom) : named.apply(claim);
-            });
-            // Spelled, because what a caller does with these is name a place to a reader. The
-            // names themselves belong to the value whose rules these are, and a caller holding the
-            // state has renamed its subjects to its own.
-            SequencedMap<B, String> carried = new java.util.LinkedHashMap<>();
-            namedBy.forEach((atom, path) -> carried.put(naming.apply(atom), path.toString()));
-            return new Carried<>(constraints.renamed(naming, order), carried);
-        }
-
-        /**
-         * One number filed at one coordinate.
-         *
-         * <p>Refused rather than overwritten where a subject arrives at two of them. Two coordinates
-         * that are one number is this reading saying something a caller has two names for, and
-         * whichever of them went unnamed would be a coordinate the constraints say nothing about —
-         * so what the caller was told the rules leave there would be everything.
-         */
-        private static void at(Map<FactSubject, NumberAt<RuleKey>> where, FactSubject atom,
-                               NumberAt<RuleKey> claim) {
-            NumberAt<RuleKey> had = where.put(atom, claim);
-            if (had != null && !had.equals(claim)) {
-                throw new IllegalStateException("one number is at `" + had.position() + "` and at `"
-                        + claim.position() + "`, so neither name is the whole of it");
-            }
         }
     }
 
