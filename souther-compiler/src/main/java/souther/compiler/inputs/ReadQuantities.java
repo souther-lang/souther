@@ -115,6 +115,20 @@ final class ReadQuantities implements Quantities {
      */
     private volatile Map<NumericTerm, NumericDomain.Bounds> orderedBounds;
     /**
+     * Why nothing is left, worked out the first time anybody asks; null until then.
+     *
+     * <p>A function of this value and of nothing else, which is why it can be kept here: what is
+     * fixed and what is taken in do not change once the value is made, and a refinement is another
+     * value with nothing kept. A search asks the region it is about to realise a level in and then
+     * asks it again while choosing — the same question of the same value, and the walk over every
+     * case and container is the expensive part of the answer. That nothing was proved is an answer
+     * like any other and is kept the same way.
+     *
+     * <p>Whichever thread gets there first, as with {@link #orderedBounds}: two that raced work out
+     * the same answer from the same value.
+     */
+    private volatile Optional<EmptyInput> emptiness;
+    /**
      * What has already been worked out, by the context it was worked out under.
      *
      * <p>A memo of {@link #constraints} and of nothing else. What the rules leave under a context is
@@ -1134,6 +1148,12 @@ final class ReadQuantities implements Quantities {
             both.merge(term, new Fixed(each.getValue(), each.getValue()),
                     (had, one) -> had.and(one.least()));
         }
+        // A fixing already made changes nothing, so it is this value and not a copy of it — the way
+        // a condition already taken in is. A copy would answer every question this one has already
+        // answered by working it out again.
+        if (both.equals(fixed)) {
+            return this;
+        }
         return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, both, ruleReading,
                 assumed);
     }
@@ -1159,6 +1179,17 @@ final class ReadQuantities implements Quantities {
      */
     @Override
     public Optional<EmptyInput> emptiness() {
+        Optional<EmptyInput> had = emptiness;
+        if (had != null) {
+            return had;
+        }
+        Optional<EmptyInput> made = whyNothingIsLeft();
+        emptiness = made;
+        return made;
+    }
+
+    /** {@link #emptiness}, worked out. */
+    private Optional<EmptyInput> whyNothingIsLeft() {
         for (Map.Entry<NumericTerm, Fixed> each : inOrder()) {
             if (!each.getValue().isOne()) {
                 return Optional.of(new EmptyInput.TwoValuesAtOnePosition(each.getKey(),
