@@ -357,47 +357,33 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
      * And what it answers is what reading them again with the same thing settled would answer.
      *
      * <p>Which is why not reading them again is allowed. The two are one statement or they are two,
-     * and stating a settling in two places is how they would come apart — so what the cheap way says
-     * is held against what the reading itself says, at a position and over a form and about whether
-     * anything is left.
+     * and stating a settling in two places is how they would come apart — so what fixing a position
+     * of the input says is held against what the reading of the declaration says with the same
+     * position settled in it, at the other position and about whether anything is left.
      */
     @Test
     void whatASettlingLeavesIsWhatReadingItInWouldLeave() {
         Read read = read(SOURCE, "take");
+        Quantities asked = read.inputs().quantities(read.rules());
         souther.compiler.types.TypeSymbol.AtModule name =
                 souther.compiler.types.TypeSymbols.declared(
                 new souther.compiler.types.TypeKey(read.rules().symbols().module(), "P"));
-        souther.compiler.check.FieldDomains whole = souther.compiler.check.FieldDomains.of(
-                name, RuleReadingContext.unshared(read.rules(), ReadAs.THE_COMPILATION_DOES));
 
-        for (int at = 0; at <= 5; at++) {
+        for (int at = -1; at <= 6; at++) {
             Map<souther.compiler.check.RuleKey, Count> settled =
                     Map.of(souther.compiler.check.RuleKey.of("x"), count(at));
             souther.compiler.check.FieldDomains readIn = souther.compiler.check.FieldDomains.of(
                     name, RuleReadingContext.unshared(read.rules(), ReadAs.THE_COMPILATION_DOES),
                     settled);
-            souther.compiler.check.FieldDomains.Carried<String> taken = whole.given(Map.of(
-                    souther.compiler.check.NumberAt
-                            .valueOf(souther.compiler.check.RuleKey.of("x")), count(at)))
-                    .constraintsOver(claim -> claim.of()
-                                    instanceof souther.compiler.check.NumberAt
-                                            .OfWhatNumber.OfWhatAnOperationAnswers
-                                    ? "#" + claim.position() : claim.position().toString(),
-                            subject -> "?" + subject,
-                            souther.compiler.numeric.CanonicalOrder.asTheyAreSpelled());
-            java.util.SequencedMap<String, Emptiness.AtAField.Where> where =
-                    new LinkedHashMap<>();
-            taken.named().forEach((subject, spelled) ->
-                    where.put(subject, new Emptiness.AtAField.Where.In(subject)));
+            Quantities fixed = asked.given(X, count(at));
 
-            assertEquals(readIn.holdsNothing().isPresent(),
-                    taken.constraints().holdsNothing(where).isPresent(),
+            assertEquals(readIn.holdsNothing().isPresent(), fixed.emptiness().isPresent(),
                     "whether anything is left, with x at " + at);
-            assertEquals(readIn.leftAt(souther.compiler.check.RuleKey.of("y"),
-                            new souther.compiler.check.NumberAt.OfWhatNumber.OfItsOwnValue()),
-                    taken.constraints().numbers().boundsOf(
-                            LinearForm.<String>atom("y")),
-                    "where y runs, with x at " + at);
+            if (readIn.holdsNothing().isEmpty()) {
+                assertEquals(readIn.leftAt(souther.compiler.check.RuleKey.of("y"),
+                                new souther.compiler.check.NumberAt.OfWhatNumber.OfItsOwnValue()),
+                        fixed.runsBetween(Y), "where y runs, with x at " + at);
+            }
         }
     }
 

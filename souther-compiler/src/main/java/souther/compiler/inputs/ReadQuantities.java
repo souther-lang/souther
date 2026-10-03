@@ -12,6 +12,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
@@ -28,6 +29,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * The one reading of a behavior's input, asked about a quantity over several of its positions.
@@ -129,30 +131,33 @@ final class ReadQuantities implements Quantities {
      */
     private volatile Optional<EmptyInput> emptiness;
     /**
-     * What has already been worked out, by the context it was worked out under.
+     * What the declarations leave under each context, before anything is fixed or taken in.
+     *
+     * <p>Shared with every reading made from this one by fixing or assuming something, because none
+     * of that reaches it: which readings stand under a context and what they say together is a
+     * question about the context and the declarations. A search makes a reading per candidate it
+     * tries, and kept per reading this was worked out again for each of them.
+     */
+    private final Contexts contexts;
+    /**
+     * What has already been worked out, by the context it was worked out under: the declarations'
+     * rules with what a caller took in said onto them.
      *
      * <p>A memo of {@link #constraints} and of nothing else. What the rules leave under a context is
      * a function of this value and that context — the same question asked twice has the same answer,
      * and nothing here is consulted to decide what the answer is. So this may be dropped without
      * changing what this reading says, and is here because a search asks the same context a great
      * many times: where a form runs, whether anything is left, and where the next form runs are
-     * three questions under one context, and reading every declaration again for each of them is
-     * what a row costs three times over.
+     * three questions under one context.
      *
-     * <p>Per value, since the readings are conditioned on what this refinement fixed. A table shared
-     * between refinements would answer one refinement's question out of another's.
+     * <p>Per value, since what was taken in is this value's. The part no caller said anything to is
+     * {@link #contexts}, and is not kept twice.
      */
-    private final Map<StructuralContext, Map<TermPath, FieldDomains.Carried<InputAtom>>> read =
-            new ConcurrentHashMap<>();
-    /** The same, of what those readings come to said together. Held beside them because both are
-     *  asked for on their own: a proof of emptiness names a place out of the first and shows what
-     *  it shows out of the second. */
     private final Map<StructuralContext, ConstraintState<InputAtom>> answered =
             new ConcurrentHashMap<>();
     /** The same, of those rules with this value's fixings standing in them. Beside the one above
-     *  and not in place of it: how a term is spaced is asked of what the declarations say, and a
-     *  reading that asked the conditioned rules for it would be asking about a number a fixing had
-     *  already settled. */
+     *  and not in place of it: a form a caller takes in is spaced by what the declarations say,
+     *  and not by what a fixing happened to settle. */
     private final Map<StructuralContext, ConstraintState<InputAtom>> withTheFixings =
             new ConcurrentHashMap<>();
 
@@ -217,7 +222,9 @@ final class ReadQuantities implements Quantities {
                            Map<TermPath, Position> byPath, List<CasesRead> cases,
                            java.util.function.Function<TermPath, Type> typeAt,
                            Map<NumericTerm, Fixed> fixed,
-                           RuleReadingContext ruleReading, List<Assumed> assumed) {
+                           RuleReadingContext ruleReading, List<Assumed> assumed,
+                           Contexts contexts) {
+        this.contexts = contexts;
         this.cases = List.copyOf(cases);
         this.ruleReading = ruleReading;
         this.typeAt = typeAt;
@@ -241,7 +248,21 @@ final class ReadQuantities implements Quantities {
                              java.util.function.Function<TermPath, Type> typeAt,
                              RuleReadingContext ruleReading) {
         return new ReadQuantities(byRoot, new Roots(roots), byPath, cases, typeAt, Map.of(),
-                ruleReading, List.of());
+                ruleReading, List.of(), new Contexts());
+    }
+
+    /**
+     * This reading with nothing fixed and nothing taken in, which is the one {@link #contexts} is
+     * worked out by.
+     *
+     * <p>Made rather than remembered, and only where a context is first asked about. What the shared
+     * part is worked out from is then a value that holds no fixing and no condition, so nothing a
+     * search said can reach it — whichever refinement happened to ask first.
+     */
+    private ReadQuantities unrefined() {
+        return fixed.isEmpty() && assumed.isEmpty() ? this
+                : new ReadQuantities(byRoot, roots, byPath, cases, typeAt, Map.of(), ruleReading,
+                        List.of(), contexts);
     }
 
     /**
@@ -379,31 +400,117 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * The rules of every value this context says stands, read with what is fixed under each and
-     * said in this input's names.
+     * What the declarations leave under each context a reading has been asked about, kept for that
+     * reading and every reading made from it.
+     *
+     * <p>Keyed by the context alone, which is everything the answer turns on: what is fixed and what
+     * is taken in are said onto it afterwards, by each reading for itself ({@link #constraints},
+     * {@link #effectiveConstraints}). Worked out by a reading holding neither
+     * ({@link #unrefined}), so that what is kept here cannot carry one refinement's fixing into
+     * another's answer.
+     *
+     * <p>Whichever thread gets there first, and a second that raced it works out the same answer
+     * from the same declarations.
+     */
+    private static final class Contexts {
+
+        private final Map<StructuralContext, UnderAContext> read = new ConcurrentHashMap<>();
+
+        UnderAContext under(StructuralContext context, ReadQuantities asking) {
+            UnderAContext had = read.get(context);
+            if (had != null) {
+                return had;
+            }
+            UnderAContext made = asking.unrefined().readUnder(context);
+            CONTEXTS_READ.incrementAndGet();
+            read.put(context, made);
+            return made;
+        }
+    }
+
+    /**
+     * What the declarations leave under one context, and the readings it was said out of.
+     *
+     * <p>The two together because a proof of emptiness names a place out of the readings and shows
+     * what it shows out of what they leave, and the place it names has to be one of the subjects
+     * that showed it.
+     *
+     * @param carried     the rules of every value the context says stands, in this input's names
+     * @param constraints those rules said together, with what the context itself says about the
+     *                    values
+     */
+    private record UnderAContext(Map<TermPath, FieldDomains.Carried<InputAtom>> carried,
+                                 ConstraintState<InputAtom> constraints) {}
+
+    /**
+     * How many contexts have had what the declarations leave under them worked out, for a test
+     * holding the readings a search makes to sharing that work.
+     *
+     * <p>Counted rather than timed, for the reason {@link
+     * souther.compiler.check.InvariantChecker#readingsMade} gives: what is held is that fixing a
+     * position works nothing out again, which is a shape and not a speed.
+     */
+    static long contextsRead() {
+        return CONTEXTS_READ.get();
+    }
+
+    private static final AtomicLong CONTEXTS_READ = new AtomicLong();
+
+    /** {@link Contexts}, asked from this reading. */
+    private UnderAContext underAContext(StructuralContext under) {
+        return contexts.under(under, this);
+    }
+
+    /**
+     * What the declarations leave under {@code under}, worked out.
+     *
+     * <p>The rules of every value this context says stands, said in this input's names and said
+     * together, with what the context itself says about the values.
      *
      * <p>Under the context and not all of them. A reading opened at a case holds of the rows whose
      * value turned out to be that case, so putting one into a space asked about rows that are some
      * other case would be stating a rule of nobody's — and putting every case in at once is a sum
      * refusing an input between its alternatives.
+     *
+     * <p>Said together, which is what makes this a constraint space rather than a product of them.
+     * Two parameters are related by nothing the declarations say, so meeting their rules leaves
+     * every answer where it was; what it does is leave somewhere for a rule that relates them to be
+     * said at all.
+     *
+     * <p>Nothing here is settled. A position a caller fixes is fixed over this whole space, once and
+     * in this input's names ({@link #effectiveConstraints}), and not in each value's rules before
+     * they are said together. Settled here, every candidate a search tries would be a context of
+     * its own.
      */
-    private Map<TermPath, FieldDomains.Carried<InputAtom>> conditioned(StructuralContext under) {
-        Map<TermPath, FieldDomains.Carried<InputAtom>> had = read.get(under);
-        if (had != null) {
-            return had;
-        }
-        Map<TermPath, FieldDomains.Carried<InputAtom>> made = new LinkedHashMap<>();
+    private UnderAContext readUnder(StructuralContext under) {
+        Map<TermPath, FieldDomains.Carried<InputAtom>> carried = new LinkedHashMap<>();
         byRoot.forEach((root, opened) -> {
             if (under.holds(opened.opening())) {
-                made.put(root, opened.rules().given(under(root)).constraintsOver(
+                carried.put(root, opened.rules().bounds().constraintsOver(
                         at -> called(root, at, under),
                         subject -> new InputAtom.Anonymous(root.toString(), subject),
                         InputAtom.inOneOrder()));
             }
         });
-        Map<TermPath, FieldDomains.Carried<InputAtom>> answer = Collections.unmodifiableMap(made);
-        read.put(under, answer);
-        return answer;
+        ConstraintState<InputAtom> made = ConstraintState.top(InputAtom.inOneOrder());
+        // What the values of this space cost to work out. One for the space and not one per
+        // parameter: what each parameter was read under is the allowance of its own declaration,
+        // and the set a position finally admits here is met out of all of them — so this is the
+        // answer being built and this is where building it is charged. Handed to each meet, since
+        // that is where a set neither reading holds comes to be.
+        souther.compiler.values.Allowance<InputAtom> sets =
+                ruleReading.policy().allowanceForAdmittedValues();
+        for (FieldDomains.Carried<InputAtom> each : carried.values()) {
+            made = made.meet(each.constraints(), sets);
+        }
+        // And what the context itself says about the values, which is as much a part of what the
+        // question is asked against as any clause. A row this question is about is one the
+        // prerequisites hold of, so where the rules have a word for one of them it is said here
+        // rather than left as a fact about whose rules to read.
+        for (StructuralContext.Assumption each : under.assumptions()) {
+            made = alsoStating(made, each, under);
+        }
+        return new UnderAContext(Collections.unmodifiableMap(carried), made);
     }
 
     @Override
@@ -535,7 +642,7 @@ final class ReadQuantities implements Quantities {
         List<Assumed> both = new ArrayList<>(assumed);
         both.add(taking);
         return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, fixed, ruleReading,
-                both);
+                both, contexts);
     }
 
     /**
@@ -563,17 +670,13 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * The rules of every parameter, renamed into this input's vocabulary and said together.
+     * The rules of every parameter, renamed into this input's vocabulary and said together, with
+     * what a caller took in said onto them.
      *
-     * <p>Renamed and not read again ({@link FieldDomains.Settled#constraintsOver}). What a rule says
-     * is a relation between subjects, and it says the same thing whatever they are called — so what
+     * <p>Renamed and not read again ({@link FieldDomains#constraintsOver}). What a rule says is a
+     * relation between subjects, and it says the same thing whatever they are called — so what
      * reaches here is each parameter's reading, under names this input can spell, and a subject it
      * cannot spell under a name of its own so that the rules through it are not lost.
-     *
-     * <p>Said together, which is what makes this a constraint space rather than a product of them.
-     * Two parameters are related by nothing the declarations say, so meeting their rules leaves
-     * every answer where it was; what it does is leave somewhere for a rule that relates them to be
-     * said at all.
      *
      * <p>And what each number is on its own goes in here rather than being met on afterwards.
      * Projecting does not distribute over meeting: a rule holding two numbers at one apiece says
@@ -581,28 +684,17 @@ final class ReadQuantities implements Quantities {
      * against a floor this reading did have, the rule is gone.
      */
     private ConstraintState<InputAtom> constraints(StructuralContext under) {
+        ConstraintState<InputAtom> declared = underAContext(under).constraints();
+        // Nothing taken in, which is every reading that answers about the declarations rather than
+        // about a region a search narrowed. The shared answer, and not a copy of it kept here.
+        if (assumed.isEmpty()) {
+            return declared;
+        }
         ConstraintState<InputAtom> had = answered.get(under);
         if (had != null) {
             return had;
         }
-        ConstraintState<InputAtom> made = ConstraintState.top(InputAtom.inOneOrder());
-        // What the values of this space cost to work out. One for the space and not one per
-        // parameter: what each parameter was read under is the allowance of its own declaration,
-        // and the set a position finally admits here is met out of all of them — so this is the
-        // answer being built and this is where building it is charged. Handed to each meet, since
-        // that is where a set neither reading holds comes to be.
-        souther.compiler.values.Allowance<InputAtom> sets =
-                ruleReading.policy().allowanceForAdmittedValues();
-        for (FieldDomains.Carried<InputAtom> each : conditioned(under).values()) {
-            made = made.meet(each.constraints(), sets);
-        }
-        // And what the context itself says about the values, which is as much a part of what the
-        // question is asked against as any clause. A row this question is about is one the
-        // prerequisites hold of, so where the rules have a word for one of them it is said here
-        // rather than left as a fact about whose rules to read.
-        for (StructuralContext.Assumption each : under.assumptions()) {
-            made = alsoStating(made, each, under);
-        }
+        ConstraintState<InputAtom> made = declared;
         // And what the caller took in, onto the same rules rather than met against the answer
         // afterwards. A condition relating two positions says nothing about either of them alone,
         // so met afterwards it would be gone.
@@ -658,7 +750,15 @@ final class ReadQuantities implements Quantities {
      *
      * <p>Only what stands under this context, through the same gate the forms taken in go through
      * ({@link #stands}). A fixing at a position no value under this context has is a rule about a
-     * row other than the one being asked about.
+     * row other than the one being asked about. Every context a question is asked in is built from
+     * everything fixed ({@link #accumulated}), so a fixing this gate leaves out is one under a
+     * context nobody asks.
+     *
+     * <p>Said here once, over every value's rules together, and not in each value's rules before
+     * they were said together. A fixing is the range {@link #holding} puts on the number, which the
+     * arithmetic reads as the two half-spaces an equality at that value is; nothing is worked out
+     * until the rules are asked, so the same half-spaces leave the same answer on either side of the
+     * meet.
      *
      * <p>And what this puts on is only what one value was fixed at. A term fixed at two is a
      * contradiction and is said as one where the fixings are read ({@link #emptiness}); carried
@@ -834,7 +934,7 @@ final class ReadQuantities implements Quantities {
             positions(StructuralContext under) {
         java.util.SequencedMap<InputAtom, Emptiness.AtAField.Where> made =
                 new LinkedHashMap<>();
-        conditioned(under).forEach((root, carried) -> carried.named().forEach(
+        underAContext(under).carried().forEach((root, carried) -> carried.named().forEach(
                 // Off the subject and not off the reading it arrived from. A field the cases of a
                 // sum share is one place named by the sum's rules and by the case's, and the two
                 // arrive here as one subject — so the place is the one that subject stands at,
@@ -988,14 +1088,18 @@ final class ReadQuantities implements Quantities {
      * one number spaced two ways is the naming and the typing disagreeing rather than something to
      * pick the safer of.
      *
+     * <p>The type and not whether a rule happened to mention the number. What these rules hold
+     * under a context is what the declarations said and nothing a caller fixed, so a number no
+     * clause names is spaced here by its order — the order the reading of its value spaced it by,
+     * whether or not anything is fixed.
+     *
      * <p>Null where nothing says. A bound may not be taken in on a number whose spacing is guessed —
      * a strict bound is either wrongly sharpened on it or silently left blunt — so what is not
      * known is left out, and what the rules leave is then wider rather than wrong.
      */
-    private souther.compiler.numeric.Granularity spacingOf(
-            souther.compiler.numeric.NumericDomain<InputAtom> rules, NumericTerm term,
-            InputAtom atom) {
-        souther.compiler.numeric.Granularity had = rules.spacingOf(atom);
+    private Granularity spacingOf(NumericDomain<InputAtom> rules, NumericTerm term,
+                                  InputAtom atom) {
+        Granularity had = rules.spacingOf(atom);
         if (had != null) {
             return had;
         }
@@ -1155,7 +1259,7 @@ final class ReadQuantities implements Quantities {
             return this;
         }
         return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, both, ruleReading,
-                assumed);
+                assumed, contexts);
     }
 
     /**
@@ -1431,35 +1535,6 @@ final class ReadQuantities implements Quantities {
                             + " about " + term);
         }
         return term;
-    }
-
-    /**
-     * What is fixed under one value, named the way that value's own rules name it.
-     *
-     * <p>The ones that count to a number, because what this is handed to is the arithmetic the
-     * declarations are read with. A position fixed at a place its carrier counts nothing of is
-     * still fixed — {@link #whereOneTermRuns} leaves it the one value, which is what a reader
-     * choosing a value for it asks — and there is nothing to tell the rules that they could solve
-     * with. Handed over as a number it does not have, it would be a rule about some other place.
-     */
-    private Map<NumberAt<RuleKey>, Count> under(TermPath root) {
-        Map<NumberAt<RuleKey>, Count> out = new LinkedHashMap<>();
-        fixed.forEach((term, fixedAt) -> {
-            if (!(fixedAt.least() instanceof Count counted)) {
-                return;
-            }
-            UnderARoot at = rootOf(term.subjectPath());
-            // Which number of the place was settled, and not only which place. A count taken of one
-            // is a coordinate of its own, and a fixing that named only the value left a rule over
-            // two counts unconditioned while the same rule was read whole when the counts were
-            // asked about.
-            // Only where one value was fixed there. A place fixed at two settles nothing the
-            // declarations could be told, and what it contradicts is said here rather than by them.
-            if (at != null && root.equals(at.root()) && fixedAt.isOne()) {
-                out.put(coordinateOf(at, term), counted);
-            }
-        });
-        return out;
     }
 
     /**
