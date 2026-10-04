@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
 import java.util.stream.Stream;
 
@@ -206,23 +207,44 @@ class TheJapiCommandReadsAJarsPublicApiTest {
         // it, so this — not the sibling jar — is the path the ordinary invocation takes. The
         // sources have to be inside the very jar the class came from: a copy carried anywhere else
         // may describe another version of the same name.
-        Path carrying = Files.createTempDirectory("carried").resolve("greeter-shaded.jar");
-        try (java.util.jar.JarOutputStream out =
-                     new java.util.jar.JarOutputStream(Files.newOutputStream(carrying));
-             java.util.jar.JarFile source = new java.util.jar.JarFile(jar.toFile())) {
-            for (java.util.jar.JarEntry e : source.stream().toList()) {
-                out.putNextEntry(new JarEntry(e.getName()));
-                out.write(source.getInputStream(e).readAllBytes());
-            }
-            out.putNextEntry(new JarEntry("META-INF/souther-sources/acme/Greeter.java"));
-            out.write(Files.readAllBytes(sourceOfGreeter));
-        }
+        Path carrying = carryingItsSources(Files.createTempDirectory("carried").resolve("greeter-shaded.jar"));
 
         Answer answer = run("acme.Greeter", "-cp", carrying.toString());
 
         assertEquals(0, answer.code(), answer.err());
         assertTrue(answer.out().contains("Greets whoever is put in front of it."),
                 "javadoc comes from the sources the jar carries: " + answer.out());
+    }
+
+    /**
+     * The installed CLI is a script with the jar appended to it, run as {@code java -jar souther},
+     * so the class path this tool falls back on is a file whose name says nothing about being an
+     * archive. It is one all the same — the class was read out of it — and what it carries inside
+     * is read the same way.
+     */
+    @Test
+    void javadocIsFoundInsideAJarWhoseNameDoesNotSayItIsOne() throws Exception {
+        Path carrying = carryingItsSources(Files.createTempDirectory("carried").resolve("souther"));
+
+        Answer answer = run("acme.Greeter", "-cp", carrying.toString());
+
+        assertEquals(0, answer.code(), answer.err());
+        assertTrue(answer.out().contains("Greets whoever is put in front of it."),
+                "javadoc comes from the sources the file carries, whatever it is called: " + answer.out());
+    }
+
+    /** The fixture jar written again at {@code at}, carrying Greeter's source inside it. */
+    private static Path carryingItsSources(Path at) throws Exception {
+        try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(at));
+             JarFile source = new JarFile(jar.toFile())) {
+            for (JarEntry e : source.stream().toList()) {
+                out.putNextEntry(new JarEntry(e.getName()));
+                out.write(source.getInputStream(e).readAllBytes());
+            }
+            out.putNextEntry(new JarEntry("META-INF/souther-sources/acme/Greeter.java"));
+            out.write(Files.readAllBytes(sourceOfGreeter));
+        }
+        return at;
     }
 
     @Test

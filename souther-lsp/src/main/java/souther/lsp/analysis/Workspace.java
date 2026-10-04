@@ -122,9 +122,12 @@ public final class Workspace {
         if (diskScan == null) {
             diskScan = scanDisk();
         }
-        Map<String, String> sources = new LinkedHashMap<>(diskScan);
-        sources.putAll(openBuffers);
-        return ModuleGraph.of(sources, modulesOnThePath());
+        return ModuleGraph.overlaying(diskScan, openBuffers, modulesOnThePath());
+    }
+
+    /** The same, over the documents the editor has open, which are read here and not handed out. */
+    public ModuleGraph snapshot(DocumentStore documents) {
+        return snapshot(documents.openDocuments());
     }
 
     /**

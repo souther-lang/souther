@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -55,12 +56,28 @@ public final class SpecDocument {
     private final Map<String, Section> byWords;
     private final List<Section> inOrder;
     private final List<String> ownTexts;
+    /**
+     * Each section's own text and what it is called — its title and anchor together — folded to
+     * lower case, in section order. A search asks every section, so the document is folded once
+     * when it is read rather than once for each question.
+     */
+    private final List<String> ownFolded;
+    private final List<String> calledFolded;
     private final List<String> names;
 
     private SpecDocument(List<Section> sections, List<String> ownTexts,
             Map<String, Section> byAnchor, Map<String, Section> byWords, List<String> names) {
         this.inOrder = List.copyOf(sections);
         this.ownTexts = List.copyOf(ownTexts);
+        List<String> own = new ArrayList<>();
+        List<String> called = new ArrayList<>();
+        for (int i = 0; i < this.inOrder.size(); i++) {
+            Section s = this.inOrder.get(i);
+            own.add(this.ownTexts.get(i).toLowerCase(Locale.ROOT));
+            called.add((s.title() + " " + s.anchor()).toLowerCase(Locale.ROOT));
+        }
+        this.ownFolded = List.copyOf(own);
+        this.calledFolded = List.copyOf(called);
         this.byAnchor = Map.copyOf(byAnchor);
         this.byWords = Map.copyOf(byWords);
         this.names = List.copyOf(names);
@@ -349,26 +366,41 @@ public final class SpecDocument {
      * every section holding all of it, so those two settle it, which is what a phrase search is.
      */
     List<Hit> rank(List<String> asked, Match how) {
+        return scored(asked, how).stream()
+                .sorted(Comparator.comparingInt(Scored::matched).reversed()
+                        .thenComparing(Comparator.comparing(Scored::titled).reversed())
+                        .thenComparing(Comparator.comparingInt(Scored::occurrences).reversed()))
+                .map(s -> new Hit(s.section(), s.titled(), s.matched(), s.occurrences(),
+                        snippet(s, asked, how)))
+                .toList();
+    }
+
+    /**
+     * A section the query was found in, before the line it was found on is looked for. Only a hit
+     * that is shown needs that line, and a common word is found in most of the sections there are.
+     */
+    record Scored(Section section, boolean titled, int matched, int occurrences, int at) {}
+
+    /** The sections that say any of {@code asked}, in document order, scored as {@link #rank} does. */
+    List<Scored> scored(List<String> asked, Match how) {
         // Folded once for the whole search rather than once per section, and here rather than at
         // each caller, so that a term arriving in the case a reader copied it in is one term.
         List<String> terms = asked.stream().map(DocName::canonical).toList();
-        List<Hit> hits = new ArrayList<>();
+        List<Scored> hits = new ArrayList<>();
         for (int i = 0; i < inOrder.size(); i++) {
-            Section s = inOrder.get(i);
             // The anchor is asked of the same text the title is: an anchor is what a reader has in
             // hand, and a section whose prose never writes its own anchor is most of them.
-            Match.Held held = how.held((s.title() + " " + s.anchor()).toLowerCase(Locale.ROOT),
-                    ownTexts.get(i).toLowerCase(Locale.ROOT), terms);
+            Match.Held held = how.held(calledFolded.get(i), ownFolded.get(i), terms);
             if (held.matched() > 0) {
-                hits.add(new Hit(s, held.named(), held.matched(), held.occurrences(),
-                        snippet(ownTexts.get(i), terms, how)));
+                hits.add(new Scored(inOrder.get(i), held.named(), held.matched(), held.occurrences(), i));
             }
         }
-        return hits.stream()
-                .sorted(java.util.Comparator.comparingInt(Hit::matched).reversed()
-                        .thenComparing(java.util.Comparator.comparing(Hit::titled).reversed())
-                        .thenComparing(java.util.Comparator.comparingInt(Hit::occurrences).reversed()))
-                .toList();
+        return hits;
+    }
+
+    /** The line {@code hit} says one of {@code asked} on, as {@link Hit#snippet} gives it. */
+    String snippet(Scored hit, List<String> asked, Match how) {
+        return snippet(ownTexts.get(hit.at()), asked.stream().map(DocName::canonical).toList(), how);
     }
 
     /**

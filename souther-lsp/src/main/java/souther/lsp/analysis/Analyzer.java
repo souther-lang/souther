@@ -24,6 +24,7 @@ import souther.compiler.query.RowObservation;
 import souther.compiler.query.Measurement;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.Front;
 import souther.compiler.query.Names;
 import souther.compiler.query.ObligationAssessment;
 import souther.compiler.query.RowWork;
@@ -101,6 +102,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiFunction;
+import java.util.function.Supplier;
 
 /**
  * The language-analysis core, independent of the LSP transport: pure functions from source text to
@@ -210,6 +213,7 @@ public final class Analyzer {
         if (!this.measure.equals(asked)) {
             this.measure = asked;
             this.workspaceCompile = null;
+            this.composingCompile = null;
         }
     }
 
@@ -222,15 +226,17 @@ public final class Analyzer {
     /** All diagnostics for a document: every syntax error, or — when there are none — the first
      * semantic error a compile turns up, or the warnings a clean compile found. */
     public List<LspDiagnostic> diagnostics(String text) {
-        SourceLayout lines = SourceLayout.of(text);
-        List<LspDiagnostic> out = new ArrayList<>(syntaxOf(Reading.of(text), lines.lines()));
+        Reading reading = readingOf(text);
+        List<LspDiagnostic> out = new ArrayList<>(syntaxOf(reading, reading.lines()));
         if (!out.isEmpty()) {
             return out;   // don't chase semantics through a broken parse
         }
+        SourceLayout lines = reading.laidOut();
 
         try {
-            // The document compiles fully here, so its inline `example`s are evaluated on save and a
-            // failing one (E1805) surfaces as an editor diagnostic. What it imports is resolved like
+            // The document compiles fully here, so its inline `example`s are evaluated every time its
+            // diagnostics are asked, and a failing one (E1805) surfaces as an editor diagnostic. What
+            // it imports is resolved like
             // any other import, against a path this document is given none of.
             List<Located> warnings = new ArrayList<>();
             Compiler.compiled(CompilationSources.text(text), ModulePath.EMPTY, warnings);
@@ -302,9 +308,8 @@ public final class Analyzer {
         for (String uri : graph.uris()) {
             abandonment.stopIfAsked();   // between two files, before this one is parsed
             String text = graph.text(uri);
-            SourceLayout lines = SourceLayout.of(text, new SourceId(uri));
-            Reading reading = readingOf(uri, text);
-            out.put(uri, new ArrayList<>(syntaxOf(reading, lines.lines())));
+            Reading reading = readingOf(graph, uri);
+            out.put(uri, new ArrayList<>(syntaxOf(reading, reading.lines())));
             if (reading.parses()) {
                 compileSet.put(uri, text);   // a syntactically broken file cannot join the compile
             } else {
@@ -322,7 +327,7 @@ public final class Analyzer {
             // Which file broke the walk is not known here, so every file that entered the compile is
             // marked. Silence would leave the whole workspace looking clean.
             for (String uri : compileSet.keySet()) {
-                out.get(uri).add(internalError(new LineIndex(graph.text(uri)), e));
+                out.get(uri).add(internalError(readingOf(graph, uri).lines(), e));
             }
             return out;
         }
@@ -367,7 +372,7 @@ public final class Analyzer {
     private Compilation compileOf(ModuleGraph graph, Map<String, String> sources, Set<String> broken) {
         elsewhere.forgetAllBut(graph.uris());
         behaviorsOwed.forgetAllBut(graph.uris());
-        readings.keySet().retainAll(Set.copyOf(graph.uris()));
+        readings.keySet().retainAll(graph.uris());
         ModulesOnThePath path = graph.onThePath();
         if (workspaceCompile == null || !path.equals(compiledAgainst)) {
             workspaceCompile = Compilation.ofDocuments(sources, broken, path.path());
@@ -379,14 +384,29 @@ public final class Analyzer {
         // Told here rather than where the compile is made: what stops the walk is whichever unit of
         // work reached it, and a compile outlives every one of them.
         workspaceCompile.abandonWhen(abandonment);
+        settledFor = graph;
         return workspaceCompile;
     }
+
+    /**
+     * The graph {@link #workspaceCompile} was last brought up to date with.
+     *
+     * <p>A graph is a snapshot and never changes, so a compile brought up to date with it stays up
+     * to date with it. One request asks for the compile more than once — a rename asks through the
+     * references and again for itself — and each time would sort every document of the workspace
+     * again into what joins and what does not, for the answer it already has.
+     */
+    private ModuleGraph settledFor;
 
     /**
      * The same compile, for a request — navigation. A file that will not parse is left out of it,
      * as it is for diagnostics: it cannot join a module set.
      */
     private Compilation compileOf(ModuleGraph graph) {
+        if (workspaceCompile != null && graph == settledFor) {
+            workspaceCompile.abandonWhen(abandonment);
+            return workspaceCompile;
+        }
         return compileOf(graph, sorted(graph));
     }
 
@@ -406,18 +426,31 @@ public final class Analyzer {
      * <p>Handed the documents rather than sorting them again: which of them can join a compile is
      * one answer per request, and the workspace compile beside this one was built from it.
      *
-     * <p>Kept for nothing after the block is written. What it is for happens once, when somebody
-     * takes the offer, and a compile held between two of those would answer from the documents as
-     * they were when the first one was taken.
+     * <p>Kept between two blocks and brought up to date with the documents before each, the way the
+     * workspace compile is. An answer it holds is given again only while nothing it read has
+     * changed, so a block is composed from the documents as they are now; what keeping it saves is
+     * the compile of everything nobody edited, which a client that does not come back for an edit
+     * would otherwise pay in full on every cursor move.
      */
     private Compilation composingRowsOf(ModuleGraph graph, Sorted sorted) {
-        Compilation composing = Compilation.ofDocuments(sorted.joining(), sorted.broken(),
-                graph.onThePath().path());
-        composing.observe(RowObservation.RECORD_ARMS);
-        composing.measure(measure);
-        composing.abandonWhen(abandonment);
-        return composing;
+        ModulesOnThePath path = graph.onThePath();
+        if (composingCompile == null || !path.equals(composedAgainst)) {
+            composingCompile = Compilation.ofDocuments(sorted.joining(), sorted.broken(),
+                    path.path());
+            composingCompile.observe(RowObservation.RECORD_ARMS);
+            composingCompile.measure(measure);
+            composedAgainst = path;
+        } else {
+            composingCompile.update(sorted.joining(), sorted.broken());
+        }
+        composingCompile.abandonWhen(abandonment);
+        return composingCompile;
     }
+
+    /** The compile {@link #composingRowsOf} keeps, and the modules on the path it was built for.
+     *  Null until a block is first composed, and again once what is measured changes. */
+    private Compilation composingCompile;
+    private ModulesOnThePath composedAgainst;
 
     /** The workspace as a compile takes it: what can join one, and the modules of what cannot. */
     private record Sorted(Map<String, String> joining, Set<String> broken) {}
@@ -436,7 +469,7 @@ public final class Analyzer {
         for (String uri : graph.uris()) {
             abandonment.stopIfAsked();
             String text = graph.text(uri);
-            Reading reading = readingOf(uri, text);
+            Reading reading = readingOf(graph, uri);
             if (reading.parses()) {
                 joining.put(uri, text);
             } else if (reading.declares() != null) {
@@ -460,24 +493,170 @@ public final class Analyzer {
      * answer cannot have changed, since one text parses one way. On the crm example — seven sources,
      * 3898 lines — it was 7.3 of the 9.3 milliseconds a completion took, and it grows with the
      * workspace rather than with the edit.
+     *
+     * <p>An open document keeps its tree as well, and what the tree is laid out as, because every
+     * question the editor asks is about an open document and each asks one of them. A question that
+     * worked them out for itself would pay for the whole document on every request, and inside a
+     * loop once for every place it answers about — a hint for each parameter, a location for each
+     * use. One text has one tree, so the questions about it share the one this read.
+     *
+     * <p>A document the editor does not have open keeps only the small facts about it — its syntax
+     * errors, its module, its lines, its outline, what it imports — and lets the tree go. Every file
+     * of the workspace has a reading, and a tree is many times the size of its text; nothing the
+     * editor asks of a closed file needs one but matching a name by its spelling, which reads the
+     * file again where it is asked, and where a closed file's places are wanted the workspace compile
+     * already has them laid out.
+     *
+     * <p>A parse that did not finish keeps nothing to share. What its tree is asked for is asked of
+     * the parser again, which fails the way it failed here, so a question that needs the tree meets
+     * the failure the question met before it was kept.
      */
-    private record Reading(String text, List<CstError<?>> errors, Throwable unfinished,
-                           String declares) {
+    private static final class Reading {
 
-        /** {@code text} parsed, once. */
-        static Reading of(String text) {
+        private final String text;
+        private final SourceId document;
+        private final boolean keepsTheTree;
+        private final SyntaxNode root;
+        private final List<CstError<?>> errors;
+        private final Throwable unfinished;
+        private final String declares;
+        private final LineIndex lines;
+        private final List<DocumentSymbol> symbols;
+
+        /** What is told every time this reading parses its text. */
+        private final Runnable parsing;
+
+        /** Laid out the first time a place in the text is asked about, and kept with the tree. */
+        private SourceLayout laidOut;
+
+        /** What the text imports, read the first time it is asked; empty where it does not read. */
+        private Optional<List<Ast.Import>> imports;
+
+        private Reading(String text, SourceId document, boolean keepsTheTree, SyntaxNode root,
+                        List<CstError<?>> errors, Throwable unfinished, String declares,
+                        LineIndex lines, List<DocumentSymbol> symbols, Runnable parsing) {
+            this.text = text;
+            this.document = document;
+            this.keepsTheTree = keepsTheTree;
+            this.root = keepsTheTree ? root : null;
+            this.errors = errors;
+            this.unfinished = unfinished;
+            this.declares = declares;
+            this.lines = lines;
+            this.symbols = symbols;
+            this.parsing = parsing;
+        }
+
+        /**
+         * {@code text} parsed, once, as the source of {@code document} — or of no named file where
+         * that is null — keeping the tree where {@code keepsTheTree} says to. {@code outline} reads
+         * the document's symbols off the tree while there is one; {@code parsing} is told of every
+         * parse this reading makes, this one included.
+         */
+        static Reading of(String text, SourceId document, boolean keepsTheTree,
+                          BiFunction<SyntaxNode, LineIndex, List<DocumentSymbol>> outline,
+                          Runnable parsing) {
+            parsing.run();
+            LineIndex lines = new LineIndex(text);
             try {
                 CstParser.Result parsed = CstParser.parse(text);
-                return new Reading(text, parsed.errors(), null,
-                        AstBuilder.headerModuleName(parsed.root()));
+                return new Reading(text, document, keepsTheTree, parsed.root(), parsed.errors(),
+                        null, AstBuilder.headerModuleName(parsed.root()), lines,
+                        List.copyOf(outline.apply(parsed.root(), lines)), parsing);
             } catch (RuntimeException | StackOverflowError e) {
-                return new Reading(text, List.of(), e, null);
+                return new Reading(text, document, keepsTheTree, null, List.of(), e, null, lines,
+                        List.of(), parsing);
             }
+        }
+
+        /** The same text, as a document the editor has closed: everything but the tree and what
+         *  it is laid out as. Nothing is parsed for it. */
+        Reading forgettingTheTree() {
+            Reading closed = new Reading(text, document, false, null, errors, unfinished, declares,
+                    lines, symbols, parsing);
+            closed.imports = imports;
+            return closed;
+        }
+
+        boolean keepsTheTree() {
+            return keepsTheTree;
+        }
+
+        String text() {
+            return text;
+        }
+
+        List<CstError<?>> errors() {
+            return errors;
+        }
+
+        Throwable unfinished() {
+            return unfinished;
+        }
+
+        String declares() {
+            return declares;
         }
 
         /** Whether the parse finished and met nothing, which is what joining a compile asks. */
         boolean parses() {
             return unfinished == null && errors.isEmpty();
+        }
+
+        /** The tree the parser built: the one kept, or — for a document that keeps none — the text
+         *  parsed again, here. */
+        SyntaxNode root() {
+            if (root != null) {
+                return root;
+            }
+            parsing.run();
+            return CstParser.parse(text).root();
+        }
+
+        /** Where each of the text's places is, by this reading's own count. Kept only with the tree
+         *  it was counted from. */
+        SourceLayout laidOut() {
+            if (laidOut != null) {
+                return laidOut;
+            }
+            SourceLayout counted = SourceLayout.of(root(), text, document);
+            if (keepsTheTree) {
+                laidOut = counted;
+            }
+            return counted;
+        }
+
+        /** Offsets into the text as lines and columns. Needs no tree, so a parse that did not
+         *  finish still has them. */
+        LineIndex lines() {
+            return lines;
+        }
+
+        /** The document's outline, read off the tree when the text was parsed. */
+        List<DocumentSymbol> symbols() {
+            return symbols;
+        }
+
+        /** The module {@code name} is imported from, or null where no import of this text exposes
+         *  it or the text does not read as a module. */
+        String importing(String name) {
+            if (imports == null) {
+                imports = importsOf(text);
+            }
+            for (Ast.Import imp : imports.orElse(List.of())) {
+                if (imp.names().contains(name)) {
+                    return imp.module();
+                }
+            }
+            return null;
+        }
+
+        private static Optional<List<Ast.Import>> importsOf(String text) {
+            try {
+                return Optional.of(CstFrontend.parse(text, ImplicitModuleName.OF_A_TEXT).imports());
+            } catch (RuntimeException | StackOverflowError _) {
+                return Optional.empty();   // a file that does not parse cleanly resolves no imports
+            }
         }
     }
 
@@ -485,14 +664,77 @@ public final class Analyzer {
      * remembers about a document the workspace no longer holds. */
     private final Map<String, Reading> readings = new HashMap<>();
 
-    private Reading readingOf(String uri, String text) {
+    /** How many times a document of the workspace has been parsed: into a {@link Reading}, or
+     *  again by one that keeps no tree. What a check of whether a question parsed a document reads. */
+    private int parsesMade;
+
+    /** The document at {@code uri} in {@code graph}, open or closed as the graph says it is. */
+    private Reading readingOf(ModuleGraph graph, String uri) {
+        return readingOf(uri, graph.text(uri), graph.isOpen(uri));
+    }
+
+    /**
+     * The reading of {@code text} as the document at {@code uri}, which keeps its tree where
+     * {@code open} says the editor has it open.
+     *
+     * <p>Which of the two a reading is follows the document and not the text: one text is open in
+     * one request and closed in the next. Closing it lets the tree go without reading anything, and
+     * opening it again parses the text again, because the tree it was read into is gone.
+     */
+    private Reading readingOf(String uri, String text, boolean open) {
         Reading had = readings.get(uri);
         if (had != null && had.text().equals(text)) {
-            return had;
+            if (had.keepsTheTree() == open) {
+                return had;
+            }
+            if (!open) {
+                Reading closed = had.forgettingTheTree();
+                readings.put(uri, closed);
+                return closed;
+            }
         }
-        Reading now = Reading.of(text);
+        Reading now = Reading.of(text, new SourceId(uri), open, this::outlineOf,
+                () -> parsesMade++);
         readings.put(uri, now);
         return now;
+    }
+
+    /** A text with no document to keep it under, asked about once. */
+    private Reading readingOf(String text) {
+        return Reading.of(text, null, true, this::outlineOf, () -> { });
+    }
+
+    /** How many times a document has been parsed so far. */
+    int parsesMade() {
+        return parsesMade;
+    }
+
+    /** Whether the reading of the document at {@code uri} is holding a tree. */
+    boolean holdsATreeOf(String uri) {
+        Reading held = readings.get(uri);
+        return held != null && held.root != null;
+    }
+
+    /**
+     * How the document at {@code uri} — null for a text with no document — is laid out: as the
+     * workspace compile laid it out where the compile holds this same text, and by its own reading
+     * where it does not — a document held out of the compile for its syntax errors, or one asked
+     * about before the compile has read it.
+     *
+     * <p>The compile's first, because it has one for every document it holds, closed ones included,
+     * and the same text laid out for the same document is the same layout either way.
+     */
+    private SourceLayout laidOut(String uri, Reading reading) {
+        if (uri != null && workspaceCompile != null) {
+            SourceId id = new SourceId(uri);
+            if (reading.text().equals(workspaceCompile.db().ask(new Front.Text(id)).value())) {
+                SourceLayout held = workspaceCompile.db().ask(new Front.LayoutOf(id)).value();
+                if (held != null) {
+                    return held;
+                }
+            }
+        }
+        return reading.laidOut();
     }
 
     /** A source of the compile as the editor names it. A workspace hands its documents over under
@@ -506,16 +748,16 @@ public final class Analyzer {
      * and a column that any file might have.
      *
      * <p>Read off the document. A line and a column are where the reader put the caret, and which
-     * of the things written in that file they landed on is the file's to say — so the text is
-     * asked, and a document this compilation is not holding has no place to answer with.
+     * of the things written in that file they landed on is the file's to say — so the layout the
+     * compilation made of it is asked, and a document this compilation is not holding has no place
+     * to answer with.
      */
     private static SourcePos cursor(Compilation compilation, String uri, Position pos) {
         SourceId id = new SourceId(uri);
-        String text = compilation.db().ask(new souther.compiler.query.Front.Text(id)).value();
-        if (text == null) {
+        SourceLayout laidOut = compilation.db().ask(new Front.LayoutOf(id)).value();
+        if (laidOut == null) {
             return null;
         }
-        SourceLayout laidOut = SourceLayout.of(text, id);
         return laidOut.placeAt(laidOut.lines().offsetOf(pos.line(), pos.character()));
     }
 
@@ -620,7 +862,9 @@ public final class Analyzer {
         }
         Adequacy.Of adequacy = compilation.adequacy(module);
         List<CodeLens> out = new ArrayList<>();
+        SourceLayouts texts = textsOf(graph);
         for (Hir.BehaviorDef behavior : written.behaviors()) {
+            abandonment.stopIfAsked();
             // A module's declarations need not all be in this document, and a line number from
             // another file read against this one's index points somewhere arbitrary.
             if (!uri.equals(documentOf(behavior.pos(), null, graph))) {
@@ -628,7 +872,7 @@ public final class Analyzer {
             }
             String title = lensTitle(compilation, module, behavior.name(), adequacy);
             if (title != null) {
-                out.add(new CodeLens(lensAnchorRange(textsOf(graph), behavior.pos()), title));
+                out.add(new CodeLens(lensAnchorRange(texts, behavior.pos()), title));
             }
         }
         return out;
@@ -649,7 +893,7 @@ public final class Analyzer {
             return known;
         }
         String text = graph.text(uri);
-        return text == null ? null : readingOf(uri, text).declares();
+        return text == null ? null : readingOf(graph, uri).declares();
     }
 
     /**
@@ -777,13 +1021,13 @@ public final class Analyzer {
     public List<CodeAction> codeActions(String uri, String text, Range requested,
                                         ModuleGraph graph) {
         List<CodeAction> out = new ArrayList<>();
-        CstParser.Result parsed = CstParser.parse(text);
-        if (!parsed.errors().isEmpty()) {
+        Reading reading = readingOf(uri, text, graph.isOpen(uri));
+        if (!reading.parses()) {
             return out;   // a semantic answer needs a clean parse
         }
         try {
             Compilation compilation = compileOf(graph);
-            out.addAll(rowsToWrite(uri, text, parsed.root(), requested, graph, compilation));
+            out.addAll(rowsToWrite(uri, text, reading, requested, graph, compilation));
             out.addAll(repairs(uri, requested, compilation));
         } catch (RuntimeException | StackOverflowError _) {
             return List.of();   // nothing to offer, which is an answer; the diagnose says what broke
@@ -840,15 +1084,17 @@ public final class Analyzer {
      * module's own source or an attached file — and moving a block is easier than finding out why one
      * landed somewhere surprising.
      */
-    private List<CodeAction> rowsToWrite(String uri, String text, SyntaxNode root, Range requested,
-                                         ModuleGraph graph, Compilation compilation) {
+    private List<CodeAction> rowsToWrite(String uri, String text, Reading reading,
+                                         Range requested, ModuleGraph graph,
+                                         Compilation compilation) {
         if (!measure.level().readsRows()) {
             return List.of();
         }
         // Which declaration is being asked about, asked of the document the request arrived with.
         // Ahead of the compile because it is what the rest is about: everything below answers about
         // a behavior, and there is no behavior to answer about until this says so.
-        SourceLayout lines = SourceLayout.of(text, new SourceId(uri));
+        SyntaxNode root = reading.root();
+        SourceLayout lines = laidOut(uri, reading);
         // The first behavior it reaches, and not the first definition. A selection is drawn over as
         // many declarations as somebody drags it over, and a `data` above the behavior is not an
         // answer about the behavior. Over more than one behavior it is the one written first: an
@@ -1032,11 +1278,11 @@ public final class Analyzer {
      * error — the formatter re-derives layout from a clean parse, so a broken document is left as-is. */
     public Optional<String> format(String text) {
         try {
-            CstParser.Result parsed = CstParser.parse(text);
-            if (!parsed.errors().isEmpty()) {
+            Reading reading = readingOf(text);
+            if (!reading.parses()) {
                 return Optional.empty();
             }
-            return Optional.of(Formatter.format(parsed.root()));
+            return Optional.of(Formatter.format(reading.root()));
         } catch (RuntimeException | StackOverflowError _) {
             // The one entry point here that answered a document it could not walk with an error
             // reply rather than by leaving the document alone. The reason it could not is already
@@ -1067,8 +1313,9 @@ public final class Analyzer {
                 return value;
             }
         }
-        SourceLayout lines = SourceLayout.of(text, new SourceId(uri));
-        SyntaxNode root = CstParser.parse(text).root();
+        Reading reading = readingOf(graph, uri);
+        SourceLayout lines = laidOut(uri, reading);
+        SyntaxNode root = reading.root();
         SyntaxToken ident = identAt(meaningfulTokens(root), lines, lines.lines().offsetOf(pos.line(), pos.character()));
         if (ident == null) {
             return Optional.empty();
@@ -1078,7 +1325,7 @@ public final class Analyzer {
             SyntaxToken name = nameToken(local);
             return name == null ? Optional.empty() : Optional.of(new Location(uri, tokenRange(lines.lines(), name)));
         }
-        String targetModule = importedFrom(text, nameOf(ident));
+        String targetModule = reading.importing(nameOf(ident));
         if (targetModule == null) {
             return Optional.empty();
         }
@@ -1086,14 +1333,14 @@ public final class Analyzer {
         if (targetUri == null) {
             return Optional.empty();
         }
-        String targetText = graph.text(targetUri);
-        SyntaxNode def = declaringDef(CstParser.parse(targetText).root(), nameOf(ident));
+        Reading target = readingOf(graph, targetUri);
+        SyntaxNode def = declaringDef(target.root(), nameOf(ident));
         if (def == null) {
             return Optional.empty();
         }
         SyntaxToken name = nameToken(def);
         return name == null ? Optional.empty()
-                : Optional.of(new Location(targetUri, tokenRange(new LineIndex(targetText), name)));
+                : Optional.of(new Location(targetUri, tokenRange(target.lines(), name)));
     }
 
     /**
@@ -1109,54 +1356,101 @@ public final class Analyzer {
      * never read them — the spelling is still what answers.
      */
     public List<Location> references(String uri, Position pos, ModuleGraph graph, boolean includeDeclaration) {
+        References found = referencesOf(uri, pos, graph);
+        return includeDeclaration ? found.withDeclarations() : found.withoutDeclarations().get();
+    }
+
+    /**
+     * The two answers {@link #references} gives, from one walk: with the declarations and without.
+     *
+     * <p>One walk because a highlight asks for both, and the uses are the same in each — what tells
+     * them apart is only whether the lines that declare the name are among them. The answer without
+     * them is held back where it is a walk of its own: where the compile found the declarations of
+     * a value and no use of it, what is said without the declarations is the spelling's answer,
+     * which reads every file, and a caller asking for the declarations never pays for it.
+     */
+    private record References(List<Location> withDeclarations,
+                              Supplier<List<Location>> withoutDeclarations) {
+
+        static References none() {
+            return new References(List.of(), List::of);
+        }
+
+        /** The declarations followed by the uses, and the uses alone. */
+        static References of(List<Location> declarations, List<Location> uses) {
+            List<Location> both = new ArrayList<>(declarations);
+            both.addAll(uses);
+            return new References(both, () -> uses);
+        }
+    }
+
+    private References referencesOf(String uri, Position pos, ModuleGraph graph) {
         String text = graph.text(uri);
         if (text == null) {
-            return List.of();
+            return References.none();
         }
         Compilation compilation = compileOf(graph);
         if (resolves(compilation, uri)) {
-            List<Location> uses = usesOf(compilation, uri, pos, graph, includeDeclaration);
-            if (uses != null) {
-                return uses;
+            TypeSymbol type = typeUnderCursor(compilation, uri, pos);
+            if (type != null) {
+                List<Location> declarations = new ArrayList<>();
+                declarationOf(compilation, type, graph).ifPresent(declarations::add);
+                return References.of(declarations, usesOf(compilation, type, graph));
             }
-            List<Location> values = valueUsesOf(compilation, uri, pos, graph, includeDeclaration);
-            if (!values.isEmpty()) {
-                return values;
+            ValueName value = valueUnderCursor(compilation, uri, pos);
+            if (value != null) {
+                List<Location> declarations = valueDeclarationsOf(compilation, value, uri, graph);
+                List<Location> uses = valueUsesOf(compilation, value, graph);
+                if (!uses.isEmpty()) {
+                    return References.of(declarations, uses);
+                }
+                if (!declarations.isEmpty()) {
+                    return new References(declarations, () -> bySpelling(uri, text, pos, graph,
+                            compilation).withoutDeclarations().get());
+                }
             }
             // Nothing found is not nothing here: the resolve pass records the value names written
             // in a body, and a composition's stages and a declaration's own name are not those, so
             // the cursor may be on a name it never saw. Matching the spelling still answers those.
         }
-        SyntaxNode root = CstParser.parse(text).root();
-        SourceLayout lines = SourceLayout.of(text, new SourceId(uri));
+        return bySpelling(uri, text, pos, graph, compilation);
+    }
+
+    /** The name under the cursor matched by its spelling, in every file that declares or imports
+     *  it — what answers where the compile has nothing to say. */
+    private References bySpelling(String uri, String text, Position pos, ModuleGraph graph,
+                                  Compilation compilation) {
+        Reading reading = readingOf(uri, text, graph.isOpen(uri));
+        SyntaxNode root = reading.root();
+        SourceLayout lines = laidOut(uri, reading);
         SyntaxToken ident = identAt(meaningfulTokens(root), lines, lines.lines().offsetOf(pos.line(), pos.character()));
         if (ident == null) {
-            return List.of();
+            return References.none();
         }
         String name = nameOf(ident);
         String definingModule = declaringDef(root, name) != null
-                ? moduleOf(compilation, graph, uri) : importedFrom(text, name);
+                ? moduleOf(compilation, graph, uri) : reading.importing(name);
         if (definingModule == null) {
-            return List.of();
+            return References.none();
         }
         String definingUri = uriOfModule(compilation, graph, definingModule);
         if (definingUri == null) {
-            return List.of();
+            return References.none();
         }
-        boolean isType = isTypeDef(declaringDef(CstParser.parse(graph.text(definingUri)).root(), name));
+        boolean isType = isTypeDef(declaringDef(readingOf(graph, definingUri).root(), name));
 
-        List<Location> out = new ArrayList<>();
+        List<Location> all = new ArrayList<>();
+        List<Location> uses = new ArrayList<>();
         for (String u : graph.uris()) {
             abandonment.stopIfAsked();
-            String t = graph.text(u);
+            Reading other = readingOf(graph, u);
             boolean owns = definingModule.equals(moduleOf(compilation, graph, u));
-            if (!owns && !definingModule.equals(importedFrom(t, name))) {
+            if (!owns && !definingModule.equals(other.importing(name))) {
                 continue;   // this file neither defines nor imports the symbol
             }
-            collectReferences(CstParser.parse(t).root(), name, isType, u, new LineIndex(t),
-                    includeDeclaration && owns, out);
+            collectReferences(other.root(), name, isType, u, other.lines(), owns, all, uses);
         }
-        return out;
+        return new References(all, () -> uses);
     }
 
     /**
@@ -1179,9 +1473,9 @@ public final class Analyzer {
         Map<String, List<TextEdit>> out = new LinkedHashMap<>();
         for (Map.Entry<String, List<Range>> e : renameRanges(uri, pos, graph).entrySet()) {
             List<TextEdit> edits = new ArrayList<>();
-            SyntaxNode root = CstParser.parse(graph.text(e.getKey())).root();
-            SourceLayout lines = SourceLayout.of(graph.text(e.getKey()), new SourceId(e.getKey()));
-            List<SyntaxToken> tokens = meaningfulTokens(root);
+            Reading reading = readingOf(graph, e.getKey());
+            SourceLayout lines = laidOut(e.getKey(), reading);
+            List<SyntaxToken> tokens = meaningfulTokens(reading.root());
             for (Range range : e.getValue()) {
                 String field = fieldTakenAsName(tokens, lines,
                         lines.lines().offsetOf(range.start().line(), range.start().character()));
@@ -1294,14 +1588,14 @@ public final class Analyzer {
             }
             return byUri;
         }
-        String text = graph.text(uri);
-        SyntaxNode root = CstParser.parse(text).root();
-        SourceLayout lines = SourceLayout.of(text, new SourceId(uri));
+        Reading reading = readingOf(graph, uri);
+        SyntaxNode root = reading.root();
+        SourceLayout lines = laidOut(uri, reading);
         SyntaxToken ident = identAt(meaningfulTokens(root), lines, lines.lines().offsetOf(pos.line(), pos.character()));
         if (ident != null) {
             String name = nameOf(ident);
             String definingModule = declaringDef(root, name) != null
-                    ? moduleOf(compilation, graph, uri) : importedFrom(text, name);
+                    ? moduleOf(compilation, graph, uri) : reading.importing(name);
             if (definingModule != null) {
                 addExposingAndImportSites(compilation, name, definingModule, graph, byUri);
             }
@@ -1422,21 +1716,13 @@ public final class Analyzer {
     }
 
     /**
-     * Every place the type under the cursor is named, as the compiler answers it, or null when the
-     * cursor is not on a type. A name resolves to one declaration wherever it is written, so a
-     * module that declares its own type of the same spelling is not swept up, and a qualified
-     * reference to another module's is.
+     * Every place {@code target} is used, as the compiler answers it. A name resolves to one
+     * declaration wherever it is written, so a module that declares its own type of the same
+     * spelling is not swept up, and a qualified reference to another module's is.
      */
-    private List<Location> usesOf(Compilation compilation, String uri, Position pos,
-                                  ModuleGraph graph, boolean includeDeclaration) {
-        TypeSymbol target = typeUnderCursor(compilation, uri, pos);
-        if (target == null) {
-            return null;
-        }
+    private List<Location> usesOf(Compilation compilation, TypeSymbol target, ModuleGraph graph) {
         List<Location> out = new ArrayList<>();
-        if (includeDeclaration) {
-            declarationOf(compilation, target, graph).ifPresent(out::add);
-        }
+        SourceLayouts texts = textsOf(graph);
         for (String module : compilation.modules()) {
             abandonment.stopIfAsked();
             String moduleUri = uriOf(compilation.sourceIdOf(module));
@@ -1444,7 +1730,7 @@ public final class Analyzer {
                     : compilation.db().ask(new Names.UsesOf(module, target)).value()) {
                 String at = documentOf(use.pos(), moduleUri, graph);
                 if (at != null) {
-                    out.add(new Location(at, writtenRange(textsOf(graph), use.written())));
+                    out.add(new Location(at, writtenRange(texts, use.written())));
                 }
             }
         }
@@ -1452,24 +1738,17 @@ public final class Analyzer {
     }
 
     /**
-     * Every place the value under the cursor is named, as the compiler answers it. Empty when the
-     * cursor is not on one.
+     * Every place the value {@code target} is used, as the compiler answers it.
      *
      * <p>{@link #usesOf} for the value namespace, and the reason a local can be asked about at all:
      * a use denotes a binding, so the uses of one body's {@code x} are not another's. Matching the
      * spelling could only ever answer about top-level names, and answered about the wrong one where
      * two modules spelled a name alike.
      */
-    private List<Location> valueUsesOf(Compilation compilation, String uri, Position pos,
-                                       ModuleGraph graph, boolean includeDeclaration) {
-        ValueName target = valueUnderCursor(compilation, uri, pos);
-        if (target == null) {
-            return List.of();
-        }
+    private List<Location> valueUsesOf(Compilation compilation, ValueName target,
+                                       ModuleGraph graph) {
         List<Location> out = new ArrayList<>();
-        if (includeDeclaration) {
-            out.addAll(valueDeclarationsOf(compilation, target, uri, graph));
-        }
+        SourceLayouts texts = textsOf(graph);
         for (String module : compilation.modules()) {
             abandonment.stopIfAsked();
             String moduleUri = uriOf(compilation.sourceIdOf(module));
@@ -1477,7 +1756,7 @@ public final class Analyzer {
                     : compilation.db().ask(new Names.ValueUsesOf(module, target)).value()) {
                 String at = documentOf(use.pos(), moduleUri, graph);
                 if (at != null) {
-                    out.add(new Location(at, writtenRange(textsOf(graph), use.written())));
+                    out.add(new Location(at, writtenRange(texts, use.written())));
                 }
             }
         }
@@ -1492,9 +1771,9 @@ public final class Analyzer {
                                            Map<String, List<Range>> byUri) {
         for (String u : graph.uris()) {
             abandonment.stopIfAsked();
-            String t = graph.text(u);
-            SyntaxNode root = CstParser.parse(t).root();
-            LineIndex lines = new LineIndex(t);
+            Reading reading = readingOf(graph, u);
+            SyntaxNode root = reading.root();
+            LineIndex lines = reading.lines();
             boolean owns = definingModule.equals(moduleOf(compilation, graph, u));
             for (SyntaxNode top : root.childNodes()) {
                 if (top.kind() == SyntaxKind.MODULE_HEADER && owns) {
@@ -1570,7 +1849,8 @@ public final class Analyzer {
         if (members != null) {
             return members;
         }
-        SyntaxNode root = CstParser.parse(text).root();
+        Reading reading = readingOf(graph, uri);
+        SyntaxNode root = reading.root();
         Compilation compilation = compileOf(graph);
         String module = moduleOf(compilation, graph, uri);
         List<CompletionItem> declared = declaredIn(root, module);
@@ -1583,7 +1863,7 @@ public final class Analyzer {
                 elsewhere.of(compilation, uri, module, labelsOf(declared), writesRows);
 
         LinkedHashMap<String, CompletionItem> byLabel = new LinkedHashMap<>();
-        int cursor = new LineIndex(text).offsetOf(pos.line(), pos.character());
+        int cursor = reading.lines().offsetOf(pos.line(), pos.character());
         SyntaxNode enclosing = enclosingDef(root, cursor);
         if (enclosing != null) {
             collectLocalBindings(enclosing, cursor, byLabel);
@@ -1632,22 +1912,22 @@ public final class Analyzer {
         if (text == null) {
             return Optional.empty();
         }
-        int cursor = new LineIndex(text).offsetOf(pos.line(), pos.character());
+        Reading buffer = readingOf(graph, uri);
+        int cursor = buffer.lines().offsetOf(pos.line(), pos.character());
         Sorted sorted = sorted(graph);
         Map<String, String> rest = new LinkedHashMap<>(sorted.joining());
         rest.remove(uri);
         // The buffer as it stands where it parses, and finished off where it does not: a call is
         // asked about while its closing bracket is not typed, which is most of the time.
         SemanticProbe.Reading reading =
-                probe.of(rest, sorted.broken(), graph.onThePath(), uri, text, cursor,
-                        abandonment);
+                probe.of(rest, sorted.broken(), graph.onThePath(), uri, text, buffer.parses(),
+                        cursor, abandonment);
         Compilation compilation = reading == null ? compileOf(graph) : reading.compilation();
-        String parsed = reading == null ? text : reading.repaired();
         String module = moduleOf(compilation, graph, uri);
         if (module == null) {
             return Optional.empty();
         }
-        SyntaxNode call = enclosingCall(CstParser.parse(parsed).root(), cursor);
+        SyntaxNode call = enclosingCall(reading == null ? buffer.root() : reading.root(), cursor);
         SyntaxNode applies = call == null ? null : calleeOf(call);
         SyntaxToken callee = applies == null ? null : firstIdent(applies);
         if (callee == null) {
@@ -1655,8 +1935,7 @@ public final class Analyzer {
         }
         // The reading's own layout where there is one, because that is what its answers are placed
         // against; the buffer's where the line parses and no probe was needed.
-        SourceLayout lines = reading == null
-                ? SourceLayout.of(parsed, new SourceId(uri)) : reading.laidOut();
+        SourceLayout lines = reading == null ? laidOut(uri, buffer) : reading.laidOut();
         Optional<SemanticSnapshot> snapshot = SemanticSnapshot.of(compilation.db(), module);
         int argument = argumentAt(call, cursor);
         return snapshot.flatMap(reads -> reads.calledAt(lines.at(callee)))
@@ -1777,11 +2056,12 @@ public final class Analyzer {
         List<WorkspaceSymbol> found = new ArrayList<>();
         for (String uri : graph.uris()) {
             abandonment.stopIfAsked();
-            String text = graph.text(uri);
-            if (text == null) {
+            if (graph.text(uri) == null) {
                 continue;
             }
-            for (DocumentSymbol symbol : documentSymbols(text)) {
+            // The outline each reading kept, so a file the editor has closed is answered for
+            // without being read again.
+            for (DocumentSymbol symbol : readingOf(graph, uri).symbols()) {
                 if (holds(symbol.name(), query)) {
                     found.add(new WorkspaceSymbol(symbol.name(), symbol.kind(),
                             new Location(uri, symbol.selectionRange())));
@@ -1812,9 +2092,10 @@ public final class Analyzer {
      * wider answer is where it is read.
      */
     public List<DocumentHighlight> documentHighlights(String uri, Position pos, ModuleGraph graph) {
-        List<Range> reads = here(uri, references(uri, pos, graph, false));
+        References found = referencesOf(uri, pos, graph);
+        List<Range> reads = here(uri, found.withoutDeclarations().get());
         List<DocumentHighlight> out = new ArrayList<>();
-        for (Range at : here(uri, references(uri, pos, graph, true))) {
+        for (Range at : here(uri, found.withDeclarations())) {
             out.add(new DocumentHighlight(at,
                     reads.contains(at) ? DocumentHighlight.READ : DocumentHighlight.WRITE));
         }
@@ -1851,16 +2132,17 @@ public final class Analyzer {
         if (text == null) {
             return List.of();
         }
-        SourceLayout lines = SourceLayout.of(text, new SourceId(uri));
-        int at = lines.lines().offsetOf(pos.line(), pos.character());
+        Reading reading = readingOf(graph, uri);
+        LineIndex lines = reading.lines();
+        int at = lines.offsetOf(pos.line(), pos.character());
         List<Range> widening = new ArrayList<>();
-        SyntaxToken on = tokenAt(CstParser.parse(text).root(), at);
+        SyntaxToken on = tokenAt(reading.root(), at);
         if (on != null) {
-            widening.add(tokenRange(lines.lines(), on));
+            widening.add(tokenRange(lines, on));
         }
         for (SyntaxNode node = on == null ? null : on.parent(); node != null;
                 node = node.parent()) {
-            Range around = nodeRange(lines.lines(), node);
+            Range around = nodeRange(lines, node);
             if (widening.isEmpty() || !around.equals(widening.get(widening.size() - 1))) {
                 widening.add(around);
             }
@@ -1909,8 +2191,10 @@ public final class Analyzer {
             return List.of();
         }
         List<InlayHint> hints = new ArrayList<>();
+        SourceLayouts texts = textsOf(graph);
         for (DeclaredParameter parameter : snapshot.get().parametersIn(new SourceId(uri))) {
-            Position after = editorPosition(textsOf(graph), parameter.writtenAt().end());
+            abandonment.stopIfAsked();
+            Position after = editorPosition(texts, parameter.writtenAt().end());
             if (!within(within, after)) {
                 continue;
             }
@@ -1948,7 +2232,8 @@ public final class Analyzer {
      * around it does not.
      */
     private List<CompletionItem> membersAt(String uri, String text, Position pos, ModuleGraph graph) {
-        int cursor = new LineIndex(text).offsetOf(pos.line(), pos.character());
+        Reading buffer = readingOf(uri, text, graph.isOpen(uri));
+        int cursor = buffer.lines().offsetOf(pos.line(), pos.character());
         if (!takingSomethingOffSomething(text, cursor)) {
             return null;
         }
@@ -1956,8 +2241,8 @@ public final class Analyzer {
         Map<String, String> rest = new LinkedHashMap<>(sorted.joining());
         rest.remove(uri);
         SemanticProbe.Reading reading =
-                probe.of(rest, sorted.broken(), graph.onThePath(), uri, text, cursor,
-                        abandonment);
+                probe.of(rest, sorted.broken(), graph.onThePath(), uri, text, buffer.parses(),
+                        cursor, abandonment);
         if (reading == null) {
             return List.of();
         }
@@ -2473,40 +2758,44 @@ public final class Analyzer {
             SyntaxKind.PARAM, SyntaxKind.FN_PARAM, SyntaxKind.LAMBDA_EXPR, SyntaxKind.LET_STMT,
             SyntaxKind.PATTERN_NAME, SyntaxKind.PATTERN_FIELD);
 
-    /** Appends every occurrence of {@code name} in {@code root} that refers to the target symbol. A
-     * value use inside a top-level definition that binds {@code name} locally is shadowed and skipped. */
+    /** Appends every occurrence of {@code name} in {@code root} that refers to the target symbol to
+     * {@code all}, and those that are not its declaration to {@code uses} as well. A value use inside
+     * a top-level definition that binds {@code name} locally is shadowed and skipped. The declaration
+     * is counted only where {@code declares} says this file is the one that declares it. */
     private void collectReferences(SyntaxNode root, String name, boolean isType, String uri,
-                                   LineIndex lines, boolean includeDeclaration, List<Location> out) {
+                                   LineIndex lines, boolean declares, List<Location> all,
+                                   List<Location> uses) {
         for (SyntaxNode def : root.childNodes()) {
             if (def.kind() == SyntaxKind.MODULE_HEADER || def.kind() == SyntaxKind.IMPORT_DECL) {
                 continue;   // names in the header's exposing list or an import list are not uses
             }
             boolean shadows = !isType && defBindsName(def, name);
-            collectInNode(def, name, isType, uri, lines, includeDeclaration, shadows, out);
+            collectInNode(def, name, isType, uri, lines, declares, shadows, all, uses);
         }
     }
 
     private void collectInNode(SyntaxNode node, String name, boolean isType, String uri, LineIndex lines,
-                               boolean includeDeclaration, boolean shadowed, List<Location> out) {
+                               boolean declares, boolean shadowed, List<Location> all,
+                               List<Location> uses) {
         SyntaxKind parent = node.kind();
         for (SyntaxElement e : node.children()) {
             if (e instanceof SyntaxNode child) {
-                collectInNode(child, name, isType, uri, lines, includeDeclaration, shadowed, out);
+                collectInNode(child, name, isType, uri, lines, declares, shadowed, all, uses);
             } else {
                 SyntaxToken t = (SyntaxToken) e;
                 if (t.kind() != SyntaxKind.IDENT || !spells(t, name)) {
                     continue;
                 }
                 if (isDeclarationName(node, t)) {
-                    if (includeDeclaration) {
-                        out.add(new Location(uri, tokenRange(lines, t)));
+                    if (declares) {
+                        all.add(new Location(uri, tokenRange(lines, t)));
                     }
-                } else if (isType) {
-                    if (TYPE_POSITIONS.contains(parent)) {
-                        out.add(new Location(uri, tokenRange(lines, t)));
-                    }
-                } else if (!VALUE_BINDINGS.contains(parent) && !TYPE_POSITIONS.contains(parent) && !shadowed) {
-                    out.add(new Location(uri, tokenRange(lines, t)));
+                } else if (isType ? TYPE_POSITIONS.contains(parent)
+                        : !VALUE_BINDINGS.contains(parent) && !TYPE_POSITIONS.contains(parent)
+                                && !shadowed) {
+                    Location use = new Location(uri, tokenRange(lines, t));
+                    all.add(use);
+                    uses.add(use);
                 }
             }
         }
@@ -2566,20 +2855,6 @@ public final class Analyzer {
         return null;
     }
 
-    /** The module a name is imported from in {@code text}, or {@code null} if no import exposes it. */
-    private String importedFrom(String text, String name) {
-        try {
-            for (Ast.Import imp : CstFrontend.parse(text, ImplicitModuleName.OF_A_TEXT).imports()) {
-                if (imp.names().contains(name)) {
-                    return imp.module();
-                }
-            }
-        } catch (RuntimeException | StackOverflowError _) {
-            // a file that does not parse cleanly resolves no imports; go-to-def simply misses
-        }
-        return null;
-    }
-
     /** The document the module {@code moduleName} is declared in, or {@code null} if none — the
      * compile's answer, with the headers read only for a module whose file the compile could not
      * read. */
@@ -2590,8 +2865,7 @@ public final class Analyzer {
         }
         for (String uri : graph.uris()) {
             abandonment.stopIfAsked();
-            String text = graph.text(uri);
-            if (text != null && moduleName.equals(readingOf(uri, text).declares())) {
+            if (graph.text(uri) != null && moduleName.equals(readingOf(graph, uri).declares())) {
                 return uri;
             }
         }
@@ -2602,8 +2876,9 @@ public final class Analyzer {
      * range of the top-level definition it names, if any. The workspace-aware
      * {@link #definition(String, Position, ModuleGraph)} resolves across imports as well. */
     public Optional<Range> definition(String text, Position pos) {
-        SourceLayout lines = SourceLayout.of(text);
-        SyntaxNode root = CstParser.parse(text).root();
+        Reading reading = readingOf(text);
+        SourceLayout lines = reading.laidOut();
+        SyntaxNode root = reading.root();
         SyntaxToken ident = identAt(meaningfulTokens(root), lines, lines.lines().offsetOf(pos.line(), pos.character()));
         if (ident == null) {
             return Optional.empty();
@@ -2626,13 +2901,15 @@ public final class Analyzer {
      * something semantic to say.
      */
     public Optional<Hover> hover(String uri, String text, Position pos, ModuleGraph graph) {
-        Optional<Hover> clause = invariantClauseHover(uri, text, pos, graph);
+        Reading reading = readingOf(uri, text, graph.isOpen(uri));
+        Optional<Hover> clause = invariantClauseHover(uri, reading, pos, graph);
         if (clause.isPresent()) {
             return clause;
         }
-        Optional<Hover> rule = ensuresClauseHover(uri, text, pos, graph);
+        Optional<Hover> rule = ensuresClauseHover(uri, reading, pos, graph);
         return rule.isPresent() ? rule
-                : hover(text, pos).map(shown -> withWhatIsNotStated(shown, uri, text, pos, graph));
+                : hover(uri, reading, pos).map(shown -> withWhatIsNotStated(shown, uri, reading,
+                        pos, graph));
     }
 
     /**
@@ -2643,10 +2920,10 @@ public final class Analyzer {
      * That is the declaration speaking and not a mistake in it, which is why a reader is shown it
      * where they are reading the declaration rather than told about it as a problem.
      */
-    private Hover withWhatIsNotStated(Hover shown, String uri, String text, Position pos,
+    private Hover withWhatIsNotStated(Hover shown, String uri, Reading reading, Position pos,
                                       ModuleGraph graph) {
-        SourceLayout lines = SourceLayout.of(text, new SourceId(uri));
-        SyntaxNode root = CstParser.parse(text).root();
+        SourceLayout lines = laidOut(uri, reading);
+        SyntaxNode root = reading.root();
         SyntaxToken ident = identAt(meaningfulTokens(root), lines,
                 lines.lines().offsetOf(pos.line(), pos.character()));
         // The cursor on the name a behavior is declared under, and nowhere else. `declaringDef` finds
@@ -2678,10 +2955,10 @@ public final class Analyzer {
      * {@code value} is differs between them, so the same words can be read to different depths — a
      * single answer on the clause would be one of those readings shown as if it were the clause's.
      */
-    private Optional<Hover> ensuresClauseHover(String uri, String text, Position pos,
+    private Optional<Hover> ensuresClauseHover(String uri, Reading reading, Position pos,
                                                ModuleGraph graph) {
-        SourceLayout lines = SourceLayout.of(text, new SourceId(uri));
-        SyntaxNode root = CstParser.parse(text).root();
+        SourceLayout lines = laidOut(uri, reading);
+        SyntaxNode root = reading.root();
         int offset = lines.lines().offsetOf(pos.line(), pos.character());
         SyntaxNode clause = enclosing(root, offset, SyntaxKind.ENSURES_CLAUSE);
         SyntaxNode behavior = enclosing(root, offset, SyntaxKind.BEHAVIOR_DEF);
@@ -2796,10 +3073,10 @@ public final class Analyzer {
 
     /** The discharge classification of the invariant clause the cursor is in, or empty when it is not
      * in one. */
-    private Optional<Hover> invariantClauseHover(String uri, String text, Position pos,
+    private Optional<Hover> invariantClauseHover(String uri, Reading reading, Position pos,
                                                  ModuleGraph graph) {
-        SourceLayout lines = SourceLayout.of(text, new SourceId(uri));
-        SyntaxNode root = CstParser.parse(text).root();
+        SourceLayout lines = laidOut(uri, reading);
+        SyntaxNode root = reading.root();
         int offset = lines.lines().offsetOf(pos.line(), pos.character());
         SyntaxNode clause = enclosing(root, offset, SyntaxKind.INVARIANT_CLAUSE);
         if (clause == null) {
@@ -2935,8 +3212,15 @@ public final class Analyzer {
 
     /** Hover: shows the signature line of the definition the identifier under the cursor names. */
     public Optional<Hover> hover(String text, Position pos) {
-        SourceLayout lines = SourceLayout.of(text);
-        SyntaxNode root = CstParser.parse(text).root();
+        return hover(null, readingOf(text), pos);
+    }
+
+    /** The same, of the document at {@code uri}, or of a text with no document where that is
+     *  null. */
+    private Optional<Hover> hover(String uri, Reading reading, Position pos) {
+        String text = reading.text();
+        SourceLayout lines = laidOut(uri, reading);
+        SyntaxNode root = reading.root();
         int offset = lines.lines().offsetOf(pos.line(), pos.character());
         SyntaxToken ident = identAt(meaningfulTokens(root), lines, offset);
         if (ident == null) {
@@ -3127,8 +3411,18 @@ public final class Analyzer {
      * semantic token may not cross a line.
      */
     public int[] semanticTokens(String text) {
-        LineIndex lines = new LineIndex(text);
-        SyntaxNode root = CstParser.parse(text).root();
+        return semanticTokens(readingOf(text));
+    }
+
+    /** The same, for the document the editor has open at {@code uri}, read once for every
+     *  question about it. */
+    public int[] semanticTokens(String uri, String text) {
+        return semanticTokens(readingOf(uri, text, true));
+    }
+
+    private int[] semanticTokens(Reading reading) {
+        LineIndex lines = reading.lines();
+        SyntaxNode root = reading.root();
         List<int[]> tokens = new ArrayList<>();
         collectTokens(root, lines, tokens);
 
@@ -3266,8 +3560,18 @@ public final class Analyzer {
 
     /** The document outline: one symbol per top-level definition, a data type's fields as children. */
     public List<DocumentSymbol> documentSymbols(String text) {
-        LineIndex lines = new LineIndex(text);
-        SyntaxNode file = CstParser.parse(text).root();
+        return readingOf(text).symbols();
+    }
+
+    /** The same, for the document the editor has open at {@code uri}, read once for every
+     *  question about it. */
+    public List<DocumentSymbol> documentSymbols(String uri, String text) {
+        return readingOf(uri, text, true).symbols();
+    }
+
+    /** The outline of a parsed text, which a {@link Reading} keeps whether or not it keeps the
+     *  tree it was read off. */
+    private List<DocumentSymbol> outlineOf(SyntaxNode file, LineIndex lines) {
         List<DocumentSymbol> out = new ArrayList<>();
         for (SyntaxNode def : file.childNodes()) {
             switch (def.kind()) {
@@ -3454,21 +3758,21 @@ public final class Analyzer {
      * The documents this server is holding, laid out — what turns a place in an answer into
      * somewhere an editor can put a marker.
      *
-     * <p>Read off the graph as it now stands and never kept. Which document a place is in is the
-     * place's own to say, so this is asked of that rather than of a file name the caller worked
-     * out; a place in a text this server has no document for is nowhere it could scroll to.
+     * <p>Read off the graph as it now stands. Which document a place is in is the place's own to
+     * say, so this is asked of that rather than of a file name the caller worked out; a place in a
+     * text this server has no document for is nowhere it could scroll to. What a document is laid
+     * out as is asked once for each document a request reaches ({@link #laidOut}), so a hundred
+     * places in a closed file the compile does not hold lay it out once and not a hundred times.
      */
-    private static SourceLayouts textsOf(ModuleGraph graph) {
-        Map<String, SourceLayout> held = new LinkedHashMap<>();
+    private SourceLayouts textsOf(ModuleGraph graph) {
+        Map<String, SourceLayout> asked = new HashMap<>();
         return place -> {
             if (!(place.quotedFrom()
                     instanceof QuotedFrom.ASourceThisCompileHolds(SourceId document))) {
                 return null;
             }
-            return held.computeIfAbsent(document.value(), uri -> {
-                String text = graph.text(uri);
-                return text == null ? null : SourceLayout.of(text, new SourceId(uri));
-            });
+            return asked.computeIfAbsent(document.value(), uri -> graph.text(uri) == null ? null
+                    : laidOut(uri, readingOf(graph, uri)));
         };
     }
 

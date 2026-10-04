@@ -41,7 +41,7 @@
             <artifactId>souther-fmt</artifactId>
         </dependency>
         <!-- souther-runtime is `provided` in souther-compiler; the LSP bundles it so a self-contained
-             module compiled on save can load its generated classes and evaluate its `example`s (and
+             module the editor compiles can load its generated classes and evaluate its `example`s (and
              CTFE constant checks). Without it, that evaluation is skipped rather than run. -->
         <dependency>
             <groupId>org.souther-lang</groupId>

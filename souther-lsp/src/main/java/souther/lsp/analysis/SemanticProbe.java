@@ -5,6 +5,7 @@ import souther.compiler.cst.CstLexer;
 import souther.compiler.cst.CstParser;
 import souther.compiler.cst.GreenToken;
 import souther.compiler.cst.SyntaxKind;
+import souther.compiler.cst.SyntaxNode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.query.Abandonment;
@@ -14,6 +15,7 @@ import souther.compiler.source.SourceId;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -66,8 +68,9 @@ final class SemanticProbe {
     private static final String SENTINEL = "souLspProbe";
 
     /** A repair, and where it starts. Everything before {@code firstInserted} is the source
-     *  unaltered, which is what makes an extent ending there readable. */
-    record Repair(String text, int firstInserted) {}
+     *  unaltered, which is what makes an extent ending there readable. {@code root} is the tree
+     *  the parser built of it, which is how the repair was found to be one. */
+    record Repair(String text, int firstInserted, SyntaxNode root) {}
 
     /**
      * A probe that answered: the compile the repaired source is in, how that source is laid out,
@@ -83,7 +86,7 @@ final class SemanticProbe {
      * instead, and an editor was answered about whichever token stood that far along in a text
      * nothing was compiled from.
      */
-    record Reading(Compilation compilation, String uri, SourceLayout laidOut,
+    record Reading(Compilation compilation, String uri, SyntaxNode root, SourceLayout laidOut,
                    SourcePos firstInserted) {
 
         /** The source this reading is of, which is the buffer with what the cursor was in the
@@ -131,26 +134,40 @@ final class SemanticProbe {
      * same place are the same promise about what may be read.
      */
     static Repair repair(String text, int cursor) {
-        if (text == null || cursor < 0 || cursor > text.length() || parses(text)) {
+        return text == null ? null : repair(text, parses(text) != null, cursor);
+    }
+
+    /**
+     * The same, for a caller that has already parsed the buffer and says whether it parsed. A
+     * buffer that parses has nothing to finish off.
+     */
+    static Repair repair(String text, boolean parses, int cursor) {
+        if (text == null || cursor < 0 || cursor > text.length() || parses) {
             return null;
         }
-        String closers = unclosed(text);
+        List<GreenToken> tokens = CstLexer.lex(text).tokens();
+        String closers = unclosed(tokens);
+        boolean afterADot = aDotEndsAt(tokens, cursor);
         // Both, and either, and in that order. An author reaching for a field of an argument has
         // left two things unfinished at once — `keep(request.` — and a policy that could apply one
         // repair or the other would answer that with nothing while answering each half of it. What
         // decides between them is the parser: the first that makes a source is the source.
-        Repair[] tried = {
-            inserting(text, cursor, SENTINEL, closers),
-            inserting(text, cursor, SENTINEL, ""),
-            inserting(text, cursor, "", closers),
-        };
-        for (Repair candidate : tried) {
-            if (candidate != null && parses(candidate.text())) {
-                return candidate;
+        List<Candidate> tried = List.of(
+                new Candidate(SENTINEL, closers),
+                new Candidate(SENTINEL, ""),
+                new Candidate("", closers));
+        for (Candidate each : tried) {
+            String candidate = inserting(text, cursor, afterADot, each.name(), each.closers());
+            SyntaxNode root = candidate == null ? null : parses(candidate);
+            if (root != null) {
+                return new Repair(candidate, each.name().isEmpty() ? text.length() : cursor, root);
             }
         }
         return null;
     }
+
+    /** What one candidate repair puts in: a name at the cursor, and brackets at the end. */
+    private record Candidate(String name, String closers) {}
 
     /**
      * The text with {@code name} put at the cursor and {@code closers} at the end, or null where
@@ -164,18 +181,18 @@ final class SemanticProbe {
      * <p>The insertion is where the earlier of the two is, which is the cursor whenever a name went
      * in — everything before that is the source, character for character, and is what may be read.
      */
-    private static Repair inserting(String text, int cursor, String name, String closers) {
+    private static String inserting(String text, int cursor, boolean afterADot, String name,
+                                    String closers) {
         boolean naming = !name.isEmpty();
-        if (naming && !aDotEndsAt(text, cursor)) {
+        if (naming && !afterADot) {
             return null;
         }
         if (!naming && closers.isEmpty()) {
             return null;
         }
-        String repaired = naming
+        return naming
                 ? text.substring(0, cursor) + name + text.substring(cursor) + closers
                 : text + closers;
-        return new Repair(repaired, naming ? cursor : text.length());
     }
 
     /**
@@ -194,8 +211,16 @@ final class SemanticProbe {
         if (text == null || cursor <= 0 || cursor > text.length()) {
             return false;
         }
+        return aDotEndsAt(CstLexer.lex(text).tokens(), cursor);
+    }
+
+    /** The same, over the tokens the text was already read as. */
+    private static boolean aDotEndsAt(List<GreenToken> tokens, int cursor) {
+        if (cursor <= 0) {
+            return false;
+        }
         int at = 0;
-        for (GreenToken token : CstLexer.lex(text).tokens()) {
+        for (GreenToken token : tokens) {
             at += token.width();
             if (at == cursor) {
                 return token.kind() == SyntaxKind.DOT;
@@ -215,9 +240,9 @@ final class SemanticProbe {
      * literal or a comment is text, and a reading that counted those would close a call the author
      * never opened — which is a source that parses and says something else.
      */
-    private static String unclosed(String text) {
+    private static String unclosed(List<GreenToken> tokens) {
         Deque<SyntaxKind> open = new ArrayDeque<>();
-        for (GreenToken token : CstLexer.lex(text).tokens()) {
+        for (GreenToken token : tokens) {
             switch (token.kind()) {
                 case LPAREN, LBRACKET, LBRACE -> open.push(token.kind());
                 case RPAREN -> popIf(open, SyntaxKind.LPAREN);
@@ -257,7 +282,14 @@ final class SemanticProbe {
      */
     Reading of(Map<String, String> joining, Set<String> broken, ModulesOnThePath path, String uri,
                String text, int cursor, Abandonment abandonment) {
-        Repair repair = repair(text, cursor);
+        return of(joining, broken, path, uri, text, text != null && parses(text) != null, cursor,
+                abandonment);
+    }
+
+    /** The same, for a caller that has already parsed the buffer and says whether it parsed. */
+    Reading of(Map<String, String> joining, Set<String> broken, ModulesOnThePath path, String uri,
+               String text, boolean parses, int cursor, Abandonment abandonment) {
+        Repair repair = repair(text, parses, cursor);
         if (repair == null) {
             return null;
         }
@@ -277,15 +309,19 @@ final class SemanticProbe {
         // Laid out as repaired, because the extents it is compared against are places in the text
         // that was compiled. Laid out as the author left it, the count would be of a text that does
         // not parse and the two would be counting different things.
-        SourceLayout laidOut = SourceLayout.of(repair.text(), new SourceId(uri));
-        return new Reading(compile, uri, laidOut, laidOut.placeAt(repair.firstInserted()));
+        SourceLayout laidOut = SourceLayout.of(repair.root(), repair.text(), new SourceId(uri));
+        return new Reading(compile, uri, repair.root(), laidOut,
+                laidOut.placeAt(repair.firstInserted()));
     }
 
-    private static boolean parses(String text) {
+    /** The tree of {@code text} where it parses with nothing to report, and null where it does
+     *  not. */
+    private static SyntaxNode parses(String text) {
         try {
-            return CstParser.parse(text).errors().isEmpty();
+            CstParser.Result parsed = CstParser.parse(text);
+            return parsed.errors().isEmpty() ? parsed.root() : null;
         } catch (RuntimeException | StackOverflowError _) {
-            return false;
+            return null;
         }
     }
 }

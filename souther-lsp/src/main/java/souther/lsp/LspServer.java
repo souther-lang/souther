@@ -31,6 +31,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -514,7 +515,7 @@ public final class LspServer {
             return List.of();
         }
         List<Object> out = new ArrayList<>();
-        for (DocumentSymbol s : analyzer.documentSymbols(text)) {
+        for (DocumentSymbol s : analyzer.documentSymbols(uri, text)) {
             out.add(symbolJson(s));
         }
         return out;
@@ -545,7 +546,7 @@ public final class LspServer {
         if (text == null) {
             return null;
         }
-        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        ModuleGraph graph = workspace.snapshot(documents);
         Hover h = analyzer.hover(p.uri(), text, p.position(), graph).orElse(null);
         if (h == null) {
             return null;
@@ -562,7 +563,7 @@ public final class LspServer {
         if (p == null || documents.get(p.uri()) == null) {
             return null;
         }
-        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        ModuleGraph graph = workspace.snapshot(documents);
         return analyzer.definition(p.uri(), p.position(), graph)
                 .<Object>map(loc -> Map.of("uri", loc.uri(), "range", rangeJson(loc.range())))
                 .orElse(null);
@@ -575,7 +576,7 @@ public final class LspServer {
             return List.of();
         }
         boolean includeDeclaration = includeDeclaration(params);
-        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        ModuleGraph graph = workspace.snapshot(documents);
         List<Object> out = new ArrayList<>();
         for (Location loc : analyzer.references(p.uri(), p.position(), graph, includeDeclaration)) {
             out.add(Map.of("uri", loc.uri(), "range", rangeJson(loc.range())));
@@ -611,7 +612,7 @@ public final class LspServer {
         if (p == null || documents.get(p.uri()) == null) {
             return List.of();
         }
-        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        ModuleGraph graph = workspace.snapshot(documents);
         List<Object> items = new ArrayList<>();
         for (CompletionItem item : analyzer.completions(p.uri(), p.position(), graph)) {
             Map<String, Object> sent = new LinkedHashMap<>();
@@ -651,7 +652,7 @@ public final class LspServer {
         if (uri == null || documents.get(uri) == null) {
             return List.of();
         }
-        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        ModuleGraph graph = workspace.snapshot(documents);
         List<Object> out = new ArrayList<>();
         for (CodeLens lens : analyzer.codeLenses(uri, graph)) {
             out.add(Map.of("range", rangeJson(lens.range()),
@@ -668,7 +669,7 @@ public final class LspServer {
         if (p == null || documents.get(p.uri()) == null) {
             return null;
         }
-        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        ModuleGraph graph = workspace.snapshot(documents);
         return analyzer.signatureHelp(p.uri(), p.position(), graph).<Object>map(help -> {
             List<Object> parameters = new ArrayList<>();
             for (String each : help.parameters()) {
@@ -691,7 +692,7 @@ public final class LspServer {
         if (p == null) {
             return List.of();
         }
-        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        ModuleGraph graph = workspace.snapshot(documents);
         List<Object> out = new ArrayList<>();
         for (WorkspaceSymbol symbol : analyzer.workspaceSymbols(p.query(), graph)) {
             out.add(Map.of("name", symbol.name(), "kind", symbol.kind(),
@@ -709,7 +710,7 @@ public final class LspServer {
         if (p == null || documents.get(p.uri()) == null) {
             return List.of();
         }
-        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        ModuleGraph graph = workspace.snapshot(documents);
         List<Object> out = new ArrayList<>();
         for (DocumentHighlight highlight
                 : analyzer.documentHighlights(p.uri(), p.position(), graph)) {
@@ -737,7 +738,7 @@ public final class LspServer {
         if (p == null || documents.get(p.uri()) == null) {
             return List.of();
         }
-        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        ModuleGraph graph = workspace.snapshot(documents);
         List<Object> out = new ArrayList<>();
         for (Position at : p.positions()) {
             List<Range> widening = analyzer.selectionRanges(p.uri(), at, graph);
@@ -766,7 +767,7 @@ public final class LspServer {
             return List.of();
         }
         List<Object> out = new ArrayList<>();
-        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        ModuleGraph graph = workspace.snapshot(documents);
         for (InlayHint hint : analyzer.inlayHints(p.uri(), p.range(), graph)) {
             Map<String, Object> written = new LinkedHashMap<>();
             written.put("position", positionJson(hint.position()));
@@ -795,7 +796,7 @@ public final class LspServer {
             return List.of();
         }
         List<Object> out = new ArrayList<>();
-        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        ModuleGraph graph = workspace.snapshot(documents);
         for (CodeAction a : analyzer.codeActions(p.uri(), text, p.range(), graph)) {
             out.add(written(a));
         }
@@ -857,7 +858,7 @@ public final class LspServer {
         }
         CodeAction.Edit edit = analyzer.resolve(
                 new CodeAction.Deferred(title, uri, module, behavior), documents.get(uri),
-                workspace.snapshot(documents.openDocuments()));
+                workspace.snapshot(documents));
         if (edit == null) {
             return params;
         }
@@ -896,7 +897,7 @@ public final class LspServer {
         if (p == null || documents.get(p.uri()) == null || !analyzer.isValidName(p.newName())) {
             return null;
         }
-        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        ModuleGraph graph = workspace.snapshot(documents);
         Map<String, List<souther.lsp.protocol.TextEdit>> edits =
                 analyzer.renameEdits(p.uri(), p.position(), graph, p.newName());
         if (edits.isEmpty()) {
@@ -957,7 +958,7 @@ public final class LspServer {
             return Map.of("data", List.of());
         }
         List<Integer> data = new ArrayList<>();
-        for (int value : analyzer.semanticTokens(text)) {
+        for (int value : analyzer.semanticTokens(uri, text)) {
             data.add(value);
         }
         return Map.of("data", data);
@@ -1001,13 +1002,27 @@ public final class LspServer {
      * asked for again.
      */
     private void publishAll() {
-        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        ModuleGraph graph = workspace.snapshot(documents);
         Map<String, List<LspDiagnostic>> byUri = analyzer.diagnostics(graph);
         for (String uri : documents.uris()) {
             abandonment.stopIfAsked();
-            publish(uri, byUri.getOrDefault(uri, List.of()));
+            List<LspDiagnostic> diagnostics = byUri.getOrDefault(uri, List.of());
+            if (!diagnostics.equals(published.get(uri))) {
+                publish(uri, diagnostics);
+                published.put(uri, diagnostics);
+            }
         }
     }
+
+    /**
+     * What each open document was last told, so a set the client already holds is not sent again.
+     *
+     * <p>Every diagnose answers for every open document, and an edit to one of them leaves what the
+     * others say unchanged nearly always; sending each of them again is a frame per document per
+     * pause in typing that the client reads and throws away. Dropped when the document is closed,
+     * because closing it clears what the client shows, and a document opened again is told again.
+     */
+    private final Map<String, List<LspDiagnostic>> published = new HashMap<>();
 
     private void publish(String uri, List<LspDiagnostic> diagnostics) {
         List<Object> items = new ArrayList<>();
@@ -1038,6 +1053,7 @@ public final class LspServer {
     }
 
     private void clearDiagnostics(String uri) {
+        published.remove(uri);
         notify("textDocument/publishDiagnostics", Map.of("uri", uri, "diagnostics", List.of()));
     }
 
