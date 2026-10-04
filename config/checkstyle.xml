@@ -20,6 +20,17 @@
     FallThrough            FallThrough
     ModifierOrder          ModifierOrder
     ArrayTypeStyle         MixedArrayDimensions
+    MatchXpath             NonApiType
+
+  NonApiType is asked of the eight collection classes it names at any visibility: `ArrayList`,
+  `LinkedList`, `HashSet`, `LinkedHashSet`, `TreeSet`, `HashMap`, `LinkedHashMap` and `TreeMap`,
+  anywhere in the type of a parameter or of a method's result, a type argument included, so
+  `Map<String, ArrayList<X>>` is found as `ArrayList<X>` is. A local variable or a field is not a
+  parameter or a result and is not asked. A `@SuppressWarnings("NonApiType")` on the parameter, the
+  method or any class around it stands, as it does for Error Prone. Checkstyle resolves no types,
+  so a class of another package that is also named `HashMap` is found too; nothing here has one.
+  What else NonApiType names, such as an `Optional` parameter or a Guava immutable collection, is
+  not asked here.
 
   Nothing else Error Prone reports can be asked here. Whether two branches are the same, whether a
   name means two things, whether an override says so, whether a call prints an object rather than
@@ -71,6 +82,17 @@
             <property name="message"
                       value="a case fold with no locale is the platform's, and on a Turkish one
                              `INFO` lowercases to `ınfo`: pass Locale.ROOT"/>
+        </module>
+        <module name="MatchXpath">
+            <property name="query"
+                      value="(//METHOD_DEF/TYPE | //PARAMETER_DEF/TYPE)
+                             //IDENT[@text=('ArrayList', 'LinkedList', 'HashSet', 'LinkedHashSet', 'TreeSet', 'HashMap', 'LinkedHashMap', 'TreeMap')]
+                             [not(ancestor::*[./MODIFIERS/ANNOTATION[./IDENT[@text='SuppressWarnings']]
+                                                                     [.//STRING_LITERAL[@text='NonApiType']]])]"/>
+            <message key="matchxpath.match"
+                     value="a parameter or a result named for the class that holds it ties every
+                            caller to that class: take or return the List, Set or Map it is
+                            (Error Prone NonApiType)"/>
         </module>
     </module>
 </module>

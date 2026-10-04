@@ -117,6 +117,15 @@
             <version>3.9.16</version>
             <scope>test</scope>
         </dependency>
+        <!-- The Checkstyle the pre-commit hook runs, at the version it runs, so that what the
+             hook's rules match is asked of the code that matches it and not of a reading of
+             their XPath. -->
+        <dependency>
+            <groupId>com.puppycrawl.tools</groupId>
+            <artifactId>checkstyle</artifactId>
+            <version>${checkstyle.version}</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
