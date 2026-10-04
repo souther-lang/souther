@@ -82,9 +82,12 @@ class ADocumentSendsItsReaderWhereThatReaderCanGoTest {
         }
 
         assertFalse(offered.isEmpty(), "there are offers to check, so this is not passing on silence");
-        for (String call : offered) {
-            int space = call.indexOf(' ');
-            JsonNode answer = called(call.substring(0, space), call.substring(space + 1));
+        List<JsonNode> answers = called(offered);
+        assertEquals(offered.size(), answers.size(), "one answer for each offer: " + answers);
+        for (int i = 0; i < offered.size(); i++) {
+            String call = offered.get(i);
+            JsonNode answer = answers.get(i);
+            assertEquals(i + 1, answer.get("id").asInt(), call + " → " + answer);
             assertFalse(answer.has("error"), call + " → " + answer);
             assertFalse(answer.get("result").get("isError").asBoolean(),
                     call + " → " + answer.get("result").get("content").get(0).get("text").asString());
@@ -168,22 +171,31 @@ class ADocumentSendsItsReaderWhereThatReaderCanGoTest {
     }
 
     /**
-     * Makes the call a document offered, as written.
+     * Makes the calls the documents offered, as written, one after another in one session — the way
+     * a client asks — and answers them in the order they were asked, each request numbered by its
+     * place.
      *
      * <p>An offer is written to be read by whoever is reading the document, so its argument object
      * names its properties the way prose does. Reading it back here is lenient about that and
      * strict about everything else: what reaches the server is the operation and the arguments the
      * document named, and the server checks those against its own published schema.
      */
-    private JsonNode called(String tool, String arguments) {
-        String request = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\""
-                + tool + "\",\"arguments\":" + JSON.writeValueAsString(AS_WRITTEN.readTree(arguments))
-                + "}}";
+    private List<JsonNode> called(List<String> offered) {
+        StringBuilder requests = new StringBuilder();
+        for (int i = 0; i < offered.size(); i++) {
+            String call = offered.get(i);
+            int space = call.indexOf(' ');
+            requests.append("{\"jsonrpc\":\"2.0\",\"id\":").append(i + 1)
+                    .append(",\"method\":\"tools/call\",\"params\":{\"name\":\"")
+                    .append(call, 0, space).append("\",\"arguments\":")
+                    .append(JSON.writeValueAsString(AS_WRITTEN.readTree(call.substring(space + 1))))
+                    .append("}}\n");
+        }
         ByteArrayInputStream in = new ByteArrayInputStream(
-                (request + "\n").getBytes(StandardCharsets.UTF_8));
+                requests.toString().getBytes(StandardCharsets.UTF_8));
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         McpServer.serve(in, out);
-        return JSON.readTree(out.toString(StandardCharsets.UTF_8).strip());
+        return out.toString(StandardCharsets.UTF_8).lines().map(JSON::readTree).toList();
     }
 
     @Test
