@@ -1,22 +1,17 @@
-package souther.compiler;
+package souther.compiler.doc;
 
-import souther.compiler.ast.Hir;
-import souther.compiler.doc.PublishedCaseOrder;
-import souther.compiler.stdlib.Stdlib;
-import souther.compiler.types.Type;
-import souther.compiler.types.TypeSymbol;
+import souther.compiler.DefaultStdlib;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.StringJoiner;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -33,6 +28,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * them, which nothing does on every commit. A snapshot does: adding, renaming or reordering anything
  * on the surface fails here, and the diff is the whole surface before and after, which is the form a
  * reader can judge the new name against its neighbours in.
+ *
+ * <p>What is recorded is the listing {@code souther api} prints, so a sugar such as {@code List.fold}
+ * is held with the signature a reader is shown for it, and a change to what it takes or answers
+ * changes this.
  *
  * <p>It is not a test of behaviour and does not stand in for one. Update it by running with
  * {@code -Dsouther.surface.update=true} once the change is the one intended.
@@ -65,46 +64,16 @@ class ThePublishedSurfaceIsFixedTest {
                 "one line per published name");
     }
 
-    /** One line per published name, in qualifier then declaration order. */
+    /** What {@code souther api} lists with nothing asked: one line per published name, in
+     *  qualifier then declaration order. */
     private static String render() {
-        List<String> lines = new ArrayList<>();
-        for (String qualified : DefaultStdlib.get().published()) {
-            Stdlib.Entry entry =
-                    DefaultStdlib.get().entry(DefaultStdlib.get().operation(qualified));
-            if (entry == null) {
-                // `List.fold` is sugar: it is written and reached, and has no declaration of its own.
-                lines.add(qualified + "(step, seed, xs)");
-                continue;
-            }
-            lines.add(qualified + signature(entry));
-        }
-        return String.join("\n", lines) + "\n";
-    }
-
-    /** The parameters as the declaration writes them, and the return type where it states one. */
-    private static String signature(Stdlib.Entry entry) {
-        Hir.FnDef fn = entry.declaration();
-        String result = entry.signature().result() == null ? ""
-                : " : " + shown(entry.signature().result(), fn.declaredReturn());
-        if (fn.params().isEmpty()) {
-            return result;   // a value, written with no parameter list
-        }
-        StringJoiner params = new StringJoiner(", ", "(", ")");
-        for (int i = 0; i < fn.params().size(); i++) {
-            params.add(fn.params().get(i).name() + ": "
-                    + Type.show(entry.signature().params().get(i)));
-        }
-        return params + result;
-    }
-
-    /** A result of more than one case, in the order its declaration writes it — the surface is a
-     *  declaration, as the parameter names beside it already are. */
-    private static String shown(Type result, Hir.RetType declaredReturn) {
-        if (!(result instanceof Type.Union union)) {
-            return Type.show(result);
-        }
-        return PublishedCaseOrder.asDeclared(union.members(), declaredReturn).stream()
-                .map(TypeSymbol::name).collect(java.util.stream.Collectors.joining(" | "));
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        int code = ApiCommand.run(new String[]{},
+                new PrintStream(out, true, StandardCharsets.UTF_8),
+                new PrintStream(err, true, StandardCharsets.UTF_8));
+        assertEquals(0, code, err.toString(StandardCharsets.UTF_8));
+        return out.toString(StandardCharsets.UTF_8);
     }
 
     private static String recorded() {

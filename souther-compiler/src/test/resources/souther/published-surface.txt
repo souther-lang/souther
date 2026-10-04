@@ -79,7 +79,7 @@ List.foldRight(step: ('a, 'acc) -> 'acc, seed: 'acc, xs: List<'a>) : 'acc
 List.indexBy(key: ('a) -> 'k, xs: List<'a>) : Map<'k, 'a>
 List.sort(xs: List<'a>) : List<'a>
 List.rangeInclusive(from: Int, to: Int) : List<Int>
-List.fold(step, seed, xs)
+List.fold(step: ('acc, 'a) -> 'acc, seed: 'acc, xs: List<'a>) : 'acc
 Set.empty : Set<'a>
 Set.singleton(value: 'a) : Set<'a>
 Set.insert(value: 'a, s: Set<'a>) : Set<'a>

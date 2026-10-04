@@ -69,6 +69,28 @@ public final class Stdlib {
     }
 
     /**
+     * One published name as its caller writes it: the parameters a call of it writes, by name and
+     * type, and the type it answers with. A name declaring no parameters is a value rather than a
+     * function of no arguments.
+     *
+     * <p>A declared name's is its declaration. A sugar's is its target's declaration cut to the
+     * arguments the sugar's caller writes ({@link Rewrite#keptArgs}): {@code List.fold} takes the
+     * {@code step}, {@code seed} and {@code xs} of {@code List.foldFrom} and answers what that
+     * answers. A sugar has no entry, so this is the only thing here that says how one is called.
+     *
+     * <p>The return is carried as the declaration wrote it beside the type it resolved to, because a
+     * result of more than one case is published in the order it was written and a type does not hold
+     * that.
+     */
+    public record PublishedSignature(List<String> paramNames, List<Type> paramTypes, Type result,
+                                     Hir.RetType declaredReturn) {
+        public PublishedSignature {
+            paramNames = List.copyOf(paramNames);
+            paramTypes = List.copyOf(paramTypes);
+        }
+    }
+
+    /**
      * What a sugared name is sugar for: the call it becomes, the arguments the rewrite supplies
      * after the ones that were written, and how many of the written ones stand where they stood.
      *
@@ -168,7 +190,9 @@ public final class Stdlib {
      *  library rather than the declaration it would have to open to find out. */
     private final Map<ValueName.Stdlib.Operation, Intrinsic> kernelOperations;
     private final Map<ValueName.Stdlib.Operation, Hir.FnDef> helpers;
-    private final SequencedSet<String> published;
+    /** Every published name with how it is called. The names are its keys, so a name published
+     *  with no signature cannot be held. */
+    private final SequencedMap<String, PublishedSignature> surface;
     private final Map<String, List<String>> candidates;
     /** The projection a resolver takes, worked out once with everything else. A set built on each
      *  ask would be the same answer allocated again for every module of every compilation. */
@@ -181,7 +205,7 @@ public final class Stdlib {
                    Map<TypeKey, Hir.Def> language, Map<Kernel, Intrinsic> intrinsics,
                    Map<ValueName.Stdlib.Operation, Intrinsic> kernelOperations,
                    Map<ValueName.Stdlib.Operation, Hir.FnDef> helpers,
-                   SequencedSet<String> published,
+                   SequencedMap<String, PublishedSignature> surface,
                    Map<String, List<String>> candidates) {
         this.entries = entries;
         this.privateNames = privateNames;
@@ -203,7 +227,7 @@ public final class Stdlib {
         this.kernels = KernelSignatures.of(declared);
         this.kernelOperations = kernelOperations;
         this.helpers = helpers;
-        this.published = published;
+        this.surface = surface;
         this.candidates = candidates;
         // Rendered here and not held rendered: resolution is given spellings and answers with
         // them, which is the one place a written name is what is being asked about.
@@ -295,7 +319,13 @@ public final class Stdlib {
      * names happen to be held.
      */
     public SequencedSet<String> published() {
-        return published;
+        return surface.sequencedKeySet();
+    }
+
+    /** The {@linkplain #published() published surface} with how each name is called, in the same
+     *  order. */
+    public SequencedMap<String, PublishedSignature> publishedSurface() {
+        return surface;
     }
 
     /** The Souther-bodied declarations (expanded inline at each call site), by the operation each
@@ -564,7 +594,7 @@ public final class Stdlib {
             // name a reader may write, so it belongs there.
             Map<String, ValueName.Stdlib.Operation> named = new LinkedHashMap<>(operations);
             SUGARED.forEach(sugar -> named.put(sugar.written().qualified(), sugar.written()));
-            SequencedSet<String> published = published(sugars.sequencedKeySet());
+            SequencedMap<String, PublishedSignature> surface = surface(sugars);
             for (ValueName.Stdlib.Operation ascribed
                     : List.of(THE_WALK, THE_DISTINCTNESS_PREDICATE)) {
                 if (!helpers.containsKey(ascribed)) {
@@ -581,8 +611,8 @@ public final class Stdlib {
                     Collections.unmodifiableMap(intrinsics),
                     Collections.unmodifiableMap(kernelOperations),
                     Collections.unmodifiableMap(helpers),
-                    published,
-                    candidates(published));
+                    surface,
+                    candidates(surface.sequencedKeySet()));
         }
 
         /**
@@ -638,31 +668,45 @@ public final class Stdlib {
             return sugars;
         }
 
-        /** The published surface, in {@link Reserved#MODULES} order. A sugar has no declaration to
-         *  be ordered by, so it is placed among the module it belongs to — a reader of this list is
-         *  reading one module's vocabulary at a time, and a name that reads as {@code List}'s belongs
-         *  among them. */
-        private SequencedSet<String> published(SequencedSet<ValueName.Stdlib.Operation> sugared) {
-            SequencedSet<ValueName.Stdlib.Operation> named = new LinkedHashSet<>();
-            for (ValueName.Stdlib.Operation operation : entries.keySet()) {
+        /** The published surface, in {@link Reserved#MODULES} order, with how each name is called. A
+         *  sugar has no declaration to be ordered by, so it is placed among the module it belongs to
+         *  — a reader of this list is reading one module's vocabulary at a time, and a name that
+         *  reads as {@code List}'s belongs among them. */
+        private SequencedMap<String, PublishedSignature> surface(
+                SequencedMap<ValueName.Stdlib.Operation, Rewrite> sugars) {
+            SequencedMap<ValueName.Stdlib.Operation, PublishedSignature> named = new LinkedHashMap<>();
+            entries.forEach((operation, entry) -> {
                 if (!privateNames.contains(operation)) {
-                    named.add(operation);
+                    named.put(operation, calledAs(entry, entry.signature().params().size()));
                 }
-            }
-            named.addAll(sugared);
+            });
+            sugars.forEach((operation, rewrite) ->
+                    named.put(operation, calledAs(entries.get(rewrite.target()), rewrite.keptArgs())));
             // Which module a name belongs to is the operation's alias, which it holds. Read off a
             // spelling, this had to be given the operations back to look each one up again.
-            SequencedSet<String> byModule = new LinkedHashSet<>();
+            SequencedMap<String, PublishedSignature> byModule = new LinkedHashMap<>();
             for (String qualifier : Reserved.QUALIFIERS) {
-                for (ValueName.Stdlib.Operation operation : named) {
+                named.forEach((operation, signature) -> {
                     if (operation.alias().equals(qualifier)) {
-                        byModule.add(operation.qualified());
+                        byModule.put(operation.qualified(), signature);
                     }
-                }
+                });
             }
             // anything under a qualifier not in the load order
-            named.forEach(operation -> byModule.add(operation.qualified()));
-            return Collections.unmodifiableSequencedSet(byModule);
+            named.forEach((operation, signature) ->
+                    byModule.putIfAbsent(operation.qualified(), signature));
+            return Collections.unmodifiableSequencedMap(byModule);
+        }
+
+        /** {@code entry} as a call of it writes it when the caller writes the first {@code written}
+         *  of its arguments. */
+        private static PublishedSignature calledAs(Entry entry, int written) {
+            List<String> names = new ArrayList<>();
+            for (Hir.FnParam param : entry.declaration().params().subList(0, written)) {
+                names.add(param.binder().name());
+            }
+            return new PublishedSignature(names, entry.signature().params().subList(0, written),
+                    entry.signature().result(), entry.declaration().declaredReturn());
         }
 
         /** Bare name → every published name it could be, in the order they are published in. */

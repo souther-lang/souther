@@ -191,6 +191,9 @@ public final class SpecDocument {
             headings.add(new Heading(List.copyOf(anchors), heading.group(2), heading.group(1).length(),
                     anchorFrom, i + 1));
         }
+        // Every section is a range of these, so they are listed once: a list made for each one
+        // copies the whole document again per heading.
+        List<String> all = List.of(lines);
         List<Section> sections = new ArrayList<>();
         List<String> ownTexts = new ArrayList<>();
         for (int h = 0; h < headings.size(); h++) {
@@ -206,9 +209,9 @@ public final class SpecDocument {
             // A subsection's words are its own: what this section itself says stops at the very
             // next heading, while the readable body runs on through its subsections.
             int ownEnd = h + 1 < headings.size() ? Math.min(end, headings.get(h + 1).anchorFrom()) : end;
-            String body = String.join("\n", List.of(lines).subList(here.bodyFrom(), end)).strip();
+            String body = String.join("\n", all.subList(here.bodyFrom(), end)).strip();
             sections.add(new Section(here.anchors().getFirst(), here.title(), here.level(), body));
-            ownTexts.add(String.join("\n", List.of(lines).subList(here.bodyFrom(), ownEnd)).strip());
+            ownTexts.add(String.join("\n", all.subList(here.bodyFrom(), ownEnd)).strip());
         }
         Names named = new Names();
         for (int h = 0; h < headings.size(); h++) {
