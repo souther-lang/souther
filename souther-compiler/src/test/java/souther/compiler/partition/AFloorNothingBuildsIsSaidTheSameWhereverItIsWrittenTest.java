@@ -49,7 +49,7 @@ class AFloorNothingBuildsIsSaidTheSameWhereverItIsWrittenTest {
         assertNotNull(sigs, "the model did not compile");
         InputDomain domain = InputDomain.of(sigs.get(behavior), RuleReadingContext.unshared(rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
-        Partitions.Partitioning partitioning = Partitions.of(behavior, domain, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Partitions.Partitioning partitioning = Partitions.of(behavior, domain.reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         FillResult filled = GenerationFixtures.fill(
                 MeasuredInput.of(behavior, domain.reading(rules), partitioning),
                 List.of(), REFUSED, Budgets.generation());

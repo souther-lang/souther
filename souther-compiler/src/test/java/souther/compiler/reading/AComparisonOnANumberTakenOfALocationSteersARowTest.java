@@ -363,7 +363,7 @@ class AComparisonOnANumberTakenOfALocationSteersARowTest {
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("gate");
         return new Read(CoverageRead.of("gate", body,
                 checked.plan(),
-                inputs, rules), rules.symbols());
+                inputs.reading(rules)), rules.symbols());
     }
 
     /** What a row for such an arm is written as, which is the value the class asks for. */

@@ -214,7 +214,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         InputDomain domain = InputDomain.of(declared.getValue(), RuleReadingContext.unshared(rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
         souther.compiler.inputs.Quantities reading = domain.quantities(rules);
-        Partitions.Partitioning p = Partitions.of(declared.getKey(), domain, rules,
+        Partitions.Partitioning p = Partitions.of(declared.getKey(), domain.reading(rules),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return p.axes().stream()
                 .flatMap(axis -> Partitions.bordersOf(axis, reading,

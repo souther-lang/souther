@@ -4,6 +4,10 @@ import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 
 import java.util.Collection;
+import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * A condition on the way to a border that a row for it was not composed against, and which stage
@@ -76,6 +80,60 @@ public sealed interface ReachabilityGap {
         public ConditionReportAnchor anchor() {
             return condition.anchor();
         }
+    }
+
+    /**
+     * What a cut comes to where it could be written several ways and none of them was placed.
+     *
+     * <p><b>The rules leave nothing only where every way was shown to leave nothing</b>, and no
+     * way was left unlooked at. The rules leaving one case of a sum nothing say nothing about the
+     * case beside it, and a way this compiler did not get to the end of may have the values the
+     * others lacked — so anything short of every way proved is this compiler not composing the cut,
+     * which a reader may conclude nothing about the model from.
+     *
+     * <p>Said in the words of what stopped it, and the same words whichever order the ways were
+     * walked in. The order is the order the model declares its cases in, and a report that changed
+     * with it would be telling a reader about the declaration rather than the cut.
+     *
+     * <p>A figure that stopped one of the ways is said before anything else, because raising it is
+     * something a reader can do and may find the row. Two numbers met at one location is said
+     * before a way that found nothing, since it names the population this compiler does not compose
+     * rather than only that nothing was found.
+     *
+     * @param ways          what each way of the row came to. A case the row cannot be beside what
+     *                      it already is is not among them: it is no way of this row, and leaves
+     *                      nothing open
+     * @param someUnsettled whether some way of the row was not looked at to its end — one whose
+     *                      place nothing worked out
+     */
+    static ReachabilityGap overEveryWay(OnTheWay.TakenIn cut, List<ReachabilityGap> ways,
+                                        boolean someUnsettled) {
+        if (!someUnsettled && !ways.isEmpty()
+                && ways.stream().allMatch(each -> each instanceof ProvedImpossible)) {
+            return new ProvedImpossible(cut);
+        }
+        Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
+        Set<CompositionCapacity> unheld = new HashSet<>();
+        boolean twoAtOneLocation = false;
+        for (ReachabilityGap each : ways) {
+            switch (each) {
+                case Uncomposed(var _, Why.TheWalkForItsPositionsWasStopped(var by, var notHeld)) -> {
+                    stoppedBy.addAll(by.written());
+                    unheld.addAll(notHeld.written());
+                }
+                case Uncomposed(var _, Why.TwoNumbersAtOneLocation _) -> twoAtOneLocation = true;
+                case Uncomposed(var _, Why.NoValueComposedForItsPositions _),
+                     ProvedImpossible _ -> { }
+                case Unstated _ -> throw new IllegalArgumentException(
+                        "a way of writing a cut is one the walk stated: " + each);
+            }
+        }
+        if (!stoppedBy.isEmpty() || !unheld.isEmpty()) {
+            return new Uncomposed(cut, Why.TheWalkForItsPositionsWasStopped.by(stoppedBy, unheld));
+        }
+        return new Uncomposed(cut, twoAtOneLocation
+                ? new Why.TwoNumbersAtOneLocation()
+                : new Why.NoValueComposedForItsPositions());
     }
 
     /**

@@ -85,7 +85,7 @@ class AClassThatNarrowsStatesTheNarrowingAndNotAValueTest {
         InputDomain domain = InputDomain.of(sigs.get("use"),
                 RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
         Partitions.Partitioning axes =
-                Partitions.of("use", domain, rules, ReadAs.THE_COMPILATION_DOES);
+                Partitions.of("use", domain.reading(rules), ReadAs.THE_COMPILATION_DOES);
         // What a body draws, where there is one. A behavior nothing implements has the classes its
         // declarations state and no lines beside them, which is the whole of what one of these
         // models is for.

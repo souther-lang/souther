@@ -124,7 +124,7 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
         assertNotNull(sigs.get(behavior), "the model under test compiles");
         InputDomain domain = InputDomain.of(sigs.get(behavior), RuleReadingContext.unshared(rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
-        return new Read(Partitions.of(behavior, domain, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+        return new Read(Partitions.of(behavior, domain.reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 domain.quantities(rules), rules);
     }
 }

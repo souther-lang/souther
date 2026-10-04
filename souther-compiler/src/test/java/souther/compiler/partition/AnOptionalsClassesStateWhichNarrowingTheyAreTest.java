@@ -159,8 +159,8 @@ class AnOptionalsClassesStateWhichNarrowingTheyAreTest {
         return Partitions.of("look",
                 souther.compiler.inputs.InputDomain.of(read.sig(),
                         RuleReadingContext.unshared(read.rules(),
-                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
-                read.rules(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES))
+                .reading(read.rules()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
     private record Read(DeclaredSig sig, RuleReadingSource rules) {}

@@ -114,8 +114,8 @@ class WhichReadingStoppedDecidesWhatAPositionIsShortOfTest {
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return Partitions.of("check",
                         InputDomain.of(sigs.get("check"),
-                                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES)),
-                        rules, ReadAs.THE_COMPILATION_DOES)
+                                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES))
+                                .reading(rules), ReadAs.THE_COMPILATION_DOES)
                 .undivided().stream()
                 .map(each -> each.at() + "=" + each.why().getClass().getSimpleName())
                 .toList();

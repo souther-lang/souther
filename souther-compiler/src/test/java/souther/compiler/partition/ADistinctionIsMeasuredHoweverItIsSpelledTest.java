@@ -45,8 +45,8 @@ class ADistinctionIsMeasuredHoweverItIsSpelledTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return Partitions.of(behavior, InputDomain.of(sigs.get(behavior),
-                        RuleReadingContext.unshared(rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
-                rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                        RuleReadingContext.unshared(rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES))
+                .reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
     private static Axis only(Partitions.Partitioning partitioning) {

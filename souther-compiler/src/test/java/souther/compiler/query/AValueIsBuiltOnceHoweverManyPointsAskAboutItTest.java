@@ -4,12 +4,15 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BoundaryInput;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.execute.BoundaryValues;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.types.FixtureReferenceOrigin;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeReachName;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -153,6 +156,65 @@ class AValueIsBuiltOnceHoweverManyPointsAskAboutItTest {
                 "and another occurrence of the name is the same value to ask about");
     }
 
+    /**
+     * What a value's own type says of it is kept the same way, by the type and the text.
+     *
+     * <p>A search asks it of every value in an assignment before composing that assignment, the
+     * first one included, and the same values stand at the same types in every search of a module.
+     */
+    @Test
+    void whatAValuesOwnTypeSaysIsAskedOnceForEachTypeAndValue() {
+        Counting source = new Counting(new BoundaryValues.Built.Refused("not this one"));
+        FixturesAtTheBoundary remembered = FixturesAtTheBoundary.remembering(source);
+
+        BoundaryValues.OnItsOwn first = remembered.buildAlone(Type.INT, seven());
+        assertEquals(first, remembered.buildAlone(Type.INT, seven()));
+        remembered.buildAlone(Type.INT, FixtureTemplate.integer(8));
+        remembered.buildAlone(Type.STRING, seven());
+
+        assertEquals(BoundaryValues.OnItsOwn.REFUSED, first);
+        assertEquals(3, source.asked.size(), "one answer per type and value");
+    }
+
+    /**
+     * A module's classes say which values a declared type refuses on its own, and say nothing of a
+     * type nothing decodes on its own.
+     *
+     * <p>The second is what keeps an optional field's {@code None} on offer: an optional is decoded
+     * by the record holding it, and asked about alone it has no decoder to refuse anything.
+     */
+    @Test
+    void theClassesOfAModuleSayWhatADeclaredTypeRefusesOnItsOwn() {
+        Compilation compilation = Compilation.ofSource("""
+                module g
+
+                data Ok
+                data Code = String
+                    invariant String.matches("[A-Z]{3}", value)
+
+                behavior read : (c: Code) -> Ok
+                """, "Main");
+        compilation.answerEverything();
+        FixturesAtTheBoundary building = Adequacy.constructing(compilation.db(), "g");
+        assertNotNull(building, "the module has classes to build against");
+        Type.Ref code = assertInstanceOf(Type.Ref.class,
+                compilation.signatures("g").get("read").ins().get(0).type());
+        TypeReachName.Written written = assertInstanceOf(TypeReachName.Written.class,
+                RuleReadings.of(compilation, "g").symbols().scope().reach(code.name()));
+
+        assertEquals(BoundaryValues.OnItsOwn.BUILT, building.buildAlone(code,
+                FixtureTemplate.newtype(written, FixtureTemplate.string("ABC"))));
+        assertEquals(BoundaryValues.OnItsOwn.REFUSED, building.buildAlone(code,
+                FixtureTemplate.newtype(written, FixtureTemplate.string("x"))));
+        assertEquals(BoundaryValues.OnItsOwn.NO_DECODER_OF_ITS_OWN,
+                building.buildAlone(Type.option(code),
+                        FixtureTemplate.newtype(written, FixtureTemplate.string("x"))));
+        assertThrows(IllegalStateException.class,
+                () -> building.buildAlone(Type.var("a"), FixtureTemplate.string("x")),
+                "a type variable reaching a fixture is this compiler disagreeing with itself,"
+                        + " and is not read as a type nothing decodes");
+    }
+
     private static FixtureTemplate seven() {
         return FixtureTemplate.integer(7);
     }
@@ -175,6 +237,16 @@ class AValueIsBuiltOnceHoweverManyPointsAskAboutItTest {
                 throw new LinkageError("no runtime");
             }
             return answer;
+        }
+
+        @Override
+        public OnItsOwn buildAlone(Type type, Hir.Expr fixture) {
+            asked.add(Type.show(type) + " " + fixture);
+            return switch (answer) {
+                case null -> throw new LinkageError("no runtime");
+                case Built.Value _ -> OnItsOwn.BUILT;
+                case Built.Refused _ -> OnItsOwn.REFUSED;
+            };
         }
     }
 }

@@ -352,14 +352,14 @@ class ARowNothingRanFillsNoCombinationTest {
                     .ask(new souther.compiler.query.Adequacy.Inputs(module)).value()
                     .get(behavior);
             assertNotNull(inputs, "the behavior's inputs were read");
-            Partitions.Partitioning partitioning = Partitions.of(spec.name(), inputs, rules,
+            Partitions.Partitioning partitioning = Partitions.of(spec.name(), inputs.reading(rules),
                     souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
             Core body = checked.behaviorBodies().get(behavior);
             assertNotNull(body, "the behavior under test has a body");
             CoverageSites.Plan plan = checked.plan();
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
                     partitioning),
-                    CoverageRead.of(spec.name(), body, plan, inputs, rules), plan.numbering());
+                    CoverageRead.of(spec.name(), body, plan, inputs.reading(rules)), plan.numbering());
         }
     }
 }

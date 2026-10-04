@@ -65,7 +65,7 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
         InputDomain domain = InputDomain.of(sigs.get("read"),
                 RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
         Partitions.Partitioning partitioning =
-                Partitions.of("read", domain, rules, ReadAs.THE_COMPILATION_DOES);
+                Partitions.of("read", domain.reading(rules), ReadAs.THE_COMPILATION_DOES);
         return new Model(
                 MeasuredInput.of("read", domain.reading(rules), partitioning),
                 partitioning.axes());

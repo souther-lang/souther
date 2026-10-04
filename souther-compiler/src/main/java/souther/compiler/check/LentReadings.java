@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.revision.RevisionKnowledge;
+import souther.compiler.revision.StoreWork;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.StringMachineAnswers;
@@ -80,7 +81,7 @@ public final class LentReadings implements DeclarationReadings {
         this.revision = revision;
         this.work = work;
         this.lentAt = revision.getAsLong();
-        this.known = RevisionKnowledge.keptFor(revision);
+        this.known = RevisionKnowledge.keptFor(revision, work);
     }
 
     @Override

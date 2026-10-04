@@ -177,6 +177,16 @@ public final class InputDomain {
      */
     private final DeclarationReadings machines;
 
+    /**
+     * What {@link #hashCode} came to, worked out at the first asking; zero until then.
+     *
+     * <p>Kept because this is a key: every measure of a behavior asks the revision for the reading
+     * of its input by this value, and the hash walks every position read. What it is worked out
+     * from is fixed when this is made, so the first answer is every answer, and two threads working
+     * it out at once both arrive at it.
+     */
+    private int hash;
+
     private InputDomain(List<Position> positions, Map<BindingId, String> read,
                         List<Parameter> parameters, List<RuleRoot> roots, ReadingPolicy policy,
                         NameReach reach, List<PlacementSeed> placed,
@@ -230,7 +240,12 @@ public final class InputDomain {
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(positions, read, parameters, roots, policy, reach, placed);
+        int known = hash;
+        if (known == 0) {
+            known = Objects.hash(positions, read, parameters, roots, policy, reach, placed);
+            hash = known;
+        }
+        return known;
     }
 
     /**

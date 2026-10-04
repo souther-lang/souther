@@ -29,7 +29,7 @@ final class ReadInteractions {
         assertNotNull(body, "the behavior under test has a body");
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
-        return CoverageRead.of(behavior, body, checked.plan(), inputs, rules).interactions();
+        return CoverageRead.of(behavior, body, checked.plan(), inputs.reading(rules)).interactions();
     }
 
     /** The sizes of each group's factors, which is the shape of the space a row is owed for. */

@@ -344,6 +344,8 @@ Otherwise a reader is handed a value it has no name for, and the generated class
 This does not reach the *cases* of a sum, or of an output written as more than one case. Those are generated as a union interface that is public regardless (<<jvm-anonymous-union>>), and a case reaches a reader through the decoder or through the `+protected+` factory rather than by being named — which is what E1305's unit-data allowance rests on. A module keeping a case to itself therefore stays a decision about the union, not about this rule.
 
 [#imports]
+==== Imports
+
 Imports SHALL be listed explicitly. Wildcard imports are forbidden.
 
 [,ebnf]
