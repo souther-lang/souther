@@ -147,6 +147,6 @@ class AnArmOfAnOptionalWritesAtThePositionTheReadingHoldsTest {
         assertNotNull(inputs, "the behavior's input is read");
         return new Read(CoverageRead.of("gate", body,
                 checked.plan(),
-                inputs, rules), inputs, rules.symbols());
+                inputs.reading(rules)), inputs, rules.symbols());
     }
 }

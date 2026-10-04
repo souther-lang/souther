@@ -65,7 +65,7 @@ class WhatARevisionKnowsIsWorkedOutOnceAndGoesWithItTest {
 
     @Test
     void workAskedTwiceInOneRevisionIsDoneOnce() {
-        RevisionKnowledge known = RevisionKnowledge.keptFor(() -> 1);
+        RevisionKnowledge known = RevisionKnowledge.keptFor(() -> 1, StoreWork.UNWATCHED);
 
         long before = RevisionKnowledge.timesDone(Echo.class);
         assertEquals(Optional.of("a"), known.settled(new Echo("a")));
@@ -78,7 +78,7 @@ class WhatARevisionKnowsIsWorkedOutOnceAndGoesWithItTest {
 
     @Test
     void anEmptyAnswerIsKeptLikeAnyOther() {
-        RevisionKnowledge known = RevisionKnowledge.keptFor(() -> 1);
+        RevisionKnowledge known = RevisionKnowledge.keptFor(() -> 1, StoreWork.UNWATCHED);
 
         long before = RevisionKnowledge.timesDone(Echo.class);
         assertEquals(Optional.empty(), known.settled(new Echo("")));
@@ -93,7 +93,7 @@ class WhatARevisionKnowsIsWorkedOutOnceAndGoesWithItTest {
      */
     @Test
     void workBorrowedWhileOtherWorkIsDoneIsDoneOnceForEveryBorrower() {
-        RevisionKnowledge known = RevisionKnowledge.keptFor(() -> 1);
+        RevisionKnowledge known = RevisionKnowledge.keptFor(() -> 1, StoreWork.UNWATCHED);
 
         long echoes = RevisionKnowledge.timesDone(Echo.class);
         long twices = RevisionKnowledge.timesDone(Twice.class);
@@ -110,7 +110,7 @@ class WhatARevisionKnowsIsWorkedOutOnceAndGoesWithItTest {
     @Test
     void whatWasDoneUnderOneRevisionIsDoneAgainUnderTheNext() {
         AtomicLong revision = new AtomicLong(1);
-        RevisionKnowledge known = RevisionKnowledge.keptFor(revision::get);
+        RevisionKnowledge known = RevisionKnowledge.keptFor(revision::get, StoreWork.UNWATCHED);
         known.settled(new Echo("a"));
 
         revision.incrementAndGet();
@@ -138,7 +138,7 @@ class WhatARevisionKnowsIsWorkedOutOnceAndGoesWithItTest {
     @Test
     void workThatComesRoundToItselfIsRefusedWithTheWayRound() {
         for (RevisionKnowledge known : new RevisionKnowledge[] {
-                RevisionKnowledge.keptFor(() -> 1), RevisionKnowledge.NONE}) {
+                RevisionKnowledge.keptFor(() -> 1, StoreWork.UNWATCHED), RevisionKnowledge.NONE}) {
             IllegalStateException refused = assertThrows(IllegalStateException.class,
                     () -> known.settled(new Round("back")));
             assertEquals("revision work borrows itself: Round[side=back] -> Round[side=there]"
@@ -150,7 +150,7 @@ class WhatARevisionKnowsIsWorkedOutOnceAndGoesWithItTest {
     /** And work that failed leaves nothing under way behind it, so asking again is not a cycle. */
     @Test
     void workThatFailedIsNotLeftUnderWay() {
-        RevisionKnowledge known = RevisionKnowledge.keptFor(() -> 1);
+        RevisionKnowledge known = RevisionKnowledge.keptFor(() -> 1, StoreWork.UNWATCHED);
 
         assertThrows(IllegalArgumentException.class, () -> known.settled(new Failing("x")));
         assertThrows(IllegalArgumentException.class, () -> known.settled(new Failing("x")),
@@ -160,10 +160,10 @@ class WhatARevisionKnowsIsWorkedOutOnceAndGoesWithItTest {
     /** The same work done for two revisions at once is two pieces of work and not a cycle. */
     @Test
     void theSameWorkForAnotherRevisionIsNotACycle() {
-        RevisionKnowledge other = RevisionKnowledge.keptFor(() -> 2);
+        RevisionKnowledge other = RevisionKnowledge.keptFor(() -> 2, StoreWork.UNWATCHED);
 
         assertEquals("done in the other",
-                RevisionKnowledge.keptFor(() -> 1).settled(new Across(other)),
+                RevisionKnowledge.keptFor(() -> 1, StoreWork.UNWATCHED).settled(new Across(other)),
                 "asked of the other revision while being done for this one, which is not the same"
                         + " piece of work");
     }
@@ -180,7 +180,7 @@ class WhatARevisionKnowsIsWorkedOutOnceAndGoesWithItTest {
     @Test
     void workThatComesToNoAnswerIsRefused() {
         assertThrows(IllegalStateException.class,
-                () -> RevisionKnowledge.keptFor(() -> 1).settled(new Nothing()),
+                () -> RevisionKnowledge.keptFor(() -> 1, StoreWork.UNWATCHED).settled(new Nothing()),
                 "kept as a missing entry, it would be done again at every asking");
     }
 }

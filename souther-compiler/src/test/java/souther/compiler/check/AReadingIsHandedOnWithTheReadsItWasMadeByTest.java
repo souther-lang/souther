@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.regex.PatternPlan;
+import souther.compiler.revision.StoreWork;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;

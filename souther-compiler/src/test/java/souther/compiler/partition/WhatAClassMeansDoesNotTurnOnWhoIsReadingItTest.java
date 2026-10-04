@@ -72,7 +72,7 @@ class WhatAClassMeansDoesNotTurnOnWhoIsReadingItTest {
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        return Partitions.of(behavior, InputDomain.of(sigs.get(behavior), RuleReadingContext.unshared(rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes().stream()
+        return Partitions.of(behavior, InputDomain.of(sigs.get(behavior), RuleReadingContext.unshared(rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)).reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes().stream()
                 .filter(each -> each.path().toString().equals(path))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no axis at " + path))

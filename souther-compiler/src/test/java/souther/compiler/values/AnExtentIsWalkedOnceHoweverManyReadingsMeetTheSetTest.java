@@ -8,6 +8,7 @@ import net.unit8.notation199x.pattern.Meter;
 import net.unit8.notation199x.pattern.PatternParser;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.revision.RevisionKnowledge;
+import souther.compiler.revision.StoreWork;
 import net.unit8.notation199x.pattern.PatternRead;
 
 import java.util.LinkedHashSet;
@@ -163,7 +164,7 @@ class AnExtentIsWalkedOnceHoweverManyReadingsMeetTheSetTest {
 
     /** What a revision knows, as the store keeps it: one revision that does not move. */
     private static RevisionKnowledge aRevisionsKnowledge() {
-        return RevisionKnowledge.keptFor(() -> 1L);
+        return RevisionKnowledge.keptFor(() -> 1L, StoreWork.UNWATCHED);
     }
 
     /** The strings {@code pattern} accepts. */

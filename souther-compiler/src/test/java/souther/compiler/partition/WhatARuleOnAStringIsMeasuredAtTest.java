@@ -184,7 +184,7 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         RuleReadingContext ruleReading = RuleReadingContext.unshared(rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning p = ThresholdFixtures.withThresholds(
-                Partitions.of("f", read, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                Partitions.of("f", read.reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 reading,
                 guards.thresholds(), ruleReading,
                 souther.compiler.inputs.RulesWithNoLine.NONE, guards.singled(),

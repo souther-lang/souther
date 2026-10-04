@@ -104,7 +104,7 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
     private static List<String> wornAt(String source, String path, String classId) {
         Read read = read(source);
         Partitions.Partitioning partitioning =
-                Partitions.of("look", read.domain(), read.rules(), ReadAs.THE_COMPILATION_DOES);
+                Partitions.of("look", read.domain().reading(read.rules()), ReadAs.THE_COMPILATION_DOES);
         Axis axis = partitioning.axes().stream()
                 .filter(each -> each.path().toString().equals(path)).findFirst()
                 .orElseThrow(() -> new AssertionError("no axis at " + path + ": "

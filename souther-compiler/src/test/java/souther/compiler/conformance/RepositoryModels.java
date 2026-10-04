@@ -4,6 +4,7 @@ import souther.compiler.check.DeclarationReadings;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.revision.RevisionKnowledge;
+import souther.compiler.revision.StoreWork;
 import souther.compiler.types.TypeKey;
 import souther.compiler.values.StringMachineAnswers;
 
@@ -74,7 +75,7 @@ public final class RepositoryModels {
 
     private static DeclarationReadings knowingWhereSetsStop() {
         // One revision for as long as the JVM lives, for the reason given above.
-        RevisionKnowledge known = RevisionKnowledge.keptFor(() -> 0L);
+        RevisionKnowledge known = RevisionKnowledge.keptFor(() -> 0L, StoreWork.UNWATCHED);
         return new DeclarationReadings() {
 
             @Override

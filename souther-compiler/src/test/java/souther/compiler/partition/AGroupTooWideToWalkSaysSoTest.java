@@ -442,14 +442,14 @@ class AGroupTooWideToWalkSaysSoTest {
             InputDomain inputs = compilation.db()
                     .ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("total");
             assertNotNull(inputs, "the behavior's inputs were read");
-            Partitions.Partitioning partitioning = Partitions.of(spec.name(), inputs, rules,
+            Partitions.Partitioning partitioning = Partitions.of(spec.name(), inputs.reading(rules),
                     souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
             Core body = checked.behaviorBodies().get("total");
             assertNotNull(body, "the behavior under test has a body");
             CoverageSites.Plan plan = checked.plan();
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
                     partitioning),
-                    CoverageRead.of("total", body, plan, inputs, rules));
+                    CoverageRead.of("total", body, plan, inputs.reading(rules)));
         }
     }
 }

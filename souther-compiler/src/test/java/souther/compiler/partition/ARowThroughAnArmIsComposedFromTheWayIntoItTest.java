@@ -255,10 +255,10 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
             assertNotNull(body, "the behavior under test has a body");
             CoverageSites.Plan plan = checked.plan();
             Partitions.Partitioning partitioning =
-                    Partitions.of(spec.name(), inputs, rules, ReadAs.THE_COMPILATION_DOES);
+                    Partitions.of(spec.name(), inputs.reading(rules), ReadAs.THE_COMPILATION_DOES);
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
                     partitioning),
-                    CoverageRead.of(spec.name(), body, plan, inputs, rules), plan.numbering());
+                    CoverageRead.of(spec.name(), body, plan, inputs.reading(rules)), plan.numbering());
         }
     }
 }

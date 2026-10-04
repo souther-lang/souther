@@ -65,7 +65,9 @@ import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.PointRole;
+import souther.compiler.inputs.AnInputRead;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.GenerationOutcome;
@@ -909,7 +911,19 @@ public final class Adequacy {
             return null;
         }
         return souther.compiler.partition.MeasuredInput.of(spec.name(),
-                domain.reading(reading.value()), divided);
+                readingOf(db, domain, reading.value()), divided);
+    }
+
+    /**
+     * {@code input} read from {@code source}, as every measure of the behavior it is the input of
+     * reads it.
+     *
+     * <p>Once for the revision ({@link AnInputRead}). The division of a behavior, its subject, the
+     * meetings its body holds and the decisions it makes are questions apart, and each of them
+     * reading the input for itself is every rule of every parameter read again to the same answers.
+     */
+    private static InputReading readingOf(Db db, InputDomain input, RuleReadingSource source) {
+        return db.readings().revision().settled(new AnInputRead(input, source));
     }
 
     /** What one behavior states about its answer, or nothing where it states none. A behavior
@@ -1058,7 +1072,7 @@ public final class Adequacy {
                     continue;
                 }
                 out.put(spec.name(), souther.compiler.partition.DecisionReading.of(spec.name(),
-                        analysis, read.reading(reading.value()),
+                        analysis, readingOf(db, read, reading.value()),
                         InputReads.ofParametersWhereCallsStand(read.parameterReads(),
                                 ElementBindings.of(analysis, reading.value().newtypes())),
                         spec.dependsOnBehaviors()));
@@ -1120,7 +1134,7 @@ public final class Adequacy {
                 // tree beside it holds the operations the language's own combinators stand for,
                 // and a walk of that one would find meetings at nodes no arm of the plan is in.
                 out.put(spec.name(), CoverageRead.of(spec.name(), bodies.get(spec.name()), plan,
-                        read, reading.value()));
+                        readingOf(db, read, reading.value())));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -2040,7 +2054,7 @@ public final class Adequacy {
                     checked == null
                             ? souther.compiler.coverage.CoverageSites.Plan.NONE : checked.plan();
             Coverages.Partitioned read = Coverages.partitioningOf(spec,
-                    domain.reading(reading.value()),
+                    readingOf(db, domain, reading.value()),
                     // Which of the three this elaboration holds, settled before anything reads a
                     // body. The other reading of the same body travels with it, which is where a
                     // rule about the strings at a position still stands as the author wrote it.

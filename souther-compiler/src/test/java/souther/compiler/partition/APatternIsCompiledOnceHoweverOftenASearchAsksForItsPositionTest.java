@@ -281,7 +281,7 @@ class APatternIsCompiledOnceHoweverOftenASearchAsksForItsPositionTest {
                         ? compilation.db().readings() : asked.over(compilation.db().readings()));
         InputDomain domain = InputDomain.of(sigs.get("grade"), world);
         Partitions.Partitioning partitioning =
-                Partitions.of("grade", domain, rules, ReadAs.THE_COMPILATION_DOES);
+                Partitions.of("grade", domain.reading(rules), ReadAs.THE_COMPILATION_DOES);
         return MeasuredInput.of("grade", domain.reading(rules), partitioning);
     }
 

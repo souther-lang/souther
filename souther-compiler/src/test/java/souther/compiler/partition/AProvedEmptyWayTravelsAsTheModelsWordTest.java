@@ -216,13 +216,13 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
     }
 
     private static Axis costAxis() {
-        return Partitions.of(spec().name(), domain(), rules(), ReadAs.THE_COMPILATION_DOES)
+        return Partitions.of(spec().name(), domain().reading(rules()), ReadAs.THE_COMPILATION_DOES)
                 .axes().stream()
                 .filter(each -> each.path().toString().equals("r.cost")).findFirst().orElseThrow();
     }
 
     private static MeasuredInput subject() {
         return MeasuredInput.of(spec().name(), domain().reading(rules()),
-                Partitions.of(spec().name(), domain(), rules(), ReadAs.THE_COMPILATION_DOES));
+                Partitions.of(spec().name(), domain().reading(rules()), ReadAs.THE_COMPILATION_DOES));
     }
 }

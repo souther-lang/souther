@@ -222,7 +222,7 @@ class WhatTheExistingWayInReadingSaysTest {
                 compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         CoverageRead.Read read = CoverageRead.of(behavior, checked.behaviorBodies().get(behavior),
-                plan, inputs, rules);
+                plan, inputs.reading(rules));
         return List.copyOf(read.arms().values());
     }
 }

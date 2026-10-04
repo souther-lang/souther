@@ -345,18 +345,6 @@ public final class Partitions {
     }
 
     /**
-     * The same, reading the input's rules here.
-     *
-     * <p>For a caller that has no reading of them in hand. The pipeline that measures a behavior
-     * reads them once and hands the same one to everything that asks, since each of these reading
-     * its own is every rule of every parameter read again to arrive at the same answers.
-     */
-    public static Partitioning of(String behavior, InputDomain inputs, RuleReadingSource ruleSource,
-                                  ReadingPolicy policy) {
-        return of(behavior, inputs.reading(ruleSource), policy);
-    }
-
-    /**
      * The axes of one behavior, derived from the one reading of its input.
      *
      * <p>Nothing is read here. Which positions the input has and what can stand at each of them is

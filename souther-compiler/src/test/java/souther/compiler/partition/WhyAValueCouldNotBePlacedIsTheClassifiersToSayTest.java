@@ -112,7 +112,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
         InputDomain read = InputDomain.of(sigs.get("submit"), RuleReadingContext.unshared(rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
         Partitions.Partitioning partitioning = ThresholdFixtures.withThresholds(
-                Partitions.of("submit", read, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                Partitions.of("submit", read.reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 read.quantities(rules),
                 ThresholdFixtures.guardsOf("submit", checked.analysisBodies().get("submit"), body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("submit"), rules).thresholds(),

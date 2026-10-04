@@ -92,9 +92,9 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
         assertNotNull(body);
         CoverageSites.Plan plan = checked.plan();
         Partitions.Partitioning axes =
-                Partitions.of(spec.name(), inputs, rules, ReadAs.THE_COMPILATION_DOES);
+                Partitions.of(spec.name(), inputs.reading(rules), ReadAs.THE_COMPILATION_DOES);
         return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules), axes),
-                CoverageRead.of(spec.name(), body, plan, inputs, rules));
+                CoverageRead.of(spec.name(), body, plan, inputs.reading(rules)));
     }
 
     /** The positions under two cases are both axes, which is what the assignments have to hold. */

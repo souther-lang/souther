@@ -312,11 +312,11 @@ class ARefusalOfOneParameterIsNotTriedAgainBesideTheOthersTest {
                     compilation.db().ask(new Adequacy.Inputs(module)).value();
             InputDomain domain = inputs.get(behavior);
             assertNotNull(domain, "the behavior's inputs were read");
-            Partitions.Partitioning partitioning = Partitions.of(spec.name(), domain, rules,
+            Partitions.Partitioning partitioning = Partitions.of(spec.name(), domain.reading(rules),
                     ReadAs.THE_COMPILATION_DOES);
             return new Model(MeasuredInput.of(spec.name(), domain.reading(rules), partitioning),
                     CoverageRead.of(spec.name(), checked.behaviorBodies().get(behavior),
-                            checked.plan(), domain, rules));
+                            checked.plan(), domain.reading(rules)));
         }
     }
 }

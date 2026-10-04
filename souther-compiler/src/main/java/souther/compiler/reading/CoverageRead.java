@@ -10,7 +10,7 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.flow.ValueArrivals;
 import souther.compiler.flow.Ways;
-import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 
 import java.util.ArrayList;
@@ -150,17 +150,23 @@ public final class CoverageRead {
         }
     }
 
-    /** What the walk over {@code behavior}'s {@code body} reads. */
-    public static Read of(String behavior, Core body, CoverageSites.Plan plan, InputDomain inputs,
-                          RuleReadingSource source) {
+    /**
+     * What the walk over {@code behavior}'s {@code body} reads.
+     *
+     * <p>Against the reading of the input the rest of the measurement reads, handed in rather than
+     * made here. Made here, it is every rule of every parameter read again to the answers the
+     * caller's reading already came to.
+     */
+    public static Read of(String behavior, Core body, CoverageSites.Plan plan, InputReading input) {
+        RuleReadingSource source = input.rules();
         Symbols symbols = source.symbols();
-        InputReads reads = InputReads.ofParameters(inputs.parameterReads(),
+        InputReads reads = InputReads.ofParameters(input.domain().parameterReads(),
                 ElementBindings.NONE);
         // One reading of this body's comparisons, handed to both readers of them. What a way is
         // admitted by and what a decision is said of are two questions about one comparison, and
         // each reading it for itself is how they came to be about different numbers.
         souther.compiler.inputs.ComparedNumbers numbers =
-                souther.compiler.inputs.ComparedNumbers.of(inputs.reading(source));
+                souther.compiler.inputs.ComparedNumbers.of(input);
         CoverageNaming naming =
                 new CoverageNaming(plan, symbols, source.newtypes(), reads, numbers);
         ValueArrivals<Outcome> reading = ValueArrivals.ofBody(body, naming,

@@ -157,7 +157,7 @@ class ALineIsNamedByTheClauseThatDrewItTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         assertNotNull(sigs);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        return Partitions.of("price", InputDomain.of(sigs.get("price"), RuleReadingContext.unshared(rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
+        return Partitions.of("price", InputDomain.of(sigs.get("price"), RuleReadingContext.unshared(rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)).reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                 .axes().stream().filter(a -> a.path().toString().equals("length"))
                 .findFirst().orElseThrow();
     }
