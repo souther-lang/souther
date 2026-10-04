@@ -44,7 +44,8 @@ class AWalkOverWhatAnEvaluationHoldsIsCountedTest {
         try {
             PaidForBeforeItIsWalked.payFor(deepAndWide());
             long spent = EvaluationContext.spent(Long.MAX_VALUE / 2);
-            assertTrue(spent >= DEEP + WIDE, "a value of " + (DEEP + WIDE) + " nodes cost " + spent);
+            long nodes = (long) DEEP + WIDE;
+            assertTrue(spent >= nodes, "a value of " + nodes + " nodes cost " + spent);
         } finally {
             EvaluationContext.end();
         }
@@ -72,7 +73,8 @@ class AWalkOverWhatAnEvaluationHoldsIsCountedTest {
         assertNull(EvaluationContext.overspent(new IllegalStateException("not a stop")));
     }
 
-    private static void stops() {
+    /** What is called reflectively above, so not private: nothing here calls it by name. */
+    static void stops() {
         throw StepLimitExceeded.INSTANCE;
     }
 }

@@ -81,8 +81,8 @@ class ARuntimeCallIsHeldToTheStepsOfTheRowThatMadeItTest {
         long first = spentWithRoom(MATCHES_NONE);
 
         // The one reads every character and the other the first, which is all but one of them more.
-        assertTrue(whole - first >= LONG - 1,
-                "reading " + (LONG - 1) + " characters more cost " + (whole - first) + " steps more");
+        assertTrue(whole - first >= LONG - 1L,
+                "reading " + (LONG - 1L) + " characters more cost " + (whole - first) + " steps more");
     }
 
     @Test
@@ -90,8 +90,8 @@ class ARuntimeCallIsHeldToTheStepsOfTheRowThatMadeItTest {
         long whole = spentWithRoom(SEARCHES_ALL);
         long first = spentWithRoom(SEARCHES_NONE);
 
-        assertTrue(whole - first >= LONG - 1,
-                "going over " + (LONG - 1) + " characters more cost " + (whole - first) + " steps more");
+        assertTrue(whole - first >= LONG - 1L,
+                "going over " + (LONG - 1L) + " characters more cost " + (whole - first) + " steps more");
     }
 
     /**

@@ -5,6 +5,7 @@ import net.unit8.notation199x.pattern.PatternMachine;
 import net.unit8.notation199x.pattern.PatternParser;
 import net.unit8.notation199x.pattern.PatternRead;
 import net.unit8.notation199x.pattern.StringPattern;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -56,16 +57,20 @@ class AnOperationAnswersTheSameAndPassesItsCheckpointAsItWorksTest {
         public void spend(long pieces) {
             passed += pieces;
             if (passed >= stopAt) {
-                throw Stopped.STOPPED;
+                thrown = new Stopped();
+                throw thrown;
             }
         }
+
+        /** What this threw, so that what comes out of an operation can be held to being it; null
+         *  until it throws. */
+        @Nullable Stopped thrown;
     }
 
     private static final class Stopped extends RuntimeException {
         private static final long serialVersionUID = 1L;
-        static final Stopped STOPPED = new Stopped();
 
-        private Stopped() {
+        Stopped() {
             super(null, null, false, false);
         }
     }
@@ -187,8 +192,8 @@ class AnOperationAnswersTheSameAndPassesItsCheckpointAsItWorksTest {
     void anOperationStopsWhereItsCheckpointThrows() {
         for (Operation op : operations()) {
             Counting stopping = new Counting(op.goesOver() / 2 + 1);
-            assertSame(Stopped.STOPPED, assertThrows(Stopped.class, () -> op.evaluated().apply(stopping)),
-                    op.name());
+            Stopped out = assertThrows(Stopped.class, () -> op.evaluated().apply(stopping), op.name());
+            assertSame(stopping.thrown, out, op.name());
         }
     }
 
