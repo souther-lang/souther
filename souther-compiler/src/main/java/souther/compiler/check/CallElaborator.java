@@ -8,6 +8,7 @@ import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.DataMessage;
@@ -529,7 +530,8 @@ public final class CallElaborator {
      * expanded, substituted or rewritten before the check ran, which is this compiler disagreeing
      * with itself and not something an author can act on.
      */
-    static RuntimeException noCallee(Hir.Apply call, Symbols symbols) {
+    static RuntimeException noCallee(Hir.Apply call, Symbols symbols,
+                                     ReachedValueLocations locations) {
         if (call.answered() == null) {
             return new IllegalStateException("`" + call.written()
                     + "` applies something that is not a name, at " + call.pos());
@@ -559,8 +561,9 @@ public final class CallElaborator {
             // probe sees when it types a body before the binding it asks about has one and reads the
             // report to find out. The same sentence answers both: at the point of the report, this
             // name is not a function here.
-            case ValueName.Local _ -> CompileException.of(Diagnostic
-                            .at(call.appliedAt()).say(new NameMessage.ItIsNotAFunctionHere(call.written())).build());
+            case ValueName.Local _ -> CompileException.of(hidden(Diagnostic.at(call.appliedAt())
+                            .say(new NameMessage.ItIsNotAFunctionHere(call.written())),
+                    call, locations).build());
             case ValueName.Helper _ -> unelaborated("a helper", call);
             case ValueName.Stdlib _ -> unelaborated("a standard-library function", call);
             // A name the language itself gives (`None`), applied. `Some`/`None` applications are
@@ -568,6 +571,27 @@ public final class CallElaborator {
             case ValueName.Builtin b -> CompileException.of(Diagnostic
                             .at(call.appliedAt()).say(new NameMessage.ANameTheLanguageGivesIsNotAFunction(b.name())).build());
             case null -> unelaborated("nothing", call);
+        };
+    }
+
+    /**
+     * {@code said}, pointing as well at what the applied binding hid, where it hid something.
+     *
+     * <p>What was hidden is what resolution said when it chose the binding, and nothing here looks
+     * the spelling up again. The label says it is hidden and no more: whether it could be applied
+     * here is another question, and a behavior a helper cannot reach is hidden all the same.
+     */
+    private static Diagnostic.Builder hidden(Diagnostic.Builder said, Hir.Apply call,
+                                             ReachedValueLocations locations) {
+        if (!(call.applied().shadowing() instanceof Hir.Shadowing.Hides(
+                ReachName.Declaration reached))) {
+            return said;
+        }
+        NameMessage.ABindingInScopeHidesIt label =
+                new NameMessage.ABindingInScopeHidesIt(call.written(), reached.rendered());
+        return switch (locations.of(reached)) {
+            case DiagnosticPlace.InSource in -> said.secondary(in, label);
+            case DiagnosticPlace.Unavailable out -> said.secondaryOutOfSight(out.provenance(), label);
         };
     }
 
@@ -897,13 +921,9 @@ public final class CallElaborator {
         }
         if (required == null) {
             Elaborator.optionCaseWritten(call.written(), call.pos());
-            CompileException bareLibraryName = StdlibNames.writtenBare(
-                    ctx.symbols().library().names(), call.written(), call.written(),
-                    call.applied().reportedAt());
-            if (bareLibraryName != null) {
-                throw bareLibraryName;
-            }
-            throw noCallee(call, ctx.symbols());
+            // The name answered to something here, so the report is about what it answered to,
+            // whatever the library publishes under the same spelling.
+            throw noCallee(call, ctx.symbols(), ctx.reachedLocations());
         }
         arity(call, required.params().size());
         for (int i = 0; i < required.params().size(); i++) {

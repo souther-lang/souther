@@ -1099,7 +1099,7 @@ public final class Resolve {
             // is answered as the expression it is, and what may be applied is the check's to say.
             case Ast.Apply call when call.function() instanceof Ast.Var callee ->
                     applied(call, callee, bound);
-            case Ast.Apply call -> Hir.Apply.read(call, appliedCallee(call),
+            case Ast.Apply call -> Hir.Apply.read(call, appliedCallee(call, Hir.Shadowing.NOTHING),
                     callee(call.function(), bound), exprs(call.args(), bound));
             // `Map.empty`, `String.isEmpty`, `up.Amount` — a namespace and a member of it, which
             // the parser read as a field taken off a name because it reads no case at all. Folded
@@ -1248,8 +1248,33 @@ public final class Resolve {
                     ReachName.of(denotes, written.canonical(), reachable.module()),
                     callee.origin(), callee.region());
         }
-        return Hir.Apply.read(call, appliedCallee(call), name,
+        return Hir.Apply.read(call, appliedCallee(call, shadowing(written, denotes)), name,
                 exprs(call.args(), bound));
+    }
+
+    /**
+     * What a binding in force hid from the name {@code written}: what the module's value namespace
+     * reaches by that spelling, where the binding is what the name means here.
+     *
+     * <p>Asked of the namespace and not of {@link #lookup}. That one answers with the binding again,
+     * and it treats what it reaches as used — an attached value reached from the model is refused
+     * there. What was hidden is used by nothing; it is what the name would have meant.
+     *
+     * <p>A name and nothing more. Whether a library name has a declaration behind it or is
+     * rewritten into another call is the library's to say, and a reading holds the library's names
+     * and not what is behind them.
+     */
+    private Hir.Shadowing shadowing(WrittenName written, ValueName denotes) {
+        if (!(denotes instanceof ValueName.Local)) {
+            return Hir.Shadowing.NOTHING;
+        }
+        String spelling = written.canonical();
+        if (reachable.reachIn(reaches, spelling) instanceof Reach.Reaches(ValueName behind)
+                && ReachName.of(behind, spelling, reachable.module())
+                        instanceof ReachName.Declaration hidden) {
+            return new Hir.Shadowing.Hides(hidden);
+        }
+        return Hir.Shadowing.NOTHING;
     }
 
     /**
@@ -1267,7 +1292,7 @@ public final class Resolve {
      * be read two ways depending on what it turned out to reach — and what the author wrote is not
      * a thing that turns on that.
      */
-    private static Hir.AppliedCallee appliedCallee(Ast.Apply call) {
+    private static Hir.AppliedCallee appliedCallee(Ast.Apply call, Hir.Shadowing hid) {
         Ast.Expr callee = call.function();
         // Where the callee is written, or where the application is where the callee says nowhere at
         // all. A report about what is applied points somewhere either way, and an application the
@@ -1275,7 +1300,7 @@ public final class Resolve {
         // not a place worked out from one of them.
         Region at = callee.reportedAt();
         return new Hir.AppliedCallee(dottedName(callee),
-                at != null ? at : Region.point(call.pos()));
+                at != null ? at : Region.point(call.pos()), hid);
     }
 
     /**

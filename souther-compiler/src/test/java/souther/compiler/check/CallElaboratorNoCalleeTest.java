@@ -55,7 +55,8 @@ class CallElaboratorNoCalleeTest {
                 Hir.Apply.synthetic("f", ReachName.of(denotes, "f", "m"),
                         new SourceReferenceOrigin(new WrittenOwner.Body("m", "b"), 0), WROTE,
                         List.of(new Hir.IntLit(1, AT, null)), AT, null),
-                ResolvedSymbols.none(souther.compiler.DefaultStdlib.get()));
+                ResolvedSymbols.none(souther.compiler.DefaultStdlib.get()),
+                ReachedValueLocations.NOT_HELD);
     }
 
     /** A behavior named from a helper `let` or a `>->` composition, neither of which reaches one. */
@@ -139,7 +140,8 @@ class CallElaboratorNoCalleeTest {
                 souther.compiler.types.RuleOrigin.unwritten(), null, AT, null);
         RuntimeException e = CallElaborator.noCallee(Hir.Apply.synthetic(block,
                 List.of(new Hir.IntLit(1, AT, null)), WROTE, AT, null),
-                ResolvedSymbols.none(souther.compiler.DefaultStdlib.get()));
+                ResolvedSymbols.none(souther.compiler.DefaultStdlib.get()),
+                ReachedValueLocations.NOT_HELD);
 
         assertInstanceOf(IllegalStateException.class, e);
         assertTrue(e.getMessage().contains(String.valueOf(AT)), () -> "says where: " + e.getMessage());

@@ -44,6 +44,7 @@ import souther.compiler.check.CardinalityPremise;
 import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.Unwrapping;
 import souther.compiler.check.UninhabitableTypes;
+import souther.compiler.check.ReachedValueLocations;
 import souther.compiler.check.ClauseHelpers;
 import souther.compiler.check.ClausesForDischarge;
 import souther.compiler.check.ExecutableInvariants;
@@ -2042,6 +2043,24 @@ public final class Shapes {
     }
 
     /**
+     * Where a report points at what any value name reaches, for a reader that is about to point at
+     * one.
+     *
+     * <p>One of these for the whole compilation, for the reason {@link #expandedClauses} gives.
+     * Holding one asks nothing; a reader depends on where something is when a report it makes
+     * points there.
+     */
+    public static ReachedValueLocations reachedValueLocations(Db db) {
+        return reached -> {
+            Answer<DiagnosticPlace> at = db.ask(new Names.ReachedValueLocation(reached));
+            if (!at.present()) {
+                throw new ReachedValueLocations.NothingIsReached(reached);
+            }
+            return at.value();
+        };
+    }
+
+    /**
      * What any declaration says, for a reader in another module.
      *
      * <p>One of these for the whole compilation, for the reason {@link #expandedClauses} gives:
@@ -2082,7 +2101,7 @@ public final class Shapes {
     public static DeclarationAccess declarationAccess(Db db) {
         return new DeclarationAccess(publishedDeclarations(db), declarationKinds(db),
                 newtypeInners(db), effectiveFieldTypes(db), fieldLayout(db), sumCases(db),
-                enumerationListings(db));
+                enumerationListings(db), reachedValueLocations(db));
     }
 
     /**

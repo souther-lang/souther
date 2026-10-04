@@ -2627,12 +2627,21 @@ public interface Hir {
      * <p>{@code at} is never null. An application stands somewhere — where a source wrote it, or
      * where the pass composing it put it — and a report about what it applies points there. There
      * is no application with nowhere to point at what it applies.
+     *
+     * <p>{@code shadowing} is what the applied name would have reached had no binding of that name
+     * been in force, which is something only the reading that chose the binding knows: by the time
+     * a report says the binding is not a function, the name means the binding and nothing else.
+     * Kept as the reference and never as where it points — what was hidden is settled when the name
+     * is read, and where a report can point at it depends on what text the reporting compilation
+     * holds.
      */
-    record AppliedCallee(WrittenName name, Region at) {
+    record AppliedCallee(WrittenName name, Region at, Shadowing shadowing) {
 
         public AppliedCallee {
             Objects.requireNonNull(at, "an application is applied somewhere, and a report about"
                     + " what it applies points there");
+            Objects.requireNonNull(shadowing, "an applied name hides something or hides nothing,"
+                    + " and which is the reading's answer");
         }
 
         /** Whether what the author applied is a name — which is not whether a name is what stands
@@ -2667,12 +2676,38 @@ public interface Hir {
          * <p>What the author applied travels with the copy; where they wrote it does not. A body
          * spliced in from a source this compile cannot show carries no coordinate of that source, so
          * the occurrence goes and the places are the ones the copy stands at — the same answer a
-         * field read taken off a copied value gives, and for the same reason.
+         * field read taken off a copied value gives, and for the same reason. What the name hid
+         * travels with it: it is a reference to a declaration or a library name, which is the same
+         * one from any file.
          */
         public AppliedCallee restamped(SourcePos at, Region over) {
             return new AppliedCallee(name == null ? null
                     : WrittenName.synthetic(name.canonical(), at),
-                    over != null ? over : Region.point(at));
+                    over != null ? over : Region.point(at), shadowing);
+        }
+    }
+
+    /**
+     * What a binding in force hid from the name an application applies: what the same spelling
+     * reaches where no binding of it is in force, or nothing.
+     *
+     * <p>A name and not a declaration. The spelling may reach a module's helper or behavior, a
+     * library operation the library declares, or one the library rewrites into another call — and
+     * which of those is behind a library name is the library's to say, not the reading's.
+     */
+    sealed interface Shadowing {
+
+        /** A name that hid nothing: no binding won it, or nothing else was there to win. */
+        Shadowing NOTHING = new HidesNothing();
+
+        record HidesNothing() implements Shadowing {}
+
+        /** The binding in force hid {@code reached}, which the spelling reaches outside it. */
+        record Hides(ReachName.Declaration reached) implements Shadowing {
+
+            public Hides {
+                Objects.requireNonNull(reached, "what is hidden is something a name reaches");
+            }
         }
     }
 
@@ -2757,11 +2792,12 @@ public interface Hir {
         }
 
         /** What {@code function} answers as the applied callee, anchored at {@code where} it stands
-         *  when the callee is written nowhere at all. */
+         *  when the callee is written nowhere at all. It hid nothing: whether a binding hid what a
+         *  name reaches is the source reading's answer, and a composed application was not read. */
         private static AppliedCallee appliedCallee(Expr function, SourcePos where) {
             Region at = function.reportedAt();
             return new AppliedCallee(function instanceof Var v ? v.written() : null,
-                    at != null ? at : Region.point(where));
+                    at != null ? at : Region.point(where), Shadowing.NOTHING);
         }
 
         /**
