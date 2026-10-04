@@ -1,5 +1,6 @@
 package souther.lsp.analysis;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -11,6 +12,11 @@ import java.util.Set;
  * {@link Analyzer} reads it to resolve names and diagnostics across the whole module set, the way
  * the batch compiler does.
  *
+ * <p>Nothing that reads a graph can change it, and nothing that built it keeps a way to. A graph
+ * copies what it is made from, once, and hands out only views that refuse a change, so a reader that
+ * holds a graph between two requests, or compares two of them by identity, is reading the workspace
+ * as it was when the graph was made.
+ *
  * <p>The modules on the path are here and not remembered by whoever compiles, because a compile
  * reads both and both have to be one reading of the workspace. A request answered between a change
  * and the next diagnose would otherwise read the sources as they now are against the path as it was.
@@ -21,11 +27,10 @@ public final class ModuleGraph {
     private final ModulesOnThePath onThePath;
     private final Set<String> open;
 
-    private ModuleGraph(Map<String, String> sources, ModulesOnThePath onThePath,
-                        Set<String> open) {
-        this.sources = sources;
+    private ModuleGraph(Map<String, String> sources, ModulesOnThePath onThePath, Set<String> open) {
+        this.sources = Collections.unmodifiableMap(sources);
         this.onThePath = onThePath;
-        this.open = open;
+        this.open = Set.copyOf(open);
     }
 
     /** A graph over the given {@code uri -> source text} map, with nothing built beside it, every
@@ -37,21 +42,21 @@ public final class ModuleGraph {
     /** A graph over the given sources, resolving what they import from elsewhere against
      *  {@code onThePath}, every source of it open in the editor. */
     public static ModuleGraph of(Map<String, String> sources, ModulesOnThePath onThePath) {
-        return of(sources, onThePath, sources.keySet());
+        return new ModuleGraph(new LinkedHashMap<>(sources), onThePath, sources.keySet());
     }
 
-    /** The same, with only the sources {@code open} names open in the editor and the rest read
-     *  from where they are kept. */
-    public static ModuleGraph of(Map<String, String> sources, ModulesOnThePath onThePath,
-                                 Set<String> open) {
-        return new ModuleGraph(new LinkedHashMap<>(sources), onThePath, Set.copyOf(open));
-    }
-
-    /** A graph over a map its caller made for it and hands over, so it is not copied again: the
-     *  caller keeps no reference to it, and nothing else can change it. */
-    static ModuleGraph over(LinkedHashMap<String, String> handedOver, ModulesOnThePath onThePath,
-                            Set<String> open) {
-        return new ModuleGraph(handedOver, onThePath, Set.copyOf(open));
+    /**
+     * A graph over what is kept on disk with the text of the editor's open buffers over it.
+     *
+     * <p>The sources are made here, once, from the two, and the open documents are what the buffers
+     * name, so a source cannot be called open without being in the graph, and nobody outside holds
+     * the map the sources are kept in.
+     */
+    static ModuleGraph overlaying(Map<String, String> onDisk, Map<String, String> openBuffers,
+                                  ModulesOnThePath onThePath) {
+        Map<String, String> sources = new LinkedHashMap<>(onDisk);
+        sources.putAll(openBuffers);
+        return new ModuleGraph(sources, onThePath, openBuffers.keySet());
     }
 
     /** Whether the editor has the document at {@code uri} open, rather than it being read from
@@ -60,7 +65,7 @@ public final class ModuleGraph {
         return open.contains(uri);
     }
 
-    /** Every document URI in the workspace. */
+    /** Every document URI in the workspace. A view that refuses a change. */
     public Set<String> uris() {
         return sources.keySet();
     }

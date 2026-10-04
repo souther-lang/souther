@@ -27,15 +27,17 @@ public final class DocumentStore {
         return texts.get(uri);
     }
 
-    /** The URIs of every open document. */
+    /** The URIs of every open document, as a view that refuses a change: only {@link #open},
+     *  {@link #change} and {@link #close} alter what is open. */
     public Set<String> uris() {
-        return texts.keySet();
+        return Collections.unmodifiableSet(texts.keySet());
     }
 
     /** Every open document's text, keyed by URI — the overlay a {@link Workspace} applies over the
-     * on-disk sources. A view rather than a copy: what reads it copies what it keeps, and a request
-     * would otherwise copy every open document twice. */
-    public Map<String, String> openDocuments() {
+     * on-disk sources. A view that refuses a change, and one only the workspace is handed: what it
+     * copies from it is the snapshot, and a request would otherwise copy every open document once
+     * more before the workspace does. */
+    Map<String, String> openDocuments() {
         return Collections.unmodifiableMap(texts);
     }
 }

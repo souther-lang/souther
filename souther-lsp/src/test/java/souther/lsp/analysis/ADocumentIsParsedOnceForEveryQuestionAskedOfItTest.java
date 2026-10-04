@@ -180,7 +180,8 @@ class ADocumentIsParsedOnceForEveryQuestionAskedOfItTest {
     }
 
     private static ModuleGraph withTheLibraryClosed() {
-        return ModuleGraph.of(sources(MODEL), ModulesOnThePath.NONE, Set.of(MODEL_URI));
+        return ModuleGraph.overlaying(Map.of(LIB_URI, LIB), Map.of(MODEL_URI, MODEL),
+                ModulesOnThePath.NONE);
     }
 
     private static Map<String, String> sources(String model) {
