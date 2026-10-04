@@ -113,6 +113,9 @@ class EveryQuestionAReadingAnswersIsAboutItsOwnInputTest {
             } else if (takes == PositionId.class) {
                 handed[at] = new PositionId(TermPath.of("s"));
                 names = true;
+            } else if (takes == TermPath.class) {
+                handed[at] = TermPath.of("s");
+                names = true;
             } else if (takes == LinearForm.class) {
                 handed[at] = LinearForm.atom(foreignTerm());
                 names = true;

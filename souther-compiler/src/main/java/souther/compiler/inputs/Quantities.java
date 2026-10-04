@@ -133,6 +133,16 @@ public sealed interface Quantities permits ReadQuantities {
     TermOrders ordersOf(NumericTerm term);
 
     /**
+     * The same number named at {@code at}, or null where what it takes is not taken there.
+     *
+     * <p>For a name every case of a sum spreads, which is one number at the sum and one under each
+     * case. What stands at {@code at} is this reading's to say, for the reason {@link #ordersOf}
+     * gives: a caller holding a type of its own would be holding whatever its walk stopped at, and
+     * a walk that follows a written value says nothing about a name a row reads.
+     */
+    NumericTerm namedAt(NumericTerm.FromOnePosition term, TermPath at);
+
+    /**
      * How many the rules leave the container standing at {@code at}, or every number where they
      * leave it unsaid.
      *

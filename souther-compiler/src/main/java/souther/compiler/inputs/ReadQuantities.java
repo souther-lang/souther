@@ -286,6 +286,20 @@ final class ReadQuantities implements Quantities {
     }
 
     @Override
+    public NumericTerm namedAt(NumericTerm.FromOnePosition term, TermPath at) {
+        // Both ends refused where this input does not have them, for the reason every question
+        // here is: what stands at a place of another input follows from no reading of this one.
+        held(term);
+        if (rootOf(at) == null) {
+            throw new IllegalArgumentException(
+                    "`" + at.discriminated() + "` is under no value whose rules this reading holds,"
+                            + " so there is nothing here to name " + term + " at");
+        }
+        return term.movedTo(at, typeAt.apply(at), ruleReading.source().inners(),
+                ruleReading.source().symbols());
+    }
+
+    @Override
     public int mostHeldAt(PositionId at) {
         Position position = byPath.get(at.at());
         // Refused where this reading has no such position, the way a term under nothing this

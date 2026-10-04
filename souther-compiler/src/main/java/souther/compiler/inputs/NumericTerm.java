@@ -395,7 +395,10 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
     default NumericTerm movedTo(TermPath other, Type at, NewtypeInners inners, Symbols symbols) {
         return switch (this) {
             case ValueOf _ -> new ValueOf(other);
-            case TakenOf taken -> TakenOf.of(taken.operation(), other, at, inners, symbols);
+            // With what it was given beside the value, which is part of which number it is: a
+            // quotient is the one its divisor says, and a taking given none is no quotient.
+            case TakenOf taken -> TakenOf.of(taken.operation(), other, taken.arguments(), at,
+                    inners, symbols);
             // What moves here is where a number is taken, and a run is not taken anywhere: its
             // values come from a place inside a sequence, and the name that would move is the
             // container's. Answered as "not there" rather than by rebuilding the run at a
