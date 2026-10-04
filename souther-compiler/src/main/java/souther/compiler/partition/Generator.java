@@ -5632,7 +5632,7 @@ public final class Generator {
                                         + ", and nothing said which of them the value under it is");
             }
         }
-        Choices choices = choicesOf(subject, p, plan, decided, settled);
+        Choices choices = choicesOf(subject, plan, decided, under);
         if (choices.missingAt() != null) {
             // A position nothing stands at is the declarations' answer where the plan reached
             // everything, and this compiler's where it did not: what the search would have been
@@ -6115,18 +6115,20 @@ public final class Generator {
      *
      * @param decided what the caller fixed: the classes of an axis, or the single value a boundary is
      *                to be reached at
+     * @param left    the parameter's rules with what the caller settled taken in — the reading the
+     *                plan was made against, handed over rather than read again, since the two are
+     *                one reading and a second one would be the same declarations worked out twice
+     *                for every point
      */
-    private static Choices choicesOf(MeasuredInput subject, int p, ConstructionPlan plan,
+    private static Choices choicesOf(MeasuredInput subject, ConstructionPlan plan,
                                      Map<TermPath, List<FixtureTemplate>> decided,
-                                     Map<TermPath, Place> settled) {
+                                     FieldDomains left) {
         RuleReadingContext reading = subject.ruleReading();
-        TermPath at = TermPath.of(subject.parameters().get(p));
         List<TermPath> paths = new ArrayList<>(decided.keySet());
         List<List<FixtureTemplate>> values = new ArrayList<>(decided.values());
         // A position the caller fixed holds nothing back: it was given the value it is to take.
         List<List<FixtureTemplate>> reserves = new ArrayList<>(
                 java.util.Collections.nCopies(paths.size(), List.<FixtureTemplate>of()));
-        FieldDomains left = rulesOf(subject.types().get(p), reading, under(at, settled));
         for (ConstructionPlan.Slot slot : plan.slots()) {
             if (paths.contains(slot.at())) {
                 continue;   // an axis decides here
