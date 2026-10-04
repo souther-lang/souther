@@ -1,11 +1,14 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Membership;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.types.Type;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -67,9 +70,11 @@ public final class InputClassifications {
     public static List<Classification> placedAt(List<ObservedValue> inputs,
                                                 MeasuredInput.MeasuredAxes axes) {
         BehaviorInputs where = axes.subject().inputs();
+        // One row walked to every position, through the same few types each time.
+        Map<Type, TypeView> views = new HashMap<>();
         List<Classification> out = new ArrayList<>(axes.size());
         for (Axis axis : axes.axes()) {
-            out.add(axis.derivable() ? classify(inputs, where, axis) : null);
+            out.add(axis.derivable() ? classify(inputs, where, axis, views) : null);
         }
         return java.util.Collections.unmodifiableList(out);
     }
@@ -87,10 +92,10 @@ public final class InputClassifications {
      * had to guess.
      */
     private static Classification classify(List<ObservedValue> inputs, BehaviorInputs where,
-                                           Axis axis) {
+                                           Axis axis, Map<Type, TypeView> views) {
         // Over the arms, so a walk that comes to answer a third way is one this is taught about
         // rather than one folded into the word for a walk that could not be made.
-        return switch (where.occurrencesAt(inputs, axis.path())) {
+        return switch (where.occurrencesAt(inputs, axis.path(), views)) {
             case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
                     Classification.unreadable(Incompleteness.Code.VALUE_UNREADABLE,
                             axis.id().behavior(), axis.id().term());

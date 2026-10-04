@@ -108,7 +108,7 @@ public final class TypeChecker {
                                        Map<String, LoweringRole> roles,
                                        Map<ValueName.Behavior, ReqSig> reqSigs,
                                        Map<ValueName.Behavior, ReqSig> calleeSigs,
-                                       Map<String, Type> recursiveHelperFns,
+                                       Map<String, StandingSignature> recursiveHelperFns,
                                        Map<String, Hir.FnDef> imported, Set<String> settled,
                                        Map<TypeSymbol.AtModule, ValueShape> shapes,
                                        Preserved.SettledValues declaredElsewhere) {
@@ -161,7 +161,7 @@ public final class TypeChecker {
                                      ReachedValueLocations reachedLocations,
                                      Map<ValueName.Behavior, ReqSig> calleeSigs,
                                      Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
-                                     Map<String, Type> recursiveHelperFns,
+                                     Map<String, StandingSignature> recursiveHelperFns,
                                      Map<String, DataChecker.Constructs> recHelperConstructs,
                                      Preserved.SettledValues settledValues) {
         return SpecChecker.checkSpecFn(spec, fn, loweredBody, discharge, symbols, declarations,
@@ -189,7 +189,7 @@ public final class TypeChecker {
 
     /** The signatures every recursive helper a representation can reach would be called under —
      *  what typing a call left standing needs, whether or not this module turned out to reach it. */
-    public static Map<String, Type> recursiveCallSigs(
+    public static Map<String, StandingSignature> recursiveCallSigs(
             HelperTable table,
             java.util.Collection<souther.compiler.types.ReachName.Declaration> references,
             Symbols symbols) {
@@ -257,7 +257,7 @@ public final class TypeChecker {
                                         List<CompileException> errors,
                                         Elaborated elaborated, List<Unanswerable> abandoned,
                                         Map<ValueName.Behavior, ReqSig> reqSigs,
-                                        Map<String, Type> recursiveHelperFns,
+                                        Map<String, StandingSignature> recursiveHelperFns,
                                         Map<String, Hir.FnDef> publishedToHere,
                                         Set<String> settled,
                                         Map<TypeSymbol.AtModule, ValueShape> shapes) {

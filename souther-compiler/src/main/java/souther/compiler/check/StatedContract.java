@@ -145,7 +145,7 @@ public record StatedContract(ValueName.Behavior behavior, List<Param> params, Ty
      */
     public static StatedContract of(BehaviorContract contract, ClausesForDischarge declaring,
                                     Symbols symbols, DeclarationAccess declarations,
-                                    Map<String, Type> helpers) {
+                                    Map<String, StandingSignature> helpers) {
         // Its caller keeps what typing a rule could not do as a contract it cannot read, and the
         // check that answers for the rule reports it — so this holds no place to point at.
         CheckContext ctx =

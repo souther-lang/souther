@@ -15,7 +15,6 @@ import souther.compiler.types.TypeSymbol;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -421,7 +420,7 @@ public final class MatchElaborator {
      * {@link #armBinding}. An arm whose pattern the language refuses is refused here and brings
      * nothing into force.
      *
-     * <p>The one place that decides it, for both forms of {@code match} and for {@link #inArm}.
+     * <p>The one place that decides it, for both forms of {@code match}.
      */
     private static Core.ArmBinding entered(Hir.Case c, Core.ResolvedPattern pattern, Type subject,
                                            Symbols symbols) {
@@ -442,42 +441,6 @@ public final class MatchElaborator {
             }
         }
         return armBinding(c.binding(), pattern, subject);
-    }
-
-    /**
-     * The scope arm {@code c}'s body is read in over a subject of type {@code subject}, for a
-     * reader that has the subject's type and is not elaborating the match: what the arm selects,
-     * resolved as the elaboration resolves it, and brought into force through {@link #entered}.
-     * An arm that binds nothing is read in {@code env}.
-     *
-     * <p>Nothing where the elaboration refuses the match before this arm's body — the subject's
-     * type not known, a subject that is no sum, a name that is no case of it, an or-pattern over an
-     * optional. What is wrong is the elaboration's to report, in its words. An arm that selects a
-     * case and opens it wrongly is refused as the elaboration refuses it.
-     */
-    static Optional<Scope> inArm(Hir.Case c, Type subject, Scope env, CheckContext ctx) {
-        if (subject == null) {
-            return Optional.empty();
-        }
-        CaseSpace space = CaseSpace.of(subject, ctx.kinds(), ctx.published(), ctx.sums());
-        if (space instanceof CaseSpace.Plain
-                || (space instanceof CaseSpace.Optional && c.caseTypes().size() != 1)) {
-            return Optional.empty();
-        }
-        List<ResolvedCase> alternatives = new ArrayList<>();
-        for (Hir.Name written : c.caseTypes()) {
-            ResolvedCase resolved = written instanceof Hir.Name.Denoting named
-                    ? space.selector(named.type(), ctx.kinds(), ctx.sums()) : null;
-            if (resolved == null) {
-                return Optional.empty();
-            }
-            alternatives.add(resolved);
-        }
-        Core.ResolvedPattern pattern = alternatives.size() == 1
-                ? new Core.ResolvedPattern.Single(alternatives.get(0))
-                : new Core.ResolvedPattern.AnyOf(alternatives, subject);
-        return Optional.of(bound(env, c.binding(),
-                entered(c, pattern, subject, ctx.symbols()).type()));
     }
 
     /** Extends {@code env} with {@code binding} when both it and its type are present; otherwise

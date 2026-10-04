@@ -50,7 +50,7 @@ public final class BehaviorChecker {
                                        DeclaredSig declared, Symbols symbols,
                                        DeclarationAccess declarations,
                                        ReachedValueLocations reachedLocations,
-                                       Map<String, Type> helpers) {
+                                       Map<String, StandingSignature> helpers) {
         Reading reading = read(behavior, module, declared, declarations.published(),
                 declarations.kinds(), declarations.sums());
         BehaviorContract contract = reading.contract();
@@ -262,7 +262,8 @@ public final class BehaviorChecker {
      * the elaboration gets better at simplifying a term away.
      */
     private static Contract.Rule checkRule(Hir.SpecBehavior behavior, BehaviorContract contract,
-                                           Rule rule, Map<String, Type> helpers, Symbols symbols,
+                                           Rule rule, Map<String, StandingSignature> helpers,
+                                           Symbols symbols,
                                            DeclarationAccess declarations,
                                            ReachedValueLocations reachedLocations) {
         Core condition = Elaborator.elaborate(Lower.desugarExpr(rule.statement()),

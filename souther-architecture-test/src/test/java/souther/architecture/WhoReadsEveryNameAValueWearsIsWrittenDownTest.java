@@ -115,9 +115,7 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "NameReach$Observed;L" + INPUTS + "InputDomain$Gathered;L" + INPUTS
                             + "InputDomain$Reach;)V",
                     THE_POSITION),
-            row(PARTITION + "BehaviorInputs$Standing", "step",
-                    "(L" + INPUTS + "TermPath$Step;" + INNERS + SYMBOLS + KINDS + SUMS
-                            + "Ljava/util/List;)Z",
+            row(PARTITION + "BehaviorInputs", "view", "(" + TYPE + ")L" + TYPE_VIEW + ";",
                     THE_POSITION),
             row(PARTITION + "ConstructionPlan", "applying",
                     "(L" + PARTITION + "ConstructionPlan$Settled;L" + INPUTS + "Refinement;" + INNERS

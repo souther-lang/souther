@@ -288,8 +288,8 @@ public final class HelperInliner {
         }
     }
 
-    /** Where a lambda given to a function parameter was written: the parameter it fills, the call
-     * it was handed to as the source spells it, and the lambda's own position. Asked by the
+    /** Where a lambda given to a function parameter was written: what it was handed to, and the
+     * lambda's own position. Asked by the
      * binding and not by the spelling: two combinators nested one inside the other give their
      * function parameters the same name as often as not, and a report that found the outer one's
      * lambda would point at another author's line.
@@ -298,7 +298,7 @@ public final class HelperInliner {
      * separate fact and is kept where identity is settled ({@code Writing#suppliedFrom}): held here
      * as well it was a second answer to one question, and the two came apart the moment one
      * operation handed a block on to another. */
-    private record LambdaOrigin(String param, String call, SourcePos pos) {}
+    private record LambdaOrigin(Hir.FunctionHandover handover, SourcePos pos) {}
 
     private HelperInliner(HelperTable table, HelperGraph graph, ValueAtAReference reading) {
         if (reading == ValueAtAReference.SETTLED_REFERENCE) {
@@ -1563,8 +1563,9 @@ public final class HelperInliner {
                 }
                 // Walked with this expansion as the copy being written: a call the body still holds
                 // is one this expansion made, not one the body around it made.
-                yield new Hir.Expansion(ex.callee(), ex.application(), ex.at(), bound, given,
-                        ex.declaredReturn(), insideThisExpansion(ex, () -> inline(ex.body())),
+                yield new Hir.Expansion(ex.callee(), ex.handover(), ex.application(), ex.at(),
+                        bound, given, ex.declaredReturn(),
+                        insideThisExpansion(ex, () -> inline(ex.body())),
                         ex.pos(), ex.region());
             }
             // A build by reference holds no body, so there is nothing in it to walk.
@@ -1825,8 +1826,11 @@ public final class HelperInliner {
             }
         });
         arguments.unreduced().keySet().forEach(writing.scopedLambdas()::remove);
-        return new Hir.Expansion(callee.denotes(), mine, site, bound, arguments.given(),
-                instantiated(helper.declaredReturn(), applied), body, call.pos(), call.region());
+        LambdaOrigin handedOver = handedOver(callee);
+        return new Hir.Expansion(callee.denotes(),
+                handedOver == null ? null : handedOver.handover(), mine, site, bound,
+                arguments.given(), instantiated(helper.declaredReturn(), applied), body,
+                call.pos(), call.region());
     }
 
     /**
@@ -1992,14 +1996,12 @@ public final class HelperInliner {
      * call reached it through a module.
      */
     private CompileException wrongArity(Hir.Apply call, Hir.FnDef helper, int given) {
-        ScopedLambda applied = call.answered() != null
-                && call.answered().denotes() instanceof ValueName.Local local
-                ? writing.scopedLambdas().get(local.id()) : null;
-        LambdaOrigin origin = applied == null ? null : applied.origin();
+        LambdaOrigin origin = handedOver(call.answered());
         if (origin != null) {
             return CompileException.of(Diagnostic.at(origin.pos())
-                    .say(new HelperMessage.TheBlockTakesAnotherNumberOfArguments(origin.param(),
-                            origin.call(), String.valueOf(given),
+                    .say(new HelperMessage.TheBlockTakesAnotherNumberOfArguments(
+                            origin.handover().parameter(), origin.handover().call(),
+                            String.valueOf(given),
                             String.valueOf(helper.params().size())))
                     .build());
         }
@@ -2007,6 +2009,16 @@ public final class HelperInliner {
                 .say(new HelperMessage.CalledWithAnotherNumberOfArguments(call.written(),
                         String.valueOf(helper.params().size()), String.valueOf(given)))
                 .build());
+    }
+
+    /** Where the block {@code applied} names was handed over, or null where it names no block a
+     *  call was handed — a block a {@code let} bound among them, which was written where it is
+     *  bound. */
+    private LambdaOrigin handedOver(Hir.Var.Denoting applied) {
+        ScopedLambda lambda = applied != null
+                && applied.denotes() instanceof ValueName.Local local
+                ? writing.scopedLambdas().get(local.id()) : null;
+        return lambda == null ? null : lambda.origin();
     }
 
     /**
@@ -2093,7 +2105,9 @@ public final class HelperInliner {
                 // Asked of the callee as written, not of what it expanded to: applying a
                 // function parameter is what removes it, because the application β-reduces
                 // to the lambda's body, so the expansion holds no reference either way.
-                given.add(new Hir.Given(instantiated(p.type(), applied), arg,
+                Hir.FunctionHandover handover =
+                        new Hir.FunctionHandover(p.name(), rawCall.written());
+                given.add(new Hir.Given(handover, instantiated(p.type(), applied), arg,
                         references(helper.writtenBody(), p.binder().id()), arrivesAs(arg), i));
                 Hir.FnType declares = declaredFn(p.type(), applied);
                 // Which rule this call handed to this parameter, said where the call site is
@@ -2153,7 +2167,7 @@ public final class HelperInliner {
                             Hir.FnDef.lambda(f.name(), lparams,
                                     declares == null ? null : declares.result(),
                                     new Hir.FnBody.Written(lambda.body()), lambda.pos()),
-                            new LambdaOrigin(p.name(), rawCall.written(), lambda.pos())));
+                            new LambdaOrigin(handover, lambda.pos())));
                     // A block written at this call was written by whoever wrote the call, so what it
                     // crosses into is this copy whatever stood before it. Recorded in the one place
                     // a crossing is, so that handing it on from inside reads the same as handing on
@@ -2490,8 +2504,8 @@ public final class HelperInliner {
         Hir.Expr body = insideThisCopy(mine,
                 writing.lineage().copiedInto(applied, site), Map.of(),
                 () -> substituted(value.reached().rendered(), rename(written, renaming)));
-        return new Hir.Expansion(applied, mine, site, List.of(), List.of(), null, body, call.pos(),
-                call.region());
+        return new Hir.Expansion(applied, null, mine, site, List.of(), List.of(), null, body,
+                call.pos(), call.region());
     }
 
     /** A value applying which applies its own body: the declaration, and the definition that
@@ -3168,8 +3182,9 @@ public final class HelperInliner {
                 for (Hir.Given g : ex.given()) {
                     given.add(g.with(read(g.value())));
                 }
-                yield new Hir.Expansion(ex.callee(), ex.application(), ex.at(), bound, given,
-                        ex.declaredReturn(), insideThisExpansion(ex, () -> read(ex.body())),
+                yield new Hir.Expansion(ex.callee(), ex.handover(), ex.application(), ex.at(),
+                        bound, given, ex.declaredReturn(),
+                        insideThisExpansion(ex, () -> read(ex.body())),
                         ex.pos(), ex.region());
             }
             case Hir.ValueBuild build -> build;
@@ -3656,7 +3671,7 @@ public final class HelperInliner {
                 // What this copy of the expansion wrote, from the one place an owner is moved. Kept
                 // as it was, the two copies of one already-expanded body would say they wrote into
                 // the same place while their bindings had gone to two.
-                yield new Hir.Expansion(ex.callee(),
+                yield new Hir.Expansion(ex.callee(), ex.handover(),
                         renaming.copy().ownerOf(ex.application()), ex.at(), bound, given,
                         ex.declaredReturn(), rename(ex.body(), renaming),
                         renaming.at(ex.pos()), renaming.over(ex.region()));

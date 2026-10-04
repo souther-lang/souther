@@ -5,6 +5,7 @@ import souther.compiler.check.InvariantFinding;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.StandingSignature;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
@@ -635,7 +636,7 @@ public final class Bodies {
             Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, DeclaredSig>> signatures = db.ask(new DeclaredSignatures(name));
-            Answer<Map<String, Type>> helpers = db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
+            Answer<Map<String, StandingSignature>> helpers = db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
             if (!lowering.present() || !scope.present() || !signatures.present()
                     || !helpers.present()) {
                 return Answer.absent();
@@ -935,7 +936,7 @@ public final class Bodies {
             Answer<Expandable> expandable = db.ask(new Shapes.Expandable(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, DeclaredSig>> signatures = db.ask(new DeclaredSignatures(name));
-            Answer<Map<String, Type>> helpers = db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
+            Answer<Map<String, StandingSignature>> helpers = db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
             if (!expandable.present() || !scope.present() || !signatures.present()
                     || !helpers.present()) {
                 return Answer.absent();
@@ -1601,20 +1602,20 @@ public final class Bodies {
      * declared anywhere in the module checks every behavior of it again.
      */
     public record RecursiveCallSigsForBody(String module, String behavior)
-            implements Key<Map<String, Type>> {
+            implements Key<Map<String, StandingSignature>> {
 
         @Override
-        public Answer<Map<String, Type>> compute(Db db) {
-            Answer<Map<String, Type>> sigs =
+        public Answer<Map<String, StandingSignature>> compute(Db db) {
+            Answer<Map<String, StandingSignature>> sigs =
                     db.ask(new RecursiveCallSigs(module, InliningPolicy.FULL));
             Answer<Set<ReachName.Declaration>> reached =
                     db.ask(new StandingRecursionsOfBody(module, behavior, InliningPolicy.FULL));
             if (!sigs.present() || !reached.present()) {
                 return Answer.absent();
             }
-            Map<String, Type> out = new LinkedHashMap<>();
+            Map<String, StandingSignature> out = new LinkedHashMap<>();
             for (String each : heldAt(reached.value())) {
-                Type sig = sigs.value().get(each);
+                StandingSignature sig = sigs.value().get(each);
                 if (sig != null) {
                     out.put(each, sig);
                 }
@@ -2264,7 +2265,7 @@ public final class Bodies {
                 return Answer.of(Boolean.TRUE);
             }
             Answer<DerivedSymbols> symbols = Names.derivedSymbols(db, name);
-            Answer<Map<String, Type>> standing =
+            Answer<Map<String, StandingSignature>> standing =
                     db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
             Answer<ModuleCheck.Of> checked = db.ask(new ModuleCheck(name));
             // A module that did not check has said why; what its helpers name is not asked of it.
@@ -2274,7 +2275,7 @@ public final class Bodies {
             }
             // A closed body names this module's own recursive helpers qualified, which is how a
             // reader reaches them, so the calls left standing are typed under that spelling too.
-            Map<String, Type> standingCalls = new LinkedHashMap<>(standing.value());
+            Map<String, StandingSignature> standingCalls = new LinkedHashMap<>(standing.value());
             standing.value().forEach((helper, type) ->
                     standingCalls.putIfAbsent(HelperNames.qualified(name, helper), type));
             Set<String> published = new HashSet<>();
@@ -2604,7 +2605,7 @@ public final class Bodies {
                     db.ask(new BodyForInvariantDischarge(module, value));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
             Answer<Map<ValueName.Behavior, ReqSig>> reqSigs = db.ask(new ReqSigs(module));
-            Answer<Map<String, Type>> sigs = db.ask(new RecursiveCallSigsForBody(module, value));
+            Answer<Map<String, StandingSignature>> sigs = db.ask(new RecursiveCallSigsForBody(module, value));
             Answer<ModuleCheck.Of> valuesChecked = db.ask(new ModuleCheck(module));
             if (!lowered.present() || !scope.present() || !reqSigs.present() || !sigs.present()
                     || !valuesChecked.present()) {
@@ -2825,14 +2826,14 @@ public final class Bodies {
      * table holds none of the library and its recursive set is not the emitted representation's.
      */
     public record RecursiveCallSigs(String name, InliningPolicy policy)
-            implements Key<Map<String, Type>> {
+            implements Key<Map<String, StandingSignature>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, Type>> compute(Db db) {
+        public Answer<Map<String, StandingSignature>> compute(Db db) {
             Answer<Expanding.Of> against = db.ask(new Expanding(name, policy));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             if (!against.present() || !scope.present()) {
@@ -3229,7 +3230,7 @@ public final class Bodies {
             // of them: a recursive helper this body never calls is no part of what it is checked
             // against, and depending on the index would check this body again whenever one was
             // declared anywhere in the module.
-            Answer<Map<String, Type>> sigs = db.ask(new RecursiveCallSigsForBody(module, behavior));
+            Answer<Map<String, StandingSignature>> sigs = db.ask(new RecursiveCallSigsForBody(module, behavior));
             Answer<Map<String, DataChecker.Constructs>> constructs =
                     db.ask(new RecursiveHelperConstructsForBody(module, behavior));
             Answer<Expansion<Hir.FnDef>> discharge =
@@ -3532,7 +3533,7 @@ public final class Bodies {
             Answer<BehaviorBodies> bodies = db.ask(new Implementation(name));
             Answer<Set<ValueName.Behavior>> unwritten = db.ask(new ImportedUnwritten(name));
             Answer<Map<ValueName.Behavior, ReqSig>> reqSigs = db.ask(new ReqSigs(name));
-            Answer<Map<String, Type>> sigs = db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
+            Answer<Map<String, StandingSignature>> sigs = db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
             Answer<Map<ValueName.Behavior, ReqSig>> calleeSigs = db.ask(new CalleeSigs(name));
             Answer<Map<String, Hir.FnDef>> published = db.ask(new ImportedDefinitions(name));
             Answer<Preserved.SettledValues> elsewhere = db.ask(new ValuesDeclaredElsewhere(name));

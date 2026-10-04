@@ -53,6 +53,7 @@ import souther.compiler.check.Unanswerable;
 import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.ResolvedSymbols;
+import souther.compiler.check.StandingSignature;
 import souther.compiler.core.ValueShape;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.CompileException;
@@ -2333,7 +2334,7 @@ public final class Shapes {
         public Answer<Map<TypeSymbol.AtModule, ValueShape>> compute(Db db) {
             Answer<Hir.Module> settled = db.ask(new Bodies.Settled(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
-            Answer<Map<String, souther.compiler.types.Type>> helpers =
+            Answer<Map<String, StandingSignature>> helpers =
                     db.ask(new Bodies.RecursiveCallSigs(name, InliningPolicy.FULL));
             // Elaborating a clause reads the rules of everything a declaration spreads, which is a
             // walk of the spreads. Asked here for the same reason the count asks it: the graph is

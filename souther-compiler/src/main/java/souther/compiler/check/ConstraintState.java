@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.numeric.CanonicalOrder;
+import souther.compiler.numeric.ClosedStates;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedIntervals;
@@ -73,7 +74,16 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      *              position is and the caller is not
      */
     public static <A> ConstraintState<A> top(CanonicalOrder<A> order) {
-        return new ConstraintState<>(NumericDomain.top(order), PredicateFacts.none(),
+        return top(order, ClosedStates.NONE);
+    }
+
+    /**
+     * The same, with what the numbers leave worked out through {@code closedStates}, for a reader
+     * that owns a lifetime over which one closure stands for every equal question
+     * ({@link NumericDomain#top(CanonicalOrder, ClosedStates)}).
+     */
+    public static <A> ConstraintState<A> top(CanonicalOrder<A> order, ClosedStates closedStates) {
+        return new ConstraintState<>(NumericDomain.top(order, closedStates), PredicateFacts.none(),
                 Confinement.Conjoined.top(), false);
     }
 

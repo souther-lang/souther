@@ -45,7 +45,7 @@ public final class CarriedBodyDependencies {
     public static Set<TypeSymbol.AtModule> of(Hir.FnDef closed, DerivedSymbols symbols,
                                               DeclarationAccess declarations,
                                               DeclarationNewtypes newtypes,
-                                              Map<String, Type> standingCalls) {
+                                              Map<String, StandingSignature> standingCalls) {
         Type declared = closed.declaredReturn() == null
                 ? null : TypeOps.successType(closed.declaredReturn());
         Core typed;

@@ -1873,10 +1873,17 @@ public interface Hir {
      * call the source settles, and a reader that took the second from the first would be reading an
      * identity out of a value that says how the compiler ran. The two answer about one call and are
      * not the same answer to give.
+     *
+     * <p>{@code handover} is the call a block was handed to, where the callee is that block: what
+     * the block answers is held here to what that call's parameter declared, and a block answering
+     * something else is reported in those terms. Null for every other callee, a block bound by a
+     * {@code let} among them: that one is handed over by name, and what its binding says it is
+     * is read against the parameter at the call ({@link Given#arrivesAs}).
      */
-    record Expansion(ValueName callee, BindingOwner application, ExpansionSite at,
-                     List<Bound> bound, List<Given> given, RetType declaredReturn, Expr body,
-                     SourcePos pos, Region region) implements Expr {
+    record Expansion(ValueName callee, FunctionHandover handover, BindingOwner application,
+                     ExpansionSite at, List<Bound> bound, List<Given> given,
+                     RetType declaredReturn, Expr body, SourcePos pos, Region region)
+            implements Expr {
 
         /**
          * The same expansion as the nested bindings it writes — for a reader whose question is only
@@ -1940,14 +1947,28 @@ public interface Hir {
      * them. Which arguments are functions and which are values is the callee's to say, so what the
      * call wrote, and in what order, is read off this and {@link Bound#argument} together.
      */
-    record Given(RetType declaredType, Expr value, boolean applied, RetType arrivesAs,
-                 int argument) {
+    record Given(FunctionHandover handover, RetType declaredType, Expr value, boolean applied,
+                 RetType arrivesAs, int argument) {
 
         /** The same argument, holding {@code rewritten}. */
         public Given with(Expr rewritten) {
-            return new Given(declaredType, rewritten, applied, arrivesAs, argument);
+            return new Given(handover, declaredType, rewritten, applied, arrivesAs, argument);
         }
     }
+
+    /**
+     * A function handed to a parameter of a call, as a report about it names the two: the
+     * parameter the callee declared, and the call as the source spells it.
+     *
+     * <p>Typing the function is the elaboration's, wherever the callee reads it, and that place is
+     * past the call: inside the callee's body, or at a boundary the body never applies. What the
+     * author would recognise is the call they wrote, and nothing at either place says it any more,
+     * so it is carried there from where the call was read.
+     *
+     * <p>The spelling and not the occurrence. A report about a function handed over points at the
+     * function, which the author wrote; the call is only quoted.
+     */
+    record FunctionHandover(String parameter, String call) {}
 
     /** A list literal {@code [e1, e2, ...]} (one or more elements of the same type).
      *
@@ -3073,8 +3094,9 @@ public interface Hir {
                 });
                 Expr body = atExpr.apply(ex.body());
                 yield bound == ex.bound() && body == ex.body() ? ex
-                        : new Expansion(ex.callee(), ex.application(), ex.at(), bound, ex.given(),
-                                ex.declaredReturn(), body, ex.pos(), ex.region());
+                        : new Expansion(ex.callee(), ex.handover(), ex.application(), ex.at(),
+                                bound, ex.given(), ex.declaredReturn(), body, ex.pos(),
+                                ex.region());
             }
             case Materialised m -> {
                 Expr body = atExpr.apply(m.body());
