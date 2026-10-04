@@ -3943,26 +3943,21 @@ public final class Generator {
             // because every question below is about the place the row writes: what else is being
             // written there, whether one value answers them all, and which location the value is
             // gathered under.
-            WaysToWrite ways = waysToWrite(subject, looking, term);
+            //
+            // The ways of this row: a name sent under a case takes the row with it, and the number
+            // beside it is written under the same case or not at all, since no value is two cases.
+            WaysToWrite ways = waysToWrite(subject, looking, term, trying);
             List<ReachabilityGap> missed = new ArrayList<>();
-            boolean unsettled = ways.someNotWorkedOut();
-            for (RealizationTarget target : ways.to()) {
-                // A name sent under a case takes the row with it, and the number beside it is
-                // written under the same case or the row is asked to be two things. A way the row
-                // cannot be is not one this looked at, so it settles nothing about the cut.
-                if (!(trying.merge(target.writeRoot().requirements())
-                        instanceof Requirements.Merge.Merged(Requirements both))) {
-                    unsettled = true;
-                    continue;
-                }
-                switch (writing(next, term, target, both, routes, owing)) {
+            for (Way way : ways.to()) {
+                switch (writing(next, term, way.target(), way.taken(), routes, owing)) {
                     case Placed.AtAll placed -> {
                         return placed;
                     }
                     case Placed.AtNone(ReachabilityGap why) -> missed.add(why);
                 }
             }
-            return new Placed.AtNone(ReachabilityGap.overEveryWay(cut, missed, unsettled));
+            return new Placed.AtNone(
+                    ReachabilityGap.overEveryWay(cut, missed, ways.someNotWorkedOut()));
         }
 
         /** The placing with {@code term} written at {@code target}, and the rest after it. */
@@ -4091,25 +4086,37 @@ public final class Generator {
     }
 
     /**
-     * Every place a row may write to move one number, and whether some way to one was not followed
-     * to its end.
+     * One place a row that is already {@code trying} may write a number at, and what the row is
+     * once it does.
      *
-     * <p>What the row has to be to write at each of them is not a second component here. A path
-     * states the narrowings taken to reach it ({@link TermPath#requirements}), so it is read off
-     * {@link RealizationTarget#writeRoot} by whoever asks whether the row can be that — and a case
-     * recorded beside the place would be a second answer free to disagree with the path.
-     *
-     * @param to                the places, in the order the model declares the cases on the way to
-     *                          each
-     * @param someNotWorkedOut  whether a way reached a place whose holding nothing worked out. Not
-     *                          a place to write at, and not one shown to hold nothing either, so a
-     *                          reader concluding something from every place in {@code to} has not
-     *                          looked at all of them
+     * <p>The row's requirements and not the place's alone. They are the place's path
+     * ({@link TermPath#requirements}) taken together with what the row already was, worked out once
+     * where the way was followed — so whoever writes at the place is handed the row it writes into
+     * rather than asking again whether the two hold together.
      */
-    private record WaysToWrite(List<RealizationTarget> to, boolean someNotWorkedOut) {}
+    private record Way(RealizationTarget target, Requirements taken) {}
 
     /**
-     * Every place a row may write to move {@code term}.
+     * Every place a row that is already something may write to move one number, and whether some
+     * way to one was not followed to its end.
+     *
+     * <p><b>The ways of this row, and not of every value of the input.</b> A case the row cannot be
+     * beside what it already is was never one of its ways: the two narrowings hold of no value
+     * together, which is something the model settles and not something left unlooked at. Left in
+     * and refused afterwards, it would have to be read as one or the other, and read as unlooked at
+     * it keeps a cut every way of this row was shown to leave nothing from being said to be that.
+     *
+     * @param to               the places, in the order the model declares the cases on the way to
+     *                         each
+     * @param someNotWorkedOut whether a way of this row reached a place whose holding nothing worked
+     *                         out. Not a place to write at, and not one shown to hold nothing
+     *                         either, so a reader concluding something from every place in
+     *                         {@code to} has not looked at all of them
+     */
+    private record WaysToWrite(List<Way> to, boolean someNotWorkedOut) {}
+
+    /**
+     * Every place a row that is already {@code trying} may write to move {@code term}.
      *
      * <p><b>The place a number is read is the place a row writes it, except at a name every case of
      * a sum spreads.</b> There the rules name the sum's own field and a row writes one of the
@@ -4135,22 +4142,28 @@ public final class Generator {
      * the cases share would be told a set narrows nothing and sent to write at the sum's own name.
      */
     private static WaysToWrite waysToWrite(MeasuredInput subject, WitnessSearch looking,
-                                           NumericTerm term) {
+                                           NumericTerm term, Requirements trying) {
         NumericTerm.FromOnePosition at = term.atOnePosition();
+        List<Way> to = new ArrayList<>();
         // A number no single position answers is written where its run is rebuilt, and a run has no
         // name of a sum's to be read at. Left to the sorting below, the position it does not have
         // would be the path asked about.
         if (at == null) {
-            return new WaysToWrite(List.of(RealizationTarget.of(term)), false);
+            RealizationTarget run = RealizationTarget.of(term);
+            if (trying.merge(run.writeRoot().requirements())
+                    instanceof Requirements.Merge.Merged(Requirements taken)) {
+                to.add(new Way(run, taken));
+            }
+            return new WaysToWrite(List.copyOf(to), false);
         }
-        List<RealizationTarget> to = new ArrayList<>();
-        boolean notWorkedOut = followed(subject, looking, at, at.position(), 0, to);
+        boolean notWorkedOut = followed(subject, looking, at, at.position(), trying, 0, to);
         return new WaysToWrite(List.copyOf(to), notWorkedOut);
     }
 
     /**
-     * The places a row may write {@code term} at from {@code here} on, added to {@code to}, and
-     * whether some way from here ended at a place nothing worked out.
+     * The places a row that is already {@code trying} may write {@code term} at from {@code here}
+     * on, added to {@code to}, and whether some way of this row from here ended at a place nothing
+     * worked out.
      *
      * <p><b>A name that crosses is followed until it reaches a place the reading answered for.</b>
      * The sorting moves a name one crossing at a time and says so ({@link NameReach#standingOf}), so
@@ -4158,25 +4171,34 @@ public final class Generator {
      * answer would refuse every position two sums down, which the reading has and can state a set
      * for. Each step is one case taken, and the place reached states all of them.
      *
+     * <p><b>Only into the cases the row can be.</b> What the path to a place requires is put
+     * together with what the row already is at every step, and a case the two do not hold together
+     * at is not followed: nothing below it is a way of this row, a place there whose holding nothing
+     * worked out included.
+     *
      * <p>Bounded by the crossings the walk recorded, because each step takes one of them and no
      * step takes one twice. Running past that is this compiler disagreeing with its own reading
      * rather than a search that could be allowed more.
      */
     private static boolean followed(MeasuredInput subject, WitnessSearch looking,
-                                    NumericTerm.FromOnePosition term, TermPath here, int crossed,
-                                    List<RealizationTarget> to) {
+                                    NumericTerm.FromOnePosition term, TermPath here,
+                                    Requirements trying, int crossed, List<Way> to) {
         if (crossed > subject.reach().crossings().size()) {
             throw new IllegalStateException(
                     "a name was followed past every crossing this reading recorded: " + term);
+        }
+        if (!(trying.merge(here.requirements())
+                instanceof Requirements.Merge.Merged(Requirements taken))) {
+            return false;
         }
         return switch (looking.admitted().at(here)) {
             // The reading answered for this place, so it is where the row writes. The first time
             // round that is the place the number is read at, and after a crossing it is the
             // position under the cases taken to get here.
             case AdmittedValues.Admitted.Values _ -> {
-                to.add(here.equals(term.position())
+                to.add(new Way(here.equals(term.position())
                         ? new RealizationTarget.AtOnePosition(term)
-                        : new RealizationTarget.AtOnePositionElsewhere(term, here));
+                        : new RealizationTarget.AtOnePositionElsewhere(term, here), taken));
                 yield false;
             }
             // Nothing worked out what this place holds. A value written here would be offered at a
@@ -4186,7 +4208,7 @@ public final class Generator {
             case AdmittedValues.Admitted.StandsUnderTheCases _ -> {
                 boolean notWorkedOut = false;
                 for (NameReach.CaseStanding standing : casesUnder(subject, here)) {
-                    notWorkedOut |= followed(subject, looking, term, standing.position(),
+                    notWorkedOut |= followed(subject, looking, term, standing.position(), taken,
                             crossed + 1, to);
                 }
                 yield notWorkedOut;

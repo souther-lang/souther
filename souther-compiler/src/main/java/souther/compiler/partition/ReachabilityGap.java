@@ -100,9 +100,11 @@ public sealed interface ReachabilityGap {
      * before a way that found nothing, since it names the population this compiler does not compose
      * rather than only that nothing was found.
      *
-     * @param ways          what each way that was looked at came to
-     * @param someUnsettled whether some way was not looked at to its end — one whose place nothing
-     *                      worked out, or one the row could not be beside what it already was
+     * @param ways          what each way of the row came to. A case the row cannot be beside what
+     *                      it already is is not among them: it is no way of this row, and leaves
+     *                      nothing open
+     * @param someUnsettled whether some way of the row was not looked at to its end — one whose
+     *                      place nothing worked out
      */
     static ReachabilityGap overEveryWay(OnTheWay.TakenIn cut, List<ReachabilityGap> ways,
                                         boolean someUnsettled) {
