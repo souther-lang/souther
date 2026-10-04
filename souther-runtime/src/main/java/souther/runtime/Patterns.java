@@ -35,4 +35,15 @@ public final class Patterns {
                                          String... image) {
         return StringPattern.of(List.of(image));
     }
+
+    /**
+     * Whether {@code pattern} accepts {@code subject}, passing {@code checkpoint} as the walk goes:
+     * before each character, state and step it looks at, as the machine's own entry asks.
+     *
+     * <p>What an evaluated class calls where a shipped one calls {@code Predicate.test}. The
+     * predicate is one {@link #read} made, so the machine it is run as is the one the class loaded.
+     */
+    public static boolean matches(Predicate<String> pattern, String subject, WorkCheckpoint checkpoint) {
+        return TextRules.matches(pattern, subject, checkpoint);
+    }
 }

@@ -72,10 +72,10 @@ class WhoMayAskBigDecimalWhatItCanRefuseTest {
                     + " longValueExact()J",
             "souther/runtime/DecimalMath#toInt(Lsouther/runtime/RoundingMode;Ljava/math/BigDecimal;)J"
                     + " setScale(ILjava/math/RoundingMode;)Ljava/math/BigDecimal;",
-            "souther/runtime/RationalMath#toInt(Lsouther/runtime/RoundingMode;Lsouther/runtime/Rational;)J"
-                    + " longValueExact()J",
-            "souther/runtime/Representations#canonicalNumber(Ljava/math/BigDecimal;)"
-                    + "Ljava/math/BigDecimal; setScale(I)Ljava/math/BigDecimal;");
+            "souther/runtime/RationalMath#toInt(Lsouther/runtime/RoundingMode;Lsouther/runtime/Rational;"
+                    + "Lsouther/runtime/WorkCheckpoint;)J longValueExact()J",
+            "souther/runtime/Representations#canonicalNumber(Ljava/math/BigDecimal;"
+                    + "Lsouther/runtime/WorkCheckpoint;)Ljava/math/BigDecimal; setScale(I)Ljava/math/BigDecimal;");
 
     @Test
     void everyRunTimeCallThatCanBeRefusedIsWrittenDownHere() {

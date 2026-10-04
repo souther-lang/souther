@@ -294,4 +294,142 @@ public final class DecimalMath {
     static BigDecimal leastDigits(BigDecimal d) {
         return ExactDecimals.leastDigits(d);
     }
+
+    // What an evaluated class calls: each operation above, paid for to a checkpoint before the host
+    // is asked for it (HostWork). Paying is all these add, so what they answer is what the operation
+    // answers, refusals included.
+
+    /** {@link #add(BigDecimal, BigDecimal)}, paid for to {@code checkpoint} first. */
+    public static BigDecimal add(BigDecimal a, BigDecimal b, WorkCheckpoint checkpoint) {
+        payAligned(a, b, checkpoint);
+        return add(a, b);
+    }
+
+    /** {@link #subtract(BigDecimal, BigDecimal)}, paid for to {@code checkpoint} first. */
+    public static BigDecimal subtract(BigDecimal a, BigDecimal b, WorkCheckpoint checkpoint) {
+        payAligned(a, b, checkpoint);
+        return subtract(a, b);
+    }
+
+    /** {@link #multiply(BigDecimal, BigDecimal)}, paid for to {@code checkpoint} first. */
+    public static BigDecimal multiply(BigDecimal a, BigDecimal b, WorkCheckpoint checkpoint) {
+        if (checkpoint != WorkCheckpoint.NONE) {
+            long answer = HostWork.bits(a) + HostWork.bits(b);
+            HostWork.pay(checkpoint, answer, HostWork.read(HostWork.bits(a), HostWork.bits(b), answer)
+                    + HostWork.product(HostWork.bits(a), HostWork.bits(b)));
+        }
+        return multiply(a, b);
+    }
+
+    /** {@link #divide(BigDecimal, BigDecimal, long, RoundingMode)}, paid for to {@code checkpoint}
+     *  first, where it divides at all. */
+    public static Object divide(BigDecimal dividend, BigDecimal divisor, long scale, RoundingMode mode,
+                                WorkCheckpoint checkpoint) {
+        if (checkpoint != WorkCheckpoint.NONE && divisor.signum() != 0 && scale == (int) scale) {
+            // The dividend or the divisor is raised by the power of ten that brings the quotient to
+            // the scale asked for, and the quotient is as long as what is left after dividing.
+            long tens = scale - dividend.scale() + divisor.scale();
+            long raise = tens == 0 ? 0 : HostWork.bitsOfTens(tens);
+            long over = HostWork.bits(dividend) + (tens > 0 ? raise : 0);
+            long under = HostWork.bits(divisor) + (tens < 0 ? raise : 0);
+            long quotient = Math.max(over - under, 0) + 1;
+            HostWork.pay(checkpoint, Math.max(over, under), HostWork.read(over, under, quotient)
+                    + (raise == 0 ? 0 : HostWork.power(raise)
+                            + HostWork.product(tens > 0 ? HostWork.bits(dividend) : HostWork.bits(divisor), raise))
+                    + HostWork.product(quotient, under));
+        }
+        return divide(dividend, divisor, scale, mode);
+    }
+
+    /** {@link #negate(BigDecimal)}, paid for to {@code checkpoint} first. */
+    public static BigDecimal negate(BigDecimal d, WorkCheckpoint checkpoint) {
+        if (checkpoint != WorkCheckpoint.NONE) {
+            checkpoint.spend(HostWork.read(HostWork.bits(d), HostWork.bits(d)));
+        }
+        return negate(d);
+    }
+
+    /** {@link #compare(BigDecimal, BigDecimal)}, paid for to {@code checkpoint} first. */
+    public static long compare(BigDecimal a, BigDecimal b, WorkCheckpoint checkpoint) {
+        payAligned(a, b, checkpoint);
+        return compare(a, b);
+    }
+
+    /** {@link #toInt(RoundingMode, BigDecimal)}, paid for to {@code checkpoint} first. */
+    public static long toInt(RoundingMode mode, BigDecimal d, WorkCheckpoint checkpoint) {
+        payRescaled(d, 0, checkpoint);
+        return toInt(mode, d);
+    }
+
+    /** {@link #round(long, RoundingMode, BigDecimal)}, paid for to {@code checkpoint} first, where
+     *  the scale is one the run time takes. */
+    public static BigDecimal round(long scale, RoundingMode mode, BigDecimal d, WorkCheckpoint checkpoint) {
+        if (scale == (int) scale) {
+            payRescaled(d, (int) scale, checkpoint);
+        }
+        return round(scale, mode, d);
+    }
+
+    /** {@link #plainText(BigDecimal)}, paid for to {@code checkpoint} first: the digits turned into
+     *  text, which multiplies, and the text written. */
+    public static String plainText(BigDecimal d, WorkCheckpoint checkpoint) {
+        if (checkpoint != WorkCheckpoint.NONE) {
+            long digits = HostWork.bits(d);
+            checkpoint.spend(HostWork.power(digits) + HostWork.product(digits, digits));
+            long length = plainTextLength(d);
+            if (length <= Strings.LONGEST_TEXT) {
+                checkpoint.spend(HostWork.read(length * Character.SIZE));
+            }
+        }
+        return plainText(d);
+    }
+
+    /** {@link #ofDecimalText(String)}, paid for to {@code checkpoint} first: reading digits into a
+     *  whole number multiplies what has been read by ten for every few digits more. */
+    static BigDecimal ofDecimalText(String text, WorkCheckpoint checkpoint) {
+        if (checkpoint != WorkCheckpoint.NONE) {
+            long bits = HostWork.bitsOfTens(text.length());
+            HostWork.pay(checkpoint, bits, HostWork.product(bits, bits));
+        }
+        return ofDecimalText(text);
+    }
+
+    /** {@link #leastDigits(BigDecimal)}, paid for to {@code checkpoint} first: taking the zeros off
+     *  divides the digits by ten as many times as there are zeros to take. */
+    static BigDecimal leastDigits(BigDecimal d, WorkCheckpoint checkpoint) {
+        if (checkpoint != WorkCheckpoint.NONE) {
+            long bits = HostWork.bits(d);
+            checkpoint.spend(HostWork.power(bits) + HostWork.product(bits, bits));
+        }
+        return leastDigits(d);
+    }
+
+    /** Pays for {@code a} and {@code b} brought to one scale, as a sum, a difference and a comparison
+     *  bring them: the one at the smaller scale is multiplied by the power of ten between the two, and
+     *  how many digits each has is found by comparing it with a power of ten as long. */
+    private static void payAligned(BigDecimal a, BigDecimal b, WorkCheckpoint checkpoint) {
+        if (checkpoint == WorkCheckpoint.NONE) {
+            return;
+        }
+        long gap = Math.abs((long) a.scale() - b.scale());
+        BigDecimal raised = a.scale() < b.scale() ? a : b;
+        long raise = gap == 0 ? 0 : HostWork.bitsOfTens(gap);
+        long answer = Math.max(HostWork.bits(a), HostWork.bits(b)) + raise + 1;
+        HostWork.pay(checkpoint, answer, HostWork.read(HostWork.bits(a), HostWork.bits(b), answer)
+                + HostWork.power(HostWork.bits(a)) + HostWork.power(HostWork.bits(b))
+                + (raise == 0 ? 0 : HostWork.power(raise) + HostWork.product(HostWork.bits(raised), raise)));
+    }
+
+    /** Pays for {@code d} brought to {@code places}: multiplied by a power of ten to go up, divided
+     *  by one to go down. */
+    private static void payRescaled(BigDecimal d, int places, WorkCheckpoint checkpoint) {
+        if (checkpoint == WorkCheckpoint.NONE) {
+            return;
+        }
+        long gap = (long) places - d.scale();
+        long raise = gap == 0 ? 0 : HostWork.bitsOfTens(gap);
+        long answer = HostWork.bits(d) + (gap > 0 ? raise : 0);
+        HostWork.pay(checkpoint, Math.max(answer, raise), HostWork.read(HostWork.bits(d), answer)
+                + (raise == 0 ? 0 : HostWork.power(raise) + HostWork.product(HostWork.bits(d), raise)));
+    }
 }

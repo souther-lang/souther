@@ -3,6 +3,7 @@ package souther.exact;
 import org.jspecify.annotations.Nullable;
 
 import java.math.BigInteger;
+import java.util.function.LongConsumer;
 import java.util.function.Supplier;
 
 import static souther.exact.ExactPowers.FIVE;
@@ -55,6 +56,9 @@ final class ExactOrder {
      *  truth so that the count of what a writing would cost is over it too. */
     private static final int MORE_BITS_THAN_A_FIVE_TAKES = 3;
 
+    /** Told of no width: what a caller that does not pay for the refinement hands in. */
+    static final LongConsumer NOBODY_ASKS = _ -> { };
+
     private ExactOrder() {
     }
 
@@ -65,7 +69,13 @@ final class ExactOrder {
      * are equal records, and the caller answered those before reaching here.
      */
     static int magnitudes(ExactParts a, ExactParts b) {
-        return magnitudeWithAWritingWorth(a, b, bitsAWritingIsWorth(storedBits(a) + storedBits(b)));
+        return magnitudes(a, b, NOBODY_ASKS);
+    }
+
+    /** {@link #magnitudes(ExactParts, ExactParts)}, telling {@code widened} each width the refinement
+     *  takes a bracket at. */
+    static int magnitudes(ExactParts a, ExactParts b, LongConsumer widened) {
+        return magnitudeWithAWritingWorth(a, b, bitsAWritingIsWorth(storedBits(a) + storedBits(b)), widened);
     }
 
     /**
@@ -82,6 +92,11 @@ final class ExactOrder {
      * writing may cost stated rather than worked out.
      */
     static int magnitudeWithAWritingWorth(ExactParts a, ExactParts b, long bitsAWritingMayForm) {
+        return magnitudeWithAWritingWorth(a, b, bitsAWritingMayForm, NOBODY_ASKS);
+    }
+
+    static int magnitudeWithAWritingWorth(ExactParts a, ExactParts b, long bitsAWritingMayForm,
+                                          LongConsumer widened) {
         Integer quickly = magnitudeFromBrackets(a, b, BRACKET_BITS);
         if (quickly != null) {
             return quickly;
@@ -98,7 +113,7 @@ final class ExactOrder {
         if (theOtherWayAbout != null) {
             return -theOtherWayAbout;
         }
-        return magnitudeByRefining(a, b);
+        return magnitudeByRefining(a, b, widened);
     }
 
     /** How many bits the parts a value stores take up, which is what holding it costs. */
@@ -135,9 +150,13 @@ final class ExactOrder {
      * would have answered.
      */
     static int magnitudeByRefining(ExactParts a, ExactParts b) {
+        return magnitudeByRefining(a, b, NOBODY_ASKS);
+    }
+
+    static int magnitudeByRefining(ExactParts a, ExactParts b, LongConsumer widened) {
         return asWideAsItTakes(
                 width -> magnitudeFromBrackets(a, b, width),
-                () -> "tell two values apart");
+                () -> "tell two values apart", widened);
     }
 
     /** A question a bracket of some width either settles or leaves open. */
@@ -159,9 +178,17 @@ final class ExactOrder {
      * untouched, and so does an error of the host's own.
      */
     static <T> T asWideAsItTakes(ReadFromABracket<T> reading, Supplier<String> theQuestion) {
+        return asWideAsItTakes(reading, theQuestion, NOBODY_ASKS);
+    }
+
+    /** {@link #asWideAsItTakes(ReadFromABracket, Supplier)}, telling {@code widened} each width
+     *  before a reading is taken at it. */
+    static <T> T asWideAsItTakes(ReadFromABracket<T> reading, Supplier<String> theQuestion,
+                                 LongConsumer widened) {
         WidthsToTry widths = WidthsToTry.aboveAWidthOf(BRACKET_BITS);
         while (widths.thereIsOneToTry()) {
             int width = widths.next();
+            widened.accept(width);
             T decided;
             try {
                 decided = reading.atAWidthOf(width);

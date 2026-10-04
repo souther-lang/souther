@@ -2,6 +2,7 @@ package souther.exact;
 
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.util.function.LongConsumer;
 
 /**
  * Exact rational arithmetic on values held as {@code n/d · 2^a · 5^b}, which both the compiler's
@@ -327,6 +328,16 @@ public final class ExactArithmetic {
      * @throws ExactRoomExceeded where this run has no room for the working width the pair needs
      */
     public static int compare(ExactParts a, ExactParts b) {
+        return compare(a, b, ExactOrder.NOBODY_ASKS);
+    }
+
+    /**
+     * {@link #compare(ExactParts, ExactParts)}, telling {@code widened} the width, in bits, of each
+     * bracket the order is refined at before it is taken. How many there are turns on how closely the
+     * two values agree and not on anything a caller can see beforehand, so a caller paying for the
+     * work pays for these as they come.
+     */
+    public static int compare(ExactParts a, ExactParts b, LongConsumer widened) {
         if (a.equals(b)) {
             return 0;
         }
@@ -334,7 +345,7 @@ public final class ExactArithmetic {
         if (bySign != 0) {
             return bySign;
         }
-        int byMagnitude = ExactOrder.magnitudes(a, b);
+        int byMagnitude = ExactOrder.magnitudes(a, b, widened);
         return a.signum() > 0 ? byMagnitude : -byMagnitude;
     }
 
@@ -346,7 +357,15 @@ public final class ExactArithmetic {
      *         is {@link RoundingMode#UNNECESSARY}
      */
     public static BigInteger roundedTimesTenTo(ExactParts of, int scale, RoundingMode towards) {
-        return ExactRounding.roundedTimesTenTo(of, scale, towards);
+        return ExactRounding.roundedTimesTenTo(of, scale, towards, ExactOrder.NOBODY_ASKS);
+    }
+
+    /** {@link #roundedTimesTenTo(ExactParts, int, RoundingMode)}, telling {@code widened} the width of
+     *  each bracket the rounding is refined at, as {@link #compare(ExactParts, ExactParts, LongConsumer)}
+     *  does. */
+    public static BigInteger roundedTimesTenTo(ExactParts of, int scale, RoundingMode towards,
+                                               LongConsumer widened) {
+        return ExactRounding.roundedTimesTenTo(of, scale, towards, widened);
     }
 
     /**

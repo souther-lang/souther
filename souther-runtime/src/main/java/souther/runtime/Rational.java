@@ -9,6 +9,7 @@ import souther.exact.ExactRoomExceeded;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.function.LongConsumer;
 
 /**
  * An exact rational, which is what {@code /} answers (spec §primitives). Neither {@code Int} nor
@@ -273,6 +274,177 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException(e.getMessage() + ": " + this, e);
         }
+    }
+
+    // What an evaluated computation asks: each operation above, paid for to a checkpoint (HostWork).
+    // A value is paid for by the bits of the fraction it stores and not by its exponents, which it
+    // holds as numbers; what an operation builds out of the exponents is paid for where it builds it.
+    // Every operation answers in lowest terms with the twos and fives taken off, which divides the
+    // answer by what it shares, so each pays for that too.
+
+    /** {@link #times}, paid for to {@code checkpoint} first. */
+    public Rational times(Rational other, WorkCheckpoint checkpoint) {
+        payProduct(other, checkpoint);
+        return times(other);
+    }
+
+    /** {@link #dividedBy}, paid for to {@code checkpoint} first. */
+    public Rational dividedBy(Rational other, WorkCheckpoint checkpoint) {
+        payProduct(other, checkpoint);
+        return dividedBy(other);
+    }
+
+    /**
+     * {@link #plus}, paid for to {@code checkpoint} first: each side's numerator is multiplied by the
+     * powers of two and five it holds beyond what the two share, and the two are brought over one
+     * denominator. Where a power is past what the host builds nothing is paid, since the sum then has
+     * no representation and says so.
+     */
+    public Rational plus(Rational other, WorkCheckpoint checkpoint) {
+        if (checkpoint != WorkCheckpoint.NONE && !isZero() && !other.isZero()) {
+            long here = powerBits(twos, Math.min(twos, other.twos), fives, Math.min(fives, other.fives));
+            long there = powerBits(other.twos, Math.min(twos, other.twos),
+                    other.fives, Math.min(fives, other.fives));
+            long over = HostWork.bits(denominator) + HostWork.bits(other.denominator);
+            long sum = Math.max(HostWork.bits(numerator) + here, HostWork.bits(other.numerator) + there) + over;
+            HostWork.pay(checkpoint, Math.max(here, there) + sum,
+                    HostWork.power(here) + HostWork.power(there)
+                            + HostWork.product(HostWork.bits(numerator), here)
+                            + HostWork.product(HostWork.bits(other.numerator), there)
+                            + HostWork.product(sum, over) + HostWork.product(sum, sum));
+        }
+        return plus(other);
+    }
+
+    /** {@link #minus}, paid for to {@code checkpoint} first. */
+    public Rational minus(Rational other, WorkCheckpoint checkpoint) {
+        return plus(other.negated(checkpoint), checkpoint);
+    }
+
+    /** {@link #negated}, paid for to {@code checkpoint} first. */
+    public Rational negated(WorkCheckpoint checkpoint) {
+        if (checkpoint != WorkCheckpoint.NONE) {
+            checkpoint.spend(HostWork.product(stored(), stored()));
+        }
+        return negated();
+    }
+
+    /** {@link #of(BigInteger, BigInteger)}, paid for to {@code checkpoint} first: the two are taken to
+     *  lowest terms, which divides each by what they share and by two and five as often as they hold
+     *  them. */
+    public static Rational of(BigInteger numerator, BigInteger denominator, WorkCheckpoint checkpoint) {
+        if (checkpoint != WorkCheckpoint.NONE) {
+            long bits = HostWork.bits(numerator) + HostWork.bits(denominator);
+            checkpoint.spend(HostWork.product(bits, bits));
+        }
+        return of(numerator, denominator);
+    }
+
+    /** {@link #of(BigDecimal)}, paid for to {@code checkpoint} first: the digits are taken to lowest
+     *  terms, which divides by two and five as often as they hold them. */
+    public static Rational of(BigDecimal written, WorkCheckpoint checkpoint) {
+        if (checkpoint != WorkCheckpoint.NONE) {
+            checkpoint.spend(HostWork.product(HostWork.bits(written), HostWork.bits(written)));
+        }
+        return of(written);
+    }
+
+    /**
+     * {@link #compareTo}, paid for to {@code checkpoint}: the writing the order may form before it
+     * refines is paid for first, and each bracket the refinement takes is paid for as it is taken —
+     * how many it takes turns on how closely the two agree, which nothing before asking says.
+     */
+    public int compareTo(Rational other, WorkCheckpoint checkpoint) {
+        if (checkpoint == WorkCheckpoint.NONE) {
+            return compareTo(other);
+        }
+        long stored = stored() + other.stored();
+        long writing = 4 * stored + 128;
+        checkpoint.spend(HostWork.power(writing) + HostWork.product(stored, writing));
+        try {
+            return ExactArithmetic.compare(parts(), other.parts(), widths(checkpoint, stored));
+        } catch (ExactFailure failure) {
+            throw translated(failure);
+        }
+    }
+
+    /** {@link #asDecimal(int, java.math.RoundingMode)}, paid for to {@code checkpoint}: the digits of
+     *  the answer are built from the exponents moved by the scale, and a value standing close to half
+     *  of the way between two of them is refined as the order is. */
+    public BigDecimal asDecimal(int scale, java.math.RoundingMode towards, WorkCheckpoint checkpoint) {
+        if (checkpoint == WorkCheckpoint.NONE) {
+            return asDecimal(scale, towards);
+        }
+        payWritten(twos + (long) scale, fives + (long) scale, checkpoint);
+        try {
+            return new BigDecimal(ExactArithmetic.roundedTimesTenTo(parts(), scale, towards,
+                    widths(checkpoint, stored())), scale);
+        } catch (ExactFailure failure) {
+            throw translated(failure);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException(e.getMessage() + ": " + this, e);
+        }
+    }
+
+    /** {@link #asDecimal()}, paid for to {@code checkpoint} first, where there is a decimal. */
+    public @Nullable BigDecimal asDecimal(WorkCheckpoint checkpoint) {
+        if (checkpoint != WorkCheckpoint.NONE && hasFiniteDecimal()) {
+            long tens = Math.min(twos, fives);
+            if (tens >= -(long) Integer.MAX_VALUE) {
+                long scale = tens > -(long) Integer.MIN_VALUE ? Integer.MIN_VALUE : -tens;
+                payWritten(twos + scale, fives + scale, checkpoint);
+            }
+        }
+        return asDecimal();
+    }
+
+    /** {@link #asWholeNumber()}, paid for to {@code checkpoint} first, where it is one. */
+    public @Nullable BigInteger asWholeNumber(WorkCheckpoint checkpoint) {
+        if (checkpoint != WorkCheckpoint.NONE && isWhole()) {
+            payWritten(twos, fives, checkpoint);
+        }
+        return asWholeNumber();
+    }
+
+    /** The bits of the fraction this stores. */
+    long stored() {
+        return HostWork.bits(numerator) + HostWork.bits(denominator);
+    }
+
+    /** Pays for multiplying two values' fractions together and taking the product to lowest terms. */
+    private void payProduct(Rational other, WorkCheckpoint checkpoint) {
+        if (checkpoint != WorkCheckpoint.NONE) {
+            long a = stored();
+            long b = other.stored();
+            checkpoint.spend(HostWork.product(a, b) + HostWork.product(a + b, a + b));
+        }
+    }
+
+    /** Pays for this numerator written out with {@code 2^twos} and {@code 5^fives} built into it, the
+     *  part of each exponent below nought being left where it is. */
+    private void payWritten(long byTwos, long byFives, WorkCheckpoint checkpoint) {
+        long built = powerBits(Math.max(byTwos, 0), 0, Math.max(byFives, 0), 0);
+        long answer = HostWork.bits(numerator) + built;
+        HostWork.pay(checkpoint, answer, HostWork.power(built) + HostWork.product(stored(), answer)
+                + HostWork.product(answer, HostWork.bits(denominator)));
+    }
+
+    /** The bits of {@code 2^(twos - fromTwos) × 5^(fives - fromFives)}, or past what the host builds
+     *  where either difference is past what a long counts. */
+    private static long powerBits(long twos, long fromTwos, long fives, long fromFives) {
+        long byTwos = twos - fromTwos;
+        long byFives = fives - fromFives;
+        if (byTwos < 0 || byFives < 0 || byTwos > HostWork.MOST_BITS || byFives > HostWork.MOST_BITS) {
+            return HostWork.MOST_BITS + 1;
+        }
+        return byTwos + byFives * 2322 / 1000 + 1;
+    }
+
+    /** What each bracket a refinement takes is paid: a power of five squared to that width a time for
+     *  each bit of its exponent, and the stored fraction divided at it. */
+    private static LongConsumer widths(WorkCheckpoint checkpoint, long stored) {
+        return width -> checkpoint.spend(Long.SIZE * HostWork.product(width, width)
+                + HostWork.product(stored, width));
     }
 
     /** The abort a whole number the host had no range for leaves by. */

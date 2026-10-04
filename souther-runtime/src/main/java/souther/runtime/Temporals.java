@@ -185,6 +185,39 @@ public final class Temporals {
         return refusal(TemporalForms.Kind.INSTANT, text);
     }
 
+    /** {@link #dateRefusal(Object)}, paying {@code checkpoint} for the text before the grammar reads
+     *  it, a piece a character. */
+    public static @Nullable String dateRefusal(Object text, WorkCheckpoint checkpoint) {
+        payForReading(text, checkpoint);
+        return dateRefusal(text);
+    }
+
+    /** {@link #timeRefusal(Object)}, paying for the text first. */
+    public static @Nullable String timeRefusal(Object text, WorkCheckpoint checkpoint) {
+        payForReading(text, checkpoint);
+        return timeRefusal(text);
+    }
+
+    /** {@link #dateTimeRefusal(Object)}, paying for the text first. */
+    public static @Nullable String dateTimeRefusal(Object text, WorkCheckpoint checkpoint) {
+        payForReading(text, checkpoint);
+        return dateTimeRefusal(text);
+    }
+
+    /** {@link #instantRefusal(Object)}, paying for the text first. */
+    public static @Nullable String instantRefusal(Object text, WorkCheckpoint checkpoint) {
+        payForReading(text, checkpoint);
+        return instantRefusal(text);
+    }
+
+    /** The grammar is read by the host in one call, which passes nothing, and it reads as far as the
+     *  text goes. */
+    private static void payForReading(Object text, WorkCheckpoint checkpoint) {
+        if (text instanceof String s) {
+            checkpoint.spend(s.length());
+        }
+    }
+
     private static @Nullable String refusal(TemporalForms.Kind kind, Object text) {
         if (!(text instanceof String s)) {
             return null;
