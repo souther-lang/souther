@@ -575,12 +575,12 @@ class CompileExampleGenerateTest {
      * the ones not reached were not refused — nothing was written and nothing built — and calling them
      * refused tells an author their model rules out a combination it does not.
      *
-     * <p>What refuses every value here is a rule this compiler cannot take apart, which nothing
-     * derives a value from. Strings clearing both rules of a field exist — {@code "2a"} is one — so
-     * what stops a row is the search rather than the model. A second format
-     * would not do: the formats a reading can take in are met with each other, and a value clearing
-     * all of them is proposed. Nor would a rule counting the field — a floor is read too, and the
-     * value built for it is one this model would accept.
+     * <p>What refuses every value here is a rule of the record this compiler cannot take apart,
+     * which nothing derives a value from. A string clearing it and the field's format exists —
+     * {@code "2a"} is one — so what stops a row is the search rather than the model. Every field
+     * offers two values its own type admits, so the assignments past the bound are ones nothing has
+     * refused: a field offering a value its type refused would leave that value out of the search,
+     * and nine such fields would come to fewer assignments than the bound.
      */
     @Test
     void whatTheSearchDidNotReachIsNotReportedAsRefused() {
@@ -589,10 +589,9 @@ class CompileExampleGenerateTest {
         for (char c = 'a'; c <= 'i'; c++) {
             declarations.append("""
                     data V%1$s = String
-                        invariant String.matches("[0-9a-z]{2,}", value)
-                        invariant %2$s
+                        invariant String.matches("[0-9a-z]+", value)
 
-                    """.formatted(Character.toUpperCase(c), ARuleNoReadingTakesIn.narrowly("value")));
+                    """.formatted(Character.toUpperCase(c)));
             fields.append(c).append(": V").append(Character.toUpperCase(c)).append(", ");
         }
         String source = """
@@ -612,7 +611,7 @@ class CompileExampleGenerateTest {
 
                 let take (request) = Ok { n = 0 }
                 """.formatted(declarations, fields)
-                .replace("UNREAD", ARuleNoReadingTakesIn.about("a.value"));
+                .replace("UNREAD", ARuleNoReadingTakesIn.narrowly("a.value"));
 
         List<CameToNothing> left =
                 generated(source).get("take").composed().unresolved();

@@ -6,6 +6,7 @@ import souther.compiler.execute.BoundaryValues.Built;
 import souther.compiler.execute.ProgramExecution;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.types.FixtureReferenceOrigin;
+import souther.compiler.types.Type;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -43,9 +44,14 @@ public final class FixturesAtTheBoundary {
 
     private record Asked(BoundaryInput at, String written) {}
 
+    private record AskedAlone(Type type, String written) {}
+
     private final BoundaryValues source;
 
     private final Map<Asked, Built> answered = new ConcurrentHashMap<>();
+
+    private final Map<AskedAlone, BoundaryValues.OnItsOwn> answeredAlone =
+            new ConcurrentHashMap<>();
 
     private FixturesAtTheBoundary(BoundaryValues source) {
         this.source = source;
@@ -71,6 +77,27 @@ public final class FixturesAtTheBoundary {
         // threads that race build the same answer, and the first one kept is the one both return.
         Built made = source.build(at, fixture.value());
         Built kept = answered.putIfAbsent(asked, made);
+        return kept == null ? made : kept;
+    }
+
+    /**
+     * What building {@code fixture} as {@code type} on its own came to, built the first time it is
+     * asked.
+     *
+     * <p>Kept by the type and the text for the reason {@link #build} keeps by the position and the
+     * text. A search asks it of every value it offers at a position once its first assignment is
+     * refused, and the same few values stand at the same few types across every search of a module.
+     *
+     * <p>Throws what {@code source} throws, and keeps none of it.
+     */
+    public BoundaryValues.OnItsOwn buildAlone(Type type, FixtureTemplate fixture) {
+        AskedAlone asked = new AskedAlone(type, fixture.text());
+        BoundaryValues.OnItsOwn had = answeredAlone.get(asked);
+        if (had != null) {
+            return had;
+        }
+        BoundaryValues.OnItsOwn made = source.buildAlone(type, fixture.value());
+        BoundaryValues.OnItsOwn kept = answeredAlone.putIfAbsent(asked, made);
         return kept == null ? made : kept;
     }
 }

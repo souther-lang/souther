@@ -913,6 +913,31 @@ public final class Generator {
         }
 
         /**
+         * What the decoder of {@code type} says of {@code candidate} on its own, before it is put
+         * beside anything.
+         *
+         * <p>A proof a search can use, and only in one direction. A value put inside a parameter is
+         * read there by its own type's decoder, so a value that decoder refuses on its own is refused
+         * in every value it could be put in, and no assignment holding it needs composing. The
+         * converse does not follow: a value admitted on its own can still be refused beside the
+         * others, by a rule relating two fields, and that stays {@link #build}'s to say.
+         *
+         * <p>{@link Admissibility#UNKNOWN} unless a runtime answers, and never read as either of the
+         * other two. A search that took it for a refusal would drop values nothing refused; one that
+         * took it for an admission would have nothing to drop, which is all it is.
+         */
+        default Admissibility admissibility(Type type, FixtureTemplate candidate) {
+            return Admissibility.UNKNOWN;
+        }
+
+        /** What a type's own decoder said of a value, or that nothing asked it. */
+        enum Admissibility {
+            ADMITTED,
+            REFUSED,
+            UNKNOWN
+        }
+
+        /**
          * Nothing is refused and nothing is built — what a caller with no runtime to build against
          * uses.
          *
@@ -4372,29 +4397,43 @@ public final class Generator {
     private static CandidateCheck certifying(CandidateCheck check, MeasuredInput subject, int parameter,
                                              Map<RealizationTarget, Place> fixing,
                                              boolean[] refused) {
-        return (at, candidate) -> {
-            CandidateCheck.Built built = check.build(at, candidate);
-            // Nothing built it, so nothing here can say where it went, and the row is offered as it
-            // was composed.
-            if (at != parameter || !(built instanceof CandidateCheck.Built.Value(var observed))) {
+        return new CandidateCheck() {
+
+            @Override
+            public CandidateCheck.Built build(int at, FixtureTemplate candidate) {
+                CandidateCheck.Built built = check.build(at, candidate);
+                // Nothing built it, so nothing here can say where it went, and the row is offered
+                // as it was composed.
+                if (at != parameter
+                        || !(built instanceof CandidateCheck.Built.Value(var observed))) {
+                    return built;
+                }
+                for (Map.Entry<RealizationTarget, Place> each : fixing.entrySet()) {
+                    if (!subject.parameters().get(parameter)
+                            .equals(each.getKey().writeRoot().head())) {
+                        continue;
+                    }
+                    // Only a reading that placed the value somewhere else turns a candidate away.
+                    // A reading that could not be made says nothing about where the value is, and
+                    // a search that pruned on it would be spending this compiler's own limit as
+                    // though it were an answer about the value. The whole-row reading that
+                    // follows is where not being able to tell is recorded.
+                    if (readsBackAt(subject, parameter, observed, each.getKey(), each.getValue())
+                            instanceof RealizationReadback.Elsewhere(String why)) {
+                        refused[0] = true;
+                        return new CandidateCheck.Built.Refused(why);
+                    }
+                }
                 return built;
             }
-            for (Map.Entry<RealizationTarget, Place> each : fixing.entrySet()) {
-                if (!subject.parameters().get(parameter).equals(each.getKey().writeRoot().head())) {
-                    continue;
-                }
-                // Only a reading that placed the value somewhere else turns a candidate away. A
-                // reading that could not be made says nothing about where the value is, and a
-                // search that pruned on it would be spending this compiler's own limit as though
-                // it were an answer about the value. The whole-row reading that follows is where
-                // not being able to tell is recorded.
-                if (readsBackAt(subject, parameter, observed, each.getKey(), each.getValue())
-                        instanceof RealizationReadback.Elsewhere(String why)) {
-                    refused[0] = true;
-                    return new CandidateCheck.Built.Refused(why);
-                }
+
+            // What a value's own type says of it is the decoder's, and where the whole parameter
+            // reads back is no part of it: passed through, so a search under a point prunes on
+            // the same proofs as any other.
+            @Override
+            public Admissibility admissibility(Type type, FixtureTemplate candidate) {
+                return check.admissibility(type, candidate);
             }
-            return built;
         };
     }
 
@@ -6026,6 +6065,12 @@ public final class Generator {
         TermPath where = position.at();
         for (FixtureTemplate candidate
                 : candidatesAt(subject, p, position, settled, decided, candidates)) {
+            // Refused by its own type, so refused in every assignment under this branch: the branch
+            // is not walked, and the bound is not spent on it ({@link #over} says why).
+            if (check.admissibility(position.type(), candidate)
+                    == CandidateCheck.Admissibility.REFUSED) {
+                continue;
+            }
             chosen.put(where, candidate);
             Place number = Counts.writtenIn(candidate.value());
             if (number != null) {
@@ -6519,40 +6564,71 @@ public final class Generator {
         return over(subject, p, choices.plan(), choices.at(), choices.widened(), check);
     }
 
-    /** One pass over one set of choices, from the assignment where every position takes its first
-     * value outward. */
+    /**
+     * One pass over one set of choices, from the assignment where every position takes its first
+     * value outward.
+     *
+     * <p><b>No assignment is composed that a value's own type has already refused.</b> A value its
+     * type's decoder refuses on its own is refused in every assignment holding it
+     * ({@link CandidateCheck#admissibility}), so those assignments are not candidates the search is
+     * unsure of — they are known to be refused, and the bound is spent only on the ones that are
+     * not. A value refused for its own format would otherwise be composed beside every combination
+     * of the rest, and a bound spent on those leaves assignments of values nothing refused untried.
+     *
+     * <p>Asked only once the first assignment is refused. Most searches end at it, and those have
+     * nothing to prune; what a type says of a value is a build of its own, kept by the check, and a
+     * search that ends at its first assignment has no use for one.
+     *
+     * <p>A position left with nothing is every assignment refused, and is said as that: the values
+     * were offered and refused, which is not a position nothing could be offered at.
+     */
     private static Outcome over(MeasuredInput subject, int p, ConstructionPlan plan, List<TermPath> at,
-                                List<List<FixtureTemplate>> values, CandidateCheck check) {
+                                List<List<FixtureTemplate>> offered, CandidateCheck check) {
         int positions = at.size();
         // The world every assignment below is composed in, taken once. Each of them writes the same
         // row out of the same declarations, so a walk that asked the subject again per assignment
         // would be saying the world it reads in is a thing that turns on which assignment it is.
         RuleReadingContext reading = subject.ruleReading();
+        int[] first = new int[positions];
+        FixtureTemplate firstBuilt = builtAt(p, plan, at, offered, first, reading, check);
+        if (firstBuilt != null) {
+            return new Outcome.Built(firstBuilt);
+        }
+        List<List<FixtureTemplate>> values = notRefusedAlone(plan, at, offered, check);
+        if (values.stream().anyMatch(List::isEmpty)) {
+            return new Outcome.Unresolved(UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
+                    null);
+        }
+        // The first assignment over what is left is the one already refused where every first value
+        // stood, and is not composed a second time. Where one of them did not, it is an assignment
+        // nothing has tried.
+        boolean firstTried = true;
+        for (int i = 0; i < positions; i++) {
+            firstTried &= values.get(i).get(0) == offered.get(i).get(0);
+        }
         ArrayDeque<int[]> next = new ArrayDeque<>();
         Set<String> seen = new LinkedHashSet<>();
-        int[] first = new int[positions];
         next.add(first);
         seen.add(Arrays.toString(first));
 
-        int tried = 0;
+        int tried = 1;
         // Recorded where the bound is reached rather than read afterwards off what was left behind.
         // A walk that stopped and a walk that ran out are told apart by the queue today and would go
         // on being told apart by it until the day a second thing empties it.
         boolean stopped = false;
         while (!next.isEmpty()) {
-            if (tried == MAX_TUPLES) {
-                stopped = true;
-                break;
-            }
             int[] assignment = next.poll();
-            tried++;
-            Map<TermPath, FixtureTemplate> chosen = new LinkedHashMap<>();
-            for (int i = 0; i < positions; i++) {
-                chosen.put(at.get(i), values.get(i).get(assignment[i]));
-            }
-            FixtureTemplate built = compose(plan.root(), chosen, reading);
-            if (built != null && check.refuse(p, built).isEmpty()) {
-                return new Outcome.Built(built);
+            boolean composed = !(firstTried && assignment == first);
+            if (composed) {
+                if (tried == MAX_TUPLES) {
+                    stopped = true;
+                    break;
+                }
+                tried++;
+                FixtureTemplate built = builtAt(p, plan, at, values, assignment, reading, check);
+                if (built != null) {
+                    return new Outcome.Built(built);
+                }
             }
             for (int i = 0; i < positions; i++) {
                 if (assignment[i] + 1 >= values.get(i).size()) {
@@ -6575,6 +6651,45 @@ public final class Generator {
                         new LinkedHashMap<>(), null)
                 : new Outcome.Unresolved(UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
                         null);
+    }
+
+    /** The parameter's value under one assignment, where it composes and is not refused; null
+     *  otherwise. */
+    private static FixtureTemplate builtAt(int p, ConstructionPlan plan, List<TermPath> at,
+                                           List<List<FixtureTemplate>> values, int[] assignment,
+                                           RuleReadingContext reading, CandidateCheck check) {
+        Map<TermPath, FixtureTemplate> chosen = new LinkedHashMap<>();
+        for (int i = 0; i < at.size(); i++) {
+            chosen.put(at.get(i), values.get(i).get(assignment[i]));
+        }
+        FixtureTemplate built = compose(plan.root(), chosen, reading);
+        return built != null && check.refuse(p, built).isEmpty() ? built : null;
+    }
+
+    /**
+     * What each position offers, less what its own type refused, in the order it was offered.
+     *
+     * <p>A position the plan does not say the type of keeps everything: nothing was asked about its
+     * values, and nothing unasked is dropped.
+     */
+    private static List<List<FixtureTemplate>> notRefusedAlone(ConstructionPlan plan,
+                                                               List<TermPath> at,
+                                                               List<List<FixtureTemplate>> offered,
+                                                               CandidateCheck check) {
+        Map<TermPath, Type> typeAt = new HashMap<>();
+        for (ConstructionPlan.Slot each : plan.slots()) {
+            typeAt.put(each.at(), each.type());
+        }
+        List<List<FixtureTemplate>> out = new ArrayList<>();
+        for (int i = 0; i < at.size(); i++) {
+            Type type = typeAt.get(at.get(i));
+            List<FixtureTemplate> here = offered.get(i);
+            out.add(type == null ? here : here.stream()
+                    .filter(each -> check.admissibility(type, each)
+                            != CandidateCheck.Admissibility.REFUSED)
+                    .toList());
+        }
+        return out;
     }
 
     /**

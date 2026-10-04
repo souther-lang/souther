@@ -22,6 +22,7 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.ValueTypes;
 import souther.compiler.types.BindingId;
 import souther.compiler.check.BoundaryInput;
+import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
@@ -128,8 +129,20 @@ public final class FixtureReader {
         // the loader that is shared, and has to be — it caches the classes it has defined and loaded,
         // and a fake's subclass is generated once.
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
-        return (at, fixture) -> new FixtureReader(module, symbols, sums, kinds, fields, values, loader)
-                .building(at, fixture);
+        return new BoundaryValues() {
+
+            @Override
+            public BoundaryValues.Built build(BoundaryInput at, Hir.Expr fixture) {
+                return new FixtureReader(module, symbols, sums, kinds, fields, values, loader)
+                        .building(at, fixture);
+            }
+
+            @Override
+            public BoundaryValues.OnItsOwn buildAlone(Type type, Hir.Expr fixture) {
+                return new FixtureReader(module, symbols, sums, kinds, fields, values, loader)
+                        .buildingAlone(type, fixture);
+            }
+        };
     }
 
     /** The method emitted for {@code operand}, or null where nothing emitted one — read off the
@@ -1858,6 +1871,39 @@ public final class FixtureReader {
                 throw e;   // the evaluation ran out; whether the fixture is refused is still unread
             }
             return new BoundaryValues.Built.Refused(String.valueOf(e.getMessage()));
+        }
+    }
+
+    /**
+     * {@link #building}, of a value read as {@code type} on its own.
+     *
+     * <p>Where the type has no decoder of its own, nothing is asked. The shape is settled before the
+     * value is read so that the two are told apart: a type with no shape here is not the value being
+     * refused, and an optional field's {@code None} answered as a refusal would be dropped from every
+     * search over the record that holds it.
+     */
+    BoundaryValues.OnItsOwn buildingAlone(Type type, Hir.Expr fixture) {
+        FixtureShape shape;
+        try {
+            shape = FixtureShape.of(type, symbols);
+        } catch (RuntimeException e) {
+            return BoundaryValues.OnItsOwn.NO_DECODER_OF_ITS_OWN;
+        }
+        try {
+            String method = emittedFor(fixture);
+            if (method != null) {
+                ran(method);
+            } else {
+                built(fixture, shape);
+            }
+            return BoundaryValues.OnItsOwn.BUILT;
+        } catch (FixtureException e) {
+            return BoundaryValues.OnItsOwn.REFUSED;
+        } catch (RuntimeException e) {
+            if (EvaluationContext.overspending(e)) {
+                throw e;   // the evaluation ran out; whether the fixture is refused is still unread
+            }
+            return BoundaryValues.OnItsOwn.REFUSED;
         }
     }
 }
