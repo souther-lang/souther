@@ -77,7 +77,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
         InputDomain domain = InputDomain.of(sigs.get("submit"), RuleReadingContext.unshared(rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
         return MeasuredInput.of("submit", domain.reading(rules),
-                Partitions.of("submit", domain, rules,
+                Partitions.of("submit", domain.reading(rules),
                         souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
     }
 

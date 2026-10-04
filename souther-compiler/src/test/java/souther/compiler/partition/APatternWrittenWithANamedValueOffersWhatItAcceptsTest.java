@@ -129,7 +129,7 @@ class APatternWrittenWithANamedValueOffersWhatItAcceptsTest {
         InputDomain domain = InputDomain.of(sigs.get("take"),
                 RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
         Partitions.Partitioning partitioning =
-                Partitions.of("take", domain, rules, ReadAs.THE_COMPILATION_DOES);
+                Partitions.of("take", domain.reading(rules), ReadAs.THE_COMPILATION_DOES);
         MeasuredInput subject = MeasuredInput.of("take", domain.reading(rules), partitioning);
         return GenerationFixtures.fill(subject, List.of(), Generator.CandidateCheck.ANY,
                 Budgets.generation());

@@ -177,7 +177,7 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
                 .ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get(spec.name());
         assertNotNull(domain, "the model under test compiles");
         Partitions.Partitioning partitioning =
-                Partitions.of(spec.name(), domain, rules, ReadAs.THE_COMPILATION_DOES);
+                Partitions.of(spec.name(), domain.reading(rules), ReadAs.THE_COMPILATION_DOES);
 
         List<String> names = new ArrayList<>();
         spec.params().forEach(each -> names.add(each.name()));

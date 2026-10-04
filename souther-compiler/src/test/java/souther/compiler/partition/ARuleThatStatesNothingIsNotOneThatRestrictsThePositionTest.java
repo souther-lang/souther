@@ -257,7 +257,7 @@ class ARuleThatStatesNothingIsNotOneThatRestrictsThePositionTest {
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return Partitions.of("read",
                 InputDomain.of(sigs.get("read"), RuleReadingContext.unshared(rules,
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
-                rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES))
+                .reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 }

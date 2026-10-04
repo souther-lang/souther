@@ -104,7 +104,7 @@ class GeneratorTest {
         assertNotNull(sigs);
         InputDomain domain = InputDomain.of(sigs.get(behavior), RuleReadingContext.unshared(rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
-        Partitions.Partitioning partitioning = Partitions.of(behavior, domain, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Partitions.Partitioning partitioning = Partitions.of(behavior, domain.reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return new Model(
                 MeasuredInput.of(behavior, domain.reading(rules), partitioning),
                 rules);

@@ -72,7 +72,7 @@ class AnArmsBinderNamesTheNarrowedPositionTest {
                 inputs, rules);
         InputDomain read = InputDomain.of(sigs.get("read"),
                 RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
-        Partitions.Partitioning base = Partitions.of("read", read, rules,
+        Partitions.Partitioning base = Partitions.of("read", read.reading(rules),
                 ReadAs.THE_COMPILATION_DOES);
         return ThresholdFixtures.withThresholds(base, read.quantities(rules), guards.thresholds(),
                 RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),

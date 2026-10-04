@@ -162,11 +162,10 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
             Core body = checked.behaviorBodies().get(behavior);
             assertNotNull(body, "the behavior under test has a body");
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
-                    Partitions.of(spec.name(), inputs, rules,
+                    Partitions.of(spec.name(), inputs.reading(rules),
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
                     CoverageRead.of(spec.name(), body,
-                            checked.plan(), inputs,
-                            rules));
+                            checked.plan(), inputs.reading(rules)));
         }
     }
 }

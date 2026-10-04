@@ -90,7 +90,7 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
         InputDomain read = InputDomain.of(sigs.get("book"), RuleReadingContext.unshared(rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
         Partitions.Partitioning partitioning = ThresholdFixtures.withThresholds(
-                Partitions.of("book", read, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                Partitions.of("book", read.reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 read.quantities(rules),
                 ThresholdFixtures.guardsOf("book", checked.analysisBodies().get("book"), body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("book"), rules).thresholds(),

@@ -95,7 +95,7 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
                         plan, domain, rules);
         souther.compiler.inputs.Quantities reading = domain.quantities(rules);
         Partitions.Partitioning p = ThresholdFixtures.withThresholds(
-                Partitions.of(spec.name(), domain, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                Partitions.of(spec.name(), domain.reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 reading,
                 guards.thresholds(),
                 RuleReadingContext.unshared(rules,

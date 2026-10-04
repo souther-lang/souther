@@ -241,7 +241,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
     }
 
     private static List<Axis> axes() {
-        return Partitions.of(spec().name(), domain(), rules(), ReadAs.THE_COMPILATION_DOES)
+        return Partitions.of(spec().name(), domain().reading(rules()), ReadAs.THE_COMPILATION_DOES)
                 .axes();
     }
 
@@ -249,6 +249,6 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
         List<String> names = new ArrayList<>();
         spec().params().forEach(each -> names.add(each.name()));
         return MeasuredInput.of(spec().name(), domain().reading(rules()),
-                Partitions.of(spec().name(), domain(), rules(), ReadAs.THE_COMPILATION_DOES));
+                Partitions.of(spec().name(), domain().reading(rules()), ReadAs.THE_COMPILATION_DOES));
     }
 }

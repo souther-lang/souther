@@ -431,7 +431,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                 souther.compiler.inputs.InputDomain.of(sigs.get(behavior),
                         RuleReadingContext.unshared(rules,
                                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
-        Partitions.Partitioning partitioning = Partitions.of(behavior, domain, rules,
+        Partitions.Partitioning partitioning = Partitions.of(behavior, domain.reading(rules),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Axis axis = partitioning.axes().stream()
                 .filter(a -> a.path().toString().equals(path)).findFirst().orElseThrow();

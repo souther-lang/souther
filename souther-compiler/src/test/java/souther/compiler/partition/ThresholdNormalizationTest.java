@@ -62,7 +62,7 @@ class ThresholdNormalizationTest {
         InputDomain domain = InputDomain.of(sigs.get(behavior), RuleReadingContext.unshared(rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
         souther.compiler.inputs.Quantities reading = domain.quantities(rules);
-        Partitions.Partitioning base = Partitions.of(behavior, domain, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Partitions.Partitioning base = Partitions.of(behavior, domain.reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return new Read(ThresholdFixtures.withThresholds(base, reading, thresholds,
                 RuleReadingContext.unshared(rules,
                         souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
