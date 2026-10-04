@@ -43,6 +43,19 @@ public final class Values {
     private Values() {}
 
     public static boolean equal(@Nullable Object a, @Nullable Object b) {
+        return equal(a, b, WorkCheckpoint.NONE);
+    }
+
+    /**
+     * {@link #equal(Object, Object)}, passing {@code checkpoint} as it compares: once for each unit
+     * of two texts, once for each element of two containers, and paying for two numbers before the
+     * host compares them.
+     *
+     * <p>A {@code Some} and a tuple are taken apart here rather than asked for their own
+     * {@code equals}, which compares what they hold without a checkpoint. A generated data class is
+     * asked for its own: the class an evaluation runs passes the evaluation's checkpoint itself.
+     */
+    public static boolean equal(@Nullable Object a, @Nullable Object b, WorkCheckpoint checkpoint) {
         if (a == b) {
             return true;
         }
@@ -52,20 +65,51 @@ public final class Values {
         return switch (a) {
             case null -> false;
             case Long l -> l.equals(b);
-            case String s -> s.equals(b);
-            case BigDecimal x -> b instanceof BigDecimal y && equal(x, y);
-            case ValueSemantics s -> s.valueEquals(b);
+            case String s -> b instanceof String t && sameText(s, t, checkpoint);
+            case BigDecimal x -> b instanceof BigDecimal y && equal(x, y, checkpoint);
+            case ValueSemantics s -> s.valueEquals(b, checkpoint);
             // A foreign container is asked through one of ours. A list is walked here, since a list
             // compares positionally and a foreign one holds what it holds; a set and a map are not,
             // because Java's equality is finer than the language's and a foreign one may hold two
             // elements the language calls one. Normalizing is what makes their sizes the sizes the
             // language means, and it is the same normalizing the hash below does.
-            case List<?> xs -> b instanceof ValueSemantics s ? s.valueEquals(xs)
-                    : b instanceof List<?> ys && equalLists(xs, ys);
-            case Set<?> xs -> b instanceof Set<?> && PersistentHashSet.from(xs).valueEquals(b);
-            case Map<?, ?> xs -> b instanceof Map<?, ?> && PersistentHashMap.from(xs).valueEquals(b);
+            case List<?> xs -> b instanceof ValueSemantics s ? s.valueEquals(xs, checkpoint)
+                    : b instanceof List<?> ys && equalLists(xs, ys, checkpoint);
+            case Set<?> xs -> b instanceof Set<?>
+                    && PersistentHashSet.from(xs, checkpoint).valueEquals(b, checkpoint);
+            case Map<?, ?> xs -> b instanceof Map<?, ?>
+                    && PersistentHashMap.from(xs, checkpoint).valueEquals(b, checkpoint);
+            case Option.Some<?> some -> b instanceof Option.Some<?> other
+                    && equal(some.value(), other.value(), checkpoint);
+            case Tuple t -> Tuple.same(t, b, checkpoint);
+            case Rational r -> b instanceof Rational other && sameRational(r, other, checkpoint);
             default -> a.equals(b);
         };
+    }
+
+    /** Two texts compared a unit at a time under a checkpoint, and by the host's own comparison where
+     *  nothing is counting. Texts of two lengths are not the same text, and saying so reads neither. */
+    private static boolean sameText(String a, String b, WorkCheckpoint checkpoint) {
+        if (checkpoint == WorkCheckpoint.NONE) {
+            return a.equals(b);
+        }
+        if (a.length() != b.length()) {
+            return false;
+        }
+        for (int i = 0; i < a.length(); i++) {
+            checkpoint.pass();
+            if (a.charAt(i) != b.charAt(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean sameRational(Rational a, Rational b, WorkCheckpoint checkpoint) {
+        if (checkpoint != WorkCheckpoint.NONE) {
+            checkpoint.spend(HostWork.read(a.stored(), b.stored()));
+        }
+        return a.equals(b);
     }
 
     /** Two amounts are the same amount when they differ only in scale. */
@@ -73,24 +117,51 @@ public final class Values {
         return a == null ? b == null : b != null && a.compareTo(b) == 0;
     }
 
+    /** {@link #equal(BigDecimal, BigDecimal)}, paid for to {@code checkpoint} first. */
+    public static boolean equal(@Nullable BigDecimal a, @Nullable BigDecimal b, WorkCheckpoint checkpoint) {
+        return a == null ? b == null : b != null && DecimalMath.compare(a, b, checkpoint) == 0;
+    }
+
     public static int hash(@Nullable Object v) {
+        return hash(v, WorkCheckpoint.NONE);
+    }
+
+    /**
+     * {@link #hash(Object)}, passing {@code checkpoint} once for each element hashed and paying for a
+     * number before the host hashes it.
+     *
+     * <p>A text is hashed by the host under a checkpoint too. A {@code java.lang.String} works its
+     * hash out once and keeps it, and a text in an evaluation was built by passing a checkpoint over
+     * each of its code points — canonicalizing asks once a code point — so working it out costs what
+     * making the text has already paid for.
+     */
+    public static int hash(@Nullable Object v, WorkCheckpoint checkpoint) {
         return switch (v) {
             case null -> 0;
             case Long l -> l.hashCode();
             case String s -> s.hashCode();
-            case BigDecimal d -> hash(d);
-            case ValueSemantics s -> s.valueHash();
+            case BigDecimal d -> hash(d, checkpoint);
+            case ValueSemantics s -> s.valueHash(checkpoint);
             case List<?> xs -> {
                 int h = 1;                 // the formula PersistentVector.valueHash uses, so a list
                 for (Object e : xs) {      // lands in one bucket whichever implementation carries it
-                    h = 31 * h + hash(e);
+                    checkpoint.pass();
+                    h = 31 * h + hash(e, checkpoint);
                 }
                 yield h;
             }
             // through the same normalizing the comparison above does, so a foreign set holding two
             // elements the language calls one hashes as the one element it is
-            case Set<?> xs -> PersistentHashSet.from(xs).valueHash();
-            case Map<?, ?> m -> PersistentHashMap.from(m).valueHash();
+            case Set<?> xs -> PersistentHashSet.from(xs, checkpoint).valueHash(checkpoint);
+            case Map<?, ?> m -> PersistentHashMap.from(m, checkpoint).valueHash(checkpoint);
+            case Option.Some<?> some -> hash(some.value(), checkpoint);
+            case Tuple t -> Tuple.hashOf(t, checkpoint);
+            case Rational r -> {
+                if (checkpoint != WorkCheckpoint.NONE) {
+                    checkpoint.spend(HostWork.read(r.stored()));
+                }
+                yield r.hashCode();
+            }
             default -> v.hashCode();
         };
     }
@@ -99,6 +170,29 @@ public final class Values {
      *  {@link DecimalMath#leastDigits}, the one form of an amount there is at every scale. */
     public static int hash(@Nullable BigDecimal v) {
         return v == null ? 0 : DecimalMath.leastDigits(v).hashCode();
+    }
+
+    /** {@link #hash(BigDecimal)}, paid for to {@code checkpoint} first. */
+    public static int hash(@Nullable BigDecimal v, WorkCheckpoint checkpoint) {
+        return v == null ? 0 : DecimalMath.leastDigits(v, checkpoint).hashCode();
+    }
+
+    /**
+     * Where {@code a} stands against {@code b} in the order a sort reads off the values themselves,
+     * passing {@code checkpoint} as the comparison goes: a number is paid for before the host
+     * compares it, and a text passes once a unit. What is neither is asked for its own
+     * {@code compareTo} — a time, or a newtype the generated class orders, which in an evaluation
+     * passes the evaluation's checkpoint itself.
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public static int compare(Object a, Object b, WorkCheckpoint checkpoint) {
+        return switch (a) {
+            case Long l -> Long.compare(l, (Long) b);
+            case BigDecimal x -> Long.signum(DecimalMath.compare(x, (BigDecimal) b, checkpoint));
+            case Rational r -> r.compareTo((Rational) b, checkpoint);
+            case String s -> Strings.compare(s, (String) b, checkpoint);
+            default -> ((Comparable) a).compareTo(b);
+        };
     }
 
     /**
@@ -114,14 +208,15 @@ public final class Values {
         return carrier == Long.class || carrier == String.class;
     }
 
-    private static boolean equalLists(List<?> a, List<?> b) {
+    private static boolean equalLists(List<?> a, List<?> b, WorkCheckpoint checkpoint) {
         if (a.size() != b.size()) {
             return false;
         }
         Iterator<?> xs = a.iterator();
         Iterator<?> ys = b.iterator();
         while (xs.hasNext()) {
-            if (!equal(xs.next(), ys.next())) {
+            checkpoint.pass();
+            if (!equal(xs.next(), ys.next(), checkpoint)) {
                 return false;
             }
         }

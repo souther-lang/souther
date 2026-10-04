@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.Comparator;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.function.Function;
 
 import org.jspecify.annotations.Nullable;
 
@@ -12,7 +13,12 @@ import org.jspecify.annotations.Nullable;
  *  ({@link #append}) or O(n) ({@code sort}) rather than copying the whole list — which is what turns
  *  the fold-derived combinators from O(n²) into O(n). Inputs may be any {@code java.util.List} (a
  *  {@code []} literal is a JDK list, a decoded list comes from Raoh), so every builder normalizes
- *  through {@link PersistentVector#from}. */
+ *  through {@link PersistentVector#from}.
+ *
+ *  <p>Every operation that walks a list has a second entry taking a {@link WorkCheckpoint}, which is
+ *  what an evaluated class calls, and one body the two share: the entry without one hands in
+ *  {@link WorkCheckpoint#NONE}. Each walk passes the checkpoint once for each element it goes over,
+ *  whatever it does with the element, so a step that does nothing that counts is still counted. */
 public final class Lists {
 
     private Lists() {}
@@ -38,11 +44,17 @@ public final class Lists {
      *  because {@code b} can still be a singleton here — a {@code ++} whose right side is a variable
      *  rather than a written {@code [x]}, which the backend routes to {@link #append} instead. */
     public static <T> List<T> concat(List<? extends T> a, List<? extends T> b) {
-        PersistentVector<T> out = PersistentVector.from(a);
+        return concat(a, b, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #concat(List, List)}, passing {@code checkpoint} once for each element copied. */
+    public static <T> List<T> concat(List<? extends T> a, List<? extends T> b, WorkCheckpoint checkpoint) {
+        PersistentVector<T> out = PersistentVector.from(a, checkpoint);
         if (b.size() == 1) {
             return out.append(b.get(0));   // the fold hot path: no iterator, one append
         }
         for (T x : b) {
+            checkpoint.pass();
             out = out.append(x);
         }
         return out;
@@ -52,7 +64,13 @@ public final class Lists {
      *  singleton in between. The backend emits this in place of {@link #concat} when the right-hand
      *  side of {@code ++} is a one-element list literal, which is every fold-derived combinator. */
     public static <T> List<T> append(List<? extends T> list, T element) {
-        return PersistentVector.<T>from(list).append(element);
+        return append(list, element, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #append(List, Object)}, passing {@code checkpoint} once for each element of a list
+     *  that has to be copied first. */
+    public static <T> List<T> append(List<? extends T> list, T element, WorkCheckpoint checkpoint) {
+        return PersistentVector.<T>from(list, checkpoint).append(element);
     }
 
     /**
@@ -84,12 +102,18 @@ public final class Lists {
      * is what comes back from every step and the cast below cannot fail. That is also what makes the
      * mutation unobservable: no version of the list before the last one is ever read.
      */
-    @SuppressWarnings("unchecked")
     public static <T> List<T> build(Fn step, List<? extends T> xs, long from) {
+        return build(step, xs, from, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #build(Fn, List, long)}, passing {@code checkpoint} once for each element walked. */
+    @SuppressWarnings("unchecked")
+    public static <T> List<T> build(Fn step, List<? extends T> xs, long from, WorkCheckpoint checkpoint) {
         PersistentVector.Builder<T> builder = new PersistentVector.Builder<>();
         Object acc = builder;
         int n = xs.size();
         for (long i = from; i >= 0 && i < n; i++) {
+            checkpoint.pass();
             acc = step.apply(new Object[] {acc, xs.get((int) i)});
         }
         return ((PersistentVector.Builder<T>) acc).build();
@@ -105,8 +129,14 @@ public final class Lists {
     /** {@code acc ++ elements} inside a {@link #build}, for a step that adds a list rather than one
      *  element ({@code List.flatMap}, a fold joining what each element gives). */
     public static <T> List<T> growAll(List<T> acc, List<? extends T> elements) {
+        return growAll(acc, elements, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #growAll(List, List)}, passing {@code checkpoint} once for each element added. */
+    public static <T> List<T> growAll(List<T> acc, List<? extends T> elements, WorkCheckpoint checkpoint) {
         PersistentVector.Builder<T> builder = (PersistentVector.Builder<T>) acc;
         for (int i = 0, n = elements.size(); i < n; i++) {
+            checkpoint.pass();
             builder.add(elements.get(i));
         }
         return acc;
@@ -115,11 +145,19 @@ public final class Lists {
     /** Every element through {@code f}, in order — not the self-hosted {@code List.map} a Souther
      *  body writes (which folds over a first-class {@code Fn}), but the codegen-internal one a
      *  crossing's canonicalization composes recursively for a nested container
-     *  ({@code CanonicalizeAtCrossing}): a plain {@link java.util.function.Function} the compiler
+     *  ({@code CanonicalizeAtCrossing}): a plain {@link Function} the compiler
      *  builds and binds at the crossing, not a value the domain can construct. */
-    public static <T> List<Object> map(java.util.function.Function<? super T, Object> f, List<T> xs) {
+    public static <T> List<Object> map(Function<? super T, Object> f, List<T> xs) {
+        return map(f, xs, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #map(Function, List)}, passing {@code checkpoint} once for each
+     *  element. */
+    public static <T> List<Object> map(Function<? super T, Object> f, List<T> xs,
+                                       WorkCheckpoint checkpoint) {
         PersistentVector.Builder<Object> out = new PersistentVector.Builder<>();
         for (T x : xs) {
+            checkpoint.pass();
             out.add(f.apply(x));
         }
         return out.build();
@@ -131,8 +169,14 @@ public final class Lists {
      *  Walked in place, from its end, and not copied into an array first: a list holds more than an
      *  array does ({@link Capacity}). */
     public static <T> List<T> reverse(List<? extends T> xs) {
+        return reverse(xs, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #reverse(List)}, passing {@code checkpoint} once for each element. */
+    public static <T> List<T> reverse(List<? extends T> xs, WorkCheckpoint checkpoint) {
         PersistentVector.Builder<T> out = new PersistentVector.Builder<>();
         for (ListIterator<? extends T> back = xs.listIterator(xs.size()); back.hasPrevious(); ) {
+            checkpoint.pass();
             out.add(back.previous());
         }
         return out.build();
@@ -147,12 +191,18 @@ public final class Lists {
      *  result, so it gets the treatment {@link IntMath} gives an overflow. A span within it that the
      *  heap cannot hold is the host's refusal and not this one. */
     public static List<Long> rangeInclusive(long from, long to) {
+        return rangeInclusive(from, to, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #rangeInclusive(long, long)}, passing {@code checkpoint} once for each element made. */
+    public static List<Long> rangeInclusive(long from, long to, WorkCheckpoint checkpoint) {
         if (from > to) {
             return PersistentVector.empty();
         }
         Capacity.span(from, to);
         PersistentVector.Builder<Long> out = new PersistentVector.Builder<>();
         for (long i = from; ; i++) {
+            checkpoint.pass();
             out.add(i);
             if (i == to) {
                 return out.build();
@@ -164,8 +214,14 @@ public final class Lists {
      *  the kernel the {@code +} operator uses, so a total past the range of an {@code Int} aborts
      *  here rather than wrapping. */
     public static long sumInt(List<Long> xs) {
+        return sumInt(xs, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #sumInt(List)}, passing {@code checkpoint} once for each element. */
+    public static long sumInt(List<Long> xs, WorkCheckpoint checkpoint) {
         long acc = 0;
         for (long x : xs) {
+            checkpoint.pass();
             acc = IntMath.addExact(acc, x);
         }
         return acc;
@@ -173,8 +229,14 @@ public final class Lists {
 
     /** The product of a list of {@code Int} (Elm {@code List.product}); the empty list is 1. */
     public static long productInt(List<Long> xs) {
+        return productInt(xs, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #productInt(List)}, passing {@code checkpoint} once for each element. */
+    public static long productInt(List<Long> xs, WorkCheckpoint checkpoint) {
         long acc = 1;
         for (long x : xs) {
+            checkpoint.pass();
             acc = IntMath.multiplyExact(acc, x);
         }
         return acc;
@@ -185,9 +247,16 @@ public final class Lists {
      *  own scales carry through the walk and a sum past what a {@code Decimal} holds aborts as
      *  {@code +} does. */
     public static BigDecimal sumDecimal(List<BigDecimal> xs) {
+        return sumDecimal(xs, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #sumDecimal(List)}, passing {@code checkpoint} once for each element and paying for
+     *  each sum. */
+    public static BigDecimal sumDecimal(List<BigDecimal> xs, WorkCheckpoint checkpoint) {
         BigDecimal acc = BigDecimal.ZERO;
         for (BigDecimal x : xs) {
-            acc = DecimalMath.add(acc, x);
+            checkpoint.pass();
+            acc = DecimalMath.add(acc, x, checkpoint);
         }
         return acc;
     }
@@ -195,9 +264,16 @@ public final class Lists {
     /** The product of a list of {@code Decimal}; the empty list is 1. Each step is {@code *}
      *  ({@link DecimalMath#multiply}), and aborts where {@code *} does. */
     public static BigDecimal productDecimal(List<BigDecimal> xs) {
+        return productDecimal(xs, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #productDecimal(List)}, passing {@code checkpoint} once for each element and paying
+     *  for each product. */
+    public static BigDecimal productDecimal(List<BigDecimal> xs, WorkCheckpoint checkpoint) {
         BigDecimal acc = BigDecimal.ONE;
         for (BigDecimal x : xs) {
-            acc = DecimalMath.multiply(acc, x);
+            checkpoint.pass();
+            acc = DecimalMath.multiply(acc, x, checkpoint);
         }
         return acc;
     }
@@ -206,18 +282,32 @@ public final class Lists {
      *  identity is the exact nought the type constructs, so there is no seed for an author to write
      *  and no rounding anywhere in the walk. */
     public static Rational sumRational(List<Rational> xs) {
+        return sumRational(xs, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #sumRational(List)}, passing {@code checkpoint} once for each element and paying for
+     *  each sum. */
+    public static Rational sumRational(List<Rational> xs, WorkCheckpoint checkpoint) {
         Rational acc = Rational.ZERO;
         for (Rational x : xs) {
-            acc = acc.plus(x);
+            checkpoint.pass();
+            acc = acc.plus(x, checkpoint);
         }
         return acc;
     }
 
     /** The product of a list of {@code Rational}; the empty list is one. */
     public static Rational productRational(List<Rational> xs) {
+        return productRational(xs, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #productRational(List)}, passing {@code checkpoint} once for each element and paying
+     *  for each product. */
+    public static Rational productRational(List<Rational> xs, WorkCheckpoint checkpoint) {
         Rational acc = Rational.ONE;
         for (Rational x : xs) {
-            acc = acc.times(x);
+            checkpoint.pass();
+            acc = acc.times(x, checkpoint);
         }
         return acc;
     }
@@ -231,6 +321,12 @@ public final class Lists {
         return Sorting.stably(xs, (a, b) -> ((Comparable) a).compareTo(b));
     }
 
+    /** {@link #sort(List)}, passing {@code checkpoint} once for each comparison and inside each, as
+     *  {@link Values#compare} does. */
+    public static <T> List<T> sort(List<? extends T> xs, WorkCheckpoint checkpoint) {
+        return Sorting.stably(xs, (a, b) -> Values.compare(a, b, checkpoint), checkpoint);
+    }
+
     /** As {@link #sort(List)}, ordering by {@code by} rather than by the element's natural order.
      *  An enumeration's order belongs to the sum, not to the case value — the same case may be
      *  listed by two sums in different positions — so it arrives as a comparator. So does the order
@@ -239,31 +335,64 @@ public final class Lists {
         return Sorting.stably(xs, by);
     }
 
+    /** {@link #sort(Comparator, List)}, passing {@code checkpoint} once for each comparison; what a
+     *  comparison does inside is {@code by}'s to pass. */
+    public static <T> List<T> sort(Comparator<Object> by, List<? extends T> xs, WorkCheckpoint checkpoint) {
+        return Sorting.stably(xs, by, checkpoint);
+    }
+
     /** The greatest element by natural order, {@code None} for an empty list (Elm {@code List.maximum}).
      *  The element is a {@link Comparable}, as {@code sort} requires. */
     public static <T> Option<T> max(List<? extends T> xs) {
-        return extreme(xs, null, true);
+        return extreme(xs, null, true, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #max(List)}, passing {@code checkpoint} once for each element and inside each
+     *  comparison. */
+    public static <T> Option<T> max(List<? extends T> xs, WorkCheckpoint checkpoint) {
+        return extreme(xs, naturally(checkpoint), true, checkpoint);
     }
 
     /** The least element by natural order, {@code None} for an empty list (Elm {@code List.minimum}). */
     public static <T> Option<T> min(List<? extends T> xs) {
-        return extreme(xs, null, false);
+        return extreme(xs, null, false, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #min(List)}, passing {@code checkpoint} as {@link #max(List, WorkCheckpoint)} does. */
+    public static <T> Option<T> min(List<? extends T> xs, WorkCheckpoint checkpoint) {
+        return extreme(xs, naturally(checkpoint), false, checkpoint);
     }
 
     /** As {@link #max(List)}, ordering by {@code by} rather than by the element's natural order. */
     public static <T> Option<T> max(Comparator<Object> by, List<? extends T> xs) {
-        return extreme(xs, by, true);
+        return extreme(xs, by, true, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #max(Comparator, List)}, passing {@code checkpoint} once for each element. */
+    public static <T> Option<T> max(Comparator<Object> by, List<? extends T> xs, WorkCheckpoint checkpoint) {
+        return extreme(xs, by, true, checkpoint);
     }
 
     /** As {@link #min(List)}, ordering by {@code by}. */
     public static <T> Option<T> min(Comparator<Object> by, List<? extends T> xs) {
-        return extreme(xs, by, false);
+        return extreme(xs, by, false, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #min(Comparator, List)}, passing {@code checkpoint} once for each element. */
+    public static <T> Option<T> min(Comparator<Object> by, List<? extends T> xs, WorkCheckpoint checkpoint) {
+        return extreme(xs, by, false, checkpoint);
     }
 
     /** The first element satisfying {@code p}, or {@code None} if none does (Elm {@code List.Extra
      *  find}). {@code p} is a first-class function value; it is applied to each element in turn. */
     public static <T> Option<T> find(Fn p, List<? extends T> xs) {
+        return find(p, xs, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #find(Fn, List)}, passing {@code checkpoint} once for each element tried. */
+    public static <T> Option<T> find(Fn p, List<? extends T> xs, WorkCheckpoint checkpoint) {
         for (T x : xs) {
+            checkpoint.pass();
             if ((Boolean) p.apply(new Object[] {x})) {
                 return Option.some(x);
             }
@@ -278,31 +407,53 @@ public final class Lists {
         return sortBy(null, key, xs);
     }
 
+    /** {@link #sortBy(Fn, List)}, passing {@code checkpoint} as {@link #sort(List, WorkCheckpoint)}
+     *  does, and once for each key worked out. */
+    public static <T> List<T> sortBy(Fn key, List<? extends T> xs, WorkCheckpoint checkpoint) {
+        return sortBy(naturally(checkpoint), key, xs, checkpoint);
+    }
+
     /** As {@link #sortBy(Fn, List)}, ordering the keys by {@code by} rather than naturally. */
-    @SuppressWarnings({"unchecked", "rawtypes"})
     public static <T> List<T> sortBy(@Nullable Comparator<Object> by, Fn key, List<? extends T> xs) {
+        return sortBy(by, key, xs, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #sortBy(Comparator, Fn, List)}, passing {@code checkpoint} once for each element and
+     *  each comparison. */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public static <T> List<T> sortBy(@Nullable Comparator<Object> by, Fn key, List<? extends T> xs,
+                                     WorkCheckpoint checkpoint) {
         PersistentVector.Builder<Object[]> decorated = new PersistentVector.Builder<>();
         for (T x : xs) {
+            checkpoint.pass();
             decorated.add(new Object[] {x, key.apply(new Object[] {x})});
         }
         List<Object[]> sorted = Sorting.stably(decorated.build(), by == null
                 ? (a, b) -> ((Comparable) a[1]).compareTo(b[1])
-                : (a, b) -> by.compare(a[1], b[1]));
+                : (a, b) -> by.compare(a[1], b[1]), checkpoint);
         PersistentVector.Builder<T> out = new PersistentVector.Builder<>();
         for (Object[] pair : sorted) {
+            checkpoint.pass();
             out.add((T) pair[0]);
         }
         return out.build();
     }
 
+    /** The order a sort reads off the values themselves, passing {@code checkpoint} inside each
+     *  comparison. */
+    private static Comparator<Object> naturally(WorkCheckpoint checkpoint) {
+        return (a, b) -> Values.compare(a, b, checkpoint);
+    }
+
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static <T> Option<T> extreme(
-            List<? extends T> xs, @Nullable Comparator<Object> by, boolean greatest) {
+    private static <T> Option<T> extreme(List<? extends T> xs, @Nullable Comparator<Object> by,
+                                         boolean greatest, WorkCheckpoint checkpoint) {
         if (xs.isEmpty()) {
             return Option.none();
         }
         T best = xs.get(0);
         for (T x : xs) {
+            checkpoint.pass();
             int cmp = by == null ? ((Comparable) x).compareTo(best) : by.compare(x, best);
             if (greatest ? cmp > 0 : cmp < 0) {
                 best = x;

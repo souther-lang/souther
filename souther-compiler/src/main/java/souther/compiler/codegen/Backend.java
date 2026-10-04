@@ -940,7 +940,7 @@ public final class Backend {
                         int slot = 1;   // slot 0 is `this`
                         for (Type t : fields.values()) {
                             load(code, slot, t);
-                            CanonicalizeAtCrossing.emit(code, t);
+                            CanonicalizeAtCrossing.emit(ctx, code, t);
                             slot += width(t);
                         }
                         CodegenContext.invoke(code, ctx.construction(data.declares()));
@@ -1604,7 +1604,7 @@ public final class Backend {
                     // A generated behavior's apply is public, callable by Java directly and not
                     // only from another generated class — the same crossing as an injected
                     // behavior's answer or a factory's field, one door earlier.
-                    CanonicalizeAtCrossing.emit(code, pt);
+                    CanonicalizeAtCrossing.emit(ctx, code, pt);
                     int slot = gen.slot(pt);
                     unbox(code, pt, slot);
                     Hir.Binder binder = input.written().binder();
@@ -1666,7 +1666,7 @@ public final class Backend {
             // the asymmetry a runtime ensures check on the answer alone already had to close.
             for (int i = 0; i < n; i++) {
                 code.aload(i + 1);
-                CanonicalizeAtCrossing.emit(code, successType(spec.params().get(i).type()));
+                CanonicalizeAtCrossing.emit(ctx, code, successType(spec.params().get(i).type()));
                 code.astore(i + 1);
             }
             code.aload(0);
@@ -1829,7 +1829,7 @@ public final class Backend {
                 // injected stage answers with below.
                 for (int i = 0; i < arity; i++) {
                     code.aload(i + 1);
-                    CanonicalizeAtCrossing.emit(code, declared.inputTypes().get(i));
+                    CanonicalizeAtCrossing.emit(ctx, code, declared.inputTypes().get(i));
                     code.astore(i + 1);
                 }
                 // stage 0 consumes the pipeline's arguments unconditionally
@@ -1907,7 +1907,7 @@ public final class Backend {
         }
         CodegenContext.invoke(code, apply);
         projectStage(code, linked, slot);
-        CanonicalizeAtCrossing.emit(code, stageOut);
+        CanonicalizeAtCrossing.emit(ctx, code, stageOut);
         checkStageAtCrossing(code, stage, arity, slot + 1);
         code.astore(1);
     }
@@ -1923,7 +1923,7 @@ public final class Backend {
         code.aload(1);
         CodegenContext.invoke(code, linked.apply());
         projectStage(code, linked, slot);
-        CanonicalizeAtCrossing.emit(code, stageOut);
+        CanonicalizeAtCrossing.emit(ctx, code, stageOut);
         checkStageAtCrossing(code, stage, 1, slot + 1);
         code.astore(1);
     }

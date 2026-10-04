@@ -748,10 +748,10 @@ final class BodyGen {
                 case Core.Neg n -> {
                     Type negated = genExpr(n.operand());
                     if (negated == Type.DECIMAL) {
-                        code.invokestatic(CD_DecimalMath, "negate",
-                                MethodTypeDesc.of(CD_BigDecimal, CD_BigDecimal));
+                        ctx.callRuntime(code, CD_DecimalMath, "negate",
+                                MethodTypeDesc.of(CD_BigDecimal, CD_BigDecimal), Work.CHECKPOINTED);
                     } else if (negated == Type.RATIONAL) {
-                        code.invokestatic(CD_RationalMath, "negate", MTD_ratNegate);
+                        ctx.callRuntime(code, CD_RationalMath, "negate", MTD_ratNegate, Work.CHECKPOINTED);
                     } else {
                         code.invokestatic(CD_IntMath, "negateExact", MTD_intNegate);
                     }
@@ -1187,6 +1187,22 @@ final class BodyGen {
             code.invokestatic(owner, method, desc);
         }
 
+        /** A call into the runtime, handing an evaluated class's checkpoint in where {@code work}
+         *  says to ({@link CodegenContext#callRuntime}). */
+        void emitRuntimeCall(ClassDesc owner, String method, MethodTypeDesc shipped, Work work) {
+            ctx.callRuntime(code, owner, method, shipped, work);
+        }
+
+        /** Whether this generation counts, and so hands runtime calls a checkpoint. */
+        boolean counting() {
+            return ctx.counting();
+        }
+
+        /** The evaluation's checkpoint, on the stack. */
+        void emitCheckpoint() {
+            ctx.pushCheckpoint(code);
+        }
+
         void emitInvokeVirtual(ClassDesc owner, String method, MethodTypeDesc desc) {
             code.invokevirtual(owner, method, desc);
         }
@@ -1270,7 +1286,13 @@ final class BodyGen {
             code.ldc(ctx.patterns.of(settled.meaning(), settled.written(),
                     Diagnostic.at(call.args().get(0).pos())));
             genExpr(call.args().get(1));
-            code.invokeinterface(CD_Predicate, "test", MTD_predicate_test);
+            if (ctx.counting()) {
+                // The machine's own walk, passing the evaluation's checkpoint as it goes: what a
+                // Predicate's test runs passes none, and the walk is as long as the subject.
+                ctx.callRuntime(code, CD_Patterns, "matches", MTD_Patterns_matches, Work.CHECKPOINTED);
+            } else {
+                code.invokeinterface(CD_Predicate, "test", MTD_predicate_test);
+            }
         }
 
         private void call(Core.Call call) {
@@ -1402,13 +1424,15 @@ final class BodyGen {
          * builder is the seed.
          */
         private void buildList(Core.Call call) {
-            if (walked(call, CD_Lists, MTD_Lists_builder, MTD_Lists_sealed)) {
+            // A list's builder compares nothing it is given, so making one is the same call
+            // everywhere.
+            if (walked(call, CD_Lists, MTD_Lists_builder, MTD_Lists_sealed, Work.FIXED)) {
                 return;
             }
             emitStep(call);
             genExpr(call.args().get(1));      // the list walked
             genExpr(call.args().get(2));      // the index walked from (a long)
-            code.invokestatic(CD_Lists, "build", MTD_Lists_build);
+            ctx.callRuntime(code, CD_Lists, "build", MTD_Lists_build, Work.CHECKPOINTED);
         }
 
         /**
@@ -1425,20 +1449,22 @@ final class BodyGen {
                 code.invokestatic(CD_Lists, "grow", MTD_Lists_grow);
             } else {
                 genExpr(added);
-                code.invokestatic(CD_Lists, "growAll", MTD_Lists_growAll);
+                ctx.callRuntime(code, CD_Lists, "growAll", MTD_Lists_growAll, Work.CHECKPOINTED);
             }
         }
 
         /** The same walk for a fold accumulating a map: the builder is the seed and the map it built
          *  is handed over at the end. */
         private void buildMap(Core.Call call) {
-            if (walked(call, CD_Maps, MTD_Maps_builder, MTD_Maps_sealed)) {
+            // A map's builder compares the keys written into it, so an evaluated class makes one that
+            // holds the checkpoint they are compared under.
+            if (walked(call, CD_Maps, MTD_Maps_builder, MTD_Maps_sealed, Work.CHECKPOINTED)) {
                 return;
             }
             emitStep(call);
             genExpr(call.args().get(1));      // the list walked
             genExpr(call.args().get(2));      // the index walked from (a long)
-            code.invokestatic(CD_Maps, "build", MTD_Maps_build);
+            ctx.callRuntime(code, CD_Maps, "build", MTD_Maps_build, Work.CHECKPOINTED);
         }
 
         /**
@@ -1471,9 +1497,9 @@ final class BodyGen {
          *  {@link GrowingFold}): the seed is the builder, and the list or map it built is what the
          *  walk answers with. */
         private boolean walked(Core.Call call, ClassDesc helpers,
-                               MethodTypeDesc builder, MethodTypeDesc sealed) {
+                               MethodTypeDesc builder, MethodTypeDesc sealed, Work making) {
             return walked(call.args().get(0), call.args().get(1),
-                    () -> code.invokestatic(helpers, "builder", builder),
+                    () -> ctx.callRuntime(code, helpers, "builder", builder, making),
                     () -> code.invokestatic(helpers, "sealed", sealed));
         }
 
@@ -1671,7 +1697,7 @@ final class BodyGen {
             }
             invoke(linked.apply());
             project(linked);
-            CanonicalizeAtCrossing.emit(code, success);
+            CanonicalizeAtCrossing.emit(ctx, code, success);
             checkAtCrossing(callee, saved);
             castFromObject(code, success);
         }
@@ -1807,8 +1833,8 @@ final class BodyGen {
                     // and `append(a, b)` cannot answer differently.
                     if (lt == Type.STRING) {
                         genExpr(bin.right());
-                        code.invokestatic(CD_Strings, "append",
-                                MethodTypeDesc.of(CD_String, CD_String, CD_String));
+                        ctx.callRuntime(code, CD_Strings, "append",
+                                MethodTypeDesc.of(CD_String, CD_String, CD_String), Work.CHECKPOINTED);
                     } else if (Core.withoutStanding(bin.right()) instanceof Core.ListLit lit
                             && lit.elements().size() == 1) {
                         // `acc ++ [x]` is how every fold-derived combinator grows its list
@@ -1816,10 +1842,10 @@ final class BodyGen {
                         // itself: building a one-element list for `concat` to immediately take apart
                         // costs an ArrayList, a copyOf, and an iterator on the hot path.
                         box(code, emitValue(lit.elements().get(0), null));
-                        code.invokestatic(CD_Lists, "append", MTD_Lists_append);
+                        ctx.callRuntime(code, CD_Lists, "append", MTD_Lists_append, Work.CHECKPOINTED);
                     } else {
                         genExpr(bin.right());
-                        code.invokestatic(CD_Lists, "concat", MTD_Lists_concat);
+                        ctx.callRuntime(code, CD_Lists, "concat", MTD_Lists_concat, Work.CHECKPOINTED);
                     }
                     yield null;
                 }
@@ -1857,7 +1883,7 @@ final class BodyGen {
                 case Core.BinaryReading.ExactNumbers _ -> {
                     pushExact(bin.left());
                     pushExact(bin.right());
-                    code.invokestatic(CD_RationalMath, exactly(bin.op()), MTD_ratArith);
+                    ctx.callRuntime(code, CD_RationalMath, exactly(bin.op()), MTD_ratArith, Work.CHECKPOINTED);
                     return;
                 }
                 // Newtype arithmetic is the operation over what the newtypes wrap, which the tree
@@ -1882,7 +1908,7 @@ final class BodyGen {
                 }
                 pushExact(bin.left());
                 pushExact(bin.right());
-                code.invokestatic(CD_RationalMath, exactly(bin.op()), MTD_ratArith);
+                ctx.callRuntime(code, CD_RationalMath, exactly(bin.op()), MTD_ratArith, Work.CHECKPOINTED);
                 return;
             }
             Type t = genExpr(bin.left());
@@ -1897,8 +1923,8 @@ final class BodyGen {
                 throw new IllegalStateException(
                         "no kernel for " + bin.op() + " over " + Type.show(t));
             }
-            code.invokestatic(decimal ? CD_DecimalMath : CD_IntMath, kernel,
-                    decimal ? MTD_bdArith : MTD_intExact);
+            ctx.callRuntime(code, decimal ? CD_DecimalMath : CD_IntMath, kernel,
+                    decimal ? MTD_bdArith : MTD_intExact, decimal ? Work.CHECKPOINTED : Work.FIXED);
         }
 
         /** What the exact kernel for {@code op} is called. Named from the operator rather than handed
@@ -1927,7 +1953,7 @@ final class BodyGen {
             if (t == Type.INT) {
                 code.invokestatic(CD_RationalMath, "fromInt", MTD_ratFromInt);
             } else if (t == Type.DECIMAL) {
-                code.invokestatic(CD_RationalMath, "fromDecimal", MTD_ratFromDecimal);
+                ctx.callRuntime(code, CD_RationalMath, "fromDecimal", MTD_ratFromDecimal, Work.CHECKPOINTED);
             }
         }
 
@@ -2000,7 +2026,7 @@ final class BodyGen {
                     code.checkcast(CD_String);
                     operand(comparison, comparison.right());
                     code.checkcast(CD_String);
-                    code.invokestatic(CD_Strings, "compare", MTD_Strings_compare);
+                    ctx.callRuntime(code, CD_Strings, "compare", MTD_Strings_compare, Work.CHECKPOINTED);
                     code.iconst_0();
                     comparisonMaterialize(cut.statedRelation(), false);
                 }
@@ -2012,7 +2038,14 @@ final class BodyGen {
                     // value; the others order in time.
                     operand(comparison, comparison.left());
                     operand(comparison, comparison.right());
-                    code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
+                    if (ctx.counting()) {
+                        // A Decimal's or a Rational's compareTo is as long as its digits, and takes
+                        // no checkpoint; the runtime's order pays for it first.
+                        ctx.pushCheckpoint(code);
+                        code.invokestatic(CD_Values, "compare", MTD_Values_compare);
+                    } else {
+                        code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
+                    }
                     code.iconst_0();
                     comparisonMaterialize(cut.statedRelation(), false);
                 }
@@ -2046,7 +2079,7 @@ final class BodyGen {
             // `Values.equal` asking it is asking this.
             Type lt = operand(comparison, comparison.left());
             operand(comparison, comparison.right());
-            if (lt == Type.STRING) {
+            if (lt == Type.STRING && !ctx.counting()) {
                 code.invokevirtual(CD_String, "equals",
                         MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
                 selecting(singled);
@@ -2055,8 +2088,10 @@ final class BodyGen {
             if (isReference(lt)) {
                 // What sameness is, is the runtime's to say: a data compares by its fields, an
                 // amount ignores its scale, a collection asks that of what it holds (spec
-                // §equality). A pair of Decimals takes the overload for them.
-                emitValueEquals(code, lt == Type.DECIMAL);
+                // §equality). A pair of Decimals takes the overload for them. Two texts are
+                // asked here too where this generation counts, since the host's own comparison of
+                // them is as long as they are and passes nothing.
+                emitValueEquals(ctx, code, lt == Type.DECIMAL);
                 selecting(singled);
                 return;
             }
@@ -2093,7 +2128,9 @@ final class BodyGen {
                     yield true;
                 }
                 case Ordering.Strings _ -> {
-                    code.invokestatic(CD_Strings, "ordering", MTD_ordering);
+                    // Made for this one sort where this generation counts, holding the checkpoint
+                    // each comparison passes.
+                    ctx.callRuntime(code, CD_Strings, "ordering", MTD_ordering, Work.CHECKPOINTED);
                     yield true;
                 }
                 case Ordering.Longs _, Ordering.Natural _ -> false;

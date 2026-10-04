@@ -186,10 +186,9 @@ final class CodecGen {
 
     /** The {@code invokedynamic} call site that produces a {@code Function} wrapping
      *  {@code Sets::fromList} (a {@code List -> Set} dedup), for {@code Decoder.map} in a Set decoder. */
-    private static DynamicCallSiteDesc setFromListCallSite() {
-        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
-                DirectMethodHandleDesc.Kind.STATIC, CD_Sets, "fromList",
-                MethodTypeDesc.of(CD_Set, CD_List));
+    private DynamicCallSiteDesc setFromListCallSite() {
+        DirectMethodHandleDesc impl = ctx.boundRuntime(CD_Sets, "fromList",
+                MethodTypeDesc.of(CD_Set, CD_List), Work.CHECKPOINTED);
         return Lambdas.callSite(Lambdas.Sam.FUNCTION, impl, MethodTypeDesc.of(CD_Set, CD_List));
     }
 
@@ -226,7 +225,7 @@ final class CodecGen {
                     + " written by buildDecoder, so it has no __text to call");
         }
         code.invokestatic(leafOwner, "string", MTD_leafString);
-        code.invokedynamic(STRINGS_ADMISSION);
+        code.invokedynamic(admissionCallSite());
         code.invokeinterface(CD_RDecoder, "map", MTD_Rdecoder_map);
         code.invokedynamic(textCallSite());
         code.invokeinterface(CD_RDecoder, "flatMapWithPath", MTD_flatMapWithPath);
@@ -235,11 +234,11 @@ final class CodecGen {
     }
 
     /** {@code Strings::admission} as a {@code Function}, for the string leaf above. */
-    private static final DynamicCallSiteDesc STRINGS_ADMISSION = Lambdas.callSite(
-            Lambdas.Sam.FUNCTION,
-            MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_Strings,
-                    "admission", MTD_admission),
-            MTD_admission);
+    private DynamicCallSiteDesc admissionCallSite() {
+        return Lambdas.callSite(Lambdas.Sam.FUNCTION,
+                ctx.boundRuntime(CD_Strings, "admission", MTD_admission, Work.CHECKPOINTED),
+                MTD_admission);
+    }
 
     /** This class's {@code __text} as a {@code BiFunction}, for the string leaf above. */
     private DynamicCallSiteDesc textCallSite() {
@@ -785,7 +784,7 @@ final class CodecGen {
             }
             if (constraintsOf(invariants).stream()
                     .anyMatch(BoundaryConstraint.Unique.class::isInstance)) {
-                RaohListUnique.emitHelpers(cb);
+                RaohListUnique.emitHelpers(ctx, cb);
             }
         });
     }
@@ -1173,8 +1172,9 @@ final class CodecGen {
     /** Returns the failure at the path where the runtime says the value (argument 0) is not the
      *  temporal, and falls through to the label it answers where nothing is said. */
     private Label emitTemporalRefusal(CodeBuilder code, Type.Prim temporal) {
+        // The grammar reads the whole text, which is as long as whatever arrived.
         return emitRefusal(code, CD_Temporals, bareRefusal(temporal), TemporalRule.REFUSED,
-                Optional.empty());
+                Optional.empty(), Work.CHECKPOINTED);
     }
 
     /**
@@ -1189,10 +1189,10 @@ final class CodecGen {
      * {@code actual}, as Raoh's own does, so a resolver that renders one renders this.
      */
     private Label emitRefusal(CodeBuilder code, ClassDesc owner, String question, String errorCode,
-                              Optional<String> expected) {
+                              Optional<String> expected, Work work) {
         Label admitted = code.newLabel();
         code.aload(0);
-        code.invokestatic(owner, question, MTD_temporalRefusal);
+        ctx.callRuntime(code, owner, question, MTD_temporalRefusal, work);
         code.astore(2);
         code.aload(2);
         code.ifnull(admitted);
@@ -1280,9 +1280,10 @@ final class CodecGen {
     private void emitBareScalarHelper(ClassBuilder cb, BareScalar scalar) {
         cb.withMethodBody(scalar.helper, MTD_Rdecode,
                 ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
+            // Which carrier arrived, and a scale read off it: nothing that grows.
             Label admitted = emitRefusal(code, CD_BoundaryScalars, scalar.question,
                     ErrorCodes.TYPE_MISMATCH,
-                    Optional.of(scalar.expected));
+                    Optional.of(scalar.expected), Work.FIXED);
             code.labelBinding(admitted);
             code.invokestatic(CD_ObjectDecoders, scalar.factory, scalar.leaf);
             code.aload(0);
@@ -2053,7 +2054,8 @@ final class CodecGen {
             }
             case Hir.DecimalRaw d -> {
                 gen.expr(d.arg());                                   // BigDecimal is neutral
-                code.invokestatic(CD_Representations, "canonicalNumber", MTD_canonicalNumber);
+                ctx.callRuntime(code, CD_Representations, "canonicalNumber", MTD_canonicalNumber,
+                        Work.CHECKPOINTED);
             }
             case Hir.IsoTextRaw t -> {
                 gen.expr(t.arg());
@@ -2094,9 +2096,11 @@ final class CodecGen {
                 pushElemEncoder(code, se.elem());
                 code.invokestatic(CD_MapEncoders, "list", MTD_Rencode_list);   // Encoder for an array
                 gen.expr(se.source());                                          // the Set value
-                code.invokestatic(CD_Sets, "toList", MethodTypeDesc.of(CD_List, CD_Set));   // Set -> List
+                ctx.callRuntime(code, CD_Sets, "toList", MethodTypeDesc.of(CD_List, CD_Set),   // Set -> List
+                        Work.CHECKPOINTED);
                 code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);      // encode the array
-                code.invokestatic(CD_Representations, "sortedArray", MTD_Representations_sorted);
+                ctx.callRuntime(code, CD_Representations, "sortedArray", MTD_Representations_sorted,
+                        Work.CHECKPOINTED);
             }
             case Hir.MapEnc me -> {
                 pushElemEncoder(code, me.elem());
@@ -2105,10 +2109,11 @@ final class CodecGen {
                 if (needsKeyRender(me.key())) {
                     // Render the keys bare before the String-keyed map encoder.
                     pushKeyRenderer(code, me.key());                            // Function<K,String>
-                    code.invokestatic(CD_Maps, "mapKeys", MTD_mapKeys);         // Map<String,V>
+                    ctx.callRuntime(code, CD_Maps, "mapKeys", MTD_mapKeys, Work.CHECKPOINTED);   // Map<String,V>
                 }
                 code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
-                code.invokestatic(CD_Representations, "sortedObject", MTD_Representations_sorted);
+                ctx.callRuntime(code, CD_Representations, "sortedObject", MTD_Representations_sorted,
+                        Work.CHECKPOINTED);
             }
             case Hir.ObjectRaw o -> {
                 code.new_(CD_LinkedHashMap);
@@ -2208,7 +2213,7 @@ final class CodecGen {
      * hands the {@code BigDecimal} through as it is, scale and all, and the scale is how a number was
      * written rather than how much it is.
      */
-    private static void canonicalizeAmount(CodeBuilder code, LeafScalar kind) {
+    private void canonicalizeAmount(CodeBuilder code, LeafScalar kind) {
         if (kind != LeafScalar.DECIMAL) {
             return;
         }
@@ -2217,10 +2222,9 @@ final class CodecGen {
     }
 
     /** {@code Representations::canonicalNumber} as an {@code Encoder}. */
-    private static DynamicCallSiteDesc canonicalNumberCallSite() {
-        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
-                DirectMethodHandleDesc.Kind.STATIC, CD_Representations, "canonicalNumber",
-                MTD_canonicalNumber);
+    private DynamicCallSiteDesc canonicalNumberCallSite() {
+        DirectMethodHandleDesc impl = ctx.boundRuntime(CD_Representations, "canonicalNumber",
+                MTD_canonicalNumber, Work.CHECKPOINTED);
         return Lambdas.callSite(Lambdas.Sam.ENCODER, impl, MTD_canonicalNumber);
     }
 
@@ -2233,10 +2237,9 @@ final class CodecGen {
      * point at which the type is still known: once encoded, a Set and a List are both a
      * {@code java.util.List}, and only one of the two may be reordered.
      */
-    private static DynamicCallSiteDesc orderingCallSite(String ordering) {
-        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
-                DirectMethodHandleDesc.Kind.STATIC, CD_Representations, ordering,
-                MTD_Representations_sorted);
+    private DynamicCallSiteDesc orderingCallSite(String ordering) {
+        DirectMethodHandleDesc impl = ctx.boundRuntime(CD_Representations, ordering,
+                MTD_Representations_sorted, Work.CHECKPOINTED);
         return Lambdas.callSite(Lambdas.Sam.ENCODER, impl, MTD_Representations_sorted);
     }
 
@@ -2269,18 +2272,17 @@ final class CodecGen {
     }
 
     /** {@code Sets::toList} as a {@code Function}, so a nested Set reaches the list encoder. */
-    private static DynamicCallSiteDesc setToListCallSite() {
-        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
-                DirectMethodHandleDesc.Kind.STATIC, CD_Sets, "toList", MTD_Sets_toList);
+    private DynamicCallSiteDesc setToListCallSite() {
+        DirectMethodHandleDesc impl = ctx.boundRuntime(CD_Sets, "toList", MTD_Sets_toList, Work.CHECKPOINTED);
         return Lambdas.callSite(Lambdas.Sam.FUNCTION, impl, MTD_Sets_toList);
     }
 
     /** {@code m -> Maps.mapKeysWith(keyFn, m)} as a {@code Function}, capturing the key function
      * already on the stack: a nested newtype-keyed Map renders its keys bare before the String-keyed
      * map encoder sees it. */
-    private static DynamicCallSiteDesc mapKeysCallSite() {
-        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
-                DirectMethodHandleDesc.Kind.STATIC, CD_Maps, "mapKeysWith", MTD_mapKeysWith);
+    private DynamicCallSiteDesc mapKeysCallSite() {
+        DirectMethodHandleDesc impl = ctx.boundRuntime(CD_Maps, "mapKeysWith", MTD_mapKeysWith,
+                Work.CHECKPOINTED);
         return Lambdas.callSite(Lambdas.Sam.FUNCTION, impl, MethodTypeDesc.of(CD_Map, CD_Map),
                 CD_Function);                                            // captures the key Function
     }

@@ -2,6 +2,7 @@ package souther.compiler.examples;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Symbols;
+import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.TypeSymbol;
@@ -47,6 +48,9 @@ final class ObservedValues {
     }
 
     private ObservedValue walk(Object live, int depth) {
+        // What is walked was built by the evaluation, and is as large as it was built: one node, one
+        // counted point, as one time round a loop of the evaluated code is.
+        EvaluationContext.tick();
         // An optional holding a value is that value (spec §absence-is-written-as-null), so what is
         // read is what it holds and the envelope is not a node of what was read. Asked before the
         // budget, because the budget bounds the value that is kept: charged for, the same value
@@ -166,7 +170,8 @@ final class ObservedValues {
             java.lang.reflect.Method accessor = live.getClass().getDeclaredMethod(name);
             accessor.setAccessible(true);
             return accessor.invoke(live);
-        } catch (ReflectiveOperationException | RuntimeException _) {
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            EvaluationContext.rethrowIfOverspent(e);
             return FAILED;
         }
     }

@@ -1,12 +1,8 @@
 package souther.runtime;
 
+import java.math.BigDecimal;
 import java.util.Comparator;
 import java.util.List;
-import java.util.PrimitiveIterator;
-import net.unit8.notation199x.CaseConversion;
-import net.unit8.notation199x.Normalization;
-import net.unit8.notation199x.Normalization.Form;
-import net.unit8.notation199x.ScalarValues;
 import net.unit8.notation199x.WhiteSpace;
 import org.jspecify.annotations.Nullable;
 
@@ -25,6 +21,12 @@ import org.jspecify.annotations.Nullable;
  * above it. The conversion is {@link String#codePointCount} on the way in and
  * {@link String#offsetByCodePoints} on the way back, so no result holds half a surrogate pair where
  * its input held none.
+ *
+ * <p>Every operation whose work grows with the text it is handed has a second entry taking a
+ * {@link WorkCheckpoint}, which is what an evaluated class calls, and one body the two entries share:
+ * the entry without one hands in {@link WorkCheckpoint#NONE}. Where the host or 199x-notation does a
+ * walk in one call, the body asks it of them only under {@code NONE} and walks it here otherwise, so
+ * what a shipped class runs is what it ran before there was a checkpoint to pass.
  */
 public final class Strings {
 
@@ -77,12 +79,12 @@ public final class Strings {
     /** {@code joined} canonicalized to NFC, aborting where the answer has no place — canonicalizing
      *  can lengthen a text at a seam as well as shorten it, so the answer is measured as it is
      *  built and not taken to be as long as what it was built from. */
-    private static String canonical(String joined, String what) {
-        return canonical(joined, what, LONGEST_TEXT);
+    private static String canonical(String joined, String what, WorkCheckpoint checkpoint) {
+        return canonical(joined, what, LONGEST_TEXT, checkpoint);
     }
 
-    private static String canonical(String joined, String what, long longest) {
-        String canonical = Normalization.normalizeWithin(Form.NFC, joined, longest);
+    private static String canonical(String joined, String what, long longest, WorkCheckpoint checkpoint) {
+        String canonical = TextRules.nfcWithin(joined, longest, checkpoint);
         if (canonical == null) {
             throw new ConstraintViolation(what + " is longer than a String holds once canonicalized");
         }
@@ -109,17 +111,26 @@ public final class Strings {
      * out to find that out.
      */
     public static TextAdmission admission(String text) {
-        return admission(text, LONGEST_TEXT);
+        return admission(text, LONGEST_TEXT, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #admission(String)}, passing {@code checkpoint} as it goes. */
+    public static TextAdmission admission(String text, WorkCheckpoint checkpoint) {
+        return admission(text, LONGEST_TEXT, checkpoint);
     }
 
     /** {@link #admission} for a {@code String} of {@code longest} code points at most: this is what a
      *  test that cannot build text that long asks of it. */
     static TextAdmission admission(String text, long longest) {
-        int half = ScalarValues.halfAPairAt(text);
+        return admission(text, longest, WorkCheckpoint.NONE);
+    }
+
+    static TextAdmission admission(String text, long longest, WorkCheckpoint checkpoint) {
+        int half = TextRules.halfAPairAt(text, checkpoint);
         if (half >= 0) {
             return new TextAdmission.NotText(half);
         }
-        String canonical = Normalization.normalizeWithin(Form.NFC, text, longest);
+        String canonical = TextRules.nfcWithin(text, longest, checkpoint);
         return canonical == null
                 ? new TextAdmission.NoPlace() : new TextAdmission.Admitted(canonical);
     }
@@ -127,7 +138,12 @@ public final class Strings {
     /** {@link #admission}, aborting where the text is not one: what a crossing from Java answers,
      *  where the host handed over something that is not text, or text that has no place. */
     public static String admit(String text) {
-        return switch (admission(text)) {
+        return admit(text, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #admit(String)}, passing {@code checkpoint} as it goes. */
+    public static String admit(String text, WorkCheckpoint checkpoint) {
+        return switch (admission(text, checkpoint)) {
             case TextAdmission.Admitted a -> a.text();
             case TextAdmission.NotText n -> throw new ConstraintViolation(
                     "text crossing into the domain holds half of a surrogate pair at UTF-16 index "
@@ -138,19 +154,30 @@ public final class Strings {
     }
 
     /**
-     * The language's order on text, lexicographic over scalar values ({@link ScalarValues}), as
+     * The language's order on text, lexicographic over scalar values ({@code ScalarValues}), as
      * generated code reaches it. Every place in a program that orders two {@code String}s the way a
      * model's {@code <} does asks this — the operator, a newtype's {@code compareTo}, the sort family
      * and the order a boundary writes in. Not {@link String#compareTo}, which orders UTF-16 code
      * units.
      */
     public static int compare(String a, String b) {
-        return ScalarValues.compare(a, b);
+        return TextRules.compare(a, b, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #compare(String, String)}, passing {@code checkpoint} before each unit compared. */
+    public static int compare(String a, String b, WorkCheckpoint checkpoint) {
+        return TextRules.compare(a, b, checkpoint);
     }
 
     /** {@link #compare} as a comparator, for the sort family's overloads that take one. */
     public static Comparator<Object> ordering() {
         return ORDERING;
+    }
+
+    /** {@link #ordering()}, passing {@code checkpoint} in every comparison: made for one sort and
+     *  held by nothing past it. */
+    public static Comparator<Object> ordering(WorkCheckpoint checkpoint) {
+        return (a, b) -> compare((String) a, (String) b, checkpoint);
     }
 
     private static final Comparator<Object> ORDERING = (a, b) -> compare((String) a, (String) b);
@@ -159,24 +186,42 @@ public final class Strings {
      *  is O(n) where the UTF-16 unit count would be a field read — the price of a length that agrees
      *  with {@link #characters} and cannot be half a character. */
     public static long length(String s) {
-        return ScalarValues.count(s);
+        return TextRules.count(s, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #length(String)}, passing {@code checkpoint} before each code point counted. */
+    public static long length(String s, WorkCheckpoint checkpoint) {
+        return TextRules.count(s, checkpoint);
     }
 
     /** The UTF-16 offset of code point {@code index}, or an abort where the string has no such code
      *  point. Every index the language hands in comes through here, so an out-of-range one is
      *  reported the same way wherever it was written. */
-    private static int offsetOf(String s, long index, String what) {
-        if (index < 0 || index > length(s)) {
+    private static int offsetOf(String s, long index, String what, WorkCheckpoint checkpoint) {
+        if (index < 0 || index > length(s, checkpoint)) {
             throw new ConstraintViolation(what + " out of range: " + index);
         }
-        return s.offsetByCodePoints(0, (int) index);
+        if (checkpoint == WorkCheckpoint.NONE) {
+            return s.offsetByCodePoints(0, (int) index);
+        }
+        int at = 0;
+        for (long passed = 0; passed < index; passed++) {
+            checkpoint.pass();
+            at += Character.charCount(s.codePointAt(at));
+        }
+        return at;
     }
 
     /** The code points of {@code s} from {@code fromInclusive} up to but not including
      *  {@code toExclusive}. Both are code-point indices, so a surrogate pair is never split. */
     public static String slice(String s, long fromInclusive, long toExclusive) {
-        int from = offsetOf(s, fromInclusive, "String.slice fromInclusive");
-        int to = offsetOf(s, toExclusive, "String.slice toExclusive");
+        return slice(s, fromInclusive, toExclusive, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #slice(String, long, long)}, passing {@code checkpoint} as it goes. */
+    public static String slice(String s, long fromInclusive, long toExclusive, WorkCheckpoint checkpoint) {
+        int from = offsetOf(s, fromInclusive, "String.slice fromInclusive", checkpoint);
+        int to = offsetOf(s, toExclusive, "String.slice toExclusive", checkpoint);
         if (to < from) {
             throw new ConstraintViolation(
                     "String.slice toExclusive " + toExclusive + " is before fromInclusive "
@@ -185,16 +230,76 @@ public final class Strings {
         return s.substring(from, to);
     }
 
+    /** Where {@code target} is first found in {@code s} at or after {@code from}, in UTF-16 units,
+     *  or -1. Walked here under a checkpoint, passing it before each unit compared: the host's own
+     *  search compares as many units as the two texts' lengths multiplied, in one call. */
+    private static int indexOf(String s, String target, int from, WorkCheckpoint checkpoint) {
+        if (checkpoint == WorkCheckpoint.NONE) {
+            return s.indexOf(target, from);
+        }
+        for (int at = from; at <= s.length() - target.length(); at++) {
+            int matched = 0;
+            while (matched < target.length()) {
+                checkpoint.pass();
+                if (s.charAt(at + matched) != target.charAt(matched)) {
+                    break;
+                }
+                matched++;
+            }
+            if (matched == target.length()) {
+                return at;
+            }
+        }
+        return -1;
+    }
+
+    /** Whether {@code s} holds {@code target} anywhere: {@link String#contains}, which is what a
+     *  shipped class calls for {@code String.contains}, passing {@code checkpoint} before each unit
+     *  compared. */
+    public static boolean contains(String s, String target, WorkCheckpoint checkpoint) {
+        return target.isEmpty() || indexOf(s, target, 0, checkpoint) >= 0;
+    }
+
+    /** Whether {@code s} begins with {@code prefix}: {@link String#startsWith}, passing
+     *  {@code checkpoint} before each unit compared. */
+    public static boolean startsWith(String s, String prefix, WorkCheckpoint checkpoint) {
+        return prefix.length() <= s.length() && sameUnits(s, 0, prefix, checkpoint);
+    }
+
+    /** Whether {@code s} ends with {@code suffix}: {@link String#endsWith}, passing
+     *  {@code checkpoint} before each unit compared. */
+    public static boolean endsWith(String s, String suffix, WorkCheckpoint checkpoint) {
+        return suffix.length() <= s.length()
+                && sameUnits(s, s.length() - suffix.length(), suffix, checkpoint);
+    }
+
+    /** Whether {@code s} holds the units of {@code part} from {@code at}, which it has room for. */
+    private static boolean sameUnits(String s, int at, String part, WorkCheckpoint checkpoint) {
+        for (int i = 0; i < part.length(); i++) {
+            checkpoint.pass();
+            if (s.charAt(at + i) != part.charAt(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** Splits on a literal separator, keeping empty pieces (Elm {@code String.split} semantics):
      *  {@code split("a,,b", ",") == ["a", "", "b"]}. An empty separator yields the whole string. */
     public static List<String> split(String s, String sep) {
+        return split(s, sep, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #split(String, String)}, passing {@code checkpoint} as it goes. */
+    public static List<String> split(String s, String sep, WorkCheckpoint checkpoint) {
         if (sep.isEmpty()) {
             return List.of(s);
         }
         PersistentVector.Builder<String> out = new PersistentVector.Builder<>();
         int from = 0;
         while (true) {
-            int at = s.indexOf(sep, from);
+            checkpoint.pass();
+            int at = indexOf(s, sep, from, checkpoint);
             if (at < 0) {
                 out.add(s.substring(from));
                 break;
@@ -210,8 +315,13 @@ public final class Strings {
      *  closed under concatenation — a base letter followed by a combining mark composes into one
      *  code point, not two — so the join has to canonicalize again at the seam. */
     public static String append(String a, String b) {
-        holds(length(a) + length(b), "String.append");
-        return canonical(a + b, "String.append");
+        return append(a, b, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #append(String, String)}, passing {@code checkpoint} as it goes. */
+    public static String append(String a, String b, WorkCheckpoint checkpoint) {
+        holds(length(a, checkpoint) + length(b, checkpoint), "String.append");
+        return canonical(a + b, "String.append", checkpoint);
     }
 
     /** Joins with a separator ({@code join(["a", "b"], "-") == "a-b"}). Canonicalized for the same
@@ -219,12 +329,34 @@ public final class Strings {
      *  as one {@code append} makes. A list can hold the same string many times over, so a short list
      *  of short strings can join to more than a {@code String} holds; that is measured first. */
     public static String join(List<String> xs, String sep) {
-        long codePoints = xs.isEmpty() ? 0 : length(sep) * (xs.size() - 1);
+        return join(xs, sep, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #join(List, String)}, passing {@code checkpoint} as it goes. */
+    public static String join(List<String> xs, String sep, WorkCheckpoint checkpoint) {
+        long codePoints = xs.isEmpty() ? 0 : length(sep, checkpoint) * (xs.size() - 1);
         for (String x : xs) {
-            codePoints += length(x);
+            checkpoint.pass();
+            codePoints += length(x, checkpoint);
         }
         holds(codePoints, "String.join");
-        return canonical(String.join(sep, xs), "String.join");
+        String joined;
+        if (checkpoint == WorkCheckpoint.NONE) {
+            joined = String.join(sep, xs);
+        } else {
+            StringBuilder out = new StringBuilder();
+            boolean first = true;
+            for (String x : xs) {
+                checkpoint.pass();
+                if (!first) {
+                    out.append(sep);
+                }
+                first = false;
+                out.append(x);
+            }
+            joined = out.toString();
+        }
+        return canonical(joined, "String.join", checkpoint);
     }
 
     /** Joins a list of strings with no separator (Elm {@code String.concat}):
@@ -233,21 +365,50 @@ public final class Strings {
         return join(xs, "");
     }
 
+    /** {@link #concat(List)}, passing {@code checkpoint} as it goes. */
+    public static String concat(List<String> xs, WorkCheckpoint checkpoint) {
+        return join(xs, "", checkpoint);
+    }
+
     /** Replaces every literal occurrence of {@code target} (Elm {@code String.replace}). An empty
      *  {@code target} leaves the string unchanged rather than splicing between every character.
      *  Canonicalized: a {@code replacement} introduces the same seam {@link #append} does. A long
      *  {@code replacement} for a short {@code target} lengthens the text once per occurrence, so the
      *  occurrences are counted and the length measured first. */
     public static String replace(String s, String target, String replacement) {
+        return replace(s, target, replacement, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #replace(String, String, String)}, passing {@code checkpoint} as it goes. */
+    public static String replace(String s, String target, String replacement, WorkCheckpoint checkpoint) {
         if (target.isEmpty()) {
             return s;
         }
         long occurrences = 0;
-        for (int at = s.indexOf(target); at >= 0; at = s.indexOf(target, at + target.length())) {
+        for (int at = indexOf(s, target, 0, checkpoint); at >= 0;
+                at = indexOf(s, target, at + target.length(), checkpoint)) {
+            checkpoint.pass();
             occurrences++;
         }
-        holds(length(s) + occurrences * (length(replacement) - length(target)), "String.replace");
-        return canonical(s.replace(target, replacement), "String.replace");
+        holds(length(s, checkpoint) + occurrences * (length(replacement, checkpoint)
+                - length(target, checkpoint)), "String.replace");
+        return canonical(replaced(s, target, replacement, checkpoint), "String.replace", checkpoint);
+    }
+
+    /** {@code s} with every occurrence of the non-empty {@code target} replaced, not canonicalized. */
+    private static String replaced(String s, String target, String replacement, WorkCheckpoint checkpoint) {
+        if (checkpoint == WorkCheckpoint.NONE) {
+            return s.replace(target, replacement);
+        }
+        StringBuilder out = new StringBuilder();
+        int from = 0;
+        for (int at = indexOf(s, target, 0, checkpoint); at >= 0;
+                at = indexOf(s, target, from, checkpoint)) {
+            checkpoint.pass();
+            out.append(s, from, at).append(replacement);
+            from = at + target.length();
+        }
+        return out.append(s, from, s.length()).toString();
     }
 
     /** Renders an integer as its decimal string ({@code fromInt(42) == "42"}). */
@@ -260,9 +421,15 @@ public final class Strings {
      *  character outside the whitespace set — including one JDK's own {@code String.trim} would
      *  have stripped — stops the run rather than being crossed. */
     public static String trim(String s) {
+        return trim(s, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #trim(String)}, passing {@code checkpoint} before each code point it looks at. */
+    public static String trim(String s, WorkCheckpoint checkpoint) {
         int start = 0;
         int end = s.length();
         while (start < end) {
+            checkpoint.pass();
             int cp = s.codePointAt(start);
             if (!WhiteSpace.contains(cp)) {
                 break;
@@ -270,6 +437,7 @@ public final class Strings {
             start += Character.charCount(cp);
         }
         while (end > start) {
+            checkpoint.pass();
             int cp = s.codePointBefore(end);
             if (!WhiteSpace.contains(cp)) {
                 break;
@@ -284,11 +452,17 @@ public final class Strings {
      *  {@link #trim} uses, scanned by code point rather than by a regex class, so a run of
      *  whitespace this splits on is a run {@link #trim} would remove at either end. */
     public static List<String> words(String s) {
+        return words(s, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #words(String)}, passing {@code checkpoint} before each code point. */
+    public static List<String> words(String s, WorkCheckpoint checkpoint) {
         PersistentVector.Builder<String> out = new PersistentVector.Builder<>();
         StringBuilder word = new StringBuilder();
-        PrimitiveIterator.OfInt it = s.codePoints().iterator();
-        while (it.hasNext()) {
-            int cp = it.nextInt();
+        for (int at = 0; at < s.length(); ) {
+            checkpoint.pass();
+            int cp = s.codePointAt(at);
+            at += Character.charCount(cp);
             if (WhiteSpace.contains(cp)) {
                 if (!word.isEmpty()) {
                     out.add(word.toString());
@@ -308,8 +482,18 @@ public final class Strings {
      *  ({@code characters("a12") == ["a", "1", "2"]}). Souther has no {@code Char}, so a character is
      *  a one-code-point {@code String}; this is what a {@code List.fold} over characters iterates. */
     public static List<String> characters(String s) {
+        return characters(s, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #characters(String)}, passing {@code checkpoint} before each code point. */
+    public static List<String> characters(String s, WorkCheckpoint checkpoint) {
         PersistentVector.Builder<String> out = new PersistentVector.Builder<>();
-        s.codePoints().forEach(cp -> out.add(new String(Character.toChars(cp))));
+        for (int at = 0; at < s.length(); ) {
+            checkpoint.pass();
+            int cp = s.codePointAt(at);
+            at += Character.charCount(cp);
+            out.add(new String(Character.toChars(cp)));
+        }
         return out.build();
     }
 
@@ -317,8 +501,18 @@ public final class Strings {
      *  gives the empty list, so a caller wanting the first one takes it through {@code List.get} and
      *  reads the absence there rather than from a sentinel. */
     public static List<Long> codePoints(String s) {
+        return codePoints(s, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #codePoints(String)}, passing {@code checkpoint} before each code point. */
+    public static List<Long> codePoints(String s, WorkCheckpoint checkpoint) {
         PersistentVector.Builder<Long> out = new PersistentVector.Builder<>();
-        s.codePoints().forEach(cp -> out.add((long) cp));
+        for (int at = 0; at < s.length(); ) {
+            checkpoint.pass();
+            int cp = s.codePointAt(at);
+            at += Character.charCount(cp);
+            out.add((long) cp);
+        }
         return out.build();
     }
 
@@ -326,35 +520,39 @@ public final class Strings {
      *  when it is not integer text or names an integer outside {@code Int} (Elm {@code String.toInt},
      *  with a named case in place of {@code Maybe}). Returns a boxed {@code Long} or the
      *  {@code NotANumber} singleton — the {@code Int | NotANumber} union. Which text is accepted is
-     *  decided by {@link #isIntegerText}; {@code Long.parseLong} only converts text already accepted
-     *  and answers the range, because on its own it also reads every Unicode decimal digit its JDK
-     *  knows ({@code "１２３"}, {@code "٣"}). */
+     *  decided here digit by digit, and not by {@code Long.parseLong}, which also reads every Unicode
+     *  decimal digit its JDK knows ({@code "１２３"}, {@code "٣"}). */
     public static Object toInt(String s) {
-        if (!isIntegerText(s)) {
-            return NotANumber.INSTANCE;
-        }
-        try {
-            return Long.parseLong(s);
-        } catch (NumberFormatException _) {
-            return NotANumber.INSTANCE;
-        }
+        return toInt(s, WorkCheckpoint.NONE);
     }
 
-    /** Integer text (spec §string-integer-text): an optional ASCII {@code +} or {@code -} followed by
-     *  one or more ASCII digits {@code 0}-{@code 9}, and nothing else. Checked by char because every
-     *  char it accepts is ASCII, so a surrogate half or any other non-ASCII char refuses the text. */
-    private static boolean isIntegerText(String s) {
-        int i = !s.isEmpty() && (s.charAt(0) == '+' || s.charAt(0) == '-') ? 1 : 0;
+    /** {@link #toInt(String)}, passing {@code checkpoint} before each character. */
+    public static Object toInt(String s, WorkCheckpoint checkpoint) {
+        boolean negative = !s.isEmpty() && s.charAt(0) == '-';
+        int i = !s.isEmpty() && (negative || s.charAt(0) == '+') ? 1 : 0;
         if (i == s.length()) {
-            return false;
+            return NotANumber.INSTANCE;
         }
+        // Gathered below zero, where a long has one more place than above it, so the least Int is
+        // read as itself and every other is negated once at the end.
+        long below = 0;
         for (; i < s.length(); i++) {
+            checkpoint.pass();
             char c = s.charAt(i);
             if (c < '0' || c > '9') {
-                return false;
+                return NotANumber.INSTANCE;
             }
+            int digit = c - '0';
+            if (below < Long.MIN_VALUE / 10 || below * 10 < Long.MIN_VALUE + digit) {
+                // Past what an Int holds, so not an Int whatever follows.
+                return NotANumber.INSTANCE;
+            }
+            below = below * 10 - digit;
         }
-        return true;
+        if (negative) {
+            return below;
+        }
+        return below == Long.MIN_VALUE ? NotANumber.INSTANCE : -below;
     }
 
     /** The code points of {@code s} in the opposite order, canonicalized (Elm {@code String.reverse}).
@@ -364,7 +562,25 @@ public final class Strings {
      *  writes {@code String.codePoints(s) |> List.reverse} instead — a {@code List<Int>}, not a
      *  {@code String}, is under no canonical-form obligation. */
     public static String reverse(String s) {
-        return canonical(new StringBuilder(s).reverse().toString(), "String.reverse");
+        return reverse(s, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #reverse(String)}, passing {@code checkpoint} before each code point. */
+    public static String reverse(String s, WorkCheckpoint checkpoint) {
+        String reversed;
+        if (checkpoint == WorkCheckpoint.NONE) {
+            reversed = new StringBuilder(s).reverse().toString();
+        } else {
+            StringBuilder out = new StringBuilder();
+            for (int end = s.length(); end > 0; ) {
+                checkpoint.pass();
+                int cp = s.codePointBefore(end);
+                end -= Character.charCount(cp);
+                out.appendCodePoint(cp);
+            }
+            reversed = out.toString();
+        }
+        return canonical(reversed, "String.reverse", checkpoint);
     }
 
     /** {@code n} copies of {@code s} joined (Elm {@code String.repeat}); {@code n} of 0 or less gives
@@ -376,34 +592,72 @@ public final class Strings {
      *  Canonicalized: the seam between one copy and the next is exactly {@link #append}'s seam,
      *  repeated. */
     public static String repeat(String s, long n) {
-        return repeat(s, n, LONGEST_TEXT);
+        return repeat(s, n, LONGEST_TEXT, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #repeat(String, long)}, passing {@code checkpoint} as it goes. */
+    public static String repeat(String s, long n, WorkCheckpoint checkpoint) {
+        return repeat(s, n, LONGEST_TEXT, checkpoint);
     }
 
     static String repeat(String s, long n, long longest) {
+        return repeat(s, n, longest, WorkCheckpoint.NONE);
+    }
+
+    static String repeat(String s, long n, long longest, WorkCheckpoint checkpoint) {
         if (n <= 0 || s.isEmpty()) {
             return "";
         }
-        holdsCopies(n, length(s), "String.repeat", longest);
-        return canonical(s.repeat((int) n), "String.repeat", longest);
+        holdsCopies(n, length(s, checkpoint), "String.repeat", longest);
+        return canonical(copies(s, (int) n, checkpoint), "String.repeat", longest, checkpoint);
+    }
+
+    /** {@code n} copies of {@code s} one after another, not canonicalized; {@code n} copies have
+     *  been measured to have a place. */
+    private static String copies(String s, int n, WorkCheckpoint checkpoint) {
+        if (checkpoint == WorkCheckpoint.NONE) {
+            return s.repeat(n);
+        }
+        StringBuilder out = new StringBuilder();
+        for (int copy = 0; copy < n; copy++) {
+            checkpoint.pass();
+            out.append(s);
+        }
+        return out.toString();
     }
 
     /** Breaks {@code s} into lines (Elm {@code String.lines}): {@code \r\n} is normalised to
      *  {@code \n} first, then the string is split on {@code \n} keeping empty pieces — so a trailing
      *  newline leaves an empty last line, as it does in Elm. */
     public static List<String> lines(String s) {
-        return split(s.replace("\r\n", "\n"), "\n");
+        return lines(s, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #lines(String)}, passing {@code checkpoint} as it goes. */
+    public static List<String> lines(String s, WorkCheckpoint checkpoint) {
+        return split(replaced(s, "\r\n", "\n", checkpoint), "\n", checkpoint);
     }
 
     /** {@code s} widened on the left to {@code width} code points with copies of {@code pad}. A
      *  string already that wide is returned unchanged, and an empty {@code pad} fills nothing, so it
      *  is returned unchanged too. */
     public static String padLeft(String s, long width, String pad) {
-        return pad(s, width, pad, true, LONGEST_TEXT);
+        return pad(s, width, pad, true, LONGEST_TEXT, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #padLeft(String, long, String)}, passing {@code checkpoint} as it goes. */
+    public static String padLeft(String s, long width, String pad, WorkCheckpoint checkpoint) {
+        return pad(s, width, pad, true, LONGEST_TEXT, checkpoint);
     }
 
     /** {@code s} widened on the right, the mirror of {@link #padLeft}. */
     public static String padRight(String s, long width, String pad) {
-        return pad(s, width, pad, false, LONGEST_TEXT);
+        return pad(s, width, pad, false, LONGEST_TEXT, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #padRight(String, long, String)}, passing {@code checkpoint} as it goes. */
+    public static String padRight(String s, long width, String pad, WorkCheckpoint checkpoint) {
+        return pad(s, width, pad, false, LONGEST_TEXT, checkpoint);
     }
 
     /** Widens {@code s} to exactly {@code width} code points with copies of {@code pad} — on the
@@ -431,21 +685,28 @@ public final class Strings {
      * padding is defined as ("{@code pad} is repeated and cut", spec §stdlib-string), so they are
      * measured before they are built, as the fill and {@code s} joined are. */
     static String pad(String s, long width, String pad, boolean atStart, long longest) {
-        if (pad.isEmpty() || length(s) >= width) {
+        return pad(s, width, pad, atStart, longest, WorkCheckpoint.NONE);
+    }
+
+    static String pad(String s, long width, String pad, boolean atStart, long longest,
+                      WorkCheckpoint checkpoint) {
+        if (pad.isEmpty() || length(s, checkpoint) >= width) {
             return s;
         }
         holds(width, "String.pad", longest);
-        long padLength = length(pad);
-        long need = width - length(s);
+        long padLength = length(pad, checkpoint);
+        long need = width - length(s, checkpoint);
         while (true) {
+            checkpoint.pass();
             long copies = 1 + (need - 1) / padLength;
             holdsCopies(copies, padLength, "String.pad's fill", longest);
-            String fill = canonical(pad.repeat((int) copies), "String.pad's fill", longest);
-            String trimmedFill = length(fill) > need ? slice(fill, 0, need) : fill;
-            holds(length(trimmedFill) + length(s), "String.pad", longest);
+            String fill = canonical(copies(pad, (int) copies, checkpoint), "String.pad's fill", longest,
+                    checkpoint);
+            String trimmedFill = length(fill, checkpoint) > need ? slice(fill, 0, need, checkpoint) : fill;
+            holds(length(trimmedFill, checkpoint) + length(s, checkpoint), "String.pad", longest);
             String joined = canonical(atStart ? trimmedFill + s : s + trimmedFill, "String.pad",
-                    longest);
-            if (length(joined) >= width) {
+                    longest, checkpoint);
+            if (length(joined, checkpoint) >= width) {
                 return joined;
             }
             need++;
@@ -457,8 +718,13 @@ public final class Strings {
      *  ({@code fromDecimal(new BigDecimal("1000.00")) == "1000.00"}); a negative scale is written as
      *  the integer zeros it stands for, with no point ({@code 12E+2} is {@code "1200"}). A text no
      *  {@code String} holds aborts ({@link DecimalMath#plainText}). */
-    public static String fromDecimal(java.math.BigDecimal d) {
+    public static String fromDecimal(BigDecimal d) {
         return DecimalMath.plainText(d);
+    }
+
+    /** {@link #fromDecimal(BigDecimal)}, paid for to {@code checkpoint} first. */
+    public static String fromDecimal(BigDecimal d, WorkCheckpoint checkpoint) {
+        return DecimalMath.plainText(d, checkpoint);
     }
 
     /** Parses {@code s} as decimal text (spec §string-decimal-text), or {@link NotANumber#INSTANCE}
@@ -470,18 +736,25 @@ public final class Strings {
      *  ({@code "１２３.４５"}). The scale of what it answers is the number of digits written after the
      *  point, which is also what {@code BigDecimal(String)} gives text with no exponent. */
     public static Object toDecimal(String s) {
-        if (!isDecimalText(s)) {
+        return toDecimal(s, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #toDecimal(String)}, passing {@code checkpoint} before each character and paying for
+     *  the digits read into a number. */
+    public static Object toDecimal(String s, WorkCheckpoint checkpoint) {
+        if (!isDecimalText(s, checkpoint)) {
             return NotANumber.INSTANCE;
         }
-        return DecimalMath.ofDecimalText(s);
+        return DecimalMath.ofDecimalText(s, checkpoint);
     }
 
     /** Decimal text (spec §string-decimal-text): an optional ASCII {@code +} or {@code -}, one or
      *  more ASCII digits, and optionally a {@code .} followed by one or more ASCII digits, and
-     *  nothing else. Checked by char for the same reason as {@link #isIntegerText}. */
-    private static boolean isDecimalText(String s) {
+     *  nothing else. Checked by char, since every char it accepts is ASCII, so a surrogate half or
+     *  any other non-ASCII char refuses the text. */
+    private static boolean isDecimalText(String s, WorkCheckpoint checkpoint) {
         int i = !s.isEmpty() && (s.charAt(0) == '+' || s.charAt(0) == '-') ? 1 : 0;
-        int whole = digitsFrom(s, i);
+        int whole = digitsFrom(s, i, checkpoint);
         if (whole == i) {
             return false;
         }
@@ -491,14 +764,18 @@ public final class Strings {
         if (s.charAt(whole) != '.') {
             return false;
         }
-        int fraction = digitsFrom(s, whole + 1);
+        int fraction = digitsFrom(s, whole + 1, checkpoint);
         return fraction > whole + 1 && fraction == s.length();
     }
 
     /** The index just past the run of ASCII digits in {@code s} starting at {@code from}. */
-    private static int digitsFrom(String s, int from) {
+    private static int digitsFrom(String s, int from, WorkCheckpoint checkpoint) {
         int i = from;
-        while (i < s.length() && s.charAt(i) >= '0' && s.charAt(i) <= '9') {
+        while (i < s.length()) {
+            checkpoint.pass();
+            if (s.charAt(i) < '0' || s.charAt(i) > '9') {
+                break;
+            }
             i++;
         }
         return i;
@@ -511,16 +788,26 @@ public final class Strings {
      *  condition Unicode's default algorithm carries that is context rather than locale.
      *  Canonicalized: case mapping is not closed under NFC either. */
     public static String lowercase(String s) {
-        return canonical(mapped(CaseConversion.lowercaseWithin(s, LONGEST_TEXT), "String.lowercase"),
-                "String.lowercase");
+        return lowercase(s, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #lowercase(String)}, passing {@code checkpoint} as the conversion asks. */
+    public static String lowercase(String s, WorkCheckpoint checkpoint) {
+        return canonical(mapped(TextRules.lowercaseWithin(s, LONGEST_TEXT, checkpoint), "String.lowercase"),
+                "String.lowercase", checkpoint);
     }
 
     /** The uppercase half of {@link #lowercase}: the same untailored Unicode 18.0.0 full mapping, so
      *  one code point can widen to several ({@code uppercase("straße") == "STRASSE"}), and no locale
      *  narrows it back — Turkish {@code i} still becomes {@code I}, never {@code İ}. */
     public static String uppercase(String s) {
-        return canonical(mapped(CaseConversion.uppercaseWithin(s, LONGEST_TEXT), "String.uppercase"),
-                "String.uppercase");
+        return uppercase(s, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #uppercase(String)}, passing {@code checkpoint} as the conversion asks. */
+    public static String uppercase(String s, WorkCheckpoint checkpoint) {
+        return canonical(mapped(TextRules.uppercaseWithin(s, LONGEST_TEXT, checkpoint), "String.uppercase"),
+                "String.uppercase", checkpoint);
     }
 
     /** The case-mapped text, before it is canonicalized, or an abort where it would have no place. A

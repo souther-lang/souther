@@ -11,17 +11,19 @@ import java.time.Duration;
  * beside the JVM's arrangement: an execution that is not this one honours the same three by its own
  * means, and reads them without naming the subsystem that happens to run them today.
  *
- * <p>The first two are what decide a row. {@code stepLimit} is how many times the evaluated code may
- * pass a point the emitter counts, and {@code recursionDepthLimit} is how deep a recursive helper may
- * go; a row that spends either is reported, and the reading is the same on every machine because
- * neither is a measure of time. Two compiles of the same model under the same policy therefore say
- * the same thing about it, however fast the host is and however loaded.
+ * <p>The first two are what decide a row. {@code stepLimit} is how many counted points the evaluation
+ * may pass: each time round a loop the emitter emits, and inside each runtime operation that code
+ * calls, once for each character, element or state the operation goes over, with a host computation
+ * on long numbers paid for before it starts. {@code recursionDepthLimit} is how deep a recursive
+ * helper may go. A row that spends either is reported, and the reading is the same on every machine
+ * because neither is a measure of time. Two compiles of the same model under the same policy
+ * therefore say the same thing about it, however fast the host is and however loaded.
  *
  * <p>{@code compilerTimeout} is not about the model at all. It exists for work that is the
- * compiler's own and that the counters do not reach — what it does around the points it places, and
- * a call it makes into classes that have none in them. Losing to it is the compiler failing to
- * answer, not the model failing to terminate, and the two are reported as the different things they
- * are.
+ * compiler's own and that the counters do not reach — loading a class, a boundary library walking a
+ * value it decodes or writes, one host computation already started — and for a call into classes
+ * that pass no counted point at all. Losing to it is the compiler failing to answer, not the model
+ * failing to terminate, and the two are reported as the different things they are.
  *
  * <p>What it obliges an execution to is elapsed time, and the elapsed time it obliges is the
  * compiler's own: past this, the compiler has not gone on working without answering. What decides

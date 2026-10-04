@@ -31,6 +31,7 @@ import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.evaluate.StepLimitExceeded;
+import souther.runtime.Values;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.observe.Asserted;
 import souther.compiler.observe.Disposition;
@@ -389,7 +390,7 @@ public final class ExampleVerifier {
             return false;
         }
         for (int i = 0; i < a.length; i++) {
-            if (!souther.runtime.Values.equal(a[i], b[i])) {
+            if (!Values.equal(a[i], b[i], EvaluationContext.checkpoint())) {
                 return false;
             }
         }
@@ -1557,15 +1558,16 @@ public final class ExampleVerifier {
      * <p>Told apart here rather than at each place code runs, because what an author does about the
      * two is not the same: a loop that will not stop is bounded or made structural, and a recursion
      * that goes too deep is made to recurse on a part of its argument.
+     *
+     * <p>Read off what {@link EvaluationContext#overspent} finds, wherever in the causes it is. An
+     * evaluation given up on spent no budget: it is the deadline's, and is said where the deadline is.
      */
     private static FailurePhase overspending(Throwable cause) {
-        if (cause instanceof StepLimitExceeded) {
-            return FailurePhase.STEP_LIMIT;
-        }
-        if (cause instanceof DepthLimitExceeded) {
-            return FailurePhase.DEPTH_LIMIT;
-        }
-        return null;
+        return switch (EvaluationContext.overspent(cause)) {
+            case StepLimitExceeded _ -> FailurePhase.STEP_LIMIT;
+            case DepthLimitExceeded _ -> FailurePhase.DEPTH_LIMIT;
+            case null, default -> null;
+        };
     }
 
     /**
@@ -1864,9 +1866,8 @@ public final class ExampleVerifier {
             return fixtures.caseUnder(
                     TypeView.asWritten(position, symbols, kinds, sums).wrappers(), fixture);
         } catch (RuntimeException e) {
-            if (overspending(e) != null) {
-                throw e;   // the row's budget is gone; it is not a form that could not be read
-            }
+            // the row's budget is gone, or the row was given up on; it is not a form that could not be read
+            EvaluationContext.rethrowIfOverspent(e);
             return null;
         }
     }
@@ -2393,9 +2394,7 @@ public final class ExampleVerifier {
      */
     private void applicationFailed(FixtureReader fixtures, Hir.ExampleRow row, Expectation stated,
                                    Throwable cause, List<Diagnostic> out, RowState state) {
-        if (overspending(cause) != null) {
-            throw (RuntimeException) cause;
-        }
+        EvaluationContext.rethrowIfOverspent(cause);
         if (cause instanceof FakeMissException fm) {
             out.add(Diagnostic.at(row.pos())
                     .say(new ExampleMessage.AFakeHadNoOutputForAnInput(fm.getMessage()))

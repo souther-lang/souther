@@ -61,13 +61,17 @@ class WhatAMachineCostsIsBoundedByWhatItLooksAtTest {
     }
 
     /**
-     * A class written wide and repeated is within every state limit and a great deal of work to make
-     * deterministic: each state's row is as wide as the class cuts the symbols. It is refused on
-     * that work, as a machine larger than one may be, and refused early.
+     * A chain of characters each of its own is within every state limit and a great deal of work to
+     * make deterministic: it is as many classes as it is long, and each state's row is as wide as
+     * that. It is refused on that work, as a machine larger than one may be, and refused early.
      */
     @Test
-    void aWideClassRepeatedIsRefusedOnTheWorkItsRowsTake() {
-        PatternMeaning meaning = meaning(wideClass(3000) + "{2000}");
+    void aChainOfCharactersEachOfItsOwnIsRefusedOnTheWorkItsRowsTake() {
+        StringBuilder chain = new StringBuilder();
+        for (int i = 0; i < 8000; i++) {
+            chain.appendCodePoint(0x20000 + i);
+        }
+        PatternMeaning meaning = meaning(chain.toString());
         Meter meter = PatternPlan.Budget.OF_ADMITTED_VALUES.meter();
         assertTimeoutPreemptively(Duration.ofSeconds(30), () ->
                 assertNull(PatternPlan.of(meaning).compile(meter)));
@@ -104,15 +108,5 @@ class WhatAMachineCostsIsBoundedByWhatItLooksAtTest {
 
     private static PatternMeaning meaning(String regex) {
         return ((PatternRead.Read) PatternParser.read(regex)).meaning();
-    }
-
-    /** A class of {@code many} characters none of which is beside another, all past the basic
-     *  plane so that none is half of a pair. */
-    private static String wideClass(int many) {
-        StringBuilder out = new StringBuilder("[");
-        for (int i = 0; i < many; i++) {
-            out.appendCodePoint(0x20000 + 2 * i);
-        }
-        return out.append(']').toString();
     }
 }

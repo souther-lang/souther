@@ -63,6 +63,12 @@ public sealed interface Tuple {
 
     /** Whether {@code a} and {@code b} are the same tuple; what each arm's {@code equals} answers. */
     static boolean same(Tuple a, @Nullable Object b) {
+        return same(a, b, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #same(Tuple, Object)}, comparing the elements under {@code checkpoint}. A tuple's
+     *  arity is written in the source, so the elements are counted by nothing here. */
+    static boolean same(Tuple a, @Nullable Object b, WorkCheckpoint checkpoint) {
         if (a == b) {
             return true;
         }
@@ -70,7 +76,7 @@ public sealed interface Tuple {
             return false;
         }
         for (int i = 0; i < a.size(); i++) {
-            if (!Values.equal(a.get(i), other.get(i))) {
+            if (!Values.equal(a.get(i), other.get(i), checkpoint)) {
                 return false;
             }
         }
@@ -79,9 +85,14 @@ public sealed interface Tuple {
 
     /** The hash that agrees with {@link #same}. */
     static int hashOf(Tuple t) {
+        return hashOf(t, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #hashOf(Tuple)}, hashing the elements under {@code checkpoint}. */
+    static int hashOf(Tuple t, WorkCheckpoint checkpoint) {
         int h = 1;
         for (int i = 0; i < t.size(); i++) {
-            h = 31 * h + Values.hash(t.get(i));
+            h = 31 * h + Values.hash(t.get(i), checkpoint);
         }
         return h;
     }

@@ -81,7 +81,13 @@ public final class Representations {
      * this a function of the amount.
      */
     public static BigDecimal canonicalNumber(BigDecimal amount) {
-        BigDecimal stripped = DecimalMath.leastDigits(amount);
+        return canonicalNumber(amount, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #canonicalNumber(BigDecimal)}, paying for the zeros taken off to {@code checkpoint}.
+     *  What is spelled out after that is no more than {@link ExactDecimals#MAX_SPELT_OUT_DIGITS}. */
+    public static BigDecimal canonicalNumber(BigDecimal amount, WorkCheckpoint checkpoint) {
+        BigDecimal stripped = DecimalMath.leastDigits(amount, checkpoint);
         if (stripped.scale() >= 0) {
             return stripped;
         }
@@ -92,18 +98,30 @@ public final class Representations {
 
     /** The members of an encoded array, in ascending order of their own external representation. */
     public static Object sortedArray(@Nullable Object encoded) {
+        return sortedArray(encoded, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #sortedArray(Object)}, passing {@code checkpoint} once for each comparison and inside
+     *  each, as the members are compared. */
+    public static Object sortedArray(@Nullable Object encoded, WorkCheckpoint checkpoint) {
         if (!(encoded instanceof List<?> members)) {
             throw notAnExternalForm(encoded);
         }
-        return sortedMembers(members);
+        return sortedMembers(members, checkpoint);
     }
 
     /** The members of an encoded object, in ascending order of their keys. */
     public static Object sortedObject(@Nullable Object encoded) {
+        return sortedObject(encoded, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #sortedObject(Object)}, passing {@code checkpoint} once for each member and each
+     *  comparison of two keys, and inside it. */
+    public static Object sortedObject(@Nullable Object encoded, WorkCheckpoint checkpoint) {
         if (!(encoded instanceof Map<?, ?> members)) {
             throw notAnExternalForm(encoded);
         }
-        return byKey(members);
+        return byKey(members, checkpoint);
     }
 
     /**
@@ -114,10 +132,17 @@ public final class Representations {
      * their members read in key order.
      */
     public static int compareExternalForms(@Nullable Object a, @Nullable Object b) {
-        return compare(a, b, null);
+        return compare(a, b, null, WorkCheckpoint.NONE);
     }
 
-    private static int compare(@Nullable Object a, @Nullable Object b, @Nullable KeyOrders orders) {
+    /** {@link #compareExternalForms(Object, Object)}, passing {@code checkpoint} once for each member
+     *  compared and inside each. */
+    public static int compareExternalForms(@Nullable Object a, @Nullable Object b, WorkCheckpoint checkpoint) {
+        return compare(a, b, null, checkpoint);
+    }
+
+    private static int compare(@Nullable Object a, @Nullable Object b, @Nullable KeyOrders orders,
+                               WorkCheckpoint checkpoint) {
         int form = rank(a);
         int other = rank(b);
         if (form != other) {
@@ -129,10 +154,10 @@ public final class Representations {
         }
         return switch (form) {
             case NULL, FALSE, TRUE -> 0;
-            case NUMBER -> compareNumbers(a, b);
-            case STRING -> Strings.compare((String) a, (String) b);
-            case ARRAY -> compareArrays((List<?>) a, (List<?>) b, orders);
-            default -> compareObjects((Map<?, ?>) a, (Map<?, ?>) b, orders);
+            case NUMBER -> compareNumbers(a, b, checkpoint);
+            case STRING -> Strings.compare((String) a, (String) b, checkpoint);
+            case ARRAY -> compareArrays((List<?>) a, (List<?>) b, orders, checkpoint);
+            default -> compareObjects((Map<?, ?>) a, (Map<?, ?>) b, orders, checkpoint);
         };
     }
 
@@ -182,12 +207,20 @@ public final class Representations {
      * in scale are one amount (the language drops scale from identity) and two numbers on the wire,
      * so leaving them tied would let whichever arrived first stay first.
      */
-    private static int compareNumbers(Object a, Object b) {
+    private static int compareNumbers(Object a, Object b, WorkCheckpoint checkpoint) {
         if (a instanceof Long x && b instanceof Long y) {
             return Long.compare(x, y);
         }
-        int byAmount = asAmount(a).compareTo(asAmount(b));
-        return byAmount != 0 ? byAmount : asWritten(a).compareTo(asWritten(b));
+        int byAmount = (int) DecimalMath.compare(asAmount(a), asAmount(b), checkpoint);
+        if (byAmount != 0) {
+            return byAmount;
+        }
+        if (checkpoint != WorkCheckpoint.NONE) {
+            // Each is written out, which turns its digits into text.
+            long bits = Math.max(HostWork.bits(asAmount(a)), HostWork.bits(asAmount(b)));
+            checkpoint.spend(2 * HostWork.product(bits, bits));
+        }
+        return asWritten(a).compareTo(asWritten(b));
     }
 
     private static BigDecimal asAmount(Object number) {
@@ -199,11 +232,13 @@ public final class Representations {
         return number.toString();
     }
 
-    private static int compareArrays(List<?> a, List<?> b, @Nullable KeyOrders orders) {
+    private static int compareArrays(List<?> a, List<?> b, @Nullable KeyOrders orders,
+                                     WorkCheckpoint checkpoint) {
         Iterator<?> xs = a.iterator();
         Iterator<?> ys = b.iterator();
         while (xs.hasNext() && ys.hasNext()) {
-            int c = compare(xs.next(), ys.next(), orders);
+            checkpoint.pass();
+            int c = compare(xs.next(), ys.next(), orders, checkpoint);
             if (c != 0) {
                 return c;
             }
@@ -211,15 +246,17 @@ public final class Representations {
         return Integer.compare(a.size(), b.size());
     }
 
-    private static int compareObjects(Map<?, ?> a, Map<?, ?> b, @Nullable KeyOrders orders) {
-        List<String> xs = keysOf(a, orders);
-        List<String> ys = keysOf(b, orders);
+    private static int compareObjects(Map<?, ?> a, Map<?, ?> b, @Nullable KeyOrders orders,
+                                      WorkCheckpoint checkpoint) {
+        List<String> xs = keysOf(a, orders, checkpoint);
+        List<String> ys = keysOf(b, orders, checkpoint);
         for (int i = 0; i < Math.min(xs.size(), ys.size()); i++) {
-            int byKey = Strings.compare(xs.get(i), ys.get(i));
+            checkpoint.pass();
+            int byKey = Strings.compare(xs.get(i), ys.get(i), checkpoint);
             if (byKey != 0) {
                 return byKey;
             }
-            int byValue = compare(a.get(xs.get(i)), b.get(ys.get(i)), orders);
+            int byValue = compare(a.get(xs.get(i)), b.get(ys.get(i)), orders, checkpoint);
             if (byValue != 0) {
                 return byValue;
             }
@@ -259,10 +296,13 @@ public final class Representations {
     /** The members in order, in a host list: an external form can hold {@code null}, which a
      *  {@code List} of the language cannot, and the members arrived as one host list already, so a
      *  copy as long as it has a place wherever it did. */
-    private static List<Object> sortedMembers(List<?> members) {
+    private static List<Object> sortedMembers(List<?> members, WorkCheckpoint checkpoint) {
         List<Object> out = new ArrayList<>(members);
-        KeyOrders orders = new KeyOrders();
-        out.sort((a, b) -> compare(a, b, orders));
+        KeyOrders orders = new KeyOrders(checkpoint);
+        out.sort((a, b) -> {
+            checkpoint.pass();
+            return compare(a, b, orders, checkpoint);
+        });
         return out;
     }
 
@@ -278,7 +318,12 @@ public final class Representations {
      */
     private static final class KeyOrders {
 
+        private final WorkCheckpoint checkpoint;
         private @Nullable Map<Object, List<String>> known;
+
+        KeyOrders(WorkCheckpoint checkpoint) {
+            this.checkpoint = checkpoint;
+        }
 
         List<String> of(Map<?, ?> members) {
             Map<Object, List<String>> cache = known;
@@ -286,29 +331,32 @@ public final class Representations {
                 cache = new IdentityHashMap<>();
                 known = cache;
             }
-            return cache.computeIfAbsent(members, m -> sortedKeys((Map<?, ?>) m));
+            return cache.computeIfAbsent(members, m -> sortedKeys((Map<?, ?>) m, checkpoint));
         }
     }
 
-    private static List<String> keysOf(Map<?, ?> members, @Nullable KeyOrders orders) {
-        return orders == null ? sortedKeys(members) : orders.of(members);
+    private static List<String> keysOf(Map<?, ?> members, @Nullable KeyOrders orders,
+                                       WorkCheckpoint checkpoint) {
+        return orders == null ? sortedKeys(members, checkpoint) : orders.of(members);
     }
 
-    private static Map<String, Object> byKey(Map<?, ?> members) {
-        List<String> keys = sortedKeys(members);
+    private static Map<String, Object> byKey(Map<?, ?> members, WorkCheckpoint checkpoint) {
+        List<String> keys = sortedKeys(members, checkpoint);
         Map<String, Object> out = LinkedHashMap.newLinkedHashMap(keys.size());
         for (String key : keys) {
+            checkpoint.pass();
             out.put(key, members.get(key));
         }
         return out;
     }
 
-    private static List<String> sortedKeys(Map<?, ?> members) {
+    private static List<String> sortedKeys(Map<?, ?> members, WorkCheckpoint checkpoint) {
         PersistentVector.Builder<String> keys = new PersistentVector.Builder<>();
         for (Object key : members.keySet()) {
+            checkpoint.pass();
             keys.add(requireKey(key));
         }
-        return Sorting.stably(keys.build(), Strings::compare);
+        return Sorting.stably(keys.build(), (a, b) -> Strings.compare(a, b, checkpoint), checkpoint);
     }
 
     /** A boundary object is keyed by strings, so a key that is not one means the codec broke. */

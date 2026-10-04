@@ -59,22 +59,35 @@ public final class PersistentHashSet<E> extends AbstractSet<E> implements ValueS
         return PersistentHashSet.<E>empty().with(value);
     }
 
+    /** {@link #ofSingle(Object)}, hashing the element under {@code checkpoint}. */
+    public static <E> PersistentHashSet<E> ofSingle(E value, WorkCheckpoint checkpoint) {
+        return PersistentHashSet.<E>empty().with(value, checkpoint);
+    }
+
     /** Wraps {@code src} as a PersistentHashSet, sharing when it already is one, else building by
      *  adding each element (dropping duplicates). */
-    @SuppressWarnings("unchecked")
     public static <E> PersistentHashSet<E> from(Collection<? extends E> src) {
+        return from(src, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #from(Collection)}, passing {@code checkpoint} once for each element added and as
+     *  elements are compared. */
+    @SuppressWarnings("unchecked")
+    public static <E> PersistentHashSet<E> from(Collection<? extends E> src, WorkCheckpoint checkpoint) {
         if (src instanceof PersistentHashSet<?> phs) {
             return (PersistentHashSet<E>) phs;
         }
-        return build(src.iterator());
+        return build(src.iterator(), checkpoint);
     }
 
     /** Drains {@code elements} into a set in one pass, through the backing map's bulk builder: the
      *  trie never leaves this method, so its nodes are filled in place rather than cloned per
      *  element. Every set operation that produces a fresh set goes through here. */
-    private static <E> PersistentHashSet<E> build(java.util.Iterator<? extends E> elements) {
-        PersistentHashMap.Builder<E, Object> b = new PersistentHashMap.Builder<>();
+    private static <E> PersistentHashSet<E> build(Iterator<? extends E> elements,
+                                                  WorkCheckpoint checkpoint) {
+        PersistentHashMap.Builder<E, Object> b = new PersistentHashMap.Builder<>(checkpoint);
         while (elements.hasNext()) {
+            checkpoint.pass();
             b.set(elements.next(), PRESENT);
         }
         return sealed(b);
@@ -88,13 +101,23 @@ public final class PersistentHashSet<E> extends AbstractSet<E> implements ValueS
 
     /** This set with {@code value} added (unchanged when already present). */
     public PersistentHashSet<E> with(E value) {
-        PersistentHashMap<E, Object> m = map.assoc(value, PRESENT);
+        return with(value, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #with(Object)}, comparing elements under {@code checkpoint}. */
+    public PersistentHashSet<E> with(E value, WorkCheckpoint checkpoint) {
+        PersistentHashMap<E, Object> m = map.assoc(value, PRESENT, checkpoint);
         return m == map ? this : new PersistentHashSet<>(m);
     }
 
     /** This set without {@code value} (unchanged when absent). */
     public PersistentHashSet<E> without(E value) {
-        PersistentHashMap<E, Object> m = map.without(value);
+        return without(value, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #without(Object)}, comparing elements under {@code checkpoint}. */
+    public PersistentHashSet<E> without(E value, WorkCheckpoint checkpoint) {
+        PersistentHashMap<E, Object> m = map.without(value, checkpoint);
         return m == map ? this : new PersistentHashSet<>(m);
     }
 
@@ -106,6 +129,11 @@ public final class PersistentHashSet<E> extends AbstractSet<E> implements ValueS
     @Override
     public boolean contains(@Nullable Object value) {
         return map.containsKey(value);
+    }
+
+    /** {@link #contains(Object)}, comparing elements under {@code checkpoint}. */
+    public boolean contains(@Nullable Object value, WorkCheckpoint checkpoint) {
+        return map.containsKey(value, checkpoint);
     }
 
     @Override
@@ -134,19 +162,20 @@ public final class PersistentHashSet<E> extends AbstractSet<E> implements ValueS
      * when the set already is one, so a set Souther built pays nothing.
      */
     @Override
-    public boolean valueEquals(@Nullable Object o) {
+    public boolean valueEquals(@Nullable Object o, WorkCheckpoint checkpoint) {
         if (o == this) {
             return true;
         }
         if (!(o instanceof Set<?> s)) {
             return false;
         }
-        PersistentHashSet<?> other = PersistentHashSet.from(s);
+        PersistentHashSet<?> other = PersistentHashSet.from(s, checkpoint);
         if (other.size() != size()) {
             return false;
         }
         for (Object e : other) {
-            if (!contains(e)) {
+            checkpoint.pass();
+            if (!contains(e, checkpoint)) {
                 return false;
             }
         }
@@ -156,26 +185,35 @@ public final class PersistentHashSet<E> extends AbstractSet<E> implements ValueS
     /** Summed over the elements, so it does not depend on the order they are walked in — a set is
      *  unordered, and two holding the same elements reach them in different places. */
     @Override
-    public int valueHash() {
+    public int valueHash(WorkCheckpoint checkpoint) {
         int h = 0;
         for (E e : this) {
-            h += Values.hash(e);
+            checkpoint.pass();
+            h += Values.hash(e, checkpoint);
         }
         return h;
     }
 
     /** All elements of {@code a} and {@code b} (adds the smaller into the larger). */
     public static <E> PersistentHashSet<E> union(Set<? extends E> a, Set<? extends E> b) {
+        return union(a, b, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #union(Set, Set)}, passing {@code checkpoint} once for each element added. */
+    public static <E> PersistentHashSet<E> union(Set<? extends E> a, Set<? extends E> b,
+                                                 WorkCheckpoint checkpoint) {
         Set<? extends E> larger = a.size() >= b.size() ? a : b;
         Set<? extends E> smaller = a.size() >= b.size() ? b : a;
         if (smaller.isEmpty()) {
-            return from(larger);
+            return from(larger, checkpoint);
         }
-        PersistentHashMap.Builder<E, Object> out = new PersistentHashMap.Builder<>();
+        PersistentHashMap.Builder<E, Object> out = new PersistentHashMap.Builder<>(checkpoint);
         for (E e : larger) {
+            checkpoint.pass();
             out.set(e, PRESENT);
         }
         for (E e : smaller) {
+            checkpoint.pass();
             out.set(e, PRESENT);
         }
         return sealed(out);
@@ -183,11 +221,18 @@ public final class PersistentHashSet<E> extends AbstractSet<E> implements ValueS
 
     /** The elements in both {@code a} and {@code b} (scans the smaller). */
     public static <E> PersistentHashSet<E> intersect(Set<? extends E> a, Set<? extends E> b) {
+        return intersect(a, b, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #intersect(Set, Set)}, passing {@code checkpoint} once for each element looked at. */
+    public static <E> PersistentHashSet<E> intersect(Set<? extends E> a, Set<? extends E> b,
+                                                     WorkCheckpoint checkpoint) {
         Set<?> larger = a.size() >= b.size() ? a : b;
         Set<? extends E> smaller = a.size() >= b.size() ? b : a;
-        PersistentHashMap.Builder<E, Object> kept = new PersistentHashMap.Builder<>();
+        PersistentHashMap.Builder<E, Object> kept = new PersistentHashMap.Builder<>(checkpoint);
         for (E e : smaller) {
-            if (larger.contains(e)) {
+            checkpoint.pass();
+            if (holds(larger, e, checkpoint)) {
                 kept.set(e, PRESENT);
             }
         }
@@ -196,15 +241,28 @@ public final class PersistentHashSet<E> extends AbstractSet<E> implements ValueS
 
     /** The elements of {@code a} that are not in {@code b}. */
     public static <E> PersistentHashSet<E> difference(Set<? extends E> a, Set<? extends E> b) {
+        return difference(a, b, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #difference(Set, Set)}, passing {@code checkpoint} once for each element looked at. */
+    public static <E> PersistentHashSet<E> difference(Set<? extends E> a, Set<? extends E> b,
+                                                      WorkCheckpoint checkpoint) {
         if (b.isEmpty()) {
-            return from(a);
+            return from(a, checkpoint);
         }
-        PersistentHashMap.Builder<E, Object> kept = new PersistentHashMap.Builder<>();
+        PersistentHashMap.Builder<E, Object> kept = new PersistentHashMap.Builder<>(checkpoint);
         for (E e : a) {
-            if (!b.contains(e)) {
+            checkpoint.pass();
+            if (!holds(b, e, checkpoint)) {
                 kept.set(e, PRESENT);
             }
         }
         return sealed(kept);
+    }
+
+    /** Whether {@code set} holds {@code e}, asked of the set as it is: one of these compares under
+     *  {@code checkpoint}, and any other set answers by its own {@code contains}. */
+    private static boolean holds(Set<?> set, Object e, WorkCheckpoint checkpoint) {
+        return set instanceof PersistentHashSet<?> ours ? ours.contains(e, checkpoint) : set.contains(e);
     }
 }

@@ -121,12 +121,7 @@ public final class RationalMath {
      * narrowing, which answers a value because the caller said what to do with the fraction.
      */
     public static long toInt(RoundingMode mode, Rational r) {
-        BigDecimal whole = decimalAt(r, 0, mode);
-        try {
-            return whole.longValueExact();
-        } catch (ArithmeticException _) {
-            throw new ConstraintViolation("Rational does not fit in an Int: " + r);
-        }
+        return toInt(mode, r, WorkCheckpoint.NONE);
     }
 
     /** {@code Rational.toDecimal(scale, mode, r)}: this at {@code scale} places, rounded by
@@ -146,6 +141,72 @@ public final class RationalMath {
      */
     private static BigDecimal decimalAt(Rational r, long scale, RoundingMode mode) {
         return r.asDecimal(scale(scale), DecimalMath.toJava(mode));
+    }
+
+    // What an evaluated class calls: each operation above, paid for to a checkpoint as Rational says.
+
+    public static Rational add(Rational a, Rational b, WorkCheckpoint checkpoint) {
+        return a.plus(b, checkpoint);
+    }
+
+    public static Rational subtract(Rational a, Rational b, WorkCheckpoint checkpoint) {
+        return a.minus(b, checkpoint);
+    }
+
+    public static Rational multiply(Rational a, Rational b, WorkCheckpoint checkpoint) {
+        return a.times(b, checkpoint);
+    }
+
+    /** {@link #divide(Rational, Rational)}, paid for to {@code checkpoint}. */
+    public static Rational divide(Rational a, Rational b, WorkCheckpoint checkpoint) {
+        if (b.isZero()) {
+            return divide(a, b);
+        }
+        return a.dividedBy(b, checkpoint);
+    }
+
+    public static Rational negate(Rational a, WorkCheckpoint checkpoint) {
+        return a.negated(checkpoint);
+    }
+
+    public static Rational fromDecimal(BigDecimal written, WorkCheckpoint checkpoint) {
+        return Rational.of(written, checkpoint);
+    }
+
+    public static long compare(Rational a, Rational b, WorkCheckpoint checkpoint) {
+        return Integer.signum(a.compareTo(b, checkpoint));
+    }
+
+    /** {@link #toWholeNumber(Rational)}, paid for to {@code checkpoint}. */
+    public static Object toWholeNumber(Rational r, WorkCheckpoint checkpoint) {
+        if (!r.isWhole()) {
+            return NotWhole.INSTANCE;
+        }
+        if (r.compareTo(LEAST_INT, checkpoint) < 0 || r.compareTo(GREATEST_INT, checkpoint) > 0) {
+            throw new ConstraintViolation("Rational does not fit in an Int: " + r);
+        }
+        return Objects.requireNonNull(r.asWholeNumber(checkpoint)).longValueExact();
+    }
+
+    /** {@link #toFiniteDecimal(Rational)}, paid for to {@code checkpoint}. */
+    public static Object toFiniteDecimal(Rational r, WorkCheckpoint checkpoint) {
+        BigDecimal written = r.asDecimal(checkpoint);
+        return written == null ? NotAFiniteDecimal.INSTANCE : written;
+    }
+
+    /** {@link #toInt(RoundingMode, Rational)}, paid for to {@code checkpoint}. */
+    public static long toInt(RoundingMode mode, Rational r, WorkCheckpoint checkpoint) {
+        BigDecimal whole = r.asDecimal(0, DecimalMath.toJava(mode), checkpoint);
+        try {
+            return whole.longValueExact();
+        } catch (ArithmeticException _) {
+            throw new ConstraintViolation("Rational does not fit in an Int: " + r);
+        }
+    }
+
+    /** {@link #toDecimal(long, RoundingMode, Rational)}, paid for to {@code checkpoint}. */
+    public static BigDecimal toDecimal(long scale, RoundingMode mode, Rational r, WorkCheckpoint checkpoint) {
+        return r.asDecimal(scale(scale), DecimalMath.toJava(mode), checkpoint);
     }
 
     /** A scale held to what the run time takes, as {@code DecimalMath} holds one. */

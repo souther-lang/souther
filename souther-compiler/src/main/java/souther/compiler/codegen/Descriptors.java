@@ -134,6 +134,15 @@ final class Descriptors {
      * the stack as it was, throwing where the budget is gone. */
     static final MethodTypeDesc MTD_EvaluationContext_count =
             MethodTypeDesc.of(ConstantDescs.CD_void);
+    /** What a runtime operation an evaluated class calls is handed, as its last argument, to pass
+     *  as it works. */
+    static final ClassDesc CD_WorkCheckpoint = ClassDesc.of("souther.runtime.WorkCheckpoint");
+    /** {@code EvaluationContext.checkpoint()}: the evaluation's checkpoint, asked once a call. */
+    static final MethodTypeDesc MTD_EvaluationContext_checkpoint = MethodTypeDesc.of(CD_WorkCheckpoint);
+    /** The runtime operations a class generated for evaluating binds as a function, each under the
+     *  name and type of the runtime's own: what {@link CodegenContext#boundRuntime} binds there. */
+    static final ClassDesc CD_BoundUnderEvaluation =
+            ClassDesc.of("souther.compiler.evaluate.BoundUnderEvaluation");
     /** {@code UnreachableReached.reached(String)}: aborts, typed as answering the position's value. */
     static final MethodTypeDesc MTD_reached = MethodTypeDesc.of(CD_Object, CD_String);
     /** The failure side of {@code __construct}: which clause of which type did not hold. */
@@ -214,6 +223,11 @@ final class Descriptors {
     static final MethodTypeDesc MTD_predicate_test =
             MethodTypeDesc.of(ConstantDescs.CD_boolean, ConstantDescs.CD_Object);
     static final ClassDesc CD_Patterns = ClassDesc.of("souther.runtime.Patterns");
+    /** {@code Patterns.matches(Predicate, String)} as an evaluated class reaches it: the machine's
+     *  walk, given the checkpoint {@link CodegenContext#callRuntime} adds. No class that ships calls
+     *  it, so there is no entry without the checkpoint to call. */
+    static final MethodTypeDesc MTD_Patterns_matches =
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Predicate, CD_String);
     /** {@code Patterns.read(Lookup, String, Class, String...)}: the bootstrap of the constant a
      *  pattern's machine is loaded as, handed the strings its image was cut into. The constant is a
      *  {@code Predicate}, so a class names this runtime and the JDK and nothing of what runs it. */
@@ -548,6 +562,10 @@ final class Descriptors {
             MethodTypeDesc.of(ConstantDescs.CD_int, CD_Object);
     static final MethodTypeDesc MTD_Values_hashDecimal =
             MethodTypeDesc.of(ConstantDescs.CD_int, CD_BigDecimal);
+    /** {@code Values.compare(Object, Object, WorkCheckpoint)}: the order an evaluated class reads off
+     *  two values whose own {@code compareTo} is the order. */
+    static final MethodTypeDesc MTD_Values_compare =
+            MethodTypeDesc.of(ConstantDescs.CD_int, CD_Object, CD_Object, CD_WorkCheckpoint);
     /** {@code Object.equals(Object)} — a constant receiver compares against a value that may be null. */
     static final MethodTypeDesc MTD_equalsObject =
             MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object);

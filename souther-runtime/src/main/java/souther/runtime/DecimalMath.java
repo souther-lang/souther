@@ -294,4 +294,181 @@ public final class DecimalMath {
     static BigDecimal leastDigits(BigDecimal d) {
         return ExactDecimals.leastDigits(d);
     }
+
+    // What an evaluated class calls: each operation above, paid for to a checkpoint before the host
+    // is asked for it (HostWork). Paying is all these add, so what they answer is what the operation
+    // answers, refusals included.
+
+    /** {@link #add(BigDecimal, BigDecimal)}, paid for to {@code checkpoint} first. */
+    public static BigDecimal add(BigDecimal a, BigDecimal b, WorkCheckpoint checkpoint) {
+        paySum(a, b, checkpoint);
+        return add(a, b);
+    }
+
+    /** {@link #subtract(BigDecimal, BigDecimal)}, paid for to {@code checkpoint} first. */
+    public static BigDecimal subtract(BigDecimal a, BigDecimal b, WorkCheckpoint checkpoint) {
+        paySum(a, b, checkpoint);
+        return subtract(a, b);
+    }
+
+    /** {@link #multiply(BigDecimal, BigDecimal)}, paid for to {@code checkpoint} first. */
+    public static BigDecimal multiply(BigDecimal a, BigDecimal b, WorkCheckpoint checkpoint) {
+        if (checkpoint != WorkCheckpoint.NONE) {
+            long answer = HostWork.bits(a) + HostWork.bits(b);
+            HostWork.pay(checkpoint, answer, HostWork.read(HostWork.bits(a), HostWork.bits(b), answer)
+                    + HostWork.product(HostWork.bits(a), HostWork.bits(b)));
+        }
+        return multiply(a, b);
+    }
+
+    /** {@link #divide(BigDecimal, BigDecimal, long, RoundingMode)}, paid for to {@code checkpoint}
+     *  first, where it divides at all. */
+    public static Object divide(BigDecimal dividend, BigDecimal divisor, long scale, RoundingMode mode,
+                                WorkCheckpoint checkpoint) {
+        if (checkpoint != WorkCheckpoint.NONE && divisor.signum() != 0 && scale == (int) scale) {
+            // The dividend or the divisor is raised by the power of ten that brings the quotient to
+            // the scale asked for, and the quotient is as long as what is left after dividing.
+            long tens = scale - dividend.scale() + divisor.scale();
+            long raise = tens == 0 ? 0 : HostWork.bitsOfTens(tens);
+            long over = HostWork.bits(dividend) + (tens > 0 ? raise : 0);
+            long under = HostWork.bits(divisor) + (tens < 0 ? raise : 0);
+            long quotient = Math.max(over - under, 0) + 1;
+            HostWork.pay(checkpoint, Math.max(over, under), HostWork.read(over, under, quotient)
+                    + (raise == 0 ? 0 : HostWork.power(raise)
+                            + HostWork.product(tens > 0 ? HostWork.bits(dividend) : HostWork.bits(divisor), raise))
+                    + HostWork.product(quotient, under));
+        }
+        return divide(dividend, divisor, scale, mode);
+    }
+
+    /** {@link #negate(BigDecimal)}, paid for to {@code checkpoint} first. */
+    public static BigDecimal negate(BigDecimal d, WorkCheckpoint checkpoint) {
+        if (checkpoint != WorkCheckpoint.NONE) {
+            checkpoint.spend(HostWork.read(HostWork.bits(d), HostWork.bits(d)));
+        }
+        return negate(d);
+    }
+
+    /** {@link #compare(BigDecimal, BigDecimal)}, paid for to {@code checkpoint} first. */
+    public static long compare(BigDecimal a, BigDecimal b, WorkCheckpoint checkpoint) {
+        payComparison(a, b, checkpoint);
+        return compare(a, b);
+    }
+
+    /** {@link #toInt(RoundingMode, BigDecimal)}, paid for to {@code checkpoint} first. */
+    public static long toInt(RoundingMode mode, BigDecimal d, WorkCheckpoint checkpoint) {
+        payRescaled(d, 0, checkpoint);
+        return toInt(mode, d);
+    }
+
+    /** {@link #round(long, RoundingMode, BigDecimal)}, paid for to {@code checkpoint} first, where
+     *  the scale is one the run time takes. */
+    public static BigDecimal round(long scale, RoundingMode mode, BigDecimal d, WorkCheckpoint checkpoint) {
+        if (scale == (int) scale) {
+            payRescaled(d, (int) scale, checkpoint);
+        }
+        return round(scale, mode, d);
+    }
+
+    /** {@link #plainText(BigDecimal)}, paid for to {@code checkpoint} first: the digits turned into
+     *  text, which multiplies, and the text written. */
+    public static String plainText(BigDecimal d, WorkCheckpoint checkpoint) {
+        if (checkpoint != WorkCheckpoint.NONE) {
+            long digits = HostWork.bits(d);
+            checkpoint.spend(HostWork.power(digits) + HostWork.product(digits, digits));
+            long length = plainTextLength(d);
+            if (length <= Strings.LONGEST_TEXT) {
+                checkpoint.spend(HostWork.read(length * Character.SIZE));
+            }
+        }
+        return plainText(d);
+    }
+
+    /** {@link #ofDecimalText(String)}, paid for to {@code checkpoint} first: reading digits into a
+     *  whole number multiplies what has been read by ten for every few digits more. */
+    static BigDecimal ofDecimalText(String text, WorkCheckpoint checkpoint) {
+        if (checkpoint != WorkCheckpoint.NONE) {
+            long bits = HostWork.bitsOfTens(text.length());
+            HostWork.pay(checkpoint, bits, HostWork.product(bits, bits));
+        }
+        return ofDecimalText(text);
+    }
+
+    /** {@link #leastDigits(BigDecimal)}, paid for to {@code checkpoint} first: taking the zeros off
+     *  divides the digits by ten as many times as there are zeros to take. */
+    static BigDecimal leastDigits(BigDecimal d, WorkCheckpoint checkpoint) {
+        if (checkpoint != WorkCheckpoint.NONE) {
+            long bits = HostWork.bits(d);
+            checkpoint.spend(HostWork.power(bits) + HostWork.product(bits, bits));
+        }
+        return leastDigits(d);
+    }
+
+    // Each estimate below follows what the host decides before it computes, in the order it decides
+    // it, and pays only for the work that decision leaves: a nought or a sign settles a comparison,
+    // and a nought brought to another scale is a nought. A scale is paid for only where the host
+    // builds a number at it, and then because the number is that long.
+
+    /** Pays for a sum or a difference: the operand at the smaller scale is multiplied by the power of
+     *  ten between the two scales, unless it is nought, and the answer is as long as the longer of the
+     *  two once that is done. */
+    private static void paySum(BigDecimal a, BigDecimal b, WorkCheckpoint checkpoint) {
+        if (checkpoint == WorkCheckpoint.NONE) {
+            return;
+        }
+        BigDecimal raised = a.scale() < b.scale() ? a : b;
+        BigDecimal kept = raised == a ? b : a;
+        long gap = Math.abs((long) a.scale() - b.scale());
+        long raise = gap == 0 || raised.signum() == 0 ? 0 : HostWork.bitsOfTens(gap);
+        long answer = Math.max(HostWork.bits(raised) + raise, HostWork.bits(kept)) + 1;
+        HostWork.pay(checkpoint, answer, HostWork.read(HostWork.bits(a), HostWork.bits(b), answer)
+                + (raise == 0 ? 0 : HostWork.power(raise) + HostWork.product(HostWork.bits(raised), raise)));
+    }
+
+    /**
+     * Pays for a comparison. A nought or two signs apart is settled on sight. Otherwise the host
+     * counts each operand's digits, which compares it with a power of ten as long, and compares where
+     * the first digit of each stands; only two values whose first digits stand at one place are brought
+     * to one scale, and then the scales are no further apart than the digits are many — so what that
+     * costs is bounded by how long the operands are, whatever their scales.
+     */
+    private static void payComparison(BigDecimal a, BigDecimal b, WorkCheckpoint checkpoint) {
+        if (checkpoint == WorkCheckpoint.NONE) {
+            return;
+        }
+        long bitsA = HostWork.bits(a);
+        long bitsB = HostWork.bits(b);
+        if (a.signum() == 0 || b.signum() == 0 || a.signum() != b.signum()) {
+            checkpoint.spend(HostWork.read(bitsA, bitsB));
+            return;
+        }
+        long counting = HostWork.read(bitsA, bitsB) + HostWork.power(bitsA) + HostWork.power(bitsB);
+        // Where the first digit stands, from the bits: a digit is a little over three of them, so the
+        // count is off by at most one either way, and two apart is apart.
+        long firstA = bitsA * 30103 / 100000 - a.scale();
+        long firstB = bitsB * 30103 / 100000 - b.scale();
+        if (Math.abs(firstA - firstB) > 2) {
+            checkpoint.spend(counting);
+            return;
+        }
+        long longer = Math.max(bitsA, bitsB);
+        checkpoint.spend(counting + HostWork.power(longer) + HostWork.product(longer, longer));
+    }
+
+    /** Pays for {@code d} brought to {@code places}: multiplied by a power of ten to go up, divided
+     *  by one to go down. A nought is a nought at every scale, and costs the reading. */
+    private static void payRescaled(BigDecimal d, int places, WorkCheckpoint checkpoint) {
+        if (checkpoint == WorkCheckpoint.NONE) {
+            return;
+        }
+        if (d.signum() == 0) {
+            checkpoint.spend(HostWork.read(HostWork.bits(d)));
+            return;
+        }
+        long gap = (long) places - d.scale();
+        long raise = gap == 0 ? 0 : HostWork.bitsOfTens(gap);
+        long answer = HostWork.bits(d) + (gap > 0 ? raise : 0);
+        HostWork.pay(checkpoint, Math.max(answer, raise), HostWork.read(HostWork.bits(d), answer)
+                + (raise == 0 ? 0 : HostWork.power(raise) + HostWork.product(HostWork.bits(d), raise)));
+    }
 }

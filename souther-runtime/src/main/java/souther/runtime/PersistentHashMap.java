@@ -75,13 +75,21 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
 
     /** Wraps {@code m} as a PersistentHashMap, sharing when it already is one, else building it in
      *  one pass through {@link Builder} (later entries win). */
-    @SuppressWarnings("unchecked")
     public static <K, V> PersistentHashMap<K, V> from(Map<? extends K, ? extends V> m) {
+        return from(m, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #from(Map)}, passing {@code checkpoint} once for each entry copied and as each key is
+     *  compared. */
+    @SuppressWarnings("unchecked")
+    public static <K, V> PersistentHashMap<K, V> from(Map<? extends K, ? extends V> m,
+                                                      WorkCheckpoint checkpoint) {
         if (m instanceof PersistentHashMap<?, ?> phm) {
             return (PersistentHashMap<K, V>) phm;
         }
-        Builder<K, V> b = new Builder<>();
+        Builder<K, V> b = new Builder<>(checkpoint);
         for (Map.Entry<? extends K, ? extends V> e : m.entrySet()) {
+            checkpoint.pass();
             b.set(e.getKey(), e.getValue());
         }
         return b.build();
@@ -101,14 +109,14 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
      * key type of the map being walked. Which carriers those are is still {@code Values}'s to say —
      * only the call is moved, not the rule.
      */
-    private static int hashOf(@Nullable Object key) {
+    private static int hashOf(@Nullable Object key, WorkCheckpoint checkpoint) {
         if (key == null) {
             return 0;
         }
         if (Values.answersForItself(key.getClass())) {
             return spread(key.hashCode());
         }
-        return spread(Values.hash(key));
+        return spread(Values.hash(key, checkpoint));
     }
 
     @Override
@@ -122,13 +130,24 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
     @Override
     @SuppressWarnings({"unchecked", "null"})
     public @Nullable V get(@Nullable Object key) {
-        Object r = root.find(key, hashOf(key), 0);
+        return get(key, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #get(Object)}, comparing keys under {@code checkpoint}. */
+    @SuppressWarnings({"unchecked", "null"})
+    public @Nullable V get(@Nullable Object key, WorkCheckpoint checkpoint) {
+        Object r = root.find(key, hashOf(key, checkpoint), 0, checkpoint);
         return r == NOT_FOUND ? null : (V) r;
     }
 
     @Override
     public boolean containsKey(@Nullable Object key) {
-        return root.find(key, hashOf(key), 0) != NOT_FOUND;
+        return containsKey(key, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #containsKey(Object)}, comparing keys under {@code checkpoint}. */
+    public boolean containsKey(@Nullable Object key, WorkCheckpoint checkpoint) {
+        return root.find(key, hashOf(key, checkpoint), 0, checkpoint) != NOT_FOUND;
     }
 
     @Override
@@ -155,22 +174,24 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
      * foreign map meant is not a question the boundary can answer.
      */
     @Override
-    public boolean valueEquals(@Nullable Object o) {
+    public boolean valueEquals(@Nullable Object o, WorkCheckpoint checkpoint) {
         if (o == this) {
             return true;
         }
         if (!(o instanceof Map<?, ?> m)) {
             return false;
         }
-        PersistentHashMap<?, ?> other = PersistentHashMap.from(m);
+        PersistentHashMap<?, ?> other = PersistentHashMap.from(m, checkpoint);
         if (other.size() != size) {
             return false;
         }
         for (Map.Entry<?, ?> e : other.entrySet()) {
+            checkpoint.pass();
             // asked as two questions rather than reading an absent key off a null answer: a map
             // Souther built never stores one, but `from` will build a map from a foreign map that
             // does, and "not here" and "here, holding nothing" are not the same answer
-            if (!containsKey(e.getKey()) || !Values.equal(get(e.getKey()), e.getValue())) {
+            if (!containsKey(e.getKey(), checkpoint)
+                    || !Values.equal(get(e.getKey(), checkpoint), e.getValue(), checkpoint)) {
                 return false;
             }
         }
@@ -180,10 +201,11 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
     /** Summed over the entries, so it does not depend on the order they are walked in — two maps
      *  built by different routes hold the same entries in different places. */
     @Override
-    public int valueHash() {
+    public int valueHash(WorkCheckpoint checkpoint) {
         int h = 0;
         for (Map.Entry<K, V> e : entrySet()) {
-            h += Values.hash(e.getKey()) ^ Values.hash(e.getValue());
+            checkpoint.pass();
+            h += Values.hash(e.getKey(), checkpoint) ^ Values.hash(e.getValue(), checkpoint);
         }
         return h;
     }
@@ -192,8 +214,13 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
      *  Named {@code assoc} rather than {@code put} because {@link java.util.Map#put} is the mutating
      *  operation and returns the old value — this returns a new map. */
     public PersistentHashMap<K, V> assoc(K key, V val) {
+        return assoc(key, val, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #assoc(Object, Object)}, comparing keys and values under {@code checkpoint}. */
+    public PersistentHashMap<K, V> assoc(K key, V val, WorkCheckpoint checkpoint) {
         Box added = new Box();
-        Node newRoot = root.put(key, hashOf(key), val, 0, added, false);
+        Node newRoot = root.put(key, hashOf(key, checkpoint), val, 0, added, false, checkpoint);
         if (newRoot == root) {
             return this;   // key present with an equal value: unchanged
         }
@@ -207,7 +234,12 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
      *  new node and a no-op returns the same node, so reference identity alone tells us whether the
      *  size dropped — no separate "was it removed" flag is threaded through. */
     public PersistentHashMap<K, V> without(K key) {
-        Node newRoot = root.remove(key, hashOf(key), 0);
+        return without(key, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #without(Object)}, comparing keys under {@code checkpoint}. */
+    public PersistentHashMap<K, V> without(K key, WorkCheckpoint checkpoint) {
+        Node newRoot = root.remove(key, hashOf(key, checkpoint), 0, checkpoint);
         if (newRoot == root) {
             return this;
         }
@@ -254,13 +286,18 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
         int index;
     }
 
+    /**
+     * A node of the trie. Every operation takes the checkpoint keys and values are compared under:
+     * going down the trie is a step a level and the levels are a hash's bits, so it passes nothing
+     * itself, and a bucket of colliding keys passes once for each key it looks at.
+     */
     private interface Node {
-        Object find(@Nullable Object key, int keyHash, int shift);
+        Object find(@Nullable Object key, int keyHash, int shift, WorkCheckpoint checkpoint);
 
         /** Reports into {@code probe} where {@code key}'s value is held inline under this node, and
          *  answers whether it is held at all. A key in a collision bucket is not reported: the bucket
          *  is the rare case and has nothing to gain. */
-        boolean probe(@Nullable Object key, int keyHash, int shift, Probe probe);
+        boolean probe(@Nullable Object key, int keyHash, int shift, Probe probe, WorkCheckpoint checkpoint);
 
         /**
          * This node with {@code key} mapped to {@code val}.
@@ -275,9 +312,10 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
          * <p>An ordinary persistent put passes {@code false} and clones every node on the path, as it
          * must.
          */
-        Node put(Object key, int keyHash, Object val, int shift, Box addedLeaf, boolean owned);
+        Node put(Object key, int keyHash, Object val, int shift, Box addedLeaf, boolean owned,
+                 WorkCheckpoint checkpoint);
 
-        Node remove(Object key, int keyHash, int shift);
+        Node remove(Object key, int keyHash, int shift, WorkCheckpoint checkpoint);
 
         int payloadArity();
 
@@ -362,24 +400,25 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
         }
 
         @Override
-        public Object find(@Nullable Object key, int keyHash, int shift) {
+        public Object find(@Nullable Object key, int keyHash, int shift, WorkCheckpoint checkpoint) {
             int bitpos = 1 << ((keyHash >>> shift) & MASK);
             if ((dataMap & bitpos) != 0) {
                 int i = dataIndex(bitpos);
-                return Values.equal(keyAt(i), key) ? valAt(i) : NOT_FOUND;
+                return Values.equal(keyAt(i), key, checkpoint) ? valAt(i) : NOT_FOUND;
             }
             if ((nodeMap & bitpos) != 0) {
-                return nodeAt(nodeIndex(bitpos)).find(key, keyHash, shift + BITS);
+                return nodeAt(nodeIndex(bitpos)).find(key, keyHash, shift + BITS, checkpoint);
             }
             return NOT_FOUND;
         }
 
         @Override
-        public boolean probe(@Nullable Object key, int keyHash, int shift, Probe probe) {
+        public boolean probe(@Nullable Object key, int keyHash, int shift, Probe probe,
+                             WorkCheckpoint checkpoint) {
             int bitpos = 1 << ((keyHash >>> shift) & MASK);
             if ((dataMap & bitpos) != 0) {
                 int i = dataIndex(bitpos);
-                if (!Values.equal(keyAt(i), key)) {
+                if (!Values.equal(keyAt(i), key, checkpoint)) {
                     return false;
                 }
                 probe.holder = contents;
@@ -387,26 +426,27 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
                 return true;
             }
             if ((nodeMap & bitpos) != 0) {
-                return nodeAt(nodeIndex(bitpos)).probe(key, keyHash, shift + BITS, probe);
+                return nodeAt(nodeIndex(bitpos)).probe(key, keyHash, shift + BITS, probe, checkpoint);
             }
             return false;
         }
 
         @Override
-        public Node put(Object key, int keyHash, Object val, int shift, Box addedLeaf, boolean owned) {
+        public Node put(Object key, int keyHash, Object val, int shift, Box addedLeaf, boolean owned,
+                        WorkCheckpoint checkpoint) {
             int bitpos = 1 << ((keyHash >>> shift) & MASK);
             if ((dataMap & bitpos) != 0) {
                 int i = dataIndex(bitpos);
                 Object currentKey = keyAt(i);
-                if (Values.equal(currentKey, key)) {
-                    if (Values.equal(valAt(i), val)) {
+                if (Values.equal(currentKey, key, checkpoint)) {
+                    if (Values.equal(valAt(i), val, checkpoint)) {
                         return this;
                     }
                     // Keeping currentKey and replacing only the value is this runtime's choice, not
                     // a Souther language contract: which of two equal keys a map holds is unspecified.
                     return copyAndSetValue(bitpos, val, owned);
                 }
-                Node sub = mergeTwoPairs(currentKey, hashOf(currentKey), valAt(i),
+                Node sub = mergeTwoPairs(currentKey, hashOf(currentKey, checkpoint), valAt(i),
                         key, keyHash, val, shift + BITS);
                 addedLeaf.value = true;
                 return copyAndMigrateInlineToNode(bitpos, sub);
@@ -414,7 +454,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
             if ((nodeMap & bitpos) != 0) {
                 int i = nodeIndex(bitpos);
                 Node sub = nodeAt(i);
-                Node newSub = sub.put(key, keyHash, val, shift + BITS, addedLeaf, owned);
+                Node newSub = sub.put(key, keyHash, val, shift + BITS, addedLeaf, owned, checkpoint);
                 return newSub == sub ? this : copyAndSetNode(bitpos, newSub, owned);
             }
             addedLeaf.value = true;
@@ -422,11 +462,11 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
         }
 
         @Override
-        public Node remove(Object key, int keyHash, int shift) {
+        public Node remove(Object key, int keyHash, int shift, WorkCheckpoint checkpoint) {
             int bitpos = 1 << ((keyHash >>> shift) & MASK);
             if ((dataMap & bitpos) != 0) {
                 int i = dataIndex(bitpos);
-                if (Values.equal(keyAt(i), key)) {
+                if (Values.equal(keyAt(i), key, checkpoint)) {
                     return copyAndRemoveValue(bitpos);
                 }
                 return this;
@@ -434,7 +474,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
             if ((nodeMap & bitpos) != 0) {
                 int i = nodeIndex(bitpos);
                 Node sub = nodeAt(i);
-                Node newSub = sub.remove(key, keyHash, shift + BITS);
+                Node newSub = sub.remove(key, keyHash, shift + BITS, checkpoint);
                 if (newSub == sub) {
                     return this;
                 }
@@ -606,10 +646,11 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
         }
 
         /** Where {@code key} is in the bucket, or -1 where it is not. */
-        private int indexOf(@Nullable Object key) {
+        private int indexOf(@Nullable Object key, WorkCheckpoint checkpoint) {
             int at = 0;
             for (Object k : keys) {
-                if (Values.equal(given(k), key)) {
+                checkpoint.pass();
+                if (Values.equal(given(k), key, checkpoint)) {
                     return at;
                 }
                 at++;
@@ -618,47 +659,49 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
         }
 
         @Override
-        public Object find(@Nullable Object key, int keyHash, int shift) {
+        public Object find(@Nullable Object key, int keyHash, int shift, WorkCheckpoint checkpoint) {
             if (keyHash != hash) {
                 return NOT_FOUND;
             }
-            int at = indexOf(key);
+            int at = indexOf(key, checkpoint);
             return at < 0 ? NOT_FOUND : given(values.get(at));
         }
 
         @Override
-        public boolean probe(@Nullable Object key, int keyHash, int shift, Probe probe) {
+        public boolean probe(@Nullable Object key, int keyHash, int shift, Probe probe,
+                             WorkCheckpoint checkpoint) {
             return false;   // a bucket of colliding keys: rare, and the walk down it is the cost
         }
 
         @Override
-        public Node put(Object key, int keyHash, Object val, int shift, Box addedLeaf, boolean owned) {
+        public Node put(Object key, int keyHash, Object val, int shift, Box addedLeaf, boolean owned,
+                        WorkCheckpoint checkpoint) {
             if (keyHash != hash) {
                 // A key that reaches this node with a different hash: wrap the bucket in a bitmap node
                 // at this level, then insert into that.
                 Node wrapper = new BitmapIndexedNode(0, 1 << ((hash >>> shift) & MASK),
                         new Object[]{this});
-                return wrapper.put(key, keyHash, val, shift, addedLeaf, owned);
+                return wrapper.put(key, keyHash, val, shift, addedLeaf, owned, checkpoint);
             }
-            int at = indexOf(key);
+            int at = indexOf(key, checkpoint);
             if (at >= 0) {
-                if (Values.equal(given(values.get(at)), val)) {
+                if (Values.equal(given(values.get(at)), val, checkpoint)) {
                     return this;
                 }
                 // As above: keys is kept as-is and only values changes. An implementation invariant,
                 // not something the language promises about which equal key a map represents.
-                return new HashCollisionNode(hash, keys, replaced(values, at, held(val)));
+                return new HashCollisionNode(hash, keys, replaced(values, at, held(val), checkpoint));
             }
             addedLeaf.value = true;
             return new HashCollisionNode(hash, keys.append(held(key)), values.append(held(val)));
         }
 
         @Override
-        public Node remove(Object key, int keyHash, int shift) {
+        public Node remove(Object key, int keyHash, int shift, WorkCheckpoint checkpoint) {
             if (keyHash != hash) {
                 return this;
             }
-            int at = indexOf(key);
+            int at = indexOf(key, checkpoint);
             if (at < 0) {
                 return this;
             }
@@ -668,24 +711,28 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
                 return new BitmapIndexedNode(1 << ((hash >>> shift) & MASK), 0,
                         new Object[]{given(keys.get(other)), given(values.get(other))});
             }
-            return new HashCollisionNode(hash, without(keys, at), without(values, at));
+            return new HashCollisionNode(hash, without(keys, at, checkpoint), without(values, at, checkpoint));
         }
 
         /** {@code xs} with the element at {@code at} replaced by {@code value}. */
-        private static PersistentVector<Object> replaced(PersistentVector<Object> xs, int at, Object value) {
+        private static PersistentVector<Object> replaced(PersistentVector<Object> xs, int at, Object value,
+                                                         WorkCheckpoint checkpoint) {
             PersistentVector.Builder<Object> out = new PersistentVector.Builder<>();
             int i = 0;
             for (Object x : xs) {
+                checkpoint.pass();
                 out.add(i++ == at ? value : x);
             }
             return out.build();
         }
 
         /** {@code xs} without the element at {@code at}. */
-        private static PersistentVector<Object> without(PersistentVector<Object> xs, int at) {
+        private static PersistentVector<Object> without(PersistentVector<Object> xs, int at,
+                                                        WorkCheckpoint checkpoint) {
             PersistentVector.Builder<Object> out = new PersistentVector.Builder<>();
             int i = 0;
             for (Object x : xs) {
+                checkpoint.pass();
                 if (i++ != at) {
                     out.add(x);
                 }
@@ -802,8 +849,19 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
     static final class Builder<K, V> extends AbstractMap<K, V> {
         private final Box added = new Box();
         private final Probe probe = new Probe();
+        /** What keys and values are compared under while this is filled: the checkpoint of the
+         *  operation filling it, which holds it for no longer than that operation runs. */
+        private final WorkCheckpoint checkpoint;
         private Node root = BitmapIndexedNode.EMPTY;
         private int size;
+
+        Builder() {
+            this(WorkCheckpoint.NONE);
+        }
+
+        Builder(WorkCheckpoint checkpoint) {
+            this.checkpoint = checkpoint;
+        }
         /** Whether {@link #build} has handed the trie over. A builder is single-use: the map it built
          *  shares the nodes it filled, so a later write would reach into a value that is supposed to be
          *  immutable. Refusing here is what keeps that from being possible rather than merely unlikely
@@ -825,7 +883,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
                 throw new IllegalStateException("this builder has already been built");
             }
             @Nullable Object @Nullable [] held = probe.holder;
-            if (held != null && Values.equal(probe.key, key)) {
+            if (held != null && Values.equal(probe.key, key, checkpoint)) {
                 held[probe.index] = val;
                 probe.holder = null;
                 probe.key = null;
@@ -834,7 +892,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
             probe.holder = null;
             probe.key = null;
             added.value = false;
-            root = root.put(key, hashOf(key), val, 0, added, true);
+            root = root.put(key, hashOf(key, checkpoint), val, 0, added, true, checkpoint);
             if (added.value) {
                 Capacity.oneMore(size, "Map or Set");
                 size++;
@@ -859,7 +917,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
         @Override
         @SuppressWarnings({"unchecked", "null"})
         public @Nullable V get(@Nullable Object key) {
-            if (root.probe(key, hashOf(key), 0, probe)) {
+            if (root.probe(key, hashOf(key, checkpoint), 0, probe, checkpoint)) {
                 probe.key = key;
                 return (V) Objects.requireNonNull(probe.holder)[probe.index];
             }
@@ -870,7 +928,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
 
         @Override
         public boolean containsKey(@Nullable Object key) {
-            return root.find(key, hashOf(key), 0) != NOT_FOUND;
+            return root.find(key, hashOf(key, checkpoint), 0, checkpoint) != NOT_FOUND;
         }
 
         @Override

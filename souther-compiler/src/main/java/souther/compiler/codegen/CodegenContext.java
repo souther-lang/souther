@@ -32,6 +32,8 @@ import souther.compiler.types.ValueName;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.CodeBuilder;
 import java.lang.constant.ClassDesc;
+import java.lang.constant.DirectMethodHandleDesc;
+import java.lang.constant.MethodHandleDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -300,6 +302,62 @@ final class CodegenContext {
             code.invokestatic(Descriptors.CD_EvaluationContext, "tick",
                     Descriptors.MTD_EvaluationContext_count);
         }
+    }
+
+    /**
+     * A call to the runtime static {@code owner.method}, its arguments on the stack in the order
+     * {@code shipped} takes them.
+     *
+     * <p>Where this generation counts and the call's work grows with what it is handed, the
+     * evaluation's checkpoint goes on the stack after them and the entry called is the one that
+     * takes it last; everywhere else the call is {@code shipped} as it stands. Every call into the
+     * runtime goes through here, so whether an evaluated class hands one in is decided once, by the
+     * {@link Work} each call states, and a class that ships names neither the checkpoint nor this
+     * compiler.
+     */
+    void callRuntime(CodeBuilder code, ClassDesc owner, String method, MethodTypeDesc shipped, Work work) {
+        callRuntime(code, owner, method, shipped, work, false);
+    }
+
+    /** {@link #callRuntime(CodeBuilder, ClassDesc, String, MethodTypeDesc, Work)} for a static
+     *  declared on an interface. */
+    void callRuntime(CodeBuilder code, ClassDesc owner, String method, MethodTypeDesc shipped, Work work,
+                     boolean onAnInterface) {
+        if (work == Work.CHECKPOINTED && counting) {
+            pushCheckpoint(code);
+            code.invokestatic(owner, method, counted(shipped), onAnInterface);
+        } else {
+            code.invokestatic(owner, method, shipped, onAnInterface);
+        }
+    }
+
+    /**
+     * The runtime static {@code owner.method} as the handle a call site binds into a function.
+     *
+     * <p>A function made from a handle may be kept and applied by a later evaluation, so it cannot
+     * hold a checkpoint. Where this generation counts and the operation's work grows with what it is
+     * handed, the handle is the operation of the same name and type on
+     * {@code BoundUnderEvaluation}, which asks for the evaluation's checkpoint each time it is
+     * applied.
+     */
+    DirectMethodHandleDesc boundRuntime(ClassDesc owner, String method, MethodTypeDesc desc, Work work) {
+        ClassDesc bound = work == Work.CHECKPOINTED && counting ? Descriptors.CD_BoundUnderEvaluation : owner;
+        return MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, bound, method, desc);
+    }
+
+    /** The evaluation's checkpoint, on the stack: only ever emitted where this generation counts. */
+    void pushCheckpoint(CodeBuilder code) {
+        if (!counting) {
+            throw new IllegalStateException("a class that ships asked for the evaluation's checkpoint");
+        }
+        code.invokestatic(Descriptors.CD_EvaluationContext, "checkpoint",
+                Descriptors.MTD_EvaluationContext_checkpoint);
+    }
+
+    /** The entry an evaluated class calls in place of one {@code shipped}: the same, with the
+     *  checkpoint taken last. */
+    static MethodTypeDesc counted(MethodTypeDesc shipped) {
+        return shipped.insertParameterTypes(shipped.parameterCount(), Descriptors.CD_WorkCheckpoint);
     }
 
     /**

@@ -20,8 +20,18 @@ import org.jspecify.annotations.Nullable;
 public interface ValueSemantics {
 
     /** Whether {@code other} is the same Souther value as this one. */
-    boolean valueEquals(@Nullable Object other);
+    default boolean valueEquals(@Nullable Object other) {
+        return valueEquals(other, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #valueEquals(Object)}, passing {@code checkpoint} once for each element compared. */
+    boolean valueEquals(@Nullable Object other, WorkCheckpoint checkpoint);
 
     /** A hash that agrees with {@link #valueEquals}. */
-    int valueHash();
+    default int valueHash() {
+        return valueHash(WorkCheckpoint.NONE);
+    }
+
+    /** {@link #valueHash()}, passing {@code checkpoint} once for each element hashed. */
+    int valueHash(WorkCheckpoint checkpoint);
 }

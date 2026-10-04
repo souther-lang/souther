@@ -167,8 +167,13 @@ public final class PersistentVector<E> extends AbstractList<E>
     /** Wraps {@code src} as a PersistentVector, sharing when it already is one and copying only when
      *  it is some other {@code java.util.List}/{@code Collection} (a JDK list from a literal or the
      *  decode boundary). Empty yields the shared {@link #EMPTY}. */
-    @SuppressWarnings("unchecked")
     public static <E> PersistentVector<E> from(Collection<? extends E> src) {
+        return from(src, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #from(Collection)}, passing {@code checkpoint} once for each element copied. */
+    @SuppressWarnings("unchecked")
+    public static <E> PersistentVector<E> from(Collection<? extends E> src, WorkCheckpoint checkpoint) {
         if (src instanceof PersistentVector<?> pv) {
             return (PersistentVector<E>) pv;
         }
@@ -177,6 +182,7 @@ public final class PersistentVector<E> extends AbstractList<E>
         }
         Builder<E> b = new Builder<>();
         for (E e : src) {
+            checkpoint.pass();
             b.add(e);
         }
         return b.build();
@@ -382,7 +388,7 @@ public final class PersistentVector<E> extends AbstractList<E>
     /** Whether {@code o} is the same list the language means: the same elements in the same order,
      *  each compared through {@link Values}. */
     @Override
-    public boolean valueEquals(@Nullable Object o) {
+    public boolean valueEquals(@Nullable Object o, WorkCheckpoint checkpoint) {
         if (o == this) {
             return true;
         }
@@ -392,7 +398,8 @@ public final class PersistentVector<E> extends AbstractList<E>
         Iterator<E> a = iterator();
         Iterator<?> b = other.iterator();
         while (a.hasNext() && b.hasNext()) {
-            if (!Values.equal(a.next(), b.next())) {
+            checkpoint.pass();
+            if (!Values.equal(a.next(), b.next(), checkpoint)) {
                 return false;
             }
         }
@@ -401,13 +408,14 @@ public final class PersistentVector<E> extends AbstractList<E>
 
     /** The same formula {@link #hashCode} uses, over the elements' language hashes. */
     @Override
-    public int valueHash() {
+    public int valueHash(WorkCheckpoint checkpoint) {
         int h = 1;
         for (int base = 0; base < cnt; base += leafLength(base, cnt)) {
             @Nullable Object[] leaf = arrayFor(base);
             int n = leafLength(base, cnt);
             for (int j = 0; j < n; j++) {
-                h = 31 * h + Values.hash(leaf[j]);
+                checkpoint.pass();
+                h = 31 * h + Values.hash(leaf[j], checkpoint);
             }
         }
         return h;
