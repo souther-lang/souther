@@ -40,7 +40,12 @@ public final class ScopedDeclarations {
 
     /** What a value of each of {@code symbols}'s sums can be, read off the same scope. */
     public static SumCases sumsOf(Symbols symbols) {
-        return SumCases.asWritten(kindsOf(symbols), of(symbols));
+        return SumCases.asWritten(kindsOf(symbols), listedOf(symbols));
+    }
+
+    /** The cases each of {@code symbols}'s sums lists, read off the same scope. */
+    public static ListedCases listedOf(Symbols symbols) {
+        return ListedCases.asWritten(symbols);
     }
 
     /** Everything a check asks of {@code symbols}'s declarations, each read off the same scope. */

@@ -953,7 +953,7 @@ public final class Bodies {
                     try {
                         BehaviorContract contract = BehaviorChecker.contractAsRead(each.getValue(),
                                 name, signatures.value().get(each.getKey()),
-                                Shapes.publishedDeclarations(db), Shapes.declarationKinds(db),
+                                Shapes.listedCases(db), Shapes.declarationKinds(db),
                                 Shapes.sumCases(db));
                         out.put(each.getKey(), StatedContract.of(contract, declaring, scope.value(),
                                 Shapes.declarationAccess(db), helpers.value()));

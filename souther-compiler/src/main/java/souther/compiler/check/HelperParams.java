@@ -5,9 +5,7 @@ import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -17,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -404,8 +403,6 @@ final class HelperParams {
         private final Symbols symbols;
         /** What is asked of the declarations this body names, as it was handed in. */
         private final DeclarationAccess declarations;
-        /** What the declarations this body names say about themselves. */
-        private final PublishedDeclarations published;
         /** What a value of each sum this body names can be. */
         private final SumCases sums;
         /** Which form each of those declarations was written in. */
@@ -445,7 +442,6 @@ final class HelperParams {
             this.freshening = freshening;
             this.symbols = symbols;
             this.declarations = declarations;
-            this.published = declarations.published();
             this.sums = declarations.sums();
             this.kinds = declarations.kinds();
             this.ctx = new CheckContext(symbols, declarations, null, reqSigs);
@@ -903,26 +899,33 @@ final class HelperParams {
             Type scrutinee = typed(m.scrutinee(), env);
             List<Reading> arms = new ArrayList<>();
             for (Hir.Case c : m.cases()) {
-                arms.add(new Reading(c.body(), armScope(env, c, scrutinee)));
+                inArm(c, scrutinee, env).ifPresent(scope -> arms.add(new Reading(c.body(), scope)));
             }
             visitShared(arms, target, expected);
         }
 
-        /** {@code env} with what arm {@code c} binds, where the scrutinee's type says what that is. */
-        private Scope armScope(Scope env, Hir.Case c, Type scrutinee) {
-            if (c.binding() == null || c.caseTypes().size() != 1) {
-                return env;
+        /**
+         * The scope arm {@code c}'s body is read in, as the elaboration of the match brings it into
+         * force, or nothing where the arm binds a name and the elaboration would refuse it.
+         *
+         * <p>An arm that binds nothing is read in {@code env} whatever the subject is: there is
+         * nothing for it to bring into force, and a subject this reading cannot type — a parameter
+         * still open — leaves the body as readable as it was.
+         *
+         * <p>An arm that binds a name and has no scope is not read, rather than read in
+         * {@code env}: what the name holds is not known, and a body read without it would type its
+         * uses of the name as whatever {@code env} says that name is. Refused, it is the
+         * elaboration's to report, and settling reports nothing.
+         */
+        private Optional<Scope> inArm(Hir.Case c, Type scrutinee, Scope env) {
+            if (c.binding() == null) {
+                return Optional.of(env);
             }
-            if (c.caseTypes().get(0).answered() == null) {
-                return env;   // it names no case, so it binds nothing this can say the type of
+            try {
+                return MatchElaborator.inArm(c, scrutinee, env, ctx);
+            } catch (CompileException | Unanswerable _) {
+                return Optional.empty();
             }
-            TypeSymbol arm = c.caseTypes().get(0).answered().type();
-            // What the case refines the value to, asked of the subject's cases rather than worked
-            // out from the subject's shape a second time.
-            ResolvedCase selected =
-                    CaseSpace.of(scrutinee, kinds, published, sums).selector(arm, kinds, sums);
-            Type bound = selected == null ? null : selected.bound();
-            return bound == null ? env : MatchElaborator.bound(env, c.binding(), bound);
         }
 
         /**

@@ -82,6 +82,11 @@ public record CheckContext(Symbols symbols, DeclarationAccess declarations,
         return declarations.sums();
     }
 
+    /** The cases each sum lists, read off the declarations this check's names reach. */
+    public ListedCases listed() {
+        return ListedCases.asWritten(symbols);
+    }
+
     /**
      * The same, elaborating what {@code expansion} put here.
      *

@@ -64,8 +64,9 @@ public final class ClauseHelpers {
                                                 DeclarationKinds kinds,
                                                 Map<String, Hir.FnDef> published) {
         // Settling runs while what these declarations say is still being worked out, so what is read
-        // here is which form each one is — settled when the module was indexed — and asking what one
-        // says is refused rather than answered with nothing.
+        // here is which form each one is — settled when the module was indexed — and which cases a
+        // sum lists, settled where its names resolved. Asking what one says is refused rather than
+        // answered with nothing.
         Hir.Module settled = settled(m, symbols, PublishedDeclarations.THE_ONE_THAT_MAKES_THEM,
                 kinds);
         HelperInliner inliner = HelperInliner.forModule(settled, published, symbols.library(),

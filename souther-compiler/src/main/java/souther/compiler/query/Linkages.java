@@ -13,6 +13,7 @@ import souther.compiler.check.Ordering;
 import souther.compiler.check.Preserved;
 import souther.compiler.check.Requirements;
 import souther.compiler.check.Sig;
+import souther.compiler.check.ListedCases;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.ValueEntries;
@@ -251,10 +252,10 @@ public final class Linkages {
                     required.put(behavior, Requirements.names(each)));
             // Read through the reader, so what the projection reads of the declarations is what it
             // records it rests on: the compilation's own answer for what a sum's cases are would be
-            // read past it.
+            // read past it. What each sum lists is read off the symbols, which read through it too.
             DeclarationKinds kinds = reader.readingKinds(Shapes.declarationKinds(db));
-            SumCases sums = SumCases.asWrittenOnceEach(kinds,
-                    reader.readingPublished(Shapes.publishedDeclarations(db)));
+            SumCases sums =
+                    SumCases.asWrittenOnceEach(kinds, ListedCases.asWritten(symbols.value()));
             SortedMap<LinkageTarget, LinkageProjection> provides = LinkageProjections.of(
                     new LinkageProjections.Settled(name, written.published(), declarations,
                             orders, signatures.value(), implementations.value().states(), required,

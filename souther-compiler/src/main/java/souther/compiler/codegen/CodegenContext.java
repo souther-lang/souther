@@ -10,6 +10,7 @@ import souther.compiler.Reserved;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.ListedCases;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.StandingSignature;
 import souther.compiler.check.PublishedDeclarations;
@@ -434,7 +435,7 @@ final class CodegenContext {
         this.symbols = symbols;
         this.published = published;
         this.kinds = kinds;
-        this.sums = SumCases.asWrittenOnceEach(kinds, published);
+        this.sums = SumCases.asWrittenOnceEach(kinds, ListedCases.asWritten(symbols));
         this.inners = inners;
         this.kernels = kernels;
         this.caseToSums = caseToSums;

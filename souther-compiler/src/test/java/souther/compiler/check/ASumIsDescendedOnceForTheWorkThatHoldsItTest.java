@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>{@link SumCases#asWrittenOnceEach} is for a reader that cannot take the compilation's answer
  * because it records what it reads, and that asks one sum of many classes. Its answers are the
- * descent's, and a sum asked again is answered without reading what any declaration says — which
+ * descent's, and a sum asked again is answered without reading what any sum lists — which
  * is what lets such a reader pay for a sum once and still record everything it read.
  */
 class ASumIsDescendedOnceForTheWorkThatHoldsItTest {
@@ -43,12 +43,12 @@ class ASumIsDescendedOnceForTheWorkThatHoldsItTest {
             ModulePath.EMPTY).db().ask(new Names.Resolved("m")).value();
     private final Symbols symbols = TypeChecker.symbols(resolved, DefaultStdlib.get());
     private final DeclarationKinds kinds = ScopedDeclarations.kindsOf(symbols);
-    private final PublishedDeclarations said = ScopedDeclarations.of(symbols);
+    private final ListedCases listed = ScopedDeclarations.listedOf(symbols);
 
     @Test
     void itAnswersAsTheDescentDoesForEveryName() {
-        SumCases descent = SumCases.asWritten(kinds, said);
-        SumCases once = SumCases.asWrittenOnceEach(kinds, said);
+        SumCases descent = SumCases.asWritten(kinds, listed);
+        SumCases once = SumCases.asWrittenOnceEach(kinds, listed);
         for (TypeSymbol.AtModule name : names()) {
             assertEquals(descent.of(name), once.of(name), name::name);
             assertEquals(descent.of(name), once.of(name), () -> name.name() + ", asked again");
@@ -58,9 +58,9 @@ class ASumIsDescendedOnceForTheWorkThatHoldsItTest {
     @Test
     void aSumAskedAgainReadsNothing() {
         AtomicInteger reads = new AtomicInteger();
-        PublishedDeclarations counted = declaration -> {
+        ListedCases counted = declaration -> {
             reads.incrementAndGet();
-            return said.of(declaration);
+            return listed.of(declaration);
         };
         SumCases once = SumCases.asWrittenOnceEach(kinds, counted);
         TypeSymbol.AtModule outer = named("Outer");

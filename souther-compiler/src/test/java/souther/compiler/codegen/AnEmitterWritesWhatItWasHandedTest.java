@@ -8,6 +8,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.DerivedSymbols;
+import souther.compiler.check.ListedCases;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.TypeOps;
@@ -76,7 +77,7 @@ class AnEmitterWritesWhatItWasHandedTest {
     private final souther.compiler.check.DeclarationKinds forms =
             souther.compiler.query.Shapes.declarationKinds(compilation.db());
     /** What a value of each sum among them can be. */
-    private final SumCases sums = SumCases.asWritten(forms, said);
+    private final SumCases sums = SumCases.asWritten(forms, ListedCases.asWritten(symbols));
     private final CodecGen codec = codecGen();
 
     @Test

@@ -66,6 +66,8 @@ class WhoWorksOutWhatASumCanBeIsWrittenDownTest {
 
     private static final String PUBLISHED = "L" + CHECK + "PublishedDeclarations;";
 
+    private static final String LISTED = "L" + CHECK + "ListedCases;";
+
     private static final String ACCESS = "L" + CHECK + "DeclarationAccess;";
 
     /**
@@ -84,7 +86,7 @@ class WhoWorksOutWhatASumCanBeIsWrittenDownTest {
                     "(" + SYMBOLS + PUBLISHED + KINDS + ")" + ACCESS, THE_WALK),
             CHECK + "SumCases#asWritten, in a lambda -> " + THE_DESCENT,
             row(SUM_CASES, "asWrittenOnceEach",
-                    "(" + KINDS + PUBLISHED + ")L" + SUM_CASES + ";", THE_WALK),
+                    "(" + KINDS + LISTED + ")L" + SUM_CASES + ";", THE_WALK),
             row(CODEGEN + "CodegenContext", "<init>",
                     "(Ljava/lang/String;L" + CHECK + "DerivedSymbols;" + PUBLISHED + KINDS + "L"
                             + CHECK + "NewtypeInners;Lsouther/compiler/core/KernelSignatures;"

@@ -47,9 +47,9 @@ public interface SumCases {
      * <p>For the compilation's answer, which is made by asking it once for each sum, and for the
      * walks that have not been handed that answer.
      */
-    static SumCases asWritten(DeclarationKinds kinds, PublishedDeclarations published) {
+    static SumCases asWritten(DeclarationKinds kinds, ListedCases listed) {
         return sum -> kinds.isSum(sum.key())
-                ? Cases.of(AtomSpace.leavesUnder(List.of(sum), kinds, published), kinds)
+                ? Cases.of(AtomSpace.leavesUnder(List.of(sum), kinds, listed), kinds)
                 : null;
     }
 
@@ -63,8 +63,8 @@ public interface SumCases {
      * records nothing new. Held for the one piece of work the reader does, it answers what the
      * declarations said while that work was done.
      */
-    static SumCases asWrittenOnceEach(DeclarationKinds kinds, PublishedDeclarations published) {
-        SumCases descended = asWritten(kinds, published);
+    static SumCases asWrittenOnceEach(DeclarationKinds kinds, ListedCases listed) {
+        SumCases descended = asWritten(kinds, listed);
         Map<TypeSymbol.AtModule, Cases> reached = new HashMap<>();
         return sum -> {
             Cases cases = reached.get(sum);

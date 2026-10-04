@@ -15,6 +15,7 @@ import souther.compiler.types.TypeSymbol;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -43,7 +44,7 @@ public final class MatchElaborator {
         // Which form the subject is was answered where its cases were worked out. Read as a form
         // rather than by asking the type again, so a form the space gains has to be answered here
         // too rather than falling into the general reading with nobody the wiser.
-        return switch (CaseSpace.of(st, ctx.kinds(), ctx.published(), ctx.sums())) {
+        return switch (CaseSpace.of(st, ctx.kinds(), ctx.listed(), ctx.sums())) {
             case CaseSpace.Plain _ -> throw CompileException.of(Diagnostic.at(m.pos(), 5)
                     .say(new MatchMessage.TheSubjectIsNotASum(Type.show(st))).build());
             case CaseSpace.Optional option ->
@@ -66,23 +67,20 @@ public final class MatchElaborator {
      */
     static NotACaseOfThisMatch notCase(Hir.Name written, String what, Hir.Case c,
                                        Set<TypeSymbol> cases, Symbols symbols,
-                                       DeclarationKinds kinds, PublishedDeclarations published) {
+                                       DeclarationKinds kinds, ListedCases listed) {
         String caseName = written.written();
         String otherSum = null;
         for (TypeSymbol name : symbols.scope().visibleNames()) {
             // Which of them are sums is asked of their form, and what a sum lists only of those:
-            // the product whose clause this match is in may be among them, its meaning being made.
+            // a product among them is never read to find out it lists nothing.
             if (!(name instanceof TypeSymbol.AtModule at)
                     || !kinds.isSum(at.key())
-                    || !(published.of(at.key())
-                            instanceof PublishedDeclarationResult.Found(
-                                    DeclarationMeaning.Sum sum))) {
+                    || !(listed.of(at.key()) instanceof List<TypeSymbol> others)) {
                 continue;
             }
-            List<TypeSymbol> others = AtomSpace.declaredCases(sum);
             if (written.answered() != null && others.contains(written.answered().type())
                     && !cases.containsAll(others)) {
-                otherSum = sum.declares().name();
+                otherSum = at.name();
                 break;
             }
         }
@@ -181,7 +179,7 @@ public final class MatchElaborator {
                 ResolvedCase resolved = space.selector(caseName, ctx.kinds(), ctx.sums());
                 if (resolved == null) {
                     throw notCase(written, what, c, cases, ctx.symbols(), ctx.kinds(),
-                            ctx.published());
+                            ctx.listed());
                 }
                 alternatives.add(resolved);
                 answersFor.addAll(resolved.atoms());
@@ -242,7 +240,7 @@ public final class MatchElaborator {
             // subject states them: sorted, a report of a nesting would read in an order nothing
             // wrote.
             throw nonExhaustive(m.pos(), what,
-                    CoveringNames.of(scrutinee, unanswered, ctx.kinds(), ctx.published(),
+                    CoveringNames.of(scrutinee, unanswered, ctx.kinds(), ctx.listed(),
                             ctx.sums()));
         }
         if (branchType == null) {
@@ -420,7 +418,7 @@ public final class MatchElaborator {
      * {@link #armBinding}. An arm whose pattern the language refuses is refused here and brings
      * nothing into force.
      *
-     * <p>The one place that decides it, for both forms of {@code match}.
+     * <p>The one place that decides it, for both forms of {@code match} and for {@link #inArm}.
      */
     private static Core.ArmBinding entered(Hir.Case c, Core.ResolvedPattern pattern, Type subject,
                                            Symbols symbols) {
@@ -441,6 +439,42 @@ public final class MatchElaborator {
             }
         }
         return armBinding(c.binding(), pattern, subject);
+    }
+
+    /**
+     * The scope arm {@code c}'s body is read in over a subject of type {@code subject}, for a
+     * reader that has the subject's type and is not elaborating the match: what the arm selects,
+     * resolved as the elaboration resolves it, and brought into force through {@link #entered}.
+     * An arm that binds nothing is read in {@code env}.
+     *
+     * <p>Nothing where the elaboration refuses the match before this arm's body — the subject's
+     * type not known, a subject that is no sum, a name that is no case of it, an or-pattern over an
+     * optional. What is wrong is the elaboration's to report, in its words. An arm that selects a
+     * case and opens it wrongly is refused as the elaboration refuses it.
+     */
+    static Optional<Scope> inArm(Hir.Case c, Type subject, Scope env, CheckContext ctx) {
+        if (subject == null) {
+            return Optional.empty();
+        }
+        CaseSpace space = CaseSpace.of(subject, ctx.kinds(), ctx.listed(), ctx.sums());
+        if (space instanceof CaseSpace.Plain
+                || (space instanceof CaseSpace.Optional && c.caseTypes().size() != 1)) {
+            return Optional.empty();
+        }
+        List<ResolvedCase> alternatives = new ArrayList<>();
+        for (Hir.Name written : c.caseTypes()) {
+            ResolvedCase resolved = written instanceof Hir.Name.Denoting named
+                    ? space.selector(named.type(), ctx.kinds(), ctx.sums()) : null;
+            if (resolved == null) {
+                return Optional.empty();
+            }
+            alternatives.add(resolved);
+        }
+        Core.ResolvedPattern pattern = alternatives.size() == 1
+                ? new Core.ResolvedPattern.Single(alternatives.get(0))
+                : new Core.ResolvedPattern.AnyOf(alternatives, subject);
+        return Optional.of(bound(env, c.binding(),
+                entered(c, pattern, subject, ctx.symbols()).type()));
     }
 
     /** Extends {@code env} with {@code binding} when both it and its type are present; otherwise

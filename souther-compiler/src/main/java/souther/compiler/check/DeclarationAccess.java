@@ -58,7 +58,7 @@ public record DeclarationAccess(PublishedDeclarations published, DeclarationKind
      */
     public static DeclarationAccess asWritten(Symbols symbols, PublishedDeclarations published,
                                               DeclarationKinds kinds) {
-        SumCases sums = SumCases.asWritten(kinds, published);
+        SumCases sums = SumCases.asWritten(kinds, ListedCases.asWritten(symbols));
         return new DeclarationAccess(published, kinds, NewtypeInners.asWritten(symbols),
                 EffectiveFieldTypes.asWritten(symbols), FieldLayout.asWritten(symbols), sums,
                 EnumerationListings.asWritten(symbols, kinds, sums));
@@ -75,10 +75,8 @@ public record DeclarationAccess(PublishedDeclarations published, DeclarationKind
      * declares it, which every clause of it would then be reported under.
      *
      * <p>Only that one answer is narrowed. What a value of a sum can be and which enumerations list
-     * a value are the two other answers read off what declarations say, and both are kept as they
-     * were handed: each reads what sums say, asked only of a declaration its form says is a sum,
-     * and a sum's meaning reads no clause. The only meaning made by reading clauses is a product's,
-     * so neither answer is made out of the declaration being made.
+     * a value are kept as they were handed: each reads the cases a sum lists ({@link ListedCases}),
+     * settled where the sum's names resolved, and no meaning being made is read for them.
      */
     DeclarationAccess making(TypeKey made) {
         PublishedDeclarations besidesIt = declaration -> made.equals(declaration)
