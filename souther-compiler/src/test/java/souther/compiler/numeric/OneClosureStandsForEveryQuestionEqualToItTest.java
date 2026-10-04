@@ -7,11 +7,13 @@ import souther.compiler.numeric.AffineConstraint.Read;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A closure kept for a question stands for every question equal to it, and for no other.
@@ -87,6 +89,34 @@ class OneClosureStandsForEveryQuestionEqualToItTest {
 
         assertSame(once, again);
         assertEquals(1, kept.workedOut());
+    }
+
+    /**
+     * A question asked again puts nothing in order again.
+     *
+     * <p>Stating a question places the positions its rules weigh, and the comparison doing it can be
+     * dear. What an order makes of one set of positions is kept with the closures, so the second
+     * asking compares nothing — whatever the rules over those positions are.
+     */
+    @Test
+    void aQuestionAskedAgainPutsNothingInOrderAgain() {
+        ClosedStates kept = ClosedStates.kept();
+        AtomicInteger compared = new AtomicInteger();
+        CanonicalOrder<String> counting = (one, other) -> {
+            compared.incrementAndGet();
+            return one.compareTo(other);
+        };
+        kept.of(List.of(rule("a", 1, "b", -1, -2)), atom -> Granularity.DISCRETE, counting);
+        int once = compared.get();
+        assertTrue(once > 0, "placing two positions compared nothing");
+
+        kept.of(List.of(rule("a", 1, "b", -1, -2)), atom -> Granularity.DISCRETE, counting);
+        kept.of(List.of(rule("a", 1, "b", -1, -5)), atom -> Granularity.DISCRETE, counting);
+
+        // A closure walks the positions by their places and never asks the order itself, so every
+        // comparison counted here is one made to state a question.
+        assertEquals(once, compared.get(), "the positions were put in order again");
+        assertEquals(2, kept.workedOut(), "the second rules over the same positions were not closed");
     }
 
     @Test

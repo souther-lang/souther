@@ -2,6 +2,7 @@ package souther.compiler.numeric;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
@@ -33,28 +34,45 @@ import java.util.function.Function;
 public final class ClosedStates {
 
     /** Nothing kept: every domain works out what its rules leave for itself. */
-    public static final ClosedStates NONE = new ClosedStates(null);
+    public static final ClosedStates NONE = new ClosedStates(null, null);
 
     /** One closure per question, kept for as long as whatever holds this is held. */
     public static ClosedStates kept() {
-        return new ClosedStates(new ConcurrentHashMap<>());
+        return new ClosedStates(new ConcurrentHashMap<>(), new ConcurrentHashMap<>());
     }
 
     private final Map<ClosureQuestion<?>, ClosedState<?>> answers;
 
+    /**
+     * Where each order puts each set of positions it has been asked about
+     * ({@link ClosureQuestion#placesIn}).
+     *
+     * <p>Kept because putting a question to the table means stating it, and stating it means
+     * sorting the positions its rules weigh — with a comparison that can be dear, once per question
+     * asked and not once per closure worked out. The positions repeat far more than the rules do.
+     *
+     * <p>Keyed by the order as the object it is, which is not what makes two questions one: two
+     * orders written apart that put the positions in the same places are two entries here and one
+     * question at {@link #answers}. An entry missed is a sort done again and nothing else.
+     */
+    private final Map<CanonicalOrder<?>, Map<Set<?>, Map<?, Integer>>> places;
+
     private final AtomicLong workedOut = new AtomicLong();
 
-    private ClosedStates(Map<ClosureQuestion<?>, ClosedState<?>> answers) {
+    private ClosedStates(Map<ClosureQuestion<?>, ClosedState<?>> answers,
+                         Map<CanonicalOrder<?>, Map<Set<?>, Map<?, Integer>>> places) {
         this.answers = answers;
+        this.places = places;
     }
 
     /** What {@code rules} leave, spaced by {@code spacing} and walked in {@code order}. */
     <A> ClosedState<A> of(List<AffineConstraint<A>> rules, Function<A, Granularity> spacing,
                           CanonicalOrder<A> order) {
-        ClosureQuestion<A> question = ClosureQuestion.of(rules, spacing, order);
         if (answers == null) {
-            return ClosedState.of(question);
+            return ClosedState.of(ClosureQuestion.of(rules, spacing, order));
         }
+        ClosureQuestion<A> question =
+                ClosureQuestion.of(rules, spacing, weighed -> placed(weighed, order));
         // The cast holds because an entry is only ever put under the question it answers, and a
         // question over positions of type A is answered by a closure over the same positions.
         @SuppressWarnings("unchecked")
@@ -68,6 +86,22 @@ public final class ClosedStates {
         workedOut.incrementAndGet();
         @SuppressWarnings("unchecked")
         ClosedState<A> raced = (ClosedState<A>) answers.putIfAbsent(question, made);
+        return raced == null ? made : raced;
+    }
+
+    /** {@link ClosureQuestion#placesIn}, kept for the order and the positions it was asked of. */
+    private <A> Map<A, Integer> placed(Set<A> positions, CanonicalOrder<A> order) {
+        Map<Set<?>, Map<?, Integer>> under =
+                places.computeIfAbsent(order, unused -> new ConcurrentHashMap<>());
+        // The cast holds because an entry is only ever put under the positions it places.
+        @SuppressWarnings("unchecked")
+        Map<A, Integer> had = (Map<A, Integer>) under.get(positions);
+        if (had != null) {
+            return had;
+        }
+        Map<A, Integer> made = ClosureQuestion.placesIn(positions, order);
+        @SuppressWarnings("unchecked")
+        Map<A, Integer> raced = (Map<A, Integer>) under.putIfAbsent(Set.copyOf(positions), made);
         return raced == null ? made : raced;
     }
 

@@ -1,6 +1,7 @@
 package souther.compiler.numeric;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -61,6 +62,20 @@ final class ClosureQuestion<A> {
      */
     static <A> ClosureQuestion<A> of(List<AffineConstraint<A>> rules,
                                      Function<A, Granularity> spacing, CanonicalOrder<A> order) {
+        return of(rules, spacing, weighed -> placesIn(weighed, order));
+    }
+
+    /**
+     * The same, with the places of the positions the rules weigh handed over by {@code placing}
+     * rather than sorted out here — for a caller that has already put those positions in the same
+     * order and kept what it came to.
+     *
+     * @param placing what {@link #placesIn} answers for the positions the rules weigh, under the
+     *                order the closure is to walk them in
+     */
+    static <A> ClosureQuestion<A> of(List<AffineConstraint<A>> rules,
+                                     Function<A, Granularity> spacing,
+                                     Function<Set<A>, Map<A, Integer>> placing) {
         Set<A> weighed = new LinkedHashSet<>();
         rules.forEach(each -> weighed.addAll(each.form().coefs().keySet()));
         Map<A, Granularity> spaced = new HashMap<>();
@@ -72,9 +87,20 @@ final class ClosureQuestion<A> {
             }
             spaced.put(position, it);
         }
-        // Sorted by the order alone and not walked: a pair the order cannot tell apart is kept at
-        // one place rather than refused, for the reason the class comment gives.
-        List<A> sorted = new ArrayList<>(weighed);
+        return new ClosureQuestion<>(List.copyOf(rules), Map.copyOf(spaced),
+                placing.apply(Collections.unmodifiableSet(weighed)));
+    }
+
+    /**
+     * Where {@code order} puts each of {@code positions}: how many of the others come before it.
+     *
+     * <p>Sorted by the order alone and not walked: a pair the order cannot tell apart is kept at
+     * one place rather than refused, for the reason the class comment gives. Settled by the order
+     * and the positions and by nothing else, so what it comes to for one set of positions under one
+     * order may be kept and handed back for the next question about the same positions.
+     */
+    static <A> Map<A, Integer> placesIn(Set<A> positions, CanonicalOrder<A> order) {
+        List<A> sorted = new ArrayList<>(positions);
         sorted.sort(order);
         Map<A, Integer> place = new HashMap<>();
         for (int at = 0; at < sorted.size(); at++) {
@@ -83,7 +109,7 @@ final class ClosureQuestion<A> {
             place.put(here, before != null && order.compare(before, here) == 0
                     ? place.get(before) : at);
         }
-        return new ClosureQuestion<>(List.copyOf(rules), Map.copyOf(spaced), Map.copyOf(place));
+        return Map.copyOf(place);
     }
 
     /** The rules, in the order they are held. */

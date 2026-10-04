@@ -6,6 +6,7 @@ import souther.compiler.check.ConstraintState;
 import souther.compiler.check.Emptiness;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.RuleKey;
+import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.ClosedStates;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
@@ -425,6 +426,13 @@ final class ReadQuantities implements Quantities {
 
         private final ClosedStates closures = ClosedStates.kept();
 
+        /**
+         * The order every context's numbers are walked in, as one object. It is one order however
+         * many times it is asked for; held once, what the closures kept of where it put a set of
+         * positions is found again from whichever context asks.
+         */
+        private final CanonicalOrder<InputAtom> order = InputAtom.inOneOrder();
+
         UnderAContext under(StructuralContext context, ReadQuantities asking) {
             UnderAContext had = read.get(context);
             if (had != null) {
@@ -511,7 +519,7 @@ final class ReadQuantities implements Quantities {
             }
         });
         ConstraintState<InputAtom> made =
-                ConstraintState.top(InputAtom.inOneOrder(), contexts.closures);
+                ConstraintState.top(contexts.order, contexts.closures);
         // What the values of this space cost to work out. One for the space and not one per
         // parameter: what each parameter was read under is the allowance of its own declaration,
         // and the set a position finally admits here is met out of all of them — so this is the
