@@ -160,6 +160,20 @@ public final class ClosedState<A> {
     }
 
     /**
+     * What the rules of {@code question} leave, worked out from the question and from nothing else.
+     *
+     * <p>The spacing and the order are the question's own, read back off it rather than taken from
+     * whoever stated it, so a closure is settled by the question it answers — which is what lets
+     * one closure stand for every question equal to it ({@link ClosedStates}). Over the positions
+     * the rules weigh, which are the only positions a closure asks about, they are the spacing and
+     * the order the question was stated with, so this is the closure {@link #of(List, Function,
+     * CanonicalOrder)} works out from those.
+     */
+    static <A> ClosedState<A> of(ClosureQuestion<A> question) {
+        return of(question.rules(), question::spacingOf, question.order());
+    }
+
+    /**
      * Whether the rules leave one of the forms they are about no value at all.
      *
      * <p>A rule bounds its own form one way, and another rule over the same form bounds it the
