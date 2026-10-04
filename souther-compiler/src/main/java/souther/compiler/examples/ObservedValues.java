@@ -170,7 +170,8 @@ final class ObservedValues {
             java.lang.reflect.Method accessor = live.getClass().getDeclaredMethod(name);
             accessor.setAccessible(true);
             return accessor.invoke(live);
-        } catch (ReflectiveOperationException | RuntimeException _) {
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            EvaluationContext.rethrowIfOverspent(e);
             return FAILED;
         }
     }

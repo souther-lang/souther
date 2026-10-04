@@ -45,6 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import souther.compiler.evaluate.EvaluationContext;
 import souther.runtime.Strings;
 import souther.runtime.TextAdmission;
 
@@ -2252,7 +2253,7 @@ public final class AstBuilder {
      * this language runs everywhere, not whatever Unicode version this JDK shipped with.
      */
     private String stringValue(SyntaxToken literal) {
-        return switch (Strings.admission(CstLexer.textOf(literal.text()))) {
+        return switch (Strings.admission(CstLexer.textOf(literal.text()), EvaluationContext.checkpoint())) {
             case TextAdmission.Admitted a -> a.text();
             case TextAdmission.NotText _ -> throw error(posOf(literal),
                     new ParseMessage.AStringLiteralHoldsHalfASurrogatePair());

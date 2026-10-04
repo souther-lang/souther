@@ -2,6 +2,10 @@ package souther.compiler.evaluate;
 
 import souther.runtime.WorkCheckpoint;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
+
 /**
  * What one evaluation is allowed, counted by the code as it runs.
  *
@@ -170,8 +174,38 @@ public final class EvaluationContext {
      * something that is not wrong.
      */
     public static boolean overspending(Throwable thrown) {
-        return thrown instanceof StepLimitExceeded || thrown instanceof DepthLimitExceeded
-                || thrown instanceof EvaluationAbandoned;
+        return overspent(thrown) != null;
+    }
+
+    /**
+     * What stopped the evaluation, where {@code thrown} is it or carries it as a cause, and null
+     * where it is neither.
+     *
+     * <p>Read through the causes because the stop is thrown inside the evaluated code and reaches a
+     * catch through whatever stands between: a reflective call wraps it in an
+     * {@code InvocationTargetException}, and a layer that reports its own failure may carry it as the
+     * cause of that. Read off the outermost throwable only, a stop wrapped once is a value that could
+     * not be built, and the caller goes on working for an evaluation that is over. A caller that
+     * rethrows rethrows this, the stop itself, and not what it was found inside.
+     */
+    public static RuntimeException overspent(Throwable thrown) {
+        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Throwable each = thrown; each != null && seen.add(each); each = each.getCause()) {
+            if (each instanceof StepLimitExceeded || each instanceof DepthLimitExceeded
+                    || each instanceof EvaluationAbandoned) {
+                return (RuntimeException) each;
+            }
+        }
+        return null;
+    }
+
+    /** Rethrows what stopped the evaluation, where {@code thrown} is it or carries it
+     *  ({@link #overspent}), and returns where it does not. */
+    public static void rethrowIfOverspent(Throwable thrown) {
+        RuntimeException stop = overspent(thrown);
+        if (stop != null) {
+            throw stop;
+        }
     }
 
     private EvaluationContext() {}

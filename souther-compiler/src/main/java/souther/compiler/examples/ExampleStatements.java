@@ -25,6 +25,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.evaluate.StepLimitExceeded;
+import souther.runtime.Values;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.RowStatements;
@@ -538,10 +539,13 @@ public final class ExampleStatements {
                 // The reading spent what the policy allows. That is an answer about the statements —
                 // the same one on every host — and is told apart from a reading that stopped answering,
                 // which is an answer about the host.
-                if (cause instanceof StepLimitExceeded) {
+                // Read through the causes, as a stop reaching here through a reflective call is
+                // wrapped (EvaluationContext.overspent).
+                RuntimeException stop = EvaluationContext.overspent(cause);
+                if (stop instanceof StepLimitExceeded) {
                     return new Read.Overspent<>(FailurePhase.STEP_LIMIT, policy.stepLimit());
                 }
-                if (cause instanceof DepthLimitExceeded) {
+                if (stop instanceof DepthLimitExceeded) {
                     return new Read.Overspent<>(FailurePhase.DEPTH_LIMIT,
                             policy.recursionDepthLimit());
                 }
@@ -1020,7 +1024,7 @@ public final class ExampleStatements {
                 return false;
             }
             for (int i = 0; i < arguments.length; i++) {
-                if (!souther.runtime.Values.equal(arguments[i], key[i])) {
+                if (!Values.equal(arguments[i], key[i], EvaluationContext.checkpoint())) {
                     return false;
                 }
             }
@@ -1385,7 +1389,7 @@ public final class ExampleStatements {
             return false;
         }
         if (left instanceof Answered.Whole l && right instanceof Answered.Whole r) {
-            return !souther.runtime.Values.equal(l.fixture().value(), r.fixture().value());
+            return !Values.equal(l.fixture().value(), r.fixture().value(), EvaluationContext.checkpoint());
         }
         TypeSymbol one = caseOf(left);
         TypeSymbol other = caseOf(right);
