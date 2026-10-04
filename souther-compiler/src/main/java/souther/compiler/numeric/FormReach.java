@@ -1,5 +1,6 @@
 package souther.compiler.numeric;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +60,10 @@ final class FormReach<A> {
 
     /** The one order a walk of a form's positions takes them in — see {@link CanonicalOrder}. */
     private final CanonicalOrder<A> order;
+
+    /** Every half-space of every rule, stated once for the round — see {@link #premises}. Null
+     *  until the first form of two or more positions asks. */
+    private List<Premise<A>> premises;
 
     private FormReach(List<AffineConstraint<A>> rules, Box<A> ends,
                       DifferenceBounds<A> differences, CanonicalOrder<A> order) {
@@ -159,7 +164,6 @@ final class FormReach<A> {
 
     private ExactCut highest(Map<A, ExactRatio> coefs, ExactRatio constant,
                                 AffineConstraint<A> without) {
-        ExactCut best = fromTheEnds(coefs, constant);
         if (coefs.size() <= 1) {
             // A form naming one position is answered by the ends and by nothing else, because the
             // ends *are* this step at one position, run until they stop moving or until the rounds
@@ -168,32 +172,172 @@ final class FormReach<A> {
             // left the range of a position with no bound while the same position asked as a form
             // went one link further and found one. Two answers about one position, and the budget
             // bounding neither.
-            return best;
+            return fromTheEnds(coefs, constant);
         }
-        for (AffineConstraint<A> rule : rules) {
-            if (rule.equals(without)) {
+        ExactCut ranges = fromTheRanges(coefs, constant);
+        ExactCut best = withTheDifference(coefs, constant, ranges);
+        // What a premise naming none of the form's positions leaves is the form and the premise
+        // side by side. Where the form weighs two positions or more, that residual has three or
+        // more, so the ranges are its only route — see passesOver for when they bound it no lower
+        // than what is already held.
+        boolean residualsAreRangedOnly = weighed(coefs) >= 2;
+        for (Premise<A> each : premises()) {
+            if (each.rule().equals(without)) {
                 continue;
             }
-            for (AffineConstraint.HalfSpace<A> premise : rule.halfSpaces()) {
-                // A model's own decimals can put this premise's bound, or one of its own
-                // coefficients, far enough apart in scale from what it is being merged with that the
-                // exact arithmetic cannot hold the sum. Where that happens this premise composes no
-                // route this round — the same as a premise this form does not name — which costs a
-                // tighter bound this route might have found and claims nothing this route did not.
-                Map<A, ExactRatio> without1 = withoutThe(premise, coefs);
-                ExactRatio residualConstant =
-                        without1 == null ? null : constant.plus(premise.bound().at()).orNull();
-                ExactCut residual = residualConstant == null ? null
-                        : fromTheEnds(without1, residualConstant);
-                if (residual != null) {
-                    // The form reaches the sum only where the residual reaches its own end and the
-                    // premise reaches its bound.
-                    best = ExactCut.tighterUpper(best, new ExactCut(residual.at(),
-                            residual.inclusive() && premise.bound().inclusive()));
-                }
+            AffineConstraint.HalfSpace<A> premise = each.half();
+            if (residualsAreRangedOnly && namesNoneOf(premise, coefs) && passesOver(each, ranges)) {
+                continue;
+            }
+            // A model's own decimals can put this premise's bound, or one of its own
+            // coefficients, far enough apart in scale from what it is being merged with that the
+            // exact arithmetic cannot hold the sum. Where that happens this premise composes no
+            // route this round — the same as a premise this form does not name — which costs a
+            // tighter bound this route might have found and claims nothing this route did not.
+            Map<A, ExactRatio> without1 = withoutThe(premise, coefs);
+            ExactRatio residualConstant =
+                    without1 == null ? null : constant.plus(premise.bound().at()).orNull();
+            ExactCut residual = residualConstant == null ? null
+                    : fromTheEnds(without1, residualConstant);
+            if (residual != null) {
+                // The form reaches the sum only where the residual reaches its own end and the
+                // premise reaches its bound.
+                best = ExactCut.tighterUpper(best, new ExactCut(residual.at(),
+                        residual.inclusive() && premise.bound().inclusive()));
             }
         }
         return best;
+    }
+
+    /** How many of {@code coefs}' positions carry a weight. */
+    private static <A> int weighed(Map<A, ExactRatio> coefs) {
+        int weighed = 0;
+        for (ExactRatio weight : coefs.values()) {
+            if (!weight.isZero()) {
+                weighed++;
+            }
+        }
+        return weighed;
+    }
+
+    /** Whether {@code premise}'s sum names none of the positions {@code coefs} holds, weighed or
+     *  not — a position held at nought is still one a merge would combine. */
+    private static <A> boolean namesNoneOf(AffineConstraint.HalfSpace<A> premise,
+                                           Map<A, ExactRatio> coefs) {
+        for (A position : coefs.keySet()) {
+            if (premise.form().coefs().containsKey(position)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether a premise naming none of a form of two weighed positions or more can be passed over:
+     * whether the residual it leaves is bounded, by the ranges alone, no lower than {@code ranges},
+     * the ranges' bound on the form, which is no lower than what is already held.
+     *
+     * <p>The ranges bound the residual at their bound on the form plus their bound on
+     * {@code bound - Σ w·x}, the premise's own room. Where an end that room needs is missing, the
+     * residual is bounded nowhere and so tightens nothing. Where the room is above nought, the
+     * residual is bounded above {@code ranges}. Anything else — the room at or below nought, or a sum
+     * the exact arithmetic could not hold — is merged in the way every premise is, so what is
+     * answered here decides how much work is done and never what comes of it.
+     */
+    private boolean passesOver(Premise<A> each, ExactCut ranges) {
+        return switch (each.room(this)) {
+            case NOT_REACHED -> true;
+            case ABOVE_NOUGHT -> ranges != null;
+            case NOT_SETTLED -> false;
+        };
+    }
+
+    /** Where {@code half}'s room — {@code bound - Σ w·x} at the most the ranges let it come to —
+     *  stands. */
+    private Room roomOf(AffineConstraint.HalfSpace<A> half) {
+        Map<A, ExactRatio> negated = new LinkedHashMap<>();
+        for (Map.Entry<A, ExactRatio> each : half.form().entriesIn(order)) {
+            ExactRatio weight = each.getValue().negated();
+            ExactCut end = weight.signum() > 0 ? ends.mostOf(each.getKey())
+                    : ends.leastOf(each.getKey());
+            if (end == null) {
+                return Room.NOT_REACHED;
+            }
+            negated.put(each.getKey(), weight);
+        }
+        ExactCut room = Reach.of(negated, half.bound().at(), this::rangeOf).most();
+        return room != null && room.at().signum() > 0 ? Room.ABOVE_NOUGHT : Room.NOT_SETTLED;
+    }
+
+    /** Where a premise's room stands against the ranges of this round. */
+    private enum Room {
+        /** An end the room needs is missing, so the ranges bound it nowhere. */
+        NOT_REACHED,
+        /** The ranges bound it above nought. */
+        ABOVE_NOUGHT,
+        /** Neither of those is known: at or below nought, or a sum the exact arithmetic could not
+         *  hold. */
+        NOT_SETTLED
+    }
+
+    /**
+     * Every half-space of every rule, in the order the rules are held.
+     *
+     * <p>Once for the round rather than once for every form asked in it: an equality states its two
+     * half-spaces afresh each time it is asked for them.
+     *
+     * <p>Worked out on the first ask and kept. What is kept is a function of what this was handed,
+     * so two threads that both work it out work out the same list.
+     */
+    private List<Premise<A>> premises() {
+        List<Premise<A>> read = premises;
+        if (read == null) {
+            List<Premise<A>> out = new ArrayList<>();
+            for (AffineConstraint<A> rule : rules) {
+                for (AffineConstraint.HalfSpace<A> half : rule.halfSpaces()) {
+                    out.add(new Premise<>(rule, half));
+                }
+            }
+            read = List.copyOf(out);
+            premises = read;
+        }
+        return read;
+    }
+
+    /**
+     * One half-space of a rule, and where its room stands once a form has asked.
+     *
+     * <p>The room is the premise's and the ranges', and not the form's, so it is worked out the
+     * first time a form naming none of the premise asks and kept for the round. Two threads that
+     * both work it out work out the same answer.
+     */
+    private static final class Premise<A> {
+
+        private final AffineConstraint<A> rule;
+        private final AffineConstraint.HalfSpace<A> half;
+        private Room room;
+
+        Premise(AffineConstraint<A> rule, AffineConstraint.HalfSpace<A> half) {
+            this.rule = rule;
+            this.half = half;
+        }
+
+        AffineConstraint<A> rule() {
+            return rule;
+        }
+
+        AffineConstraint.HalfSpace<A> half() {
+            return half;
+        }
+
+        Room room(FormReach<A> round) {
+            Room read = room;
+            if (read == null) {
+                read = round.roomOf(half);
+                room = read;
+            }
+            return read;
+        }
     }
 
     /** {@code coefs} with {@code premise}'s form taken off it, which is what is left to bound once
@@ -227,8 +371,23 @@ final class FormReach<A> {
         if (coefs.isEmpty()) {
             return ExactCut.inclusive(constant);
         }
-        ExactCut best = Reach.of(coefs, constant,
-                position -> Reach.between(ends.leastOf(position), ends.mostOf(position))).most();
+        return withTheDifference(coefs, constant, fromTheRanges(coefs, constant));
+    }
+
+    /** What the ends leave the form, each position read at its own end. */
+    private ExactCut fromTheRanges(Map<A, ExactRatio> coefs, ExactRatio constant) {
+        return Reach.of(coefs, constant, this::rangeOf).most();
+    }
+
+    private Reach rangeOf(A position) {
+        return Reach.between(ends.leastOf(position), ends.mostOf(position));
+    }
+
+    /** {@code best}, tightened by the closed differences where the form is the difference of two
+     *  positions. */
+    private ExactCut withTheDifference(Map<A, ExactRatio> coefs, ExactRatio constant,
+                                       ExactCut fromTheRanges) {
+        ExactCut best = fromTheRanges;
         Apart<A> apart = difference(coefs);
         if (apart != null) {
             ExactCut held = differences.differenceBound(apart.above(), apart.below());
