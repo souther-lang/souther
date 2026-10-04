@@ -735,8 +735,9 @@ class AnalyzerTest {
     }
 
     @Test
-    void aFailingInlineExampleIsReportedOnSave() {
-        // a self-contained module is compiled on save, so a failing `example` surfaces as E1905
+    void aFailingInlineExampleIsReportedAsADiagnostic() {
+        // a self-contained module is compiled whenever its diagnostics are asked, so a failing
+        // `example` surfaces as E1905
         String src = "module demo\n"
                 + "data M = { n: Int }\n"
                 + "behavior f : (x: M) -> M\n"
