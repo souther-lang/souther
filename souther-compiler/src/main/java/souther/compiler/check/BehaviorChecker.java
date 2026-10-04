@@ -50,7 +50,7 @@ public final class BehaviorChecker {
                                        DeclaredSig declared, Symbols symbols,
                                        DeclarationAccess declarations,
                                        Map<String, StandingSignature> helpers) {
-        Reading reading = read(behavior, module, declared, ListedCases.asWritten(symbols),
+        Reading reading = read(behavior, module, declared, declarations.listed(),
                 declarations.kinds(), declarations.sums());
         BehaviorContract contract = reading.contract();
         // The rules it did read, held to what a rule has to be. Two mistakes in one declaration are

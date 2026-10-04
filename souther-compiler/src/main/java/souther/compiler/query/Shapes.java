@@ -2100,7 +2100,7 @@ public final class Shapes {
     public static DeclarationAccess declarationAccess(Db db) {
         return new DeclarationAccess(publishedDeclarations(db), declarationKinds(db),
                 newtypeInners(db), effectiveFieldTypes(db), fieldLayout(db), sumCases(db),
-                enumerationListings(db));
+                listedCases(db), enumerationListings(db));
     }
 
     /**

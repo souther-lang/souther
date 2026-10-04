@@ -591,7 +591,8 @@ public final class Elaborator {
         }
         // The step matches on, or grows the accumulator into, the sum the seed's case belongs to.
         if (declaredStep.result() instanceof Type.Var accVar) {
-            Type sum = TypeOps.enclosingSum(TypeOps.substitute(declaredStep.result(), bind), ctx.symbols());
+            Type sum = TypeOps.enclosingSum(TypeOps.substitute(declaredStep.result(), bind),
+                    ctx.symbols(), ctx.kinds(), ctx.listed());
             if (sum != null) {
                 Map<String, Type> widened = new HashMap<>(bind);
                 widened.put(accVar.name(), sum);

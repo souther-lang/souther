@@ -116,6 +116,7 @@ class AHelperMatchingASumIsTypedWhileTheDeclarationsAreBeingMadeTest {
                         data X = { s: S, a: A }
                             invariant same(s, a)
                         """));
+        assertEquals("E1203", refused.diagnostic().code(), refused::getMessage);
         assertTrue(refused.getMessage().contains("`C` is not a case of data `S`"),
                 refused::getMessage);
     }
