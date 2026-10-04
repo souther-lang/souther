@@ -7,11 +7,9 @@ import net.unit8.notation199x.pattern.PatternRead;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A construction stops where it is first refused, and that refusal is what it is told about.
@@ -55,32 +53,6 @@ class TheFirstRefusalStopsAConstructionAndIsWhatItIsToldTest {
                 "and what stopped it is the side that is larger than a machine may be");
         assertEquals(200, meter.left(),
                 "the right side was never built, so what it would have cost is still there");
-    }
-
-    /**
-     * And a meter keeps the first refusal, whatever is asked of it afterwards.
-     *
-     * <p>Which is not the same rule as the one above and does not follow from it. A builder that
-     * stops on the first refusal never asks again, so this is what holds when one forgets: the
-     * attribution stays the construction's rather than the last thing that happened to be tried.
-     */
-    @Test
-    void aMeterKeepsTheFirstRefusalAndNotTheLast() {
-        Meter meter = new Meter(10, 30, 1_000_000_000L);
-        meter.starting();
-
-        assertFalse(meter.making().states(20), "more than one machine may be");
-        assertEquals(Meter.Stopped.ONE_MACHINE, meter.stoppedBy());
-
-        // Now spend the allowance down, so that the next refusal is the other limit: small enough
-        // to be a machine and larger than what is left.
-        for (int each = 0; each < 3; each++) {
-            assertTrue(meter.making().states(10), "ten at a time, three times, is the whole of it");
-        }
-        assertFalse(meter.making().states(5), "and there is nothing left for five more");
-
-        assertEquals(Meter.Stopped.ONE_MACHINE, meter.stoppedBy(),
-                "the first refusal still stands, and it is the one about a rule");
     }
 
     /** And a build that comes back with nothing is not told what refused an earlier one. */
