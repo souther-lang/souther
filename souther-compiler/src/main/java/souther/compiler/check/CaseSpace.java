@@ -135,7 +135,7 @@ sealed interface CaseSpace {
      * {@code Option} is not a declaration a module holds; a union is read before a name because it
      * has no name to look up.
      */
-    static CaseSpace of(Type subject, DeclarationKinds kinds, PublishedDeclarations published,
+    static CaseSpace of(Type subject, DeclarationKinds kinds, ListedCases listed,
                         SumCases sums) {
         if (subject instanceof Type.OptionOf option) {
             // An optional's carriers cover themselves. What `Some` holds is the element, and the
@@ -155,16 +155,14 @@ sealed interface CaseSpace {
                     direct(members, kinds, sums));
         }
         // Whether the subject is a sum is asked of the form, which is settled where the module was
-        // indexed; what its cases are is asked of the declaration, and only of the ones that are
-        // sums. Asking the second of every subject would ask what a declaration says of one whose
-        // own meaning is being worked out.
+        // indexed; what its cases are is asked of what it lists, settled where its names resolved,
+        // and only of the ones that are sums. Neither waits on what any declaration says, so a
+        // match can be read while that is being worked out.
         if (subject instanceof Type.Ref ref
                 && ref.name() instanceof TypeSymbol.AtModule at
                 && kinds.isSum(at.key())
-                && published.of(at.key())
-                    instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Sum sum)) {
-            return new Cases(subject, "data `" + sum.declares().name() + "`",
-                    direct(AtomSpace.declaredCases(sum), kinds, sums));
+                && listed.of(at.key()) instanceof List<TypeSymbol> cases) {
+            return new Cases(subject, "data `" + at.name() + "`", direct(cases, kinds, sums));
         }
         return new Plain(subject);
     }

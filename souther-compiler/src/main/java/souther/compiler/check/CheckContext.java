@@ -96,6 +96,10 @@ public record CheckContext(Symbols symbols, DeclarationAccess declarations,
         return declarations.sums();
     }
 
+    public ListedCases listed() {
+        return declarations.listed();
+    }
+
     /**
      * The same, elaborating what {@code expansion} put here.
      *

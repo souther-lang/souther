@@ -79,12 +79,12 @@ class WhatATypeIsMadeOfIsComposedOfEachSumsAnswerTest {
         cyclic.composesEveryTwoNamesAsOneDescent();
     }
 
-    /** One module, read the way a check reads it: by form, and by what the declarations say. */
+    /** One module, read the way a check reads it: by form, and by the cases each sum lists. */
     private static final class Module {
 
         private final Hir.Module resolved;
         private final DeclarationKinds kinds;
-        private final PublishedDeclarations said;
+        private final ListedCases listed;
         private final SumCases sums;
 
         Module(String source) {
@@ -92,8 +92,8 @@ class WhatATypeIsMadeOfIsComposedOfEachSumsAnswerTest {
                     .db().ask(new Names.Resolved("m")).value();
             Symbols symbols = TypeChecker.symbols(resolved, DefaultStdlib.get());
             kinds = ScopedDeclarations.kindsOf(symbols);
-            said = ScopedDeclarations.of(symbols);
-            sums = SumCases.asWritten(kinds, said);
+            listed = ScopedDeclarations.listedOf(symbols);
+            sums = SumCases.asWritten(kinds, listed);
         }
 
         TypeSymbol named(String name) {
@@ -119,7 +119,7 @@ class WhatATypeIsMadeOfIsComposedOfEachSumsAnswerTest {
                 names.add(d.declares());
             }
             for (TypeSymbol one : names) {
-                assertEquals(shown(AtomSpace.leavesUnder(List.of(one), kinds, said)),
+                assertEquals(shown(AtomSpace.leavesUnder(List.of(one), kinds, listed)),
                         composed(Type.ref(one)), one::name);
             }
             int compared = 0;
@@ -131,7 +131,7 @@ class WhatATypeIsMadeOfIsComposedOfEachSumsAnswerTest {
                     Type.Union union = (Type.Union) Type.union(
                             new LinkedHashSet<>(List.of(first, second)));
                     assertEquals(shown(AtomSpace.leavesUnder(AtomSpace.statedBy(union), kinds,
-                                    said)),
+                                    listed)),
                             composed(union),
                             () -> first.name() + " | " + second.name());
                     compared++;

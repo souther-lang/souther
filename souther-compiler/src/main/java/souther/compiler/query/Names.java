@@ -12,6 +12,7 @@ import souther.compiler.check.DeclarationReads;
 import souther.compiler.check.DeclarationRefusals;
 import souther.compiler.check.Derived;
 import souther.compiler.check.DerivedSymbols;
+import souther.compiler.check.ListedCases;
 import souther.compiler.check.Normalized;
 import souther.compiler.check.ResolvedSymbols;
 import souther.compiler.check.Denoting;
@@ -496,6 +497,43 @@ public final class Names {
                 case Hir.SumData _ -> DeclarationKind.SUM;
                 case Hir.UnitData _ -> DeclarationKind.UNIT;
             });
+        }
+    }
+
+    /**
+     * The cases the sum at {@code named} lists, one layer, in the order it writes them.
+     *
+     * <p>Read off the declaration as its names resolved, which is where a sum's cases are settled:
+     * nothing below resolution writes a sum again. What the declaration says is worked out further
+     * up, out of its module with every clause settled, and asking that would make a reader of a
+     * sum's cases wait on the clauses of every product beside it — and be unable to ask while one
+     * of those clauses is being settled.
+     *
+     * <p>An answer of its own and not the resolved declaration handed on, so a reader of it is told
+     * only when the list changes: the declaration carries where it is written, and moves with every
+     * line above it.
+     *
+     * <p>Absent where nothing declares a sum at {@code named}.
+     */
+    public record CasesListedBy(TypeKey named) implements Key<List<TypeSymbol>> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<List<TypeSymbol>> compute(Db db) {
+            List<TypeSymbol> listed = ListedCases.readOff(address -> {
+                Answer<Hir.Def> mine = db.ask(new ResolvedDeclaration(address));
+                if (mine.present()) {
+                    return mine.value();
+                }
+                // What the language declares, which no module of this compilation wrote: its sums
+                // list cases like any other, and a reader asking one is asking about a declaration.
+                Answer<Stdlib> library = db.ask(new Front.Library());
+                return library.present() ? library.value().languageDeclaration(address) : null;
+            }).of(named);
+            return listed == null ? Answer.absent() : Answer.of(listed);
         }
     }
 

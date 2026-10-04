@@ -10,6 +10,7 @@ import souther.compiler.Reserved;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.ListedCases;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.StandingSignature;
 import souther.compiler.check.PublishedDeclarations;
@@ -62,8 +63,12 @@ final class CodegenContext {
      *  from anything else. */
     final DeclarationKinds kinds;
 
-    /** What a value of each sum an emitted class names can be, read off {@link #published} and so
-     *  through the same door: what a class is built against is what its reads record. */
+    /** Which cases each sum an emitted class names lists, read off {@link #symbols} and so through
+     *  the door its reads are recorded at: what a class is built against is what its reads
+     *  record. */
+    final ListedCases listed;
+
+    /** What a value of each sum an emitted class names can be, descended from {@link #listed}. */
     final SumCases sums;
 
     /** What each declaration that wears one value wraps, for the readings that go through the
@@ -434,7 +439,8 @@ final class CodegenContext {
         this.symbols = symbols;
         this.published = published;
         this.kinds = kinds;
-        this.sums = SumCases.asWrittenOnceEach(kinds, published);
+        this.listed = ListedCases.asWritten(symbols);
+        this.sums = SumCases.asWrittenOnceEach(kinds, listed);
         this.inners = inners;
         this.kernels = kernels;
         this.caseToSums = caseToSums;

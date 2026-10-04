@@ -4,7 +4,6 @@ import souther.compiler.types.CanonicalNameOrder;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -104,20 +103,19 @@ public final class AtomSpace {
      * leaves stand where the first root reached them. Package-private so that what
      * {@link #subjectAtoms} composes out of one answer per root can be held to it.
      *
-     * <p>Asked of what the declarations publish and not of a world's declarations. Which cases a sum
-     * has is what that declaration says about itself, so a reader here means nothing by the tree it
-     * was written in — and reading one would answer differently for the same sum every time a line
-     * above it moved.
+     * <p>Asked of the cases each sum lists ({@link ListedCases}) and not of what it says. Which cases
+     * a sum has is settled where its names resolve, and what a declaration says is worked out later,
+     * once the clauses of its module are — a helper one of those clauses calls is typed on the way,
+     * and a {@code match} in it asks this of its subject.
      *
-     * <p>Whether a name is a sum to descend is asked of {@code kinds} first, and what it says only
-     * of the ones that are. A case may be a product, whose meaning is made by reading its clauses,
-     * and a clause that orders a value asks this of the sums of the value's module. Asking every
-     * case what it says would ask it of a product whose own meaning is being made.
+     * <p>Whether a name is a sum to descend is asked of {@code kinds} first, and what it lists only
+     * of the ones that are. A case may be a product, and reading a product's declaration to find it
+     * is no sum would answer a question about its form out of what it says.
      */
     static List<TypeSymbol> leavesUnder(List<TypeSymbol> roots, DeclarationKinds kinds,
-                                        PublishedDeclarations published) {
+                                        ListedCases listed) {
         Set<TypeSymbol> atoms = new LinkedHashSet<>();
-        descend(roots, kinds, published, atoms, new HashSet<>());
+        descend(roots, kinds, listed, atoms, new HashSet<>());
         return List.copyOf(atoms);
     }
 
@@ -154,34 +152,19 @@ public final class AtomSpace {
      * come back.
      */
     private static void descend(Iterable<TypeSymbol> names, DeclarationKinds kinds,
-                                PublishedDeclarations published, Set<TypeSymbol> atoms,
+                                ListedCases listed, Set<TypeSymbol> atoms,
                                 Set<TypeSymbol> expanded) {
         for (TypeSymbol name : names) {
             // What the language declares is a case and never a sum, and it has no address to ask
             // about: a name that is not a module's is an atom without anything being asked.
-            if (name instanceof TypeSymbol.AtModule at
-                    && kinds.isSum(at.key())
-                    && published.of(at.key())
-                        instanceof PublishedDeclarationResult.Found(DeclarationMeaning.Sum sum)) {
-                if (expanded.add(name)) {
-                    descend(declaredCases(sum), kinds, published, atoms, expanded);
-                }
-            } else {
+            List<TypeSymbol> cases = name instanceof TypeSymbol.AtModule at && kinds.isSum(at.key())
+                    ? listed.of(at.key())
+                    : null;
+            if (cases == null) {
                 atoms.add(name);
+            } else if (expanded.add(name)) {
+                descend(cases, kinds, listed, atoms, expanded);
             }
         }
-    }
-
-    /** The declarations {@code sum} lists, in the order it lists them. A name it lists that reaches
-     *  nothing is no case: it is reported where it is written, and a reader counting what a value
-     *  can be counts what is there. */
-    static List<TypeSymbol> declaredCases(DeclarationMeaning.Sum sum) {
-        List<TypeSymbol> named = new ArrayList<>();
-        for (DeclarationReference each : sum.cases()) {
-            if (each instanceof DeclarationReference.Named it) {
-                named.add(it.declaration());
-            }
-        }
-        return named;
     }
 }

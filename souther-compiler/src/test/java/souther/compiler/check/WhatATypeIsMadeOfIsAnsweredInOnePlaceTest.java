@@ -236,27 +236,22 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
     // --- who can build a case closure at all -----------------------------------------------------
 
     /**
-     * A sum's own case list is read at four call sites, all of them in the package that declares it.
+     * A sum's own case list is read off its declaration at one call site, {@link ListedCases}, and
+     * every other reader of one layer asks that.
      *
      * <p>What a second closure would be built out of is one layer of a sum plus the declarations:
      * hold both and a loop away is a descent. The declarations are everywhere, so the layer is the
      * part that can be held down, and {@code TypeOps.caseNames} is package-private for that reason.
-     * That is where most of this rule lives — no code outside {@code check} can write a second
-     * closure at all, and javac says so rather than a scan guessing at spellings.
+     * A reader outside {@code check} reaches a layer only through {@link ListedCases}, and the one
+     * closure over its answers is {@link SumCases#asWritten}.
      *
      * <p>What is left for a scan is the package itself, and it counts <em>calls</em> rather than
      * files. A file already reading one layer is where a second reading is cheapest to add, so a
-     * check that stops at the file name would see nothing: the reader most likely to grow a descent
-     * is one of the four already listed.
+     * check that stops at the file name would see nothing.
      *
      * <p>Called out by file and not by line. A line number moves whenever anything above it is
      * edited, and a tripwire that goes red on an unrelated edit is one that gets deleted. The name
      * repeated is what a second call site in an existing reader shows up as.
-     *
-     * <p>Three of the four are not the descent and read one layer on purpose: a {@code match} is
-     * decided over the cases the sum declared and not over what they reach (spec
-     * §an-or-pattern-binds-the-sum-and-opens-nothing), which is #966 itself. When that changes they
-     * ask {@link AtomSpace} and this list gets shorter, never longer.
      *
      * <p><b>What this does not see.</b> A descent written around a call that is already here. Both
      * halves are about who can reach the material — the visibility bounds who may, and this bounds
@@ -283,9 +278,9 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
                 calls.add(source.getFileName().toString());
             }
         }
-        assertEquals(List.of("TypeOps.java"), calls,
-                "what a sum's cases are is asked of what the declaration says, so the tree it was"
-                        + " written in is read in one place and by nothing that answers about kind");
+        assertEquals(List.of("ListedCases.java"), calls,
+                "what a sum lists is read off the tree it was written in at one place, which every"
+                        + " reader of one layer asks");
     }
 
     /** The file that declares the case list, whose own calls to it carry no class name. */

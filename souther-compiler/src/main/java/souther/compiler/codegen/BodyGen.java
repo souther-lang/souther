@@ -259,7 +259,7 @@ final class BodyGen {
             // no answer of the compilation's to read either from.
             return new CheckContext(symbols, new DeclarationAccess(ctx.published, ctx.kinds,
                     ctx.inners, EffectiveFieldTypes.asWritten(symbols),
-                    FieldLayout.asWritten(symbols), ctx.sums,
+                    FieldLayout.asWritten(symbols), ctx.sums, ctx.listed,
                     EnumerationListings.asWritten(symbols, ctx.kinds, ctx.sums)),
                     ReachedValueLocations.NOT_HELD, data, reqSigs());
         }

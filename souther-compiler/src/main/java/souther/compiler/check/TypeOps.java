@@ -293,27 +293,29 @@ public final class TypeOps {
     /** The sum type that {@code t}'s case belongs to, or null when {@code t} is not a case of a named
      * sum. A {@code fold} whose seed is a case ({@code PricedCart}) and whose step grows and matches the
      * accumulator at the sum ({@code PricedCart | NotFound}) is typed at that sum, not the seed case. */
-    public static Type enclosingSum(Type t, Symbols symbols) {
+    public static Type enclosingSum(Type t, Symbols symbols, DeclarationKinds kinds,
+                                    ListedCases listed) {
         // A case of a primitive-headed union belongs to no named sum: nothing declares it, so no
         // module holds a sum it is a case of.
-        if (!(t instanceof Type.Ref(TypeSymbol.AtModule named))
-                || symbols.declaredNode(named) instanceof Hir.SumData) {
+        if (!(t instanceof Type.Ref(TypeSymbol.AtModule named)) || kinds.isSum(named.key())) {
             return null;
         }
         // A sum and its cases are declared together, so only that module can hold the sum this case
         // belongs to. A case may belong to more than one; pick by name so the choice is deterministic
-        // across runs rather than dependent on the symbol map's iteration order.
-        Hir.SumData chosen = null;
+        // across runs rather than dependent on the symbol map's iteration order. Which names are sums
+        // is asked of their form, and what a sum lists only of those.
+        TypeKey chosen = null;
         for (String declared : symbols.declaredNamesIn(named.module())) {
-            if (symbols.declaredNode(new TypeKey(named.module(), declared)) instanceof Hir.SumData sum
-                    && caseNames(sum).contains(named)
-                    && (chosen == null || sum.name().compareTo(chosen.name()) < 0)) {
-                chosen = sum;
+            TypeKey at = new TypeKey(named.module(), declared);
+            if (kinds.isSum(at) && listed.of(at) instanceof List<TypeSymbol> cases
+                    && cases.contains(named)
+                    && (chosen == null || declared.compareTo(chosen.name()) < 0)) {
+                chosen = at;
             }
         }
         // The identity is the one the declaration carries. Put together from this case's module and
         // the sum's spelling instead, it would be an identity for whatever that address names.
-        return chosen == null ? null : Type.ref(chosen.declares());
+        return chosen == null ? null : Type.ref(symbols.declaredNode(chosen).declares());
     }
 
     public static boolean isSumType(Type t, DeclarationKinds kinds) {
@@ -327,9 +329,9 @@ public final class TypeOps {
      *
      * <p>One layer, which is what a descent over the cases would be built out of: hold this and the
      * declarations, and a transitive closure is a loop away. There is one such closure and it is
-     * {@link AtomSpace}. Package-private for that reason and not by accident of who happens to call
-     * it — every reader of a case list is in this package, so nothing outside it can write a second
-     * closure at all, and that much is javac's to say rather than a test's.
+     * {@link AtomSpace}. Package-private for that reason, and read by {@link ListedCases} alone:
+     * every other reader of one layer asks that, and the closure over its answers is
+     * {@link SumCases#asWritten}.
      */
     static List<TypeSymbol> caseNames(Hir.SumData sum) {
         List<TypeSymbol> names = new ArrayList<>();

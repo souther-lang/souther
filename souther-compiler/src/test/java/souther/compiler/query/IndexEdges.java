@@ -455,6 +455,7 @@ final class IndexEdges {
         names(out, Bodies.Stated.class, "behavior");
         names(out, Bodies.WrittenIntoBody.class, "fn");
         names(out, Machines.OfDeclaration.class, "named");
+        names(out, Names.CasesListedBy.class, "named");
         names(out, Names.CompilationDeclares.class, "named");
         names(out, Names.Declaration.class, "named");
         names(out, Names.DeclarationIsNewtype.class, "named");

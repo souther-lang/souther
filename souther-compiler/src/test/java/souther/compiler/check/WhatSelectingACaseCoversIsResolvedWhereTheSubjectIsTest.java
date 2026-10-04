@@ -56,11 +56,11 @@ class WhatSelectingACaseCoversIsResolvedWhereTheSubjectIsTest {
     private final Hir.Module module = resolved(MODULE);
     private final Symbols symbols = TypeChecker.symbols(module, DefaultStdlib.get());
 
-    private final PublishedDeclarations said = ScopedDeclarations.of(symbols);
+    private final ListedCases listed = ScopedDeclarations.listedOf(symbols);
 
     private final DeclarationKinds forms = ScopedDeclarations.kindsOf(symbols);
 
-    private final SumCases sums = SumCases.asWritten(forms, said);
+    private final SumCases sums = SumCases.asWritten(forms, listed);
 
     @Test
     void aCaseThatIsASumCoversTheLeavesUnderIt() {
@@ -91,7 +91,7 @@ class WhatSelectingACaseCoversIsResolvedWhereTheSubjectIsTest {
     @Test
     void theAtomsOfACaseComeInTheOrderItDeclaresThem() {
         assertEquals(List.of("Station", "Hospital", "Renkei"),
-                CaseSpace.of(type("VisitKind"), forms, said, sums).selectors().stream()
+                CaseSpace.of(type("VisitKind"), forms, listed, sums).selectors().stream()
                         .flatMap(each -> each.atoms().stream()).map(TypeSymbol::name).toList());
     }
 
@@ -105,7 +105,7 @@ class WhatSelectingACaseCoversIsResolvedWhereTheSubjectIsTest {
      */
     @Test
     void anOptionalsCarrierCoversItselfAndNotWhatItHolds() {
-        CaseSpace space = CaseSpace.of(Type.option(type("VisitKind")), forms, said, sums);
+        CaseSpace space = CaseSpace.of(Type.option(type("VisitKind")), forms, listed, sums);
         assertInstanceOf(CaseSpace.Optional.class, space);
         ResolvedCase some = space.selector(TypeSymbol.SOME, forms, sums);
         assertEquals(List.of(TypeSymbol.SOME), some.atoms());
@@ -119,7 +119,7 @@ class WhatSelectingACaseCoversIsResolvedWhereTheSubjectIsTest {
     /** A subject with no cases hands out none, so there is nothing to resolve. */
     @Test
     void aSubjectWithNoCasesHasNothingToCover() {
-        assertEquals(List.of(), CaseSpace.of(type("Station"), forms, said, sums).selectors());
+        assertEquals(List.of(), CaseSpace.of(type("Station"), forms, listed, sums).selectors());
     }
 
     /**
@@ -222,7 +222,7 @@ class WhatSelectingACaseCoversIsResolvedWhereTheSubjectIsTest {
     }
 
     private ResolvedCase resolvedCase(String subject, String caseName) {
-        return CaseSpace.of(type(subject), forms, said, sums).selector(named(caseName), forms,
+        return CaseSpace.of(type(subject), forms, listed, sums).selector(named(caseName), forms,
                 sums);
     }
 

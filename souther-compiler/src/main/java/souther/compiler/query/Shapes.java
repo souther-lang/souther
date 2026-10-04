@@ -21,6 +21,7 @@ import souther.compiler.check.EnumerationListings;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.Normalized;
 import souther.compiler.check.ProductSpreads;
+import souther.compiler.check.ListedCases;
 import souther.compiler.check.PublishedDeclarationResult;
 import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.stdlib.Stdlib;
@@ -568,7 +569,7 @@ public final class Shapes {
 
         @Override
         public Answer<SumCases.Cases> compute(Db db) {
-            SumCases.Cases cases = SumCases.asWritten(declarationKinds(db), publishedDeclarations(db))
+            SumCases.Cases cases = SumCases.asWritten(declarationKinds(db), listedCases(db))
                     .of(sum);
             return cases == null ? Answer.absent() : Answer.of(cases);
         }
@@ -2093,6 +2094,22 @@ public final class Shapes {
     }
 
     /**
+     * The cases any sum lists, for a reader that works out what a value of one can be or which case
+     * an arm selects.
+     *
+     * <p>One of these for the whole compilation, for the reason {@link #expandedClauses} gives. A
+     * reader taking one depends on the cases the sums it asks about list and on nothing else those
+     * sums say, and on nothing any product says — which is what lets it be asked while a product's
+     * clauses are being settled.
+     */
+    public static ListedCases listedCases(Db db) {
+        return sum -> {
+            Answer<List<TypeSymbol>> listed = db.ask(new Names.CasesListedBy(sum));
+            return listed.present() ? listed.value() : null;
+        };
+    }
+
+    /**
      * What a check asks of a declaration it did not write, each question answered by the
      * compilation.
      *
@@ -2102,7 +2119,7 @@ public final class Shapes {
     public static DeclarationAccess declarationAccess(Db db) {
         return new DeclarationAccess(publishedDeclarations(db), declarationKinds(db),
                 newtypeInners(db), effectiveFieldTypes(db), fieldLayout(db), sumCases(db),
-                enumerationListings(db));
+                listedCases(db), enumerationListings(db));
     }
 
     /**

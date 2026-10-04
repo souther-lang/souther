@@ -51,7 +51,7 @@ public final class BehaviorChecker {
                                        DeclarationAccess declarations,
                                        ReachedValueLocations reachedLocations,
                                        Map<String, StandingSignature> helpers) {
-        Reading reading = read(behavior, module, declared, declarations.published(),
+        Reading reading = read(behavior, module, declared, declarations.listed(),
                 declarations.kinds(), declarations.sums());
         BehaviorContract contract = reading.contract();
         // The rules it did read, held to what a rule has to be. Two mistakes in one declaration are
@@ -97,10 +97,9 @@ public final class BehaviorChecker {
      *     reading of it reports as well
      */
     public static BehaviorContract contractAsRead(Hir.SpecBehavior behavior, String module,
-                                                  DeclaredSig declared,
-                                                  PublishedDeclarations published,
+                                                  DeclaredSig declared, ListedCases listed,
                                                   DeclarationKinds kinds, SumCases sums) {
-        return read(behavior, module, declared, published, kinds, sums).whole();
+        return read(behavior, module, declared, listed, kinds, sums).whole();
     }
 
     /**
@@ -130,7 +129,7 @@ public final class BehaviorChecker {
 
     /** The declaration as rules, beside what could not be read of it. */
     private static Reading read(Hir.SpecBehavior behavior, String module, DeclaredSig declared,
-                                PublishedDeclarations published, DeclarationKinds kinds,
+                                ListedCases listed, DeclarationKinds kinds,
                                 SumCases sums) {
         List<Diagnostic> found = new ArrayList<>();
         ValueName.Behavior name = new ValueName.Behavior(module, behavior.name());
@@ -158,8 +157,7 @@ public final class BehaviorChecker {
         // Which cases the answer can be, and what `value` is in each, come from the same place a
         // `match` over that answer reads them. A clause naming a case a caller could not match is a
         // clause a caller could never assume, so the two admit the same names by construction.
-        CaseSpace answer = CaseSpace.of(declared.boundary().outputType(), kinds, published,
-                sums);
+        CaseSpace answer = CaseSpace.of(declared.boundary().outputType(), kinds, listed, sums);
 
         // Arm by arm, and an arm this cannot read leaves the rest readable. Reading and checking are
         // one pass — what a rule states is which case it applies to and what holds there, and every

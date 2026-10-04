@@ -892,6 +892,14 @@ final class AnswerClosure {
                     part("souther.compiler.partition.BehaviorInputs", "rules"),
                     part("souther.compiler.check.RuleReadingSource", "declarations"),
                     part("souther.compiler.check.DeclarationAccess", "sums")),
+            // And which cases each sum lists, one layer. One input, and the answer is read off the
+            // sum's declaration as its names resolved, so what a reading holds is a way to ask.
+            generationReader("souther.compiler.check.ListedCases",
+                    Traversal.Why.NOTHING_CLOSES_IT,
+                    part("souther.compiler.partition.MeasuredInput", "written"),
+                    part("souther.compiler.partition.BehaviorInputs", "rules"),
+                    part("souther.compiler.check.RuleReadingSource", "declarations"),
+                    part("souther.compiler.check.DeclarationAccess", "listed")),
             // And which enumerations list each of them. One input, and the answer is read off the
             // sums of the value's module, so what a reading holds is a way to ask.
             generationReader("souther.compiler.check.EnumerationListings",

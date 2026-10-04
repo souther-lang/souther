@@ -227,6 +227,21 @@ final class Term {
     private final List<Term> parts;
     private final int hash;
 
+    /**
+     * What stands for {@link #of} in the one order ({@link #textOf}), written the first time an
+     * ordering compares this term by it and read from here after.
+     *
+     * <p>Held by the term because the term is what is compared again: a walk sorts its terms one pair
+     * at a time, each pair in an ordering of its own, so one term is compared with many others and
+     * what it carries would be written out again for every one of them. Written when first asked
+     * rather than when the term is made, since most terms are never put in an order. Two threads
+     * that both find it unwritten write the same text, so either one's is the term's.
+     *
+     * <p>Outside the term's identity, as an answer worked out later and kept beside it is: it is
+     * written from {@link #of}, which the identity reads.
+     */
+    private volatile String carriedText;
+
 
     /**
      * How a term's hash is mixed with the hashes of its parts.
@@ -495,7 +510,7 @@ final class Term {
             if (by != 0) {
                 return by;
             }
-            by = textOf(one.of).compareTo(textOf(other.of));
+            by = one.carriedText().compareTo(other.carriedText());
             if (by != 0) {
                 return by;
             }
@@ -521,6 +536,16 @@ final class Term {
             Term second = term.parts.get(1);
             return compare(first, second) <= 0 ? term.parts : List.of(second, first);
         }
+    }
+
+    /** {@link #carriedText}, written now if no ordering has asked for it before. */
+    private String carriedText() {
+        String text = carriedText;
+        if (text == null) {
+            text = textOf(of);
+            carriedText = text;
+        }
+        return text;
     }
 
     /** What stands for a value a shape carries, taken the way {@link #hashOf} takes it. */
