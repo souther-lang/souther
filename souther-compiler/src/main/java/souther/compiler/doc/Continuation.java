@@ -5,6 +5,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.OptionalInt;
 import java.util.regex.Pattern;
 
 /**
@@ -144,26 +145,29 @@ final class Continuation {
                 .encodeToString((at + "." + digest(text)).getBytes(StandardCharsets.UTF_8));
     }
 
+    /** Whether {@code cursor} was measured against {@code text}, so that it can be resumed at. */
+    static boolean measuredAgainst(String text, String cursor) {
+        return resumesAt(text, cursor).isPresent();
+    }
+
     private static int resume(String text, String cursor) {
-        String[] written;
-        try {
-            written = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8)
-                    .split("\\.");
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException(stale());
+        return resumesAt(text, cursor).orElseThrow(() -> new IllegalArgumentException(stale()));
+    }
+
+    /** Where in {@code text} the cursor resumes, or empty when it was not measured against it. */
+    private static OptionalInt resumesAt(String text, String cursor) {
+        // Unpadded base64 is any run of its alphabet except one leaving a single character over,
+        // which holds fewer bits than a byte.
+        if (!cursor.matches(SPELLED) || cursor.length() % 4 == 1) {
+            return OptionalInt.empty();
         }
-        if (written.length != 2 || !written[1].equals(digest(text))) {
-            throw new IllegalArgumentException(stale());
+        String[] written = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8)
+                .split("\\.");
+        if (written.length != 2 || !written[1].equals(digest(text)) || !written[0].matches("[0-9]{1,9}")) {
+            return OptionalInt.empty();
         }
-        try {
-            int at = Integer.parseInt(written[0]);
-            if (at < 0 || at > text.length()) {
-                throw new IllegalArgumentException(stale());
-            }
-            return at;
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException(stale());
-        }
+        int at = Integer.parseInt(written[0]);
+        return at <= text.length() ? OptionalInt.of(at) : OptionalInt.empty();
     }
 
     /** What identifies the answer a cursor was measured against. */
@@ -177,7 +181,8 @@ final class Continuation {
         }
     }
 
-    private static String stale() {
+    /** What a caller is told when its cursor was not measured against the answer it is carried to. */
+    static String stale() {
         return "this `cursor` was not measured against this answer — ask again without one,"
                 + " and carry the `cursor` that answer comes back with";
     }

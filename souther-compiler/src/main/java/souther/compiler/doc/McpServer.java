@@ -19,7 +19,10 @@ import java.io.PrintWriter;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -251,7 +254,7 @@ public final class McpServer {
 
         /** What the tool declares, and after it the one argument they all take. */
         List<Param> params() {
-            List<Param> all = new java.util.ArrayList<>(declared);
+            List<Param> all = new ArrayList<>(declared);
             all.add(CARRIES_ON);
             return List.copyOf(all);
         }
@@ -276,8 +279,30 @@ public final class McpServer {
      */
     private static final class Session {
 
+        /** How many answers that were cut into parts are kept for their next part to be cut from. */
+        private static final int MOST_ANSWERS_KEPT = 8;
+
         private final ClassLoader loader;
         private Documents documents;
+
+        /** What sources said about the classes {@code jar_api} was asked for. */
+        private final SourceDocs sources = SourceDocs.forASession();
+
+        /**
+         * Answers too long to hand over at once, by the call that made them less its cursor.
+         *
+         * <p>A client reads such an answer by asking the same call again with each part's cursor,
+         * and the part is cut from the whole answer. Running the tool again for every part would
+         * pay for the whole answer once per part, and for {@code jar_api} that is a run of the
+         * compiler's front end each time. The cursor still names the text it was measured against,
+         * so an answer kept here is only resumed when it is the one the cursor came from.
+         */
+        private final Map<String, String> answers = new LinkedHashMap<>(16, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
+                return size() > MOST_ANSWERS_KEPT;
+            }
+        };
 
         private Session(ClassLoader loader) {
             this.loader = loader;
@@ -469,9 +494,63 @@ public final class McpServer {
     private static ObjectNode call(JsonNode params, Session session) {
         String tool = params == null || params.get("name") == null ? "" : params.get("name").asString();
         JsonNode arguments = params == null ? null : params.get("arguments");
+        Tool answering = TOOLS.stream().filter(t -> t.name().equals(tool)).findFirst().orElse(null);
+        String asked = askedAs(tool, arguments);
+        JsonNode cursor = arguments == null ? null : arguments.get("cursor");
+        String kept = cursor == null || answering == null ? null : session.answers.get(asked);
+        // A kept answer the cursor was not measured against is not the one it came from, so the
+        // call is made again and the cursor is held against what it answers now.
+        if (kept != null && Continuation.measuredAgainst(kept, cursor.asString())) {
+            return answer(part(answering, arguments, kept, asked, session), false);
+        }
         ByteArrayOutputStream captured = new ByteArrayOutputStream();
         PrintStream stream = new PrintStream(captured, true, StandardCharsets.UTF_8);
-        int code = switch (tool) {
+        int code = ran(tool, arguments, stream, session);
+        String said = captured.toString(StandardCharsets.UTF_8);
+        if (code == 0 && answering != null) {
+            // A cursor that does not belong to this answer is this call's failure. Resuming at it
+            // anyway would answer from the middle of a document nobody asked about.
+            if (cursor != null && !Continuation.measuredAgainst(said, cursor.asString())) {
+                return failed(Continuation.stale());
+            }
+            said = part(answering, arguments, said, asked, session);
+        }
+        return answer(said, code != 0);
+    }
+
+    /**
+     * The call, written so that the same call made again is written the same: the tool and every
+     * argument but the cursor, in the order of their names.
+     */
+    private static String askedAs(String tool, JsonNode arguments) {
+        StringBuilder asked = new StringBuilder(tool);
+        if (arguments != null && arguments.isObject()) {
+            List<String> names = new ArrayList<>();
+            for (String name : arguments.propertyNames()) {
+                if (!name.equals("cursor")) {
+                    names.add(name);
+                }
+            }
+            names.sort(null);
+            for (String name : names) {
+                asked.append('\n').append(name).append('=').append(JSON.writeValueAsString(arguments.get(name)));
+            }
+        }
+        return asked.toString();
+    }
+
+    private static ObjectNode answer(String said, boolean isError) {
+        ObjectNode result = JSON.createObjectNode();
+        ObjectNode content = result.putArray("content").addObject();
+        content.put("type", "text");
+        content.put("text", said);
+        result.put("isError", isError);
+        return result;
+    }
+
+    /** Runs the tool, writing what the command says to {@code stream}, and answers its exit code. */
+    private static int ran(String tool, JsonNode arguments, PrintStream stream, Session session) {
+        return switch (tool) {
             case "doc_search" -> {
                 JsonNode limit = arguments == null ? null : arguments.get("limit");
                 String[] args = limit == null
@@ -501,40 +580,25 @@ public final class McpServer {
                         : new String[]{argument(arguments, "name"), "-cp", classpath};
                 // The argument comes from a client that may be an agent reading untrusted text, so
                 // it does not choose which part of the disk is read.
-                yield JapiCommand.runConfined(args, stream, stream, Path.of("."));
+                yield JapiCommand.runConfined(args, stream, stream, Path.of("."), session.sources);
             }
             default -> {
                 stream.println("no tool `" + tool + "`");
                 yield 2;
             }
         };
-        String said = captured.toString(StandardCharsets.UTF_8);
-        Tool answering = TOOLS.stream().filter(t -> t.name().equals(tool)).findFirst().orElse(null);
-        if (code == 0 && answering != null) {
-            try {
-                said = part(answering, arguments, said);
-            } catch (IllegalArgumentException e) {
-                // A cursor that does not belong to this answer is this call's failure. Resuming at
-                // it anyway would answer from the middle of a document nobody asked about.
-                return failed(e.getMessage());
-            }
-        }
-        ObjectNode result = JSON.createObjectNode();
-        ObjectNode content = result.putArray("content").addObject();
-        content.put("type", "text");
-        content.put("text", said);
-        result.put("isError", code != 0);
-        return result;
     }
 
     /**
-     * As much of {@code said} as one answer carries, and how to ask for what follows it.
+     * As much of {@code said} as one answer carries, and how to ask for what follows it. An answer
+     * that does not fit is kept in the session under {@code asked}, which is where the next part is
+     * cut from.
      *
      * <p>What follows is named as the call that reaches it rather than as a place in the text,
      * because a place is only a place to whoever holds the whole of it, which this caller by
      * definition does not.
      */
-    private static String part(Tool tool, JsonNode arguments, String said) {
+    private static String part(Tool tool, JsonNode arguments, String said, String asked, Session session) {
         JsonNode cursor = arguments == null ? null : arguments.get("cursor");
         // The line that carries an answer on is part of that answer, so the room for it comes out
         // of the count before the text is cut and not after. What it will say is not known until
@@ -543,6 +607,11 @@ public final class McpServer {
         int reserve = carriesOn(tool, "x".repeat(64), Integer.MAX_VALUE).length();
         Continuation.Part part = Continuation.of(said, cursor == null ? null : cursor.asString(),
                 Continuation.MOST - reserve);
+        // Kept whenever it is an answer in parts, the last part included: what is kept is the answer
+        // the call makes now, so a cursor from one it made before is held against this one.
+        if (part.cursor() != null || cursor != null) {
+            session.answers.put(asked, said);
+        }
         if (part.cursor() == null) {
             return part.text();
         }
@@ -565,12 +634,7 @@ public final class McpServer {
     }
 
     private static ObjectNode failed(String said) {
-        ObjectNode result = JSON.createObjectNode();
-        ObjectNode content = result.putArray("content").addObject();
-        content.put("type", "text");
-        content.put("text", said);
-        result.put("isError", true);
-        return result;
+        return answer(said, true);
     }
 
     /** The longest request line read, in characters. */

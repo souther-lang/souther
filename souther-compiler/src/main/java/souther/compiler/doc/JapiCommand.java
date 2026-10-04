@@ -29,6 +29,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -71,7 +72,13 @@ public final class JapiCommand {
      * own to choose.
      */
     public static int runConfined(String[] args, PrintStream out, PrintStream err, Path root) {
-        return runConfined(args, out, err, root, BoundedRead.MOST_ENTRIES_PER_REQUEST);
+        return runConfined(args, out, err, root, SourceDocs.NONE);
+    }
+
+    /** The same confined run, answering what a source says from {@code sources} where it can. */
+    static int runConfined(String[] args, PrintStream out, PrintStream err, Path root, SourceDocs sources) {
+        return run(args, out, err, System.getProperty("java.class.path", ""),
+                new Disk(ConfinedTree.at(root)), WorkBudget.of(BoundedRead.MOST_ENTRIES_PER_REQUEST), sources);
     }
 
     /**
@@ -118,22 +125,23 @@ public final class JapiCommand {
 
     /** The same run, over the class path to fall back on when the caller names none. */
     static int run(String[] args, PrintStream out, PrintStream err, String defaultClassPath) {
-        return run(args, out, err, defaultClassPath, Disk.OPEN, WorkBudget.of(BoundedRead.MOST_ENTRIES_PER_REQUEST));
+        return run(args, out, err, defaultClassPath, Disk.OPEN, WorkBudget.of(BoundedRead.MOST_ENTRIES_PER_REQUEST),
+                SourceDocs.NONE);
     }
 
     /** The same confined run, with {@code mostEntries} as everything one request may look at. */
     static int runConfined(String[] args, PrintStream out, PrintStream err, Path root, long mostEntries) {
         return run(args, out, err, System.getProperty("java.class.path", ""),
-                new Disk(ConfinedTree.at(root)), WorkBudget.of(mostEntries));
+                new Disk(ConfinedTree.at(root)), WorkBudget.of(mostEntries), SourceDocs.NONE);
     }
 
     /**
      * The same run, reading what the caller names through {@code disk}, and looking at no more than
      * {@code work} allows in all. The class path to fall back on is this command's own and is read
-     * from wherever it is.
+     * from wherever it is. What a source says is asked of {@code sources}.
      */
     private static int run(String[] args, PrintStream out, PrintStream err, String defaultClassPath,
-                           Disk disk, WorkBudget work) {
+                           Disk disk, WorkBudget work, SourceDocs sources) {
         String name = null;
         List<Entry> entries = new ArrayList<>();
         for (int i = 0; i < args.length; i++) {
@@ -179,7 +187,7 @@ public final class JapiCommand {
         Found found = findClass(name, entries, skipped);
         if (found != null) {
             try (ClassLookup lookup = lookupFor(entries)) {
-                return print(found, name, member, out, err, classPath, lookup);
+                return print(found, name, member, out, err, classPath, lookup, sources, entries);
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
@@ -648,14 +656,16 @@ public final class JapiCommand {
     // ---- rendering ----
 
     private static int print(Found found, String binaryName, String member, PrintStream out,
-                             PrintStream err, String classPath, ClassLookup lookup) {
+                             PrintStream err, String classPath, ClassLookup lookup, SourceDocs sources,
+                             List<Entry> entries) {
         ClassModel cm = ClassFile.of().parse(found.bytes());
         String simpleName = binaryName.substring(binaryName.lastIndexOf('.') + 1);
         // A constructor is named for its own type. `Outer$Inner` is how the class file spells the
         // type, and `Inner` is what the source calls the constructor.
         String constructorName = simpleName.substring(simpleName.lastIndexOf('$') + 1);
         String source = sourceOf(found.entry(), binaryName);
-        SourceDoc doc = source == null ? SourceDoc.NONE : SourceDoc.of(source, binaryName, classPath, lookup);
+        SourceDoc doc = source == null ? SourceDoc.NONE
+                : sources.read(source, binaryName, classPath, lookup, stamps(entries));
         if (!cm.flags().flags().contains(AccessFlag.PUBLIC)) {
             // Asked for by name, so it is answered — but a caller outside its package cannot name
             // it, and this command's subject is what a dependency publishes.
@@ -1002,6 +1012,29 @@ public final class JapiCommand {
         return beside != null ? beside : carriedInside(entry, "META-INF/souther-sources/" + path);
     }
 
+    /**
+     * Every entry as the file it is now, or null when one of them is not a file whose size and
+     * modification time say whether it moved — a directory, or one that cannot be read.
+     */
+    private static List<SourceDocs.Stamp> stamps(List<Entry> entries) {
+        List<SourceDocs.Stamp> stamps = new ArrayList<>();
+        for (Entry entry : entries) {
+            try {
+                Path at = entry.file();
+                BasicFileAttributes read = entry.disk().confinedTo() == null
+                        ? Files.readAttributes(at, BasicFileAttributes.class)
+                        : Files.readAttributes(at, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+                if (!read.isRegularFile()) {
+                    return null;
+                }
+                stamps.add(new SourceDocs.Stamp(at, read.size(), read.lastModifiedTime()));
+            } catch (IOException _) {
+                return null;
+            }
+        }
+        return stamps;
+    }
+
     private static String besideJar(Entry entry, String path) {
         String file = entry.path().getFileName().toString();
         if (!file.endsWith(".jar")) {
@@ -1026,8 +1059,15 @@ public final class JapiCommand {
         }
     }
 
+    /**
+     * The source at {@code path} inside the archive {@code jar}, or null when there is none.
+     *
+     * <p>Whether a file is an archive is the file's to say, not its name's. The installed CLI runs
+     * as {@code java -jar souther}, so the class path it falls back on is a file named for the
+     * command, and that file is the jar the class was just read out of.
+     */
     private static String readFrom(Entry entry, Path jar, String path) throws IOException {
-        if (!Files.isRegularFile(jar) || !jar.getFileName().toString().endsWith(".jar")) {
+        if (!Files.isRegularFile(jar)) {
             return null;
         }
         try (JarFile open = openJar(entry, jar)) {
