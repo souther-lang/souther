@@ -161,7 +161,7 @@ public final class Elaborator {
                 yield new Core.Neg(operand, t, neg.pos());
             }
             case Hir.LetIn li -> {
-                Bound bound = bound(li, li.value(), env, ctx);
+                Bound bound = bound(li, env, ctx);
                 Core body = elaborate(li.body(), bound.inner(), ctx, expected);
                 yield new Core.LetIn(CoreBinders.of(li.binder()), bound.type(),
                         Core.standingAs(bound.value(), bound.type()), body, body.type(), li.pos());
@@ -298,7 +298,7 @@ public final class Elaborator {
                                 .say(new TypeMessage.TheBranchesOfThisIfDisagree()).build());
             }
             case Hir.IfConstructed ic -> {
-                Attempted attempted = attempted(ic, ic.construct(), env, ctx);
+                Attempted attempted = attempted(ic, env, ctx);
                 Core.Construct construct = attempted.construct();
                 Core then = liftIntoOption(elaborate(ic.then(), attempted.then(), ctx, expected),
                         expected, ctx.kinds(), ctx.sums());
@@ -556,15 +556,22 @@ public final class Elaborator {
      * bottom refined here moves the accumulator after the step was read at the seed's type, so the
      * step answered was read taking what the call no longer takes. Which step the call holds is
      * decided once the settlement is final, by {@link CallElaborator}.
+     *
+     * <p>{@code handover} is the parameter the step was handed to, where the callee declares one by
+     * name, and null for a kernel. A step is an accumulator's where what it is declared to answer
+     * is a variable — the one the seed settles and the widening above grows — and answering what
+     * that accumulator does not hold is said as that. Where it is declared to answer a type of its
+     * own there is no accumulator, and the step is reported against the parameter it was handed to.
      */
-    public static Core resolveStepBinding(String fnName, Type.FnOf declaredStep, Hir.Expr stepArg,
+    public static Core resolveStepBinding(String fnName, Hir.FunctionHandover handover,
+                                          Type.FnOf declaredStep, Hir.Expr stepArg,
                                           Map<String, Type> bind, Scope env, CheckContext ctx) {
         Type.FnOf narrow = (Type.FnOf) TypeOps.substitute(declaredStep, bind);
         Core narrowCore = null;
         Type narrowGot = null;
         CompileException narrowFailed = null;
         try {
-            narrowCore = elaborateBlockArg(fnName, stepArg, narrow, env, ctx);
+            narrowCore = elaborateBlockArg(fnName, handover, stepArg, narrow, env, ctx);
             narrowGot = ((Type.FnOf) narrowCore.type()).result();
         } catch (CompileException e) {
             narrowFailed = e;
@@ -589,7 +596,8 @@ public final class Elaborator {
                 Map<String, Type> widened = new HashMap<>(bind);
                 widened.put(accVar.name(), sum);
                 Type.FnOf widenedStep = (Type.FnOf) TypeOps.substitute(declaredStep, widened);
-                Core widenedCore = elaborateBlockArg(fnName, stepArg, widenedStep, env, ctx);
+                Core widenedCore = elaborateBlockArg(fnName, handover, stepArg, widenedStep, env,
+                        ctx);
                 Type got = ((Type.FnOf) widenedCore.type()).result();
                 if (TypeOps.assignable(got, sum, ctx.kinds(), ctx.sums())) {
                     bind.put(accVar.name(), sum);
@@ -599,6 +607,11 @@ public final class Elaborator {
         }
         if (narrowGot == null) {
             throw narrowFailed;   // the narrow type errored and there was no sum to fall back to
+        }
+        if (handover != null && !(declaredStep.result() instanceof Type.Var)) {
+            throw theBlockAnswersAnotherType(handover,
+                    TypeOps.substitute(declaredStep.result(), bind), narrowGot,
+                    answerRegion(stepArg));
         }
         throw CompileException.of(Diagnostic.at(answerRegion(stepArg))
                 .say(new HelperMessage.TheStepAnswersAnotherTypeThanTheAccumulator(fnName,
@@ -647,9 +660,13 @@ public final class Elaborator {
      * <p>The parameters are visible only inside the block's body, and its requirement set is
      * whatever it calls — which flows outward into the enclosing behavior's, so nothing about
      * requirements has to be written down (spec §requirement-propagation).
+     *
+     * <p>{@code handover} is the parameter the argument was handed to, where the callee declares
+     * one by name, and null for a kernel. Where there is one, a value written in place of a function
+     * and a block of another arity are reported against it, as they are at a call that is expanded.
      */
-    static Core elaborateBlockArg(String fnName, Hir.Expr arg, Type.FnOf takes, Scope env,
-                                  CheckContext ctx) {
+    static Core elaborateBlockArg(String fnName, Hir.FunctionHandover handover, Hir.Expr arg,
+                                  Type.FnOf takes, Scope env, CheckContext ctx) {
         List<Type> paramTypes = takes.params();
         if (!(arg instanceof Hir.Block block)) {
             // a function-typed value — a helper's function parameter (spec §fn-declaration) —
@@ -677,7 +694,18 @@ public final class Elaborator {
                 // what the call hands it.
                 return Core.standingAs(value, Type.fn(paramTypes, fn.result()));
             }
+            if (handover != null && arg instanceof Hir.Var.Denoting named) {
+                throw aValueWhereAFunctionIsTaken(handover, named);
+            }
             throw CompileException.of(Diagnostic.say(new HelperMessage.ThisExpectsABlock(fnName)).at(arg.pos()).build());
+        }
+        if (handover != null && block.params().size() != paramTypes.size()) {
+            throw CompileException.of(Diagnostic.at(block.pos())
+                    .say(new HelperMessage.TheBlockTakesAnotherNumberOfArguments(
+                            handover.parameter(), handover.call(),
+                            String.valueOf(paramTypes.size()),
+                            String.valueOf(block.params().size())))
+                    .build());
         }
         if (block.params().size() != paramTypes.size()) {
             throw CompileException.of(Diagnostic.at(block.pos())
@@ -751,21 +779,20 @@ public final class Elaborator {
     record Bound(Core value, Type type, Scope inner) {}
 
     /**
-     * {@code li}'s binding brought into force over its body, with {@code value} standing for what it
-     * was given: typed, held to what its pattern opens, and bound. A binding the language refuses is
-     * refused here and brings nothing into force.
+     * {@code li}'s binding brought into force over its body: what it was given typed, held to what
+     * its pattern opens, and bound. A binding the language refuses is refused here and brings
+     * nothing into force.
      *
      * <p>The one place that decides it, for every reader that reads a {@code let}'s body with its
-     * binding in force — the elaboration, a function value's own bindings, and a check that reads
-     * the body before it is expanded. That check hands the value expanded and the binding as
-     * written, which is why the value is a parameter of its own.
+     * binding in force — the elaboration and a function value's own bindings.
      *
      * <p>The binding is visible only inside the body, so a sibling branch cannot see it. What it was
      * given goes with it: a reader below that asks what an expression comes to reads the name
      * through the scope, and the value is read under what was in force where it was written rather
      * than under the binding it makes.
      */
-    static Bound bound(Hir.LetIn li, Hir.Expr value, Scope env, CheckContext ctx) {
+    static Bound bound(Hir.LetIn li, Scope env, CheckContext ctx) {
+        Hir.Expr value = li.value();
         Type annotation = annotatedType(li, ctx.symbols());
         Core elaborated;
         Type type;
@@ -813,17 +840,13 @@ public final class Elaborator {
     record Attempted(Core.Construct construct, Scope then) {}
 
     /**
-     * {@code ic}'s binding brought into force over its success branch, with {@code construct}
-     * standing for what it attempts: held to being a construction of a type with an invariant whose
-     * clauses its departures answer, and bound to what it built. An attempt the language refuses is
-     * refused here and brings nothing into force.
-     *
-     * <p>The one place that decides it, for the elaboration and for a check that reads the body
-     * before it is expanded, which hands the construction expanded.
+     * {@code ic}'s binding brought into force over its success branch: what it attempts held to
+     * being a construction of a type with an invariant whose clauses its departures answer, and
+     * bound to what it built. An attempt the language refuses is refused here and brings nothing
+     * into force.
      */
-    static Attempted attempted(Hir.IfConstructed ic, Hir.Expr construct, Scope env,
-                               CheckContext ctx) {
-        Core built = elaborate(construct, env, ctx);
+    static Attempted attempted(Hir.IfConstructed ic, Scope env, CheckContext ctx) {
+        Core built = elaborate(ic.construct(), env, ctx);
         if (!(built instanceof Core.Construct made)) {
             throw CompileException.of(Diagnostic.at(ic.construct().reportedAt())
                     .say(new AttemptMessage.ThisIsNotAConstruction())
@@ -936,11 +959,19 @@ public final class Elaborator {
         Core body = elaborate(ex.body(), inner.deciding(decided), ctx.inside(ex.application(), ex.callee(), ex.at()), want);
         Type type = body.type();
         if (declaredResult != null) {
-            // What the body answers decides a variable the arguments left open — a result the
-            // signature relates to a function parameter rather than to a value one.
-            decide(decided, declaredResult, ex.body(), body.type(), ctx.kinds(), ctx.sums(),
-                    "the result of `" + shown(ex) + "`");
-            if (ex.callee() instanceof ValueName.Local) {
+            if (ex.handover() != null) {
+                // A block the caller wrote and handed to a call, expanded where the callee applies
+                // it. What it answers decides and is held to what that call's parameter declared,
+                // and a block answering something else is the caller's error, said in the words of
+                // the call they wrote.
+                answered(ex.handover(), decided, declaredResult, ex.body(), body.type(), ctx);
+            } else {
+                // What the body answers decides a variable the arguments left open — a result the
+                // signature relates to a function parameter rather than to a value one.
+                decide(decided, declaredResult, ex.body(), body.type(), ctx.kinds(), ctx.sums(),
+                        "the result of `" + shown(ex) + "`");
+            }
+            if (ex.handover() == null && ex.callee() instanceof ValueName.Local) {
                 // A function the caller supplied, expanded where the callee applies it. What it was
                 // declared to answer is what the caller was held to when it handed the function
                 // over, so a body answering something else is the caller's error and is reported
@@ -1029,8 +1060,13 @@ public final class Elaborator {
     /**
      * The functions this call was given, held to what the callee declared of them.
      *
-     * <p>Only the ones the callee never applies. Where it applies one, that application is an
-     * expansion like any other and carries what the callee declared of the parameter, so the
+     * <p>A name held here as a value is refused at every one of them, applied or not: it is the
+     * caller's mistake in the caller's scope, and the one place that scope and the call are both
+     * in hand is here. Read inside the callee's body it would be a value applied in code the
+     * author did not write.
+     *
+     * <p>Otherwise only the ones the callee never applies. Where it applies one, that application
+     * is an expansion like any other and carries what the callee declared of the parameter, so the
      * function is read there — in the one place the types this application decided are in force.
      * Where it never does, there is no such place, and this is the only reader that holds the
      * signature and the argument at once.
@@ -1047,6 +1083,14 @@ public final class Elaborator {
                     || !(TypeOps.resolveParamType(g.declaredType())
                             instanceof Type.FnOf declared)) {
                 continue;
+            }
+            // A name this scope holds as a value is no function, whatever the callee does with it.
+            // Asked before what it arrives as, which for a value is the value's own declared type
+            // and would be refused as a mismatch of types rather than as what it is.
+            if (g.value() instanceof Hir.Var.Denoting v
+                    && env.of(v.denotes(), v.reaches()) instanceof Type held
+                    && !(held instanceof Type.FnOf)) {
+                throw aValueWhereAFunctionIsTaken(g.handover(), v);
             }
             Type arrives = arrivesAs(g, ex, env);
             if (arrives != null) {
@@ -1216,6 +1260,53 @@ public final class Elaborator {
      * type here as it is on a binding: the body is read against it and the call answers it. */
     private static Type declaredResult(Hir.Expansion ex) {
         return ex.declaredReturn() == null ? null : TypeOps.successType(ex.declaredReturn());
+    }
+
+    /**
+     * What a block handed over answered, read against what the parameter it was handed to declared
+     * it to answer: a variable the declaration leaves open is decided by it, and everything the
+     * declaration states it is held to.
+     */
+    private static void answered(Hir.FunctionHandover handover, Substitution decided,
+                                 Type declared, Hir.Expr body, Type actual, CheckContext ctx) {
+        if (decided.decide(declared, actual, ctx.kinds(), ctx.sums()) instanceof Fit.Disagrees
+                || decided.hold(declared, actual, ctx.kinds(), ctx.sums())
+                        instanceof Fit.Disagrees) {
+            throw theBlockAnswersAnotherType(handover, decided.zonk(declared), actual,
+                    answering(body).reportedAt());
+        }
+    }
+
+    /**
+     * A block handed to {@code handover} answering {@code returns} where the parameter declared
+     * {@code must}, reported at {@code at}.
+     *
+     * <p>{@code must} is shown as the declaration writes it. What this application has decided is
+     * written in, and a variable it has not is shown by the name the declaration gave it rather than
+     * as an open type: the parameter is what the report names, so its own variable is a word the
+     * reader can find there.
+     */
+    static CompileException theBlockAnswersAnotherType(Hir.FunctionHandover handover, Type must,
+                                                       Type returns, Region at) {
+        return CompileException.of(Diagnostic.at(at)
+                .say(new HelperMessage.TheBlockAnswersAnotherType(handover.parameter(),
+                        handover.call(), Type.show(asDeclared(must)), Type.show(returns)))
+                .build());
+    }
+
+    /** {@code t} with each variable an application left open standing as the declaration's own. */
+    private static Type asDeclared(Type t) {
+        return t instanceof Type.MetaVar open ? new Type.Var(open.spelling(), false)
+                : Type.mapChildren(t, Elaborator::asDeclared);
+    }
+
+    /** A name {@code handover}'s call was given in place of a function, which here is a value. */
+    static CompileException aValueWhereAFunctionIsTaken(Hir.FunctionHandover handover,
+                                                        Hir.Var.Denoting value) {
+        return CompileException.of(Diagnostic.at(value.pos())
+                .say(new HelperMessage.AValueWhereAFunctionIsTaken(handover.parameter(),
+                        handover.call(), value.name()))
+                .build());
     }
 
     /** The callee as the caller wrote it, for a message about the call. A function the caller
@@ -1542,7 +1633,7 @@ public final class Elaborator {
             case Hir.LetIn li -> {
                 // a capture binding around the function (e.g. `let $n = 5 in (x) -> x + $n`), brought
                 // into force as any binding is: written `let s: S = A { ... }`, `s` is the sum
-                Bound bound = bound(li, li.value(), env, ctx);
+                Bound bound = bound(li, env, ctx);
                 Core body = functionValue(li.body(), paramTypes, result, bound.inner(), ctx);
                 yield new Core.LetIn(CoreBinders.of(li.binder()), bound.type(),
                         Core.standingAs(bound.value(), bound.type()), body, body.type(), li.pos());
@@ -1756,8 +1847,9 @@ public final class Elaborator {
      * Wraps a value being given to a {@code ?} field, so {@code Out { note = n }} puts {@code n}
      * where an optional is asked for (spec §algebraic-types). Construction is the one place this happens: an
      * expected optional only ever arrives from a field's own type, because nowhere else in a model
-     * can {@code T?} be written (ADR-0011) — a lambda handed to a stdlib combinator is typed with no
-     * expected type at all ({@code HelperTyping}), so a step for {@code List.filterMap} still has to
+     * can {@code T?} be written (ADR-0011) — a lambda handed to a stdlib combinator is read against
+     * no optional, since what its application declared it to answer stays open until the lambda's
+     * own answer decides it ({@link #expansion}), so a step for {@code List.filterMap} still has to
      * answer an optional of its own. That keeps this a rule about building a data rather than a
      * coercion applied wherever two shapes nearly line up.
      *

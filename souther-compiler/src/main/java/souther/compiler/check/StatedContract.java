@@ -145,7 +145,7 @@ public record StatedContract(ValueName.Behavior behavior, List<Param> params, Ty
      */
     public static StatedContract of(BehaviorContract contract, ClausesForDischarge declaring,
                                     Symbols symbols, DeclarationAccess declarations,
-                                    Map<String, Type> helpers) {
+                                    Map<String, StandingSignature> helpers) {
         CheckContext ctx = CheckContext.of(symbols, declarations).forDischarge();
         List<StatedRule> rules = new ArrayList<>();
         for (BehaviorContract.Clause clause : contract.clauses()) {

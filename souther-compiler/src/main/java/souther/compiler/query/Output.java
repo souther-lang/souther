@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.check.StandingSignature;
 import souther.compiler.execute.ExampleExecution;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowOutcome;
@@ -205,7 +206,7 @@ public final class Output {
                       Map<ValueName.Behavior, EnsuresEnforcement> checks,
                       Set<String> rowMethods,
                       Set<String> fixtureOnlyMethods,
-                      Map<String, souther.compiler.types.Type> standingCalls,
+                      Map<String, StandingSignature> standingCalls,
                       LinkageReader linkage) {
 
             Inputs {
@@ -280,7 +281,7 @@ public final class Output {
             // against. The emitter re-types the expressions it emits (a clause, a rule), so a
             // signature table of its own would be a second reading of what a name means, and the two
             // would agree only until one of them was edited.
-            Answer<Map<String, souther.compiler.types.Type>> standing =
+            Answer<Map<String, StandingSignature>> standing =
                     db.ask(new Bodies.RecursiveCallSigs(name, souther.compiler.check.InliningPolicy.FULL));
             if (!checked.present() || !compositions.present()
                     || !lowering.present()

@@ -496,7 +496,7 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "check/Clauses", "substituted",
                 "(" + core + "Ljava/util/Map;)" + core, 1, REWRITES_UNDER_IT);
         row(out, c + "check/Elaborator", "attempted",
-                "(L" + c + "ast/Hir$IfConstructed;L" + c + "ast/Hir$Expr;L" + c + "check/Scope;L"
+                "(L" + c + "ast/Hir$IfConstructed;L" + c + "check/Scope;L"
                         + c + "check/CheckContext;)L" + c + "check/Elaborator$Attempted;", 1,
                 "asks what elaborating a construction answered, which is the construction itself:"
                         + " a value is not widened where it is made");

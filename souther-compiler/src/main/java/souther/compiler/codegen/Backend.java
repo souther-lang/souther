@@ -7,6 +7,7 @@ import souther.compiler.check.Boundary;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.NewtypeInners;
+import souther.compiler.check.StandingSignature;
 import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -170,7 +171,7 @@ public final class Backend {
                                                Map<ValueName.Behavior, Composition> compositions,
                                                Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
-                                               Map<String, Type> standingCalls,
+                                               Map<String, StandingSignature> standingCalls,
                                                SourceLayouts layouts,
                                                LinkageReader linkage) {
         return generate(module, symbols, published, kinds, kernels, typePackage, sigs,
@@ -202,7 +203,7 @@ public final class Backend {
                                                Map<ValueName.Behavior, Composition> compositions,
                                                Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
-                                               Map<String, Type> standingCalls,
+                                               Map<String, StandingSignature> standingCalls,
                                                SourceLayouts layouts,
                                                LinkageReader linkage,
                                                Instrumentation instrumentation) {
@@ -229,7 +230,7 @@ public final class Backend {
                                                   Map<ValueName.Behavior, Composition> compositions,
                                                   Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                   Map<ValueName.Behavior, EnsuresEnforcement> checks,
-                                                  Map<String, Type> standingCalls,
+                                                  Map<String, StandingSignature> standingCalls,
                                                   SourceLayouts layouts,
                                                   LinkageReader linkage,
                                                   Instrumentation instrumentation) {

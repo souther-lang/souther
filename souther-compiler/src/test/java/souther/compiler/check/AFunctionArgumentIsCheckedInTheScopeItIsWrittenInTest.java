@@ -20,16 +20,16 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * What a library operation is handed in place of a function is checked at the call, against what
- * the body has bound where the call is written, and the report names the operation as the call
- * spells it.
+ * What a library operation is handed in place of a function is reported against the call, in the
+ * scope the call is written in, and the report names the operation as the call spells it.
  *
- * <p>The check runs on the body before the library's own body is expanded into it, so it is the one
- * place a mistake can be reported in the author's terms. Past it, the same mistake is found inside
- * the expansion: at the whole call, about the library's own parameter, in a body this compile has no
- * source for. So a binding the check does not see is a binding whose mistakes are reported there,
- * and the rows below are the places a binding comes into force — a parameter, a {@code let}, a
- * {@code let} of a {@code let}, and a block's own parameter.
+ * <p>The function is typed once, where the elaboration reads it: at the boundary of the call's
+ * expansion, where the callee applies it, or against the signature of a call left standing. The
+ * report is made there from what the call left behind — the parameter the function was handed to
+ * and the call as written. Without that, the same mistake is a value applied, or a block
+ * answering, inside a body this compile has no source for. The rows below are the places a binding
+ * comes into force — a parameter, a {@code let}, a {@code let} of a {@code let}, and a block's own
+ * parameter — and each reaches the report as the name the author wrote.
  *
  * <p>The scope is keyed by the binding and not by its spelling, which only a row with two bindings of
  * one name can tell apart: the inner one is what the call reads, and the outer one is a type the
@@ -482,8 +482,71 @@ class AFunctionArgumentIsCheckedInTheScopeItIsWrittenInTest {
                 """;
 
         Message said = refused(source).diagnostic().said();
-        assertEquals("List.filterMap",
-                assertInstanceOf(HelperMessage.TheBlockAnswersAnotherType.class, said).call());
+        HelperMessage.TheBlockAnswersAnotherType answers =
+                assertInstanceOf(HelperMessage.TheBlockAnswersAnotherType.class, said);
+        assertEquals("List.filterMap", answers.call());
+        assertEquals("Int", answers.returns());
+    }
+
+    /** What the call has not decided is shown as the variable the parameter declared, and what it
+     *  has decided is written in: {@code 'a} is the element, {@code 'b} is still open. */
+    @Test
+    void whatTheParameterDeclaredIsShownInItsOwnVariables() {
+        String source = """
+                module m
+
+                behavior f : (xs: List<Int>) -> List<Int>
+                let f (xs) = List.filterMap(x -> x + 1, xs)
+                """;
+
+        HelperMessage.TheBlockAnswersAnotherType answers = assertInstanceOf(
+                HelperMessage.TheBlockAnswersAnotherType.class,
+                refused(source).diagnostic().said());
+        assertEquals("'b?", answers.must());
+    }
+
+    // A recursive helper is not expanded: its calls stand, typed against its signature. What it
+    // is handed is reported in the same words as at a call that is expanded, naming the parameter
+    // its declaration wrote.
+
+    /** What every call below is to. */
+    private static final String TIMES = """
+            module m
+
+            partial let times (step: (Int) -> Int, x: Int, k: Int): Int =
+                if k == 0 then x else times(step, step(x), k - 1)
+
+            behavior g : (n: Int) -> Int
+            """;
+
+    @Test
+    void aValueHandedToARecursiveHelperIsReportedAtTheName() {
+        HelperMessage.AValueWhereAFunctionIsTaken said = assertInstanceOf(
+                HelperMessage.AValueWhereAFunctionIsTaken.class,
+                refused(TIMES + "let g (n) = times(n, n, 3)\n").diagnostic().said());
+        assertEquals("step", said.parameter());
+        assertEquals("times", said.call());
+        assertEquals("n", said.written());
+    }
+
+    @Test
+    void aBlockAnsweringAnotherTypeToARecursiveHelperNamesItsParameter() {
+        HelperMessage.TheBlockAnswersAnotherType said = assertInstanceOf(
+                HelperMessage.TheBlockAnswersAnotherType.class,
+                refused(TIMES + "let g (n) = times(x -> \"one\", n, 3)\n").diagnostic().said());
+        assertEquals("step", said.parameter());
+        assertEquals("times", said.call());
+        assertEquals("Int", said.must());
+        assertEquals("String", said.returns());
+    }
+
+    @Test
+    void aBlockOfAnotherArityToARecursiveHelperNamesItsParameter() {
+        HelperMessage.TheBlockTakesAnotherNumberOfArguments said = assertInstanceOf(
+                HelperMessage.TheBlockTakesAnotherNumberOfArguments.class,
+                refused(TIMES + "let g (n) = times((a, b) -> a, n, 3)\n").diagnostic().said());
+        assertEquals("step", said.parameter());
+        assertEquals("times", said.call());
     }
 
     @Test

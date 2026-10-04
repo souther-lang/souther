@@ -33,7 +33,8 @@ import java.util.Map;
  * diagnostic to quote and for a did-you-mean to offer. Nothing is found by it.
  */
 public record Scope(Map<BindingId, Binding> bindings, Map<String, Type> visible,
-                    Map<String, Type> standing, Substitution decisions, BoundValues values) {
+                    Map<String, StandingSignature> standing, Substitution decisions,
+                    BoundValues values) {
 
     public Scope {
         bindings = BindingMap.from(bindings);
@@ -41,7 +42,7 @@ public record Scope(Map<BindingId, Binding> bindings, Map<String, Type> visible,
 
     /** A scope for a caller that has decisions in force and no values to carry. */
     public Scope(Map<BindingId, Binding> bindings, Map<String, Type> visible,
-                 Map<String, Type> standing, Substitution decisions) {
+                 Map<String, StandingSignature> standing, Substitution decisions) {
         this(bindings, visible, standing, decisions, BoundValues.NONE);
     }
 
@@ -70,7 +71,7 @@ public record Scope(Map<BindingId, Binding> bindings, Map<String, Type> visible,
     /** The same, with the signatures a call left standing is typed against: a recursive helper,
      * which is emitted as a method rather than expanded. Not a vocabulary — the name one is reached
      * by here is not always a name that may be written here. */
-    public Scope reaching(Map<String, Type> standingCalls) {
+    public Scope reaching(Map<String, StandingSignature> standingCalls) {
         return new Scope(bindings, visible, Map.copyOf(standingCalls), decisions, values);
     }
 
@@ -92,10 +93,23 @@ public record Scope(Map<BindingId, Binding> bindings, Map<String, Type> visible,
         return switch (denotes) {
             case ValueName.Local local -> typeOf(local.id());
             case ValueName.Behavior _ -> visible.get(reachedBy);
-            case ValueName.Helper _, ValueName.Stdlib _ -> standing.get(reachedBy);
+            case ValueName.Helper _, ValueName.Stdlib _ -> {
+                StandingSignature signature = standing.get(reachedBy);
+                yield signature == null ? null : signature.type();
+            }
             case ValueName.OfType _, ValueName.Builtin _ -> null;
             case null -> null;
         };
+    }
+
+    /**
+     * The signature a call of {@code denotes} is left standing on here, or null where it is not one.
+     * What {@link #of} answers for it is that signature's type; this is for a reader that also has
+     * to say which parameter an argument was given to.
+     */
+    public StandingSignature standingOn(ValueName denotes, String reachedBy) {
+        return denotes instanceof ValueName.Helper || denotes instanceof ValueName.Stdlib
+                ? standing.get(reachedBy) : null;
     }
 
     /** The type of one binding, or null where this scope does not hold it. */

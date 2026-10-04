@@ -75,7 +75,7 @@ final class HelperParams {
         Set<String> recursive = new LinkedHashSet<>();
         inliner.recursiveHelpers().forEach(
                 reference -> recursive.add(reference.rendered()));
-        Map<String, Type> recursiveHelperFns;
+        Map<String, StandingSignature> recursiveHelperFns;
         try {
             // Every recursion in reach, not only what this module declares: settling reads a body
             // with its calls expanded, and a call the expansion left standing has to be typeable
@@ -166,7 +166,8 @@ final class HelperParams {
     /** {@code h} with its determinable parameters typed, or null when none of them is. */
     private static Hir.FnDef settle(Hir.FnDef h, HelperInliner inliner, Symbols symbols,
                                     DeclarationAccess declarations,
-                                    Map<ValueName.Behavior, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns) {
+                                    Map<ValueName.Behavior, ReqSig> reqSigs,
+                                    Map<String, StandingSignature> recursiveHelperFns) {
         List<Integer> open = new ArrayList<>();
         Scope env = Scope.NONE;
         Hir.Expr body;
@@ -265,7 +266,7 @@ final class HelperParams {
                                         Hir.Expr body, Symbols symbols,
                                         DeclarationAccess declarations,
                                         Map<ValueName.Behavior, ReqSig> reqSigs,
-                                        Map<String, Type> recursiveHelperFns,
+                                        Map<String, StandingSignature> recursiveHelperFns,
                                         Map<Integer, OpenUse> openUses) {
         BodyTyping typing = new BodyTyping(symbols, declarations, reqSigs, recursiveHelperFns);
         Type answers = declaredReturn(h);
@@ -411,7 +412,7 @@ final class HelperParams {
         private final DeclarationKinds kinds;
         private final CheckContext ctx;
         private final Map<ValueName.Behavior, ReqSig> reqSigs;
-        private final Map<String, Type> recursiveHelperFns;
+        private final Map<String, StandingSignature> recursiveHelperFns;
         /** What each call in this body has decided for the variables its callee left open. One
          * decision per call, read by every parameter that reaches it — and by the walk one step
          * inside a closure, which reads calls of the same body. */
@@ -428,7 +429,8 @@ final class HelperParams {
         private OpenUse openUse;
 
         BodyTyping(Symbols symbols, DeclarationAccess declarations,
-                   Map<ValueName.Behavior, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns) {
+                   Map<ValueName.Behavior, ReqSig> reqSigs,
+                   Map<String, StandingSignature> recursiveHelperFns) {
             this(symbols, declarations, reqSigs, recursiveHelperFns, new Freshening());
         }
 
@@ -437,7 +439,8 @@ final class HelperParams {
          * a name carries starts over with the reader — and unifying them would say the two hold one
          * thing. */
         BodyTyping(Symbols symbols, DeclarationAccess declarations,
-                   Map<ValueName.Behavior, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
+                   Map<ValueName.Behavior, ReqSig> reqSigs,
+                   Map<String, StandingSignature> recursiveHelperFns,
                    Freshening freshening) {
             this.freshening = freshening;
             this.symbols = symbols;
@@ -1107,8 +1110,9 @@ final class HelperParams {
                     return new Type.FnOf(req.params(), req.success());
                 }
             }
-            if (recursiveHelperFns.get(fn) instanceof Type.FnOf sig) {
-                return sig;
+            StandingSignature recursive = recursiveHelperFns.get(fn);
+            if (recursive != null) {
+                return recursive.type();
             }
             // Only a kernel's signature: a Souther-bodied library callee here is a recursive
             // helper, and those are answered above with the types their call site instantiated.

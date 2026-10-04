@@ -1,8 +1,8 @@
 package souther.compiler.query;
 
 import souther.compiler.check.InliningPolicy;
+import souther.compiler.check.StandingSignature;
 import souther.compiler.meta.ModulePath;
-import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;
 
@@ -64,8 +64,10 @@ class WhatCanStandUnexpandedIsWiderThanWhatAModuleTookOnTest {
                 .db();
     }
 
-    private static Map<String, Type> canStand(Db db, String module, InliningPolicy policy) {
-        Answer<Map<String, Type>> answer = db.ask(new Bodies.RecursiveCallSigs(module, policy));
+    private static Map<String, StandingSignature> canStand(Db db, String module,
+                                                           InliningPolicy policy) {
+        Answer<Map<String, StandingSignature>> answer =
+                db.ask(new Bodies.RecursiveCallSigs(module, policy));
         assertTrue(answer.present(), "signatures for " + module + ": " + answer.reports());
         return answer.value();
     }
@@ -113,11 +115,10 @@ class WhatCanStandUnexpandedIsWiderThanWhatAModuleTookOnTest {
     /** And a signature is the declaration's own, not something worked out from the call sites. */
     @Test
     void aSignatureIsTheOneTheDeclarationWasWrittenWith() {
-        Type fold = canStand(dbOf("plain", REACHES_NOTHING), "plain", InliningPolicy.FULL)
-                .get("List.foldFrom");
+        StandingSignature fold = canStand(dbOf("plain", REACHES_NOTHING), "plain",
+                InliningPolicy.FULL).get("List.foldFrom");
 
-        assertTrue(fold instanceof Type.FnOf, "the fold is typed as a function, and was: " + fold);
-        assertEquals(4, ((Type.FnOf) fold).params().size(),
+        assertEquals(4, fold.type().params().size(),
                 "the step, the seed, the list and the index it walks from");
     }
 }

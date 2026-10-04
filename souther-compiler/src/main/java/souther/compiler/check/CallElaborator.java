@@ -334,7 +334,7 @@ public final class CallElaborator {
         // Every argument stands as what the signature settled it to be taken as, which is known once
         // every argument has been read.
         Applied applied = new Applied(new Type.FnOf(params, kept.result()), bind);
-        List<Core> placed = materialized(call, applied, ca);
+        List<Core> placed = materialized(call, applied, null, ca);
         // The operation as the signature that just typed this call says it: what was applied and
         // what it takes are one answer, and asking anything a second time for the name would be
         // reaching for a declaration this already has in hand.
@@ -458,7 +458,7 @@ public final class CallElaborator {
          * result type the block yields at what {@code takes} says it takes. What {@code takes}
          * says it answers is what a body that is itself a function is read against. */
         Type block(int i, String fnName, Type.FnOf takes) {
-            Core c = Elaborator.elaborateBlockArg(fnName, args.get(i), takes, env, ctx);
+            Core c = Elaborator.elaborateBlockArg(fnName, null, args.get(i), takes, env, ctx);
             cores[i] = c;
             return ((Type.FnOf) c.type()).result();
         }
@@ -483,11 +483,16 @@ public final class CallElaborator {
          * checker decided the one type may stand as the other, and it is placed here, so this is
          * where that is decided: a settlement that stopped short of what the function answers would
          * otherwise have its answer stand as something narrower.
+         *
+         * <p>{@code handover} is the parameter the function was handed to, where the callee names
+         * one, and null for a kernel; a function answering something else is reported against it.
          */
-        void settledAs(int i, String fnName, Type.FnOf takes, String what) {
+        void settledAs(int i, String fnName, Hir.FunctionHandover handover, Type.FnOf takes,
+                       String what) {
             Core read = cores[i];
             if (!((Type.FnOf) read.type()).params().equals(takes.params())) {
-                read = Elaborator.elaborateBlockArg(fnName, args.get(i), takes, env, ctx);
+                read = Elaborator.elaborateBlockArg(fnName, handover, args.get(i), takes, env,
+                        ctx);
             }
             if (takes.result() instanceof Type.Var) {
                 cores[i] = read;
@@ -495,6 +500,10 @@ public final class CallElaborator {
             }
             Type answered = ((Type.FnOf) read.type()).result();
             if (!TypeOps.assignable(answered, takes.result(), ctx.kinds(), ctx.sums())) {
+                if (handover != null) {
+                    throw Elaborator.theBlockAnswersAnotherType(handover, takes.result(),
+                            answered, Elaborator.answerRegion(args.get(i)));
+                }
                 throw Elaborator.doesNotFit(args.get(i), answered, takes.result(), what);
             }
             cores[i] = Elaborator.answering(read, takes.result());
@@ -648,8 +657,12 @@ public final class CallElaborator {
      *
      * <p>Arity is the caller's to check first, in its own words; this throws where the two
      * disagree rather than walking off the shorter list.
+     *
+     * <p>{@code declared} is the declaration standing behind the signature, which names the
+     * parameters a function argument is reported against, and null for a kernel, which names none.
      */
-    private static Applied applySignature(Hir.Apply call, Type.FnOf signature, CallArgs ca,
+    private static Applied applySignature(Hir.Apply call, Type.FnOf signature,
+                                          StandingSignature declared, CallArgs ca,
                                           Type expected, Scope env, CheckContext ctx) {
         List<Hir.Expr> args = call.args();
         if (args.size() != signature.params().size()) {
@@ -663,8 +676,9 @@ public final class CallElaborator {
         try {
             for (int i = 0; i < args.size(); i++) {
                 if (signature.params().get(i) instanceof Type.FnOf declaredStep) {
-                    ca.put(i, Elaborator.resolveStepBinding(call.written(), declaredStep,
-                            args.get(i), bind, env, ctx));
+                    ca.put(i, Elaborator.resolveStepBinding(call.written(),
+                            handedTo(call, declared, i), declaredStep, args.get(i), bind, env,
+                            ctx));
                 }
             }
         } catch (CompileException stepError) {
@@ -712,19 +726,34 @@ public final class CallElaborator {
      * own rule, may have settled further a variable an earlier argument was read against. A value
      * stands as what its parameter settled to, and a function is read again where it was read
      * taking something else ({@link CallArgs#settledAs}).
+     *
+     * <p>{@code standing} is as {@link #applySignature} has it.
      */
-    private static List<Core> materialized(Hir.Apply call, Applied applied, CallArgs ca) {
+    private static List<Core> materialized(Hir.Apply call, Applied applied,
+                                           StandingSignature standing, CallArgs ca) {
         List<Type> declared = applied.signature().params();
         List<Type> takes = applied.takes();
         for (int i = 0; i < declared.size(); i++) {
             String what = "argument " + (i + 1) + " of " + call.written();
-            if (declared.get(i) instanceof Type.FnOf) {
-                ca.settledAs(i, call.written(), (Type.FnOf) takes.get(i), what);
+            if (declared.get(i) instanceof Type.FnOf step) {
+                // A step declared to answer a variable answers an accumulator, which is no
+                // parameter's to report (Elaborator#resolveStepBinding).
+                ca.settledAs(i, call.written(),
+                        step.result() instanceof Type.Var ? null : handedTo(call, standing, i),
+                        (Type.FnOf) takes.get(i), what);
             } else {
                 ca.requireTyped(i, takes.get(i), what);
             }
         }
         return ca.cores();
+    }
+
+    /** What argument {@code i} of {@code call} was handed to, where {@code declared} names the
+     *  parameters, and null where nothing does. */
+    private static Hir.FunctionHandover handedTo(Hir.Apply call, StandingSignature declared,
+                                                 int i) {
+        return declared == null ? null
+                : new Hir.FunctionHandover(declared.parameters().get(i), call.written());
     }
 
     /**
@@ -797,7 +826,8 @@ public final class CallElaborator {
                                 .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(intrinsic.parameters().size()), String.valueOf(args.size()))).build());
             }
             Applied applied = applySignature(call,
-                    new Type.FnOf(intrinsic.parameters(), intrinsic.result()), ca, expected, env, ctx);
+                    new Type.FnOf(intrinsic.parameters(), intrinsic.result()), null, ca, expected,
+                    env, ctx);
             // What remains is the kernel's own: constraints the kernel places on the outcome the
             // signature could not state, and the emitter's special cases. They read the settled
             // substitution and result — they are checks on what the application became, not part
@@ -826,7 +856,7 @@ public final class CallElaborator {
             } else {
                 fact = Core.KernelFact.None.INSTANCE;
             }
-            return new TypedCall(materialized(call, applied, ca), applied.result(),
+            return new TypedCall(materialized(call, applied, null, ca), applied.result(),
                     new Core.CallSettlement.AtKernel(applied.takes(), fact));
         }
         // a function-typed value in scope (a helper's function parameter) applied to
@@ -845,8 +875,11 @@ public final class CallElaborator {
                                 .at(call.appliedAt())
                                 .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(fn.params().size()), String.valueOf(args.size()))).build());
             }
-            Applied applied = applySignature(call, fn, ca, expected, env, ctx);
-            return new TypedCall(materialized(call, applied, ca), applied.result());
+            // A recursive helper's declaration names its parameters, which a function value in
+            // force does not.
+            StandingSignature declared = env.standingOn(callee.denotes(), callee.reaches());
+            Applied applied = applySignature(call, fn, declared, ca, expected, env, ctx);
+            return new TypedCall(materialized(call, applied, declared, ca), applied.result());
         }
         // A library name that matched no builtin or intrinsic above. Which of the two it is the
         // library says, and the two are not one report. A name it declares reached here without

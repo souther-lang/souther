@@ -257,7 +257,7 @@ public final class SpecChecker {
                                     ReadingPolicy policy,
                                     Map<ValueName.Behavior, ReqSig> calleeSigs,
                                     Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
-                                    Map<String, Type> recursiveHelperFns,
+                                    Map<String, StandingSignature> recursiveHelperFns,
                                     Map<String, DataChecker.Constructs> recHelperConstructs,
                                     Preserved.SettledValues settledValues) {
         SumCases sums = declarations.sums();
@@ -335,13 +335,6 @@ public final class SpecChecker {
                 .withCallees(calleeSigs)
                 .withDependencies(dependsOn)
                 .preserving(Preserved.valuesAlreadySettled(settledValues));
-        // Check functions passed to helper parameters (e.g. a combinator's predicate) against their
-        // declared types first, so a mismatch names the parameter, not the derivation it expands to.
-        // A nested fold reaches `List.foldFrom` inside a block, so its signature must be in scope here.
-        // Typed with what the body is elaborated with, so what the check cannot type is what the
-        // elaboration refuses.
-        HelperTyping.checkFunctionArgs(fn.writtenBody(), inliner.bodyOf(fn.name()), tenv, typing,
-                inliner);
         // The body arrives with helper calls already expanded (the Lower stage, ADR-0021): it is
         // checked as one expression, so a helper's constructions and injected calls count toward this
         // behavior's permission and dependencies — exactly as if the code had been written inline (§blocks).

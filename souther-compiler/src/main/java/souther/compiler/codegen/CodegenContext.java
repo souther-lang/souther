@@ -11,6 +11,7 @@ import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.NewtypeInners;
+import souther.compiler.check.StandingSignature;
 import souther.compiler.check.PublishedDeclarations;
 import souther.compiler.check.SumCases;
 import souther.compiler.ast.Hir;
@@ -97,7 +98,7 @@ final class CodegenContext {
      * here out of what this module happens to emit would answer for the methods written rather than
      * for the names a call can hold, which is a narrower question and not the one being asked.
      */
-    final Map<String, Type> standingCalls;
+    final Map<String, StandingSignature> standingCalls;
 
     /**
      * The texts this module's code was read from, for the debug table.
@@ -422,7 +423,8 @@ final class CodegenContext {
                    KernelSignatures kernels,
                    Map<String, List<GeneratedClass>> caseToSums,
                    Map<String, String> typePackage, Set<String> exposed,
-                   Map<String, Type> standingCalls, SourceLayouts layouts, QuotedFrom home,
+                   Map<String, StandingSignature> standingCalls, SourceLayouts layouts,
+                   QuotedFrom home,
                    LinkageReader linkage) {
         this.linkage = Objects.requireNonNull(linkage,
                 "what a module's classes are built against is read through one place");
