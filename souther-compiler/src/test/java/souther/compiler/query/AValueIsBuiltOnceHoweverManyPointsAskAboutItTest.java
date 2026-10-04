@@ -159,8 +159,8 @@ class AValueIsBuiltOnceHoweverManyPointsAskAboutItTest {
     /**
      * What a value's own type says of it is kept the same way, by the type and the text.
      *
-     * <p>A search asks it of every value it offers once its first assignment is refused, and the
-     * same values stand at the same types in every search of a module.
+     * <p>A search asks it of every value in an assignment before composing that assignment, the
+     * first one included, and the same values stand at the same types in every search of a module.
      */
     @Test
     void whatAValuesOwnTypeSaysIsAskedOnceForEachTypeAndValue() {

@@ -85,8 +85,9 @@ public final class FixturesAtTheBoundary {
      * asked.
      *
      * <p>Kept by the type and the text for the reason {@link #build} keeps by the position and the
-     * text. A search asks it of every value it offers at a position once its first assignment is
-     * refused, and the same few values stand at the same few types across every search of a module.
+     * text. A search asks it of every value in an assignment before composing that assignment, the
+     * first one included, and the same few values stand at the same few types across every search
+     * of a module.
      *
      * <p>Throws what {@code source} throws, and keeps none of it.
      */
