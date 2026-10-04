@@ -4,9 +4,6 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.observe.ObservedValue;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
 /**
  * Whether a value composed elsewhere can be built at a module's boundary.
  *
@@ -21,7 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>So one of these is a question about a fixed world, and the same value asked about twice is
  * answered the same way twice. What it is asked against — the module, the classes the compile
  * produced, the loader that holds them — is the instance itself, so the position and the fixture are
- * the whole of what decides an answer and an answer once given may be kept ({@link #remembering}).
+ * the whole of what decides an answer and an answer once given may be kept by whoever asked for it.
  * An implementation whose answer moved with something else — a count of the candidates it has seen,
  * a point a search happens to be at — would be answering another question.
  */
@@ -40,41 +37,6 @@ public interface BoundaryValues {
      * value.
      */
     Built build(BoundaryInput at, Hir.Expr fixture);
-
-    /**
-     * The same answers, each worked out once.
-     *
-     * <p>A search asks about one candidate at every point of a border it is tried at and under every
-     * way of standing the dependencies in, and the decoder says the same thing each time. Whether
-     * the value stands at the point is the other half of that question and is asked of what comes
-     * back here, every time; it is not this one's to keep.
-     *
-     * <p>What is kept is what came back: a value, or a refusal, both of which are what the decoder
-     * says about the fixture. What was thrown is not kept. A runtime that would not link and an
-     * evaluation that ran out of what it may spend are about this compile and this run, and the next
-     * asking is entitled to find out again.
-     *
-     * <p>Kept for as long as {@code source} is, because {@code source} is what the answers are
-     * about. Shared between two of them, an answer worked out against one module's classes would be
-     * handed back about the other's.
-     */
-    static BoundaryValues remembering(BoundaryValues source) {
-        record Asked(BoundaryInput at, Hir.Expr fixture) {}
-        Map<Asked, Built> answered = new ConcurrentHashMap<>();
-        return (at, fixture) -> {
-            Asked asked = new Asked(at, fixture);
-            Built had = answered.get(asked);
-            if (had != null) {
-                return had;
-            }
-            // Built outside the map rather than inside computeIfAbsent: a decoder can run for a while,
-            // and the map would hold everything hashed beside this fixture until it finished. Two
-            // threads that race build the same answer, and the first one kept is the one both return.
-            Built made = source.build(at, fixture);
-            Built kept = answered.putIfAbsent(asked, made);
-            return kept == null ? made : kept;
-        };
-    }
 
     /** What came of building one value. */
     sealed interface Built {
