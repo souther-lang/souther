@@ -7,7 +7,6 @@ import souther.compiler.numeric.AffineConstraint.Read;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -24,9 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
  */
 class OneClosureStandsForEveryQuestionEqualToItTest {
 
-    private static final Function<String, Granularity> DISCRETE = atom -> Granularity.DISCRETE;
-
-    /** Two domains built apart over the same rules: the second is lent what the first worked out. */
+    /** Two domains built apart over the same rules: the second is lent what the first worked
+     *  out. */
     @Test
     void aDomainBuiltAgainOverTheSameRulesIsLentItsClosure() {
         ClosedStates kept = ClosedStates.kept();
@@ -58,7 +56,7 @@ class OneClosureStandsForEveryQuestionEqualToItTest {
         ClosedStates kept = ClosedStates.kept();
         List<AffineConstraint<String>> rules = List.of(rule("a", 1, "b", -1, -2));
 
-        kept.of(rules, DISCRETE, CanonicalOrder.asTheyAreSpelled());
+        kept.of(rules, atom -> Granularity.DISCRETE, CanonicalOrder.asTheyAreSpelled());
         kept.of(rules, atom -> atom.equals("a") ? Granularity.DENSE : Granularity.DISCRETE,
                 CanonicalOrder.asTheyAreSpelled());
 
@@ -71,7 +69,7 @@ class OneClosureStandsForEveryQuestionEqualToItTest {
         ClosedStates kept = ClosedStates.kept();
         List<AffineConstraint<String>> rules = List.of(rule("a", 1, "b", -1, -2));
 
-        kept.of(rules, DISCRETE, CanonicalOrder.asTheyAreSpelled());
+        kept.of(rules, atom -> Granularity.DISCRETE, CanonicalOrder.asTheyAreSpelled());
         kept.of(rules, atom -> atom.equals("c") ? Granularity.DENSE : Granularity.DISCRETE,
                 CanonicalOrder.asTheyAreSpelled());
 
@@ -84,8 +82,8 @@ class OneClosureStandsForEveryQuestionEqualToItTest {
         ClosedStates kept = ClosedStates.kept();
         List<AffineConstraint<String>> rules = List.of(rule("a", 1, "b", -1, -2));
 
-        ClosedState<String> once = kept.of(rules, DISCRETE, String::compareTo);
-        ClosedState<String> again = kept.of(rules, DISCRETE, String::compareTo);
+        ClosedState<String> once = kept.of(rules, atom -> Granularity.DISCRETE, String::compareTo);
+        ClosedState<String> again = kept.of(rules, atom -> Granularity.DISCRETE, String::compareTo);
 
         assertSame(once, again);
         assertEquals(1, kept.workedOut());
@@ -96,8 +94,8 @@ class OneClosureStandsForEveryQuestionEqualToItTest {
         ClosedStates kept = ClosedStates.kept();
         List<AffineConstraint<String>> rules = List.of(rule("a", 1, "b", -1, -2));
 
-        kept.of(rules, DISCRETE, String::compareTo);
-        kept.of(rules, DISCRETE, (one, other) -> other.compareTo(one));
+        kept.of(rules, atom -> Granularity.DISCRETE, String::compareTo);
+        kept.of(rules, atom -> Granularity.DISCRETE, (one, other) -> other.compareTo(one));
 
         assertEquals(2, kept.workedOut());
     }
@@ -110,8 +108,10 @@ class OneClosureStandsForEveryQuestionEqualToItTest {
         AffineConstraint<String> one = rule("a", 1, "b", -1, -2);
         AffineConstraint<String> other = rule("b", 1, "c", -1, -3);
 
-        kept.of(List.of(one, other), DISCRETE, CanonicalOrder.asTheyAreSpelled());
-        kept.of(List.of(other, one), DISCRETE, CanonicalOrder.asTheyAreSpelled());
+        kept.of(List.of(one, other), atom -> Granularity.DISCRETE,
+                CanonicalOrder.asTheyAreSpelled());
+        kept.of(List.of(other, one), atom -> Granularity.DISCRETE,
+                CanonicalOrder.asTheyAreSpelled());
 
         assertEquals(2, kept.workedOut());
     }
@@ -120,8 +120,12 @@ class OneClosureStandsForEveryQuestionEqualToItTest {
     void nothingIsKeptWhereNothingIsAskedToBe() {
         List<AffineConstraint<String>> rules = List.of(rule("a", 1, "b", -1, -2));
 
-        assertNotSame(ClosedStates.NONE.of(rules, DISCRETE, CanonicalOrder.asTheyAreSpelled()),
-                ClosedStates.NONE.of(rules, DISCRETE, CanonicalOrder.asTheyAreSpelled()));
+        ClosedState<String> once = ClosedStates.NONE.of(rules, atom -> Granularity.DISCRETE,
+                CanonicalOrder.asTheyAreSpelled());
+        ClosedState<String> again = ClosedStates.NONE.of(rules, atom -> Granularity.DISCRETE,
+                CanonicalOrder.asTheyAreSpelled());
+
+        assertNotSame(once, again);
         assertEquals(0, ClosedStates.NONE.workedOut());
     }
 
@@ -142,7 +146,8 @@ class OneClosureStandsForEveryQuestionEqualToItTest {
                 rule("c", 1, "bb", 1, -9),
                 rule("bb", 1, "a", 0, 0));
 
-        ClosedState<String> closed = ClosedStates.kept().of(rules, DISCRETE, byLength);
+        ClosedState<String> closed =
+                ClosedStates.kept().of(rules, atom -> Granularity.DISCRETE, byLength);
 
         assertEquals(ExactCut.inclusive(ExactRatio.of(2)), closed.box().mostOf("a"),
                 "bb at most nought and a at most two above it");
@@ -166,12 +171,13 @@ class OneClosureStandsForEveryQuestionEqualToItTest {
         return new LinearForm<>(ExactRatio.of(constant), coefs);
     }
 
-    /** {@code one*oneWeight + other*otherWeight + constant <= 0}, read as the arithmetic reads it. */
+    /** {@code one*oneWeight + other*otherWeight + constant <= 0}, read as the arithmetic reads
+     *  it. */
     private static AffineConstraint<String> rule(String one, long oneWeight, String other,
                                                  long otherWeight, long constant) {
         LinearForm<String> written = form(one, oneWeight, other, otherWeight, constant);
         Read<String> read = AffineConstraint.of(written.coefs(), written.constant(), Rel.LE,
-                DISCRETE::apply);
+                atom -> Granularity.DISCRETE);
         assertInstanceOf(Read.Stated.class, read);
         return ((Read.Stated<String>) read).constraint();
     }
