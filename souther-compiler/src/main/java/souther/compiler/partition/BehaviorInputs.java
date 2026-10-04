@@ -15,8 +15,11 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
 
 /**
  * What a behavior takes: what its inputs are called, what they are declared to be, and what those
@@ -160,17 +163,31 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      * the way a written row is or the classes they land in are two readings rather than one.
      */
     WalkResult<List<Occurrence>> occurrencesAt(List<ObservedValue> inputs, TermPath path) {
+        return occurrencesAt(inputs, path, new HashMap<>());
+    }
+
+    /**
+     * The same, reading what each type is out of {@code views} and adding to it.
+     *
+     * <p>For a caller walking one row to many positions. Every walk starts at a parameter's type
+     * and passes the same few types on the way down, and what a type is — its names and the fields
+     * it lays out — is a fact about the declarations this was read against and not about the walk.
+     * Worked out again at every step of every walk, it is most of what reading a row costs.
+     */
+    WalkResult<List<Occurrence>> occurrencesAt(List<ObservedValue> inputs, TermPath path,
+                                               Map<Type, TypeView> views) {
         int at = indexOf(path);
         if (at < 0 || at >= inputs.size()) {
             return WalkResult.couldNotWalk();
         }
+        Function<Type, TypeView> viewOf = type -> views.computeIfAbsent(type, this::view);
         List<Standing> standing = List.of(new Standing(inputs.get(at), types.get(at),
                 TermPath.of(path.head()), ElementsTaken.NONE));
         for (TermPath.Step step : path.steps()) {
             List<Standing> next = new ArrayList<>();
             int took = 0;
             for (Standing each : standing) {
-                if (each.step(step, rules.inners(), symbols(), rules.kinds(), sums(), next)) {
+                if (each.step(step, viewOf, next)) {
                     took++;
                 }
             }
@@ -190,6 +207,11 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
         // list would be reported as one nothing could be read from.
         return WalkResult.reached(
                 standing.stream().map(each -> new Occurrence(each.at(), each.value())).toList());
+    }
+
+    /** What a value of {@code type} is under the declarations this was read against. */
+    private TypeView view(Type type) {
+        return TypeView.of(type, rules.inners(), symbols(), rules.kinds(), sums());
     }
 
     /**
@@ -306,14 +328,12 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
          * at under a refinement. A caller reads the first as a walk it could not make and the
          * second as a row that is somewhere else.
          */
-        boolean step(TermPath.Step step, NewtypeInners inners, Symbols symbols,
-                     DeclarationKinds kinds, SumCases sums,
-                     List<Standing> out) {
+        boolean step(TermPath.Step step, Function<Type, TypeView> viewOf, List<Standing> out) {
             if (value.unread() != null) {
                 out.add(this);
                 return true;
             }
-            TypeView view = TypeView.of(type, inners, symbols, kinds, sums);
+            TypeView view = viewOf.apply(type);
             ObservedValue here = Classifier.inside(view.wrappers(), value);
             if (here.unread() != null) {
                 out.add(new Standing(here, type, reached, at));

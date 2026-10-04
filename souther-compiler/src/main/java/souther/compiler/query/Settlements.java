@@ -4,6 +4,7 @@ import souther.compiler.check.Sig;
 import souther.compiler.execute.BoundaryValues;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Place;
+import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.GenerationObligation;
@@ -340,12 +341,12 @@ public record Settlements(List<ObligationIdentity> requested,
                 // sit and what running it recorded — does not change between the questions put to
                 // it, and reading it per item would be the same row read as many times as this run
                 // happens to be asked about, at the price of running it that many times.
-                RowAsRead one = read == null ? RowAsRead.nothingRead() : read.read(row.toRun());
+                ReadRow one = read == null ? null : read.read(row.toRun());
                 Map<ObligationIdentity, Settlement> here = new LinkedHashMap<>();
                 Map<ObligationIdentity, InputOfARowForALine> where = new LinkedHashMap<>();
                 for (ObligationIdentity item : items) {
                     ToldApartAt answered = read == null
-                            ? new ToldApartAt(undetermined(one), null)
+                            ? new ToldApartAt(undetermined(RowAsRead.nothingRead()), null)
                             : read.answerFor(one, item);
                     here.put(item, answered.said());
                     if (answered.at() != null) {
@@ -383,6 +384,53 @@ public record Settlements(List<ObligationIdentity> requested,
                     here.computeIfAbsent(reading.behavior(), _ -> new ArrayList<>()).add(at));
         }
         return out;
+    }
+
+    /**
+     * A row as read, and where its values fall at the behavior's positions.
+     *
+     * <p>Where the values fall is worked out once and asked of every class put to the row. Which
+     * class a value is in is a question about the row and the positions and not about the item
+     * that asks it, and placing every position again for each class is the row read once per
+     * class the run happens to be asked about.
+     *
+     * <p>Not worked out until a class asks. A row put only to arms and lines never needs it.
+     *
+     * <p>Kept in the axes' order and looked up by the axis, rather than as a map keyed by it: a
+     * copy of a map iterates in an order each run decides, and nothing here needs one.
+     */
+    private static final class ReadRow {
+
+        private final RowAsRead asRead;
+
+        private final MeasuredInput.MeasuredAxes axes;
+
+        private List<Classification> placed;
+
+        ReadRow(RowAsRead asRead, MeasuredInput.MeasuredAxes axes) {
+            this.asRead = asRead;
+            this.axes = axes;
+        }
+
+        RowAsRead asRead() {
+            return asRead;
+        }
+
+        /**
+         * Where the value at {@code at} falls, for a row whose values were built — or null where
+         * the axis has no classes or is not one of this behavior's.
+         */
+        Classification placedAt(AxisId at) {
+            if (placed == null) {
+                placed = InputClassifications.placedAt(asRead.values(), axes);
+            }
+            for (int i = 0; i < axes.size(); i++) {
+                if (axes.get(i).id().equals(at)) {
+                    return placed.get(i);
+                }
+            }
+            return null;
+        }
     }
 
     /**
@@ -718,8 +766,8 @@ public record Settlements(List<ObligationIdentity> requested,
         }
 
         /** The row as the two things every question here is put to ({@link RowAsRead}). */
-        RowAsRead read(RowToRun row) {
-            return RowAsRead.of(sig, building, trial, row);
+        ReadRow read(RowToRun row) {
+            return new ReadRow(RowAsRead.of(sig, building, trial, row), subject.axes());
         }
 
         /**
@@ -734,16 +782,17 @@ public record Settlements(List<ObligationIdentity> requested,
          * <p>{@code at} is empty for every item but a whole line. A class is where a value falls
          * and an arm is a place a run went, and neither is somewhere a report sends a reader.
          */
-        ToldApartAt answerFor(RowAsRead asRead, ObligationIdentity item) {
+        ToldApartAt answerFor(ReadRow row, ObligationIdentity item) {
             if (item instanceof ObligationIdentity.OfABorder line) {
-                return tellingTheLinesApart(asRead, line);
+                return tellingTheLinesApart(row.asRead(), line);
             }
-            return new ToldApartAt(settlementOf(asRead, item), null);
+            return new ToldApartAt(settlementOf(row, item), null);
         }
 
-        private Settlement settlementOf(RowAsRead asRead, ObligationIdentity item) {
+        private Settlement settlementOf(ReadRow row, ObligationIdentity item) {
+            RowAsRead asRead = row.asRead();
             return switch (item) {
-                case ObligationIdentity.OfAClass(var owed) -> inClass(asRead, owed);
+                case ObligationIdentity.OfAClass(var owed) -> inClass(row, owed);
                 // A case of an input of a behavior that divides no position of its own. Nothing
                 // asks for a row at one — what is offered comes from the classes a position
                 // divides into — and what discharges it is what a row states at that input, which
@@ -766,7 +815,7 @@ public record Settlements(List<ObligationIdentity> requested,
                 case ObligationIdentity.OfADecisionRule owed -> takingTheRule(asRead, owed);
                 case ObligationIdentity.OfACombinationOfDecisions owed ->
                         makingTheDecisions(asRead, owed);
-                case ObligationIdentity.OfAFallbackPairCell owed -> inBothClasses(asRead, owed);
+                case ObligationIdentity.OfAFallbackPairCell owed -> inBothClasses(row, owed);
             };
         }
 
@@ -808,11 +857,11 @@ public record Settlements(List<ObligationIdentity> requested,
          * unreadable at the other says nothing about the pair, and reading the second as a miss
          * would report a combination as untried on the strength of a value nobody could classify.
          */
-        private Settlement inBothClasses(RowAsRead asRead,
+        private Settlement inBothClasses(ReadRow row,
                                          ObligationIdentity.OfAFallbackPairCell owed) {
             Settlement answer = new Settlement.Settles();
             for (ClassOfAPosition each : owed.inOrder()) {
-                Settlement here = inClass(asRead, each);
+                Settlement here = inClass(row, each);
                 if (here instanceof Settlement.DoesNotSettle) {
                     return here;
                 }
@@ -861,15 +910,14 @@ public record Settlements(List<ObligationIdentity> requested,
          * another one is not something a row written here has a value at — which is a row that does
          * not settle it rather than one nothing could tell about.
          */
-        private Settlement inClass(RowAsRead asRead, ClassOfAPosition owed) {
+        private Settlement inClass(ReadRow row, ClassOfAPosition owed) {
             if (!behavior.equals(owed.at().behavior())) {
                 return new Settlement.DoesNotSettle();
             }
-            if (asRead.values() == null) {
-                return undetermined(asRead);
+            if (row.asRead().values() == null) {
+                return undetermined(row.asRead());
             }
-            Classification at =
-                    InputClassifications.of(asRead.values(), subject.axes()).get(owed.at());
+            Classification at = row.placedAt(owed.at());
             if (at == null) {
                 return new Settlement.DoesNotSettle();
             }
