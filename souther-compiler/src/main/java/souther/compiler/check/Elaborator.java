@@ -161,51 +161,10 @@ public final class Elaborator {
                 yield new Core.Neg(operand, t, neg.pos());
             }
             case Hir.LetIn li -> {
-                Type annotation = annotatedType(li, ctx.symbols());
-                Core value;
-                Type bindType;
-                if (annotation instanceof Type.FnOf declared && producesFunction(li.value())) {
-                    // the written type says what the function takes, so nothing has to be read off
-                    // the applications — which is what a function passed on rather than applied has
-                    // none of, and what a function applied only inside a lambda cannot give
-                    value = elaborateFunctionValue(li.value(), declared, env, ctx);
-                    checkLetAnnotation(li, declared, value.type(), ctx.kinds(), ctx.sums());
-                    bindType = declared;
-                } else if (isFunctionSelection(li.value())) {
-                    // a function bound to a local that could not be inlined (e.g. chosen by an `if`):
-                    // it is a first-class function value. A name is the function it names, and its
-                    // declaration says what it takes. A lambda's parameter types are unannotated,
-                    // so infer them from how the body applies it (spec §blocks).
-                    if (annotation != null) {
-                        throw functionAnnotation(li);   // an ordinary type does not describe a function
-                    }
-                    List<Type> paramTypes = declaredTakes(li.value(), env, ctx);
-                    if (paramTypes == null) {
-                        paramTypes = inferFnParamTypes(li.binder(), li.body(), env, ctx);
-                    }
-                    value = elaborateFunctionValueOfUnknownAnswer(li.value(), paramTypes, env, ctx);
-                    bindType = value.type();
-                } else if (annotation != null) {
-                    // the written type is the value's expected type, so an empty collection bound here
-                    // takes its element/value type from the annotation rather than staying a bottom
-                    value = elaborate(li.value(), env, ctx, annotation);
-                    checkLetAnnotation(li, annotation, value.type(), ctx.kinds(), ctx.sums());
-                    bindType = annotation;
-                } else {
-                    value = elaborate(li.value(), env, ctx);
-                    bindType = carriedType(li, value.type(), ctx.kinds(), ctx.sums());
-                }
-                if (li.opens() != null) {
-                    checkOpens(li, bindType, ctx.symbols());
-                }
-                // the binding is visible only inside the body, so a sibling branch cannot see it.
-                // What it was given goes with it: a reader below that asks what an expression comes
-                // to reads the name through this, and the value is read under what was in force
-                // where it was written rather than under the binding it makes.
-                Scope inner = env.binding(li.binder(), bindType, li.value());
-                Core body = elaborate(li.body(), inner, ctx, expected);
-                yield new Core.LetIn(CoreBinders.of(li.binder()), bindType,
-                        Core.standingAs(value, bindType), body, body.type(), li.pos());
+                Bound bound = bound(li, li.value(), env, ctx);
+                Core body = elaborate(li.body(), bound.inner(), ctx, expected);
+                yield new Core.LetIn(CoreBinders.of(li.binder()), bound.type(),
+                        Core.standingAs(bound.value(), bound.type()), body, body.type(), li.pos());
             }
             case Hir.Expansion ex -> expansion(ex, env, ctx, expected);
             // A build of a value elaborates as the value does, in the copy the build is: the walk
@@ -339,30 +298,10 @@ public final class Elaborator {
                                 .say(new TypeMessage.TheBranchesOfThisIfDisagree()).build());
             }
             case Hir.IfConstructed ic -> {
-                Core built = elaborate(ic.construct(), env, ctx);
-                if (!(built instanceof Core.Construct construct)) {
-                    throw CompileException.of(Diagnostic.at(ic.construct().reportedAt())
-                            .say(new AttemptMessage.ThisIsNotAConstruction())
-                            .hint(new AttemptMessage.WriteTheConstructionWhoseInvariantDecides())
-                            .build());
-                }
-                // What decides the branch is the invariant, so a type with none has no failing side
-                // and the else value could never be reached. Reported rather than compiled into a
-                // branch that is not one — the same call a unit data's forbidden invariant makes.
-                if (!DataChecker.isInvariantBearing(construct.typeName(), ctx.symbols())) {
-                    throw CompileException.of(Diagnostic.at(ic.construct().reportedAt())
-                            .say(new AttemptMessage.TheTypeDeclaresNoInvariant(
-                                    construct.typeName().name()))
-                            .hint(new AttemptMessage.ConstructItDirectlyOrGiveItAnInvariant(
-                                    construct.typeName().name()))
-                            .build());
-                }
-                checkArmsAnswerClauses(ic, construct.typeName(), ctx.symbols());
-                // The binder names the built value, so the success branch reads it at the data's own
-                // type — with the invariant established, which is why the discharge check may seed it.
-                Scope inner = env.with(ic.binder(), construct.type());
-                Core then = liftIntoOption(elaborate(ic.then(), inner, ctx, expected), expected,
-                        ctx.kinds(), ctx.sums());
+                Attempted attempted = attempted(ic, ic.construct(), env, ctx);
+                Core.Construct construct = attempted.construct();
+                Core then = liftIntoOption(elaborate(ic.then(), attempted.then(), ctx, expected),
+                        expected, ctx.kinds(), ctx.sums());
                 List<Core.ElseArm> arms = new ArrayList<>();
                 Type joined = then.type();
                 for (Hir.ElseArm arm : ic.els()) {
@@ -803,6 +742,108 @@ public final class Elaborator {
                             .at(li.pos())
                             .diff(actual, shown).say(new TypeMessage.ThePatternOpensAnotherType(shown, actual)).build());
         }
+    }
+
+    /**
+     * What a {@code let} brings into force: the value as elaborated, the type its name is bound at,
+     * and the scope its body is read in.
+     */
+    record Bound(Core value, Type type, Scope inner) {}
+
+    /**
+     * {@code li}'s binding brought into force over its body, with {@code value} standing for what it
+     * was given: typed, held to what its pattern opens, and bound. A binding the language refuses is
+     * refused here and brings nothing into force.
+     *
+     * <p>The one place that decides it, for every reader that reads a {@code let}'s body with its
+     * binding in force — the elaboration, a function value's own bindings, and a check that reads
+     * the body before it is expanded. That check hands the value expanded and the binding as
+     * written, which is why the value is a parameter of its own.
+     *
+     * <p>The binding is visible only inside the body, so a sibling branch cannot see it. What it was
+     * given goes with it: a reader below that asks what an expression comes to reads the name
+     * through the scope, and the value is read under what was in force where it was written rather
+     * than under the binding it makes.
+     */
+    static Bound bound(Hir.LetIn li, Hir.Expr value, Scope env, CheckContext ctx) {
+        Type annotation = annotatedType(li, ctx.symbols());
+        Core elaborated;
+        Type type;
+        if (annotation instanceof Type.FnOf declared && producesFunction(value)) {
+            // the written type says what the function takes, so nothing has to be read off
+            // the applications — which is what a function passed on rather than applied has
+            // none of, and what a function applied only inside a lambda cannot give
+            elaborated = elaborateFunctionValue(value, declared, env, ctx);
+            checkLetAnnotation(li, declared, elaborated.type(), ctx.kinds(), ctx.sums());
+            type = declared;
+        } else if (isFunctionSelection(value)) {
+            // a function bound to a local that could not be inlined (e.g. chosen by an `if`):
+            // it is a first-class function value. A name is the function it names, and its
+            // declaration says what it takes. A lambda's parameter types are unannotated,
+            // so infer them from how the body applies it (spec §blocks).
+            if (annotation != null) {
+                throw functionAnnotation(li);   // an ordinary type does not describe a function
+            }
+            List<Type> paramTypes = declaredTakes(value, env, ctx);
+            if (paramTypes == null) {
+                paramTypes = inferFnParamTypes(li.binder(), li.body(), env, ctx);
+            }
+            elaborated = elaborateFunctionValueOfUnknownAnswer(value, paramTypes, env, ctx);
+            type = elaborated.type();
+        } else if (annotation != null) {
+            // the written type is the value's expected type, so an empty collection bound here
+            // takes its element/value type from the annotation rather than staying a bottom
+            elaborated = elaborate(value, env, ctx, annotation);
+            checkLetAnnotation(li, annotation, elaborated.type(), ctx.kinds(), ctx.sums());
+            type = annotation;
+        } else {
+            elaborated = elaborate(value, env, ctx);
+            type = carriedType(li, elaborated.type(), ctx.kinds(), ctx.sums());
+        }
+        if (li.opens() != null) {
+            checkOpens(li, type, ctx.symbols());
+        }
+        return new Bound(elaborated, type, env.binding(li.binder(), type, value));
+    }
+
+    /**
+     * What an attempted construction brings into force over the branch it succeeds into: the
+     * construction, and the scope that branch is read in.
+     */
+    record Attempted(Core.Construct construct, Scope then) {}
+
+    /**
+     * {@code ic}'s binding brought into force over its success branch, with {@code construct}
+     * standing for what it attempts: held to being a construction of a type with an invariant whose
+     * clauses its departures answer, and bound to what it built. An attempt the language refuses is
+     * refused here and brings nothing into force.
+     *
+     * <p>The one place that decides it, for the elaboration and for a check that reads the body
+     * before it is expanded, which hands the construction expanded.
+     */
+    static Attempted attempted(Hir.IfConstructed ic, Hir.Expr construct, Scope env,
+                               CheckContext ctx) {
+        Core built = elaborate(construct, env, ctx);
+        if (!(built instanceof Core.Construct made)) {
+            throw CompileException.of(Diagnostic.at(ic.construct().reportedAt())
+                    .say(new AttemptMessage.ThisIsNotAConstruction())
+                    .hint(new AttemptMessage.WriteTheConstructionWhoseInvariantDecides())
+                    .build());
+        }
+        // What decides the branch is the invariant, so a type with none has no failing side
+        // and the else value could never be reached. Reported rather than compiled into a
+        // branch that is not one — the same call a unit data's forbidden invariant makes.
+        if (!DataChecker.isInvariantBearing(made.typeName(), ctx.symbols())) {
+            throw CompileException.of(Diagnostic.at(ic.construct().reportedAt())
+                    .say(new AttemptMessage.TheTypeDeclaresNoInvariant(made.typeName().name()))
+                    .hint(new AttemptMessage.ConstructItDirectlyOrGiveItAnInvariant(
+                            made.typeName().name()))
+                    .build());
+        }
+        checkArmsAnswerClauses(ic, made.typeName(), ctx.symbols());
+        // The binder names the built value, so the success branch reads it at the data's own
+        // type — with the invariant established, which is why the discharge check may seed it.
+        return new Attempted(made, env.with(ic.binder(), made.type()));
     }
 
     /** The type a source annotation declares on a binding ({@code let x: T = e}), or null when the
@@ -1499,12 +1540,12 @@ public final class Elaborator {
                 yield applied.wrap(body, body.type(), ex.pos());
             }
             case Hir.LetIn li -> {
-                // a capture binding around the function (e.g. `let $n = 5 in (x) -> x + $n`)
-                Core bound = elaborate(li.value(), env, ctx);
-                Scope inner = env.with(li.binder(), bound.type());
-                Core body = functionValue(li.body(), paramTypes, result, inner, ctx);
-                yield new Core.LetIn(CoreBinders.of(li.binder()), bound.type(), bound, body, body.type(),
-                        li.pos());
+                // a capture binding around the function (e.g. `let $n = 5 in (x) -> x + $n`), brought
+                // into force as any binding is: written `let s: S = A { ... }`, `s` is the sum
+                Bound bound = bound(li, li.value(), env, ctx);
+                Core body = functionValue(li.body(), paramTypes, result, bound.inner(), ctx);
+                yield new Core.LetIn(CoreBinders.of(li.binder()), bound.type(),
+                        Core.standingAs(bound.value(), bound.type()), body, body.type(), li.pos());
             }
             default -> elaborate(value, env, ctx);
         };

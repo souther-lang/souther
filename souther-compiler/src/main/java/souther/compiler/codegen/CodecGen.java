@@ -477,32 +477,61 @@ final class CodecGen {
 
     /**
      * Decodes a sum all of whose cases are unit data: the value is its case's name, so it reads a
-     * bare string and answers that case's singleton (issue #161). A name no case answers to fails at
-     * the value's path, the way a newtype's invariant does, rather than being read as some other case.
+     * bare string and answers that case's singleton (issue #161).
+     *
+     * <p>Which names are allowed is held by Raoh's {@code oneOf} over strings, because that
+     * constraint states the rule a name is held to — one of these, compared exactly, case and all —
+     * so a name no case answers to fails at the value's path as {@code oneOf} reports it (spec
+     * §sum-discrimination). What is the enumeration's own is which case each allowed name is.
      */
     byte[] generateEnumSumDecoder(Hir.SumData sum, Boundary.Alternatives alternatives, Src src) {
         ClassDesc cdDec = cd(decoderOf(sum, src));
+        List<Boundary.WireCase> cases = alternatives.wireCases();
         return buildDecoder(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_RDecoder);
             emitDefaultCtor(cb);
             emitSharedInstance(cb, cdDec);
-            cb.withMethodBody("decode", MTD_Rdecode, ClassFile.ACC_PUBLIC, code -> {
+            // The reader is a constant of the class, built once when it is first used: `oneOf`
+            // sorts the names and words its message when it is made, which a decode is not to
+            // pay for every time.
+            cb.withMethodBody(READER, MTD_reader, ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC,
+                    code -> {
                 emitStringLeaf(code, srcLeafOwner(src));
+                code.loadConstant(cases.size());
+                code.anewarray(CD_String);
+                for (int i = 0; i < cases.size(); i++) {
+                    code.dup();
+                    code.loadConstant(i);
+                    code.loadConstant(cases.get(i).tag());
+                    code.aastore();
+                }
+                code.invokevirtual(CD_StringDecoder, "oneOf", MTD_stringOneOf);
                 code.invokedynamic(fromNameCallSite(cdDec));
                 code.invokeinterface(CD_RDecoder, "flatMapWithPath", MTD_flatMapWithPath);
+                code.areturn();
+            });
+            cb.withMethodBody("decode", MTD_Rdecode, ClassFile.ACC_PUBLIC, code -> {
+                code.ldc(DynamicConstantDesc.ofNamed(ConstantDescs.BSM_INVOKE, "reader",
+                        CD_RDecoder, MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC,
+                                cdDec, READER, MTD_reader)));
                 code.aload(1);
                 code.aload(2);
                 code.invokeinterface(CD_RDecoder, "decode", MTD_Rdecode);
                 code.areturn();
             });
-            emitFromNameHelper(cb, sum.name(), alternatives.wireCases());
+            emitFromNameHelper(cb, cases);
         });
     }
 
-    /** {@code static Result __fromName(String name, Path path)}: the case that name denotes, or the
-     *  failure saying it denotes none of them. */
-    private void emitFromNameHelper(ClassBuilder cb, String sumName, List<Boundary.WireCase> cases) {
+    /**
+     * {@code static Result __fromName(String name, Path path)}: the case that name denotes.
+     *
+     * <p>Handed only a name {@code oneOf} allowed, which is the name of a case. One that is not
+     * would be this compiler handing {@code oneOf} other names than it maps, so it throws rather
+     * than answering a failure the language never states.
+     */
+    private void emitFromNameHelper(ClassBuilder cb, List<Boundary.WireCase> cases) {
         cb.withMethodBody("__fromName", MTD_fromName,
                 ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
             for (Boundary.WireCase c : cases) {
@@ -516,20 +545,18 @@ final class CodecGen {
                 code.areturn();
                 code.labelBinding(next);
             }
-            code.aload(1);                                             // path
-            code.loadConstant("invalid_format");
-            code.loadConstant("not a case of " + sumName);
-            // A detail of the failure and not the sum's discriminator, which an enumeration does not
-            // have — this says which type the name was read against. The two are spelled alike and
-            // are not the same key: reading this one off `Boundary` would tie what a failure reports
-            // to how a value is written, and an enumeration has no key to read.
-            code.loadConstant("type");
-            code.loadConstant(sumName);
-            code.invokestatic(CD_Map, "of", MethodTypeDesc.of(CD_Map, CD_Object, CD_Object), true);
-            code.invokestatic(CD_RResult, "fail", MTD_Rfail4, true);
-            code.areturn();
+            code.new_(CD_IllegalStateException);
+            code.dup();
+            code.invokespecial(CD_IllegalStateException, "<init>", MTD_void);
+            code.athrow();
         });
     }
+
+    /** What an enumeration's decoder builds the reader it decodes with in, once. */
+    private static final String READER = "__reader";
+
+    /** {@code static Decoder __reader()}. */
+    private static final MethodTypeDesc MTD_reader = MethodTypeDesc.of(CD_RDecoder);
 
     private static DynamicCallSiteDesc fromNameCallSite(ClassDesc cdDec) {
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
