@@ -359,6 +359,12 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
             return compareTo(other);
         }
         long stored = stored() + other.stored();
+        // Settled as the arithmetic settles it first: two equal values by their parts, and two of
+        // different signs by the signs, neither of which writes anything out.
+        if (signum() != other.signum() || equals(other)) {
+            checkpoint.spend(HostWork.read(stored));
+            return compareTo(other);
+        }
         long writing = 4 * stored + 128;
         checkpoint.spend(HostWork.power(writing) + HostWork.product(stored, writing));
         try {
@@ -372,7 +378,8 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      *  the answer are built from the exponents moved by the scale, and a value standing close to half
      *  of the way between two of them is refined as the order is. */
     public BigDecimal asDecimal(int scale, java.math.RoundingMode towards, WorkCheckpoint checkpoint) {
-        if (checkpoint == WorkCheckpoint.NONE) {
+        if (checkpoint == WorkCheckpoint.NONE || isZero()) {
+            // Nought is nought at every scale, answered before anything is built.
             return asDecimal(scale, towards);
         }
         payWritten(twos + (long) scale, fives + (long) scale, checkpoint);
@@ -388,7 +395,7 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
 
     /** {@link #asDecimal()}, paid for to {@code checkpoint} first, where there is a decimal. */
     public @Nullable BigDecimal asDecimal(WorkCheckpoint checkpoint) {
-        if (checkpoint != WorkCheckpoint.NONE && hasFiniteDecimal()) {
+        if (checkpoint != WorkCheckpoint.NONE && hasFiniteDecimal() && !isZero()) {
             long tens = Math.min(twos, fives);
             if (tens >= -(long) Integer.MAX_VALUE) {
                 long scale = tens > -(long) Integer.MIN_VALUE ? Integer.MIN_VALUE : -tens;
@@ -400,7 +407,7 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
 
     /** {@link #asWholeNumber()}, paid for to {@code checkpoint} first, where it is one. */
     public @Nullable BigInteger asWholeNumber(WorkCheckpoint checkpoint) {
-        if (checkpoint != WorkCheckpoint.NONE && isWhole()) {
+        if (checkpoint != WorkCheckpoint.NONE && isWhole() && !isZero()) {
             payWritten(twos, fives, checkpoint);
         }
         return asWholeNumber();

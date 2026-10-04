@@ -301,13 +301,13 @@ public final class DecimalMath {
 
     /** {@link #add(BigDecimal, BigDecimal)}, paid for to {@code checkpoint} first. */
     public static BigDecimal add(BigDecimal a, BigDecimal b, WorkCheckpoint checkpoint) {
-        payAligned(a, b, checkpoint);
+        paySum(a, b, checkpoint);
         return add(a, b);
     }
 
     /** {@link #subtract(BigDecimal, BigDecimal)}, paid for to {@code checkpoint} first. */
     public static BigDecimal subtract(BigDecimal a, BigDecimal b, WorkCheckpoint checkpoint) {
-        payAligned(a, b, checkpoint);
+        paySum(a, b, checkpoint);
         return subtract(a, b);
     }
 
@@ -351,7 +351,7 @@ public final class DecimalMath {
 
     /** {@link #compare(BigDecimal, BigDecimal)}, paid for to {@code checkpoint} first. */
     public static long compare(BigDecimal a, BigDecimal b, WorkCheckpoint checkpoint) {
-        payAligned(a, b, checkpoint);
+        payComparison(a, b, checkpoint);
         return compare(a, b);
     }
 
@@ -404,26 +404,65 @@ public final class DecimalMath {
         return leastDigits(d);
     }
 
-    /** Pays for {@code a} and {@code b} brought to one scale, as a sum, a difference and a comparison
-     *  bring them: the one at the smaller scale is multiplied by the power of ten between the two, and
-     *  how many digits each has is found by comparing it with a power of ten as long. */
-    private static void payAligned(BigDecimal a, BigDecimal b, WorkCheckpoint checkpoint) {
+    // Each estimate below follows what the host decides before it computes, in the order it decides
+    // it, and pays only for the work that decision leaves: a nought or a sign settles a comparison,
+    // and a nought brought to another scale is a nought. A scale is paid for only where the host
+    // builds a number at it, and then because the number is that long.
+
+    /** Pays for a sum or a difference: the operand at the smaller scale is multiplied by the power of
+     *  ten between the two scales, unless it is nought, and the answer is as long as the longer of the
+     *  two once that is done. */
+    private static void paySum(BigDecimal a, BigDecimal b, WorkCheckpoint checkpoint) {
         if (checkpoint == WorkCheckpoint.NONE) {
             return;
         }
-        long gap = Math.abs((long) a.scale() - b.scale());
         BigDecimal raised = a.scale() < b.scale() ? a : b;
-        long raise = gap == 0 ? 0 : HostWork.bitsOfTens(gap);
-        long answer = Math.max(HostWork.bits(a), HostWork.bits(b)) + raise + 1;
+        BigDecimal kept = raised == a ? b : a;
+        long gap = Math.abs((long) a.scale() - b.scale());
+        long raise = gap == 0 || raised.signum() == 0 ? 0 : HostWork.bitsOfTens(gap);
+        long answer = Math.max(HostWork.bits(raised) + raise, HostWork.bits(kept)) + 1;
         HostWork.pay(checkpoint, answer, HostWork.read(HostWork.bits(a), HostWork.bits(b), answer)
-                + HostWork.power(HostWork.bits(a)) + HostWork.power(HostWork.bits(b))
                 + (raise == 0 ? 0 : HostWork.power(raise) + HostWork.product(HostWork.bits(raised), raise)));
     }
 
+    /**
+     * Pays for a comparison. A nought or two signs apart is settled on sight. Otherwise the host
+     * counts each operand's digits, which compares it with a power of ten as long, and compares where
+     * the first digit of each stands; only two values whose first digits stand at one place are brought
+     * to one scale, and then the scales are no further apart than the digits are many — so what that
+     * costs is bounded by how long the operands are, whatever their scales.
+     */
+    private static void payComparison(BigDecimal a, BigDecimal b, WorkCheckpoint checkpoint) {
+        if (checkpoint == WorkCheckpoint.NONE) {
+            return;
+        }
+        long bitsA = HostWork.bits(a);
+        long bitsB = HostWork.bits(b);
+        if (a.signum() == 0 || b.signum() == 0 || a.signum() != b.signum()) {
+            checkpoint.spend(HostWork.read(bitsA, bitsB));
+            return;
+        }
+        long counting = HostWork.read(bitsA, bitsB) + HostWork.power(bitsA) + HostWork.power(bitsB);
+        // Where the first digit stands, from the bits: a digit is a little over three of them, so the
+        // count is off by at most one either way, and two apart is apart.
+        long firstA = bitsA * 30103 / 100000 - a.scale();
+        long firstB = bitsB * 30103 / 100000 - b.scale();
+        if (Math.abs(firstA - firstB) > 2) {
+            checkpoint.spend(counting);
+            return;
+        }
+        long longer = Math.max(bitsA, bitsB);
+        checkpoint.spend(counting + HostWork.power(longer) + HostWork.product(longer, longer));
+    }
+
     /** Pays for {@code d} brought to {@code places}: multiplied by a power of ten to go up, divided
-     *  by one to go down. */
+     *  by one to go down. A nought is a nought at every scale, and costs the reading. */
     private static void payRescaled(BigDecimal d, int places, WorkCheckpoint checkpoint) {
         if (checkpoint == WorkCheckpoint.NONE) {
+            return;
+        }
+        if (d.signum() == 0) {
+            checkpoint.spend(HostWork.read(HostWork.bits(d)));
             return;
         }
         long gap = (long) places - d.scale();

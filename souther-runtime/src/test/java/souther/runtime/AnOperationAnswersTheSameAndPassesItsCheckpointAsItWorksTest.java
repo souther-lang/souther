@@ -177,7 +177,7 @@ class AnOperationAnswersTheSameAndPassesItsCheckpointAsItWorksTest {
     void anOperationPassesItsCheckpointForWhatItGoesOver() {
         for (Operation op : operations()) {
             Counting all = new Counting(Long.MAX_VALUE);
-            op.evaluated().apply(all);
+            assertTrue(Values.equal(op.shipped().get(), op.evaluated().apply(all)), op.name());
             assertTrue(all.passed >= op.goesOver(),
                     op.name() + " passed " + all.passed + " for " + op.goesOver() + " it goes over");
         }
