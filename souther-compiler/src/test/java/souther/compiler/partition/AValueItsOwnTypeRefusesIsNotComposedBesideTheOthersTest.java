@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.query.Adequacy;
@@ -15,6 +17,7 @@ import souther.compiler.types.Type;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -110,6 +113,87 @@ class AValueItsOwnTypeRefusesIsNotComposedBesideTheOthersTest {
         composedNoneOfThem(control, saying);
     }
 
+    /**
+     * One search composes an assignment once, however many of its passes arrive at it.
+     *
+     * <p>The product walk tries an assignment and is refused; the conditioned search that follows
+     * can choose the same values, and so can the product walk's second pass. What came back the
+     * first time is the answer the second time, and composing it again spends the bound on a
+     * question already answered.
+     */
+    @Test
+    void aSearchComposesNoAssignmentTwice() {
+        RefusingEverythingAndSayingWhatACodeRefuses saying =
+                new RefusingEverythingAndSayingWhatACodeRefuses();
+        probeAt(Count.of(100), saying);
+
+        assertFalse(saying.composed.isEmpty(), "the search composed something");
+        assertEquals(saying.composed.size(), Set.copyOf(saying.composed).size(),
+                "each assignment once: " + saying.composed);
+    }
+
+    /**
+     * The bound is spent on every assignment that is still undecided, and on nothing else —
+     * including the first one a search tries.
+     *
+     * <p>Eight positions each offer {@code 0}, {@code 1} and {@code 2}, and {@code 0} is refused
+     * on its own. What is left is two values at each of eight positions, as many assignments as the
+     * bound, and the only one the parameter takes is the farthest of them, so it is the last the
+     * walk reaches. A search that composed the first assignment it was offered — every position at
+     * {@code 0} — before asking what those values' type says of them spends one of the bound on an
+     * assignment known refused, and the walk stops one short of the row.
+     */
+    @Test
+    void theLastUndecidedAssignmentWithinTheBoundIsReached() {
+        Read read = read(EIGHT_NUMBERS, "count");
+        List<Axis> axes = new ArrayList<>();
+        for (String field : List.of("a", "b", "c", "d", "e", "f", "g", "h")) {
+            NumericTerm.ValueOf term = new NumericTerm.ValueOf(TermPath.of("n").then(field));
+            PartitionClass any = PartitionClass.of("any", "any", new Recognition.Nothing(),
+                    RepresentativeSource.of(List.of(FixtureTemplate.integer(0),
+                            FixtureTemplate.integer(1), FixtureTemplate.integer(2))))
+                    .ofTheNumber(term);
+            axes.add(new Axis(new AxisId("count", "n." + field), term, List.of(any), List.of()));
+        }
+        MeasuredInput subject = MeasuredInput.of("count", read.domain().reading(read.rules()),
+                AxesATestWrote.asAMeasurement("count", axes));
+        List<String> composed = new ArrayList<>();
+        Generator.CandidateCheck onlyTheFarthest = new Generator.CandidateCheck() {
+
+            @Override
+            public Built build(int parameter, FixtureTemplate candidate) {
+                composed.add(candidate.text());
+                return candidate.text().contains("= 0") || candidate.text().contains("= 1")
+                        ? new Built.Refused("not this one") : new Built.NothingBuiltIt();
+            }
+
+            @Override
+            public Admissibility admissibility(Type type, FixtureTemplate candidate) {
+                return candidate.text().equals("0") ? Admissibility.REFUSED : Admissibility.ADMITTED;
+            }
+        };
+
+        FillResult filled =
+                GenerationFixtures.fill(subject, List.of(), onlyTheFarthest, Budgets.generation());
+
+        assertFalse(filled.rows().isEmpty(), "the row is reached: " + filled.unresolved());
+        int reached = composed.indexOf(filled.rows().get(0).inputs().get(0).text());
+        assertEquals(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES.maximum() - 1, reached,
+                "at the last assignment the bound allows, in the walk that was offered it");
+        assertEquals(List.of(), composed.subList(0, reached).stream()
+                        .filter(each -> each.contains("= 0")).toList(),
+                "and nothing composed before it holds a value its type refused");
+    }
+
+    private static final String EIGHT_NUMBERS = """
+            module example.eight
+
+            data Ok
+            data Eight = { a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int, h: Int }
+
+            behavior count : (n: Eight) -> Ok
+            """;
+
     private static void composedNoneOfThem(RefusingEverything control,
                                            RefusingEverything saying) {
         assertFalse(unformatted(control.composed).isEmpty(),
@@ -130,16 +214,20 @@ class AValueItsOwnTypeRefusesIsNotComposedBesideTheOthersTest {
                         Partitions.Partitioning partitioning) {}
 
     private static Read read() {
-        Compilation compilation = Compilation.ofSource(NINE_CODES, "Main");
+        return read(NINE_CODES, "take");
+    }
+
+    private static Read read(String source, String behavior) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain domain =
-                compilation.db().ask(new Adequacy.Inputs(module)).value().get("take");
+                compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
         assertNotNull(domain, "the model under test compiles");
         Partitions.Partitioning partitioning =
-                Partitions.of("take", domain.reading(rules), ReadAs.THE_COMPILATION_DOES);
-        return new Read(MeasuredInput.of("take", domain.reading(rules), partitioning), domain,
+                Partitions.of(behavior, domain.reading(rules), ReadAs.THE_COMPILATION_DOES);
+        return new Read(MeasuredInput.of(behavior, domain.reading(rules), partitioning), domain,
                 rules, partitioning);
     }
 

@@ -209,6 +209,10 @@ class AValueIsBuiltOnceHoweverManyPointsAskAboutItTest {
         assertEquals(BoundaryValues.OnItsOwn.NO_DECODER_OF_ITS_OWN,
                 building.buildAlone(Type.option(code),
                         FixtureTemplate.newtype(written, FixtureTemplate.string("x"))));
+        assertThrows(IllegalStateException.class,
+                () -> building.buildAlone(Type.var("a"), FixtureTemplate.string("x")),
+                "a type variable reaching a fixture is this compiler disagreeing with itself,"
+                        + " and is not read as a type nothing decodes");
     }
 
     private static FixtureTemplate seven() {

@@ -1881,12 +1881,16 @@ public final class FixtureReader {
      * value is read so that the two are told apart: a type with no shape here is not the value being
      * refused, and an optional field's {@code None} answered as a refusal would be dropped from every
      * search over the record that holds it.
+     *
+     * <p>Only the shape's own refusal is that answer. What else settling a shape can throw is this
+     * compiler disagreeing with itself — a type variable reaching a fixture — and it is thrown on
+     * rather than read as a type nothing decodes.
      */
     BoundaryValues.OnItsOwn buildingAlone(Type type, Hir.Expr fixture) {
         FixtureShape shape;
         try {
             shape = FixtureShape.of(type, symbols);
-        } catch (RuntimeException e) {
+        } catch (FixtureException e) {
             return BoundaryValues.OnItsOwn.NO_DECODER_OF_ITS_OWN;
         }
         try {

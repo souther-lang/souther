@@ -5683,7 +5683,9 @@ public final class Generator {
                     new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                             choices.missingAt()));
         }
-        Outcome product = walk(subject, p, choices, check);
+        // One for every pass below, so what one of them found refused is known to the others.
+        Composing composing = new Composing(p, plan, subject.ruleReading(), check);
+        Outcome product = walk(choices, composing);
         if (product instanceof Outcome.Built) {
             return product;
         }
@@ -5691,7 +5693,7 @@ public final class Generator {
         // two of them was satisfied only where the lists happened to already hold a pair that does.
         // Asked again choosing one position at a time, each from what is left once the ones before it
         // are asserted, which is the only way `a < b` is met in general.
-        Outcome conditioned = conditioned(subject, p, plan, decided, settled, check);
+        Outcome conditioned = conditioned(subject, p, plan, decided, settled, composing);
         if (conditioned instanceof Outcome.Built) {
             return conditioned;
         }
@@ -5981,7 +5983,7 @@ public final class Generator {
     private static Outcome conditioned(MeasuredInput subject, int p, ConstructionPlan plan,
                                        Map<TermPath, List<FixtureTemplate>> decided,
                                        Map<TermPath, Place> settled,
-                                       CandidateCheck check) {
+                                       Composing composing) {
         List<ConstructionPlan.Slot> found = plan.slots();
         // What the caller fixed goes first, so that everything chosen after it is chosen beside it.
         // A class stands for one value and a boundary is one value, and neither is worth deciding
@@ -5996,8 +5998,8 @@ public final class Generator {
         // reading a settling states and not a second one of the declaration.
         ConditionedCandidates candidates = new ConditionedCandidates(subject.ruleReading(),
                 rulesOf(subject.types().get(p), subject.ruleReading(), Map.of()));
-        FixtureTemplate built = descend(subject, p, plan, positions, 0, new LinkedHashMap<>(),
-                new LinkedHashMap<>(settled), decided, check, budget, candidates);
+        FixtureTemplate built = descend(subject, p, positions, 0, new LinkedHashMap<>(),
+                new LinkedHashMap<>(settled), decided, composing, budget, candidates);
         if (built != null) {
             return new Outcome.Built(built);
         }
@@ -6040,6 +6042,95 @@ public final class Generator {
     }
 
     /**
+     * Every assignment one parameter's search composes, put through one place.
+     *
+     * <p><b>The bound is spent only on an assignment whose answer is not already known.</b> Two
+     * kinds are known without composing them. One holds a value its own type refuses
+     * ({@link CandidateCheck#admissibility}), which is refused in every value holding it. The other
+     * is one this search already composed and saw refused — the product walk's second pass walks
+     * every assignment of its first again before it reaches what was held back, and the conditioned
+     * search can arrive at an assignment the product walk tried. Neither is composed, and neither
+     * counts against {@link CompositionBudget#ASSIGNMENTS_A_SEARCH_COMPOSES}: what the bound limits
+     * is the questions this search had to put to the decoder, and those were not questions.
+     *
+     * <p>Here and not at each pass, because a pass that asked for itself would be the pass that
+     * forgot to. The first assignment a pass tries is asked about like every other.
+     *
+     * <p>Known by what the assignment writes at each position, and not by the values' trees, for
+     * the reason {@code FixturesAtTheBoundary} keeps its answers by text: two occurrences of one
+     * named value differ in their trees and write the same thing.
+     */
+    private static final class Composing {
+
+        private final int parameter;
+        private final ConstructionPlan plan;
+        private final RuleReadingContext reading;
+        private final CandidateCheck check;
+        private final Map<TermPath, Type> typeAt = new HashMap<>();
+        private final Set<Map<TermPath, String>> refused = new HashSet<>();
+
+        Composing(int parameter, ConstructionPlan plan, RuleReadingContext reading,
+                  CandidateCheck check) {
+            this.parameter = parameter;
+            this.plan = plan;
+            this.reading = reading;
+            this.check = check;
+            for (ConstructionPlan.Slot each : plan.slots()) {
+                typeAt.put(each.at(), each.type());
+            }
+        }
+
+        /**
+         * Whether the value's own type refuses it at {@code at}. False where the plan says no type
+         * there: nothing was asked, and nothing unasked is a refusal.
+         */
+        boolean refusedAlone(TermPath at, FixtureTemplate value) {
+            Type type = typeAt.get(at);
+            return type != null && check.admissibility(type, value)
+                    == CandidateCheck.Admissibility.REFUSED;
+        }
+
+        /** What putting one assignment to the decoder came to, or that it did not need putting. */
+        Tried attempt(Map<TermPath, FixtureTemplate> chosen, Budget budget) {
+            Map<TermPath, String> written = new HashMap<>();
+            for (Map.Entry<TermPath, FixtureTemplate> each : chosen.entrySet()) {
+                if (refusedAlone(each.getKey(), each.getValue())) {
+                    return new Tried.Known();
+                }
+                written.put(each.getKey(), each.getValue().text());
+            }
+            if (refused.contains(written)) {
+                return new Tried.Known();
+            }
+            if (!budget.spend()) {
+                return new Tried.OutOfBudget();
+            }
+            FixtureTemplate built = compose(plan.root(), chosen, reading);
+            if (built != null && check.refuse(parameter, built).isEmpty()) {
+                return new Tried.Built(built);
+            }
+            refused.add(written);
+            return new Tried.Refused();
+        }
+
+        /** What {@link #attempt} came to. */
+        sealed interface Tried {
+
+            /** Composed, and the decoder took it. */
+            record Built(FixtureTemplate value) implements Tried {}
+
+            /** Composed, and refused. */
+            record Refused() implements Tried {}
+
+            /** Known refused without composing it, so nothing was spent. */
+            record Known() implements Tried {}
+
+            /** Not composed, because the bound is spent. */
+            record OutOfBudget() implements Tried {}
+        }
+    }
+
+    /**
      * The assignment this branch leads to, or null where none of them builds.
      *
      * @param chosen  what the positions before this one took
@@ -6047,28 +6138,24 @@ public final class Generator {
      * @param budget  assignments left to compose, shared down the whole search
      * @param candidates what a position can take under a settling, shared down the whole search
      */
-    private static FixtureTemplate descend(MeasuredInput subject, int p, ConstructionPlan plan,
+    private static FixtureTemplate descend(MeasuredInput subject, int p,
                                            List<ConstructionPlan.Slot> positions, int index,
                                            Map<TermPath, FixtureTemplate> chosen,
                                            Map<TermPath, Place> settled,
                                            Map<TermPath, List<FixtureTemplate>> decided,
-                                           CandidateCheck check, Budget budget,
+                                           Composing composing, Budget budget,
                                            ConditionedCandidates candidates) {
         if (index == positions.size()) {
-            if (!budget.spend()) {
-                return null;
-            }
-            FixtureTemplate whole = compose(plan.root(), chosen, subject.ruleReading());
-            return whole != null && check.refuse(p, whole).isEmpty() ? whole : null;
+            return composing.attempt(chosen, budget) instanceof Composing.Tried.Built(var value)
+                    ? value : null;
         }
         ConstructionPlan.Slot position = positions.get(index);
         TermPath where = position.at();
         for (FixtureTemplate candidate
                 : candidatesAt(subject, p, position, settled, decided, candidates)) {
             // Refused by its own type, so refused in every assignment under this branch: the branch
-            // is not walked, and the bound is not spent on it ({@link #over} says why).
-            if (check.admissibility(position.type(), candidate)
-                    == CandidateCheck.Admissibility.REFUSED) {
+            // is not walked ({@link Composing} says why).
+            if (composing.refusedAlone(where, candidate)) {
                 continue;
             }
             chosen.put(where, candidate);
@@ -6076,8 +6163,8 @@ public final class Generator {
             if (number != null) {
                 settled.put(where, number);
             }
-            FixtureTemplate found = descend(subject, p, plan, positions, index + 1, chosen, settled,
-                    decided, check, budget, candidates);
+            FixtureTemplate found = descend(subject, p, positions, index + 1, chosen, settled,
+                    decided, composing, budget, candidates);
             if (found != null) {
                 return found;
             }
@@ -6550,8 +6637,8 @@ public final class Generator {
      * wider set of choices is a longer walk to every assignment in it, and a widening meant for one
      * position would otherwise take rows away from the rest.
      */
-    private static Outcome walk(MeasuredInput subject, int p, Choices choices, CandidateCheck check) {
-        Outcome tried = over(subject, p, choices.plan(), choices.at(), choices.values(), check);
+    private static Outcome walk(Choices choices, Composing composing) {
+        Outcome tried = over(choices.at(), choices.values(), composing);
         // Only where the ordinary assignments ran out. A search that stopped at the bound has not
         // tried them all, and starting a wider one in front of the ones it never reached would spend
         // what is left on assignments further from what the model says the row is about, while the
@@ -6561,74 +6648,68 @@ public final class Generator {
         if (!ranOut || !choices.anythingHeldBack()) {
             return tried;
         }
-        return over(subject, p, choices.plan(), choices.at(), choices.widened(), check);
+        // The assignments of the first pass are all in this one too, nearest first, and each is
+        // known refused: the second pass reaches what was held back without spending on them.
+        return over(choices.at(), choices.widened(), composing);
     }
 
     /**
      * One pass over one set of choices, from the assignment where every position takes its first
      * value outward.
      *
-     * <p><b>No assignment is composed that a value's own type has already refused.</b> A value its
-     * type's decoder refuses on its own is refused in every assignment holding it
-     * ({@link CandidateCheck#admissibility}), so those assignments are not candidates the search is
-     * unsure of — they are known to be refused, and the bound is spent only on the ones that are
-     * not. A value refused for its own format would otherwise be composed beside every combination
-     * of the rest, and a bound spent on those leaves assignments of values nothing refused untried.
+     * <p><b>The positions are walked over what their own types do not refuse.</b> A value its type
+     * refuses is refused in every assignment holding it ({@link Composing}), so the walk is over
+     * the product of what is left, nearest first in that product. Walked over everything offered
+     * instead, those assignments would only be passed over, but every one of them would still be
+     * enumerated on the way to the rest — as many as the product of the offers, which the bound
+     * does not limit because nothing was composed.
      *
-     * <p>Asked only once the first assignment is refused. Most searches end at it, and those have
-     * nothing to prune; what a type says of a value is a build of its own, kept by the check, and a
-     * search that ends at its first assignment has no use for one.
+     * <p>Narrowed only once the first assignment is refused. Most searches end at it, and asking
+     * about the first assignment's own values, which {@link Composing#attempt} does, is all they
+     * need.
      *
      * <p>A position left with nothing is every assignment refused, and is said as that: the values
      * were offered and refused, which is not a position nothing could be offered at.
      */
-    private static Outcome over(MeasuredInput subject, int p, ConstructionPlan plan, List<TermPath> at,
-                                List<List<FixtureTemplate>> offered, CandidateCheck check) {
+    private static Outcome over(List<TermPath> at, List<List<FixtureTemplate>> offered,
+                                Composing composing) {
         int positions = at.size();
-        // The world every assignment below is composed in, taken once. Each of them writes the same
-        // row out of the same declarations, so a walk that asked the subject again per assignment
-        // would be saying the world it reads in is a thing that turns on which assignment it is.
-        RuleReadingContext reading = subject.ruleReading();
+        Budget budget = new Budget();
         int[] first = new int[positions];
-        FixtureTemplate firstBuilt = builtAt(p, plan, at, offered, first, reading, check);
-        if (firstBuilt != null) {
-            return new Outcome.Built(firstBuilt);
+        if (composing.attempt(assigned(at, offered, first), budget)
+                instanceof Composing.Tried.Built(var value)) {
+            return new Outcome.Built(value);
         }
-        List<List<FixtureTemplate>> values = notRefusedAlone(plan, at, offered, check);
+        List<List<FixtureTemplate>> values = new ArrayList<>();
+        for (int i = 0; i < positions; i++) {
+            TermPath here = at.get(i);
+            values.add(offered.get(i).stream()
+                    .filter(each -> !composing.refusedAlone(here, each)).toList());
+        }
         if (values.stream().anyMatch(List::isEmpty)) {
             return new Outcome.Unresolved(UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
                     null);
-        }
-        // The first assignment over what is left is the one already refused where every first value
-        // stood, and is not composed a second time. Where one of them did not, it is an assignment
-        // nothing has tried.
-        boolean firstTried = true;
-        for (int i = 0; i < positions; i++) {
-            firstTried &= values.get(i).get(0) == offered.get(i).get(0);
         }
         ArrayDeque<int[]> next = new ArrayDeque<>();
         Set<String> seen = new LinkedHashSet<>();
         next.add(first);
         seen.add(Arrays.toString(first));
 
-        int tried = 1;
         // Recorded where the bound is reached rather than read afterwards off what was left behind.
         // A walk that stopped and a walk that ran out are told apart by the queue today and would go
         // on being told apart by it until the day a second thing empties it.
         boolean stopped = false;
         while (!next.isEmpty()) {
             int[] assignment = next.poll();
-            boolean composed = !(firstTried && assignment == first);
-            if (composed) {
-                if (tried == MAX_TUPLES) {
-                    stopped = true;
-                    break;
+            switch (composing.attempt(assigned(at, values, assignment), budget)) {
+                case Composing.Tried.Built(var value) -> {
+                    return new Outcome.Built(value);
                 }
-                tried++;
-                FixtureTemplate built = builtAt(p, plan, at, values, assignment, reading, check);
-                if (built != null) {
-                    return new Outcome.Built(built);
-                }
+                case Composing.Tried.OutOfBudget _ -> stopped = true;
+                case Composing.Tried.Refused _, Composing.Tried.Known _ -> { }
+            }
+            if (stopped) {
+                break;
             }
             for (int i = 0; i < positions; i++) {
                 if (assignment[i] + 1 >= values.get(i).size()) {
@@ -6653,43 +6734,15 @@ public final class Generator {
                         null);
     }
 
-    /** The parameter's value under one assignment, where it composes and is not refused; null
-     *  otherwise. */
-    private static FixtureTemplate builtAt(int p, ConstructionPlan plan, List<TermPath> at,
-                                           List<List<FixtureTemplate>> values, int[] assignment,
-                                           RuleReadingContext reading, CandidateCheck check) {
+    /** What one assignment puts at each position. */
+    private static Map<TermPath, FixtureTemplate> assigned(List<TermPath> at,
+                                                          List<List<FixtureTemplate>> values,
+                                                          int[] assignment) {
         Map<TermPath, FixtureTemplate> chosen = new LinkedHashMap<>();
         for (int i = 0; i < at.size(); i++) {
             chosen.put(at.get(i), values.get(i).get(assignment[i]));
         }
-        FixtureTemplate built = compose(plan.root(), chosen, reading);
-        return built != null && check.refuse(p, built).isEmpty() ? built : null;
-    }
-
-    /**
-     * What each position offers, less what its own type refused, in the order it was offered.
-     *
-     * <p>A position the plan does not say the type of keeps everything: nothing was asked about its
-     * values, and nothing unasked is dropped.
-     */
-    private static List<List<FixtureTemplate>> notRefusedAlone(ConstructionPlan plan,
-                                                               List<TermPath> at,
-                                                               List<List<FixtureTemplate>> offered,
-                                                               CandidateCheck check) {
-        Map<TermPath, Type> typeAt = new HashMap<>();
-        for (ConstructionPlan.Slot each : plan.slots()) {
-            typeAt.put(each.at(), each.type());
-        }
-        List<List<FixtureTemplate>> out = new ArrayList<>();
-        for (int i = 0; i < at.size(); i++) {
-            Type type = typeAt.get(at.get(i));
-            List<FixtureTemplate> here = offered.get(i);
-            out.add(type == null ? here : here.stream()
-                    .filter(each -> check.admissibility(type, each)
-                            != CandidateCheck.Admissibility.REFUSED)
-                    .toList());
-        }
-        return out;
+        return chosen;
     }
 
     /**
