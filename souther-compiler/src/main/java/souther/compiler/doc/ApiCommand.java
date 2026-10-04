@@ -3,8 +3,7 @@ package souther.compiler.doc;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.Reserved;
 import souther.compiler.stdlib.Stdlib;
-import souther.compiler.types.ValueName;
-import souther.compiler.ast.Hir;
+import souther.compiler.stdlib.Stdlib.PublishedSignature;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -13,11 +12,9 @@ import java.io.InputStream;
 import java.io.PrintStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.SequencedMap;
+import java.util.stream.Collectors;
 
 /**
  * {@code souther api}: the standard library's published surface, one name per line with the
@@ -68,7 +65,7 @@ public final class ApiCommand {
                 return 2;
             }
             String needle = args[1].toLowerCase(Locale.ROOT);
-            List<String> found = surface(stdlib).entrySet().stream()
+            List<String> found = stdlib.publishedSurface().entrySet().stream()
                     .filter(e -> e.getKey().toLowerCase(Locale.ROOT).contains(needle))
                     .map(e -> line(e.getKey(), e.getValue()))
                     .toList();
@@ -81,7 +78,7 @@ public final class ApiCommand {
         }
         String asked = args[0];
         if (asked.contains(".")) {
-            Signature signature = surface(stdlib).get(asked);
+            PublishedSignature signature = stdlib.publishedSurface().get(asked);
             if (signature == null) {
                 err.println("no stdlib declaration `" + asked + "`");
                 return 2;
@@ -101,77 +98,22 @@ public final class ApiCommand {
         return 0;
     }
 
-    /** One published name's parameters, as written, and the type it answers with. A name declaring
-     *  none is a value rather than a function of no arguments. The return is carried as the
-     *  declaration wrote it beside the type it resolved to, because a result of more than one case
-     *  is published in the order it was written ({@link PublishedCaseOrder}) and a type does not
-     *  hold that. */
-    record Signature(List<String> paramNames, List<Type> paramTypes, Type result,
-                     Hir.RetType declaredReturn) {}
-
-    private static void listPublished(PrintStream out, String prefix, Stdlib stdlib) {
-        surface(stdlib).forEach((name, signature) -> {
-            if (prefix == null || name.startsWith(prefix)) {
-                out.println(line(name, signature));
-            }
-        });
-    }
-
     /**
-     * Every name a program may write, in module order.
+     * Every name a program may write, in module order, or those under {@code prefix}.
      *
      * <p>This is the surface a reader writes, not the declared one: a name written as sugar over a
      * private helper — {@code List.fold}, which the checker rewrites to {@code List.foldFrom(…, 0)}
      * — is what the specification tells a reader to call, so it is listed under its own name and
-     * with only the arguments its caller writes. Leaving it out would have this command contradict the
-     * specification about what exists.
-     *
-     * <p>Which names those are and what order they come in are both {@link Stdlib#published()}'s
-     * answer, walked here rather than rebuilt: a listing assembled from the declarations and then
-     * the rewrites puts every sugar after every module, whichever module it reads as. What each
-     * name's signature comes from is this command's own question, and the only one it decides.
-     *
-     * <p>Answered as something that has an order, because a reader is given these one after another.
-     * A map that only said which names are on the surface would be one every caller had to walk in
-     * whatever it walked in, and the order a reader is shown would be a fact about how this was
-     * built rather than the one that was asked for.
+     * with only the arguments its caller writes. Which names those are, their order and how each is
+     * called are all {@link Stdlib#publishedSurface()}'s answer; what this decides is how a line
+     * is written.
      */
-    static SequencedMap<String, Signature> surface(Stdlib stdlib) {
-        SequencedMap<String, Signature> surface = new LinkedHashMap<>();
-        for (String name : stdlib.published()) {
-            // A published name is a spelling, and the library is what turns one into the operation
-            // it reaches. Everything below is asked with that operation.
-            ValueName.Stdlib.Operation operation = stdlib.operation(name);
-            if (operation == null) {
-                continue;
+    private static void listPublished(PrintStream out, String prefix, Stdlib stdlib) {
+        stdlib.publishedSurface().forEach((name, signature) -> {
+            if (prefix == null || name.startsWith(prefix)) {
+                out.println(line(name, signature));
             }
-            Stdlib.Rewrite rewrite = stdlib.rewriteOf(operation);
-            if (rewrite != null) {
-                Stdlib.Entry target = stdlib.entry(rewrite.target());
-                if (target != null) {
-                    surface.put(name, declared(target, rewrite.keptArgs()));
-                }
-                continue;
-            }
-            Stdlib.Entry entry = stdlib.entry(operation);
-            if (entry != null) {
-                surface.put(name, declared(entry, entry.signature().params().size()));
-            }
-        }
-        return surface;
-    }
-
-    private static Signature declared(Stdlib.Entry entry, int arity) {
-        List<Hir.FnParam> params = entry.declaration().params();
-        List<Type> types = entry.signature().params();
-        List<String> names = new ArrayList<>();
-        List<Type> kept = new ArrayList<>();
-        for (int i = 0; i < arity && i < params.size(); i++) {
-            names.add(params.get(i).binder().name());
-            kept.add(types.get(i));
-        }
-        return new Signature(names, kept, entry.signature().result(),
-                entry.declaration().declaredReturn());
+        });
     }
 
     /**
@@ -181,7 +123,7 @@ public final class ApiCommand {
      * parameter list is what tells a function from a value, and an empty {@code ()} is refused
      * rather than being a second spelling of either.
      */
-    private static String line(String qualifiedName, Signature signature) {
+    private static String line(String qualifiedName, PublishedSignature signature) {
         StringBuilder sb = new StringBuilder(qualifiedName);
         if (!signature.paramNames().isEmpty()) {
             sb.append("(");
@@ -208,12 +150,12 @@ public final class ApiCommand {
      * declaration's too — so a result somebody wrote as {@code Int | DivisionByZero} is published
      * that way round, and not in the order a set of names is shown in.
      */
-    static String result(Signature signature) {
+    private static String result(PublishedSignature signature) {
         if (!(signature.result() instanceof Type.Union union)) {
             return Type.show(signature.result());
         }
         return PublishedCaseOrder.asDeclared(union.members(), signature.declaredReturn()).stream()
-                .map(TypeSymbol::name).collect(java.util.stream.Collectors.joining(" | "));
+                .map(TypeSymbol::name).collect(Collectors.joining(" | "));
     }
 
     private static int printSource(String alias, PrintStream out, PrintStream err) {

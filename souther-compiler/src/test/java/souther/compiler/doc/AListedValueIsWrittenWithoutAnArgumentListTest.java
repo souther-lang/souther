@@ -1,6 +1,7 @@
 package souther.compiler.doc;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.stdlib.Stdlib.PublishedSignature;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
@@ -48,7 +49,7 @@ class AListedValueIsWrittenWithoutAnArgumentListTest {
 
     @Test
     void anArgumentListIsWrittenExactlyWhereTheDeclarationDeclaresOne() {
-        Map<String, ApiCommand.Signature> surface = ApiCommand.surface(DefaultStdlib.get());
+        Map<String, PublishedSignature> surface = DefaultStdlib.get().publishedSurface();
         List<String> values = new ArrayList<>();
         List<String> functions = new ArrayList<>();
 
@@ -56,7 +57,7 @@ class AListedValueIsWrittenWithoutAnArgumentListTest {
             String called = calledAs(line);
             int open = called.indexOf('(');
             String name = open < 0 ? called : called.substring(0, open);
-            ApiCommand.Signature signature = surface.get(name);
+            PublishedSignature signature = surface.get(name);
             assertNotNull(signature, "the listing writes a name the surface does not publish: " + line);
             if (signature.paramNames().isEmpty()) {
                 values.add(name);
