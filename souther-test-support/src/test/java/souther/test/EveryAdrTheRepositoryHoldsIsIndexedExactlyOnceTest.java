@@ -44,16 +44,24 @@ class EveryAdrTheRepositoryHoldsIsIndexedExactlyOnceTest {
     private static final Pattern ADR = Pattern.compile("(\\d{4})-[^/]+\\.md");
 
     /**
+     * The header of the table that is the index. The table is found by it, so another table the
+     * README keeps beside it is not read as rows naming ADRs.
+     */
+    private static final Pattern HEADER =
+            Pattern.compile("^\\|\\s*ADR\\s*\\|\\s*Decision\\s*\\|\\s*Spec\\s*\\|\\s*$");
+
+    /** The line under a header, which makes the lines above and below it a table. */
+    private static final Pattern SEPARATOR = Pattern.compile("^\\|(\\s*:?-+:?\\s*\\|)+\\s*$");
+
+    /**
      * A row of the index: the number it shows, linked to the file it names.
      *
-     * <p>This reads the table as it is written today and is not the rule. A line of the table it
+     * <p>This reads the table as it is written today and is not the rule. A row of the table it
      * cannot read is reported rather than passed over, so a row written some other way is never an
      * ADR this quietly stopped counting.
      */
-    private static final Pattern ROW = Pattern.compile("^\\|\\s*\\[(\\d{4})\\]\\(([^)\\s]+)\\)\\s*\\|");
-
-    /** The table's own header and the line under it, which are table lines and name no ADR. */
-    private static final Pattern HEADING = Pattern.compile("^\\|\\s*(ADR|-+)\\s*\\|");
+    private static final Pattern ROW =
+            Pattern.compile("^\\|\\s*\\[(\\d{4})\\]\\(([^)\\s]+)\\)\\s*\\|");
 
     @Test
     void theIndexNamesEveryAdrExactlyOnceAndNothingElse() throws IOException {
@@ -68,10 +76,8 @@ class EveryAdrTheRepositoryHoldsIsIndexedExactlyOnceTest {
 
         Map<Path, Integer> rows = new TreeMap<>();
         List<String> problems = new ArrayList<>();
-        for (String line : Files.readAllLines(git.resolve(INDEX), StandardCharsets.UTF_8)) {
-            if (!line.startsWith("|") || HEADING.matcher(line).find()) {
-                continue;
-            }
+        for (String line : theIndexsRows(Files.readAllLines(git.resolve(INDEX),
+                StandardCharsets.UTF_8))) {
             Matcher row = ROW.matcher(line);
             if (!row.find()) {
                 problems.add("a row this cannot read an ADR from: " + line);
@@ -101,5 +107,31 @@ class EveryAdrTheRepositoryHoldsIsIndexedExactlyOnceTest {
 
         assertEquals(List.of(), problems,
                 INDEX + " does not name exactly the ADRs this repository holds");
+    }
+
+    /**
+     * The rows of the index table: every line after its header and separator, up to the first line
+     * that is not a table line.
+     *
+     * <p>No header is a failure here and not an empty list. Read as no rows, it would report every
+     * ADR as missing and say nothing about why.
+     */
+    private static List<String> theIndexsRows(List<String> lines) {
+        int header = -1;
+        for (int i = 0; i < lines.size(); i++) {
+            if (HEADER.matcher(lines.get(i)).matches()) {
+                assertEquals(-1, header, INDEX + " has a second index table at line " + (i + 1));
+                header = i;
+            }
+        }
+        assertFalse(header < 0, INDEX + " has no table headed `| ADR | Decision | Spec |`");
+        assertFalse(header + 1 >= lines.size()
+                        || !SEPARATOR.matcher(lines.get(header + 1)).matches(),
+                INDEX + "'s index header is not followed by a table separator");
+        List<String> rows = new ArrayList<>();
+        for (int i = header + 2; i < lines.size() && lines.get(i).startsWith("|"); i++) {
+            rows.add(lines.get(i));
+        }
+        return rows;
     }
 }
