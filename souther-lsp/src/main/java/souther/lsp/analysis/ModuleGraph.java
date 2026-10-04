@@ -19,21 +19,45 @@ public final class ModuleGraph {
 
     private final Map<String, String> sources;
     private final ModulesOnThePath onThePath;
+    private final Set<String> open;
 
-    private ModuleGraph(Map<String, String> sources, ModulesOnThePath onThePath) {
+    private ModuleGraph(Map<String, String> sources, ModulesOnThePath onThePath,
+                        Set<String> open) {
         this.sources = sources;
         this.onThePath = onThePath;
+        this.open = open;
     }
 
-    /** A graph over the given {@code uri -> source text} map, with nothing built beside it. */
+    /** A graph over the given {@code uri -> source text} map, with nothing built beside it, every
+     *  source of it open in the editor. */
     public static ModuleGraph of(Map<String, String> sources) {
         return of(sources, ModulesOnThePath.NONE);
     }
 
     /** A graph over the given sources, resolving what they import from elsewhere against
-     *  {@code onThePath}. */
+     *  {@code onThePath}, every source of it open in the editor. */
     public static ModuleGraph of(Map<String, String> sources, ModulesOnThePath onThePath) {
-        return new ModuleGraph(new LinkedHashMap<>(sources), onThePath);
+        return of(sources, onThePath, sources.keySet());
+    }
+
+    /** The same, with only the sources {@code open} names open in the editor and the rest read
+     *  from where they are kept. */
+    public static ModuleGraph of(Map<String, String> sources, ModulesOnThePath onThePath,
+                                 Set<String> open) {
+        return new ModuleGraph(new LinkedHashMap<>(sources), onThePath, Set.copyOf(open));
+    }
+
+    /** A graph over a map its caller made for it and hands over, so it is not copied again: the
+     *  caller keeps no reference to it, and nothing else can change it. */
+    static ModuleGraph over(LinkedHashMap<String, String> handedOver, ModulesOnThePath onThePath,
+                            Set<String> open) {
+        return new ModuleGraph(handedOver, onThePath, Set.copyOf(open));
+    }
+
+    /** Whether the editor has the document at {@code uri} open, rather than it being read from
+     *  disk. */
+    public boolean isOpen(String uri) {
+        return open.contains(uri);
     }
 
     /** Every document URI in the workspace. */

@@ -1,5 +1,6 @@
 package souther.lsp.analysis;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -31,9 +32,10 @@ public final class DocumentStore {
         return texts.keySet();
     }
 
-    /** A snapshot of every open document's text, keyed by URI — the overlay a {@link Workspace}
-     * applies over the on-disk sources. */
+    /** Every open document's text, keyed by URI — the overlay a {@link Workspace} applies over the
+     * on-disk sources. A view rather than a copy: what reads it copies what it keeps, and a request
+     * would otherwise copy every open document twice. */
     public Map<String, String> openDocuments() {
-        return new LinkedHashMap<>(texts);
+        return Collections.unmodifiableMap(texts);
     }
 }

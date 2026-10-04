@@ -122,9 +122,9 @@ public final class Workspace {
         if (diskScan == null) {
             diskScan = scanDisk();
         }
-        Map<String, String> sources = new LinkedHashMap<>(diskScan);
+        LinkedHashMap<String, String> sources = new LinkedHashMap<>(diskScan);
         sources.putAll(openBuffers);
-        return ModuleGraph.of(sources, modulesOnThePath());
+        return ModuleGraph.over(sources, modulesOnThePath(), openBuffers.keySet());
     }
 
     /**

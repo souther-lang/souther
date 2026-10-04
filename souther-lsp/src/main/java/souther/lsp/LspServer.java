@@ -31,6 +31,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -514,7 +515,7 @@ public final class LspServer {
             return List.of();
         }
         List<Object> out = new ArrayList<>();
-        for (DocumentSymbol s : analyzer.documentSymbols(text)) {
+        for (DocumentSymbol s : analyzer.documentSymbols(uri, text)) {
             out.add(symbolJson(s));
         }
         return out;
@@ -957,7 +958,7 @@ public final class LspServer {
             return Map.of("data", List.of());
         }
         List<Integer> data = new ArrayList<>();
-        for (int value : analyzer.semanticTokens(text)) {
+        for (int value : analyzer.semanticTokens(uri, text)) {
             data.add(value);
         }
         return Map.of("data", data);
@@ -1005,9 +1006,23 @@ public final class LspServer {
         Map<String, List<LspDiagnostic>> byUri = analyzer.diagnostics(graph);
         for (String uri : documents.uris()) {
             abandonment.stopIfAsked();
-            publish(uri, byUri.getOrDefault(uri, List.of()));
+            List<LspDiagnostic> diagnostics = byUri.getOrDefault(uri, List.of());
+            if (!diagnostics.equals(published.get(uri))) {
+                publish(uri, diagnostics);
+                published.put(uri, diagnostics);
+            }
         }
     }
+
+    /**
+     * What each open document was last told, so a set the client already holds is not sent again.
+     *
+     * <p>Every diagnose answers for every open document, and an edit to one of them leaves what the
+     * others say unchanged nearly always; sending each of them again is a frame per document per
+     * pause in typing that the client reads and throws away. Dropped when the document is closed,
+     * because closing it clears what the client shows, and a document opened again is told again.
+     */
+    private final Map<String, List<LspDiagnostic>> published = new HashMap<>();
 
     private void publish(String uri, List<LspDiagnostic> diagnostics) {
         List<Object> items = new ArrayList<>();
@@ -1038,6 +1053,7 @@ public final class LspServer {
     }
 
     private void clearDiagnostics(String uri) {
+        published.remove(uri);
         notify("textDocument/publishDiagnostics", Map.of("uri", uri, "diagnostics", List.of()));
     }
 
