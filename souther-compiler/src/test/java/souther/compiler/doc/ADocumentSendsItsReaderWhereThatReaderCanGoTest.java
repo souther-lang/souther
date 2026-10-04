@@ -62,13 +62,17 @@ class ADocumentSendsItsReaderWhereThatReaderCanGoTest {
 
     @Test
     void everyOperationTheShippedDocumentsOfferAClientIsOneTheServerAnswers() {
+        // Each topic as a client is shown it, read once: which tools an offer may name does not
+        // change what a topic says.
+        LibraryDocs docs = LibraryDocs.on(loader(), Caller.MCP);
+        List<String> shown = docs.topics().stream().map(topic -> docs.read(topic.name())).toList();
         List<String> offered = new ArrayList<>();
         for (String tool : published()) {
             // Named against the published table rather than by shape, because a code span of a
             // record literal is written the same way and is not an offer to call anything.
             Pattern call = Pattern.compile("`(" + tool + ") (\\{[^`]*})`");
-            for (LibraryDocs.Topic topic : LibraryDocs.on(loader(), Caller.MCP).topics()) {
-                Matcher offer = call.matcher(read(topic.name(), Caller.MCP));
+            for (String text : shown) {
+                Matcher offer = call.matcher(text);
                 while (offer.find()) {
                     if (!STANDS_IN.matcher(offer.group(2)).find()) {
                         offered.add(offer.group(1) + " " + offer.group(2));
