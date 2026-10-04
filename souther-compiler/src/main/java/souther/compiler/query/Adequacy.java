@@ -71,6 +71,7 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.GenerationOutcome;
+import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.InputClassifications;
 import souther.compiler.partition.ObservedInputs;
@@ -2557,8 +2558,7 @@ public final class Adequacy {
                 souther.compiler.partition.NumbersAskedFor asking,
                 souther.compiler.partition.Reachability.Reaching reaching,
                 souther.compiler.partition.AnswersDemanded demands) {
-            Generator.CandidateCheck check =
-                    (at, candidate) -> built(building.build(sig.ins().get(at), candidate));
+            Generator.CandidateCheck check = checkAgainst(building, sig);
             try {
                 // One per way of standing the dependencies in. Which of them answers what was asked
                 // is not something this can tell — where a row goes is read by whoever asked — so
@@ -5188,7 +5188,7 @@ public final class Adequacy {
             // The measurement's own axes, so that a row is placed by the walk it was measured at.
             souther.compiler.partition.MeasuredInput.MeasuredAxes axes = asked.subject().axes();
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY
-                    : (at, candidate) -> built(building.build(sig.ins().get(at), candidate));
+                    : checkAgainst(building, sig);
 
             // Where each row's values sit, and what its run did. Both come off the one outcome:
             // the first is what a pair count is taken over, the second is what says which of the
@@ -5235,6 +5235,36 @@ public final class Adequacy {
                     new Generator.CandidateCheck.Built.Value(observed);
             case BoundaryValues.Built.Refused(var why) ->
                     new Generator.CandidateCheck.Built.Refused(why);
+        };
+    }
+
+    /** The same mapping, of what a value's own type said of it. */
+    private static Generator.CandidateCheck.Admissibility admissibility(
+            BoundaryValues.OnItsOwn what) {
+        return switch (what) {
+            case BUILT -> Generator.CandidateCheck.Admissibility.ADMITTED;
+            case REFUSED -> Generator.CandidateCheck.Admissibility.REFUSED;
+            case NO_DECODER_OF_ITS_OWN -> Generator.CandidateCheck.Admissibility.UNKNOWN;
+        };
+    }
+
+    /**
+     * A search's check, asked of this module's own classes: each candidate at the parameter it is
+     * built for, and each value at the type it is offered as.
+     */
+    private static Generator.CandidateCheck checkAgainst(FixturesAtTheBoundary building, Sig sig) {
+        return new Generator.CandidateCheck() {
+
+            @Override
+            public Generator.CandidateCheck.Built build(int at, FixtureTemplate candidate) {
+                return built(building.build(sig.ins().get(at), candidate));
+            }
+
+            @Override
+            public Generator.CandidateCheck.Admissibility admissibility(Type type,
+                                                                        FixtureTemplate candidate) {
+                return Adequacy.admissibility(building.buildAlone(type, candidate));
+            }
         };
     }
 
