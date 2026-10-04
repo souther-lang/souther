@@ -4,16 +4,20 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BoundaryInput;
-import souther.compiler.diag.SourcePos;
 import souther.compiler.execute.BoundaryValues;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.partition.FixtureTemplate;
+import souther.compiler.types.FixtureReferenceOrigin;
 import souther.compiler.types.LeafScalar;
+import souther.compiler.types.ReachName;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -29,8 +33,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  */
 class AValueIsBuiltOnceHoweverManyPointsAskAboutItTest {
 
-    private static final SourcePos AT = new SourcePos(1, 1);
-
     private static final BoundaryInput INT = new BoundaryInput.Scalar(LeafScalar.INT);
 
     private static final BoundaryInput TEXT = new BoundaryInput.Scalar(LeafScalar.STRING);
@@ -39,7 +41,7 @@ class AValueIsBuiltOnceHoweverManyPointsAskAboutItTest {
     @Test
     void theSameValueAtTheSamePositionIsBuiltOnce() {
         Counting source = new Counting(new BoundaryValues.Built.Value(new ObservedValue.Integer(7)));
-        BoundaryValues remembered = BoundaryValues.remembering(source);
+        FixturesAtTheBoundary remembered = FixturesAtTheBoundary.remembering(source);
 
         BoundaryValues.Built first = remembered.build(INT, seven());
         for (int again = 0; again < 3; again++) {
@@ -48,11 +50,30 @@ class AValueIsBuiltOnceHoweverManyPointsAskAboutItTest {
         assertEquals(1, source.asked.size(), "one position, one fixture, one answer");
     }
 
+    /**
+     * Two occurrences of one name are one value to ask about.
+     *
+     * <p>Their trees differ — each carries the reference the run composed — and a row writes the
+     * same line for both, which is what the decoder is asked about.
+     */
+    @Test
+    void twoOccurrencesOfOneNameAreBuiltOnce() {
+        Counting source = new Counting(new BoundaryValues.Built.Value(new ObservedValue.Integer(7)));
+        FixturesAtTheBoundary remembered = FixturesAtTheBoundary.remembering(source);
+        ReachName.Own standard = new ReachName.Own(new ValueName.Helper("g", "standard"));
+        FixtureTemplate first = FixtureTemplate.named(standard, new FixtureReferenceOrigin(0));
+        FixtureTemplate second = FixtureTemplate.named(standard, new FixtureReferenceOrigin(1));
+        assertNotEquals(first.value(), second.value(), "two references, composed apart");
+
+        assertSame(remembered.build(INT, first), remembered.build(INT, second));
+        assertEquals(1, source.asked.size(), "one line a row writes, one answer");
+    }
+
     /** A refusal is the decoder's answer about the fixture as much as a value is, and is kept. */
     @Test
     void aRefusalIsKeptTheWayAValueIs() {
         Counting source = new Counting(new BoundaryValues.Built.Refused("not this one"));
-        BoundaryValues remembered = BoundaryValues.remembering(source);
+        FixturesAtTheBoundary remembered = FixturesAtTheBoundary.remembering(source);
 
         remembered.build(INT, seven());
         remembered.build(INT, seven());
@@ -69,7 +90,7 @@ class AValueIsBuiltOnceHoweverManyPointsAskAboutItTest {
     @Test
     void whatWasThrownIsAskedAgain() {
         Counting source = new Counting(null);
-        BoundaryValues remembered = BoundaryValues.remembering(source);
+        FixturesAtTheBoundary remembered = FixturesAtTheBoundary.remembering(source);
 
         assertThrows(LinkageError.class, () -> remembered.build(INT, seven()));
         assertThrows(LinkageError.class, () -> remembered.build(INT, seven()));
@@ -81,10 +102,10 @@ class AValueIsBuiltOnceHoweverManyPointsAskAboutItTest {
     @Test
     void anotherFixtureOrAnotherPositionIsAskedAboutAsItself() {
         Counting source = new Counting(new BoundaryValues.Built.Value(new ObservedValue.Integer(7)));
-        BoundaryValues remembered = BoundaryValues.remembering(source);
+        FixturesAtTheBoundary remembered = FixturesAtTheBoundary.remembering(source);
 
         remembered.build(INT, seven());
-        remembered.build(INT, new Hir.IntLit(8, AT, null));
+        remembered.build(INT, FixtureTemplate.integer(8));
         remembered.build(TEXT, seven());
 
         assertEquals(3, source.asked.size());
@@ -102,24 +123,38 @@ class AValueIsBuiltOnceHoweverManyPointsAskAboutItTest {
                 module g
 
                 data Ok
+                data Amount = Int
+
+                let standard = Amount(7)
 
                 behavior read : (x: Int) -> Ok
+                behavior charge : (a: Amount) -> Ok
                 """, "Main");
         compilation.answerEverything();
-        BoundaryValues building = Adequacy.constructing(compilation.db(), "g");
+        FixturesAtTheBoundary building = Adequacy.constructing(compilation.db(), "g");
         assertNotNull(building, "the module has classes to build against");
 
         BoundaryValues.Built built = building.build(INT, seven());
         assertInstanceOf(BoundaryValues.Built.Value.class, built);
         assertSame(built, building.build(INT, seven()));
 
-        BoundaryValues.Built refused = building.build(INT, new Hir.StringLit("seven", AT, null));
+        BoundaryValues.Built refused = building.build(INT, FixtureTemplate.string("seven"));
         assertInstanceOf(BoundaryValues.Built.Refused.class, refused);
-        assertSame(refused, building.build(INT, new Hir.StringLit("seven", AT, null)));
+        assertSame(refused, building.build(INT, FixtureTemplate.string("seven")));
+
+        BoundaryInput amount = compilation.signatures("g").get("charge").ins().get(0);
+        ReachName.Own standard = new ReachName.Own(new ValueName.Helper("g", "standard"));
+        BoundaryValues.Built named = building.build(amount,
+                FixtureTemplate.named(standard, new FixtureReferenceOrigin(0)));
+        assertInstanceOf(BoundaryValues.Built.Value.class, named,
+                "a name the module states is built as what it names");
+        assertSame(named, building.build(amount,
+                FixtureTemplate.named(standard, new FixtureReferenceOrigin(1))),
+                "and another occurrence of the name is the same value to ask about");
     }
 
-    private static Hir.Expr seven() {
-        return new Hir.IntLit(7, AT, null);
+    private static FixtureTemplate seven() {
+        return FixtureTemplate.integer(7);
     }
 
     /** A decoder that says one thing, and writes down every time it was asked; throws where that

@@ -2489,7 +2489,7 @@ public final class Adequacy {
      * candidate goes through.
      */
     static Coverages.Probe probing(Sig sig, souther.compiler.partition.MeasuredInput subject,
-                                   BoundaryValues building, Generator.Trial trial,
+                                   FixturesAtTheBoundary building, Generator.Trial trial,
                                    AnswersForARule answers) {
         return building == null || answers == null ? null
                 : new ARowBuiltAndRun(sig, subject, building, trial, answers);
@@ -2509,7 +2509,7 @@ public final class Adequacy {
 
         private final souther.compiler.partition.MeasuredInput subject;
 
-        private final BoundaryValues building;
+        private final FixturesAtTheBoundary building;
 
         private final Generator.Trial trial;
 
@@ -2527,7 +2527,7 @@ public final class Adequacy {
         private final AnswersForARule answers;
 
         private ARowBuiltAndRun(Sig sig, souther.compiler.partition.MeasuredInput subject,
-                                BoundaryValues building, Generator.Trial trial,
+                                FixturesAtTheBoundary building, Generator.Trial trial,
                                 AnswersForARule answers) {
             this.sig = sig;
             this.subject = subject;
@@ -2544,7 +2544,7 @@ public final class Adequacy {
                 souther.compiler.partition.Reachability.Reaching reaching,
                 souther.compiler.partition.AnswersDemanded demands) {
             Generator.CandidateCheck check =
-                    (at, candidate) -> built(building.build(sig.ins().get(at), candidate.value()));
+                    (at, candidate) -> built(building.build(sig.ins().get(at), candidate));
             try {
                 // One per way of standing the dependencies in. Which of them answers what was asked
                 // is not something this can tell — where a row goes is read by whoever asked — so
@@ -5158,7 +5158,7 @@ public final class Adequacy {
                 souther.compiler.partition.GenerationPlan asked,
                 List<Generator.Baseline> baselines,
                 Optional<SiteNumbering> numbering, RowReading observed,
-                BoundaryValues building,
+                FixturesAtTheBoundary building,
                 Generator.Trial trial, List<souther.compiler.partition.StandInAttempt> stood,
                 souther.compiler.partition.AdequacyPolicy.OfTheGeneration budget) {
             if (observed.someRowsUnseen()) {
@@ -5174,7 +5174,7 @@ public final class Adequacy {
             // The measurement's own axes, so that a row is placed by the walk it was measured at.
             souther.compiler.partition.MeasuredInput.MeasuredAxes axes = asked.subject().axes();
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY
-                    : (at, candidate) -> built(building.build(sig.ins().get(at), candidate.value()));
+                    : (at, candidate) -> built(building.build(sig.ins().get(at), candidate));
 
             // Where each row's values sit, and what its run did. Both come off the one outcome:
             // the first is what a pair count is taken over, the second is what says which of the
@@ -5233,10 +5233,13 @@ public final class Adequacy {
      * nothing here runs a row, so no budget is installed and the counted entry points count against
      * nothing. Asking for the uncounted classes instead would generate every one of them again to get
      * the same answers.
+     *
+     * <p>Each answer kept, for as long as the classes it was built against are held.
      */
-    static BoundaryValues constructing(Db db, String module) {
+    static FixturesAtTheBoundary constructing(Db db, String module) {
         ExampleExecution asked = ExampleExecutions.of(db, module);
-        return asked == null ? null : db.execution().values(asked);
+        BoundaryValues building = asked == null ? null : db.execution().values(asked);
+        return building == null ? null : FixturesAtTheBoundary.remembering(building);
     }
 
     /**
