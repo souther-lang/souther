@@ -185,21 +185,15 @@ final class JvmTypes {
      * a different scale depending on whether it was read from JSON or a DB column, and a money
      * type whose equality turns on that is a trap. Clojure, Scala and Ceylon all chose the same way.
      */
-    static void emitValueEquals(CodeBuilder code, boolean decimal) {
-        if (decimal) {
-            code.invokestatic(CD_Values, "equal", MTD_Values_equalDecimal);
-        } else {
-            code.invokestatic(CD_Values, "equal", MTD_Values_equal);
-        }
+    static void emitValueEquals(CodegenContext ctx, CodeBuilder code, boolean decimal) {
+        ctx.callRuntime(code, CD_Values, "equal", decimal ? MTD_Values_equalDecimal : MTD_Values_equal,
+                Work.CHECKPOINTED);
     }
 
     /** Emits the hash that agrees with {@link #emitValueEquals}, for a value on the stack. */
-    static void emitValueHash(CodeBuilder code, boolean decimal) {
-        if (decimal) {
-            code.invokestatic(CD_Values, "hash", MTD_Values_hashDecimal);
-        } else {
-            code.invokestatic(CD_Values, "hash", MTD_Values_hash);
-        }
+    static void emitValueHash(CodegenContext ctx, CodeBuilder code, boolean decimal) {
+        ctx.callRuntime(code, CD_Values, "hash", decimal ? MTD_Values_hashDecimal : MTD_Values_hash,
+                Work.CHECKPOINTED);
     }
 
     // --- reference-resolving members: these reach the module's package map through the context ---

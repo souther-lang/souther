@@ -455,7 +455,7 @@ final class ValueClassGen {
                                 // What a field's sameness means is the runtime's to say (spec §equality):
                                 // an amount ignores its scale wherever it sits, including inside a
                                 // collection this field holds.
-                                emitValueEquals(code, t == Type.DECIMAL);
+                                emitValueEquals(ctx, code, t == Type.DECIMAL);
                                 code.ifeq(differs);
                             }
                         }
@@ -486,7 +486,7 @@ final class ValueClassGen {
                             // whose equality ignores a scale and whose hash did not would land 1.0
                             // and 1.00 in different buckets, and a Map keyed by this data would stop
                             // working. Groovy changed `==` and left hashCode alone; that bug is open.
-                            emitValueHash(code, t == Type.DECIMAL);
+                            emitValueHash(ctx, code, t == Type.DECIMAL);
                         }
                         code.iadd();
                     }
@@ -626,10 +626,19 @@ final class ValueClassGen {
                     switch (how) {
                         case Ordering.Longs _ ->
                                 code.lcmp();   // -1 / 0 / 1, which is compareTo's contract
-                        case Ordering.Natural _ ->
+                        // compareTo is the JDK's signature and takes no checkpoint, so a class an
+                        // evaluation runs asks for the evaluation's own once a comparison.
+                        case Ordering.Natural _ -> {
+                            if (ctx.counting()) {
+                                ctx.pushCheckpoint(code);
+                                code.invokestatic(CD_Values, "compare", MTD_Values_compare);
+                            } else {
                                 code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
+                            }
+                        }
                         case Ordering.Strings _ ->
-                                code.invokestatic(CD_Strings, "compare", MTD_Strings_compare);
+                                ctx.callRuntime(code, CD_Strings, "compare", MTD_Strings_compare,
+                                        Work.CHECKPOINTED);
                         case Ordering.Places places -> {
                             code.invokestatic(cd(places.enumeration()), ORDER_METHOD, MTD_order, true);
                             code.invokestatic(CD_Integer, "compare", MTD_Integer_compare, false);
@@ -755,7 +764,7 @@ final class ValueClassGen {
             for (Map.Entry<String, Type> f : fields.entrySet()) {
                 code.aload(0);
                 load(code, slot, f.getValue());
-                CanonicalizeAtCrossing.emit(code, f.getValue());
+                CanonicalizeAtCrossing.emit(ctx, code, f.getValue());
                 code.putfield(cdName, f.getKey(), jvmType(f.getValue()));
                 slot += width(f.getValue());
             }
@@ -793,7 +802,7 @@ final class ValueClassGen {
                         for (Type t : fields.values()) {
                             if (CanonicalizeAtCrossing.reachesString(t)) {
                                 load(code, argSlot, t);
-                                CanonicalizeAtCrossing.emit(code, t);
+                                CanonicalizeAtCrossing.emit(ctx, code, t);
                                 store(code, argSlot, t);
                             }
                             argSlot += width(t);

@@ -16,6 +16,8 @@ import java.util.Set;
 import java.util.function.Function;
 
 import static souther.compiler.codegen.Descriptors.*;
+import static souther.compiler.codegen.Work.CHECKPOINTED;
+import static souther.compiler.codegen.Work.FIXED;
 
 /**
  * What the JVM emits for each kernel this table backs.
@@ -96,8 +98,12 @@ final class Intrinsics {
      * What a value goes over as is not among them: an argument going into a slot the runtime takes
      * as a reference is boxed, and which slots those are is what the declaration says, so there is
      * nothing to list.
+     *
+     * <p>{@code work} is the one thing a row says about the runtime method rather than about the
+     * call: whether its work grows with what it is handed, and so whether an evaluated class calls
+     * the entry that takes the evaluation's checkpoint.
      */
-    record RuntimeStatic(ClassDesc owner, String method, int[] argOrder) implements Emit {
+    record RuntimeStatic(ClassDesc owner, String method, int[] argOrder, Work work) implements Emit {
 
         /**
          * @throws IllegalArgumentException where {@code argOrder} is not a permutation of the
@@ -131,7 +137,7 @@ final class Intrinsics {
         public void emit(BodyGen g, Kernel kernel, Core.Call call) {
             KernelSignature declared = g.kernelSignature(kernel);
             pushArguments(g, declared, call, this);
-            g.emitInvokeStatic(owner, method, descriptorOf(declared, this));
+            g.emitRuntimeCall(owner, method, descriptorOf(declared, this), work);
         }
     }
 
@@ -149,13 +155,30 @@ final class Intrinsics {
      * them.
      */
     record TakesAFunction(ClassDesc owner, String method, int container,
-                          Function<Type, List<Type>> paramTypes) implements Emit {
+                          Function<Type, List<Type>> paramTypes, Work work) implements Emit {
         @Override
         public void emit(BodyGen g, Kernel kernel, Core.Call call) {
             KernelSignature declared = g.kernelSignature(kernel);
             pushArguments(g, declared, call, this);
-            g.emitInvokeStatic(owner, method, descriptorOf(declared, this));
+            g.emitRuntimeCall(owner, method, descriptorOf(declared, this), work);
         }
+    }
+
+    /**
+     * What an evaluated class calls for a JDK method a {@link JdkVirtual} row names.
+     *
+     * <p>A JDK method takes no checkpoint, so one whose work grows with the text it is handed is
+     * answered in an evaluated class by a runtime static that walks the same text passing one. The
+     * two are one operation: the static takes the receiver and the arguments in the order the row
+     * puts them on the stack, and the checkpoint after them.
+     */
+    sealed interface Evaluated permits Evaluated.AsItShips, Evaluated.Through {
+
+        /** The JDK method itself, whose work is {@link Work#FIXED}. */
+        record AsItShips() implements Evaluated {}
+
+        /** A runtime static taking the checkpoint last, at {@code desc}. */
+        record Through(ClassDesc owner, String method, MethodTypeDesc desc) implements Evaluated {}
     }
 
     /**
@@ -175,14 +198,20 @@ final class Intrinsics {
      * no entries, and what it offered was the raw narrowing issue #976 is about, in the one place a
      * later kernel taking a host {@code int} would reach for it.
      */
-    record JdkVirtual(ClassDesc owner, String method, MethodTypeDesc desc, int[] argOrder)
-            implements Emit {
+    record JdkVirtual(ClassDesc owner, String method, MethodTypeDesc desc, int[] argOrder,
+                      Evaluated evaluated) implements Emit {
         @Override
         public void emit(BodyGen g, Kernel kernel, Core.Call call) {
             for (int src : argOrder) {
                 g.genExpr(call.args().get(src));
             }
-            g.emitInvokeVirtual(owner, method, desc);
+            if (evaluated instanceof Evaluated.Through(var counted, var name, var countedDesc)
+                    && g.counting()) {
+                g.emitCheckpoint();
+                g.emitInvokeStatic(counted, name, countedDesc);
+            } else {
+                g.emitInvokeVirtual(owner, method, desc);
+            }
         }
     }
 
@@ -200,15 +229,15 @@ final class Intrinsics {
      * <p>The list argument alone cannot say which: over the empty-list literal its element is the
      * bottom, and the answer came from the position the call was written in.
      */
-    record NumericFold(String intMethod, String decimalMethod, String rationalMethod)
+    record NumericFold(String intMethod, String decimalMethod, String rationalMethod, Work work)
             implements Emit {
         @Override
         public void emit(BodyGen g, Kernel kernel, Core.Call call) {
             Type result = call.type();
             KernelSignature declared = g.kernelSignature(kernel);
             g.genExpr(call.args().get(0));
-            g.emitInvokeStatic(CD_Lists, methodFor(result, call), MethodTypeDesc.of(
-                    boundaryDesc(result), boundaryDesc(declared.parameters().get(0))));
+            g.emitRuntimeCall(CD_Lists, methodFor(result, call), MethodTypeDesc.of(
+                    boundaryDesc(result), boundaryDesc(declared.parameters().get(0))), work);
         }
 
         /** Which implementation answers the fold, by the type the checker settled. Written out over
@@ -406,15 +435,18 @@ final class Intrinsics {
         KernelSignature declared = g.kernelSignature(kernel);
         ClassDesc owner;
         String method;
+        Work work;
         Emit row = TABLE.get(kernel);
         switch (row) {
             case RuntimeStatic each -> {
                 owner = each.owner();
                 method = each.method();
+                work = each.work();
             }
             case TakesAFunction each -> {
                 owner = each.owner();
                 method = each.method();
+                work = each.work();
             }
             case Emit each -> throw new IllegalStateException("`" + kernel.key() + "` is emitted as "
                     + each + ", which takes no comparator");
@@ -422,7 +454,7 @@ final class Intrinsics {
                     "the JVM emits nothing for `" + kernel.key() + "`");
         }
         pushArguments(g, declared, call, row);
-        g.emitInvokeStatic(owner, method, descriptorWithComparator(declared, row));
+        g.emitRuntimeCall(owner, method, descriptorWithComparator(declared, row), work);
     }
 
     /** How each kernel is emitted — read by the test that holds the descriptor invariant. */
@@ -434,13 +466,23 @@ final class Intrinsics {
         return a;
     }
 
-    private static Emit rt(ClassDesc owner, String method, int[] argOrder) {
-        return new RuntimeStatic(owner, method, argOrder);
+    private static Emit rt(ClassDesc owner, String method, int[] argOrder, Work work) {
+        return new RuntimeStatic(owner, method, argOrder, work);
     }
 
-    private static Emit jdk(ClassDesc owner, String method, MethodTypeDesc desc, int[] argOrder) {
-        return new JdkVirtual(owner, method, desc, argOrder);
+    private static Emit jdk(ClassDesc owner, String method, MethodTypeDesc desc, int[] argOrder,
+                            Evaluated evaluated) {
+        return new JdkVirtual(owner, method, desc, argOrder, evaluated);
     }
+
+    /** A JDK method on text, answered in an evaluated class by the {@code Strings} static of the
+     *  same name taking the receiver, the one argument and the checkpoint. */
+    private static Evaluated throughStrings(String method) {
+        return new Evaluated.Through(CD_Strings, method,
+                MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_String, CD_String, CD_WorkCheckpoint));
+    }
+
+    private static final Evaluated AS_IT_SHIPS = new Evaluated.AsItShips();
 
     private static MethodTypeDesc mtd(ClassDesc ret, ClassDesc... params) {
         return MethodTypeDesc.of(ret, params);
@@ -451,153 +493,157 @@ final class Intrinsics {
         Map<Kernel, Emit> t = new java.util.EnumMap<>(Kernel.class);
 
         // String — JDK-native instance methods (explicit descriptor); receiver is the last Souther arg.
-        t.put(Kernel.STRING_TO_INT, rt(CD_Strings, "toInt", order(0)));
-        t.put(Kernel.STRING_TO_DECIMAL, rt(CD_Strings, "toDecimal", order(0)));
-        t.put(Kernel.STRING_LENGTH, rt(CD_Strings, "length", order(0)));
-        t.put(Kernel.STRING_LOWERCASE, rt(CD_Strings, "lowercase", order(0)));
-        t.put(Kernel.STRING_UPPERCASE, rt(CD_Strings, "uppercase", order(0)));
-        t.put(Kernel.STRING_CONTAINS, jdk(CD_String, "contains", mtd(bool, CD_CharSequence), order(1, 0)));
-        t.put(Kernel.STRING_STARTS_WITH, jdk(CD_String, "startsWith", mtd(bool, CD_String), order(1, 0)));
-        t.put(Kernel.STRING_ENDS_WITH, jdk(CD_String, "endsWith", mtd(bool, CD_String), order(1, 0)));
-        t.put(Kernel.STRING_APPEND, rt(CD_Strings, "append", order(0, 1)));
+        t.put(Kernel.STRING_TO_INT, rt(CD_Strings, "toInt", order(0), CHECKPOINTED));
+        t.put(Kernel.STRING_TO_DECIMAL, rt(CD_Strings, "toDecimal", order(0), CHECKPOINTED));
+        t.put(Kernel.STRING_LENGTH, rt(CD_Strings, "length", order(0), CHECKPOINTED));
+        t.put(Kernel.STRING_LOWERCASE, rt(CD_Strings, "lowercase", order(0), CHECKPOINTED));
+        t.put(Kernel.STRING_UPPERCASE, rt(CD_Strings, "uppercase", order(0), CHECKPOINTED));
+        t.put(Kernel.STRING_CONTAINS, jdk(CD_String, "contains", mtd(bool, CD_CharSequence), order(1, 0),
+                throughStrings("contains")));
+        t.put(Kernel.STRING_STARTS_WITH, jdk(CD_String, "startsWith", mtd(bool, CD_String), order(1, 0),
+                throughStrings("startsWith")));
+        t.put(Kernel.STRING_ENDS_WITH, jdk(CD_String, "endsWith", mtd(bool, CD_String), order(1, 0),
+                throughStrings("endsWith")));
+        t.put(Kernel.STRING_APPEND, rt(CD_Strings, "append", order(0, 1), CHECKPOINTED));
         // String — Strings runtime statics.
         // `slice` left the JDK's `substring` when the language settled on code points: the JDK method
         // indexes UTF-16 units, so the conversion — and the abort for an index the string has not
         // got — lives in the runtime rather than in a descriptor here.
-        t.put(Kernel.STRING_SLICE, rt(CD_Strings, "slice", order(2, 0, 1)));
-        t.put(Kernel.STRING_SPLIT, rt(CD_Strings, "split", order(1, 0)));
-        t.put(Kernel.STRING_JOIN, rt(CD_Strings, "join", order(1, 0)));
-        t.put(Kernel.STRING_REPLACE, rt(CD_Strings, "replace", order(2, 0, 1)));
+        t.put(Kernel.STRING_SLICE, rt(CD_Strings, "slice", order(2, 0, 1), CHECKPOINTED));
+        t.put(Kernel.STRING_SPLIT, rt(CD_Strings, "split", order(1, 0), CHECKPOINTED));
+        t.put(Kernel.STRING_JOIN, rt(CD_Strings, "join", order(1, 0), CHECKPOINTED));
+        t.put(Kernel.STRING_REPLACE, rt(CD_Strings, "replace", order(2, 0, 1), CHECKPOINTED));
         // `trim` and `words` share one whitespace predicate (spec §string-whitespace), so both stay
         // on the runtime rather than the JDK's own `trim`, whose whitespace set does not agree.
-        t.put(Kernel.STRING_TRIM, rt(CD_Strings, "trim", order(0)));
-        t.put(Kernel.STRING_WORDS, rt(CD_Strings, "words", order(0)));
-        t.put(Kernel.STRING_CHARACTERS, rt(CD_Strings, "characters", order(0)));
-        t.put(Kernel.STRING_CODE_POINTS, rt(CD_Strings, "codePoints", order(0)));
-        t.put(Kernel.STRING_FROM_INT, rt(CD_Strings, "fromInt", order(0)));
-        t.put(Kernel.STRING_CONCAT, rt(CD_Strings, "concat", order(0)));
-        t.put(Kernel.STRING_REVERSE, rt(CD_Strings, "reverse", order(0)));
-        t.put(Kernel.STRING_REPEAT, rt(CD_Strings, "repeat", order(1, 0)));
-        t.put(Kernel.STRING_LINES, rt(CD_Strings, "lines", order(0)));
-        t.put(Kernel.STRING_PAD_LEFT, rt(CD_Strings, "padLeft", order(2, 0, 1)));
-        t.put(Kernel.STRING_PAD_RIGHT, rt(CD_Strings, "padRight", order(2, 0, 1)));
-        t.put(Kernel.STRING_FROM_DECIMAL, rt(CD_Strings, "fromDecimal", order(0)));
+        t.put(Kernel.STRING_TRIM, rt(CD_Strings, "trim", order(0), CHECKPOINTED));
+        t.put(Kernel.STRING_WORDS, rt(CD_Strings, "words", order(0), CHECKPOINTED));
+        t.put(Kernel.STRING_CHARACTERS, rt(CD_Strings, "characters", order(0), CHECKPOINTED));
+        t.put(Kernel.STRING_CODE_POINTS, rt(CD_Strings, "codePoints", order(0), CHECKPOINTED));
+        t.put(Kernel.STRING_FROM_INT, rt(CD_Strings, "fromInt", order(0), FIXED));
+        t.put(Kernel.STRING_CONCAT, rt(CD_Strings, "concat", order(0), CHECKPOINTED));
+        t.put(Kernel.STRING_REVERSE, rt(CD_Strings, "reverse", order(0), CHECKPOINTED));
+        t.put(Kernel.STRING_REPEAT, rt(CD_Strings, "repeat", order(1, 0), CHECKPOINTED));
+        t.put(Kernel.STRING_LINES, rt(CD_Strings, "lines", order(0), CHECKPOINTED));
+        t.put(Kernel.STRING_PAD_LEFT, rt(CD_Strings, "padLeft", order(2, 0, 1), CHECKPOINTED));
+        t.put(Kernel.STRING_PAD_RIGHT, rt(CD_Strings, "padRight", order(2, 0, 1), CHECKPOINTED));
+        t.put(Kernel.STRING_FROM_DECIMAL, rt(CD_Strings, "fromDecimal", order(0), CHECKPOINTED));
 
-        t.put(Kernel.DECIMAL_TO_INT, rt(CD_DecimalMath, "toInt", order(0, 1)));
-        t.put(Kernel.DECIMAL_ROUND, rt(CD_DecimalMath, "round", order(0, 1, 2)));
+        t.put(Kernel.DECIMAL_TO_INT, rt(CD_DecimalMath, "toInt", order(0, 1), CHECKPOINTED));
+        t.put(Kernel.DECIMAL_ROUND, rt(CD_DecimalMath, "round", order(0, 1, 2), CHECKPOINTED));
 
         // List
         t.put(Kernel.LIST_SORT_BY, new TakesAFunction(CD_Lists, "sortBy", 1,
-                held -> List.of(((Type.ListOf) held).element())));
+                held -> List.of(((Type.ListOf) held).element()), CHECKPOINTED));
         t.put(Kernel.LIST_FIND, new TakesAFunction(CD_Lists, "find", 1,
-                held -> List.of(((Type.ListOf) held).element())));
+                held -> List.of(((Type.ListOf) held).element()), CHECKPOINTED));
+        // One value through the function: what the function does is its own body's to count.
         t.put(Kernel.OPTION_MAP, new TakesAFunction(CD_Options, "map", 1,
-                held -> List.of(((Type.OptionOf) held).element())));
-        t.put(Kernel.LIST_MAX, rt(CD_Lists, "max", order(0)));
-        t.put(Kernel.LIST_MIN, rt(CD_Lists, "min", order(0)));
-        t.put(Kernel.LIST_LENGTH, rt(CD_Lists, "length", order(0)));
-        t.put(Kernel.LIST_GET, rt(CD_Lists, "get", order(1, 0)));
-        t.put(Kernel.LIST_SORT, rt(CD_Lists, "sort", order(0)));
-        t.put(Kernel.LIST_REVERSE, rt(CD_Lists, "reverse", order(0)));
-        t.put(Kernel.LIST_RANGE_INCLUSIVE, rt(CD_Lists, "rangeInclusive", order(0, 1)));
-        t.put(Kernel.LIST_SUM, new NumericFold("sumInt", "sumDecimal", "sumRational"));
+                held -> List.of(((Type.OptionOf) held).element()), FIXED));
+        t.put(Kernel.LIST_MAX, rt(CD_Lists, "max", order(0), CHECKPOINTED));
+        t.put(Kernel.LIST_MIN, rt(CD_Lists, "min", order(0), CHECKPOINTED));
+        t.put(Kernel.LIST_LENGTH, rt(CD_Lists, "length", order(0), FIXED));
+        t.put(Kernel.LIST_GET, rt(CD_Lists, "get", order(1, 0), FIXED));
+        t.put(Kernel.LIST_SORT, rt(CD_Lists, "sort", order(0), CHECKPOINTED));
+        t.put(Kernel.LIST_REVERSE, rt(CD_Lists, "reverse", order(0), CHECKPOINTED));
+        t.put(Kernel.LIST_RANGE_INCLUSIVE, rt(CD_Lists, "rangeInclusive", order(0, 1), CHECKPOINTED));
+        t.put(Kernel.LIST_SUM, new NumericFold("sumInt", "sumDecimal", "sumRational", CHECKPOINTED));
         t.put(Kernel.LIST_PRODUCT,
-                new NumericFold("productInt", "productDecimal", "productRational"));
+                new NumericFold("productInt", "productDecimal", "productRational", CHECKPOINTED));
 
         // Map
-        t.put(Kernel.MAP_GET, rt(CD_Maps, "get", order(1, 0)));
-        t.put(Kernel.MAP_EMPTY, rt(CD_Maps, "empty", order()));
-        t.put(Kernel.MAP_CONTAINS_KEY, rt(CD_Maps, "containsKey", order(1, 0)));
-        t.put(Kernel.MAP_KEYS, rt(CD_Maps, "keys", order(0)));
-        t.put(Kernel.MAP_VALUES, rt(CD_Maps, "values", order(0)));
-        t.put(Kernel.MAP_SINGLETON, rt(CD_Maps, "singleton", order(0, 1)));
-        t.put(Kernel.MAP_INSERT, rt(CD_Maps, "insert", order(0, 1, 2)));
-        t.put(Kernel.MAP_REMOVE, rt(CD_Maps, "remove", order(0, 1)));
-        t.put(Kernel.MAP_IS_EMPTY, rt(CD_Maps, "isEmpty", order(0)));
-        t.put(Kernel.MAP_SIZE, rt(CD_Maps, "size", order(0)));
-        t.put(Kernel.MAP_TO_LIST, rt(CD_Maps, "toList", order(0)));
-        t.put(Kernel.MAP_FROM_LIST, rt(CD_Maps, "fromList", order(0)));
+        t.put(Kernel.MAP_GET, rt(CD_Maps, "get", order(1, 0), CHECKPOINTED));
+        t.put(Kernel.MAP_EMPTY, rt(CD_Maps, "empty", order(), FIXED));
+        t.put(Kernel.MAP_CONTAINS_KEY, rt(CD_Maps, "containsKey", order(1, 0), CHECKPOINTED));
+        t.put(Kernel.MAP_KEYS, rt(CD_Maps, "keys", order(0), CHECKPOINTED));
+        t.put(Kernel.MAP_VALUES, rt(CD_Maps, "values", order(0), CHECKPOINTED));
+        t.put(Kernel.MAP_SINGLETON, rt(CD_Maps, "singleton", order(0, 1), CHECKPOINTED));
+        t.put(Kernel.MAP_INSERT, rt(CD_Maps, "insert", order(0, 1, 2), CHECKPOINTED));
+        t.put(Kernel.MAP_REMOVE, rt(CD_Maps, "remove", order(0, 1), CHECKPOINTED));
+        t.put(Kernel.MAP_IS_EMPTY, rt(CD_Maps, "isEmpty", order(0), FIXED));
+        t.put(Kernel.MAP_SIZE, rt(CD_Maps, "size", order(0), FIXED));
+        t.put(Kernel.MAP_TO_LIST, rt(CD_Maps, "toList", order(0), CHECKPOINTED));
+        t.put(Kernel.MAP_FROM_LIST, rt(CD_Maps, "fromList", order(0), CHECKPOINTED));
 
         // Set
-        t.put(Kernel.SET_EMPTY, rt(CD_Sets, "empty", order()));
-        t.put(Kernel.SET_SINGLETON, rt(CD_Sets, "singleton", order(0)));
-        t.put(Kernel.SET_INSERT, rt(CD_Sets, "insert", order(0, 1)));
-        t.put(Kernel.SET_REMOVE, rt(CD_Sets, "remove", order(0, 1)));
-        t.put(Kernel.SET_CONTAINS, rt(CD_Sets, "contains", order(0, 1)));
-        t.put(Kernel.SET_UNION, rt(CD_Sets, "union", order(0, 1)));
-        t.put(Kernel.SET_INTERSECTION, rt(CD_Sets, "intersection", order(0, 1)));
-        t.put(Kernel.SET_DIFFERENCE, rt(CD_Sets, "difference", order(0, 1)));
-        t.put(Kernel.SET_IS_EMPTY, rt(CD_Sets, "isEmpty", order(0)));
-        t.put(Kernel.SET_SIZE, rt(CD_Sets, "size", order(0)));
-        t.put(Kernel.SET_TO_LIST, rt(CD_Sets, "toList", order(0)));
-        t.put(Kernel.SET_FROM_LIST, rt(CD_Sets, "fromList", order(0)));
+        t.put(Kernel.SET_EMPTY, rt(CD_Sets, "empty", order(), FIXED));
+        t.put(Kernel.SET_SINGLETON, rt(CD_Sets, "singleton", order(0), CHECKPOINTED));
+        t.put(Kernel.SET_INSERT, rt(CD_Sets, "insert", order(0, 1), CHECKPOINTED));
+        t.put(Kernel.SET_REMOVE, rt(CD_Sets, "remove", order(0, 1), CHECKPOINTED));
+        t.put(Kernel.SET_CONTAINS, rt(CD_Sets, "contains", order(0, 1), CHECKPOINTED));
+        t.put(Kernel.SET_UNION, rt(CD_Sets, "union", order(0, 1), CHECKPOINTED));
+        t.put(Kernel.SET_INTERSECTION, rt(CD_Sets, "intersection", order(0, 1), CHECKPOINTED));
+        t.put(Kernel.SET_DIFFERENCE, rt(CD_Sets, "difference", order(0, 1), CHECKPOINTED));
+        t.put(Kernel.SET_IS_EMPTY, rt(CD_Sets, "isEmpty", order(0), FIXED));
+        t.put(Kernel.SET_SIZE, rt(CD_Sets, "size", order(0), FIXED));
+        t.put(Kernel.SET_TO_LIST, rt(CD_Sets, "toList", order(0), CHECKPOINTED));
+        t.put(Kernel.SET_FROM_LIST, rt(CD_Sets, "fromList", order(0), CHECKPOINTED));
 
         // Date / DateTime — the temporal is the receiver (emitted first); the count is a long.
         // Through the runtime rather than straight to `java.time`: a shift off the end of the range
         // aborts saying what it was doing, instead of the JVM's own exception reaching the boundary
         // and naming a class the language has no type for.
-        t.put(Kernel.DATE_ADD_DAYS, rt(CD_Temporals, "addDays", order(1, 0)));
-        t.put(Kernel.DATE_ADD_MONTHS, rt(CD_Temporals, "addMonths", order(1, 0)));
-        t.put(Kernel.DATE_ADD_YEARS, rt(CD_Temporals, "addYears", order(1, 0)));
-        t.put(Kernel.DATE_DAYS_BETWEEN, rt(CD_Temporals, "daysBetween", order(0, 1)));
-        t.put(Kernel.DATE_YEAR, rt(CD_Temporals, "year", order(0)));
-        t.put(Kernel.DATE_MONTH, rt(CD_Temporals, "month", order(0)));
-        t.put(Kernel.DATE_DAY, rt(CD_Temporals, "day", order(0)));
-        t.put(Kernel.DATE_FROM_PARTS, rt(CD_Temporals, "fromDateParts", order(0, 1, 2)));
-        t.put(Kernel.TIME_FROM_PARTS, rt(CD_Temporals, "fromTimeParts", order(0, 1, 2)));
-        t.put(Kernel.TIME_HOUR, rt(CD_Temporals, "hour", order(0)));
-        t.put(Kernel.TIME_MINUTE, rt(CD_Temporals, "minute", order(0)));
-        t.put(Kernel.TIME_SECOND, rt(CD_Temporals, "second", order(0)));
-        t.put(Kernel.DATETIME_ADD_MINUTES, rt(CD_Temporals, "addMinutes", order(1, 0)));
-        t.put(Kernel.DATETIME_ADD_HOURS, rt(CD_Temporals, "addHours", order(1, 0)));
+        t.put(Kernel.DATE_ADD_DAYS, rt(CD_Temporals, "addDays", order(1, 0), FIXED));
+        t.put(Kernel.DATE_ADD_MONTHS, rt(CD_Temporals, "addMonths", order(1, 0), FIXED));
+        t.put(Kernel.DATE_ADD_YEARS, rt(CD_Temporals, "addYears", order(1, 0), FIXED));
+        t.put(Kernel.DATE_DAYS_BETWEEN, rt(CD_Temporals, "daysBetween", order(0, 1), FIXED));
+        t.put(Kernel.DATE_YEAR, rt(CD_Temporals, "year", order(0), FIXED));
+        t.put(Kernel.DATE_MONTH, rt(CD_Temporals, "month", order(0), FIXED));
+        t.put(Kernel.DATE_DAY, rt(CD_Temporals, "day", order(0), FIXED));
+        t.put(Kernel.DATE_FROM_PARTS, rt(CD_Temporals, "fromDateParts", order(0, 1, 2), FIXED));
+        t.put(Kernel.TIME_FROM_PARTS, rt(CD_Temporals, "fromTimeParts", order(0, 1, 2), FIXED));
+        t.put(Kernel.TIME_HOUR, rt(CD_Temporals, "hour", order(0), FIXED));
+        t.put(Kernel.TIME_MINUTE, rt(CD_Temporals, "minute", order(0), FIXED));
+        t.put(Kernel.TIME_SECOND, rt(CD_Temporals, "second", order(0), FIXED));
+        t.put(Kernel.DATETIME_ADD_MINUTES, rt(CD_Temporals, "addMinutes", order(1, 0), FIXED));
+        t.put(Kernel.DATETIME_ADD_HOURS, rt(CD_Temporals, "addHours", order(1, 0), FIXED));
         // `addDateTimeDays` rather than a second `addDays`: the runtime is Java, which would take the
         // two as overloads and leave the emitter's descriptor deciding which, where the kernel already
         // says which temporal it is for.
-        t.put(Kernel.DATETIME_ADD_DAYS, rt(CD_Temporals, "addDateTimeDays", order(1, 0)));
-        t.put(Kernel.DATETIME_MINUTES_BETWEEN, rt(CD_Temporals, "minutesBetween", order(0, 1)));
+        t.put(Kernel.DATETIME_ADD_DAYS, rt(CD_Temporals, "addDateTimeDays", order(1, 0), FIXED));
+        t.put(Kernel.DATETIME_MINUTES_BETWEEN, rt(CD_Temporals, "minutesBetween", order(0, 1), FIXED));
         t.put(Kernel.DATETIME_TO_DATE,
-                jdk(CD_LocalDateTime, "toLocalDate", mtd(CD_LocalDate), order(0)));
+                jdk(CD_LocalDateTime, "toLocalDate", mtd(CD_LocalDate), order(0), AS_IT_SHIPS));
         t.put(Kernel.DATETIME_TO_TIME,
-                jdk(CD_LocalDateTime, "toLocalTime", mtd(CD_LocalTime), order(0)));
+                jdk(CD_LocalDateTime, "toLocalTime", mtd(CD_LocalTime), order(0), AS_IT_SHIPS));
         // A date and a time of day are both settled values, so joining them cannot fail: total, with
         // the date as the receiver of `LocalDate.atTime`.
         t.put(Kernel.DATETIME_FROM_DATE_AND_TIME,
-                jdk(CD_LocalDate, "atTime", mtd(CD_LocalDateTime, CD_LocalTime), order(0, 1)));
+                jdk(CD_LocalDate, "atTime", mtd(CD_LocalDateTime, CD_LocalTime), order(0, 1), AS_IT_SHIPS));
 
         // Int — IntMath statics. add/subtract/multiply share the overflow-aborting kernel with the
         // `+ - *` operators; modBy aborts on a zero divisor; compare returns -1/0/1.
-        t.put(Kernel.INT_ADD, rt(CD_IntMath, "addExact", order(0, 1)));
-        t.put(Kernel.INT_SUBTRACT, rt(CD_IntMath, "subtractExact", order(0, 1)));
-        t.put(Kernel.INT_MULTIPLY, rt(CD_IntMath, "multiplyExact", order(0, 1)));
-        t.put(Kernel.INT_COMPARE, rt(CD_IntMath, "compare", order(0, 1)));
-        t.put(Kernel.INT_FLOOR_MOD, rt(CD_IntMath, "floorMod", order(0, 1)));
+        t.put(Kernel.INT_ADD, rt(CD_IntMath, "addExact", order(0, 1), FIXED));
+        t.put(Kernel.INT_SUBTRACT, rt(CD_IntMath, "subtractExact", order(0, 1), FIXED));
+        t.put(Kernel.INT_MULTIPLY, rt(CD_IntMath, "multiplyExact", order(0, 1), FIXED));
+        t.put(Kernel.INT_COMPARE, rt(CD_IntMath, "compare", order(0, 1), FIXED));
+        t.put(Kernel.INT_FLOOR_MOD, rt(CD_IntMath, "floorMod", order(0, 1), FIXED));
 
         // Decimal — every one of them a DecimalMath static. What a BigDecimal method does is not
         // what a Souther operation means: each of these is partial at
         // the ends of the scale range, and the abort that reports it belongs to the operation rather
         // than to whoever emitted the call (ADR-0112). One emitter for the whole module, so a
         // Decimal operation added later has one place to be written and no second shape to pick.
-        t.put(Kernel.DECIMAL_ADD, rt(CD_DecimalMath, "add", order(0, 1)));
-        t.put(Kernel.DECIMAL_SUBTRACT, rt(CD_DecimalMath, "subtract", order(0, 1)));
-        t.put(Kernel.DECIMAL_MULTIPLY, rt(CD_DecimalMath, "multiply", order(0, 1)));
-        t.put(Kernel.DECIMAL_DIVIDE, rt(CD_DecimalMath, "divide", order(0, 1, 2, 3)));
-        t.put(Kernel.DECIMAL_COMPARE, rt(CD_DecimalMath, "compare", order(0, 1)));
-        t.put(Kernel.DECIMAL_FROM_INT, rt(CD_DecimalMath, "fromInt", order(0)));
+        t.put(Kernel.DECIMAL_ADD, rt(CD_DecimalMath, "add", order(0, 1), CHECKPOINTED));
+        t.put(Kernel.DECIMAL_SUBTRACT, rt(CD_DecimalMath, "subtract", order(0, 1), CHECKPOINTED));
+        t.put(Kernel.DECIMAL_MULTIPLY, rt(CD_DecimalMath, "multiply", order(0, 1), CHECKPOINTED));
+        t.put(Kernel.DECIMAL_DIVIDE, rt(CD_DecimalMath, "divide", order(0, 1, 2, 3), CHECKPOINTED));
+        t.put(Kernel.DECIMAL_COMPARE, rt(CD_DecimalMath, "compare", order(0, 1), CHECKPOINTED));
+        t.put(Kernel.DECIMAL_FROM_INT, rt(CD_DecimalMath, "fromInt", order(0), FIXED));
 
         // Rational — every one of them a RationalMath static, for the same reason: what the exact
         // arithmetic of the language means is the runtime's, and the exponent range it aborts at is
         // part of the operation rather than of whoever emitted the call.
-        t.put(Kernel.RATIONAL_ADD, rt(CD_RationalMath, "add", order(0, 1)));
-        t.put(Kernel.RATIONAL_SUBTRACT, rt(CD_RationalMath, "subtract", order(0, 1)));
-        t.put(Kernel.RATIONAL_MULTIPLY, rt(CD_RationalMath, "multiply", order(0, 1)));
-        t.put(Kernel.RATIONAL_DIVIDE, rt(CD_RationalMath, "divide", order(0, 1)));
-        t.put(Kernel.RATIONAL_COMPARE, rt(CD_RationalMath, "compare", order(0, 1)));
-        t.put(Kernel.RATIONAL_FROM_INT, rt(CD_RationalMath, "fromInt", order(0)));
-        t.put(Kernel.RATIONAL_FROM_DECIMAL, rt(CD_RationalMath, "fromDecimal", order(0)));
-        t.put(Kernel.RATIONAL_TO_WHOLE_NUMBER, rt(CD_RationalMath, "toWholeNumber", order(0)));
-        t.put(Kernel.RATIONAL_TO_FINITE_DECIMAL, rt(CD_RationalMath, "toFiniteDecimal", order(0)));
-        t.put(Kernel.RATIONAL_TO_INT, rt(CD_RationalMath, "toInt", order(0, 1)));
-        t.put(Kernel.RATIONAL_TO_DECIMAL, rt(CD_RationalMath, "toDecimal", order(0, 1, 2)));
+        t.put(Kernel.RATIONAL_ADD, rt(CD_RationalMath, "add", order(0, 1), CHECKPOINTED));
+        t.put(Kernel.RATIONAL_SUBTRACT, rt(CD_RationalMath, "subtract", order(0, 1), CHECKPOINTED));
+        t.put(Kernel.RATIONAL_MULTIPLY, rt(CD_RationalMath, "multiply", order(0, 1), CHECKPOINTED));
+        t.put(Kernel.RATIONAL_DIVIDE, rt(CD_RationalMath, "divide", order(0, 1), CHECKPOINTED));
+        t.put(Kernel.RATIONAL_COMPARE, rt(CD_RationalMath, "compare", order(0, 1), CHECKPOINTED));
+        t.put(Kernel.RATIONAL_FROM_INT, rt(CD_RationalMath, "fromInt", order(0), FIXED));
+        t.put(Kernel.RATIONAL_FROM_DECIMAL, rt(CD_RationalMath, "fromDecimal", order(0), CHECKPOINTED));
+        t.put(Kernel.RATIONAL_TO_WHOLE_NUMBER, rt(CD_RationalMath, "toWholeNumber", order(0), CHECKPOINTED));
+        t.put(Kernel.RATIONAL_TO_FINITE_DECIMAL, rt(CD_RationalMath, "toFiniteDecimal", order(0), CHECKPOINTED));
+        t.put(Kernel.RATIONAL_TO_INT, rt(CD_RationalMath, "toInt", order(0, 1), CHECKPOINTED));
+        t.put(Kernel.RATIONAL_TO_DECIMAL, rt(CD_RationalMath, "toDecimal", order(0, 1, 2), CHECKPOINTED));
 
         // Not a copy: the map is a local nothing else holds, and read back through an EnumMap it
         // answers in the order the kernels are declared in rather than in whatever order a copy

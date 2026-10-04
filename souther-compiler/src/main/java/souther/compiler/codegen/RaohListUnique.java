@@ -83,9 +83,9 @@ final class RaohListUnique {
     }
 
     /** Emits the helper {@link #emit} chains, onto the decoder class being built. */
-    static void emitHelpers(ClassBuilder cb) {
+    static void emitHelpers(CodegenContext ctx, ClassBuilder cb) {
         cb.withMethodBody(HELPER, MTD_invariantFailure,
-                ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, RaohListUnique::emitBody);
+                ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> emitBody(ctx, code));
     }
 
     /**
@@ -96,7 +96,7 @@ final class RaohListUnique {
      * <p>Locals: {@code value}=0, {@code path}=1, {@code xs}=2, {@code seen}=3, {@code reported}=4,
      * {@code duplicates}=5, {@code it}=6, {@code x}=7.
      */
-    private static void emitBody(CodeBuilder code) {
+    private static void emitBody(CodegenContext ctx, CodeBuilder code) {
         code.aload(0);
         code.checkcast(CD_List);
         code.astore(2);                                             // xs = (List) value
@@ -125,21 +125,24 @@ final class RaohListUnique {
         code.invokeinterface(CD_Iterator, "next", MTD_next);
         code.astore(7);                                              // x = it.next()
 
+        // Every way round the loop goes back through the count, as every loop the emitter emits
+        // does (CodegenContext.countOneStep): one element looked at, one step.
+        ctx.countOneStep(code);
         code.aload(7);
         code.aload(3);
-        code.invokestatic(CD_Sets, "contains", MTD_Sets_contains);
+        ctx.callRuntime(code, CD_Sets, "contains", MTD_Sets_contains, Work.CHECKPOINTED);
         code.ifne(seenBefore);
         // not seen before: seen = Sets.insert(x, seen)
         code.aload(7);
         code.aload(3);
-        code.invokestatic(CD_Sets, "insert", MTD_Sets_insert);
+        ctx.callRuntime(code, CD_Sets, "insert", MTD_Sets_insert, Work.CHECKPOINTED);
         code.astore(3);
         code.goto_(loop);
         code.labelBinding(seenBefore);
         // seen already: a duplicate, reported once — the first time it repeats
         code.aload(7);
         code.aload(4);
-        code.invokestatic(CD_Sets, "contains", MTD_Sets_contains);
+        ctx.callRuntime(code, CD_Sets, "contains", MTD_Sets_contains, Work.CHECKPOINTED);
         code.ifne(loop);
         code.aload(5);
         code.aload(7);
@@ -147,7 +150,7 @@ final class RaohListUnique {
         code.pop();
         code.aload(7);
         code.aload(4);
-        code.invokestatic(CD_Sets, "insert", MTD_Sets_insert);
+        ctx.callRuntime(code, CD_Sets, "insert", MTD_Sets_insert, Work.CHECKPOINTED);
         code.astore(4);
         code.goto_(loop);
 

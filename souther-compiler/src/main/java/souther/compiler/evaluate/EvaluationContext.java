@@ -1,5 +1,7 @@
 package souther.compiler.evaluate;
 
+import souther.runtime.WorkCheckpoint;
+
 /**
  * What one evaluation is allowed, counted by the code as it runs.
  *
@@ -24,8 +26,15 @@ public final class EvaluationContext {
      * counting is a call from code nobody is holding to a budget, and ignoring it is right. */
     private static final ThreadLocal<State> CURRENT = new ThreadLocal<>();
 
-    /** One evaluation's remaining budget and how deep it currently is. */
-    private static final class State {
+    /**
+     * One evaluation's remaining budget and how deep it currently is.
+     *
+     * <p>Also the checkpoint a runtime operation called from the evaluation passes, so a step spent
+     * inside the operation is spent from this evaluation's budget and from no other: the operation
+     * holds the state it was handed, and not whichever evaluation the thread is running when it
+     * passes.
+     */
+    private static final class State implements WorkCheckpoint {
         private long remainingSteps;
         private int depth;
         private final int depthLimit;
@@ -33,6 +42,26 @@ public final class EvaluationContext {
         State(long steps, int depthLimit) {
             this.remainingSteps = steps;
             this.depthLimit = depthLimit;
+        }
+
+        @Override
+        public void pass() {
+            stopIfAbandoned();
+            if (--remainingSteps < 0) {
+                throw StepLimitExceeded.INSTANCE;
+            }
+        }
+
+        /** {@code pieces} steps at once. Where the budget does not hold them all it is left spent out,
+         *  as a pass past its end leaves it, and what they would have paid for does not start. */
+        @Override
+        public void spend(long pieces) {
+            stopIfAbandoned();
+            if (pieces > remainingSteps) {
+                remainingSteps = -1;
+                throw StepLimitExceeded.INSTANCE;
+            }
+            remainingSteps -= pieces;
         }
     }
 
@@ -54,13 +83,22 @@ public final class EvaluationContext {
      */
     public static void tick() {
         State state = CURRENT.get();
-        if (state == null) {
-            return;
+        if (state != null) {
+            state.pass();
         }
-        stopIfAbandoned();
-        if (--state.remainingSteps < 0) {
-            throw StepLimitExceeded.INSTANCE;
-        }
+    }
+
+    /**
+     * What a runtime operation called from evaluated code passes as it works: one of its passes is
+     * one {@link #tick}, spent from the same budget.
+     *
+     * <p>Asked once where the operation is called, so the operation's own loop passes it without
+     * looking up whose evaluation it is each time round. {@link WorkCheckpoint#NONE} where nothing
+     * is counting, for the same reason a tick then does nothing.
+     */
+    public static WorkCheckpoint checkpoint() {
+        State state = CURRENT.get();
+        return state == null ? WorkCheckpoint.NONE : state;
     }
 
     /**
@@ -92,7 +130,7 @@ public final class EvaluationContext {
      * worker. An interrupt is only a request, and evaluated code that reaches no blocking call
      * never sees it, so a worker whose row was given up on would go on spending CPU and heap for as
      * long as the JVM lives. The counted points are the one place every evaluation passes through,
-     * so the request is read here.
+     * in the generated code and inside the runtime operations it calls, so the request is read here.
      */
     private static void stopIfAbandoned() {
         if (Thread.currentThread().isInterrupted()) {

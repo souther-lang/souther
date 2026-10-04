@@ -8,6 +8,7 @@ import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
+import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.Position;
 import souther.compiler.types.Type;
@@ -90,6 +91,8 @@ final class NeutralForm {
      *             what an operand answered with, or an input the row handed over
      */
     Object of(Object live, Position position, String what) {
+        // One node of a value the evaluation built, one counted point (ObservedValues says why).
+        EvaluationContext.tick();
         if (live == null) {
             return live;
         }

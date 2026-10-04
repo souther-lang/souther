@@ -773,6 +773,10 @@ public final class FixtureReader {
      * writes, so the two sides of a mismatch can be read against each other. A value with no encoder
      * (or one that fails to encode) falls back to its case name alone. */
     String describeActual(Object result) {
+        // What is written below goes over the value through its encoder, and the boundary library
+        // walks its collections passing no checkpoint. Observing it first goes over the same nodes
+        // and counts each, so the walk that cannot count is paid for before it is made.
+        structured(result);
         String name = NeutralForm.simpleName(result);
         if (name.isEmpty()) {
             return String.valueOf(result);
