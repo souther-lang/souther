@@ -65,16 +65,14 @@ class AWalkOverWhatAnEvaluationHoldsIsCountedTest {
     /** A stop thrown inside code reached reflectively arrives wrapped, and is found inside. */
     @Test
     void aStopIsFoundInsideWhatWrapsIt() throws NoSuchMethodException {
+        Runnable stopping = () -> {
+            throw StepLimitExceeded.INSTANCE;
+        };
         InvocationTargetException wrapped = assertThrows(InvocationTargetException.class,
-                () -> getClass().getDeclaredMethod("stops").invoke(null));
+                () -> Runnable.class.getMethod("run").invoke(stopping));
         assertSame(StepLimitExceeded.INSTANCE, EvaluationContext.overspent(wrapped));
         assertSame(StepLimitExceeded.INSTANCE,
                 EvaluationContext.overspent(new IllegalStateException("reported", wrapped)));
         assertNull(EvaluationContext.overspent(new IllegalStateException("not a stop")));
-    }
-
-    /** What is called reflectively above, so not private: nothing here calls it by name. */
-    static void stops() {
-        throw StepLimitExceeded.INSTANCE;
     }
 }
