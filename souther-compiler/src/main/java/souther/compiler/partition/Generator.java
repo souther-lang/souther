@@ -20,6 +20,7 @@ import souther.compiler.inputs.Quantities;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
@@ -3804,7 +3805,7 @@ public final class Generator {
         Map<RealizationTarget, Place> out = new LinkedHashMap<>(fixing);
         Map<NumericTerm.FromOnePosition, RealizationTarget> routed = new LinkedHashMap<>();
         List<ReachabilityGap> gaps = new ArrayList<>();
-        souther.compiler.inputs.SearchRegion here = reaching.region();
+        SearchRegion here = reaching.region();
         for (Map.Entry<RealizationTarget, Place> each : fixing.entrySet()) {
             here = here.given(each.getKey().term(), each.getValue());
         }
@@ -3812,11 +3813,21 @@ public final class Generator {
         // admit is the same answer at every one of them, and working it out where it is spent walks
         // every position of the input once per condition.
         WitnessSearch looking = subject.witnessSearch();
-        // What the row is taken to be, beginning with what the way it arrives by already settled.
-        // One account for every cut, because a row is one value: a name of a sum sent under a case
-        // by one cut and under another by the next would be asking for a value that is both, and
-        // which of the two a name got would depend on the order the cuts were read in.
+        // What the row is taken to be, beginning with what the way it arrives by already settled
+        // and the places the item is written at. One account for every cut, because a row is one
+        // value: a name of a sum sent under a case by one cut and under another by the next would
+        // be asking for a value that is both, and which of the two a name got would depend on the
+        // order the cuts were read in. And a number of the item written under a case has taken
+        // the row there already, so a cut's name of the same sum is written under it too.
         Requirements assumed = reaching.requirements();
+        for (RealizationTarget each : fixing.keySet()) {
+            if (!(assumed.merge(each.writeRoot().requirements())
+                    instanceof Requirements.Merge.Merged(Requirements both))) {
+                throw new IllegalStateException("the item is written at " + each.writeRoot()
+                        + ", which is a case the way it is reached by is not: " + assumed);
+            }
+            assumed = both;
+        }
         for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
             // The whole of what one cut comes to, arrived at before any of it is the row's. What a
             // cut takes is one decision — where each of its numbers stands, where the row writes
@@ -3826,18 +3837,18 @@ public final class Generator {
                 case Placed.AtNone(ReachabilityGap why) -> gaps.add(why);
                 case Placed.AtAll(NumericWitness.Standing.Found standing,
                                   Map<NumericTerm.FromOnePosition, RealizationTarget> routes,
+                                  SequencedMap<RealizationTarget, NumericTerm.FromOnePosition> owing,
                                   Requirements taken) -> {
                     assumed = taken;
                     routed.putAll(routes);
                     for (NumericWitness.Standing.Found.Placed each : standing.inFixingOrder()) {
                         here = here.given(each.position(), each.place());
-                        // The target this cut's number was routed to, and never one built from the
-                        // number again. Built here a second time, the place the row writes would be
-                        // worked out twice — once where the cut was read and once where its answer
-                        // is filed — and the two would part at exactly the name this routing exists
-                        // for.
-                        out.put(routes.get(each.position()), each.place());
                     }
+                    // The target this cut's number was routed to, and never one built from the
+                    // number again. Built here a second time, the place the row writes would be
+                    // worked out twice — once where the cut was read and once where its answer is
+                    // filed — and the two would part at exactly the name this routing exists for.
+                    owing.forEach((target, asked) -> out.put(target, standing.placeOf(asked)));
                 }
             }
         }
@@ -3859,8 +3870,7 @@ public final class Generator {
      *                        stand beside — read and never added to
      * @param assumed what the row is already taken to be, which every case chosen here agrees with
      */
-    private static Placed placing(MeasuredInput subject, WitnessSearch looking,
-                                  souther.compiler.inputs.SearchRegion here,
+    private static Placed placing(MeasuredInput subject, WitnessSearch looking, SearchRegion here,
                                   Map<RealizationTarget, Place> alreadyStanding,
                                   Requirements assumed, OnTheWay.TakenIn cut) {
         // What the cut says, asked as the one thing it says. A cut over two positions is a
@@ -3874,112 +3884,176 @@ public final class Generator {
                                 .NothingIsLeft) {
             return new Placed.AtNone(new ReachabilityGap.ProvedImpossible(cut));
         }
-        List<NumericTerm.FromOnePosition> owing = new ArrayList<>();
-        // What routing this cut's numbers came to, kept here until the cut is placed. Where
-        // each of them is written and which case the row was taken to be to write it there are
-        // part of placing the cut, and a cut is placed at every position it names or at none —
-        // so a cut that comes to nothing leaves the row the case it had, and the next cut
-        // chooses as freely as this one did.
-        Map<NumericTerm.FromOnePosition, RealizationTarget> routes = new LinkedHashMap<>();
-        Requirements trying = assumed;
-        boolean shared = false;
-        boolean placeable = true;
-        for (NumericTerm term : cut.taken().terms()) {
-            // Where a row writes to move this number, which is where the number is read except
-            // at a name every case of a sum spreads. Asked before anything else about the
-            // number, because every question below is about the place the row writes: what else
-            // is being written there, whether one value answers them all, and which location
-            // the value is gathered under.
-            Writing asked = writeFor(subject, term, trying, looking);
-            if (asked == null) {
-            // Nothing routes it. The name crosses into a case whose reading stopped, or
-            // into cases the row cannot be any of beside what it already assumes — and a
-            // value written at the sum's own name goes nowhere, so there is nothing to
-            // place rather than a place this could not afford.
-            placeable = false;
-            break;
+        // What routing this cut's numbers came to is kept by the search until the cut is placed.
+        // Where each of them is written and which case the row was taken to be to write it there
+        // are part of placing the cut, and a cut is placed at every position it names or at none —
+        // so a cut that comes to nothing leaves the row the case it had, and the next cut chooses
+        // as freely as this one did.
+        return new CutPlacing(subject, looking, here, alreadyStanding, cut,
+                List.copyOf(cut.taken().terms()))
+                .from(0, assumed, new LinkedHashMap<>(), new LinkedHashMap<>());
+    }
+
+    /**
+     * The search for one cut's placing, over every place a row may write each of its numbers.
+     *
+     * <p><b>Which case a row is written under is part of what is searched for.</b> A name every
+     * case of a sum spreads is written under one of them, and the case decides which rules the
+     * value is held to: a case whose invariant keeps the number away from the cut leaves it
+     * nothing, and another case beside it may leave it a run. So the question a cut puts is whether
+     * some way of writing its numbers has values that stand together — and a search that settled
+     * the way first and looked for values after would answer it by the order the model declared its
+     * cases in.
+     *
+     * <p>Depth-first over the cut's numbers, one way of writing each at a time, and the values are
+     * looked for once every number has a place. The ways one number may be written are narrowed by
+     * what the row is already taken to be ({@link Requirements#merge}), so two names of one sum are
+     * written under one case and the ways the search walks are the ones a row can be.
+     *
+     * <p><b>What the ways came to is joined, and a proof only where every way was proved.</b> The
+     * rules leaving one way nothing say nothing about another, and a way this compiler did not get
+     * to the end of may have the values the others lacked. So a cut is said to be impossible where
+     * every way of writing it was shown to be, and otherwise it is a cut this did not compose for.
+     *
+     * @param alreadyStanding where the row already writes, which a number asked for here has to
+     *                        stand beside — read and never added to
+     * @param terms           the cut's numbers, in the order the search takes them
+     */
+    private record CutPlacing(MeasuredInput subject, WitnessSearch looking, SearchRegion here,
+                              Map<RealizationTarget, Place> alreadyStanding,
+                              OnTheWay.TakenIn cut, List<NumericTerm> terms) {
+
+        /**
+         * The placing of the cut's numbers from {@code next} on.
+         *
+         * @param trying what the row is taken to be with the numbers before {@code next} written
+         * @param routes where the row writes each number before {@code next}
+         * @param owing  each target before {@code next} a value has to be chosen for, with the
+         *               number it is chosen as
+         */
+        Placed from(int next, Requirements trying,
+                    Map<NumericTerm.FromOnePosition, RealizationTarget> routes,
+                    SequencedMap<RealizationTarget, NumericTerm.FromOnePosition> owing) {
+            if (next == terms.size()) {
+                return witnessed(trying, routes, owing);
             }
-            // What the next number of this cut is chosen under, since a cut is one statement
-            // about one row: a name sent under a case takes the row with it, and the number
-            // beside it is written under the same case or the row is asked to be two things.
-            trying = asked.assuming();
-            if (term.atOnePosition() != null) {
-            routes.put(term.atOnePosition(), asked.target());
-            }
-            // This very number already stands somewhere: the item asked for it, or an earlier
-            // cut did. Nothing to place, and the cut is answered at it either way.
-            if (alreadyStanding.containsKey(asked.target())) {
-            continue;
-            }
-            // A number this reader cannot place beside the ones already standing. What it can
-            // do is choose a value for a position ({@link NumericWitness}); what a number over
-            // a run asks for is a container built to come to it, which is a demand to compose
-            // and not a value to choose.
+            NumericTerm term = terms.get(next);
+            // Where a row may write to move this number, which is where the number is read except
+            // at a name every case of a sum spreads. Asked before anything else about the number,
+            // because every question below is about the place the row writes: what else is being
+            // written there, whether one value answers them all, and which location the value is
+            // gathered under.
             //
-            // Whether that is a second demand at a location this row already writes is the
-            // same question as the one below, and is asked of the root the run is answered of
-            // — a run has no position and the root it runs through is where a row writes it.
-            // Left unasked, a cut naming a total of the container the item already wrote came
-            // back as a condition on positions nothing composed a value at, which is what this
-            // reader says of a position it could not build at rather than of a location it is
-            // already writing for another number.
-            NumericTerm.FromOnePosition at = term.atOnePosition();
-            if (at == null) {
-            shared = !alsoWritingAt(alreadyStanding, asked.target().writeRoot()).isEmpty();
-            placeable = false;
-            break;
+            // The ways of this row: a name sent under a case takes the row with it, and the number
+            // beside it is written under the same case or not at all, since no value is two cases.
+            WaysToWrite ways = waysToWrite(subject, looking, term, trying);
+            List<ReachabilityGap> missed = new ArrayList<>();
+            for (Way way : ways.to()) {
+                switch (writing(next, term, way.target(), way.taken(), routes, owing)) {
+                    case Placed.AtAll placed -> {
+                        return placed;
+                    }
+                    case Placed.AtNone(ReachabilityGap why) -> missed.add(why);
+                }
             }
-            // Another number taken at the same location. A row writes one value where a
-            // location is, and that one value has to answer both — the hour of a time beside
-            // its minute, the length of a string beside the string. Whether one value can is
-            // {@link TermRealizations}' answer and is asked before anything is placed here: a
-            // group it builds together is placed and written once, and one it does not is a cut
-            // this could not put a value under.
+            return new Placed.AtNone(
+                    ReachabilityGap.overEveryWay(cut, missed, ways.someNotWorkedOut()));
+        }
+
+        /** The placing with {@code term} written at {@code target}, and the rest after it. */
+        private Placed writing(int next, NumericTerm term, RealizationTarget target,
+                               Requirements trying,
+                               Map<NumericTerm.FromOnePosition, RealizationTarget> routes,
+                               SequencedMap<RealizationTarget, NumericTerm.FromOnePosition> owing) {
+            Map<NumericTerm.FromOnePosition, RealizationTarget> routed = new LinkedHashMap<>(routes);
+            NumericTerm.FromOnePosition at = term.atOnePosition();
+            if (at != null) {
+                routed.put(at, target);
+            }
+            // This very number already stands somewhere: the item asked for it, or an earlier cut
+            // did. Nothing to place, and the cut is answered at it either way.
+            if (alreadyStanding.containsKey(target)) {
+                return from(next + 1, trying, routed, owing);
+            }
+            List<RealizationTarget> beside = alsoWritingAt(alreadyStanding, target.writeRoot());
+            // A number this reader cannot place beside the ones already standing. What it can do
+            // is choose a value for a position ({@link NumericWitness}); what a number over a run
+            // asks for is a container built to come to it, which is a demand to compose and not a
+            // value to choose.
+            //
+            // Whether that is a second demand at a location this row already writes is the same
+            // question as the one below, and is asked of the root the run is answered of — a run
+            // has no position and the root it runs through is where a row writes it. Left unasked,
+            // a cut naming a total of the container the item already wrote came back as a
+            // condition on positions nothing composed a value at, which is what this reader says
+            // of a position it could not build at rather than of a location it is already writing
+            // for another number.
+            if (at == null) {
+                return new Placed.AtNone(new ReachabilityGap.Uncomposed(cut, beside.isEmpty()
+                        ? new ReachabilityGap.Why.NoValueComposedForItsPositions()
+                        : new ReachabilityGap.Why.TwoNumbersAtOneLocation()));
+            }
+            // Another number taken at the same location. A row writes one value where a location
+            // is, and that one value has to answer both — the hour of a time beside its minute,
+            // the length of a string beside the string. Whether one value can is
+            // {@link TermRealizations}' answer and is asked before anything is placed here: a group
+            // it builds together is placed and written once, and one it does not is a cut this
+            // could not put a value under.
             //
             // Asked of what is already standing rather than of a list kept beside it, so the
-            // answer is about the demands this row actually has. Which locations are one is
-            // asked of the reader that owns it, because a container written whole and a
-            // position inside it are one location spelled two ways.
-            List<RealizationTarget> beside = alsoWritingAt(alreadyStanding, asked.target().writeRoot());
-            if (!beside.isEmpty() && !writtenTogether(beside, asked.target())) {
-            shared = true;
-            break;
+            // answer is about the demands this row actually has. Which locations are one is asked
+            // of the reader that owns it, because a container written whole and a position inside
+            // it are one location spelled two ways.
+            if (!beside.isEmpty() && !writtenTogether(beside, target)) {
+                return new Placed.AtNone(new ReachabilityGap.Uncomposed(cut,
+                        new ReachabilityGap.Why.TwoNumbersAtOneLocation()));
             }
-            owing.add(at);
+            SequencedMap<RealizationTarget, NumericTerm.FromOnePosition> owed =
+                    new LinkedHashMap<>(owing);
+            owed.put(target, writtenAs(subject, target).atOnePosition());
+            return from(next + 1, trying, routed, owed);
         }
-        // The whole cut at once, because a cut over two positions is one statement about the
-        // pair: which values one of them may take depends on what the other took, and a value
-        // chosen for the first without asking is right about its own run and wrong about the
-        // pair as often as not.
-        NumericWitness.Standing found = shared || !placeable ? null
-                : NumericWitness.of(here, owing,
-                        term -> subject.quantities().ordersOf(term).answered(), looking);
-        // What the rules settle before what this compiler managed, because a reader may act on
-        // the first and on none of the rest.
-        //
-        // And where a budget of this compiler's is why the walk found nothing, that rather than
-        // the word for a walk that had everything and reached none of it.
-        NumericWitness.Standing.Found standing = switch (found) {
-            case null -> null;
-            case NumericWitness.Standing.Found it -> it;
-            case NumericWitness.Standing.ProvedImpossible _, NumericWitness.Standing.NotFound _
-                    -> null;
-        };
-        if (standing == null) {
-            return new Placed.AtNone(switch (found) {
+
+        /**
+         * The values of every number this way of writing the cut owes, chosen together.
+         *
+         * <p>The whole cut at once, because a cut over two positions is one statement about the
+         * pair: which values one of them may take depends on what the other took, and a value
+         * chosen for the first without asking is right about its own run and wrong about the pair
+         * as often as not.
+         *
+         * <p>Each number as it is named where the row writes it. The region reads the rules of the
+         * values a question's positions stand under, so a number named under a case is answered
+         * with that case's own rules; named at the sum, it is answered as though the row could be
+         * any of the cases, and a value chosen there is one the case it is written under may
+         * refuse.
+         */
+        private Placed witnessed(Requirements trying,
+                                 Map<NumericTerm.FromOnePosition, RealizationTarget> routes,
+                                 SequencedMap<RealizationTarget, NumericTerm.FromOnePosition> owing) {
+            NumericWitness.Standing found = NumericWitness.of(here,
+                    List.copyOf(new LinkedHashSet<>(owing.values())),
+                    term -> carrierOf(term, subject.quantities()), looking);
+            // What the rules settle before what this compiler managed, because a reader may act on
+            // the first and on none of the rest.
+            //
+            // And where a budget of this compiler's is why the walk found nothing, that rather than
+            // the word for a walk that had everything and reached none of it.
+            return switch (found) {
+                case NumericWitness.Standing.Found standing ->
+                        new Placed.AtAll(standing, routes, owing, trying);
                 case NumericWitness.Standing.ProvedImpossible _ ->
-                        new ReachabilityGap.ProvedImpossible(cut);
+                        new Placed.AtNone(new ReachabilityGap.ProvedImpossible(cut));
                 case NumericWitness.Standing.NotFound it
                         when !it.stoppedBy().isEmpty() || !it.unheld().isEmpty() ->
-                        new ReachabilityGap.Uncomposed(cut,
+                        new Placed.AtNone(new ReachabilityGap.Uncomposed(cut,
                                 ReachabilityGap.Why.TheWalkForItsPositionsWasStopped.by(
-                                        it.stoppedBy(), it.unheld()));
-                case null, default -> new ReachabilityGap.Uncomposed(cut, shared
-                        ? new ReachabilityGap.Why.TwoNumbersAtOneLocation()
-                        : new ReachabilityGap.Why.NoValueComposedForItsPositions());
-            });
+                                        it.stoppedBy(), it.unheld())));
+                case NumericWitness.Standing.NotFound _ ->
+                        new Placed.AtNone(new ReachabilityGap.Uncomposed(cut,
+                                new ReachabilityGap.Why.NoValueComposedForItsPositions()));
+            };
         }
-        return new Placed.AtAll(standing, routes, trying);
     }
 
     /**
@@ -3998,10 +4072,13 @@ public final class Generator {
          * @param routes   where the row writes each number the cut names, the ones already standing
          *                 beside it included — what a later reader asks when it wants to know what a
          *                 number of this row was filed under
+         * @param owing    each target a value was chosen for here, with the number it was chosen
+         *                 as in {@code standing}
          * @param assumed  what the row is taken to be now that these are written
          */
         record AtAll(NumericWitness.Standing.Found standing,
                      Map<NumericTerm.FromOnePosition, RealizationTarget> routes,
+                     SequencedMap<RealizationTarget, NumericTerm.FromOnePosition> owing,
                      Requirements assumed) implements Placed {}
 
         /** Nothing was put under it, and this is what the way is owed about that. */
@@ -4009,22 +4086,48 @@ public final class Generator {
     }
 
     /**
-     * Where a row writes to move one number, and what the row is taken to be once it does.
+     * One place a row that is already {@code trying} may write a number at, and what the row is
+     * once it does.
      *
-     * <p>Two answers and not one, because choosing where to write a name a sum's cases share is
-     * choosing what the row is. A reader handed the place alone would write a value under a case
-     * and have nothing to hold the next name of that sum to.
+     * <p>The row's requirements and not the place's alone. They are the place's path
+     * ({@link TermPath#requirements}) taken together with what the row already was, worked out once
+     * where the way was followed — so whoever writes at the place is handed the row it writes into
+     * rather than asking again whether the two hold together.
      */
-    private record Writing(RealizationTarget target, Requirements assuming) {}
+    private record Way(RealizationTarget target, Requirements taken) {}
 
     /**
-     * Where a row writes to move {@code term}, or null where nothing here routes it.
+     * Every place a row that is already something may write to move one number, and whether some
+     * way to one was not followed to its end.
+     *
+     * <p><b>The ways of this row, and not of every value of the input.</b> A case the row cannot be
+     * beside what it already is was never one of its ways: the two narrowings hold of no value
+     * together, which is something the model settles and not something left unlooked at. Left in
+     * and refused afterwards, it would have to be read as one or the other, and read as unlooked at
+     * it keeps a cut every way of this row was shown to leave nothing from being said to be that.
+     *
+     * @param to               the places, in the order the model declares the cases on the way to
+     *                         each
+     * @param someNotWorkedOut whether a way of this row reached a place whose holding nothing worked
+     *                         out. Not a place to write at, and not one shown to hold nothing
+     *                         either, so a reader concluding something from every place in
+     *                         {@code to} has not looked at all of them
+     */
+    private record WaysToWrite(List<Way> to, boolean someNotWorkedOut) {}
+
+    /**
+     * Every place a row that is already {@code trying} may write to move {@code term}.
      *
      * <p><b>The place a number is read is the place a row writes it, except at a name every case of
      * a sum spreads.</b> There the rules name the sum's own field and a row writes one of the
      * cases, so the value answering the number stands under whichever case the row turns out to be
      * — and a row asked to write at the sum's own name writes nowhere, which is how a condition
      * over such a name came back as one nothing composed a value for.
+     *
+     * <p><b>Every case and not one of them.</b> Which case the row is written under decides which
+     * rules hold of the value, so it is not settled here: the cut being placed is what says which
+     * of them can take a value, and a search that took one case for every number would answer by
+     * the order the cases were declared in.
      *
      * <p><b>Asked of what the declarations came to at the place, and not of where a name stands.</b>
      * Where a name stands is structure, and structure says the same thing about a position this
@@ -4037,92 +4140,88 @@ public final class Generator {
      * not held to its set ({@link WitnessSearch#toComposeFrom}) — and where a row writes is the
      * place's, whichever number of it was asked for. Asked as the composing set, a count at a name
      * the cases share would be told a set narrows nothing and sent to write at the sum's own name.
-     *
-     * <p>Null where nothing worked out what the place holds, and null where a name crosses into
-     * cases the row cannot be any of. Both are rows this composes nothing for, and neither is a
-     * place to write at anyway.
      */
-    private static Writing writeFor(MeasuredInput subject, NumericTerm term, Requirements assumed,
-                                    WitnessSearch looking) {
+    private static WaysToWrite waysToWrite(MeasuredInput subject, WitnessSearch looking,
+                                           NumericTerm term, Requirements trying) {
         NumericTerm.FromOnePosition at = term.atOnePosition();
+        List<Way> to = new ArrayList<>();
         // A number no single position answers is written where its run is rebuilt, and a run has no
         // name of a sum's to be read at. Left to the sorting below, the position it does not have
         // would be the path asked about.
         if (at == null) {
-            return new Writing(RealizationTarget.of(term), assumed);
+            RealizationTarget run = RealizationTarget.of(term);
+            if (trying.merge(run.writeRoot().requirements())
+                    instanceof Requirements.Merge.Merged(Requirements taken)) {
+                to.add(new Way(run, taken));
+            }
+            return new WaysToWrite(List.copyOf(to), false);
         }
-        return whereARowWritesIt(subject, looking, at, assumed);
+        boolean notWorkedOut = followed(subject, looking, at, at.position(), trying, 0, to);
+        return new WaysToWrite(List.copyOf(to), notWorkedOut);
     }
 
     /**
-     * The place a row rebuilds to move {@code term}, taking each crossing on the way.
+     * The places a row that is already {@code trying} may write {@code term} at from {@code here}
+     * on, added to {@code to}, and whether some way of this row from here ended at a place nothing
+     * worked out.
      *
      * <p><b>A name that crosses is followed until it reaches a place the reading answered for.</b>
      * The sorting moves a name one crossing at a time and says so ({@link NameReach#standingOf}), so
      * a name under two sums comes back as a name under one — and a writer that stopped at the first
      * answer would refuse every position two sums down, which the reading has and can state a set
-     * for. Each step is one case taken, and the row has to be all of them at once.
+     * for. Each step is one case taken, and the place reached states all of them.
      *
-     * <p>The case at each crossing is the first the row can still be: one already taken keeps it,
-     * and a row that is not yet anything takes the case the model declares first. A row that could
-     * be written under a later case and not under this one is not looked for here — what this
-     * settles is where the name is written, and whether a value can be built there is the
-     * construction's answer further on.
+     * <p><b>Only into the cases the row can be.</b> What the path to a place requires is put
+     * together with what the row already is at every step, and a case the two do not hold together
+     * at is not followed: nothing below it is a way of this row, a place there whose holding nothing
+     * worked out included.
      *
      * <p>Bounded by the crossings the walk recorded, because each step takes one of them and no
      * step takes one twice. Running past that is this compiler disagreeing with its own reading
      * rather than a search that could be allowed more.
      */
-    private static Writing whereARowWritesIt(MeasuredInput subject, WitnessSearch looking,
-                                             NumericTerm.FromOnePosition term,
-                                             Requirements assumed) {
-        TermPath here = term.position();
-        Requirements taken = assumed;
-        for (int crossed = 0; crossed <= subject.reach().crossings().size(); crossed++) {
-            switch (looking.admitted().at(here)) {
-                // The reading answered for this place, so it is where the row writes. The first
-                // time round that is the place the number is read at, and after a crossing it is
-                // the position under the cases taken to get here.
-                case AdmittedValues.Admitted.Values _ -> {
-                    return new Writing(here.equals(term.position())
-                            ? new RealizationTarget.AtOnePosition(term)
-                            : new RealizationTarget.AtOnePositionElsewhere(term, here), taken);
-                }
-                // Nothing worked out what this place holds. A value written here would be offered
-                // at a position whose rules this compiler never read, which is the row this
-                // declines to compose however it was reached.
-                case AdmittedValues.Admitted.NotWorkedOut _ -> {
-                    return null;
-                }
-                case AdmittedValues.Admitted.StandsUnderTheCases _ -> {
-                    Crossed under = oneCaseFurtherDown(subject, here, taken);
-                    if (under == null) {
-                        return null;
-                    }
-                    here = under.to();
-                    taken = under.taken();
-                }
-            }
+    private static boolean followed(MeasuredInput subject, WitnessSearch looking,
+                                    NumericTerm.FromOnePosition term, TermPath here,
+                                    Requirements trying, int crossed, List<Way> to) {
+        if (crossed > subject.reach().crossings().size()) {
+            throw new IllegalStateException(
+                    "a name was followed past every crossing this reading recorded: " + term);
         }
-        throw new IllegalStateException(
-                "a name was followed past every crossing this reading recorded: " + term);
+        if (!(trying.merge(here.requirements())
+                instanceof Requirements.Merge.Merged(Requirements taken))) {
+            return false;
+        }
+        return switch (looking.admitted().at(here)) {
+            // The reading answered for this place, so it is where the row writes. The first time
+            // round that is the place the number is read at, and after a crossing it is the
+            // position under the cases taken to get here.
+            case AdmittedValues.Admitted.Values _ -> {
+                to.add(new Way(here.equals(term.position())
+                        ? new RealizationTarget.AtOnePosition(term)
+                        : new RealizationTarget.AtOnePositionElsewhere(term, here), taken));
+                yield false;
+            }
+            // Nothing worked out what this place holds. A value written here would be offered at a
+            // position whose rules this compiler never read, which is the row this declines to
+            // compose however it was reached.
+            case AdmittedValues.Admitted.NotWorkedOut _ -> true;
+            case AdmittedValues.Admitted.StandsUnderTheCases _ -> {
+                boolean notWorkedOut = false;
+                for (NameReach.CaseStanding standing : casesUnder(subject, here)) {
+                    notWorkedOut |= followed(subject, looking, term, standing.position(), taken,
+                            crossed + 1, to);
+                }
+                yield notWorkedOut;
+            }
+        };
     }
 
-    /** One crossing taken: where the name stands under the case, and what the row is now taken to
-     *  be. */
-    private record Crossed(TermPath to, Requirements taken) {}
-
     /**
-     * The name at {@code here} moved under the first case the row can still be, or null where it
-     * can be none of them.
+     * Where the name at {@code here} stands under each case of the sum it crosses.
      *
      * <p>Asked of the same sorting the state above came from, since that is where the cases are.
-     * What the row has to be travels back with the place, because a row written under one case at
-     * one name and another at the next would be asked for a value that is two cases at once — and
-     * {@link Requirements#merge} is what refuses that rather than a rule written here.
      */
-    private static Crossed oneCaseFurtherDown(MeasuredInput subject, TermPath here,
-                                              Requirements taken) {
+    private static List<NameReach.CaseStanding> casesUnder(MeasuredInput subject, TermPath here) {
         if (!(subject.reach().standingOf(here)
                 instanceof NameReach.Standing.UnderTheCases(List<NameReach.CaseStanding> under))) {
             // The state above was read off this same sorting, so anything else here is this
@@ -4130,13 +4229,41 @@ public final class Generator {
             throw new IllegalStateException(
                     "a name the search was told stands under the cases stands at none: " + here);
         }
-        for (NameReach.CaseStanding standing : under) {
-            if (taken.merge(standing.assuming())
-                    instanceof Requirements.Merge.Merged(Requirements both)) {
-                return new Crossed(standing.position(), both);
+        return under;
+    }
+
+    /**
+     * The number {@code target} realizes, named at the place the row writes it.
+     *
+     * <p><b>The one place a number read at a sum becomes the number under the case it is written
+     * at.</b> The rules and the report are about the number where the rules name it, and that is
+     * what {@link RealizationTarget#term} keeps. What a value chosen for it is held to is another
+     * question: the rules of the value it is written into, which for a name every case of a sum
+     * spreads are the rules of the case. The region answers a question with the rules of the values
+     * its positions stand under, so the number is put to it named under the case — and named at the
+     * sum, it would be answered as though the row could be any of the cases.
+     *
+     * <p>Asked where a value is chosen for a number of the way, which is the one place the case
+     * reaches a value. What is built afterwards is built at the place chosen here, which is inside
+     * what the case leaves and so inside what the sum leaves as well: a reader building at it asks
+     * nothing a case could answer differently.
+     */
+    private static NumericTerm writtenAs(MeasuredInput subject, RealizationTarget target) {
+        return switch (target) {
+            case RealizationTarget.AtOnePosition(NumericTerm.FromOnePosition term) -> term;
+            case RealizationTarget.OverARun(NumericTerm.TakenOver term) -> term;
+            case RealizationTarget.AtOnePositionElsewhere(NumericTerm.FromOnePosition term,
+                                                         TermPath root) -> {
+                NumericTerm moved = subject.quantities().namedAt(term, root);
+                // The cases spread one field, and one field has one declared type, so what the
+                // number takes of it is taken under each case as it is at the sum.
+                if (moved == null) {
+                    throw new IllegalStateException("`" + term + "` is written at " + root
+                            + " and cannot be named there, though the cases spread one field");
+                }
+                yield moved;
             }
-        }
-        return null;
+        };
     }
 
     /**
@@ -5505,7 +5632,7 @@ public final class Generator {
                                         + ", and nothing said which of them the value under it is");
             }
         }
-        Choices choices = choicesOf(subject, p, plan, decided, settled);
+        Choices choices = choicesOf(subject, plan, decided, under);
         if (choices.missingAt() != null) {
             // A position nothing stands at is the declarations' answer where the plan reached
             // everything, and this compiler's where it did not: what the search would have been
@@ -5988,18 +6115,20 @@ public final class Generator {
      *
      * @param decided what the caller fixed: the classes of an axis, or the single value a boundary is
      *                to be reached at
+     * @param left    the parameter's rules with what the caller settled taken in — the reading the
+     *                plan was made against, handed over rather than read again, since the two are
+     *                one reading and a second one would be the same declarations worked out twice
+     *                for every point
      */
-    private static Choices choicesOf(MeasuredInput subject, int p, ConstructionPlan plan,
+    private static Choices choicesOf(MeasuredInput subject, ConstructionPlan plan,
                                      Map<TermPath, List<FixtureTemplate>> decided,
-                                     Map<TermPath, Place> settled) {
+                                     FieldDomains left) {
         RuleReadingContext reading = subject.ruleReading();
-        TermPath at = TermPath.of(subject.parameters().get(p));
         List<TermPath> paths = new ArrayList<>(decided.keySet());
         List<List<FixtureTemplate>> values = new ArrayList<>(decided.values());
         // A position the caller fixed holds nothing back: it was given the value it is to take.
         List<List<FixtureTemplate>> reserves = new ArrayList<>(
                 java.util.Collections.nCopies(paths.size(), List.<FixtureTemplate>of()));
-        FieldDomains left = rulesOf(subject.types().get(p), reading, under(at, settled));
         for (ConstructionPlan.Slot slot : plan.slots()) {
             if (paths.contains(slot.at())) {
                 continue;   // an axis decides here
