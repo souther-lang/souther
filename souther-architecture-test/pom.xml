@@ -126,6 +126,14 @@
             <version>${checkstyle.version}</version>
             <scope>test</scope>
         </dependency>
+        <!-- The Error Prone the lint build runs, at the version it runs: the hook's rule for
+             NonApiType is held against the check itself, which is run over the same sources. -->
+        <dependency>
+            <groupId>com.google.errorprone</groupId>
+            <artifactId>error_prone_core</artifactId>
+            <version>${errorprone.version}</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

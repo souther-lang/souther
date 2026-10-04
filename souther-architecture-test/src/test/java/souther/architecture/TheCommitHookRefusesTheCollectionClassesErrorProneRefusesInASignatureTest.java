@@ -1,24 +1,14 @@
 package souther.architecture;
 
-import com.puppycrawl.tools.checkstyle.Checker;
-import com.puppycrawl.tools.checkstyle.ConfigurationLoader;
-import com.puppycrawl.tools.checkstyle.PropertiesExpander;
-import com.puppycrawl.tools.checkstyle.api.AuditEvent;
-import com.puppycrawl.tools.checkstyle.api.AuditListener;
-import com.puppycrawl.tools.checkstyle.api.CheckstyleException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import souther.test.RepositoryLayout;
 
-import java.io.File;
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -26,171 +16,201 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * What the pre-commit hook says about {@code ArrayList}, {@code LinkedList}, {@code HashSet},
  * {@code LinkedHashSet}, {@code TreeSet}, {@code HashMap}, {@code LinkedHashMap} and
- * {@code TreeMap}, held against what Error Prone's NonApiType says of them.
+ * {@code TreeMap}, held against what Error Prone's NonApiType says of the same source.
  *
- * <p>CI refuses one of them in the type of a parameter or of a method's result, at any visibility,
- * and looks through type arguments, so {@code Map<String, ArrayList<X>>} is refused as
- * {@code ArrayList<X>} is. It does not look at a field or a local variable, and a
- * {@code @SuppressWarnings("NonApiType")} on the parameter, the method or a class around it stands.
- * The hook is the same question asked of a parser, so each of those edges is a case here: a rule
- * that stopped at the first line of a signature, or at the outermost type, would let a commit
- * through that CI refuses, and one that went on into the body would stop a commit CI accepts.
+ * <p>The hook is the same question asked of a parser, and what it must never do is refuse what CI
+ * accepts, because that stops a commit nothing is wrong with. So each case is a source, and the
+ * count of what Error Prone refuses in it is the count Error Prone gives when it is run over it
+ * ({@link TheCommitHook}), not a count read off its documentation or its source. Both counts are
+ * written down per case, and both are asserted, so a Checkstyle or an Error Prone that comes to
+ * answer differently fails here and not in somebody's commit.
  *
- * <p>Run by Checkstyle itself over {@code config/checkstyle.xml}, the file the hook reads.
+ * <p>The hook may refuse less than Error Prone, and where it does the case says so with a count of
+ * its own: a type variable's bound is something Error Prone reads and a parser cannot. It may not
+ * refuse more, and every case is checked for that as well as for its own counts.
  */
 class TheCommitHookRefusesTheCollectionClassesErrorProneRefusesInASignatureTest {
 
-    private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
+    /**
+     * A source and how many times each of the two refuses something in it. {@code source} is a
+     * compilation unit's types; {@code Fixture} in it names the class the test files it under.
+     */
+    private record Case(String name, String source, int errorProne, int hook) {
+    }
 
-    /** What a member of the class is, and how many times the hook refuses it. */
-    private record Case(String name, String members, int refused) {
+    private static Case refusedByBoth(String name, String members) {
+        return new Case(name, inClass(members), 1, 1);
+    }
+
+    private static Case acceptedByBoth(String name, String members) {
+        return new Case(name, inClass(members), 0, 0);
+    }
+
+    private static String inClass(String members) {
+        return "final class Fixture {\n    " + members + "\n}";
     }
 
     private static final List<Case> CASES = List.of(
-            new Case("a result named for its class",
-                    "ArrayList<String> f() { return null; }", 1),
-            new Case("a parameter named for its class",
-                    "void f(LinkedHashMap<String, String> m) { }", 1),
-            new Case("a result that holds one in a type argument",
-                    "Map<String, ArrayList<String>> f() { return null; }", 1),
-            new Case("a parameter that holds one two type arguments down",
-                    "void f(Map<String, List<TreeSet<String>>> m) { }", 1),
-            new Case("a parameter that is not on the first line of the signature",
-                    "void f(int n,\n               HashMap<String, String> m) { }", 1),
-            new Case("a qualified name",
-                    "java.util.HashSet<String> f() { return null; }", 1),
-            new Case("a constructor parameter",
-                    "Fixture(TreeMap<String, String> m) { }", 1),
-            new Case("a method of an interface",
-                    "interface Reads { LinkedList<String> all(); }", 1),
+            // Where a name is written.
+            refusedByBoth("a result named for its class",
+                    "ArrayList<String> f() { return null; }"),
+            refusedByBoth("a parameter named for its class",
+                    "void f(LinkedHashMap<String, String> m) { }"),
+            refusedByBoth("a result that holds one in a type argument",
+                    "Map<String, ArrayList<String>> f() { return null; }"),
+            refusedByBoth("a parameter that holds one two type arguments down",
+                    "void f(Map<String, List<TreeSet<String>>> m) { }"),
+            refusedByBoth("a parameter that is not on the first line of the signature",
+                    "void f(int n,\n               HashMap<String, String> m) { }"),
+            refusedByBoth("a qualified name",
+                    "java.util.HashSet<String> f() { return null; }"),
+            refusedByBoth("a raw type",
+                    "ArrayList f() { return null; }"),
+            refusedByBoth("the upper bound of a wildcard",
+                    "List<? extends ArrayList<String>> f() { return null; }"),
+            refusedByBoth("a constructor parameter",
+                    "Fixture(TreeMap<String, String> m) { }"),
+            refusedByBoth("a method of an interface",
+                    "interface Reads { LinkedList<String> all(); }"),
+            refusedByBoth("a static method of an interface",
+                    "interface Reads { static ArrayList<String> s() { return null; } }"),
+            refusedByBoth("a static method",
+                    "static ArrayList<String> f() { return null; }"),
+            refusedByBoth("an abstract method",
+                    "abstract static class Base { abstract ArrayList<String> f(); }"),
+            refusedByBoth("a final parameter",
+                    "void f(final ArrayList<String> m) { }"),
+            refusedByBoth("an annotated parameter",
+                    "void f(@Deprecated ArrayList<String> m) { }"),
+            refusedByBoth("a method of an enum",
+                    "enum E { A; ArrayList<String> f() { return null; } }"),
+            new Case("a method of the body of an enum constant and the one it implements",
+                    inClass("enum E { A { ArrayList<String> g() { return null; } }; abstract ArrayList<String> g(); }"),
+                    2, 2),
+            refusedByBoth("a method of an anonymous class",
+                    "Object f() { return new Object() { ArrayList<String> g() { return null; } }; }"),
             new Case("two in one signature",
-                    "HashSet<String> f(HashMap<String, String> m) { return null; }", 2),
-            new Case("a field",
-                    "private final ArrayList<String> held = new ArrayList<>();", 0),
-            new Case("a local variable and what is built into it",
-                    "List<String> f() { ArrayList<String> local = new ArrayList<>(); return local; }", 0),
-            new Case("a construction returned as the interface",
-                    "List<String> f() { return new ArrayList<>(); }", 0),
-            new Case("the interfaces they implement",
-                    "Map<String, List<String>> f(Map<String, String> m, List<String> l) { return null; }", 0),
-            new Case("a method that suppresses it",
-                    "@SuppressWarnings(\"NonApiType\") ArrayList<String> f() { return null; }", 0),
-            new Case("a parameter that suppresses it",
-                    "void f(@SuppressWarnings(\"NonApiType\") HashMap<String, String> m) { }", 0),
-            new Case("a method that suppresses it among others",
-                    "@SuppressWarnings({\"unused\", \"NonApiType\"}) ArrayList<String> f() { return null; }", 0),
-            new Case("a method that suppresses something else",
-                    "@SuppressWarnings(\"unused\") ArrayList<String> f() { return null; }", 1),
-            new Case("the method beside one that suppresses it",
+                    inClass("HashSet<String> f(HashMap<String, String> m) { return null; }"), 2, 2),
+            new Case("an override and what it overrides",
+                    "interface Reads { LinkedList<String> all(); }\n"
+                            + "final class Fixture implements Reads {\n"
+                            + "    @Override public LinkedList<String> all() { return null; }\n"
+                            + "}", 2, 2),
+
+            // What is not a parameter or a result.
+            acceptedByBoth("a field",
+                    "private final ArrayList<String> held = new ArrayList<>();"),
+            acceptedByBoth("a local variable and what is built into it",
+                    "List<String> f() { ArrayList<String> local = new ArrayList<>(); return local; }"),
+            acceptedByBoth("a construction returned as the interface",
+                    "List<String> f() { return new ArrayList<>(); }"),
+            acceptedByBoth("the interfaces they implement",
+                    "Map<String, List<String>> f(Map<String, String> m, List<String> l) { return null; }"),
+            acceptedByBoth("the parameter of a lambda",
+                    "Function<ArrayList<String>, Integer> f = (ArrayList<String> l) -> 1;"),
+            acceptedByBoth("a class that extends one",
+                    "static class Mine extends ArrayList<String> { }\n    Mine f() { return null; }"),
+
+            // What Error Prone does not look into.
+            acceptedByBoth("an array result",
+                    "ArrayList<String>[] f() { return null; }"),
+            acceptedByBoth("an array of arrays",
+                    "ArrayList<String>[][] f() { return null; }"),
+            acceptedByBoth("an array parameter",
+                    "void f(ArrayList<String>[] xs) { }"),
+            acceptedByBoth("a variable-arity parameter",
+                    "void f(ArrayList<String>... xs) { }"),
+            acceptedByBoth("a variable-arity parameter of a generic type",
+                    "void f(Map<String, ArrayList<String>>... xs) { }"),
+            acceptedByBoth("an array in a type argument",
+                    "List<ArrayList<String>[]> f() { return null; }"),
+            acceptedByBoth("an array of a type that holds one",
+                    "Map<String, ArrayList<String>>[] f() { return null; }"),
+            acceptedByBoth("a raw array",
+                    "HashMap[] f() { return null; }"),
+            acceptedByBoth("the lower bound of a wildcard",
+                    "void f(List<? super HashSet<String>> sink) { }"),
+            new Case("a type variable bounded by one",
+                    inClass("<T extends ArrayList<String>> T f() { return null; }"), 1, 0),
+
+            // What a record owns.
+            acceptedByBoth("a method of a record",
+                    "record R(int n) { ArrayList<String> values() { return null; } }"),
+            acceptedByBoth("a parameter of a method of a record",
+                    "record R(int n) { void with(ArrayList<String> x) { } }"),
+            acceptedByBoth("a constructor of a record",
+                    "record R(int n) { R(int n, ArrayList<String> more) { this(n); } }"),
+            acceptedByBoth("a component of a record",
+                    "record R(ArrayList<String> component) { }"),
+            acceptedByBoth("a method of a record declared where it is used",
+                    "void f() { record Local() { ArrayList<String> g() { return null; } } }"),
+            refusedByBoth("a method of a class nested in a record",
+                    "record R(int n) { static class Inner { ArrayList<String> g() { return null; } } }"),
+            refusedByBoth("a method of an interface nested in a record",
+                    "record R(int n) { interface Deep { ArrayList<String> d(); } }"),
+            refusedByBoth("a method of an anonymous class made by a record",
+                    "record R(int n) { Object o() { return new Object() { ArrayList<String> h() { return null; } }; } }"),
+
+            // What a suppression stands for.
+            acceptedByBoth("a method that suppresses it",
+                    "@SuppressWarnings(\"NonApiType\") ArrayList<String> f() { return null; }"),
+            acceptedByBoth("a parameter that suppresses it",
+                    "void f(@SuppressWarnings(\"NonApiType\") HashMap<String, String> m) { }"),
+            acceptedByBoth("a method that suppresses it among others",
+                    "@SuppressWarnings({\"unused\", \"NonApiType\"}) ArrayList<String> f() { return null; }"),
+            acceptedByBoth("a method that suppresses everything",
+                    "@SuppressWarnings(\"all\") ArrayList<String> f() { return null; }"),
+            acceptedByBoth("a method of a class that suppresses it",
+                    "@SuppressWarnings(\"NonApiType\") static class Quiet { ArrayList<String> f() { return null; } }"),
+            new Case("a class that suppresses it",
+                    "@SuppressWarnings(\"NonApiType\")\nfinal class Fixture {\n"
+                            + "    ArrayList<String> f() { return null; }\n"
+                            + "    void g(HashMap<String, String> m) { }\n}", 0, 0),
+            refusedByBoth("a method that suppresses something else",
+                    "@SuppressWarnings(\"unused\") ArrayList<String> f() { return null; }"),
+            refusedByBoth("the method beside one that suppresses it",
                     "@SuppressWarnings(\"NonApiType\") ArrayList<String> f() { return null; }\n"
-                            + "    ArrayList<String> g() { return null; }", 1));
+                            + "    ArrayList<String> g() { return null; }"));
 
     @Test
-    void eachEdgeOfWhatErrorProneRefusesIsWhatTheHookRefuses(@TempDir Path dir) throws Exception {
-        Map<String, Case> filed = new LinkedHashMap<>();
+    void whatTheHookRefusesIsNeverMoreThanErrorProneRefuses() {
+        for (Case each : CASES) {
+            assertTrue(each.hook() <= each.errorProne(), each.name()
+                    + ": a hook that refuses more than CI stops a commit CI accepts");
+        }
+    }
+
+    @Test
+    void eachCaseIsRefusedAsManyTimesAsErrorProneAndTheHookEachSay(@TempDir Path dir)
+            throws Exception {
+        Map<Path, Case> filed = new LinkedHashMap<>();
         for (int i = 0; i < CASES.size(); i++) {
             Case each = CASES.get(i);
             Path file = dir.resolve("Fixture" + i + ".java");
             Files.writeString(file, """
-                    package fixture;
-
                     import java.util.*;
+                    import java.util.function.*;
 
-                    final class Fixture%d {
-                        %s
-                    }
-                    """.formatted(i, each.members().replace("Fixture(", "Fixture" + i + "(")));
-            filed.put(file.toString(), each);
+                    %s
+                    """.formatted(each.source().replace("Fixture", "Fixture" + i)));
+            filed.put(file, each);
         }
+        List<Path> files = List.copyOf(filed.keySet());
 
-        Map<String, Integer> refused = refusedBy(List.copyOf(filed.keySet()));
+        Map<Path, Integer> byErrorProne = TheCommitHook.errorProneRefusals("NonApiType", dir, files);
+        Map<Path, Integer> byTheHook = TheCommitHook.refusalsBy("MatchXpath", files);
 
         List<String> disagreements = new ArrayList<>();
-        for (Map.Entry<String, Case> each : filed.entrySet()) {
-            int found = refused.getOrDefault(each.getKey(), 0);
-            if (found != each.getValue().refused()) {
-                disagreements.add(each.getValue().name() + ": expected "
-                        + each.getValue().refused() + ", the hook refused " + found);
+        for (Map.Entry<Path, Case> each : filed.entrySet()) {
+            Case expected = each.getValue();
+            int errorProne = byErrorProne.getOrDefault(each.getKey(), 0);
+            int hook = byTheHook.getOrDefault(each.getKey(), 0);
+            if (errorProne != expected.errorProne() || hook != expected.hook()) {
+                disagreements.add(expected.name() + ": Error Prone refused " + errorProne
+                        + " (written " + expected.errorProne() + "), the hook refused " + hook
+                        + " (written " + expected.hook() + ")");
             }
         }
         assertEquals(List.of(), disagreements);
-    }
-
-    @Test
-    void theClassSuppressionStandsForEveryMemberOfTheClass(@TempDir Path dir) throws Exception {
-        Path file = Files.writeString(dir.resolve("Suppressed.java"), """
-                package fixture;
-
-                import java.util.*;
-
-                @SuppressWarnings("NonApiType")
-                final class Suppressed {
-                    ArrayList<String> f() { return null; }
-
-                    void g(HashMap<String, String> m) { }
-                }
-                """);
-
-        assertEquals(0, refusedBy(List.of(file.toString())).getOrDefault(file.toString(), 0),
-                "a suppression on the class stands for what is written in it");
-    }
-
-    @Test
-    void theRuleIsOneTheHookRunsAndNotOnlyOneThatIsWritten() throws IOException {
-        String config = Files.readString(REPOSITORY.root().resolve("config/checkstyle.xml"));
-
-        assertTrue(config.contains("<module name=\"MatchXpath\">"),
-                "the cases above are run against the file the hook reads, and this is the rule in it");
-    }
-
-    /** How many times each file was refused by the NonApiType rule. */
-    private static Map<String, Integer> refusedBy(List<String> files) throws CheckstyleException {
-        List<AuditEvent> events = new ArrayList<>();
-        List<Throwable> failures = new ArrayList<>();
-        Checker checker = new Checker();
-        try {
-            checker.setModuleClassLoader(Checker.class.getClassLoader());
-            checker.configure(ConfigurationLoader.loadConfiguration(
-                    REPOSITORY.root().resolve("config/checkstyle.xml").toString(),
-                    new PropertiesExpander(new Properties())));
-            checker.addListener(new AuditListener() {
-                @Override
-                public void auditStarted(AuditEvent event) {
-                }
-
-                @Override
-                public void auditFinished(AuditEvent event) {
-                }
-
-                @Override
-                public void fileStarted(AuditEvent event) {
-                }
-
-                @Override
-                public void fileFinished(AuditEvent event) {
-                }
-
-                @Override
-                public void addError(AuditEvent event) {
-                    events.add(event);
-                }
-
-                @Override
-                public void addException(AuditEvent event, Throwable throwable) {
-                    failures.add(throwable);
-                }
-            });
-            checker.process(files.stream().map(File::new).toList());
-        } finally {
-            checker.destroy();
-        }
-        assertTrue(failures.isEmpty(), "Checkstyle failed on a fixture: " + failures);
-        Map<String, Integer> refused = new LinkedHashMap<>();
-        for (AuditEvent event : events) {
-            if (event.getSourceName().contains("MatchXpath")) {
-                refused.merge(event.getFileName(), 1, Integer::sum);
-            }
-        }
-        return refused;
     }
 }

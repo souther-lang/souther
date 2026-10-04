@@ -22,39 +22,85 @@
     ArrayTypeStyle         MixedArrayDimensions
     MatchXpath             NonApiType
 
+  What a rule here refuses is never more than what the check it mirrors refuses, because a rule
+  that is stricter stops a commit CI would have accepted. It may refuse less, and where it does the
+  comment on the rule says what it leaves to CI.
+
   NonApiType is asked of the eight collection classes it names at any visibility: `ArrayList`,
-  `LinkedList`, `HashSet`, `LinkedHashSet`, `TreeSet`, `HashMap`, `LinkedHashMap` and `TreeMap`,
-  anywhere in the type of a parameter or of a method's result, a type argument included, so
-  `Map<String, ArrayList<X>>` is found as `ArrayList<X>` is. A local variable or a field is not a
-  parameter or a result and is not asked. A `@SuppressWarnings("NonApiType")` on the parameter, the
-  method or any class around it stands, as it does for Error Prone. Checkstyle resolves no types,
-  so a class of another package that is also named `HashMap` is found too; nothing here has one.
-  What else NonApiType names, such as an `Optional` parameter or a Guava immutable collection, is
-  not asked here.
+  `LinkedList`, `HashSet`, `LinkedHashSet`, `TreeSet`, `HashMap`, `LinkedHashMap` and `TreeMap`.
+  Error Prone visits the methods and constructors that a record does not own, and in each the type
+  of every parameter and of the result, looking into type arguments, so `Map<String, ArrayList<X>>`
+  is found as `ArrayList<X>` is, and so is `List<? extends ArrayList<X>>`. This rule visits the
+  same and no more:
+
+    - a method or constructor that a record owns is not asked, though one in a class nested in the
+      record is;
+    - a field, a local variable and the parameter of a lambda are not asked;
+    - a type that is an array, and so a variable-arity parameter, is not looked into, nor is the
+      lower bound of `? super`;
+    - a `@SuppressWarnings("NonApiType")` or `@SuppressWarnings("all")` on the parameter, the
+      method or any class around it stands.
+
+  What it leaves to CI: the bound of a type variable, which Error Prone reads and a parser cannot,
+  and what else NonApiType names, such as an `Optional` parameter or a Guava immutable collection.
+  Checkstyle resolves no types, so a class of another package that is also named `HashMap` is found
+  too; nothing here has one.
+
+  Each of these is held against Error Prone itself, which the architecture tests run over the same
+  sources, so that this is not a reading of its documentation or of its source.
 
   Nothing else Error Prone reports can be asked here. Whether two branches are the same, whether a
   name means two things, whether an override says so, whether a call prints an object rather than
   its contents — each needs the types, which is a compile.
 
-  Two of these are stricter than what they mirror, in the direction this codebase already writes.
-  Error Prone lets an unused local stand if its name begins with `unused`; here the name for one
-  is `_`. And the case-fold rule is a search through text rather than a reading of types, so it
-  would also find a `toLowerCase()` on something that is not a string — which nothing here has.
+  One of these is stricter than what it mirrors: the case-fold rule is a search through text
+  rather than a reading of types, so it would also find a `toLowerCase()` on something that is not
+  a string — which nothing here has.
+
+  UnusedVariable lets a local stand when its name is `ignored` or begins with `unused`, and it
+  reads a binding only where `x instanceof T name` introduces it, not where a switch case or a
+  record pattern does. UnusedLocalVariable reads all of them, so the rule stands aside for the
+  names and the bindings Error Prone passes, and is asked of the rest.
 
   processJavadoc is what keeps the import answers the same. Error Prone reads documentation, so an
   import only a {@link} mentions is used; Checkstyle does not read it unless asked, and unasked it
-  would stop commits CI would have accepted.
+  would stop commits CI would have accepted. A comment it cannot parse, such as one that writes
+  `Map<String, T>` outside a tag, is reported by UnusedImports as a violation, and Error Prone
+  finds nothing wrong with the same comment, so that report is suppressed. The messages are asked
+  for in English so that the suppression does not depend on the language of the machine.
+
+  That none of these is stricter than CI over the code this repository holds is a test, not a
+  hope: the architecture tests run every rule here over every Java file git tracks, and CI is green
+  over them.
 -->
 <module name="Checker">
     <property name="charset" value="UTF-8"/>
     <property name="severity" value="error"/>
+    <property name="localeLanguage" value="en"/>
+    <property name="localeCountry" value="US"/>
     <property name="fileExtensions" value="java"/>
+
+    <module name="SuppressionSingleFilter">
+        <property name="checks" value="UnusedImports"/>
+        <property name="message" value="Javadoc comment at column \d+ has parse error.*"/>
+    </module>
 
     <module name="TreeWalker">
         <module name="UnusedImports">
             <property name="processJavadoc" value="true"/>
         </module>
         <module name="UnusedLocalVariable"/>
+        <module name="SuppressionXpathSingleFilter">
+            <property name="checks" value="UnusedLocalVariable"/>
+            <property name="query"
+                      value="//VARIABLE_DEF[./IDENT[@text='ignored' or starts-with(@text, 'unused')]]/TYPE
+                             | //PATTERN_VARIABLE_DEF/IDENT[@text='ignored' or starts-with(@text, 'unused')]"/>
+        </module>
+        <module name="SuppressionXpathSingleFilter">
+            <property name="checks" value="UnusedLocalVariable"/>
+            <property name="query"
+                      value="//PATTERN_VARIABLE_DEF[not(parent::LITERAL_INSTANCEOF)]/IDENT"/>
+        </module>
         <module name="EqualsHashCode"/>
         <!--
           A record that spells its own hash is not asked to spell its own equality.
@@ -85,10 +131,13 @@
         </module>
         <module name="MatchXpath">
             <property name="query"
-                      value="(//METHOD_DEF/TYPE | //PARAMETER_DEF/TYPE)
+                      value="(//METHOD_DEF | //CTOR_DEF)[not(parent::OBJBLOCK/parent::RECORD_DEF)]
+                             /(TYPE | PARAMETERS/PARAMETER_DEF[not(ELLIPSIS)]/TYPE)
                              //IDENT[@text=('ArrayList', 'LinkedList', 'HashSet', 'LinkedHashSet', 'TreeSet', 'HashMap', 'LinkedHashMap', 'TreeMap')]
+                             [not(ancestor::*[./ARRAY_DECLARATOR])]
+                             [not(ancestor::TYPE_LOWER_BOUNDS)]
                              [not(ancestor::*[./MODIFIERS/ANNOTATION[./IDENT[@text='SuppressWarnings']]
-                                                                     [.//STRING_LITERAL[@text='NonApiType']]])]"/>
+                                                                     [.//STRING_LITERAL[@text=('NonApiType', 'all')]]])]"/>
             <message key="matchxpath.match"
                      value="a parameter or a result named for the class that holds it ties every
                             caller to that class: take or return the List, Set or Map it is
