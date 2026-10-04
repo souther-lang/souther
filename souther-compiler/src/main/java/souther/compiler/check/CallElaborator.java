@@ -575,7 +575,8 @@ public final class CallElaborator {
     }
 
     /**
-     * {@code said}, pointing as well at what the applied binding hid, where it hid something.
+     * {@code said}, pointing as well at what the applied binding hid, where it hid something and
+     * the reading holds somewhere to ask where that is.
      *
      * <p>What was hidden is what resolution said when it chose the binding, and nothing here looks
      * the spelling up again. The label says it is hidden and no more: whether it could be applied
@@ -587,11 +588,17 @@ public final class CallElaborator {
                 ReachName.Declaration reached))) {
             return said;
         }
-        NameMessage.ABindingInScopeHidesIt label =
-                new NameMessage.ABindingInScopeHidesIt(call.written(), reached.rendered());
-        return switch (locations.of(reached)) {
-            case DiagnosticPlace.InSource in -> said.secondary(in, label);
-            case DiagnosticPlace.Unavailable out -> said.secondaryOutOfSight(out.provenance(), label);
+        return switch (locations) {
+            case ReachedValueLocations.NotHeld _ -> said;
+            case ReachedValueLocations.Held(ReachedValueLocations.Where where) -> {
+                NameMessage.ABindingInScopeHidesIt label =
+                        new NameMessage.ABindingInScopeHidesIt(call.written(), reached.rendered());
+                yield switch (where.of(reached)) {
+                    case DiagnosticPlace.InSource in -> said.secondary(in, label);
+                    case DiagnosticPlace.Unavailable out ->
+                            said.secondaryOutOfSight(out.provenance(), label);
+                };
+            }
         };
     }
 

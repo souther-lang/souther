@@ -120,6 +120,41 @@ class AnAppliedBindingSaysWhatItHidesTest {
         assertEquals("4:5", pointsAt(source, label));
     }
 
+    /** A clause of a data is checked by a reading of its own, and says the same. */
+    @Test
+    void aLambdaParameterInAnInvariantHidesAHelperTheSameWay() {
+        String source = """
+                module probe.shadow exposing ( Counts, run )
+
+                data Counts = { xs: List<Int> }
+                    invariant List.all((count) -> count(2) > 0, xs)
+                let count (k: Int): Int = k + 1
+                behavior run : (n: Int) -> Int
+                let run (n) = n
+                """;
+        LabeledRegion label = theOneLabel(refused(source));
+
+        assertEquals(new NameMessage.ABindingInScopeHidesIt("count", "count"), label.said());
+        assertEquals("5:5", pointsAt(source, label));
+    }
+
+    /** And so is what a behavior ensures. */
+    @Test
+    void aLambdaParameterInAnEnsuresHidesAHelperTheSameWay() {
+        String source = """
+                module probe.shadow exposing ( run )
+
+                behavior run : (xs: List<Int>) -> Int
+                    ensures List.all((count) -> count(2) > value, xs)
+                let count (k: Int): Int = k + 1
+                let run (xs) = 0
+                """;
+        LabeledRegion label = theOneLabel(refused(source));
+
+        assertEquals(new NameMessage.ABindingInScopeHidesIt("count", "count"), label.said());
+        assertEquals("5:5", pointsAt(source, label));
+    }
+
     /** A behavior a helper cannot reach is hidden all the same; the label says hidden and no more. */
     @Test
     void aParameterThatHidesABehaviorPointsAtTheBehavior() {

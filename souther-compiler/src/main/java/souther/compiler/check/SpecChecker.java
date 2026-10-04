@@ -254,6 +254,7 @@ public final class SpecChecker {
     static Checked checkSpecFn(Hir.SpecBehavior spec, Hir.FnDef fn, Hir.Expr inlinedBody,
                                     InvariantChecker.Source discharge,
                                     Symbols symbols, DeclarationAccess declarations,
+                                    ReachedValueLocations reachedLocations,
                                     ReadingPolicy policy,
                                     Map<ValueName.Behavior, ReqSig> calleeSigs,
                                     Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
@@ -331,7 +332,7 @@ public final class SpecChecker {
         // A parameter of the same name wins: a binding in force wins over the declaration it shadows
         // (spec §fn-rules), so an input written `depth` is the input and not the helper spelled that way.
         Scope tenv = env.reaching(recursiveHelperFns);
-        CheckContext typing = new CheckContext(symbols, declarations, null, reqSigs)
+        CheckContext typing = new CheckContext(symbols, declarations, reachedLocations, null, reqSigs)
                 .withCallees(calleeSigs)
                 .withDependencies(dependsOn)
                 .preserving(Preserved.valuesAlreadySettled(settledValues));
@@ -461,7 +462,7 @@ public final class SpecChecker {
         // representation there is none of is not analyzed at all, rather than analyzed over the
         // emitted tree, whose operations are no longer operations.
         CheckContext dischargeContext = discharge == null ? null
-                : new CheckContext(symbols, declarations, null, reqSigs)
+                : new CheckContext(symbols, declarations, reachedLocations, null, reqSigs)
                         .withCallees(calleeSigs)
                         .withDependencies(dependsOn).forDischarge(settledValues);
         Core dischargeBody = discharge == null ? null

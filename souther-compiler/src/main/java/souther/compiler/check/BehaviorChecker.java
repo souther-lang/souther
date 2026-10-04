@@ -49,6 +49,7 @@ public final class BehaviorChecker {
     public static CheckedEnsures contractOf(Hir.SpecBehavior behavior, String module,
                                        DeclaredSig declared, Symbols symbols,
                                        DeclarationAccess declarations,
+                                       ReachedValueLocations reachedLocations,
                                        Map<String, Type> helpers) {
         Reading reading = read(behavior, module, declared, declarations.published(),
                 declarations.kinds(), declarations.sums());
@@ -63,7 +64,7 @@ public final class BehaviorChecker {
         for (Rule rule : contract.rules()) {
             collect(found, () ->
                     checked.add(checkRule(behavior, contract, rule, helpers, symbols,
-                            declarations)));
+                            declarations, reachedLocations)));
         }
         if (found.size() == 1) {
             throw CompileException.of(found.get(0));
@@ -262,10 +263,11 @@ public final class BehaviorChecker {
      */
     private static Contract.Rule checkRule(Hir.SpecBehavior behavior, BehaviorContract contract,
                                            Rule rule, Map<String, Type> helpers, Symbols symbols,
-                                           DeclarationAccess declarations) {
+                                           DeclarationAccess declarations,
+                                           ReachedValueLocations reachedLocations) {
         Core condition = Elaborator.elaborate(Lower.desugarExpr(rule.statement()),
                 scopeOf(contract, rule).reaching(helpers),
-                CheckContext.executableEnsures(symbols, declarations));
+                CheckContext.executableEnsures(symbols, declarations, reachedLocations));
         if (condition.type() != Type.BOOL) {
             throw CompileException.of(Diagnostic.at(rule.statement().pos())
                     .say(new BehaviorMessage.AnEnsuresExpressionIsNotBool(

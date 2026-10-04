@@ -146,7 +146,8 @@ final class Clauses {
         // declaration's own text is checked, and a clause reached from another module is not that.
         return () -> new SecondaryClauseReading.Over(
                 DataChecker.fieldScope(named, fieldsOf(named), source().bindings()),
-                CheckContext.of(symbols, source().declarations()).forDischarge());
+                CheckContext.of(symbols, source().declarations(), ReachedValueLocations.NOT_HELD)
+                        .forDischarge());
     }
 
     /**

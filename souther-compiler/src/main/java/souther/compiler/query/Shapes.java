@@ -2051,13 +2051,13 @@ public final class Shapes {
      * points there.
      */
     public static ReachedValueLocations reachedValueLocations(Db db) {
-        return reached -> {
+        return new ReachedValueLocations.Held(reached -> {
             Answer<DiagnosticPlace> at = db.ask(new Names.ReachedValueLocation(reached));
             if (!at.present()) {
                 throw new ReachedValueLocations.NothingIsReached(reached);
             }
             return at.value();
-        };
+        });
     }
 
     /**
@@ -2101,7 +2101,7 @@ public final class Shapes {
     public static DeclarationAccess declarationAccess(Db db) {
         return new DeclarationAccess(publishedDeclarations(db), declarationKinds(db),
                 newtypeInners(db), effectiveFieldTypes(db), fieldLayout(db), sumCases(db),
-                enumerationListings(db), reachedValueLocations(db));
+                enumerationListings(db));
     }
 
     /**
@@ -2362,7 +2362,8 @@ public final class Shapes {
                 try {
                     shapes.put(data.declares(),
                             ExecutableInvariants.of(data, governing.value().get(data.declares()),
-                                    scope.value(), declarationAccess(db), helpers.value(),
+                                    scope.value(), declarationAccess(db),
+                                    reachedValueLocations(db), helpers.value(),
                                     expandedClauses(db), statements));
                 } catch (Unanswerable _) {
                     // Rests on something already reported where it went wrong.

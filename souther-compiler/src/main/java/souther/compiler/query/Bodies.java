@@ -652,7 +652,8 @@ public final class Bodies {
                 try {
                     contracts.put(spec.name(), BehaviorChecker.contractOf(spec, name,
                             signatures.value().get(spec.name()), scope.value(),
-                            Shapes.declarationAccess(db), helpers.value()));
+                            Shapes.declarationAccess(db), Shapes.reachedValueLocations(db),
+                            helpers.value()));
                 } catch (Unanswerable _) {
                     // Rests on something already reported where it went wrong. Said again here it
                     // would be that one mistake seen from a second angle.
@@ -2616,6 +2617,7 @@ public final class Bodies {
                 return Answer.of(TemplateChecker.check(
                         template.writtenBody(), declared, lowered.value().provenance(),
                         scope.value(), Shapes.declarationAccess(db),
+                        Shapes.reachedValueLocations(db),
                         reqSigs.value(), sigs.value(), valuesChecked.value().settledValues()));
             } catch (Unanswerable _) {
                 return Answer.absent();
@@ -3289,6 +3291,7 @@ public final class Bodies {
                         body.value().value().definition().writtenBody(),
                         policy,
                         dischargeSource, scope.value(), Shapes.declarationAccess(db),
+                        Shapes.reachedValueLocations(db),
                         calleeSigs.value(), reqSigs.value(),
                         inliner.value(), sigs.value(), constructs.value(),
                         valuesChecked.value().settledValues());
@@ -3564,7 +3567,7 @@ public final class Bodies {
                     }
                 }
                 reported = TypeChecker.checkModule(lowering.value().settled(), scope.value(),
-                        Shapes.declarationAccess(db),
+                        Shapes.declarationAccess(db), Shapes.reachedValueLocations(db),
                         withNoValue.value(), Shapes.declarationLocations(db),
                         db.ask(new Front.Reading()).value(),
                         signatures.present() ? signatures.value() : null,

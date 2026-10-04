@@ -87,9 +87,11 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
         DeclarationAccess declarations = DeclarationAccess.asWritten(symbols,
                 PublishedDeclarations.NONE, DeclarationKinds.NONE);
         assertEquals(Preserved.NONE,
-                CheckContext.executableInvariant(symbols, declarations, null).preserved());
+                CheckContext.executableInvariant(symbols, declarations,
+                        ReachedValueLocations.NOT_HELD, null).preserved());
         assertEquals(Preserved.NONE,
-                CheckContext.executableEnsures(symbols, declarations).preserved(),
+                CheckContext.executableEnsures(symbols, declarations,
+                        ReachedValueLocations.NOT_HELD).preserved(),
                 "and a rule is read at an entry of its own, as a clause is");
     }
 

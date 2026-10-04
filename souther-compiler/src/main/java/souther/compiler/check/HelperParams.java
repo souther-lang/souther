@@ -153,7 +153,8 @@ final class HelperParams {
     static Type readFromBody(Hir.Binder param, Hir.Expr body, Scope env, CheckContext ctx,
                              Type answers) {
         try {
-            return new BodyTyping(ctx.symbols(), ctx.declarations(), ctx.reqs(), Map.of())
+            return new BodyTyping(ctx.symbols(), ctx.declarations(), ctx.reachedLocations(),
+                    ctx.reqs(), Map.of())
                     .typeOf(param, body, env, answers);
         } catch (CompileException | Unanswerable _) {
             // The two ways a body has no type to give: it does not type, and it depends on a name
@@ -188,8 +189,9 @@ final class HelperParams {
         }
         Map<Integer, Type> found;
         try {
-            found = determine(h, open, env, body, symbols, declarations, reqSigs,
-                    recursiveHelperFns, new HashMap<>());
+            // Settling reports nothing, so what typing the body would say is not pointed anywhere.
+            found = determine(h, open, env, body, symbols, declarations,
+                    ReachedValueLocations.NOT_HELD, reqSigs, recursiveHelperFns, new HashMap<>());
         } catch (Unanswerable _) {
             // A body resting on a name that denotes nothing gives no type, which is an answer this
             // reading is allowed to have: settling reports nothing, and the name was reported where
@@ -264,10 +266,12 @@ final class HelperParams {
     static Map<Integer, Type> determine(Hir.FnDef h, List<Integer> open, Scope env,
                                         Hir.Expr body, Symbols symbols,
                                         DeclarationAccess declarations,
+                                        ReachedValueLocations reachedLocations,
                                         Map<ValueName.Behavior, ReqSig> reqSigs,
                                         Map<String, Type> recursiveHelperFns,
                                         Map<Integer, OpenUse> openUses) {
-        BodyTyping typing = new BodyTyping(symbols, declarations, reqSigs, recursiveHelperFns);
+        BodyTyping typing = new BodyTyping(symbols, declarations, reachedLocations, reqSigs,
+                recursiveHelperFns);
         Type answers = declaredReturn(h);
         Map<Integer, Type> found = new LinkedHashMap<>();
         List<Integer> value = new ArrayList<>();
@@ -428,8 +432,10 @@ final class HelperParams {
         private OpenUse openUse;
 
         BodyTyping(Symbols symbols, DeclarationAccess declarations,
+                   ReachedValueLocations reachedLocations,
                    Map<ValueName.Behavior, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns) {
-            this(symbols, declarations, reqSigs, recursiveHelperFns, new Freshening());
+            this(symbols, declarations, reachedLocations, reqSigs, recursiveHelperFns,
+                    new Freshening());
         }
 
         /** The walk one step inside a closure reads the calls of the same body, so what those calls
@@ -437,6 +443,7 @@ final class HelperParams {
          * a name carries starts over with the reader — and unifying them would say the two hold one
          * thing. */
         BodyTyping(Symbols symbols, DeclarationAccess declarations,
+                   ReachedValueLocations reachedLocations,
                    Map<ValueName.Behavior, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
                    Freshening freshening) {
             this.freshening = freshening;
@@ -445,7 +452,7 @@ final class HelperParams {
             this.published = declarations.published();
             this.sums = declarations.sums();
             this.kinds = declarations.kinds();
-            this.ctx = new CheckContext(symbols, declarations, null, reqSigs);
+            this.ctx = new CheckContext(symbols, declarations, reachedLocations, null, reqSigs);
             this.reqSigs = reqSigs;
             this.recursiveHelperFns = recursiveHelperFns;
         }
@@ -818,7 +825,8 @@ final class HelperParams {
                 Scope inner = walking(env, lambda, step);
                 try {
                     for (int i = 0; i < lambda.params().size(); i++) {
-                        Type t = new BodyTyping(symbols, declarations, reqSigs, recursiveHelperFns, freshening)
+                        Type t = new BodyTyping(symbols, declarations, ctx.reachedLocations(), reqSigs,
+                                recursiveHelperFns, freshening)
                                 .typeOf(lambda.params().get(i), lambda.body(), inner, step.result());
                         if (t != null   // a position the lambda's body leaves open says nothing
                                 && decided.decide(step.params().get(i), t, kinds, sums)
@@ -965,7 +973,8 @@ final class HelperParams {
             Type.FnOf known = TypeOps.substitute(step, bind) instanceof Type.FnOf f ? f : step;
             Scope inner = walking(env, lambda, known);
             for (int i = 0; i < lambda.params().size(); i++) {
-                Type t = new BodyTyping(symbols, declarations, reqSigs, recursiveHelperFns, freshening)
+                Type t = new BodyTyping(symbols, declarations, ctx.reachedLocations(), reqSigs,
+                                recursiveHelperFns, freshening)
                         .typeOf(lambda.params().get(i), lambda.body(), inner, known.result());
                 if (t != null) {
                     // only a position the closure's body settled: unifying an undetermined one

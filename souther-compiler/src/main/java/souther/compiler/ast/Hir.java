@@ -2642,6 +2642,12 @@ public interface Hir {
                     + " what it applies points there");
             Objects.requireNonNull(shadowing, "an applied name hides something or hides nothing,"
                     + " and which is the reading's answer");
+            // What is hidden is what the applied name would have reached, so an application of
+            // something that is not a name hides nothing.
+            if (name == null && shadowing instanceof Shadowing.Hides) {
+                throw new IllegalArgumentException("an application of something that is not a name"
+                        + " hides nothing a name would have reached: " + shadowing);
+            }
         }
 
         /** Whether what the author applied is a name — which is not whether a name is what stands
