@@ -168,14 +168,12 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/MeasuredInput;I"
                             + "Lsouther/compiler/partition/ConstructionPlan;Ljava/util/Map;"
                             + "Ljava/util/Map;"
-                            + "Lsouther/compiler/partition/Generator$CandidateCheck;)"
+                            + "Lsouther/compiler/partition/Generator$Composing;)"
                             + "Lsouther/compiler/partition/Generator$Outcome;",
                     "the assignments a descent composes, marked where the bound is reached"),
             Map.entry("souther.compiler.partition.Generator#over("
-                            + "Lsouther/compiler/partition/MeasuredInput;I"
-                            + "Lsouther/compiler/partition/ConstructionPlan;Ljava/util/List;"
-                            + "Ljava/util/List;"
-                            + "Lsouther/compiler/partition/Generator$CandidateCheck;)"
+                            + "Ljava/util/List;Ljava/util/List;"
+                            + "Lsouther/compiler/partition/Generator$Composing;)"
                             + "Lsouther/compiler/partition/Generator$Outcome;",
                     "the same bound over one pass of the assignments"),
             Map.entry("souther.compiler.partition.ConstructionPlan#node("
