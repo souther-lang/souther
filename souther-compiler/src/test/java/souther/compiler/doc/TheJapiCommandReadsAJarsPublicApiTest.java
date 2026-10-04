@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
 import java.util.stream.Stream;
 
@@ -234,10 +235,9 @@ class TheJapiCommandReadsAJarsPublicApiTest {
 
     /** The fixture jar written again at {@code at}, carrying Greeter's source inside it. */
     private static Path carryingItsSources(Path at) throws Exception {
-        try (java.util.jar.JarOutputStream out =
-                     new java.util.jar.JarOutputStream(Files.newOutputStream(at));
-             java.util.jar.JarFile source = new java.util.jar.JarFile(jar.toFile())) {
-            for (java.util.jar.JarEntry e : source.stream().toList()) {
+        try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(at));
+             JarFile source = new JarFile(jar.toFile())) {
+            for (JarEntry e : source.stream().toList()) {
                 out.putNextEntry(new JarEntry(e.getName()));
                 out.write(source.getInputStream(e).readAllBytes());
             }
