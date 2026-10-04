@@ -268,8 +268,8 @@ public final class HelperNames {
             any |= value != g.value();
             given.add(value == g.value() ? g : g.with(value));
         }
-        return any ? new Hir.Expansion(ex.callee(), ex.application(), ex.at(), ex.bound(), given,
-                ex.declaredReturn(), ex.body(), ex.pos(), ex.region()) : e;
+        return any ? new Hir.Expansion(ex.callee(), ex.handover(), ex.application(), ex.at(),
+                ex.bound(), given, ex.declaredReturn(), ex.body(), ex.pos(), ex.region()) : e;
     }
 
     /** Whether {@code denotes} is a helper {@code which} accepts. */

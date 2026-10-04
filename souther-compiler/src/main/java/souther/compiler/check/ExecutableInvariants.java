@@ -58,7 +58,7 @@ public final class ExecutableInvariants {
      */
     public static ValueShape of(Hir.Data data, List<GoverningInvariant> governing,
                                 DerivedSymbols symbols, DeclarationAccess declarations,
-                                Map<String, Type> helpers, ExpandedClauseLookup form,
+                                Map<String, StandingSignature> helpers, ExpandedClauseLookup form,
                                 InvariantStatements statements) {
         Map<String, Type> types = TypeOps.fieldTypes(data, symbols);
         Map<String, BindingId> bindings =
