@@ -29,12 +29,15 @@ import souther.compiler.examples.ExampleStatements;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.ImportMessage;
+import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.SourceProvenance;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Denotation;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -1710,6 +1713,68 @@ public final class Names {
         public Answer<WrittenName> compute(Db db) {
             Answer<List<WrittenName>> written = db.ask(new ValueDeclarationsOf(denoted));
             return written.present() ? Answer.of(written.value().get(0)) : Answer.absent();
+        }
+    }
+
+    /**
+     * Where a report points at what {@code reached} reaches.
+     *
+     * <p>Beside {@link ValueDeclaredAt} rather than in place of it. That one sends an editor to an
+     * occurrence it can open, and has nothing to say about code this compilation holds no text for;
+     * a report has something to say about everything a name reaches, and for what is out of sight
+     * it says where the code came from instead of pointing.
+     *
+     * <p>A module's helper or behavior is the occurrence {@link ValueDeclaredAt} finds, whether the
+     * module is in this compilation or read back off the path, and whether the reader can be sent
+     * there is read off where that occurrence is written. A library operation the library declares
+     * is the occurrence its entry holds, which was parsed as code the library ships. A library
+     * operation the library rewrites into another call has no declaration, and is the library
+     * module its qualifier names: the declaration it rewrites to is another name, and pointing there
+     * would say that name is what was reached. Out of sight, each is named by the reference that
+     * reaches it.
+     */
+    public record ReachedValueLocation(ReachName.Declaration reached)
+            implements Key<DiagnosticPlace> {
+        @Override
+        public String module() {
+            return switch (reached) {
+                case ReachName.Own own -> own.denotes().module();
+                case ReachName.OfModule other -> other.denotes().module();
+                case ReachName.OfLibrary _ -> null;
+            };
+        }
+
+        @Override
+        public Answer<DiagnosticPlace> compute(Db db) {
+            WrittenName written = switch (reached) {
+                case ReachName.Own own -> db.ask(new ValueDeclaredAt(own.denotes())).value();
+                case ReachName.OfModule other ->
+                        db.ask(new ValueDeclaredAt(other.denotes())).value();
+                case ReachName.OfLibrary library -> {
+                    Stdlib.Entry entry =
+                            db.ask(new Front.Library()).value().entry(library.denotes());
+                    yield entry == null ? null : entry.declaration().written();
+                }
+            };
+            if (written != null) {
+                return Answer.of(switch (DiagnosticPlace.of(written.reportedAt())) {
+                    case DiagnosticPlace.InSource in -> in;
+                    case DiagnosticPlace.Unavailable out -> new DiagnosticPlace.Unavailable(
+                            out.provenance().reachedBy(reached.rendered()));
+                });
+            }
+            if (reached instanceof ReachName.OfLibrary library
+                    && db.ask(new Front.Library()).value().sugared(library.denotes())) {
+                String alias = library.denotes().alias();
+                for (Reserved.StdlibModule published : Reserved.MODULES) {
+                    if (published.qualifier().equals(alias)) {
+                        return Answer.of(new DiagnosticPlace.Unavailable(
+                                new SourceProvenance.TheStandardLibrary(published.moduleName(),
+                                        reached.rendered())));
+                    }
+                }
+            }
+            return Answer.absent();
         }
     }
 

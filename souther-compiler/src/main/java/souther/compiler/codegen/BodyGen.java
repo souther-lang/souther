@@ -12,6 +12,7 @@ import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.EffectiveFieldTypes;
 import souther.compiler.check.EnumerationListings;
 import souther.compiler.check.FieldLayout;
+import souther.compiler.check.ReachedValueLocations;
 import souther.compiler.check.ReqSig;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
@@ -259,7 +260,8 @@ final class BodyGen {
             return new CheckContext(symbols, new DeclarationAccess(ctx.published, ctx.kinds,
                     ctx.inners, EffectiveFieldTypes.asWritten(symbols),
                     FieldLayout.asWritten(symbols), ctx.sums,
-                    EnumerationListings.asWritten(symbols, ctx.kinds, ctx.sums)),
+                    EnumerationListings.asWritten(symbols, ctx.kinds, ctx.sums),
+                    ReachedValueLocations.NOT_HELD),
                     data, reqSigs());
         }
 

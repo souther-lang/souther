@@ -82,6 +82,10 @@ public record CheckContext(Symbols symbols, DeclarationAccess declarations,
         return declarations.sums();
     }
 
+    public ReachedValueLocations reachedLocations() {
+        return declarations.reachedLocations();
+    }
+
     /**
      * The same, elaborating what {@code expansion} put here.
      *

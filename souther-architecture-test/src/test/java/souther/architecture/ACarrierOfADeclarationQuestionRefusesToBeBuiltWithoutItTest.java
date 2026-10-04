@@ -92,7 +92,8 @@ class ACarrierOfADeclarationQuestionRefusesToBeBuiltWithoutItTest {
             "Lsouther/compiler/check/FieldBindings;",
             "Lsouther/compiler/check/ClauseLocations;",
             "Lsouther/compiler/check/ExpandedClauseLookup;",
-            "Lsouther/compiler/check/DeclarationLocations;");
+            "Lsouther/compiler/check/DeclarationLocations;",
+            "Lsouther/compiler/check/ReachedValueLocations;");
 
     /**
      * The one carrier this does not ask it of, by the whole of what it is.
