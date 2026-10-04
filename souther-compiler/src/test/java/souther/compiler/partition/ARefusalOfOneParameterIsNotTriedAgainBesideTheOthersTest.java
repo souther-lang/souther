@@ -71,6 +71,62 @@ class ARefusalOfOneParameterIsNotTriedAgainBesideTheOthersTest {
     }
 
     /**
+     * What is left out is the parameter at the classes it was refused at, and not the parameter.
+     *
+     * <p>The gate refused open and built shut. A row for a class of the first record moves the gate
+     * from where the search first puts it — open, and refused — to shut, and only that row builds.
+     * Left out by the parameter alone, the shut gate is never tried and no such row is offered; left
+     * out by its classes, it is, beside six fields as beside three, with the open gate built as
+     * often either way.
+     *
+     * <p>Asked of that field's classes alone. What a search learns is its own, so each class owed
+     * builds the open gate for itself, and a model with more fields owes more classes.
+     */
+    @Test
+    void aParameterRefusedAtSomeOfItsClassesIsStillBuiltAtTheOthers() {
+        Offered three = offeredWithTheGateRefusedOpen(3);
+        Offered six = offeredWithTheGateRefusedOpen(6);
+        assertTrue(three.classes().contains("left.f0=On")
+                        && three.classes().contains("left.f0=Off"),
+                "a row is offered for each class of the first record's field, with the gate shut: "
+                        + three.classes());
+        assertEquals(three.classes(), six.classes(),
+                "and the same beside six fields as beside three");
+        assertTrue(three.openBuilt() > 0, "the open gate was built");
+        assertEquals(three.openBuilt(), six.openBuilt(),
+                "and built as often beside six fields as beside three");
+    }
+
+    private record Offered(int openBuilt, Set<String> classes) {}
+
+    private static Offered offeredWithTheGateRefusedOpen(int fields) {
+        Model model = Model.of(source(fields), "decide");
+        AtomicInteger open = new AtomicInteger();
+        Generator.CandidateCheck refusingAnOpenGate = (parameter, candidate) -> {
+            if (parameter == 0 && candidate.text().contains("Open")) {
+                open.incrementAndGet();
+                return new Generator.CandidateCheck.Built.Refused("the gate is open");
+            }
+            return new Generator.CandidateCheck.Built.NothingBuiltIt();
+        };
+        List<ClassOfAPosition> owed = GenerationFixtures.everyClassNoRowSitsIn(model.subject(),
+                List.of()).stream().filter(each -> each.at().term().equals("left.f0")).toList();
+        assertEquals(2, owed.size(), "the first record's field is owed both its classes");
+        FillResult filled = GenerationFixtures.fill(model.subject(), List.of(), refusingAnOpenGate,
+                model.read(), Generator.Trial.NOTHING_RUNS, List.of(), owed, List.of(),
+                Budgets.generation());
+        Set<String> classes = new TreeSet<>();
+        for (Generator.GeneratedRow row : filled.rows()) {
+            for (Generator.Purpose purpose : row.purposes()) {
+                if (purpose instanceof Generator.Purpose.ForAClass cls) {
+                    classes.add(cls.label());
+                }
+            }
+        }
+        return new Offered(open.get(), classes);
+    }
+
+    /**
      * Beside forty fields apiece there are more ways to move the other parameters than any search
      * walks. What the refusal is about is settled by the combination, so it ends however many
      * there are.

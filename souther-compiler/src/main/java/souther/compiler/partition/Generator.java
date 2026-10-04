@@ -2379,9 +2379,9 @@ public final class Generator {
      * A consumer of candidates, and what it has seen come of one parameter's value.
      *
      * <p>The walk reads the second, and only to leave out what the consumer would pass over again:
-     * a candidate it would build and see refused again, or one against an origin it could not
-     * write again. What a candidate costs stays the consumer's to say: one left out was not built,
-     * so neither a class nor an arm paid anything for it.
+     * a candidate it would build and see come to nothing again, or one against an origin it could
+     * not write again. What a candidate costs stays the consumer's to say: one left out was not
+     * built, so neither a class nor an arm paid anything for it.
      */
     private interface TakingCandidates extends Taking<Candidate> {
 
@@ -2390,7 +2390,12 @@ public final class Generator {
 
     /**
      * What came of one parameter's value, by the classes standing under that parameter, for one
-     * consumer's walk: where the model refused it, and where an origin could not write it.
+     * consumer's walk: where building it came to nothing, and where an origin could not write it.
+     *
+     * <p>Came to nothing and not refused. What building one parameter's value comes to is the
+     * model refusing it, or this compiler's search for it stopping short or finding nothing to
+     * offer — and those are different news to a reader. What is kept here is what they share:
+     * building the same value again would come to the same thing.
      *
      * <p>A parameter's value is built from what stands under it and from nothing else: the classes
      * of its own positions, and what an origin writes for it, which is the origin's value with the
@@ -2404,12 +2409,12 @@ public final class Generator {
      *
      * <p>Not a claim that those classes hold no value together. Another value of the same classes
      * may be built where this one was not; what is known is only that this walk would build this
-     * one again and be refused again.
+     * one again and have it come to nothing again.
      *
-     * <p>A refusal of a parameter some position of another parameter also reaches is not kept.
-     * What it was refused for would then depend on that position too, and nothing here can say
-     * how. Whether an origin writes a parameter is read off the positions under it alone
-     * ({@link Delta#under}), so that is kept whatever reaches it.
+     * <p>Which axes are under a parameter is read off the head of the axis's path, and that is the
+     * whole of what reaches the parameter's value: what a position requires is on its own path, and
+     * every class of an axis is of the axis's own number ({@link Axis}). A language that let a
+     * position under one parameter decide another's value would leave this keyed by too little.
      */
     private static final class ParameterProjections {
 
@@ -2418,13 +2423,10 @@ public final class Generator {
         /** The axes under each parameter. */
         private final int[][] under;
 
-        /** Whether a refusal of each parameter is a fact about the axes under it alone. */
-        private final boolean[] closed;
+        private final Set<Projection> cameToNothing = new HashSet<>();
 
-        private final Set<Projection> refused = new HashSet<>();
-
-        /** The parameters something was refused of, under any origin. */
-        private final Set<Integer> refusedOf = new LinkedHashSet<>();
+        /** The parameters something came to nothing at, under any origin. */
+        private final Set<Integer> cameToNothingOf = new LinkedHashSet<>();
 
         /** Where an origin that states a parameter could not write it. */
         private final Set<Projection> unwritten = new HashSet<>();
@@ -2438,46 +2440,18 @@ public final class Generator {
             for (int p = 0; p < parameters.size(); p++) {
                 found.add(new ArrayList<>());
             }
-            closed = new boolean[parameters.size()];
-            Arrays.fill(closed, true);
             for (int i = 0; i < axes.size(); i++) {
-                Axis axis = axes.get(i);
-                int own = parameters.indexOf(axis.path().head());
-                if (own >= 0) {
-                    found.get(own).add(i);
+                int own = parameters.indexOf(axes.get(i).path().head());
+                if (own < 0) {
+                    throw new IllegalStateException("`" + axes.get(i).id() + "` is under no"
+                            + " parameter of the behavior it divides");
                 }
-                Set<String> reached = reachedBy(axis);
-                if (reached.size() > 1) {
-                    for (String head : reached) {
-                        int p = parameters.indexOf(head);
-                        if (p >= 0) {
-                            closed[p] = false;
-                        }
-                    }
-                }
+                found.get(own).add(i);
             }
             under = new int[parameters.size()][];
             for (int p = 0; p < parameters.size(); p++) {
                 under[p] = found.get(p).stream().mapToInt(Integer::intValue).toArray();
             }
-        }
-
-        /**
-         * The parameters a value written at {@code axis} can reach: where the position is, where
-         * what it requires is, and where each of its classes writes its number.
-         */
-        private static Set<String> reachedBy(Axis axis) {
-            Set<String> out = new LinkedHashSet<>();
-            out.add(axis.path().head());
-            for (TermPath required : axis.requirements().refinements().keySet()) {
-                out.add(required.head());
-            }
-            for (PartitionClass cls : axis.classes()) {
-                if (cls.of() != null) {
-                    out.add(cls.of().position().head());
-                }
-            }
-            return out;
         }
 
         /** Takes in which of the parameters it states the candidate's origin could not write. */
@@ -2490,23 +2464,20 @@ public final class Generator {
             }
         }
 
-        /** Takes in what building the candidate came to, where it is a refusal of one parameter. */
+        /** Takes in what building the candidate came to, where it is one parameter's alone. */
         void built(Candidate candidate, Attempt made) {
-            if (made.row() != null || made.whose().isEmpty()) {
+            if (made.row() != null || made.localTo().isEmpty()) {
                 return;
             }
-            int p = made.whose().getAsInt();
-            if (!closed[p]) {
-                return;
-            }
-            refused.add(projection(candidate.from().index(), p, candidate.where()));
-            refusedOf.add(p);
+            int p = made.localTo().getAsInt();
+            cameToNothing.add(projection(candidate.from().index(), p, candidate.where()));
+            cameToNothingOf.add(p);
         }
 
         /** Whether the consumer would pass over {@code where} against this origin again. */
         boolean leavesOut(ResolvedOrigin origin, int[] where) {
-            for (int p : refusedOf) {
-                if (refusedAt(origin, p, where)) {
+            for (int p : cameToNothingOf) {
+                if (cameToNothingAt(origin, p, where)) {
                     return true;
                 }
             }
@@ -2552,16 +2523,17 @@ public final class Generator {
 
         /** Whether nothing under the step {@code filled} of a walk is anything but left out. */
         boolean leavesOut(Settling settling, int[] where, int filled) {
-            for (int p : refusedOf) {
-                if (settling.last()[p] == filled - 1 && refusedAt(settling.origin(), p, where)) {
+            for (int p : cameToNothingOf) {
+                if (settling.last()[p] == filled - 1
+                        && cameToNothingAt(settling.origin(), p, where)) {
                     return true;
                 }
             }
             return settling.stated() == filled - 1 && writesNothing(settling.origin(), where);
         }
 
-        private boolean refusedAt(ResolvedOrigin origin, int p, int[] where) {
-            return refused.contains(projection(origin.index(), p, where));
+        private boolean cameToNothingAt(ResolvedOrigin origin, int p, int[] where) {
+            return cameToNothing.contains(projection(origin.index(), p, where));
         }
 
         /** Whether {@code origin} is one that writes a value and can write none of them here. */
@@ -2919,7 +2891,7 @@ public final class Generator {
      *
      * <p>Deciding them in turn is what lets the walk stop under a step that settles a parameter
      * where the consumer has already passed over this origin's candidates — at classes it saw
-     * refused, or, for an origin that writes a value, at classes it could write none of its
+     * come to nothing, or, for an origin that writes a value, at classes it could write none of its
      * parameters at. Everything below such a step would be passed over the same way, whichever of
      * the positions after it move, and there are as many ways of moving them as there are ways to
      * choose that many positions.
@@ -2936,41 +2908,38 @@ public final class Generator {
         if (moved > steps.length) {
             return List.of();
         }
-        List<int[]> out = new ArrayList<>();
+        List<Moved> out = new ArrayList<>();
         // Cloned, because the walk settles the positions in place and puts back what it found. A
         // row about a class under one case of a sum would otherwise carry the classes of the
         // positions under another, which is a row that has to be two things at once.
         int[] where = origin.base().clone();
         new Moving(axes, steps, known, known.settling(origin.from(), steps),
-                new StandingTogether(requires, where), out).walk(where, 0, moved);
-        int[] base = origin.base();
+                new StandingTogether(requires, where), new int[moved], out).walk(where, 0, 0);
         out.sort((one, other) -> {
-            int compared = Arrays.compare(movedIn(steps, base, one), movedIn(steps, base, other));
+            int compared = Arrays.compare(one.positions(), other.positions());
             if (compared != 0) {
                 return compared;
             }
-            for (int axis : steps) {
-                compared = Integer.compare(one[axis], other[axis]);
+            for (int axis : one.positions()) {
+                compared = Integer.compare(one.where()[axis], other.where()[axis]);
                 if (compared != 0) {
                     return compared;
                 }
             }
             return 0;
         });
-        return out;
+        List<int[]> assignments = new ArrayList<>(out.size());
+        for (Moved each : out) {
+            assignments.add(each.where());
+        }
+        return assignments;
     }
 
-    /** The positions of {@code steps} {@code where} does not stand at {@code base} at. */
-    private static int[] movedIn(int[] steps, int[] base, int[] where) {
-        int[] out = new int[steps.length];
-        int n = 0;
-        for (int axis : steps) {
-            if (where[axis] != base[axis]) {
-                out[n++] = axis;
-            }
-        }
-        return Arrays.copyOf(out, n);
-    }
+    /**
+     * One assignment a walk of {@link #assignmentsMoving} produced, and the positions it moved, in
+     * the axes' order — which is what it is ordered by, read once when it was produced.
+     */
+    private record Moved(int[] where, int[] positions) {}
 
     /**
      * Which class each position's value falls in for the value the model already states there, or
@@ -3069,28 +3038,32 @@ public final class Generator {
     /**
      * One walk of {@link #assignmentsMoving}: the positions it decides, in order, and what it
      * carries from one step to the next.
+     *
+     * @param taken the positions moved so far, as many as the walk moves in all
      */
     private record Moving(List<Axis> axes, int[] steps, ParameterProjections known,
                           ParameterProjections.Settling settling, StandingTogether together,
-                          List<int[]> out) {
+                          int[] taken, List<Moved> out) {
 
-        /** Decides the positions from {@code filled} on, moving {@code left} more of them. */
-        void walk(int[] where, int filled, int left) {
+        /** Decides the positions from {@code filled} on, {@code count} of them moved already. */
+        void walk(int[] where, int filled, int count) {
             if (known.leavesOut(settling, where, filled)) {
                 return;
             }
             if (filled == steps.length) {
-                out.add(where.clone());
+                out.add(new Moved(where.clone(), taken.clone()));
                 return;
             }
+            int left = taken.length - count;
             // Staying, where enough positions are left after this one to move the rest.
             if (left < steps.length - filled) {
-                walk(where, filled + 1, left);
+                walk(where, filled + 1, count);
             }
             if (left == 0) {
                 return;
             }
             int axis = steps[filled];
+            taken[count] = axis;
             int stood = where[axis];
             int at = stood;
             for (int c = 0; c < axes.get(axis).classes().size(); c++) {
@@ -3105,7 +3078,7 @@ public final class Generator {
                 // And a class the rest of the assignment cannot be beside is not a move either: it
                 // is a row that would have to be two things at once, which no value is.
                 if (together.holds()) {
-                    walk(where, filled + 1, left - 1);
+                    walk(where, filled + 1, count + 1);
                 }
             }
             together.move(axis, at, stood);
@@ -5133,15 +5106,16 @@ public final class Generator {
     /**
      * What building one assignment came to.
      *
-     * @param whose the parameter a refusal is about, where it is about one parameter alone. A
-     *              parameter is built from what stands under it and nothing else
-     *              ({@link #valueFor}), so a refusal said here is a fact about that parameter's
-     *              classes; one said of the row as a whole is not, and has none
+     * @param localTo the parameter whose value this came to nothing at, where it came to nothing at
+     *                one parameter alone. A parameter is built from what stands under it and
+     *                nothing else ({@link #valueFor}), so what came of it is a fact about that
+     *                parameter's classes — whether the model refused the value or the search for
+     *                it stopped. One said of the row as a whole is not, and has none
      */
     private record Attempt(GeneratedRow row, UnresolvedCombination.Reason reason, String detail,
                            Optional<String> said,
                            SequencedMap<TermPath, StringOfferShortfall> alsoShort,
-                           CompositionShortfall met, OptionalInt whose) {
+                           CompositionShortfall met, OptionalInt localTo) {
 
         Attempt(GeneratedRow row, UnresolvedCombination.Reason reason, String detail,
                 Optional<String> said,
@@ -5155,8 +5129,8 @@ public final class Generator {
             this(row, reason, detail, said, new LinkedHashMap<>(), CompositionShortfall.NONE);
         }
 
-        /** The same refusal, said to be about {@code parameter} alone. */
-        Attempt about(int parameter) {
+        /** The same, said to have come to nothing at {@code parameter} alone. */
+        Attempt localTo(int parameter) {
             return new Attempt(row, reason, detail, said, alsoShort, met,
                     OptionalInt.of(parameter));
         }
@@ -5349,7 +5323,7 @@ public final class Generator {
                 Optional<String> refused = check.refuse(p, written);
                 if (refused.isPresent()) {
                     return new Attempt(null, UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
-                            subject.parameters().get(p), refused).about(p);
+                            subject.parameters().get(p), refused).localTo(p);
                 }
                 inputs.add(written);
                 continue;
@@ -5361,18 +5335,18 @@ public final class Generator {
                 // that met no figure and walked to the end of what this writes has nothing for a
                 // reader to raise, and an empty account of what it met is what says so.
                 case Outcome.Unresolved(UnresolvedCombination.Reason why, String detail) -> {
-                    return Attempt.no(why, detail).about(p);
+                    return Attempt.no(why, detail).localTo(p);
                 }
                 // The figure's word, and beside it both what the offer was short of and what the
                 // search met. A figure being reached and a rule that gave no value are two things
                 // an author acts on, and the one that decides what they do first is the word.
                 case Outcome.Stopped stopped -> {
                     return Attempt.no(stopped.why(), stopped.detail(), stopped.offered(),
-                            stopped.met()).about(p);
+                            stopped.met()).localTo(p);
                 }
                 case Outcome.Unexhausted some -> {
                     return Attempt.no(some.why(), some.detail(), some.offered(), some.met())
-                            .about(p);
+                            .localTo(p);
                 }
                 // The word for an offer that was not everything, and beside it which rule of the
                 // position none of the values came from. Carried rather than folded into the word:
@@ -5382,7 +5356,7 @@ public final class Generator {
                         SequencedMap<TermPath, StringOfferShortfall> offered, String detail) -> {
                     return Attempt.no(
                             UnresolvedCombination.Reason.NOT_ALL_CANDIDATES_COULD_BE_OFFERED,
-                            detail, offered).about(p);
+                            detail, offered).localTo(p);
                 }
                 // The word the search came to, and beside it the figure that made what it was
                 // handed short of the position. Neither half follows from the other — a search that
@@ -5392,14 +5366,14 @@ public final class Generator {
                 case Outcome.Limited(UnresolvedCombination.Reason why, String detail,
                                      java.util.Set<CompositionBudget> by) -> {
                     return Attempt.no(why, detail, new LinkedHashMap<>(),
-                            CompositionShortfall.of(by)).about(p);
+                            CompositionShortfall.of(by)).localTo(p);
                 }
                 // A value nothing planned, in the word for a reading no search could be made of,
                 // with the figure that left the plan unable to reach what was asked for.
                 case Outcome.Unplanned(java.util.Set<CompositionBudget> by) -> {
                     return Attempt.no(UnresolvedCombination.Reason
                             .NO_READING_OF_THE_LINE_COULD_BE_SEARCHED, null, new LinkedHashMap<>(),
-                            CompositionShortfall.of(by)).about(p);
+                            CompositionShortfall.of(by)).localTo(p);
                 }
             }
         }
