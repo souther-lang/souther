@@ -68,8 +68,10 @@ public final class ClosedStates {
     /** What {@code rules} leave, spaced by {@code spacing} and walked in {@code order}. */
     <A> ClosedState<A> of(List<AffineConstraint<A>> rules, Function<A, Granularity> spacing,
                           CanonicalOrder<A> order) {
+        // Nothing kept, so nothing to state: the question is what a kept closure is found by, and a
+        // closure that is not kept is worked out from what it was handed, as it always was.
         if (answers == null) {
-            return ClosedState.of(ClosureQuestion.of(rules, spacing, order));
+            return ClosedState.of(rules, spacing, order);
         }
         ClosureQuestion<A> question =
                 ClosureQuestion.of(rules, spacing, weighed -> placed(weighed, order));
@@ -92,7 +94,7 @@ public final class ClosedStates {
     /** {@link ClosureQuestion#placesIn}, kept for the order and the positions it was asked of. */
     private <A> Map<A, Integer> placed(Set<A> positions, CanonicalOrder<A> order) {
         Map<Set<?>, Map<?, Integer>> under =
-                places.computeIfAbsent(order, unused -> new ConcurrentHashMap<>());
+                places.computeIfAbsent(order, _ -> new ConcurrentHashMap<>());
         // The cast holds because an entry is only ever put under the positions it places.
         @SuppressWarnings("unchecked")
         Map<A, Integer> had = (Map<A, Integer>) under.get(positions);

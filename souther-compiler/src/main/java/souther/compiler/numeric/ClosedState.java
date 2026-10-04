@@ -116,21 +116,9 @@ public final class ClosedState<A> {
      * @param order the one order the positions of a form are walked in, for the readings below that
      *              work a bound out at each of them — see {@link CanonicalOrder}
      */
-    static <A> ClosedState<A> of(List<AffineConstraint<A>> constraints,
-                                 Function<A, Granularity> spacing, CanonicalOrder<A> order) {
-        return of(ClosureQuestion.of(constraints, spacing, order));
-    }
-
-    /**
-     * What the rules of {@code question} leave, worked out from the question and from nothing else.
-     *
-     * <p>Every input is read off the question, so a closure is settled by the question it answers —
-     * which is what lets one closure stand for every question equal to it ({@link ClosedStates}).
-     */
-    static <A> ClosedState<A> of(ClosureQuestion<A> question) {
-        List<AffineConstraint<A>> constraints = question.rules();
-        Function<A, Granularity> spacing = question::spacingOf;
-        CanonicalOrder<A> order = question.order();
+    public static <A> ClosedState<A> of(List<AffineConstraint<A>> constraints,
+                                        Function<A, Granularity> spacing,
+                                        CanonicalOrder<A> order) {
         DifferenceBounds<A> differences = DifferenceBounds.over(constraints, order);
         if (differences.holdsNothing()) {
             return empty(differences);
@@ -169,6 +157,20 @@ public final class ClosedState<A> {
             box = next;
         }
         return settled(box, differences, Status.BUDGET_EXHAUSTED, everyBoundWasComposed);
+    }
+
+    /**
+     * What the rules of {@code question} leave, worked out from the question and from nothing else.
+     *
+     * <p>The spacing and the order are the question's own, read back off it rather than taken from
+     * whoever stated it, so a closure is settled by the question it answers — which is what lets
+     * one closure stand for every question equal to it ({@link ClosedStates}). Over the positions
+     * the rules weigh, which are the only positions a closure asks about, they are the spacing and
+     * the order the question was stated with, so this is the closure {@link #of(List, Function,
+     * CanonicalOrder)} works out from those.
+     */
+    static <A> ClosedState<A> of(ClosureQuestion<A> question) {
+        return of(question.rules(), question::spacingOf, question.order());
     }
 
     /**
