@@ -73,23 +73,32 @@ public interface RevisionKnowledge {
 
     /**
      * Knowledge kept for as long as {@code revision} says the world it was worked out in is the
-     * current one.
+     * current one, with what doing each piece of work read of {@code store}.
+     *
+     * <p>The store is not optional. A piece of work is done for the question that asked first and
+     * lent to every question after it, and a question of the store is kept by what it read: lent
+     * the answer alone, a later question read nothing to have it, and is kept over an edit to what
+     * the work read. So what the work read is kept beside its answer and read again for whoever is
+     * lent it. Knowledge with nothing to watch says so with {@link StoreWork#UNWATCHED}.
      */
-    static RevisionKnowledge keptFor(LongSupplier revision) {
-        return new Kept(revision);
+    static RevisionKnowledge keptFor(LongSupplier revision, StoreWork store) {
+        return new Kept(revision, store);
     }
 
-    /** The table, and the revision it was filled under. */
+    /** The table, the revision it was filled under, and the store the work in it read. */
     final class Kept implements RevisionKnowledge {
 
         private final LongSupplier revision;
 
-        private final Map<RevisionWork<?>, Object> answers = new HashMap<>();
+        private final StoreWork store;
+
+        private final Map<RevisionWork<?>, StoreWork.Made<?>> answers = new HashMap<>();
 
         private long filledAt;
 
-        private Kept(LongSupplier revision) {
+        private Kept(LongSupplier revision, StoreWork store) {
             this.revision = revision;
+            this.store = store;
             this.filledAt = revision.getAsLong();
         }
 
@@ -98,21 +107,26 @@ public interface RevisionKnowledge {
         @SuppressWarnings("unchecked")
         @Override
         public <A> A settled(RevisionWork<A> work) {
-            Map<RevisionWork<?>, Object> current = current();
-            Object known = current.get(work);
+            Map<RevisionWork<?>, StoreWork.Made<?>> current = current();
+            StoreWork.Made<?> known = current.get(work);
             if (known != null) {
-                return (A) known;
+                // What doing it read is what whoever is lent it read: they are handed the answer
+                // rather than working it out, and an edit to what it was worked out from has to
+                // reach them.
+                known.reads().here();
+                return (A) known.value();
             }
             // Done before it is put rather than inside the put: the work may borrow other work
             // from here while it is being done, which is the producer of what it borrows being
-            // asked in the middle of this.
-            A answer = done(work, this);
-            current().put(work, answer);
-            return answer;
+            // asked in the middle of this. Watched, so that what it read is read by the question
+            // doing it and kept for the ones it is lent to.
+            StoreWork.Made<A> made = store.watching(() -> done(work, this));
+            current().put(work, made);
+            return made.value();
         }
 
         /** What is known now: nothing, where the world has moved on since it was worked out. */
-        private Map<RevisionWork<?>, Object> current() {
+        private Map<RevisionWork<?>, StoreWork.Made<?>> current() {
             long now = revision.getAsLong();
             if (now != filledAt) {
                 answers.clear();

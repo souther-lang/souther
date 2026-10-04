@@ -12,6 +12,7 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.revision.RevisionKnowledge;
+import souther.compiler.revision.StoreWork;
 import souther.compiler.values.StringFacts;
 import souther.compiler.values.StringMachineAnswers;
 
