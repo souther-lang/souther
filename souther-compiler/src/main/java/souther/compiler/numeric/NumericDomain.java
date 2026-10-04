@@ -68,15 +68,28 @@ public final class NumericDomain<A> {
      * something a reading is.
      */
     private final CanonicalOrder<A> order;
+
+    /**
+     * Where what the rules leave is worked out, and whether a closure another domain already worked
+     * out stands for this one's.
+     *
+     * <p>Carried like {@link #order} and not part of what this domain is: it decides whether the
+     * work is done again, never what it comes to. Lent to every domain made from this one, and to
+     * whatever this one is met with — the receiver of a meeting is the reading the result belongs
+     * to.
+     */
+    private final ClosedStates closedStates;
     private List<AffineConstraint<A>> distinctRules;
     private ClosedState<A> closed;
 
     private NumericDomain(StatedRules<A> stated, AppendOnly<A, Granularity> kinds,
-                          boolean readARuleNothingSatisfies, CanonicalOrder<A> order) {
+                          boolean readARuleNothingSatisfies, CanonicalOrder<A> order,
+                          ClosedStates closedStates) {
         this.stated = stated;
         this.kinds = kinds;
         this.readARuleNothingSatisfies = readARuleNothingSatisfies;
         this.order = order;
+        this.closedStates = closedStates;
     }
 
     /**
@@ -86,9 +99,20 @@ public final class NumericDomain<A> {
      * what such a walk takes first has to be settled by the positions rather than by how the rules
      * were typed. What it is belongs to whatever a position of this domain is, which this is generic
      * over and the caller is not — see {@link CanonicalOrder}.
+     *
+     * <p>Each domain made from this works out what its rules leave for itself.
      */
     public static <A> NumericDomain<A> top(CanonicalOrder<A> order) {
-        return new NumericDomain<>(StatedRules.none(), AppendOnly.empty(), false, order);
+        return top(order, ClosedStates.NONE);
+    }
+
+    /**
+     * The same, with what the rules leave worked out through {@code closedStates} — so a domain made
+     * from this one is lent the closure of any other made from it that held the same rules.
+     */
+    public static <A> NumericDomain<A> top(CanonicalOrder<A> order, ClosedStates closedStates) {
+        return new NumericDomain<>(StatedRules.none(), AppendOnly.empty(), false, order,
+                closedStates);
     }
 
     /**
@@ -150,7 +174,8 @@ public final class NumericDomain<A> {
         return switch (read) {
             // Nothing satisfies it, so nothing satisfies it together with anything else.
             case AffineConstraint.Read.HoldsNever<A> _ ->
-                    new NumericDomain<>(StatedRules.none(), knowing.kinds, true, knowing.order);
+                    new NumericDomain<>(StatedRules.none(), knowing.kinds, true, knowing.order,
+                            closedStates);
             // Every value satisfies it, so there is nothing to keep.
             case AffineConstraint.Read.HoldsAlways<A> _ -> knowing;
             case AffineConstraint.Read.Stated<A> stated -> knowing.keeping(stated.constraint());
@@ -169,7 +194,8 @@ public final class NumericDomain<A> {
      * said before it, and a path stating many of them would pay that for each.
      */
     private NumericDomain<A> keeping(AffineConstraint<A> rule) {
-        return new NumericDomain<>(stated.and(StatedRules.of(rule)), kinds, false, order);
+        return new NumericDomain<>(stated.and(StatedRules.of(rule)), kinds, false, order,
+                closedStates);
     }
 
     /**
@@ -220,7 +246,8 @@ public final class NumericDomain<A> {
             next = next.with(atom, given);
         }
         return next == kinds ? this
-                : new NumericDomain<>(stated, next, readARuleNothingSatisfies, order);
+                : new NumericDomain<>(stated, next, readARuleNothingSatisfies, order,
+                        closedStates);
     }
 
     // --- renaming and joining ---------------------------------------------------------------------
@@ -261,7 +288,10 @@ public final class NumericDomain<A> {
         // The order of the names arrived at, and not this one carried across. What puts two
         // positions in an order is a fact about what a position of that vocabulary is, and the
         // caller is the one that knows it — the same reason the order is asked for at the top.
-        return new NumericDomain<>(out, AppendOnly.of(spacing), readARuleNothingSatisfies, order);
+        // Nothing is lent across either: rules under other names are another reader's rules, and
+        // they join the closures of the reading they are met into.
+        return new NumericDomain<>(out, AppendOnly.of(spacing), readARuleNothingSatisfies, order,
+                ClosedStates.NONE);
     }
 
     /**
@@ -278,6 +308,10 @@ public final class NumericDomain<A> {
      * <p>Spacings are checked rather than merged. Two readings calling one position by one name and
      * spacing it two ways is the naming and the typing disagreeing, and picking the safer of the two
      * would answer about a position neither reading was about.
+     *
+     * <p>What the result leaves is worked out through this domain's {@link #closedStates} and not
+     * through {@code other}'s. The receiver is the reading the result is part of, and that is
+     * nothing about what the rules mean.
      */
     public NumericDomain<A> meet(NumericDomain<A> other) {
         if (other == null || (other.stated.isNothing() && other.kinds.isEmpty()
@@ -295,7 +329,7 @@ public final class NumericDomain<A> {
             }
         }
         return new NumericDomain<>(stated.and(other.stated), both,
-                readARuleNothingSatisfies || other.readARuleNothingSatisfies, order);
+                readARuleNothingSatisfies || other.readARuleNothingSatisfies, order, closedStates);
     }
 
     // --- what the rules leave, worked out once ----------------------------------------------------
@@ -309,7 +343,7 @@ public final class NumericDomain<A> {
      */
     private ClosedState<A> closed() {
         if (closed == null) {
-            closed = ClosedState.of(rules(), kinds::get, order);
+            closed = closedStates.of(rules(), kinds::get, order);
         }
         return closed;
     }

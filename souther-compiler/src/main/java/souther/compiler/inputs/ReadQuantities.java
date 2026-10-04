@@ -6,6 +6,8 @@ import souther.compiler.check.ConstraintState;
 import souther.compiler.check.Emptiness;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.RuleKey;
+import souther.compiler.numeric.CanonicalOrder;
+import souther.compiler.numeric.ClosedStates;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
@@ -411,10 +413,25 @@ final class ReadQuantities implements Quantities {
      *
      * <p>Whichever thread gets there first, and a second that raced it works out the same answer
      * from the same declarations.
+     *
+     * <p>And what the numbers of any of these readings leave, kept by the question they put
+     * ({@link ClosedStates}). A reading asks the same question of its numbers many times over: under
+     * contexts that differ in nothing the numbers hold, once per term it is asked about, and again
+     * from every reading made from it by fixing or taking in what was already there. Those are all
+     * readings of one input that share this, and they are released together.
      */
     private static final class Contexts {
 
         private final Map<StructuralContext, UnderAContext> read = new ConcurrentHashMap<>();
+
+        private final ClosedStates closures = ClosedStates.kept();
+
+        /**
+         * The order every context's numbers are walked in, as one object. It is one order however
+         * many times it is asked for; held once, what the closures kept of where it put a set of
+         * positions is found again from whichever context asks.
+         */
+        private final CanonicalOrder<InputAtom> order = InputAtom.inOneOrder();
 
         UnderAContext under(StructuralContext context, ReadQuantities asking) {
             UnderAContext had = read.get(context);
@@ -456,6 +473,15 @@ final class ReadQuantities implements Quantities {
 
     private static final AtomicLong CONTEXTS_READ = new AtomicLong();
 
+    /**
+     * How many times the numbers of this reading, and of every reading sharing its contexts, have
+     * had what they leave worked out rather than lent — for a test holding those readings to
+     * asking one question once.
+     */
+    long closuresWorkedOut() {
+        return contexts.closures.workedOut();
+    }
+
     /** {@link Contexts}, asked from this reading. */
     private UnderAContext underAContext(StructuralContext under) {
         return contexts.under(under, this);
@@ -492,7 +518,8 @@ final class ReadQuantities implements Quantities {
                         InputAtom.inOneOrder()));
             }
         });
-        ConstraintState<InputAtom> made = ConstraintState.top(InputAtom.inOneOrder());
+        ConstraintState<InputAtom> made =
+                ConstraintState.top(contexts.order, contexts.closures);
         // What the values of this space cost to work out. One for the space and not one per
         // parameter: what each parameter was read under is the allowance of its own declaration,
         // and the set a position finally admits here is met out of all of them — so this is the
