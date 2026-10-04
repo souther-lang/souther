@@ -9,10 +9,9 @@ import souther.compiler.diag.Region;
 import java.util.List;
 
 /**
- * What a report says about a standard-library name written bare (spec §stdlib). Three readers reach
- * this — a bare name that denotes nothing, a call that reaches no callee, and a bare name written
- * where a value goes — and all three are answering the same question about the same name, so they
- * say it in one place rather than each writing the sentence out.
+ * What a report says about a standard-library name written bare (spec §stdlib), where nothing here
+ * answers to the name. A name that answered to something — a binding, a behavior — is reported as
+ * what it answered to, and is not told it is a library name.
  *
  * <p>It is a name and not a function: the library publishes values too ({@code Map.empty}), and a
  * function's own name is a value where it is handed to a combinator rather than applied. All of

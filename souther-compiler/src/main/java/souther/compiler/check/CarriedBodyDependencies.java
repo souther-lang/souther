@@ -51,9 +51,10 @@ public final class CarriedBodyDependencies {
         Core typed;
         try {
             Scope env = HelperTyping.parameterScope(closed, closed.writtenBody(), symbols,
-                    declarations, standingCalls);
+                    declarations, ReachedValueLocations.NOT_HELD, standingCalls);
             typed = Elaborator.elaborate(closed.writtenBody(), env.reaching(standingCalls),
-                    new CheckContext(symbols, declarations, null, Map.of()),
+                    new CheckContext(symbols, declarations, ReachedValueLocations.NOT_HELD, null,
+                            Map.of()),
                     declared);
         } catch (CompileException e) {
             throw new IllegalStateException("`" + closed.name() + "` was typed on its own and could"

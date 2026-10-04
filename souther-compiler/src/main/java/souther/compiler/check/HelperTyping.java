@@ -49,6 +49,7 @@ public final class HelperTyping {
      */
     static void checkHelpers(HelperInliner inliner, Map<String, Hir.FnDef> toCheck, Symbols symbols,
                                      DeclarationAccess declarations,
+                                     ReachedValueLocations reachedLocations,
                                      Map<ValueName.Behavior, ReqSig> reqSigs,
                                      Map<String, StandingSignature> recursiveHelperFns,
                                      Map<String, Hir.Expr> loweredBodies,
@@ -186,8 +187,8 @@ public final class HelperTyping {
                 // Complete the env from the body, then run the same standalone check an annotated
                 // helper gets — so a mis-declared return type or a mis-passed function argument in the
                 // body is caught here, at the helper, not only where it is later inlined.
-                typeFromBody(h, inferred, env, body, symbols, declarations, reachable,
-                        standingCalls);
+                typeFromBody(h, inferred, env, body, symbols, declarations, reachedLocations,
+                        reachable, standingCalls);
             }
             // A recursive helper is lowered to a method, so a self- or mutual call is left standing
             // rather than expanded; its signature is what a call to it is typed against, so it goes
@@ -196,7 +197,8 @@ public final class HelperTyping {
             // declaration it shadows (spec §fn-rules), so `let use (depth: Int)` reads its `depth` as
             // the Int it declares and not as the helper it is spelled like.
             Scope tenv = env.reaching(standingCalls);
-            CheckContext typing = new CheckContext(symbols, declarations, null, reachable)
+            CheckContext typing = new CheckContext(symbols, declarations, reachedLocations, null,
+                    reachable)
                     .preserving(emitted != null || reading ? standing : Preserved.NONE);
             // push a declared return type into the body so an empty-collection body (Map.empty, [])
             // takes the declared element/value type rather than a bottom
@@ -397,6 +399,7 @@ public final class HelperTyping {
      */
     private static void typeFromBody(Hir.FnDef h, List<Integer> open, Scope env,
             Hir.Expr body, Symbols symbols, DeclarationAccess declarations,
+            ReachedValueLocations reachedLocations,
             Map<ValueName.Behavior, ReqSig> reqSigs,
             Map<String, StandingSignature> recursiveHelperFns) {
         // A parameter used as a function is one, and neither applying it nor handing it to a
@@ -414,14 +417,14 @@ public final class HelperTyping {
             }
         }
         Map<Integer, HelperParams.OpenUse> openUses = new HashMap<>();
-        HelperParams.determine(h, open, env, body, symbols, declarations, reqSigs,
-                recursiveHelperFns, openUses);
+        HelperParams.determine(h, open, env, body, symbols, declarations, reachedLocations,
+                reqSigs, recursiveHelperFns, openUses);
         // What the body reaches for decides whether an annotation is what is missing. A helper does
         // not reach a behavior at all, and the type of an argument to a call that cannot be written is
         // nothing for the author to supply, so that call is what is reported.
         if (open.stream().anyMatch(idx -> !env.holds(h.params().get(idx).binder().id()))) {
             callToABehavior(body).ifPresent(call -> {
-                throw CallElaborator.noCallee(call, symbols);
+                throw CallElaborator.noCallee(call, symbols, reachedLocations);
             });
         }
         for (int idx : open) {
@@ -461,6 +464,7 @@ public final class HelperTyping {
      */
     static Scope parameterScope(Hir.FnDef h, Hir.Expr body, Symbols symbols,
                                 DeclarationAccess declarations,
+                                ReachedValueLocations reachedLocations,
                                 Map<String, StandingSignature> recursiveHelperFns) {
         Scope env = Scope.NONE;
         List<Integer> open = new ArrayList<>();
@@ -473,7 +477,7 @@ public final class HelperTyping {
             env = env.with(p.binder(), TypeOps.resolveParamType(p.type()));
         }
         if (!open.isEmpty()) {
-            typeFromBody(h, open, env, body, symbols, declarations, Map.of(),
+            typeFromBody(h, open, env, body, symbols, declarations, reachedLocations, Map.of(),
                     recursiveHelperFns);
         }
         return env;

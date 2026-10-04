@@ -97,6 +97,7 @@ public final class TypeChecker {
      */
     public static Reported checkModule(Hir.Module module, DerivedSymbols symbols,
                                        DeclarationAccess declarations,
+                                       ReachedValueLocations reachedLocations,
                                        UninhabitableTypes.WithNoValue withNoValue,
                                        DeclarationLocations declaredAt,
                                        ReadingPolicy policy,
@@ -121,7 +122,7 @@ public final class TypeChecker {
         List<CompileException> errors = new ArrayList<>();
         boolean stopped = false;
         try {
-            checkRecovering(module, symbols, declarations,
+            checkRecovering(module, symbols, declarations, reachedLocations,
                     withNoValue,
                     declaredAt,
                     policy, sigs,
@@ -157,13 +158,14 @@ public final class TypeChecker {
                                     ReadingPolicy policy,
                                      InvariantChecker.Source discharge,
                                      Symbols symbols, DeclarationAccess declarations,
+                                     ReachedValueLocations reachedLocations,
                                      Map<ValueName.Behavior, ReqSig> calleeSigs,
                                      Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
                                      Map<String, StandingSignature> recursiveHelperFns,
                                      Map<String, DataChecker.Constructs> recHelperConstructs,
                                      Preserved.SettledValues settledValues) {
         return SpecChecker.checkSpecFn(spec, fn, loweredBody, discharge, symbols, declarations,
-                policy,
+                reachedLocations, policy,
                 calleeSigs, reqSigs, inliner, recursiveHelperFns, recHelperConstructs,
                 settledValues);
     }
@@ -244,6 +246,7 @@ public final class TypeChecker {
      */
     static void checkRecovering(Hir.Module module, DerivedSymbols symbols,
                                         DeclarationAccess declarations,
+                                        ReachedValueLocations reachedLocations,
                                         UninhabitableTypes.WithNoValue withNoValue,
                                         DeclarationLocations declaredAt,
                                        ReadingPolicy policy,
@@ -364,7 +367,8 @@ public final class TypeChecker {
                         if (symbols.declarations().declaration(data.declares())
                                 instanceof Derived.Data derived) {
                             DataChecker.checkData(derived,
-                                    CheckContext.of(symbols, declarations).forData(data));
+                                    CheckContext.of(symbols, declarations, reachedLocations)
+                                            .forData(data));
                         }
                     }
                     case Hir.SumData sum -> DataChecker.checkSum(sum, symbols, kinds, sums);
@@ -555,7 +559,7 @@ public final class TypeChecker {
         // declares, which is the same check every other definition of this module gets. There is
         // nothing left here for a reading of its own to ask.
         collect(errors, abandoned, () -> HelperTyping.checkHelpers(inliner, toCheck, symbols,
-                declarations, reqSigs, recursiveHelperFns, loweredBodies,
+                declarations, reachedLocations, reqSigs, recursiveHelperFns, loweredBodies,
                 LoweringRole.valuesWithAnEntry(elaborated.roles, module.name()), elaborated));
         // Recursion is total by default (spec §fn-declaration): a non-`partial` recursive helper must
         // be structurally recursive, so its examples terminate at compile time.

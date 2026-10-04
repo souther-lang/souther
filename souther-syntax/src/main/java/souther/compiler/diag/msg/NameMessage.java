@@ -39,6 +39,9 @@ public sealed interface NameMessage extends Message {
 
     record WriteItOnItsOwn(String name) implements NameMessage, Supporting {}
 
+    record ABindingInScopeHidesIt(String binding, String hidden)
+            implements NameMessage, Supporting {}
+
     @Code(DiagnosticCode.E1023)
     record NoBehaviorOfThatNameInThisPipeline(String name) implements NameMessage, Reported {}
 

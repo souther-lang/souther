@@ -58,6 +58,7 @@ public final class ExecutableInvariants {
      */
     public static ValueShape of(Hir.Data data, List<GoverningInvariant> governing,
                                 DerivedSymbols symbols, DeclarationAccess declarations,
+                                ReachedValueLocations reachedLocations,
                                 Map<String, StandingSignature> helpers, ExpandedClauseLookup form,
                                 InvariantStatements statements) {
         Map<String, Type> types = TypeOps.fieldTypes(data, symbols);
@@ -74,7 +75,8 @@ public final class ExecutableInvariants {
 
         Scope reading = DataChecker.fieldScope(data.declares(), types,
                 FieldBindings.asWritten(symbols)).reaching(helpers);
-        CheckContext ctx = CheckContext.executableInvariant(symbols, declarations, data);
+        CheckContext ctx =
+                CheckContext.executableInvariant(symbols, declarations, reachedLocations, data);
         // A constraint is about the value of a data made of one field, whichever form it was
         // declared in: a newtype and a product of one field hold the same clauses of that field. A
         // data of more fields has no one field for a constraint to be about, and each of its clauses

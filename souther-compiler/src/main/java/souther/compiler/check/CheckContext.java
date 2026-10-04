@@ -30,8 +30,16 @@ import java.util.Map;
  * written. Held side by side because one check needs both and because a carrier that answered the
  * second through the first would be answering what a declaration says out of the tree it was
  * written in.
+ *
+ * <p>{@code reachedLocations} is where a report points at what a name reaches, and it is here and
+ * not among the declarations' answers because it lives as long as a check does. What the
+ * declarations say is carried on into the readings a compilation keeps — a rule read for a row to
+ * be written is read against them — and a way to ask where code is written is no part of any of
+ * those. A reading with a compilation at hand is handed one; a reading that has none says so with
+ * {@link ReachedValueLocations#NOT_HELD} where it builds this.
  */
 public record CheckContext(Symbols symbols, DeclarationAccess declarations,
+                           ReachedValueLocations reachedLocations,
                            Hir.Data data,
                            Map<ValueName.Behavior, ReqSig> reqs,
                            Map<ValueName.Behavior, ReqSig> callees, boolean makingAnOptional,
@@ -46,14 +54,20 @@ public record CheckContext(Symbols symbols, DeclarationAccess declarations,
                     + " what the declarations it is written against answer, so it is handed"
                     + " somewhere to read both");
         }
+        if (reachedLocations == null) {
+            throw new IllegalArgumentException("a check that reports on a name points at what it"
+                    + " reaches, so it is handed somewhere to ask where that is, or told it holds"
+                    + " none");
+        }
     }
 
     /** A context with no behavior callable by name — every position where only injected behaviors
      *  are in sight — that makes no optional and keeps no call standing. */
-    public CheckContext(Symbols symbols, DeclarationAccess declarations, Hir.Data data,
+    public CheckContext(Symbols symbols, DeclarationAccess declarations,
+                        ReachedValueLocations reachedLocations, Hir.Data data,
                         Map<ValueName.Behavior, ReqSig> reqs) {
-        this(symbols, declarations, data, reqs, Map.of(), false, Preserved.NONE, Map.of(),
-                List.of(), OccurrenceLineage.ORIGINAL);
+        this(symbols, declarations, reachedLocations, data, reqs, Map.of(), false, Preserved.NONE,
+                Map.of(), List.of(), OccurrenceLineage.ORIGINAL);
     }
 
     // Each question asked of the declarations, for a reader that asks one of them.
@@ -134,12 +148,13 @@ public record CheckContext(Symbols symbols, DeclarationAccess declarations,
      * helper stopped saying so as soon as the value it was in reached a field.
      */
     private Same same() {
-        return new Same(symbols, declarations, data, reqs, callees, makingAnOptional,
-                preserved, dependencies, within, lineage);
+        return new Same(symbols, declarations, reachedLocations, data, reqs, callees,
+                makingAnOptional, preserved, dependencies, within, lineage);
     }
 
     /** One context being written out of another. */
     private record Same(Symbols symbols, DeclarationAccess declarations,
+                        ReachedValueLocations reachedLocations,
                         Hir.Data data,
                         Map<ValueName.Behavior, ReqSig> reqs,
                         Map<ValueName.Behavior, ReqSig> callees, boolean makingAnOptional,
@@ -178,7 +193,7 @@ public record CheckContext(Symbols symbols, DeclarationAccess declarations,
                                    boolean makingAnOptional, Preserved preserved,
                                    Map<BindingId, ValueName.Behavior> deps,
                                    List<BindingOwner> within, OccurrenceLineage lineage) {
-            return new CheckContext(symbols, declarations, data, reqs, callees,
+            return new CheckContext(symbols, declarations, reachedLocations, data, reqs, callees,
                     makingAnOptional, preserved, deps, within, lineage);
         }
     }
@@ -204,16 +219,18 @@ public record CheckContext(Symbols symbols, DeclarationAccess declarations,
 
     /** No {@code data} in scope and no behaviors — the context an invariant-free, injection-free
      *  expression is checked in. */
-    public static CheckContext of(Symbols symbols, DeclarationAccess declarations) {
-        return new CheckContext(symbols, declarations, null, Map.of());
+    public static CheckContext of(Symbols symbols, DeclarationAccess declarations,
+                                  ReachedValueLocations reachedLocations) {
+        return new CheckContext(symbols, declarations, reachedLocations, null, Map.of());
     }
 
     /** The same, for a reader that has not been handed the compilation's answers to what the
      *  declarations wrap and what their fields hold, as {@link DeclarationAccess#asWritten} reads
-     *  them. */
+     *  them. Nor where anything is written: a reader with no compilation to ask holds no place. */
     public static CheckContext of(Symbols symbols, PublishedDeclarations published,
                                   DeclarationKinds kinds) {
-        return of(symbols, DeclarationAccess.asWritten(symbols, published, kinds));
+        return of(symbols, DeclarationAccess.asWritten(symbols, published, kinds),
+                ReachedValueLocations.NOT_HELD);
     }
 
     /**
@@ -231,8 +248,9 @@ public record CheckContext(Symbols symbols, DeclarationAccess declarations,
      * behavior table on the emitter's reading and left it off the checker's.
      */
     public static CheckContext executableInvariant(Symbols symbols, DeclarationAccess declarations,
+                                                   ReachedValueLocations reachedLocations,
                                                    Hir.Data data) {
-        return new CheckContext(symbols, declarations, data, Map.of());
+        return new CheckContext(symbols, declarations, reachedLocations, data, Map.of());
     }
 
     /**
@@ -242,8 +260,9 @@ public record CheckContext(Symbols symbols, DeclarationAccess declarations,
      * the fields it reaches it reaches through them. Otherwise the invariant fragment unchanged
      * (spec §ensures), so the rest is what {@link #executableInvariant} says.
      */
-    public static CheckContext executableEnsures(Symbols symbols, DeclarationAccess declarations) {
-        return new CheckContext(symbols, declarations, null, Map.of());
+    public static CheckContext executableEnsures(Symbols symbols, DeclarationAccess declarations,
+                                                 ReachedValueLocations reachedLocations) {
+        return new CheckContext(symbols, declarations, reachedLocations, null, Map.of());
     }
 
     /** The same context checking a different {@code data}'s invariant, decoder, or encoder. */
