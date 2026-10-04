@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.DeclarationReadings;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingContext;
@@ -59,6 +60,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.function.Supplier;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
@@ -1724,11 +1726,79 @@ public final class Partitions {
      * <p>Nothing about the clauses relating two fields, which are read where a row is searched for
      * one position at a time. Whether the values may be held together is the decoder's answer — the
      * same answer every other candidate this offers is put through.
+     *
+     * <p>Composed once for the revision ({@link ARecordComposed}). A search asks what stands for a
+     * record from every point and every settling it visits, and the answer is about the record and
+     * the rules and nothing about where the search is.
      */
     private static List<FixtureTemplate> composed(TypeSymbol.AtModule record,
                                                   RuleReadingContext reading,
                                                   java.util.Set<TypeSymbol> expanding) {
-        return composed(record, reading, expanding, Map.of());
+        // Given up on before it is asked, so that a record reached from its own field is the work
+        // stopping and never the work borrowing itself.
+        if (expanding.contains(record)) {
+            return List.of();
+        }
+        return reading.revision().settled(new ARecordComposed(record, reading, expanding));
+    }
+
+    /**
+     * What stands for a record with none of its fields decided, as work settled by the record, the
+     * source its rules are read from, what the reading may spend and the names it is inside.
+     *
+     * <p>The source by its origin and not by the reading that is handed over to do the work. A
+     * reading is a capability and compares as one, so two readings of one source are two objects;
+     * the origin is what says they are one source ({@link RuleReadingSource.Origin}), and under one
+     * origin and one policy a revision has one world to read in — the terms a declaration's own
+     * reading is lent under ({@link DeclarationReadings#reading}). The reading is carried to do the
+     * work with and is no part of which work this is.
+     *
+     * <p>The names it is inside, as a set. Which of them a value is under is what decides where a
+     * record reached from its own field is given up on, and the order they were met in decides
+     * nothing.
+     */
+    static final class ARecordComposed implements RevisionWork<List<FixtureTemplate>> {
+
+        private final TypeSymbol.AtModule record;
+
+        private final RuleReadingSource.Origin origin;
+
+        private final ReadingPolicy policy;
+
+        private final Set<TypeSymbol> expanding;
+
+        private final RuleReadingContext reading;
+
+        ARecordComposed(TypeSymbol.AtModule record, RuleReadingContext reading,
+                        Set<TypeSymbol> expanding) {
+            this.record = record;
+            this.origin = reading.source().origin();
+            this.policy = reading.policy();
+            this.expanding = Set.copyOf(expanding);
+            this.reading = reading;
+        }
+
+        @Override
+        public List<FixtureTemplate> workedOut(RevisionKnowledge revision) {
+            return composed(record, reading, expanding, Map.of());
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof ARecordComposed it && record.equals(it.record)
+                    && origin.equals(it.origin) && policy.equals(it.policy)
+                    && expanding.equals(it.expanding);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(record, origin, policy, expanding);
+        }
+
+        @Override
+        public String toString() {
+            return "ARecordComposed[" + record + " inside " + expanding + "]";
+        }
     }
 
     /**

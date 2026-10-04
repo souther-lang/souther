@@ -49,7 +49,7 @@ public record RowAsRead(List<ObservedValue> values, Settlement.Reason whyNotRead
      * take is still a row something may have watched, and the two answers are about different
      * things.
      */
-    public static RowAsRead of(Sig sig, BoundaryValues building, Generator.Trial trial,
+    public static RowAsRead of(Sig sig, FixturesAtTheBoundary building, Generator.Trial trial,
                                RowToRun row) {
         List<FixtureTemplate> inputs = row.inputs();
         Generator.Watched watched = trial.run(row);
@@ -61,7 +61,7 @@ public record RowAsRead(List<ObservedValue> values, Settlement.Reason whyNotRead
             if (at >= sig.ins().size()) {
                 return new RowAsRead(null, Settlement.Reason.NOTHING_BUILT_THE_VALUES, watched);
             }
-            switch (building.build(sig.ins().get(at), inputs.get(at).value())) {
+            switch (building.build(sig.ins().get(at), inputs.get(at))) {
                 case BoundaryValues.Built.Value(var observed) -> values.add(observed);
                 // The model would not take the value the row names. Told apart from having nothing
                 // to build against: this found something out about the row, and that found nothing

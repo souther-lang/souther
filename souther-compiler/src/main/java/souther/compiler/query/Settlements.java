@@ -1,7 +1,6 @@
 package souther.compiler.query;
 
 import souther.compiler.check.Sig;
-import souther.compiler.execute.BoundaryValues;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Place;
 import souther.compiler.partition.BorderObligationPoint;
@@ -265,7 +264,7 @@ public record Settlements(List<ObligationIdentity> requested,
     public static Settlements of(Db db, Composition offering) {
         String module = offering.request().module();
         Map<String, Sig> sigs = db.ask(new Bodies.Signatures(module)).value();
-        BoundaryValues building = Adequacy.constructing(db, module);
+        FixturesAtTheBoundary building = Adequacy.constructing(db, module);
         souther.compiler.execute.RowTrials trials = Adequacy.trialling(db, module);
         List<ObligationIdentity> requested = new ArrayList<>();
         SequencedMap<ObligationIdentity, RowKey> composedFor = new LinkedHashMap<>();
@@ -394,7 +393,7 @@ public record Settlements(List<ObligationIdentity> requested,
      */
     private record OneBehavior(String behavior,
                                souther.compiler.partition.MeasuredInput subject, Sig sig,
-                               BoundaryValues building, Generator.Trial trial,
+                               FixturesAtTheBoundary building, Generator.Trial trial,
                                List<GenerationObligation> obligations,
                                Map<Generator.ArmOwed, ObligationIdentity.OfAnArm> identityOfArm,
                                Map<ObligationIdentity.OfAnArm, Generator.ArmOwed> targetOfArm,
@@ -419,7 +418,7 @@ public record Settlements(List<ObligationIdentity> requested,
          *                a row somebody else's line needed
          */
         static OneBehavior of(Db db, String module, String behavior, Adequacy.Filling filling,
-                              Sig sig, BoundaryValues building,
+                              Sig sig, FixturesAtTheBoundary building,
                               souther.compiler.execute.RowTrials trials,
                               Map<BorderObligationPoint, Map<String, List<BorderAssessment>>>
                                       declared) {

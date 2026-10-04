@@ -127,14 +127,9 @@ public final class FixtureReader {
         // measuring, and a reader bound into it once would be a session spanning all of them. It is
         // the loader that is shared, and has to be — it caches the classes it has defined and loaded,
         // and a fake's subclass is generated once.
-        //
-        // And what a value came to is kept beside that loader, since the loader is what the answer
-        // is about: a search tries one candidate at many points and under many stand-ins, and the
-        // decoder says the same thing each time.
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
-        return BoundaryValues.remembering((at, fixture) ->
-                new FixtureReader(module, symbols, sums, kinds, fields, values, loader)
-                        .building(at, fixture));
+        return (at, fixture) -> new FixtureReader(module, symbols, sums, kinds, fields, values, loader)
+                .building(at, fixture);
     }
 
     /** The method emitted for {@code operand}, or null where nothing emitted one — read off the
