@@ -31,9 +31,7 @@ import static souther.compiler.codegen.Descriptors.MTD_List_copyOf;
 import static souther.compiler.codegen.Descriptors.MTD_Rok;
 import static souther.compiler.codegen.Descriptors.MTD_SB_appendObject;
 import static souther.compiler.codegen.Descriptors.MTD_SB_appendString;
-import static souther.compiler.codegen.Descriptors.MTD_Sets_contains;
-import static souther.compiler.codegen.Descriptors.MTD_Sets_empty;
-import static souther.compiler.codegen.Descriptors.MTD_Sets_insert;
+import static souther.compiler.codegen.Descriptors.MTD_Sets_repeated;
 import static souther.compiler.codegen.Descriptors.MTD_flatMapWithPath;
 import static souther.compiler.codegen.Descriptors.MTD_hasNext;
 import static souther.compiler.codegen.Descriptors.MTD_invariantFailure;
@@ -49,8 +47,8 @@ import static souther.compiler.codegen.Descriptors.MTD_void;
  * JVM representation's {@code equals}. Raoh's own {@code unique()} collects the elements in a
  * {@code HashSet}, so a {@code Decimal} at another scale, or a container holding one, is not the
  * duplicate the clause means. What runs here instead is the generic step every decoder has
- * ({@code flatMapWithPath}), walking the elements with the same membership {@code Set.contains} /
- * {@code Set.insert} the language's own {@code List.distinct} does (souther/list.sou), and failing
+ * ({@code flatMapWithPath}), finding the repeats by the same equality the language's own
+ * {@code List.distinct} reads (souther/list.sou, {@code Sets.repeated}), and failing
  * with the issue Raoh's constraint fails with when it finds one: {@code duplicate_element} with
  * {@code duplicates} holding each repeated element once, in the order its repetition was found, and
  * Raoh's default message.
@@ -109,8 +107,9 @@ final class RaohListUnique {
         cb.withMethodBody(HELPER, MTD_invariantFailure,
                 ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC,
                 code -> emitBody(ctx, code, decoderClass, element));
+        // The duplicates themselves are the outermost list written.
         int lists = 0;
-        MessageForm at = element;
+        MessageForm at = new MessageForm.ListOf(element);
         while (!(at instanceof MessageForm.Scalar)) {
             if (at instanceof MessageForm.Newtype newtype) {
                 at = newtype.wraps();
@@ -199,72 +198,16 @@ final class RaohListUnique {
      * it repeats, and otherwise what Raoh's {@code unique} fails with — {@code duplicate_element}
      * with the repeats found.
      *
-     * <p>Locals: {@code value}=0, {@code path}=1, {@code xs}=2, {@code seen}=3, {@code reported}=4,
-     * {@code duplicates}=5, {@code it}=6, {@code x}=7.
+     * <p>Locals: {@code value}=0, {@code path}=1, {@code duplicates}=2.
      */
     private static void emitBody(CodegenContext ctx, CodeBuilder code, ClassDesc decoderClass,
                                  MessageForm element) {
         code.aload(0);
         code.checkcast(CD_List);
-        code.astore(2);                                             // xs = (List) value
-
-        code.invokestatic(CD_Sets, "empty", MTD_Sets_empty);
-        code.astore(3);                                              // seen = Sets.empty()
-        code.invokestatic(CD_Sets, "empty", MTD_Sets_empty);
-        code.astore(4);                                              // reported = Sets.empty()
-        code.new_(CD_ArrayList);
-        code.dup();
-        code.invokespecial(CD_ArrayList, "<init>", MTD_void);
-        code.astore(5);                                              // duplicates = new ArrayList()
-
+        ctx.callRuntime(code, CD_Sets, "repeated", MTD_Sets_repeated, Work.CHECKPOINTED);
+        code.astore(2);                                     // duplicates = Sets.repeated((List) value)
         code.aload(2);
-        code.invokeinterface(CD_List, "iterator", MTD_iterator);
-        code.astore(6);                                              // it = xs.iterator()
-
-        Label loop = code.newLabel();
-        Label seenBefore = code.newLabel();
-        Label done = code.newLabel();
-        code.labelBinding(loop);
-        code.aload(6);
-        code.invokeinterface(CD_Iterator, "hasNext", MTD_hasNext);
-        code.ifeq(done);
-        code.aload(6);
-        code.invokeinterface(CD_Iterator, "next", MTD_next);
-        code.astore(7);                                              // x = it.next()
-
-        // Every way round the loop goes back through the count, as every loop the emitter emits
-        // does (CodegenContext.countOneStep): one element looked at, one step.
-        ctx.countOneStep(code);
-        code.aload(7);
-        code.aload(3);
-        ctx.callRuntime(code, CD_Sets, "contains", MTD_Sets_contains, Work.CHECKPOINTED);
-        code.ifne(seenBefore);
-        // not seen before: seen = Sets.insert(x, seen)
-        code.aload(7);
-        code.aload(3);
-        ctx.callRuntime(code, CD_Sets, "insert", MTD_Sets_insert, Work.CHECKPOINTED);
-        code.astore(3);
-        code.goto_(loop);
-        code.labelBinding(seenBefore);
-        // seen already: a duplicate, reported once — the first time it repeats
-        code.aload(7);
-        code.aload(4);
-        ctx.callRuntime(code, CD_Sets, "contains", MTD_Sets_contains, Work.CHECKPOINTED);
-        code.ifne(loop);
-        code.aload(5);
-        code.aload(7);
-        emitWritten(ctx, code, decoderClass, element, 0);
-        code.invokevirtual(CD_ArrayList, "add", MTD_ArrayList_add);
-        code.pop();
-        code.aload(7);
-        code.aload(4);
-        ctx.callRuntime(code, CD_Sets, "insert", MTD_Sets_insert, Work.CHECKPOINTED);
-        code.astore(4);
-        code.goto_(loop);
-
-        code.labelBinding(done);
-        code.aload(5);
-        code.invokevirtual(CD_ArrayList, "isEmpty", MethodTypeDesc.of(ConstantDescs.CD_boolean));
+        code.invokeinterface(CD_List, "isEmpty", MethodTypeDesc.of(ConstantDescs.CD_boolean));
         Label fail = code.newLabel();
         code.ifeq(fail);
         code.aload(0);
@@ -272,9 +215,9 @@ final class RaohListUnique {
         code.areturn();
 
         code.labelBinding(fail);
-        code.aload(5);
-        code.invokestatic(CD_List, "copyOf", MTD_List_copyOf, true);
-        code.astore(5);                                              // duplicates = List.copyOf(...)
+        code.aload(2);
+        emitWritten(ctx, code, decoderClass, new MessageForm.ListOf(element), 0);
+        code.astore(2);                                     // duplicates, as the issue writes them
         code.aload(1);                                               // path
         code.loadConstant(ErrorCodes.DUPLICATE_ELEMENT);
         code.aconst_null();                                          // no custom message
@@ -283,11 +226,11 @@ final class RaohListUnique {
         code.invokespecial(CD_StringBuilder, "<init>", MTD_void);
         code.loadConstant("must not contain duplicates: ");
         code.invokevirtual(CD_StringBuilder, "append", MTD_SB_appendString);
-        code.aload(5);
+        code.aload(2);
         code.invokevirtual(CD_StringBuilder, "append", MTD_SB_appendObject);
         code.invokevirtual(CD_StringBuilder, "toString", MTD_toString);
         code.loadConstant("duplicates");
-        code.aload(5);
+        code.aload(2);
         code.invokestatic(CD_Map, "of", MTD_mapOfOne, true);
         code.invokestatic(CD_RResult, "failWith", MTD_failWith, true);
         code.areturn();
