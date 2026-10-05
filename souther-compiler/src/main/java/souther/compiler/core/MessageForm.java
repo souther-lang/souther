@@ -30,6 +30,12 @@ public sealed interface MessageForm {
     /** A scalar, written as itself. */
     record Scalar(LeafScalar scalar) implements MessageForm {
 
+        public Scalar {
+            if (scalar == null) {
+                throw new IllegalArgumentException("a scalar form is the form of one scalar");
+            }
+        }
+
         @Override
         public Type type() {
             return scalar.type();
@@ -43,6 +49,13 @@ public sealed interface MessageForm {
 
     /** A list, written as the list of its elements' forms. */
     record ListOf(MessageForm element) implements MessageForm {
+
+        public ListOf {
+            if (element == null) {
+                throw new IllegalArgumentException(
+                        "a list has a form only where its elements have one");
+            }
+        }
 
         @Override
         public Type type() {
@@ -62,6 +75,13 @@ public sealed interface MessageForm {
      *     another
      */
     record Newtype(TypeSymbol name, MessageForm wraps) implements MessageForm {
+
+        public Newtype {
+            if (name == null || wraps == null) {
+                throw new IllegalArgumentException("a newtype has a form only where what it wraps"
+                        + " has one, and is opened by its name");
+            }
+        }
 
         @Override
         public Type type() {
