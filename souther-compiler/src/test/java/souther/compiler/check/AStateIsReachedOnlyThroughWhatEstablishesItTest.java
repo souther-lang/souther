@@ -193,8 +193,9 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
      */
     @Test
     void everyWayIntoAStateIsTheOperationThatEstablishesIt() {
-        assertEquals(Set.of("check(Module, Map, Stdlib)"), waysInto(Expandable.class));
-        assertEquals(Set.of("settle(Expandable, Symbols, DeclarationKinds, Map)"), waysInto(InvariantSettled.class));
+        assertEquals(Set.of("check(Module, ClosedImports, Stdlib)"), waysInto(Expandable.class));
+        assertEquals(Set.of("settle(Expandable, Symbols, DeclarationKinds, ClosedImports)"),
+                waysInto(InvariantSettled.class));
         assertEquals(Set.of(), waysInto(InvariantSettled.Def.class),
                 "a settled declaration is projected from the module it is one of");
         assertEquals(Set.of("of(Def, DeclarationNewtypes)", "ofLanguage(Def)"),
@@ -747,7 +748,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
             }
         }
         assertEquals(List.of("CheckSurface.assemble(InvariantSettled, Map, Map,"
-                                + " DeclarationNewtypes, Map, FakeTables, BehaviorBodies, Map, Set,"
+                                + " DeclarationNewtypes, Map, FakeTables, BehaviorBodies, ClosedImports, Set,"
                                 + " Stdlib, Symbols, SumCases, DeclarationKinds,"
                                 + " NewtypeInners)",
                         "CheckSurface.<init>(InvariantSettled, List, List, List, List, FakeTables,"

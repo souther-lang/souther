@@ -417,6 +417,7 @@ final class IndexEdges {
     static Map<Part, WhatAComponentHolds> whatEachComponentHolds() {
         Map<Part, WhatAComponentHolds> out = new LinkedHashMap<>();
         holds(out, Bodies.Expanding.class, "policy", WhatAComponentHolds.HOW_TO_READ_IT);
+        holds(out, Bodies.ImportedDefinitions.class, "policy", WhatAComponentHolds.HOW_TO_READ_IT);
         holds(out, Bodies.RecursiveCallSigs.class, "policy", WhatAComponentHolds.HOW_TO_READ_IT);
         holds(out, Bodies.WrittenIntoBody.class, "policy", WhatAComponentHolds.HOW_TO_READ_IT);
         holds(out, Bodies.StandingRecursionsOfBody.class, "policy",
