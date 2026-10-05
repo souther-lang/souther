@@ -99,24 +99,6 @@
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
-        <!-- The Enforcer's matcher, at the version the release and snapshot profiles run, so that
-             what the snapshot profile's exemptions match is asked of the code that matches them
-             and not of a reading of its documentation. -->
-        <dependency>
-            <groupId>org.apache.maven.enforcer</groupId>
-            <artifactId>enforcer-rules</artifactId>
-            <version>${enforcer.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <!-- What the matcher compares versions with. The Enforcer takes it from the Maven running
-             the build rather than depending on it, so it is named here, at the Maven this build is
-             run with. -->
-        <dependency>
-            <groupId>org.apache.maven</groupId>
-            <artifactId>maven-artifact</artifactId>
-            <version>3.9.16</version>
-            <scope>test</scope>
-        </dependency>
         <!-- The Checkstyle the pre-commit hook runs, at the version it runs, so that what the
              hook's rules match is asked of the code that matches it and not of a reading of
              their XPath. -->

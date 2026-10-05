@@ -108,9 +108,10 @@ not the commit develop points at on origin (`bin/require-develop-tip.sh`); and i
 module before building it. A plain `mvn deploy` publishes nothing: the publishing plugin is used
 only by the two profiles.
 
-The publication is a build of its own, so the build CI checked and the one published resolve the
-same dependencies only because none of them can change: the `snapshot` profile, like the `release`
-profile, refuses a dependency outside this reactor that is a snapshot.
+A release is a build of its own, so the build CI checked and the one published resolve the same
+dependencies only because none of them can change: the `release` profile refuses a snapshot
+dependency. The `snapshot` profile allows one, because what it publishes is replaced by the next
+publication and promises nothing a dependency's moving could break.
 
 A release and a snapshot go through the same plugin and not to the same place. A release is
 uploaded to the Portal as one deployment, validated there and then published to Maven Central; a
