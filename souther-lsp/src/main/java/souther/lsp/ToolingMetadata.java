@@ -1,9 +1,14 @@
 package souther.lsp;
 
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * What an editor or any other client has to know about this artifact to start it and talk to it:
@@ -23,7 +28,25 @@ public final class ToolingMetadata {
     /** Where the metadata is in either jar, as a path inside the archive. */
     public static final String RESOURCE = "META-INF/souther/tooling.json";
 
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
     private ToolingMetadata() {
+    }
+
+    /**
+     * The arguments a JVM has to be given to run this Souther, as the metadata states them.
+     *
+     * <p>Read from the file and not kept beside it: a process that starts another JVM for the same
+     * front end is a client of this metadata like an editor is, and a stack size written in its own
+     * source would be a second statement of it.
+     */
+    public static List<String> requiredJvmArgs() {
+        List<String> arguments = new ArrayList<>();
+        for (JsonNode argument : JSON.readTree(text()).get("runtime").get("java")
+                .get("requiredJvmArgs")) {
+            arguments.add(argument.asString());
+        }
+        return List.copyOf(arguments);
     }
 
     /** The metadata as written in the jar this class was loaded from. */
