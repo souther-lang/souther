@@ -35,6 +35,8 @@ import souther.compiler.report.GeneratedRows;
 import souther.compiler.report.UnifiedDiff;
 import souther.lsp.LspServer;
 import souther.lsp.ToolingMetadata;
+import souther.cli.backend.BackendProcess;
+import souther.cli.backend.Backends;
 import souther.cli.init.InitCommand;
 
 import java.io.Console;
@@ -106,9 +108,16 @@ public final class Main {
      * here, each of those is an ordinary result.
      */
     static int dispatch(String[] args) {
+        return dispatch(args, Path.of(""));
+    }
+
+    /**
+     * As {@link #dispatch(String[])}, with a project's version file looked for from
+     * {@code workingDirectory}.
+     */
+    static int dispatch(String[] args, Path workingDirectory) {
         String named = args.length == 0 ? "" : args[0];
-        String[] rest = args.length == 0 ? args : java.util.Arrays.copyOfRange(args, 1, args.length);
-        // Written where a command goes, `--help` asks what `help` asks. Read as an option it would
+        String[] rest = args.length == 0 ? args : java.util.Arrays.copyOfRange(args, 1, args.length);        // Written where a command goes, `--help` asks what `help` asks. Read as an option it would
         // be an option of no command, since which command's options are read is what has not been
         // said yet; read as its own shape it would be a line whose remaining arguments nothing
         // looks at, and `souther --help compile` would answer with the listing.
@@ -125,6 +134,22 @@ public final class Main {
             System.err.println(hint);
             System.err.println(Usage.all());
             return 2;
+        }
+        // Before the check below, which reads the arguments as the CLI's own: an installed target's
+        // arguments are the backend's, and are held against nothing here.
+        if (command == CliCommand.COMPILE) {
+            switch (CompileInvocation.read(rest)) {
+                case CompileInvocation.Unnamed unnamed -> {
+                    System.err.println(Messages.get("cli.target.unnamed",
+                            RenderOptions.asking(null).locale()));
+                    System.err.println(Usage.of(command));
+                    return 2;
+                }
+                case CompileInvocation.Target target -> {
+                    return delegated(target, workingDirectory);
+                }
+                case CompileInvocation.Jvm jvm -> rest = jvm.arguments().toArray(String[]::new);
+            }
         }
         // Before the command, and the same check whichever one was named. What each parser used to
         // ask for itself — is this token mine — three of them asked and two did not, and none of
@@ -150,7 +175,69 @@ public final class Main {
             System.err.println(Usage.of(command));
             return 2;
         }
+        // After everything the line itself says, and before anything runs: what a project asks of
+        // the Souther is a fact about where the command is run, which no word of the line changes.
+        if (command.scope() == CliCommand.Scope.PROJECT
+                && refusedByProject(workingDirectory, RenderOptions.asking(read.lang()))) {
+            return 2;
+        }
         return work(command, rest).getAsInt();
+    }
+
+    /**
+     * {@code souther compile --target <target> <arguments>...}: runs the installed backend that
+     * answers to the target, and answers with its exit status.
+     *
+     * <p>Held to the project's version like every compile, and to nothing else the CLI reads: the
+     * backend's arguments, {@code --help} among them, are its own.
+     */
+    private static int delegated(CompileInvocation.Target target, Path workingDirectory) {
+        RenderOptions render = RenderOptions.asking(null);
+        if (refusedByProject(workingDirectory, render)) {
+            return 2;
+        }
+        try {
+            Backends.Backend backend = Backends.installed()
+                    .choose(target.name(), ModuleMetadata.compilerVersion());
+            return BackendProcess.run(backend, target.arguments());
+        } catch (Backends.Refused e) {
+            System.err.println(Messages.get(e.key(), render.locale(), e.arguments()));
+            return 2;
+        } catch (IOException e) {
+            System.err.println("io error: " + e.getMessage());
+            return 1;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return 1;
+        }
+    }
+
+    /** Whether the project this command is run in refuses this Souther, which is then said. */
+    private static boolean refusedByProject(Path workingDirectory, RenderOptions render) {
+        String refusal = projectRefusal(workingDirectory, render);
+        if (refusal != null) {
+            System.err.println(refusal);
+        }
+        return refusal != null;
+    }
+
+    /**
+     * Why the project this command is run in refuses this Souther, or null where nothing does.
+     *
+     * <p>Compared as text with this compiler's own version. A build tree that has no version to
+     * give says {@code unreleased}, which equals only a file that says it.
+     */
+    private static String projectRefusal(Path workingDirectory, RenderOptions render) {
+        Locale locale = render.locale();
+        return switch (ProjectVersion.nearest(workingDirectory)) {
+            case ProjectVersion.Absent absent -> null;
+            case ProjectVersion.Malformed malformed ->
+                    Messages.get("cli.project.malformed", locale, malformed.file());
+            case ProjectVersion.Declared declared ->
+                    declared.version().equals(ModuleMetadata.compilerVersion()) ? null
+                            : Messages.get("cli.project.version", locale, declared.file(),
+                                    declared.version(), ModuleMetadata.compilerVersion());
+        };
     }
 
     /**

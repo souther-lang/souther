@@ -56,6 +56,9 @@ final class Usage {
         List<String> lines = new ArrayList<>();
         lines.add(("usage: souther " + command.spelling() + " [options] "
                 + command.operands()).stripTrailing());
+        for (String form : command.also().forms()) {
+            lines.add("       souther " + command.spelling() + " " + form);
+        }
         lines.add(INDENT + command.summary());
         // Never none of them: `--help` is every command's, so a command that takes nothing else
         // still has this section, which is the one a reader who got here by asking is reading.
@@ -65,6 +68,10 @@ final class Usage {
         int column = column(options.stream().map(Usage::written).toList());
         for (CliOption option : options) {
             lines.addAll(entry(written(option), command.describe(option), column));
+        }
+        for (String note : command.also().notes()) {
+            lines.add("");
+            lines.addAll(entry("", note, INDENT.length()));
         }
         return String.join(System.lineSeparator(), lines);
     }

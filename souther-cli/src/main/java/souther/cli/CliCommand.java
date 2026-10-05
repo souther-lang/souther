@@ -3,6 +3,7 @@ package souther.cli;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -28,30 +29,57 @@ import java.util.Map;
 enum CliCommand {
 
     INIT("init", "[<groupId>:<artifactId>]", "start a project, or add Souther to one",
+            Scope.INDEPENDENT,
             Map.of(CliOption.MODULE,
                     "the `.sou` module header (default: the coordinate)",
                     CliOption.DIRECTORY,
                     "where to write it (default: the artifactId, or here when adding)")),
-    COMPILE("compile", "<file.sou>...", "compile to .class files",
-            Map.of(CliOption.DIRECTORY, "where the generated .class files are written")),
-    RUN("run", "<file.sou>", "run one behavior and print its output",
+    COMPILE("compile", "<file.sou>...", "compile to .class files, or for an installed target",
+            Scope.PROJECT,
+            Map.of(CliOption.DIRECTORY, "where the generated .class files are written"),
+            new Also(List.of("--target <target> <target-arguments>..."),
+                    List.of("`--target` is read only as the first argument. `jvm` is built in and"
+                            + " is what a line without it means. Any other target is an"
+                            + " installed backend, and everything after its name is the"
+                            + " backend's own: `souther compile --target <target> --help` asks"
+                            + " it what it takes."))),
+    RUN("run", "<file.sou>", "run one behavior and print its output", Scope.PROJECT,
             Map.of(CliOption.BEHAVIOR, "which behavior to run (default: the only one)")),
-    FMT("fmt", "<file.sou>...", "format source, to stdout or in place"),
+    FMT("fmt", "<file.sou>...", "format source, to stdout or in place", Scope.PROJECT),
     EXAMPLES("examples", "<file.sou>...", "how well the `example`s cover the model",
+            Scope.PROJECT,
             Map.of(CliOption.FORMAT, "how to render the report, and any compile "
                     + "error (default human)")),
     DOC("doc", "[<anchor> | <error-code> | <set>/<topic>[/<section>]]",
-            "read the language specification"),
+            "read the language specification", Scope.INDEPENDENT),
     API("api", "[<Module>[.<name>]]", "the stdlib surface and its signatures",
+            Scope.INDEPENDENT,
             Map.of(CliOption.SEARCH, "the published names whose signature or "
                     + "document says the term")),
     JAPI("japi", "<class-or-package>[#<member>]", "a dependency jar's public API, with javadoc",
+            Scope.INDEPENDENT,
             Map.of(CliOption.CLASS_PATH, "where to find the jar to read")),
-    MCP("mcp", "", "serve doc, api and japi over MCP stdio"),
-    LSP("lsp", "", "serve the language server over LSP stdio"),
-    TOOLING("tooling", "", "what an editor needs to start and configure the server, as JSON"),
-    HELP("help", "[<command>]", "what a command takes, and what its options mean"),
-    VERSION("version", "", "which Souther this is");
+    MCP("mcp", "", "serve doc, api and japi over MCP stdio", Scope.INDEPENDENT),
+    LSP("lsp", "", "serve the language server over LSP stdio", Scope.INDEPENDENT),
+    TOOLING("tooling", "", "what an editor needs to start and configure the server, as JSON",
+            Scope.INDEPENDENT),
+    HELP("help", "[<command>]", "what a command takes, and what its options mean",
+            Scope.INDEPENDENT),
+    VERSION("version", "", "which Souther this is", Scope.INDEPENDENT);
+
+    /**
+     * Whether a command is about a project, and so held to the Souther the project says it needs.
+     *
+     * <p>A fact of the command and stated beside it. Asking of a run whether it turned out to read
+     * a project would make the answer depend on what the command's arguments mean, which for a
+     * command that hands them to something else is not the CLI's to know.
+     */
+    enum Scope {
+        /** Reads or writes a project's sources, and is refused under another Souther's version. */
+        PROJECT,
+        /** Answers about this Souther, or starts a project, and is the same wherever it is run. */
+        INDEPENDENT
+    }
 
     private static final Map<String, CliCommand> BY_SPELLING = spellingIndex();
 
@@ -74,14 +102,38 @@ enum CliCommand {
     /** What an option of this command's means here, where that is not what it means on its own. */
     private final Map<CliOption, String> reads;
 
-    CliCommand(String spelling, String operands, String summary) {
-        this(spelling, operands, summary, Map.of());
+    /** Whether the Souther a project names is the Souther this command runs under. */
+    private final Scope scope;
+
+    /** The other ways this command is written, and what a reader is told about them. */
+    private final Also also;
+
+    /**
+     * The other forms a command is written in, and what is said about them.
+     *
+     * <p>{@code forms} are synopses after the command's name, one for each form besides the one
+     * {@code operands} states; {@code notes} are sentences written under the options.
+     */
+    record Also(List<String> forms, List<String> notes) {
+        static final Also NONE = new Also(List.of(), List.of());
     }
 
-    CliCommand(String spelling, String operands, String summary, Map<CliOption, String> reads) {
+    CliCommand(String spelling, String operands, String summary, Scope scope) {
+        this(spelling, operands, summary, scope, Map.of(), Also.NONE);
+    }
+
+    CliCommand(String spelling, String operands, String summary, Scope scope,
+               Map<CliOption, String> reads) {
+        this(spelling, operands, summary, scope, reads, Also.NONE);
+    }
+
+    CliCommand(String spelling, String operands, String summary, Scope scope,
+               Map<CliOption, String> reads, Also also) {
         this.spelling = spelling;
         this.operands = operands;
         this.summary = summary;
+        this.scope = scope;
+        this.also = also;
         // Held unmodifiable, which is what a field of an enum constant has to be: every caller of
         // this command sees the one map, so a caller that could write to it would be writing for
         // all of them.
@@ -104,6 +156,14 @@ enum CliCommand {
 
     String summary() {
         return summary;
+    }
+
+    Scope scope() {
+        return scope;
+    }
+
+    Also also() {
+        return also;
     }
 
     /**

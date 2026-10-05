@@ -98,6 +98,49 @@ take `--adequacy`, and the same word names the same bar on either, so the build 
 `examples --adequacy classes --strict` alike is `compile --adequacy classes --warnings error`.
 The default is `report`, which prints them and writes the classes.
 
+```
+souther compile --target <target> <target-arguments>...
+```
+
+`--target` compiles for something other than the JVM. Written first, it chooses which grammar the rest
+of the line is read in: `jvm` is built in and is what a line without `--target` means, so `souther
+compile --target jvm -d classes m.sou` is `souther compile -d classes m.sou`. Any other target is an
+installed backend, and from the target's name on the line is the backend's, verbatim. This command
+reads none of it, `--help` included: `souther compile --target wasm --help` is the wasm backend
+asking itself what it takes. Written anywhere but first, `--target` is an option `compile` does not
+have.
+
+A backend is an executable jar, or a link to one, in `$SOUTHER_HOME/backends` or in the directory a
+package manager's launcher names with `-Dsouther.backends`. It says what it is in
+`META-INF/souther/backend.properties`, which has two keys and no others: `name`, the target it answers
+to, and `souther.version`, the Souther it was built against. This command chooses the jar whose pair
+is this Souther's, so jars for several versions can stand side by side; two of one pair in a directory
+are refused. The first directory that holds the target at all decides, so a development build in
+`$SOUTHER_HOME` stands in for a packaged one, and a stale one is refused rather than passed over.
+Which backend release that jar is has no part in the choice.
+
+The backend runs as a process of its own, under this command's `java`, with the JVM arguments this
+Souther requires — the ones `souther tooling` lists. Its arguments, working directory, environment and
+standard streams are the command's own, and the exit status is the backend's. A target that is not
+installed, a backend built for another Souther, a jar that is not a backend and a link to a jar that
+is not there are each refused with exit status 2 before anything runs.
+
+<!-- souther-section: project-version -->
+## .souther-version
+
+A file of this name holds one line: an exact Souther version, compared as text, with no range and no
+alias. It says which Souther a project's direct use of this command line requires, and chooses none:
+under one naming another version, `compile` (whatever its target), `run`, `fmt` and `examples` are
+refused with both versions named, and exit status 2. The file is looked for from the working directory
+upwards, and the nearest one wins. `init`, `doc`, `api`, `japi`, `tooling`, `help` and `version` are
+not held to it, nor are `lsp` and `mcp` for now, since an editor or an agent starts those and a
+refusal at start-up would show its reader nothing. `--help` and `--version` are answered before it is
+read.
+
+A Maven or Gradle build does not read the file: its build file decides which Souther it runs, and
+`souther init --build maven|gradle` writes none. One a Java project keeps constrains direct use of
+this command line and nothing else.
+
 <!-- souther-section: run -->
 ## run
 
