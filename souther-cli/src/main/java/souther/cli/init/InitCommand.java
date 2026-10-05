@@ -1,5 +1,6 @@
 package souther.cli.init;
 
+import souther.cli.ProjectVersion;
 import souther.compiler.Reserved;
 import souther.compiler.diag.Messages;
 import souther.compiler.text.DisplayColumns;
@@ -120,6 +121,17 @@ public final class InitCommand {
             report.add(new Line(Did.DETECTED, existing.spelling() + " ("
                     + existing.fileIn(at).getFileName() + ")"));
             report.add(new Line(Did.READ, coordinate.toString()));
+        } else if (asked == BuildSystem.NONE) {
+            // No build, so nothing has a coordinate to name and the project goes where the line is
+            // run: the directory is the project, as it is where a build is added to.
+            if (coordinateAsWritten != null) {
+                return refuse(err, locale, "cli.init.coordinate.unused", coordinateAsWritten);
+            }
+            coordinate = null;
+            target = directory != null ? directory : here;
+            if (level == null) {
+                level = Model.FULL;
+            }
         } else {
             if (coordinateAsWritten == null) {
                 return refuse(err, locale, "cli.init.coordinate.required", Coordinate.FORM);
@@ -138,9 +150,12 @@ public final class InitCommand {
             }
         }
 
-        String module = moduleAsWritten != null ? moduleAsWritten : coordinate.moduleName();
+        String module = moduleAsWritten != null ? moduleAsWritten
+                : coordinate != null ? coordinate.moduleName() : moduleOfDirectory(target);
         if (module == null) {
-            return refuse(err, locale, "cli.init.module.underivable", coordinate.toString());
+            return coordinate != null
+                    ? refuse(err, locale, "cli.init.module.underivable", coordinate.toString())
+                    : refuse(err, locale, "cli.init.module.directory", display(here, target));
         }
         if (!Coordinate.isAModuleName(module)) {
             return refuse(err, locale, "cli.init.module.name", module);
@@ -182,14 +197,23 @@ public final class InitCommand {
     private static List<Templates.File> filesOf(Project project, boolean creating) {
         List<Templates.File> files = new ArrayList<>();
         if (creating) {
-            if (project.build() == BuildSystem.MAVEN) {
-                files.add(new Templates.File("pom.xml", Templates.pom(project)));
-            } else {
-                files.add(new Templates.File("settings.gradle.kts",
-                        Templates.settingsScript(project)));
-                files.add(new Templates.File("build.gradle.kts", Templates.buildScript(project)));
+            switch (project.build()) {
+                case MAVEN -> {
+                    files.add(new Templates.File("pom.xml", Templates.pom(project)));
+                    files.add(new Templates.File(".gitignore", Templates.gitignore(project)));
+                }
+                case GRADLE -> {
+                    files.add(new Templates.File("settings.gradle.kts",
+                            Templates.settingsScript(project)));
+                    files.add(new Templates.File("build.gradle.kts",
+                            Templates.buildScript(project)));
+                    files.add(new Templates.File(".gitignore", Templates.gitignore(project)));
+                }
+                // The one file that says which Souther this project's direct use requires, where
+                // there is no build file to say it.
+                case NONE -> files.add(new Templates.File(ProjectVersion.FILE,
+                        project.southerVersion() + "\n"));
             }
-            files.add(new Templates.File(".gitignore", Templates.gitignore(project)));
         }
         files.addAll(Templates.sourcesOf(project));
         return files;
@@ -230,6 +254,12 @@ public final class InitCommand {
             return build == BuildSystem.MAVEN ? "cli.init.pom.unreadable"
                     : "cli.init.gradle.elsewhere";
         }
+    }
+
+    /** The module name the directory's own name derives, or null where it derives none. */
+    private static String moduleOfDirectory(Path directory) {
+        Path name = directory.toAbsolutePath().normalize().getFileName();
+        return name == null ? null : Coordinate.moduleNameOfDirectory(name.toString());
     }
 
     /** What the build that is already here calls the project, or null where it does not say. */
@@ -327,6 +357,14 @@ public final class InitCommand {
                              boolean creating) {
         String where = display(here, target);
         String cd = where.isEmpty() || where.equals(".") ? "" : "cd " + where + " && ";
+        if (project.build() == BuildSystem.NONE) {
+            // No target is named: which backends are installed is theirs to say and not this
+            // command's, which knows none besides the JVM.
+            out.println("    " + cd + "souther compile --target <target> <arguments>...");
+            out.println();
+            out.println("    " + Messages.get("cli.init.target", locale));
+            return;
+        }
         if (project.build() == BuildSystem.MAVEN) {
             out.println("    " + cd + (creating ? "mvn compile" : "mvn test"));
             return;

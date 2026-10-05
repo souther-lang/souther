@@ -12,7 +12,7 @@ against, so it says what this build does rather than what a text was last edited
 ## init
 
 ```
-souther init [<groupId>:<artifactId>] [-d|--dir <path>] [--build maven|gradle]
+souther init [<groupId>:<artifactId>] [-d|--dir <path>] [--build maven|gradle|none]
                                       [--model none|minimal|full] [--module <name>]
 ```
 
@@ -37,6 +37,16 @@ $ souther init com.example:hello
 `--build gradle` writes `settings.gradle.kts` and `build.gradle.kts` instead, and no wrapper: a
 wrapper pins a Gradle version, and a version pinned when this compiler was released is one it can
 never revisit. It says to run `gradle wrapper` first.
+
+`--build none` is for a project with no Java build, one that reaches Souther through `souther compile
+--target`. It writes the source and a `.souther-version` naming the Souther that ran it — the one
+file that says which Souther the project's direct use requires, where there is no build file to say
+it — and nothing else. There is no coordinate to give, and one written is refused: the project is the
+directory, and its module is `--module` or the directory's name, a hyphen written as an underscore.
+A directory whose name is not one a module can have is refused and asked for `--module`. An existing
+`.souther-version` is left as it is. What it says to run next is `souther compile --target <target>`,
+with no target named: which backends are installed is theirs to say, and this command knows none
+besides the JVM.
 
 The generated Gradle build names no Souther version, where the Maven one names the version of the
 compiler that wrote it. On Gradle the plugin adds the runtime at the version it compiles with, so

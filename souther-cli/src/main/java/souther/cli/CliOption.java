@@ -43,8 +43,9 @@ enum CliOption {
     WRITE("fmt", null, "write the formatted source back in place", "-w", "--write"),
     CHECK("fmt", null, "write no file; exit non-zero on a file that is not formatted", "--check"),
     MODULE("examples/init", "<name>", "report only this module", "--module"),
-    BUILD("init", "maven|gradle", "which build to write, where one is created (default maven)",
-            "--build"),
+    BUILD("init", "maven|gradle|none",
+            "which build to write, where one is created (default maven; none writes the sources "
+                    + "and `.souther-version` and no build)", "--build"),
     MODEL("init", "none|minimal|full",
             "how much of a model to start with (default full when creating, none when adding)",
             "--model"),
