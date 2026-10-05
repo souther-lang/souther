@@ -161,6 +161,20 @@ class AProjectNamingAnotherSoutherRefusesEveryCommandThatReadsItTest {
     }
 
     @Test
+    void aLinkToNothingIsTheNearestFileAndIsNotSkippedForOneAbove(@TempDir Path root)
+            throws IOException {
+        Path inner = Files.createDirectories(root.resolve("a"));
+        declare(root, ModuleMetadata.compilerVersion() + "\n");
+        Files.createSymbolicLink(inner.resolve(ProjectVersion.FILE), inner.resolve("gone"));
+
+        Said said = run(inner, "fmt", "model.sou");
+
+        assertEquals(2, said.code(), said.err());
+        assertTrue(said.err().contains(inner.resolve(ProjectVersion.FILE).toString()), said.err());
+        assertFalse(said.err().contains("internal compiler error"), said.err());
+    }
+
+    @Test
     void aFileThatCannotBeReadIsSaidSoAndIsNotACompilerFault(@TempDir Path project)
             throws IOException {
         Files.createDirectory(project.resolve(ProjectVersion.FILE));

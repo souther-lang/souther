@@ -2,6 +2,7 @@ package souther.cli;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -35,13 +36,15 @@ sealed interface ProjectVersion {
     /**
      * What the nearest file at or above {@code directory} says. The nearest one wins.
      *
-     * <p>Whatever is named that is there is the file, a directory included: a project that holds
-     * something it did not mean to under this name is told so, and not run as though it held none.
+     * <p>Whatever is named that is there is the file, a directory or a link to nothing included: a
+     * project that holds something it did not mean to under this name is told so, and not run as
+     * though it held none. A link is looked at as itself, because the nearest file is the one that
+     * is written, whether or not what it points at can be read.
      */
     static ProjectVersion nearest(Path directory) {
         for (Path at = directory.toAbsolutePath().normalize(); at != null; at = at.getParent()) {
             Path file = at.resolve(FILE);
-            if (Files.exists(file)) {
+            if (Files.exists(file, LinkOption.NOFOLLOW_LINKS)) {
                 return read(file);
             }
         }

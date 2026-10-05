@@ -3,6 +3,7 @@ package souther.cli.backend;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -128,6 +129,11 @@ public final class Backends {
     /** The backends in one directory, which holds none where it does not exist. */
     private static List<Backend> scan(Path directory) throws Refused {
         if (!Files.isDirectory(directory)) {
+            // Absent is no backends. What is there under the name and is not a directory — a file,
+            // or a link to nothing — is an install that is not what it was meant to be, and is said.
+            if (Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) {
+                throw new Refused("cli.backend.directory", directory, "not a directory");
+            }
             return List.of();
         }
         List<Path> entries;

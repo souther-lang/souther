@@ -145,6 +145,22 @@ class TheBackendATargetNamesIsChosenByNameAndSoutherVersionTest {
     }
 
     @Test
+    void aDirectoryThatIsALinkToNothingOrAFileIsRefusedAndAbsentIsNot(@TempDir Path dir)
+            throws IOException {
+        Path link = Files.createSymbolicLink(dir.resolve("dangling"), dir.resolve("gone"));
+        Path file = Files.writeString(dir.resolve("file"), "x");
+
+        for (Path held : List.of(link, file)) {
+            Backends.Refused said = refused(new Backends(List.of(held)), "wasm");
+
+            assertEquals("cli.backend.directory", said.key());
+            assertArrayEquals(new Object[] {held, "not a directory"}, said.arguments());
+        }
+        assertEquals("cli.backend.unknown.none",
+                refused(new Backends(List.of(dir.resolve("absent"))), "wasm").key());
+    }
+
+    @Test
     void aLinkToAJarIsABackend(@TempDir Path dir, @TempDir Path elsewhere) throws Exception {
         Path jar = FakeBackend.write(elsewhere.resolve("real.jar"), "wasm", HERE, "linked");
         Path link = Files.createSymbolicLink(dir.resolve("wasm.jar"), jar);
