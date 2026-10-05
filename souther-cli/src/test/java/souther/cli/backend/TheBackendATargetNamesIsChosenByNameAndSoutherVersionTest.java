@@ -111,7 +111,10 @@ class TheBackendATargetNamesIsChosenByNameAndSoutherVersionTest {
                 "name=wasm\n",
                 "souther.version=" + HERE + "\n",
                 "name=wasm\nsouther.version=" + HERE + "\nrelease=1\n",
-                "name=\nsouther.version=" + HERE + "\n"}) {
+                "name=\nsouther.version=" + HERE + "\n",
+                "name=wasm\nsouther.version=" + HERE + " \n",
+                "name=wasm \nsouther.version=" + HERE + "\n",
+                "name=wasm\nsouther.version=" + HERE + " x\n"}) {
             Path jar = FakeBackend.writeWithDescriptor(dir.resolve("b.jar"), descriptor);
 
             Backends.Refused said = refused(new Backends(List.of(dir)), "wasm");

@@ -29,7 +29,7 @@ public final class FakeBackend {
                 public static void main(String[] args) throws Exception {
                     System.out.println("marker=%s");
                     System.out.println("args=" + String.join("|", args));
-                    System.out.println("cwd=" + java.nio.file.Path.of("").toAbsolutePath());
+                    System.out.println("cwd=" + System.getProperty("user.dir"));
                     System.out.println("env=" + System.getenv("FAKE_ENV"));
                     System.out.println("stdin=" + new String(System.in.readAllBytes()));
                     System.err.println("said-on-stderr");

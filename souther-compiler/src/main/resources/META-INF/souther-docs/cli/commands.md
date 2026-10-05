@@ -134,8 +134,13 @@ under one naming another version, `compile` (whatever its target), `run`, `fmt` 
 refused with both versions named, and exit status 2. The file is looked for from the working directory
 upwards, and the nearest one wins. `init`, `doc`, `api`, `japi`, `tooling`, `help` and `version` are
 not held to it, nor are `lsp` and `mcp` for now, since an editor or an agent starts those and a
-refusal at start-up would show its reader nothing. `--help` and `--version` are answered before it is
-read.
+refusal at start-up would show its reader nothing. A `--help` or `--version` this command line reads
+is answered before the file is. One written after an installed target's name is the backend's and is
+not read here, so a line that delegates is held to the file first, as any other `compile` is.
+
+A file that does not hold exactly one version on one line is refused as it stands, and so is one that
+cannot be read: whitespace around the version, a blank line after it, or a directory of that name is
+said so and not read as the version it resembles. A line ending is not part of the version.
 
 A Maven or Gradle build does not read the file: its build file decides which Souther it runs, and
 `souther init --build maven|gradle` writes none. One a Java project keeps constrains direct use of

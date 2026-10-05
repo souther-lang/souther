@@ -166,11 +166,20 @@ public final class Backends {
         }
         String name = descriptor.getProperty(NAME);
         String version = descriptor.getProperty(SOUTHER_VERSION);
-        boolean exactlyTheTwo = descriptor.size() == 2 && name != null && version != null
-                && !name.isBlank() && !version.isBlank();
-        if (!exactlyTheTwo) {
+        if (descriptor.size() != 2 || !bare(name) || !bare(version)) {
             throw new Refused("cli.backend.descriptor", jar);
         }
-        return new Backend(name.strip(), version.strip(), jar);
+        return new Backend(name, version, jar);
+    }
+
+    /**
+     * Whether the value is a word: present, not empty, and with no whitespace in it.
+     *
+     * <p>What the descriptor says is compared as written, as {@code .souther-version} is, so a value
+     * that only matches once it has been trimmed is refused and not trimmed.
+     */
+    private static boolean bare(String value) {
+        return value != null && !value.isEmpty()
+                && value.chars().noneMatch(Character::isWhitespace);
     }
 }

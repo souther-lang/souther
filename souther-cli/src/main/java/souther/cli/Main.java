@@ -233,6 +233,9 @@ public final class Main {
             case ProjectVersion.Absent absent -> null;
             case ProjectVersion.Malformed malformed ->
                     Messages.get("cli.project.malformed", locale, malformed.file());
+            case ProjectVersion.Unreadable unreadable ->
+                    Messages.get("cli.project.unreadable", locale, unreadable.file(),
+                            unreadable.reason());
             case ProjectVersion.Declared declared ->
                     declared.version().equals(ModuleMetadata.compilerVersion()) ? null
                             : Messages.get("cli.project.version", locale, declared.file(),

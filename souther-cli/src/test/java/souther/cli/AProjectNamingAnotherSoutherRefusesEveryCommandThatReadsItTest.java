@@ -134,8 +134,11 @@ class AProjectNamingAnotherSoutherRefusesEveryCommandThatReadsItTest {
     }
 
     @Test
-    void aFileThatIsNotOneVersionOnOneLineIsRefused(@TempDir Path project) throws IOException {
-        for (String content : new String[] {"", "\n", "0.1.0\n0.2.0\n", "at least 0.1.0"}) {
+    void aFileThatIsNotOneVersionOnOneLineIsRefusedAndNotNormalisedIntoOne(@TempDir Path project)
+            throws IOException {
+        String here = ModuleMetadata.compilerVersion();
+        for (String content : new String[] {"", "\n", "0.1.0\n0.2.0\n", "at least 0.1.0",
+                " " + here + "\n", here + " \n", here + "\n\n", "\n" + here + "\n"}) {
             declare(project, content);
 
             Said said = run(project, "fmt", "model.sou");
@@ -143,6 +146,30 @@ class AProjectNamingAnotherSoutherRefusesEveryCommandThatReadsItTest {
             assertEquals(2, said.code(), "'" + content + "': " + said.err());
             assertTrue(said.err().contains(ProjectVersion.FILE), said.err());
         }
+    }
+
+    @Test
+    void aLineEndingIsNotPartOfTheVersion(@TempDir Path project) throws IOException {
+        String here = ModuleMetadata.compilerVersion();
+        for (String content : new String[] {here, here + "\n", here + "\r\n"}) {
+            declare(project, content);
+
+            Said said = run(project, "fmt", project.resolve("absent.sou").toString());
+
+            assertFalse(said.err().contains(ProjectVersion.FILE), "'" + content + "': " + said.err());
+        }
+    }
+
+    @Test
+    void aFileThatCannotBeReadIsSaidSoAndIsNotACompilerFault(@TempDir Path project)
+            throws IOException {
+        Files.createDirectory(project.resolve(ProjectVersion.FILE));
+
+        Said said = run(project, "fmt", "model.sou");
+
+        assertEquals(2, said.code(), said.err());
+        assertTrue(said.err().contains(ProjectVersion.FILE), said.err());
+        assertFalse(said.err().contains("internal compiler error"), said.err());
     }
 
     @Test
