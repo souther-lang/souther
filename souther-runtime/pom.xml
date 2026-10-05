@@ -52,7 +52,7 @@
              so what a published class links against is this artifact and the JDK. -->
         <dependency>
             <groupId>net.unit8.199x</groupId>
-            <artifactId>199x-notation</artifactId>
+            <artifactId>notation-199x</artifactId>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

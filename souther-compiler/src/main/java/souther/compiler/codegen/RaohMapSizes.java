@@ -128,7 +128,7 @@ final class RaohMapSizes {
      * the right side of {@code bound}, and otherwise
      * {@code Result.failWith(path, code, null, message, Map.of(bound key, bound, "actual", size))}.
      *
-     * <p>The message is Raoh's default, {@code "must have at least %d entries"} and its upper
+     * <p>The message is Raoh's default, {@code "must have at least %d elements"} and its upper
      * counterpart. A {@code %d} of an {@code int} writes what {@code Integer.toString} writes, so the
      * text is joined rather than formatted.
      */
@@ -162,7 +162,7 @@ final class RaohMapSizes {
             code.invokestatic(CD_Integer, "toString",
                     MethodTypeDesc.of(CD_String, ConstantDescs.CD_int));
             code.invokevirtual(CD_String, "concat", MethodTypeDesc.of(CD_String, CD_String));
-            code.loadConstant(" entries");
+            code.loadConstant(" elements");
             code.invokevirtual(CD_String, "concat", MethodTypeDesc.of(CD_String, CD_String));
             code.loadConstant(boundKey);
             code.iload(0);

@@ -55,7 +55,7 @@
              analysis of patterns is built on, normalization, and the temporal grammar. -->
         <dependency>
             <groupId>net.unit8.199x</groupId>
-            <artifactId>199x-notation</artifactId>
+            <artifactId>notation-199x</artifactId>
         </dependency>
         <!-- raoh core: the derived decoders/encoders `souther run` drives through (Runner), and the
              leaf codecs for primitive-typed inputs/outputs. -->

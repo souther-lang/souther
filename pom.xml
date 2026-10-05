@@ -59,12 +59,12 @@
         <souther.java.minimum>25</souther.java.minimum>
         <souther.jvm.stack>4m</souther.jvm.stack>
         <maven.compiler.release>${souther.java.minimum}</maven.compiler.release>
-        <raoh.version>0.8.0</raoh.version>
+        <raoh.version>0.9.0</raoh.version>
         <!-- The text rules the language shares with Raoh: case conversion, normalization, white
              space, the temporal grammar and the pattern language. Which strings these accept is a
              rule of the specification, so a version that changes an answer is a change to the
              language and is taken by hand, never by a dependency update. -->
-        <notation199x.version>0.2.0-SNAPSHOT</notation199x.version>
+        <notation199x.version>0.2.0</notation199x.version>
         <jspecify.version>1.0.1</jspecify.version>
         <!-- Where compiled classes go, named so the `m2e` profile below can send the editor's
              somewhere else. A build outside the editor uses the Maven defaults. -->
@@ -201,7 +201,7 @@
                  would reach one. Declared here so that every module taking it takes it so. -->
             <dependency>
                 <groupId>net.unit8.199x</groupId>
-                <artifactId>199x-notation</artifactId>
+                <artifactId>notation-199x</artifactId>
                 <version>${notation199x.version}</version>
                 <exclusions>
                     <exclusion>
