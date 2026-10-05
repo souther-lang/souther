@@ -643,8 +643,8 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                 """);
         ResolvedSymbols scope = TypeChecker.symbols(resolved, DefaultStdlib.get());
         InvariantSettled settled =
-                InvariantSettled.settle(Expandable.check(resolved, Map.of(), DefaultStdlib.get()),
-                        scope, ScopedDeclarations.kindsOf(scope), Map.of());
+                InvariantSettled.settle(Expandable.check(resolved, ClosedImports.none(InliningPolicy.FULL), DefaultStdlib.get()),
+                        scope, ScopedDeclarations.kindsOf(scope), ClosedImports.none(InliningPolicy.FULL));
         InvariantSettled.Def amount = settled.defs().stream()
                 .filter(d -> d.name().equals("Amount")).findFirst().orElseThrow();
 
@@ -883,12 +883,12 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
     void anAssemblyRefusesAnAnswerForAnotherModulesDeclaration() {
         ResolvedSymbols scopeA = TypeChecker.symbols(resolvedA(), DefaultStdlib.get());
         InvariantSettled a = InvariantSettled.settle(
-                Expandable.check(resolvedA(), Map.of(), DefaultStdlib.get()), scopeA,
-                ScopedDeclarations.kindsOf(scopeA), Map.of());
+                Expandable.check(resolvedA(), ClosedImports.none(InliningPolicy.FULL), DefaultStdlib.get()), scopeA,
+                ScopedDeclarations.kindsOf(scopeA), ClosedImports.none(InliningPolicy.FULL));
         ResolvedSymbols scopeB = TypeChecker.symbols(resolvedB(), DefaultStdlib.get());
         InvariantSettled b = InvariantSettled.settle(
-                Expandable.check(resolvedB(), Map.of(), DefaultStdlib.get()), scopeB,
-                ScopedDeclarations.kindsOf(scopeB), Map.of());
+                Expandable.check(resolvedB(), ClosedImports.none(InliningPolicy.FULL), DefaultStdlib.get()), scopeB,
+                ScopedDeclarations.kindsOf(scopeB), ClosedImports.none(InliningPolicy.FULL));
 
         Derived.Def ofA = Derived.Def.derive(Normalized.Def.of(defNamed(a, "Amount"),
                         DeclarationNewtypes.asWritten(scopeA)),
@@ -911,11 +911,11 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
     void anAssemblyRefusesAnAnswerForAnotherModulesDefinition() {
         ResolvedSymbols scopeA = TypeChecker.symbols(resolvedA(), DefaultStdlib.get());
         Derived.Module a = Derived.Module.assemble(
-                InvariantSettled.settle(Expandable.check(resolvedA(), Map.of(), DefaultStdlib.get()),
-                        scopeA, ScopedDeclarations.kindsOf(scopeA), Map.of()),
+                InvariantSettled.settle(Expandable.check(resolvedA(), ClosedImports.none(InliningPolicy.FULL), DefaultStdlib.get()),
+                        scopeA, ScopedDeclarations.kindsOf(scopeA), ClosedImports.none(InliningPolicy.FULL)),
                 Map.of("Amount", Derived.Def.derive(Normalized.Def.of(defNamed(InvariantSettled.settle(
-                        Expandable.check(resolvedA(), Map.of(), DefaultStdlib.get()), scopeA,
-                        ScopedDeclarations.kindsOf(scopeA), Map.of()), "Amount"),
+                        Expandable.check(resolvedA(), ClosedImports.none(InliningPolicy.FULL), DefaultStdlib.get()), scopeA,
+                        ScopedDeclarations.kindsOf(scopeA), ClosedImports.none(InliningPolicy.FULL)), "Amount"),
                         DeclarationNewtypes.asWritten(scopeA)),
                         scopeA, ScopedDeclarations.kindsOf(scopeA),
                         ScopedDeclarations.sumsOf(scopeA))));
@@ -999,7 +999,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
 
                 let n = 1
                 """);
-        assertEquals("m", Expandable.check(wellFounded, Map.of(), DefaultStdlib.get()).name());
+        assertEquals("m", Expandable.check(wellFounded, ClosedImports.none(InliningPolicy.FULL), DefaultStdlib.get()).name());
 
         Hir.Module reachesItself = resolved("""
                 module m exposing ( a )
@@ -1008,7 +1008,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                 let b = a
                 """);
         CompileException refused =
-                assertThrows(CompileException.class, () -> Expandable.check(reachesItself, Map.of(), DefaultStdlib.get()));
+                assertThrows(CompileException.class, () -> Expandable.check(reachesItself, ClosedImports.none(InliningPolicy.FULL), DefaultStdlib.get()));
         assertTrue(refused.getMessage().contains("a"), refused.getMessage());
     }
 
@@ -1028,14 +1028,14 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
 
                 let positive (n: Int) : Bool = n > 0
                 """);
-        Expandable expandable = Expandable.check(resolved, Map.of(), DefaultStdlib.get());
+        Expandable expandable = Expandable.check(resolved, ClosedImports.none(InliningPolicy.FULL), DefaultStdlib.get());
 
         assertTrue(clauseOf(expandable.module().defs(), "Amount") instanceof Hir.Apply,
                 "the clause is a call to the helper until something expands it");
 
         ResolvedSymbols scope = TypeChecker.symbols(expandable.module(), DefaultStdlib.get());
         InvariantSettled settled = InvariantSettled.settle(expandable, scope,
-                ScopedDeclarations.kindsOf(scope), Map.of());
+                ScopedDeclarations.kindsOf(scope), ClosedImports.none(InliningPolicy.FULL));
 
         assertFalse(clauseOf(settled.defs().stream().map(InvariantSettled.Def::def).toList(),
                         "Amount") instanceof Hir.Apply,

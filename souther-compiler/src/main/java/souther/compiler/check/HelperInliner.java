@@ -327,7 +327,7 @@ public final class HelperInliner {
      * never stand for one key, and how a call came to name one of them was settled before this. */
     public static HelperInliner forModule(Hir.Module module, Stdlib stdlib,
                                           ValueAtAReference reading) {
-        return forModule(module, Map.of(), stdlib, reading);
+        return forModule(module, ClosedImports.none(InliningPolicy.FULL), stdlib, reading);
     }
 
     /**
@@ -339,7 +339,7 @@ public final class HelperInliner {
      * no part of this — it follows from what expanding this module's trees leaves standing, and is
      * answered where that is collected.
      */
-    public static HelperInliner forModule(Hir.Module module, Map<String, Hir.FnDef> imported,
+    public static HelperInliner forModule(Hir.Module module, ClosedImports imported,
                                           Stdlib stdlib, ValueAtAReference reading) {
         HelperTable table = HelperTable.of(module, imported, InliningPolicy.FULL, stdlib);
         return new HelperInliner(table, HelperGraph.of(table), reading);
@@ -369,17 +369,18 @@ public final class HelperInliner {
     public static HelperInliner forHelpers(String module, Map<String, Hir.FnDef> own,
                                            InliningPolicy policy, Stdlib stdlib,
                                            ValueAtAReference reading) {
-        return forHelpers(module, own, Map.of(), policy, stdlib, reading);
+        return forHelpers(module, own, ClosedImports.none(policy), policy, stdlib, reading);
     }
 
     /**
      * The same, with the definitions other modules publish to this one joining the table.
      *
      * <p>They are in the table and not in {@code own}, as they are for {@link #forModule}: an imported
-     * definition is one this module expands and not one it declares.
+     * definition is one this module expands and not one it declares. They were closed under a policy
+     * of their own, and it has to be {@code policy} ({@link HelperTable#of}).
      */
     public static HelperInliner forHelpers(String module, Map<String, Hir.FnDef> declared,
-                                           Map<String, Hir.FnDef> imported, InliningPolicy policy,
+                                           ClosedImports imported, InliningPolicy policy,
                                            Stdlib stdlib, ValueAtAReference reading) {
         HelperTable table = HelperTable.of(module, declared, Map.of(), imported, policy, stdlib);
         return over(table, HelperGraph.of(table), reading);

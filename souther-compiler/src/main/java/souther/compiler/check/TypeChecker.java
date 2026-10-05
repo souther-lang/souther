@@ -109,7 +109,7 @@ public final class TypeChecker {
                                        Map<ValueName.Behavior, ReqSig> reqSigs,
                                        Map<ValueName.Behavior, ReqSig> calleeSigs,
                                        Map<String, StandingSignature> recursiveHelperFns,
-                                       Map<String, Hir.FnDef> imported, Set<String> settled,
+                                       ClosedImports imported, Set<String> settled,
                                        Map<TypeSymbol.AtModule, ValueShape> shapes,
                                        Preserved.SettledValues declaredElsewhere) {
         Elaborated elaborated = new Elaborated();
@@ -258,7 +258,7 @@ public final class TypeChecker {
                                         Elaborated elaborated, List<Unanswerable> abandoned,
                                         Map<ValueName.Behavior, ReqSig> reqSigs,
                                         Map<String, StandingSignature> recursiveHelperFns,
-                                        Map<String, Hir.FnDef> publishedToHere,
+                                        ClosedImports publishedToHere,
                                         Set<String> settled,
                                         Map<TypeSymbol.AtModule, ValueShape> shapes) {
         SumCases sums = declarations.sums();

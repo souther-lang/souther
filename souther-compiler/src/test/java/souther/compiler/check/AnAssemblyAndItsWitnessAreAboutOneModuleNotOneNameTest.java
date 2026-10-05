@@ -102,7 +102,8 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
         CheckSurface read = CheckSurface.assemble(settling, elsewhere, itsOwn,
                 DeclarationNewtypes.NONE,
                 Map.of(), FakeTables.classify(settling.module()), itsOwnAssembly.bodies(),
-                Map.of(), Set.of(), DefaultStdlib.get(), ResolvedSymbols.none(DefaultStdlib.get()),
+                ClosedImports.none(InliningPolicy.DISCHARGE), Set.of(), DefaultStdlib.get(),
+                ResolvedSymbols.none(DefaultStdlib.get()),
                 SumCases.NONE, DeclarationKinds.NONE, NewtypeInners.NONE);
         assertNotNull(read, "the assembly is made, so the refusal below is about the pairing");
 
@@ -142,7 +143,7 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
                 () -> CheckSurface.assemble(settling, normalized, underTheWrongName,
                         DeclarationNewtypes.NONE,
                         Map.of(), FakeTables.classify(settling.module()), itsOwn.bodies(),
-                        Map.of(), Set.of(), DefaultStdlib.get(),
+                        ClosedImports.none(InliningPolicy.DISCHARGE), Set.of(), DefaultStdlib.get(),
                         ResolvedSymbols.none(DefaultStdlib.get()),
                         SumCases.NONE, DeclarationKinds.NONE, NewtypeInners.NONE),
                 "an answer for one definition stood in for another, and the name they were looked"
@@ -185,7 +186,8 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
         CheckSurface assembled = CheckSurface.assemble(settling, normalized, read,
                 DeclarationNewtypes.NONE,
                 Map.of(), FakeTables.classify(settling.module()), itsOwn.bodies(),
-                Map.of(), Set.of(), DefaultStdlib.get(), ResolvedSymbols.none(DefaultStdlib.get()),
+                ClosedImports.none(InliningPolicy.DISCHARGE), Set.of(), DefaultStdlib.get(),
+                ResolvedSymbols.none(DefaultStdlib.get()),
                 SumCases.NONE, DeclarationKinds.NONE, NewtypeInners.NONE);
         assertNotNull(assembled, "the assembly is made, so the refusal below is about the pairing");
         assertNotEquals(declarations.fns(), assembled.desugaredFrom(),

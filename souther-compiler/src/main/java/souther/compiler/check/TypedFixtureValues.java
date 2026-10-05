@@ -94,7 +94,7 @@ public final class TypedFixtureValues {
      * {@code SpecBehavior}s' own declared input types, and no other.
      */
     public static Map<TypeSymbol, List<ReachName.Declaration>> of(Hir.Module module,
-            Map<String, Hir.FnDef> importedForEvidence, Set<ValueName.Helper> importedLeaves,
+            ClosedImports importedForEvidence, Set<ValueName.Helper> importedLeaves,
             Stdlib stdlib, Symbols symbols, SumCases sums, DeclarationKinds kinds,
             NewtypeInners fieldWraps, Map<ValueName.Behavior, Sig> behaviors) {
         Set<String> generated = new LinkedHashSet<>();

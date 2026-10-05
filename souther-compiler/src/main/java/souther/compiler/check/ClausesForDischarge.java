@@ -56,7 +56,7 @@ public final class ClausesForDischarge {
      */
     public static ClausesForDischarge of(Expandable expandable, Symbols symbols,
                                          PublishedDeclarations declarations, DeclarationKinds kinds,
-                                         Map<String, Hir.FnDef> published) {
+                                         ClosedImports published) {
         Hir.Module settled =
                 ClauseHelpers.settled(expandable.module(), symbols, declarations, kinds);
         return new ClausesForDischarge(settled, HelperInliner.forHelpers(settled.name(),

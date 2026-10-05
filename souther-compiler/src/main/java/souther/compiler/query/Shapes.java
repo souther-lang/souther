@@ -48,6 +48,7 @@ import souther.compiler.check.UninhabitableTypes;
 import souther.compiler.check.ReachedValueLocations;
 import souther.compiler.check.ClauseHelpers;
 import souther.compiler.check.ClausesForDischarge;
+import souther.compiler.check.ClosedImports;
 import souther.compiler.check.ExecutableInvariants;
 import souther.compiler.check.InliningPolicy;
 import souther.compiler.check.Unanswerable;
@@ -139,11 +140,13 @@ public final class Shapes {
             if (!scope.present()) {
                 return Answer.absent();
             }
-            Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
+            Answer<ClosedImports> imported =
+                    db.ask(new Bodies.ImportedDefinitions(name, InliningPolicy.FULL));
             // A module whose imports form a cycle takes nothing from them. The cycle is reported where
             // it is found; an invariant naming an imported definition is left unsettled and reported
             // as the unknown name it then is, which is the same answer every other stage gives there.
-            Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
+            ClosedImports published = imported.present()
+                    ? imported.value() : ClosedImports.none(InliningPolicy.FULL);
             try {
                 return Answer.of(
                         InvariantSettled.settle(expandable.value(), scope.value(),
@@ -193,10 +196,12 @@ public final class Shapes {
             if (!resolved.present()) {
                 return Answer.absent();
             }
-            Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
+            Answer<ClosedImports> imported =
+                    db.ask(new Bodies.ImportedDefinitions(name, InliningPolicy.FULL));
             try {
                 return Answer.of(souther.compiler.check.Expandable.check(resolved.value(),
-                        imported.present() ? imported.value() : Map.of(),
+                        imported.present()
+                                ? imported.value() : ClosedImports.none(InliningPolicy.FULL),
                         db.ask(new Front.Library()).value()));
             } catch (CompileException e) {
                 return Answer.absent(e);
@@ -1216,7 +1221,8 @@ public final class Shapes {
             // already refuses. publishedByQualifiedName reads each import directly off the module that
             // declares it instead, closed as deep as that module's own body reaches and never through
             // this assembly.
-            Map<String, Hir.FnDef> importedForEvidence = Bodies.publishedByQualifiedName(db, name);
+            ClosedImports importedForEvidence =
+                    Bodies.publishedByQualifiedName(db, name, InliningPolicy.DISCHARGE);
             // What a candidate offered from the imported half may actually be: the leaves this
             // module's own import lines admit, never a further definition importedForEvidence
             // carries only so a call past one can be read (Bodies.importedLeaves's own doc).
@@ -1295,8 +1301,10 @@ public final class Shapes {
             if (!expandable.present() || !scope.present() || !reading.present()) {
                 return Answer.absent();
             }
-            Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
-            Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
+            Answer<ClosedImports> imported =
+                    db.ask(new Bodies.ImportedDefinitions(name, InliningPolicy.DISCHARGE));
+            ClosedImports published = imported.present()
+                    ? imported.value() : ClosedImports.none(InliningPolicy.DISCHARGE);
             // What the clause says is what the check reads, so an imported bound is substituted here
             // as it is where the invariant is settled. A clause left naming it would be classified as
             // a rule this analysis cannot read, and a construction the bound rejects would compile.
@@ -1779,8 +1787,10 @@ public final class Shapes {
             if (!expandable.present() || !scope.present()) {
                 return Answer.absent();
             }
-            Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
-            Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
+            Answer<ClosedImports> imported =
+                    db.ask(new Bodies.ImportedDefinitions(name, InliningPolicy.DISCHARGE));
+            ClosedImports published = imported.present()
+                    ? imported.value() : ClosedImports.none(InliningPolicy.DISCHARGE);
             try {
                 return Answer.of(ClauseHelpers.expandedClausesOf(
                         expandable.value(), scope.value(), publishedDeclarations(db),

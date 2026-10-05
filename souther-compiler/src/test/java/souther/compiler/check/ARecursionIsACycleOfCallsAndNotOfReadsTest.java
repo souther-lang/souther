@@ -40,7 +40,7 @@ class ARecursionIsACycleOfCallsAndNotOfReadsTest {
         Ast.Module parsed = CstFrontend.parse(source);
         Hir.Module resolved = Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get()));
         return HelperTable.of(resolved.name(), HelperInliner.helpersOf(resolved),
-                Map.of(), Map.of(), InliningPolicy.FULL, DefaultStdlib.get());
+                Map.of(), InliningPolicy.FULL, DefaultStdlib.get());
     }
 
     private static ReachName.Declaration own(String name) {
