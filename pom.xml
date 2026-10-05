@@ -153,9 +153,7 @@
              a Maven artifact anyone depends on sets it in its own pom, so it is left out of a
              release and of a snapshot alike. -->
         <souther.publish.skip>false</souther.publish.skip>
-        <!-- The Enforcer the release and snapshot profiles check dependencies with, and the one
-             TheSnapshotProfileExemptsExactlyTheReactorTest asks how it reads the profile's
-             exemptions: one version, so the test asks the matcher the build uses. -->
+        <!-- The Enforcer the release and snapshot profiles check with. -->
         <enforcer.version>3.5.0</enforcer.version>
         <!-- What the build copies into an artifact from outside every module's own src, as paths
              from the root. A publication refuses an ignored file in any of them, as each module
@@ -879,10 +877,10 @@
              checkout of develop, as a release is from its tag; CI publishes nothing. The snapshot
              repository keeps one coordinate per version and every publication overwrites it, so
              what the coordinate holds is whatever was published last; this profile is what makes
-             that the tip of develop. It refuses a version that is not a snapshot, a dependency
-             outside this reactor that is one, a change HEAD does not record, an ignored file where
-             the build reads, and a HEAD that is not the commit develop points at on origin, and it
-             cleans every module before building it. Sources, javadoc and signatures are a
+             that the tip of develop. It refuses a version that is not a snapshot, a change HEAD
+             does not record, an ignored file where the build reads, and a HEAD that is not the
+             commit develop points at on origin, and it cleans every module before building it. A
+             snapshot may depend on snapshots: it is overwritten by the next publication anyway. Sources, javadoc and signatures are a
              release's and are not made. -->
         <profile>
             <id>snapshot</id>
@@ -904,35 +902,6 @@
                                         <requireSnapshotVersion>
                                             <message>The snapshot profile publishes develop's snapshot, and ${project.version} is not one. develop never carries a release version.</message>
                                         </requireSnapshotVersion>
-                                        <requireReleaseDeps>
-                                            <message>What is published is built from what it depends on, and a snapshot dependency can resolve to something else between the build CI checked and this one, or between this publication and the next.</message>
-                                            <failWhenParentIsSnapshot>false</failWhenParentIsSnapshot>
-                                            <!-- What this reactor builds, which is a snapshot here
-                                                 and is built in this same invocation, so it cannot
-                                                 resolve to anything else. Each artifact whole, at
-                                                 exactly its version: the group holds artifacts
-                                                 released from elsewhere too, such as
-                                                 souther-build-api, and one of these modules at any
-                                                 other version is not built here and resolves from a
-                                                 repository. The version is a range of one,
-                                                 [version], because the Enforcer reads a bare
-                                                 version as that version or any later one.
-                                                 TheSnapshotProfileExemptsExactlyTheReactorTest asks
-                                                 the Enforcer's own matcher what these exempt. -->
-                                            <excludes>
-                                                <exclude>org.souther-lang:souther-test-support:[${project.version}]</exclude>
-                                                <exclude>org.souther-lang:souther-runtime:[${project.version}]</exclude>
-                                                <exclude>org.souther-lang:souther-syntax:[${project.version}]</exclude>
-                                                <exclude>org.souther-lang:souther-compiler:[${project.version}]</exclude>
-                                                <exclude>org.souther-lang:souther-build-driver:[${project.version}]</exclude>
-                                                <exclude>org.souther-lang:souther-fmt:[${project.version}]</exclude>
-                                                <exclude>org.souther-lang:souther-lsp:[${project.version}]</exclude>
-                                                <exclude>org.souther-lang:souther-cli:[${project.version}]</exclude>
-                                                <exclude>org.souther-lang:souther-bench:[${project.version}]</exclude>
-                                                <exclude>org.souther-lang:souther-program-api-test:[${project.version}]</exclude>
-                                                <exclude>org.souther-lang:souther-architecture-test:[${project.version}]</exclude>
-                                            </excludes>
-                                        </requireReleaseDeps>
                                     </rules>
                                 </configuration>
                             </execution>
