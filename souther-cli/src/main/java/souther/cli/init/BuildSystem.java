@@ -15,7 +15,13 @@ import java.util.List;
 public enum BuildSystem {
 
     MAVEN("maven", "pom.xml"),
-    GRADLE("gradle", "build.gradle.kts", "build.gradle");
+    GRADLE("gradle", "build.gradle.kts", "build.gradle"),
+    /**
+     * No build at all: a project that reaches Souther through {@code souther compile --target}, with
+     * no Java build to declare it in. It has no build file, so no directory is ever recognised as
+     * one, and it is only ever asked for.
+     */
+    NONE("none");
 
     private final String spelling;
 

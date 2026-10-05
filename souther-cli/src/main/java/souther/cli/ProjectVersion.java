@@ -16,9 +16,9 @@ import java.util.List;
  * whitespace in it, a blank line after it, or no line at all names no version, and what a file that
  * does not is refused for is said rather than read as the nearest thing it resembles.
  */
-sealed interface ProjectVersion {
+public sealed interface ProjectVersion {
 
-    /** The file's name, which is also what a refusal names. */
+    /** The file's name, which is also what a refusal names and what {@code init} writes. */
     String FILE = ".souther-version";
 
     /** No file at or above the directory. */
