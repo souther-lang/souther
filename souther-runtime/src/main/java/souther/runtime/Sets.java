@@ -101,6 +101,39 @@ public final class Sets {
         return PersistentHashSet.difference(a, b, checkpoint);
     }
 
+    /**
+     * The elements of {@code xs} that one before them already is, by the elements' value equality:
+     * each such value once, as it stands where it first repeats, in the order those repetitions
+     * come. Empty where nothing repeats.
+     *
+     * <p>Two sets filled in place, each element looked up once in each set it reaches: a set built
+     * up value by value through {@link #insert} would copy its path on every element.
+     */
+    public static <T> List<T> repeated(List<T> xs) {
+        return repeated(xs, WorkCheckpoint.NONE);
+    }
+
+    /** {@link #repeated(List)}, passing {@code checkpoint} once for each element and comparing
+     *  elements under it. */
+    public static <T> List<T> repeated(List<T> xs, WorkCheckpoint checkpoint) {
+        PersistentHashMap.Builder<T, Object> seen = new PersistentHashMap.Builder<>(checkpoint);
+        PersistentHashMap.Builder<T, Object> reported = new PersistentHashMap.Builder<>(checkpoint);
+        PersistentVector.Builder<T> out = new PersistentVector.Builder<>();
+        for (T x : xs) {
+            checkpoint.pass();
+            int before = seen.size();
+            seen.set(x, Boolean.TRUE);
+            if (seen.size() == before) {
+                int named = reported.size();
+                reported.set(x, Boolean.TRUE);
+                if (reported.size() != named) {
+                    out.add(x);
+                }
+            }
+        }
+        return out.build();
+    }
+
     public static boolean isEmpty(Set<?> s) {
         return s.isEmpty();
     }
