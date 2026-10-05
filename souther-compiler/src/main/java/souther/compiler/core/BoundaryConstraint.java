@@ -16,7 +16,10 @@ import java.math.BigDecimal;
  * calls the constraint and how it runs it.
  *
  * <p>Which code, message and metadata a failure of each is reported with are not here. They are the
- * decoder library's, and each backend reaches them through its own.
+ * decoder library's, and each backend reaches them through its own. What is here is the form of any
+ * value of the domain's that a failure puts in its metadata: that the library can write it is a
+ * condition of the constraint existing, so it is decided with the constraint, by the checker, and a
+ * backend only writes the value in the form it is handed ({@link MessageForm}).
  *
  * <p>Grouped by the type of that field, since a constraint is about a value of one:
  * a {@code String}'s length and format, an {@code Int}'s and a {@code Decimal}'s bounds, a
@@ -113,8 +116,21 @@ public sealed interface BoundaryConstraint {
     /** Exactly {@code n} elements. */
     record FixedSize(int n) implements OfList {}
 
-    /** No element appears twice, compared by value as Souther compares. */
-    record Unique() implements OfList {}
+    /**
+     * No element appears twice, compared by value as Souther compares.
+     *
+     * @param element the form the elements found repeated are reported in, which every element type
+     *     this is stated for has
+     */
+    record Unique(MessageForm element) implements OfList {
+
+        public Unique {
+            if (element == null) {
+                throw new IllegalArgumentException(
+                        "a uniqueness reports the elements it finds repeated, so they have a form");
+            }
+        }
+    }
 
     /** About a {@code Map}. */
     sealed interface OfMap extends BoundaryConstraint {}

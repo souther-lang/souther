@@ -354,6 +354,97 @@ class CompileInvariantConstraintTest {
                 issue.meta().get("duplicates"));
     }
 
+    /** A product has no message form, so the duplicates a uniqueness found could not be written in
+     * its issue: the clause keeps its own check, as a projected one does. */
+    @Test
+    void aUniquenessOfProductsKeepsItsOwnCheck() throws Exception {
+        Issue issue = soleIssue("""
+                data Line = { sku: String }
+                data V = List<Line>
+                    invariant distinctLines = List.allDistinctBy(x -> x, value)
+                """, List.of(Map.of("sku", "a"), Map.of("sku", "a")));
+        assertEquals("invariant_violation", issue.code());
+        assertEquals("distinctLines", issue.meta().get("clause"));
+    }
+
+    /** Nor does a map, which is no declaration: what has no form is read off the type, not off
+     * whether a name stands there. */
+    @Test
+    void aUniquenessOfMapsKeepsItsOwnCheck() throws Exception {
+        Issue issue = soleIssue("""
+                data V = List<Map<String, Int>>
+                    invariant distinctTallies = List.allDistinctBy(x -> x, value)
+                """, List.of(Map.of("a", 1L), Map.of("a", 1L)));
+        assertEquals("invariant_violation", issue.code());
+        assertEquals("distinctTallies", issue.meta().get("clause"));
+    }
+
+    /** A newtype over a product wraps something with no message form, and has none itself. */
+    @Test
+    void aUniquenessOfNewtypesOverAProductKeepsItsOwnCheck() throws Exception {
+        Issue issue = soleIssue("""
+                data Line = { sku: String }
+                data Entry = Line
+                data V = List<Entry>
+                    invariant distinctEntries = List.allDistinctBy(x -> x, value)
+                """, List.of(Map.of("sku", "a"), Map.of("sku", "a")));
+        assertEquals("invariant_violation", issue.code());
+        assertEquals("distinctEntries", issue.meta().get("clause"));
+    }
+
+    /** A newtype is reported as the value it wraps, which is how the boundary writes it — the issue
+     * holds the string, not the value class the domain holds it in, and the message says so. */
+    @Test
+    void aRepeatedNewtypeIsReportedAsTheValueItWraps() throws Exception {
+        Issue issue = soleIssue("""
+                data Sku = String
+                data V = List<Sku>
+                    invariant List.allDistinctBy(x -> x, value)
+                """, List.of("A123", "B456", "A123"));
+        assertEquals("duplicate_element", issue.code());
+        assertEquals(List.of("A123"), issue.meta().get("duplicates"));
+        assertEquals("must not contain duplicates: [A123]", issue.message());
+    }
+
+    /** Through every name it wears, and inside every list it stands in: a newtype over a newtype
+     * over an {@code Int}, in a list of lists, is reported as the numbers. */
+    @Test
+    void aNewtypeIsUnwrappedThroughEveryNameAndEveryList() throws Exception {
+        Issue issue = soleIssue("""
+                data Code = Int
+                data Sku = Code
+                data V = List<List<Sku>>
+                    invariant List.allDistinctBy(x -> x, value)
+                """, List.of(List.of(1L, 2L), List.of(3L), List.of(1L, 2L)));
+        assertEquals("duplicate_element", issue.code());
+        assertEquals(List.of(List.of(1L, 2L)), issue.meta().get("duplicates"));
+    }
+
+    /** A newtype that holds itself through a list has values of no bounded depth, which no message
+     * form is: the clause keeps its own check. */
+    @Test
+    void aUniquenessOfANewtypeThatHoldsItselfKeepsItsOwnCheck() throws Exception {
+        Issue issue = soleIssue("""
+                data Tree = List<Tree>
+                data V = List<Tree>
+                    invariant distinctTrees = List.allDistinctBy(x -> x, value)
+                """, List.of(List.of(), List.of()));
+        assertEquals("invariant_violation", issue.code());
+        assertEquals("distinctTrees", issue.meta().get("clause"));
+    }
+
+    /** A newtype over a list is reported as that list. */
+    @Test
+    void aNewtypeOverAListIsReportedAsTheList() throws Exception {
+        Issue issue = soleIssue("""
+                data Skus = List<String>
+                data V = List<Skus>
+                    invariant List.allDistinctBy(x -> x, value)
+                """, List.of(List.of("a"), List.of("a")));
+        assertEquals("duplicate_element", issue.code());
+        assertEquals(List.of(List.of("a")), issue.meta().get("duplicates"));
+    }
+
     /** A projection that is not the identity says it of something else, and Raoh has no constraint for
      * that: the clause keeps its own check, and names itself in the metadata instead. */
     @Test

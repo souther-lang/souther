@@ -82,8 +82,8 @@ public final class ExecutableInvariants {
         // data of more fields has no one field for a constraint to be about, and each of its clauses
         // is none.
         Optional<BoundaryConstraints.Projections> projected = fields.size() == 1
-                ? Optional.of(BoundaryConstraints.of(symbols, data.declares(), fields.get(0), form,
-                        statements))
+                ? Optional.of(BoundaryConstraints.of(symbols, declarations.inners(), data.declares(),
+                        fields.get(0), form, statements))
                 : Optional.empty();
         List<ValueShape.Invariant> invariants = new ArrayList<>();
         for (GoverningInvariant governed : governing) {

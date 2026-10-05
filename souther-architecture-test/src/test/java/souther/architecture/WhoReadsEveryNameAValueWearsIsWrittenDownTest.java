@@ -93,8 +93,13 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
      * <p>Readers of a position that put its names back on a value they build, read the rules
      * written at each name, or tell what a value is written under: every one of them reads
      * {@code TypeView#wrappers} whole, directly or through what it hands the position to.
+     *
+     * <p>The form a value is written into an issue in: a newtype is reported as what it wraps, and
+     * the form names each name the value is opened through on the way there.
      */
     private static final List<String> WALKING = List.of(
+            row(CHECK + "BoundaryConstraints", "messageForm",
+                    "(" + TYPE + "Ljava/util/Set;)Lsouther/compiler/core/MessageForm;", THE_SPINE),
             row(CHECK + "InvariantChecker", "name",
                     "(Lsouther/compiler/core/Core;L" + CHECK + "RuleKey;" + TYPE + "L" + CHECK
                             + "Denotations;" + SYMBOLS

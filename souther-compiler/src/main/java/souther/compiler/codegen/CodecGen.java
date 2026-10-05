@@ -8,6 +8,7 @@ import souther.compiler.check.DerivedSymbols;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.BoundaryConstraint;
 import souther.compiler.core.ConstraintProjection;
+import souther.compiler.core.MessageForm;
 import souther.compiler.core.ValueShape;
 import souther.compiler.diag.Diagnostic;
 import net.unit8.notation199x.pattern.PatternMeaning;
@@ -782,9 +783,18 @@ final class CodecGen {
                     .anyMatch(BoundaryConstraint.OfMap.class::isInstance)) {
                 RaohMapSizes.emitHelpers(cb);
             }
-            if (constraintsOf(invariants).stream()
-                    .anyMatch(BoundaryConstraint.Unique.class::isInstance)) {
-                RaohListUnique.emitHelpers(ctx, cb);
+            // Every uniqueness of one decoder is about the elements of the one list it decodes, so
+            // they are reported in one form and share the helpers that write it.
+            List<MessageForm> uniqueElements = constraintsOf(invariants).stream()
+                    .filter(BoundaryConstraint.Unique.class::isInstance)
+                    .map(c -> ((BoundaryConstraint.Unique) c).element())
+                    .distinct().toList();
+            if (uniqueElements.size() > 1) {
+                throw new IllegalStateException("the elements of one list stated in two forms: "
+                        + uniqueElements);
+            }
+            if (!uniqueElements.isEmpty()) {
+                RaohListUnique.emitHelpers(ctx, cb, cdDec, uniqueElements.get(0));
             }
         });
     }
