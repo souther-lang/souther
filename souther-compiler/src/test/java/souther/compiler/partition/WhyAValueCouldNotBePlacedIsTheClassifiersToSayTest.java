@@ -140,7 +140,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                 List.of(new ObservedValue.Constructed(request.type(), fields)),
                 statingTheSame(read.row(),
                         List.of(new ObservedValue.Constructed(request.type(), fields))),
-                read.row().run());
+                read.row().run(), read.row().replaced());
     }
 
     /**

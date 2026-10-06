@@ -378,6 +378,11 @@ final class CodegenContext {
         return arms;
     }
 
+    /** The parts of the siblings the measuring classes carry in arm {@code part} of {@code node}. */
+    int[] carriedAt(souther.compiler.core.Core node, int part) {
+        return coverage.carriedAt(node, part);
+    }
+
     /**
      * Where this comparison's value is recorded, or empty where it is not one of a guard's condition.
      *

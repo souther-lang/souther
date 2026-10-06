@@ -127,13 +127,13 @@ class ARunSaysWhatTheBehaviorAnsweredTest {
                 row.identity(), row.expectation(), row.stage(), row.disposition(),
                 row.failurePhase(), row.expectedArm(), row.resultArm(),
                 new AnswerObservation.NotAnswered(), row.inputCases(), row.inputs(),
-                row.statement(), row.run()));
+                row.statement(), row.run(), List.of()));
         RowOutcome aborted = rowNamed(compiled(), "below nothing");
         assertThrows(IllegalArgumentException.class, () -> new RowOutcome(aborted.at(),
                 aborted.target(), aborted.identity(), aborted.expectation(), aborted.stage(),
                 aborted.disposition(), aborted.failurePhase(), aborted.expectedArm(),
                 aborted.resultArm(), row.answer(), aborted.inputCases(), aborted.inputs(),
-                aborted.statement(), aborted.run()));
+                aborted.statement(), aborted.run(), List.of()));
     }
 
     @Test

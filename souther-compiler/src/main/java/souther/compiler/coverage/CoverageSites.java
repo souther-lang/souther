@@ -3,6 +3,7 @@ package souther.compiler.coverage;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.SourceConstruct;
@@ -10,6 +11,7 @@ import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -114,6 +116,16 @@ public final class CoverageSites {
      * nothing ran, which no count can be told apart from a real one.
      */
     public static final int NO_SITE = -1;
+
+    /**
+     * How many nodes a fork's siblings may add to it, counted as every sibling carried in every
+     * other arm.
+     *
+     * <p>A guard on the classes and not a rule of the language. A method the JVM refuses for its
+     * size refuses every arm of the module with it, and a fork that stays under this carries its
+     * siblings with room to spare; one over it carries none, and says so of each.
+     */
+    static final int MOST_NODES_A_FORK_CARRIES = 4000;
 
     /**
      * What a row is owed for, which is not the same as where one runs.
@@ -355,6 +367,9 @@ public final class CoverageSites {
         private final Map<Integer, Citation> reachedAt;
         private final ComparisonCatalog comparisons;
         private final SiteNumbering numbering;
+        /** For each fork, per arm, the parts of the siblings the classes carry in that arm. */
+        private final IdentityHashMap<Core, int[][]> carried;
+        private final ArmReplacements replacements;
 
         /**
          * Made where the bodies are walked, and nowhere a caller can reach.
@@ -377,7 +392,9 @@ public final class CoverageSites {
              Map<Integer, Citation> reachedAt,
              ComparisonCatalog comparisons,
              SiteNumbering numbering,
-             Methods methods) {
+             Methods methods,
+             IdentityHashMap<Core, int[][]> carried,
+             ArmReplacements replacements) {
             // Half of what a numbering could get wrong is the key's own answer now: an occurrence
             // names a comparison and nothing else, so there is no number to put on an `&&` or on
             // arithmetic, which is what would have had the emitter copy half a `long` off the
@@ -412,6 +429,31 @@ public final class CoverageSites {
             this.comparisons = comparisons;
             this.numbering = numbering;
             this.methods = methods;
+            this.carried = carried;
+            this.replacements = replacements;
+        }
+
+        /**
+         * The parts of the siblings the classes carry in arm {@code part} of {@code node}, in the
+         * order the emitter puts them; empty where they carry none.
+         *
+         * <p>What the emitter asks at each arm it puts a switch in front of. Asked of the plan and
+         * not worked out where the code is written, because a reader of a run is told the same thing
+         * by {@link #replacements}, and two answers to which siblings are there would be a run asking
+         * for one the classes do not have.
+         */
+        public int[] carriedAt(Core node, int part) {
+            int[][] arms = carried.get(node);
+            return arms == null || arms[part] == null ? new int[0] : arms[part].clone();
+        }
+
+        /** Which other arm's expression each numbered arm can be run with in its place. */
+        public ArmReplacements replacements() {
+            return replacements;
+        }
+
+        IdentityHashMap<Core, int[][]> carried() {
+            return carried;
         }
 
         /** Every place of this module, in the order they were numbered. */
@@ -496,7 +538,8 @@ public final class CoverageSites {
                 new LinkedHashMap<>(), new IdentityHashMap<>(),
                 java.util.Set.of(), new LinkedHashMap<>(),
                 ComparisonCatalog.of(ModuleBodies.none()),
-                SiteNumbering.of(NumberingIdentity.forThePlanOfNothing()), Methods.NONE);
+                SiteNumbering.of(NumberingIdentity.forThePlanOfNothing()), Methods.NONE,
+                new IdentityHashMap<>(), ArmReplacements.NONE);
 
         /**
          * Whether one run of the behavior can pass {@code node} more than once.
@@ -744,7 +787,8 @@ public final class CoverageSites {
         });
         return new Plan(List.copyOf(sites), List.copyOf(guards), walk.byNode,
                 byComparison, armsByNode, walk.mayRepeat, Map.copyOf(walk.reachedAt),
-                comparisons, numbering, found.methods());
+                comparisons, numbering, found.methods(), walk.carried,
+                new ArmReplacements(walk.replacements));
     }
 
     /** The arm {@code raw} addresses, where an arm was numbered at all. */
@@ -828,6 +872,8 @@ public final class CoverageSites {
         private final IdentityHashMap<Core, int[]> byNode = new IdentityHashMap<>();
         private final Map<ConstructOccurrence, Integer> byComparison = new LinkedHashMap<>();
         private final IdentityHashMap<Core, DraftArm[]> armsByNode = new IdentityHashMap<>();
+        private final IdentityHashMap<Core, int[][]> carried = new IdentityHashMap<>();
+        private final Map<Integer, ArmReplacements.AtSite> replacements = new LinkedHashMap<>();
         /** Which node each fork of these bodies is, so that the one place forks are recognised is
          *  the one place two of them being one can be refused. */
         private final Map<ConstructOccurrence, Core> forks = new LinkedHashMap<>();
@@ -1010,6 +1056,82 @@ public final class CoverageSites {
             armsByNode.put(fork, arms);
         }
 
+        /**
+         * Which siblings each numbered arm of {@code fork} can be run with in its place, and which
+         * of them the classes carry.
+         *
+         * <p>A sibling whose expression is {@code unreachable} is not one: answering with it is
+         * every row through the arm stopping, which no rewrite worth asking about is. A sibling that
+         * reads the name its own arm gives the value cannot stand anywhere else. And a fork whose
+         * siblings, carried in every arm, would grow it by more than {@link #MOST_NODES_A_FORK_CARRIES}
+         * carries none of them.
+         *
+         * @param names what each arm calls the value it was entered with, null where it calls it
+         *              nothing
+         */
+        private void replacements(Core fork, SourceConstructOrigin origin, DraftArm[] arms,
+                                  List<Core> bodies, List<BindingId> names) {
+            List<Integer> candidates = new ArrayList<>();
+            int size = 0;
+            for (int part = 0; part < bodies.size(); part++) {
+                if (!(Core.withoutStanding(bodies.get(part)) instanceof Core.Unreachable)) {
+                    candidates.add(part);
+                    size += nodesIn(bodies.get(part));
+                }
+            }
+            boolean tooLarge = (long) size * (arms.length - 1) > MOST_NODES_A_FORK_CARRIES;
+            int[][] carriedHere = new int[arms.length][];
+            for (int part = 0; part < arms.length; part++) {
+                List<Integer> carriedParts = new ArrayList<>();
+                Map<Integer, ArmReplacements.Sibling> siblings = new LinkedHashMap<>();
+                for (int sibling : candidates) {
+                    if (sibling == part) {
+                        continue;
+                    }
+                    BindingId own = names.get(sibling);
+                    if (own != null && reads(bodies.get(sibling), own)) {
+                        siblings.put(sibling, new ArmReplacements.Sibling.NotCarried(
+                                ArmReplacements.Sibling.Why.READS_ITS_OWN_NAME));
+                    } else if (tooLarge) {
+                        siblings.put(sibling, new ArmReplacements.Sibling.NotCarried(
+                                ArmReplacements.Sibling.Why.TOO_LARGE));
+                    } else {
+                        siblings.put(sibling, new ArmReplacements.Sibling.Carried());
+                        carriedParts.add(sibling);
+                    }
+                }
+                // Only an arm a run is recorded in has a switch in front of it: nothing else is
+                // an arm a row is in, so nothing else is an arm a row could notice being replaced.
+                if (!arms[part].isMeasured()) {
+                    carriedHere[part] = new int[0];
+                    continue;
+                }
+                carriedHere[part] = carriedParts.stream().mapToInt(Integer::intValue).toArray();
+                if (!siblings.isEmpty()) {
+                    replacements.put(arms[part].raw().getAsInt(),
+                            new ArmReplacements.AtSite(origin, part, siblings));
+                }
+            }
+            carried.put(fork, carriedHere);
+        }
+
+        /** Whether {@code e} reads {@code binding} anywhere under it. */
+        private static boolean reads(Core e, BindingId binding) {
+            if (e instanceof Core.Read r && r.binding().equals(binding)) {
+                return true;
+            }
+            boolean[] found = {false};
+            Core.forEachChild(e, child -> found[0] = found[0] || reads(child, binding));
+            return found[0];
+        }
+
+        /** How many nodes {@code e} is, which is what carrying it once more costs. */
+        private static int nodesIn(Core e) {
+            int[] count = {1};
+            Core.forEachChild(e, child -> count[0] += nodesIn(child));
+            return count[0];
+        }
+
         /** The probe numbers of {@code arms}, in their order, {@link #NO_SITE} where an arm has
          *  none. What the emitter indexes and what the branch measure counts. */
         private static int[] probesOf(DraftArm... arms) {
@@ -1185,6 +1307,8 @@ public final class CoverageSites {
                     walk(structural.take(new CoreStructure.Edge.IfElse(), iff.els()), inside);
                     byNode.put(iff, probesOf(then, els));
                     arms(iff, iff.occurrence(), new DraftArm[] {then, els});
+                    replacements(iff, iff.origin(), new DraftArm[] {then, els},
+                            List.of(iff.then(), iff.els()), Arrays.asList(null, null));
                     if (then.isMeasured() || els.isMeasured()) {
                         guards.add(new DraftGuard(behavior, iff.origin(), decided,
                                 then.raw(), els.raw(), iff.pos()));
@@ -1208,6 +1332,14 @@ public final class CoverageSites {
                     }
                     byNode.put(m, probesOf(arms));
                     arms(m, m.occurrence(), arms);
+                    List<Core> bodies = new ArrayList<>();
+                    List<BindingId> names = new ArrayList<>();
+                    for (Core.Case arm : m.cases()) {
+                        bodies.add(arm.body());
+                        names.add(arm.binding().binder() == null ? null
+                                : arm.binding().binder().binding());
+                    }
+                    replacements(m, m.origin(), arms, bodies, names);
                 }
                 case Core.IfConstructed ic -> {
                     // The construction the attempt tests. Taken as the one slot it is, and gone
@@ -1240,6 +1372,15 @@ public final class CoverageSites {
                     }
                     byNode.put(ic, probesOf(arms));
                     arms(ic, ic.occurrence(), arms);
+                    List<Core> bodies = new ArrayList<>();
+                    List<BindingId> names = new ArrayList<>();
+                    bodies.add(ic.then());
+                    names.add(ic.binder() == null ? null : ic.binder().binding());
+                    for (Core.ElseArm arm : ic.els()) {
+                        bodies.add(arm.body());
+                        names.add(null);
+                    }
+                    replacements(ic, ic.origin(), arms, bodies, names);
                 }
             }
             // That the walk went to every slot the node has. A node kind that grows a child stops

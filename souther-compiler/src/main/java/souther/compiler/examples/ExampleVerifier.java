@@ -20,8 +20,13 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
+import souther.compiler.coverage.ArmReplacements;
+import souther.compiler.coverage.Intervention;
+import souther.compiler.coverage.Observation;
 import souther.compiler.coverage.RunRecord;
 import souther.compiler.coverage.Probe;
+import souther.compiler.observe.ReplacedRun;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.generated.ProbeImage;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.jvm.GeneratedClass;
@@ -61,10 +66,12 @@ import souther.compiler.meta.Readback;
 import souther.compiler.meta.ReadbackReasons;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Supplier;
 
 /**
@@ -1232,6 +1239,49 @@ public final class ExampleVerifier {
      * table the row resolves are read through this one, so what a row spent is one row's whatever
      * part of it was being read.
      */
+    private static final class ReplacedWork implements java.util.concurrent.Callable<RowState> {
+
+        private final ExampleVerifier verifier;
+        private final ExampleTarget target;
+        private final Sig sig;
+        private final Set<TypeSymbol> outCases;
+        private final Hir.ExampleRow row;
+        private final Map<Integer, Integer> replacing;
+
+        ReplacedWork(ExampleVerifier verifier, ExampleTarget target, Sig sig,
+                     Set<TypeSymbol> outCases, Hir.ExampleRow row,
+                     Map<Integer, Integer> replacing) {
+            this.verifier = verifier;
+            this.target = target;
+            this.sig = sig;
+            this.outCases = outCases;
+            this.row = row;
+            this.replacing = replacing;
+        }
+
+        /**
+         * The row as it is evaluated anywhere, with the replacement asked for on this thread and
+         * nothing recording: what this run goes through is a program the author did not write. What
+         * it says about the row is the state it leaves, and what it would say to the author is
+         * dropped — the row's own evaluation already said it.
+         */
+        @Override
+        public RowState call() {
+            RowState state = new RowState();
+            Intervention.begin(replacing);
+            EvaluationContext.begin(verifier.policy.stepLimit(),
+                    verifier.policy.recursionDepthLimit());
+            try {
+                verifier.checkRowNow(verifier.newFixtureReader(), target, sig, outCases, row,
+                        new ArrayList<>(), state);
+            } finally {
+                EvaluationContext.end();
+                Intervention.end();
+            }
+            return state;
+        }
+    }
+
     private static final class RowWork implements java.util.concurrent.Callable<List<Diagnostic>> {
 
         private final ExampleVerifier verifier;
@@ -1267,7 +1317,7 @@ public final class ExampleVerifier {
             // Under the numbering the classes this row runs against were emitted with. Classes
             // that record nothing start no recording, and what comes back is no account of a run.
             if (verifier.probes
-                    instanceof ProbeImage.Instrumented(var numbering)) {
+                    instanceof ProbeImage.Instrumented(var numbering, var _)) {
                 Probe.begin(numbering);
             }
             // On this thread, because this thread is the evaluation: the budget belongs to the row,
@@ -1426,12 +1476,98 @@ public final class ExampleVerifier {
     }
 
     /** What the row turned out to be, from the state its worker left. */
-    private RowOutcome outcomeOf(ExampleTarget target, Hir.ExampleRow row, RowState state) {
+    private RowOutcome outcomeOf(ExampleTarget target, Hir.ExampleRow row, RowState state,
+                                 List<ReplacedRun> replaced) {
         Reached reached = state.reached;
         return new RowOutcome(row.pos(), target.name(), row.identity(), expectationOf(row),
                 reached.stage(), state.disposition, state.failurePhase, state.expectedArm,
                 state.resultArm, reached.answer(), state.inputCases, state.inputs,
-                state.statement, ran(reached, new Counting.Read(state.stepsSpent, state.recorded)));
+                state.statement, ran(reached, new Counting.Read(state.stepsSpent, state.recorded)),
+                replaced);
+    }
+
+    /**
+     * The row run again once per arm it went through and sibling the classes carry there, each with
+     * that sibling answering in the arm's place.
+     *
+     * <p>Only of a row that answered and whose run was recorded: the arms it went through are what
+     * the recording says, and a replacement is asked of an answer there was. Each run is its own
+     * piece of work under its own deadline, after the row's, so that however these go the row's own
+     * outcome is what it was — a replacement that does not come back is one the row could not be
+     * held to, and says that.
+     */
+    private List<ReplacedRun> replacedRuns(ExampleTarget target, Sig sig, Set<TypeSymbol> outCases,
+                                           Hir.ExampleRow row, RowState state) {
+        if (!(probes instanceof ProbeImage.Instrumented(var _, ArmReplacements replacements))
+                || !(state.recorded instanceof RunRecord.Recorded(Observation seen))
+                || !(state.reached.answer() instanceof AnswerObservation.Answered)) {
+            return List.of();
+        }
+        List<ReplacedRun> out = new ArrayList<>();
+        Set<List<Object>> asked = new HashSet<>();
+        for (int site : new TreeSet<>(seen.arms())) {
+            ArmReplacements.AtSite at = replacements.bySite().get(site);
+            if (at == null) {
+                continue;
+            }
+            for (int with : new TreeSet<>(at.siblings().keySet())) {
+                if (!(at.siblings().get(with) instanceof ArmReplacements.Sibling.Carried)
+                        || !asked.add(List.of(at.fork(), at.part(), with))) {
+                    continue;
+                }
+                out.add(replacedRun(target, sig, outCases, row,
+                        at.fork(), at.part(), with,
+                        replacements.replacing(at.fork(), at.part(), with)));
+            }
+        }
+        return out;
+    }
+
+    /** One replaced run of {@code row}, under a deadline of its own. */
+    private ReplacedRun replacedRun(ExampleTarget target, Sig sig, Set<TypeSymbol> outCases,
+                                    Hir.ExampleRow row, SourceConstructOrigin fork, int part,
+                                    int with, Map<Integer, Integer> replacing) {
+        ReplacedWork work = new ReplacedWork(this, target, sig, outCases, row, replacing);
+        return switch (deadline.given(
+                new Deadline.Work.Replaced(target.name(), row.pos(), row.identity()), work)) {
+            case Deadline.Outcome.Finished(RowState state) ->
+                    new ReplacedRun(fork, part, with, state.reached.answer(), noticed(state));
+            case Deadline.Outcome.Overran(Runnable abandon) -> {
+                abandon.run();
+                yield new ReplacedRun(fork, part, with, new AnswerObservation.NotAnswered(),
+                        ReplacedRun.Noticed.COULD_NOT_TELL);
+            }
+            case Deadline.Outcome.Threw(Throwable cause) -> {
+                if (cause instanceof java.util.concurrent.CancellationException) {
+                    throw new java.util.concurrent.CancellationException(
+                            "interrupted while evaluating an example of `" + target.name() + "`");
+                }
+                // A budget or the stack running out is the replaced program's to have done, and
+                // says nothing either way about whether the row would notice it.
+                if (overspending(cause) != null || cause instanceof StackExhaustedException
+                        || cause instanceof StackOverflowError) {
+                    yield new ReplacedRun(fork, part, with, new AnswerObservation.NotAnswered(),
+                            ReplacedRun.Noticed.COULD_NOT_TELL);
+                }
+                if (cause instanceof RuntimeException re) {
+                    throw re;
+                }
+                throw new IllegalStateException(cause);
+            }
+        };
+    }
+
+    /**
+     * Whether a replaced run's row told it from the written program, read off how the row ended:
+     * held is not noticing, failing is noticing, and a row whose answer is owed has nothing to fail.
+     */
+    private static ReplacedRun.Noticed noticed(RowState state) {
+        return switch (state.disposition) {
+            case HELD -> ReplacedRun.Noticed.NO;
+            case FAILED -> ReplacedRun.Noticed.YES;
+            case NOTHING_TO_HOLD -> ReplacedRun.Noticed.STATES_NOTHING;
+            case INCOMPLETE, PENDING -> ReplacedRun.Noticed.COULD_NOT_TELL;
+        };
     }
 
     /**
@@ -1481,7 +1617,8 @@ public final class ExampleVerifier {
                 evaluation)) {
             case Deadline.Outcome.Finished(List<Diagnostic> found) -> {
                 out.addAll(found);
-                rows.add(outcomeOf(target, row, evaluation.state));
+                rows.add(outcomeOf(target, row, evaluation.state,
+                        replacedRuns(target, sig, outCases, row, evaluation.state)));
             }
             case Deadline.Outcome.Overran(Runnable abandon) -> {
                 // Only what the worker publishes: the rest of its state is still being written. How
@@ -1516,7 +1653,7 @@ public final class ExampleVerifier {
                         row.identity(), expectationOf(row), reached.stage(), Disposition.INCOMPLETE,
                         FailurePhase.TIMEOUT, null, null, reached.answer(), List.of(),
                         stated instanceof RowStatement.Stated values ? values.inputs() : List.of(),
-                        stated, ran(reached, new Counting.Unread())));
+                        stated, ran(reached, new Counting.Unread()), List.of()));
             }
             case Deadline.Outcome.Threw(Throwable cause) -> {
                 // The evaluated code stopped itself, having gone through more than it was allowed.
@@ -1527,7 +1664,7 @@ public final class ExampleVerifier {
                 if (overspent != null) {
                     out.add(overBudget(row, overspent));
                     evaluation.state.incomplete(overspent);
-                    rows.add(outcomeOf(target, row, evaluation.state));
+                    rows.add(outcomeOf(target, row, evaluation.state, List.of()));
                     return;
                 }
                 // Every way the stack can run out arrives here, because everything the worker threw
@@ -1539,13 +1676,13 @@ public final class ExampleVerifier {
                 if (cause instanceof StackExhaustedException nt) {
                     out.add(stackRanOut(row, nt.getMessage()));
                     evaluation.state.incomplete(FailurePhase.STACK_EXHAUSTED);
-                    rows.add(outcomeOf(target, row, evaluation.state));
+                    rows.add(outcomeOf(target, row, evaluation.state, List.of()));
                     return;
                 }
                 if (cause instanceof StackOverflowError) {
                     out.add(stackRanOut(row, "the evaluation overflowed the stack"));
                     evaluation.state.incomplete(FailurePhase.STACK_EXHAUSTED);
-                    rows.add(outcomeOf(target, row, evaluation.state));
+                    rows.add(outcomeOf(target, row, evaluation.state, List.of()));
                     return;
                 }
                 // Whoever is compiling asked to stop. Nothing is known about this row — no result was

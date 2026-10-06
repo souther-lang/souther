@@ -169,7 +169,7 @@ public final class RowTrial {
         return switch (probes) {
             case ProbeImage.Uninstrumented _ -> applied(applying, over, steps, reading)
                     .map(answer -> new RowTrials.Ran(new RunRecord.NoAccount(), answer));
-            case ProbeImage.Instrumented(NumberingIdentity numbering) -> {
+            case ProbeImage.Instrumented(NumberingIdentity numbering, var _) -> {
                 Probe.begin(numbering);
                 try {
                     yield applied(applying, over, steps, reading)

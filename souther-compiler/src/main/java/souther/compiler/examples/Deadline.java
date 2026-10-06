@@ -50,6 +50,11 @@ public interface Deadline {
          * row that stops before the behavior. {@code identity} is what the row names itself. */
         record WholeRow(String target, SourcePos pos, RowIdentity identity) implements Work {}
 
+        /** A row of an {@code example} evaluated again with an arm of the body answering as one of
+         * its siblings. Named against {@link WholeRow}, which is the row's own evaluation: this is
+         * a question asked of the row afterwards, and the row is evaluated once. */
+        record Replaced(String target, SourcePos pos, RowIdentity identity) implements Work {}
+
         /** The statements a row is read from, with no behavior applied. */
         record Fixtures(String target, SourcePos pos, RowIdentity identity) implements Work {}
 

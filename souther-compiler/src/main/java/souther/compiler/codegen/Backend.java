@@ -277,7 +277,7 @@ public final class Backend {
         // have no arm to number is a module a run leaves an empty account of, which is not the same
         // as one a run leaves no account of at all.
         ProbeImage probes = instrumentation.measuresCoverage()
-                ? new ProbeImage.Instrumented(coverage.identity())
+                ? new ProbeImage.Instrumented(coverage.identity(), coverage.replacements())
                 : new ProbeImage.Uninstrumented();
         ctx.setCoveragePlan(coverage);
         ctx.setCounting(instrumentation.counting());

@@ -140,6 +140,10 @@ class AModuleHasOnePlanAndOneMakerOfItTest {
             "method outcomeOf(souther.compiler.types.ConstructOccurrence,boolean) :"
                     + " java.util.Optional<"
                     + "souther.compiler.coverage.ControlPlace$Outcome>",
+            // Which siblings each numbered arm carries: asked of a node the way its probes are, and
+            // answered as a value a run can be told.
+            "method carriedAt(souther.compiler.core.Core,int) : int[]",
+            "method replacements() : souther.compiler.coverage.ArmReplacements",
             // What a number means, which is the half of a plan that outlives the graph.
             "method numbering() : souther.compiler.coverage.SiteNumbering",
             "method identity() : souther.compiler.coverage.NumberingIdentity",

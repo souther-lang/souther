@@ -112,6 +112,10 @@ import java.util.Objects;
  *                       the counting says is not held to the stage, because a row's evaluation is
  *                       not only its application — a fixture applies the helpers it names first, so
  *                       a row that applied nothing can still have spent counted points
+ * @param replaced       the row run again with an arm it went through answering as a sibling, once
+ *                       per arm and sibling the classes carry. Empty for a row that did not answer:
+ *                       a replacement changes what the body answers, and a row that got no answer
+ *                       from the body as written has none to tell a different one from
  */
 public record RowOutcome(SourcePos at,
                          String target,
@@ -126,7 +130,8 @@ public record RowOutcome(SourcePos at,
                          List<TypeSymbol> inputCases,
                          List<ObservedValue> inputs,
                          RowStatement statement,
-                         Run run) {
+                         Run run,
+                         List<ReplacedRun> replaced) {
 
     public RowOutcome {
         Objects.requireNonNull(statement, "a row states something");
@@ -171,6 +176,11 @@ public record RowOutcome(SourcePos at,
             // would have answered and have nothing to show for it, or the other way round.
             throw new IllegalArgumentException("a row that got an answer says what it was, and one"
                     + " that did not says it got none: " + stage + " with " + answer);
+        }
+        replaced = List.copyOf(replaced);
+        if (!replaced.isEmpty() && !(answer instanceof AnswerObservation.Answered)) {
+            throw new IllegalArgumentException("a row that got no answer has none a replaced body"
+                    + " could differ from: " + replaced);
         }
         // What the source put where the answer goes and what became of the answer are held to each
         // other. Asked of {@link #expectation}, which is what the row was read as, and never of
