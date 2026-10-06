@@ -139,7 +139,8 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
                 // holds of is asked where such a model is written.
                 List<TakenConstraint.Affine> cuts = stating(behavior, holding).stream()
                         .filter(each -> each instanceof OnTheWay.TakenIn)
-                        .map(each -> ((OnTheWay.TakenIn) each).taken())
+                        .map(each -> ((OnTheWay.TakenIn) each).demand())
+                        .map(each -> ((RowDemand.Relational) each).constraint())
                         .map(TakenConstraint.Affine.class::cast)
                         .toList();
                 for (int x = -4; x <= 13; x++) {

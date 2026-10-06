@@ -145,7 +145,8 @@ public final class AnAnswerComposed {
                 case SearchRegion.Assumption.Taken(SearchRegion taken) -> {
                     region = taken;
                     cuts.add(new Taken(
-                            new OnTheWay.TakenIn(anchor, new TakenConstraint.Affine(over, rel)),
+                            new OnTheWay.TakenIn(anchor, new RowDemand.Relational(
+                                    new TakenConstraint.Affine(over, rel))),
                             each));
                 }
                 case SearchRegion.Assumption.Refused(var why) ->

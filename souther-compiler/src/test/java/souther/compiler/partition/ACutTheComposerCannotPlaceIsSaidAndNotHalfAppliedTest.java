@@ -178,7 +178,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
 
     private static OnTheWay.TakenIn cut(NumericTerm over) {
         return new OnTheWay.TakenIn(WHERE,
-                new TakenConstraint.Affine(LinearForm.atom(over), Rel.GE));
+                new RowDemand.Relational(new TakenConstraint.Affine(LinearForm.atom(over), Rel.GE)));
     }
 
     /** A row composed with {@code axis} at {@code at}, and {@code taken} on the way to it. */

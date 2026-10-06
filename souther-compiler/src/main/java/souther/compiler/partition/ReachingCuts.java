@@ -253,7 +253,8 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison)
                 // distance on nothing.
                 yield switch (read.quantities().region().assuming(against, met)) {
                     case SearchRegion.Assumption.Taken _ ->
-                            new OnTheWay.TakenIn(at, new TakenConstraint.Affine(against, met));
+                            new OnTheWay.TakenIn(at, new RowDemand.Relational(
+                                    new TakenConstraint.Affine(against, met)));
                     case SearchRegion.Assumption.Refused(var why) ->
                             new OnTheWay.Declined(comparison.occurrence(), at, whyDeclined(why));
                 };
@@ -324,9 +325,10 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison)
         }
         Rel states = drawn.claim().statedRelation();
         Rel met = holding ? states : states.denied();
-        return new OnTheWay.TakenIn(at, TakenConstraint.Ordered.isABound(met)
+        TakenConstraint taken = TakenConstraint.Ordered.isABound(met)
                 ? new TakenConstraint.Ordered(drawn.term(), drawn.value(), met)
-                : new TakenConstraint.AwayFrom(drawn.term(), drawn.value()));
+                : new TakenConstraint.AwayFrom(drawn.term(), drawn.value());
+        return new OnTheWay.TakenIn(at, new RowDemand.Relational(taken));
     }
 
     /** These conditions, with the rule stated at {@code states} reached under {@code assumed}. */

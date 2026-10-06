@@ -241,8 +241,9 @@ class AComparisonAgainstAWrittenValueIsCarriedOnItsOwnOrderTest {
 
     /** The constraint the body's single condition landed in. */
     private static TakenConstraint taken(String behavior, boolean holding) {
-        return assertInstanceOf(OnTheWay.TakenIn.class, only(behavior, holding),
-                behavior + " states something a search can compose against").taken();
+        OnTheWay.TakenIn taken = assertInstanceOf(OnTheWay.TakenIn.class, only(behavior, holding),
+                behavior + " states something a search can compose against");
+        return assertInstanceOf(RowDemand.Relational.class, taken.demand()).constraint();
     }
 
     /** The one thing the body's single condition states. */

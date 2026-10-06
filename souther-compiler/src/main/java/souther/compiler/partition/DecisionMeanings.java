@@ -68,9 +68,9 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
      */
     private DecidedCondition answerOf(Condition condition, OnTheWay one, boolean held) {
         return switch (one) {
-            case OnTheWay.TakenIn taken -> {
-                Rel proposition = taken.taken().rel().orItsDenial();
-                DecisionCondition.Comparison column = switch (taken.taken()) {
+            case OnTheWay.TakenIn(var _, RowDemand.Relational(var taken)) -> {
+                Rel proposition = taken.rel().orItsDenial();
+                DecisionCondition.Comparison column = switch (taken) {
                     case TakenConstraint.Affine affine -> new DecisionCondition.AComparison(
                             DecisionComparison.ofTheInput(affine.form()), proposition);
                     case TakenConstraint.Ordered ordered ->
@@ -85,8 +85,7 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
                                     new DecisionAtom.OfTheInput(away.term()), away.at(),
                                     proposition);
                 };
-                yield new DecidedCondition.Compared(column,
-                        taken.taken().rel() == proposition);
+                yield new DecidedCondition.Compared(column, taken.rel() == proposition);
             }
             case OnTheWay.Narrowed narrowed -> {
                 TermPath at = narrowed.position();

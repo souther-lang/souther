@@ -17,6 +17,7 @@ import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.OrderedAffineBoundary;
 import souther.compiler.partition.QuantityKey;
+import souther.compiler.partition.RowDemand;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.TakenConstraint;
 import souther.compiler.partition.WayToTheBorder;
@@ -705,7 +706,7 @@ public sealed interface AnotherLineTheRowsAllow {
                             return false;
                         }
                     }
-                    case OnTheWay.TakenIn(var _, var taken) -> {
+                    case OnTheWay.TakenIn(var _, RowDemand.Relational(var taken)) -> {
                         if (Collections.disjoint(taken.terms(), moved)) {
                             continue;   // the row's answer at it, unmoved
                         }

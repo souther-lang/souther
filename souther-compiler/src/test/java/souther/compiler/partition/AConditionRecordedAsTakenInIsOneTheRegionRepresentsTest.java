@@ -147,8 +147,8 @@ class AConditionRecordedAsTakenInIsOneTheRegionRepresentsTest {
     @Test
     void aTakenInEntryTheRegionCannotCarryIsRefusedLoudly() {
         WayToTheBorder forged = new WayToTheBorder(List.of(new OnTheWay.TakenIn(WHERE,
-                new TakenConstraint.Affine(
-                        difference("recordsAreEqual", "a", "b"), Rel.EQ))));
+                new RowDemand.Relational(new TakenConstraint.Affine(
+                        difference("recordsAreEqual", "a", "b"), Rel.EQ)))));
 
         assertThrows(IllegalStateException.class,
                 () -> forged.narrowing(regionOf("recordsAreEqual")),
@@ -184,8 +184,9 @@ class AConditionRecordedAsTakenInIsOneTheRegionRepresentsTest {
 
     /** The constraint the body's single condition landed in, coming out the way it was written. */
     private static TakenConstraint taken(String behavior) {
-        return assertInstanceOf(OnTheWay.TakenIn.class, only(behavior, true),
-                behavior + " states something a search can compose against").taken();
+        OnTheWay.TakenIn taken = assertInstanceOf(OnTheWay.TakenIn.class, only(behavior, true),
+                behavior + " states something a search can compose against");
+        return assertInstanceOf(RowDemand.Relational.class, taken.demand()).constraint();
     }
 
     /** The one thing the body's single condition states. */

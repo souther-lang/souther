@@ -176,8 +176,8 @@ class ANumberIsWrittenWhereTheReadingAnsweredForThePlaceTest {
 
     /** The condition the row is composed under, which a report about it would be the subject of. */
     private static OnTheWay.TakenIn onTheWayOver(TermPath at) {
-        return new OnTheWay.TakenIn(WHERE, new TakenConstraint.Affine(
-                LinearForm.atom(new NumericTerm.ValueOf(at)), Rel.GE));
+        return new OnTheWay.TakenIn(WHERE, new RowDemand.Relational(new TakenConstraint.Affine(
+                LinearForm.atom(new NumericTerm.ValueOf(at)), Rel.GE)));
     }
 
     /** A row composed with the plain position fixed, and a condition over {@code at} on the way to

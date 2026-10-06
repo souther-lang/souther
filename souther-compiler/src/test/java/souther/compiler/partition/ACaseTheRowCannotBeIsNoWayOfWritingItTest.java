@@ -106,7 +106,8 @@ class ACaseTheRowCannotBeIsNoWayOfWritingItTest {
                         domain().quantities(rules()).ordersOf(fixed.term()).answered(), at))),
                 new Reachability.Reaching(region, required,
                         List.of(new OnTheWay.TakenIn(new ConditionReportAnchor.WhereTheReadingMetIt(
-                                "m", new ConditionOccurrence("b", 0)), ABOVE_TEN))),
+                                "m", new ConditionOccurrence("b", 0)),
+                                new RowDemand.Relational(ABOVE_TEN)))),
                 Generator.CandidateCheck.ANY);
     }
 

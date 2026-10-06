@@ -121,8 +121,9 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
         Recording region = new Recording();
 
         SearchRegion narrowed = new WayToTheBorder(List.of(
-                new OnTheWay.TakenIn(somewhere(1), first),
-                new OnTheWay.TakenIn(somewhere(2), second))).narrowing(region);
+                new OnTheWay.TakenIn(somewhere(1), new RowDemand.Relational(first)),
+                new OnTheWay.TakenIn(somewhere(2), new RowDemand.Relational(second))))
+                .narrowing(region);
 
         assertEquals(List.of(first, second), region.told,
                 "the region is narrowed by the cuts the account says it was narrowed by");
@@ -143,7 +144,7 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
 
         WayToTheBorder way = new WayToTheBorder(List.of(
                 new OnTheWay.Declined(met(1), somewhere(1), new OnTheWay.Why.NoWordsForTheShape()),
-                new OnTheWay.TakenIn(somewhere(2), only),
+                new OnTheWay.TakenIn(somewhere(2), new RowDemand.Relational(only)),
                 new OnTheWay.Declined(met(3), somewhere(3), new OnTheWay.Why.OneOfTwoThings())));
         way.narrowing(region);
 
@@ -167,8 +168,9 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
         Recording region = new Recording();
 
         new WayToTheBorder(List.of(
-                new OnTheWay.TakenIn(somewhere(1), arithmetic),
-                new OnTheWay.TakenIn(somewhere(2), ordered))).narrowing(region);
+                new OnTheWay.TakenIn(somewhere(1), new RowDemand.Relational(arithmetic)),
+                new OnTheWay.TakenIn(somewhere(2), new RowDemand.Relational(ordered))))
+                .narrowing(region);
 
         assertEquals(List.of(arithmetic, ordered), region.told,
                 "a condition in either vocabulary narrows the region it landed in");
@@ -195,7 +197,9 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
                         new NumericTerm.ValueOf(TermPath.of("x")), ExactRatio.of(17)), Rel.LE);
         Recording region = new Recording();
 
-        new WayToTheBorder(List.of(new OnTheWay.TakenIn(somewhere(1), shifted))).narrowing(region);
+        new WayToTheBorder(List.of(
+                new OnTheWay.TakenIn(somewhere(1), new RowDemand.Relational(shifted))))
+                .narrowing(region);
 
         assertEquals(List.of(shifted), region.told);
     }

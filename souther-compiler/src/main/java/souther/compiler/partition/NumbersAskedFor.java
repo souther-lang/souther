@@ -127,10 +127,13 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
             case null -> ANYTHING;
         };
         for (OnTheWay.TakenIn cut : cuts) {
-            if (!cut.taken().terms().contains(term)) {
+            TakenConstraint taken = switch (cut.demand()) {
+                case RowDemand.Relational(var relation) -> relation;
+            };
+            if (!taken.terms().contains(term)) {
                 continue;
             }
-            asked = asked.meet(switch (cut.taken()) {
+            asked = asked.meet(switch (taken) {
                 case TakenConstraint.AwayFrom away ->
                         of(LevelRegion.EVERYTHING.without(new Level.OnACarrier(on, away.at())));
                 // A form of one term says where that term runs, and the region was narrowed by it

@@ -71,17 +71,17 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
         SearchRegion region = base;
         for (OnTheWay each : onTheWay) {
             if (each instanceof OnTheWay.TakenIn taken) {
-                region = switch (taken.taken()) {
+                region = switch (taken.demand()) {
                     // Taken in, and the region is asked to take it in: an entry here is one the
                     // region said it could carry when the walk recorded it, so a refusal now is
                     // this compiler holding two readings of one constraint that disagree. Loud,
                     // because the quiet answer is the region a search would then run over — wider
                     // than what every reader of this account was told it had been narrowed to.
-                    case TakenConstraint.Affine affine ->
+                    case RowDemand.Relational(TakenConstraint.Affine affine) ->
                             region.assuming(affine.form(), affine.rel()).taken();
-                    case TakenConstraint.Ordered ordered ->
+                    case RowDemand.Relational(TakenConstraint.Ordered ordered) ->
                             region.assuming(ordered.term(), ordered.at(), ordered.rel());
-                    case TakenConstraint.AwayFrom away ->
+                    case RowDemand.Relational(TakenConstraint.AwayFrom away) ->
                             region.apartFrom(away.term(), away.at());
                 };
             }

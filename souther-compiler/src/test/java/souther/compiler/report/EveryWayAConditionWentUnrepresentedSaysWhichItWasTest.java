@@ -15,6 +15,7 @@ import souther.compiler.partition.DemandGap;
 import souther.compiler.partition.InjectedAnswer;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.ReachabilityGap;
+import souther.compiler.partition.RowDemand;
 import souther.compiler.partition.TakenConstraint;
 import souther.compiler.types.ValueName;
 
@@ -160,9 +161,9 @@ class EveryWayAConditionWentUnrepresentedSaysWhichItWasTest {
 
     /** A condition to hang a way on, which these sentences say nothing about. */
     private static OnTheWay.TakenIn cut() {
-        return new OnTheWay.TakenIn(where(),
+        return new OnTheWay.TakenIn(where(), new RowDemand.Relational(
                 new TakenConstraint.Affine(
-                        LinearForm.atom(new NumericTerm.ValueOf(TermPath.of("x"))), Rel.GE));
+                        LinearForm.atom(new NumericTerm.ValueOf(TermPath.of("x"))), Rel.GE)));
     }
 
     /** Which question a report about the condition under test would put. */

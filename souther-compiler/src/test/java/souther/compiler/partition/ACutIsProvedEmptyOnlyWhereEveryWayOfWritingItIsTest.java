@@ -24,9 +24,9 @@ class ACutIsProvedEmptyOnlyWhereEveryWayOfWritingItIsTest {
 
     private static final OnTheWay.TakenIn CUT = new OnTheWay.TakenIn(
             new ConditionReportAnchor.WhereTheReadingMetIt("m", new ConditionOccurrence("f", 0)),
-            new TakenConstraint.Affine(
+            new RowDemand.Relational(new TakenConstraint.Affine(
                     LinearForm.atom(new NumericTerm.ValueOf(TermPath.of("r").then("deadline"))),
-                    Rel.GE));
+                    Rel.GE)));
 
     private static final ReachabilityGap PROVED = new ReachabilityGap.ProvedImpossible(CUT);
 

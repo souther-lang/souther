@@ -15,8 +15,8 @@ import souther.compiler.inputs.TermPath;
  * <p><b>Every condition is one of these, and which is not a choice about the shape it was written
  * in.</b> A condition either lands in a vocabulary a search can compose against — the arithmetic's
  * ({@link TakenIn}) or the positions' ({@link Narrowed}) — or it is {@link Declined}. What a search
- * composes against is one list either way: which of the value vocabularies a condition landed in is
- * {@link TakenConstraint}'s answer and not a third arm here. So a fork this
+ * composes against is one list either way: what a condition taken in asks of a row is
+ * {@link RowDemand}'s answer and not a third arm here. So a fork this
  * reading learns to walk later widens what a search can reach and can never quietly leave a
  * condition off: a reader that cannot state one says so here, and a row composed under a declined
  * condition is a row that may not arrive rather than a row nothing knew about.
@@ -39,14 +39,15 @@ public sealed interface OnTheWay {
     /**
      * A condition a search can compose a row against, and what it came to.
      *
-     * <p>The constraint is what says which condition this is. Two of them stating one relation over
-     * one quantity are one thing to compose against, and nothing here needs to tell them apart.
+     * <p>The demand is what says which condition this is. Two of them asking one thing of a row are
+     * one thing to compose against, and nothing here needs to tell them apart.
      *
-     * <p>Which vocabulary it landed in is {@link TakenConstraint}'s and not a second answer here. A
-     * rule over numbers and a rule over a carrier's own values are both conditions a row has to
-     * pass, and a reader asking what the way took in asks one list.
+     * <p>What it asks is {@link RowDemand}'s answer and not a second arm here. A rule over numbers,
+     * a rule over a carrier's own values and whatever a composer learns to build next are all
+     * conditions a row has to pass, and a reader asking what the way took in asks one list.
      */
-    record TakenIn(ConditionReportAnchor anchor, TakenConstraint taken) implements OnTheWay {}
+    record TakenIn(ConditionReportAnchor anchor, RowDemand.OfACondition demand)
+            implements OnTheWay {}
 
     /**
      * A condition that says which values a position is one of, as the position it narrows.
