@@ -130,26 +130,29 @@ final class BodyGen {
          * for every other body. @see #injectsInto */
         private List<TypeSymbol> injectMembers = List.of();
         /**
-         * Whether the arms of this body are ones a coverage plan counted.
+         * Whether a coverage plan counted the arms and comparisons of a body.
          *
-         * <p>Off unless said otherwise, because most of what goes through here is not a behavior's
-         * body: an invariant's clause, a codec, a recursive helper shared by every behavior that
-         * calls it. None of those is a fork in any one behavior
-         * ({@link souther.compiler.coverage.CoverageSites}), and the plan holds no arm for them.
-         *
-         * <p>It was the other way round, on the reasoning that a path nobody had thought about should
-         * fail loudly rather than go unmeasured. It does not fail loudly: the generation is abandoned
-         * and the whole module's arms come back unmeasured, which is the quietest failure there is.
-         * What makes the omission loud is counting the arms that were emitted against the arms that
-         * were planned, which is done once at the end.
+         * <p>Said by whoever makes a generator, with no default. Much of what goes through here is no
+         * body the plan was made from — an invariant's clause, a codec, a recursive helper shared by
+         * every behavior that calls it — and a behavior's body and a value's method
+         * ({@link souther.compiler.check.EmittedDefinition#placesAreCounted()}) are. A default would
+         * answer for a body of a new kind before anyone asked which it is.
          */
-        private boolean armsAreCounted = false;
-
-        /** Emits this body recording where a run went through it. Said where the plan was made from
-         * these very nodes, which is a behavior's body and what it encloses. */
-        void armsAreCounted() {
-            this.armsAreCounted = true;
+        enum Places {
+            /** The plan was made from these very nodes, so a run through them is recorded. */
+            COUNTED,
+            /** The plan holds no place in this body, so nothing here is recorded. */
+            NUMBERED_NOWHERE
         }
+
+        /**
+         * Whether the arms and comparisons of this body are places a coverage plan counted.
+         *
+         * <p>A body the plan was made from and said to be numbered nowhere is not missed quietly:
+         * the places that were emitted are counted against the places that were planned, once at
+         * the end.
+         */
+        private final Places places;
 
         /**
          * How many sibling expressions the emitter is inside, carried in another arm's place.
@@ -160,7 +163,9 @@ final class BodyGen {
          */
         private int carrying = 0;
 
-        BodyGen(CodegenContext ctx, CodeBuilder code, Hir.Data data, ClassDesc cdName, int firstSlot) {
+        BodyGen(CodegenContext ctx, CodeBuilder code, Hir.Data data, ClassDesc cdName, int firstSlot,
+                Places places) {
+            this.places = places;
             this.ctx = ctx;
             this.pkg = ctx.pkg;
             this.symbols = ctx.symbols;
@@ -366,11 +371,9 @@ final class BodyGen {
                     emitSharedInstance(cb, cd, 0);
                 }
                 cb.withMethodBody("apply", MTD_Fn_apply, ClassFile.ACC_PUBLIC, code -> {
-                    BodyGen g = new BodyGen(ctx, code, null, cd, 2);   // slot 0 = this, slot 1 = the Object[] args
-                    // A lambda lifted out of a body is still that body's forks.
-                    if (armsAreCounted) {
-                        g.armsAreCounted();
-                    }
+                    // Slot 0 is this, slot 1 the Object[] args. A lambda lifted out of a body is
+                    // still that body's forks.
+                    BodyGen g = new BodyGen(ctx, code, null, cd, 2, places);
                     if (!injectedNames.isEmpty()) {
                         // the captured behaviors live in this closure's own fields; requiredCall reads
                         // `this.<name>`, so route them the same way the enclosing behavior does
@@ -621,7 +624,7 @@ final class BodyGen {
          * condition this plan instruments, and the emitter walks comparisons everywhere else too.
          */
         private void comparisonProbe(Core.Binary bin) {
-            if (!armsAreCounted || !ctx.measuring()) {
+            if (places != Places.COUNTED || !ctx.measuring()) {
                 return;
             }
             ctx.comparisonSiteOf(bin).ifPresent(this::comparisonProbeAt);
@@ -658,7 +661,7 @@ final class BodyGen {
         private void arm(Core fork, int part, List<Core> bodies, Consumer<Core> emit,
                          boolean tail) {
             probe(fork, part);
-            int[] carried = carrying > 0 || !armsAreCounted || !ctx.measuring()
+            int[] carried = carrying > 0 || places != Places.COUNTED || !ctx.measuring()
                     || ctx.probesOf(fork)[part] == CoverageSites.NO_SITE
                     ? new int[0] : ctx.carriedAt(fork, part);
             if (carried.length == 0) {
@@ -702,7 +705,7 @@ final class BodyGen {
          * {@link #arm} puts after them, and by nothing else.
          */
         private void probe(Core node, int arm) {
-            if (!armsAreCounted || !ctx.measuring()) {
+            if (places != Places.COUNTED || !ctx.measuring()) {
                 return;
             }
             int site = ctx.probesOf(node)[arm];
