@@ -1001,7 +1001,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return switch (read) {
             case DecisionRuleReading.AComparisonCameOut(var comparison, var _) -> comparison.at();
             case DecisionRuleReading.AnApplicationAnswered(var application, var _) ->
-                    application.at();
+                    application.writtenAt();
             case DecisionRuleReading.AForkTookAnArm(var arm) ->
                     Sites.placeOf(compilation.db(), arm.anchor());
             case DecisionRuleReading.AConditionIsNotShown _,

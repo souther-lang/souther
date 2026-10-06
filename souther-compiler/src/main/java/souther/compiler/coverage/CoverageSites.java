@@ -342,15 +342,17 @@ public final class CoverageSites {
      * @param application which application, in the copy of the body it stands in. What a reading
      *                    of the rules names it by is the construct of the model it is
      *                    ({@link ModelOccurrence#statedAt}), which this is one materialisation of
-     * @param at          where the code that answers stands, for a reader sent to it
+     * @param writtenAt   where the application is written, for a reader sent to it. Not where its
+     *                    answer is worked out: an operation the library implements in the language
+     *                    answers inside its own code, and a place there is a place in the library
      * @param index       where the run records it. Shared with the comparison the answering node is,
      *                    where it is one
      */
-    public record AnswerSite(String body, ConstructOccurrence application, Citation at,
+    public record AnswerSite(String body, ConstructOccurrence application, Citation writtenAt,
                              ConditionOutcomeSite index) {
 
         public AnswerSite {
-            if (body == null || application == null || at == null || index == null) {
+            if (body == null || application == null || writtenAt == null || index == null) {
                 throw new IllegalArgumentException("where an application's answer is recorded is"
                         + " one application, in one body, at one place");
             }
@@ -935,7 +937,8 @@ public final class CoverageSites {
         });
         List<AnsweredAt> answered = walk.answers.values().stream()
                 .map(draft -> new AnsweredAt(draft.node(), new AnswerSite(draft.body(),
-                        draft.application(), draft.at(), numbering.outcome(draft.raw()))))
+                        draft.application(), draft.writtenAt(),
+                        numbering.outcome(draft.raw()))))
                 .toList();
         // The siblings with their ways read back as places, through the same issue as the arms
         // above, so a way and an arm of the plan are one place and not two that agree.
@@ -1017,7 +1020,7 @@ public final class CoverageSites {
     /** Where one application's answer is recorded, as the walk has it, and the node it is
      *  recorded at. */
     private record DraftAnswer(Core node, String body, ConstructOccurrence application,
-                               Citation at, int raw) {}
+                               Citation writtenAt, int raw) {}
 
     /**
      * One place an answer is recorded, and the node the emitter records it at.

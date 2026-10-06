@@ -52,7 +52,7 @@ class AnApplicationsAnswerIsRecordedWhereTheApplicationIsTest {
         List<CoverageSites.AnswerSite> answers = checked.plan().answers("bound");
         assertEquals(1, answers.size(), () -> "one application answers: " + answers);
         assertEquals(writtenAt(checked, "bound"),
-                answers.stream().map(CoverageSites.AnswerSite::at).toList(),
+                answers.stream().map(CoverageSites.AnswerSite::writtenAt).toList(),
                 "recorded where the application is written, and not where the binding is");
     }
 
@@ -61,7 +61,7 @@ class AnApplicationsAnswerIsRecordedWhereTheApplicationIsTest {
     void thePlacesAreListedInTheOrderTheBodyWritesThem() {
         Bodies.Elaborated checked = checked();
         assertEquals(writtenAt(checked, "chain"),
-                checked.plan().answers("chain").stream().map(CoverageSites.AnswerSite::at)
+                checked.plan().answers("chain").stream().map(CoverageSites.AnswerSite::writtenAt)
                         .toList());
     }
 

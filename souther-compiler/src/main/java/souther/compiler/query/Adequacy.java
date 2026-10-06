@@ -7688,7 +7688,7 @@ public final class Adequacy {
                                 ? new ExampleMessage.TheRuleTakesThisConditionHolding()
                                 : new ExampleMessage.TheRuleTakesThisConditionFailing());
                 case DecisionRuleReading.AnApplicationAnswered(var application, var held) ->
-                        label(built, application.at(), held
+                        label(built, application.writtenAt(), held
                                 ? new ExampleMessage.TheRuleTakesThisConditionHolding()
                                 : new ExampleMessage.TheRuleTakesThisConditionFailing());
                 case DecisionRuleReading.AForkTookAnArm(var arm) ->
