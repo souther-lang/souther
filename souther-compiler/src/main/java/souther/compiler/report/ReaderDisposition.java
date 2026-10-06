@@ -167,10 +167,11 @@ public sealed interface ReaderDisposition {
      */
     static ReaderDisposition of(PartitionEvidence.PairSpace pairs,
                                 List<PartitionEvidence.AxisCoverage> axes) {
-        return widerThanTheyAreSeparated(pairs, axes).isEmpty()
+        List<Wider> wider = widerThanTheyAreSeparated(pairs, axes);
+        return wider.isEmpty()
                 ? new Settled()
                 : new ReconsiderWhatThisBehaviorNeedsToDistinguish(new Subject.OfABehavior(
-                        widerThanTheyAreSeparated(pairs, axes).getFirst().axis().at().behavior()));
+                        wider.getFirst().axis().at().behavior()));
     }
 
     /**

@@ -208,19 +208,129 @@ class APositionSaysHowFarTheBodyTellsItsClassesApartTest {
     }
 
     /**
-     * A decision past an attempted construction is made of the values the way to the attempt let
-     * through.
+     * An arm for a case the rules refuse at the position admits no value there.
      *
-     * <p>No way in to the inner {@code match} is named, since which way the attempt goes is nothing
-     * a class says. What the outer arm let through is known there all the same — only {@code C} or
-     * {@code D} arrives — so the inner arms for {@code A} and {@code B} are taken by no run and the
-     * body tells {@code A} from {@code B} nowhere. Read without what the outer arm settled, they
-     * would split the two.
+     * <p>{@code Off} is no class of {@code f}, since nothing that reaches the behavior is one; the
+     * {@code match} still has to name it. What the arm for it says is that no value takes it, which
+     * is a fact about the position and not something this compiler could not read — and the arm for
+     * the other two sends both one way.
      */
     @Test
-    void aDecisionPastAnAttemptIsMadeOfWhatTheWayToItLetThrough() {
+    void anArmForACaseTheRulesRefuseAdmitsNothing() {
+        assertEquals(1, groupsAt("f", toldApartIn("""
+                module example.refused
+
+                data On
+                data Off
+                data Pending
+                data Flag = On | Off | Pending
+                data Active = Flag invariant value /= Off
+
+                data Ok = { n: Int }
+
+                behavior judge : (f: Active, n: Int) -> Ok
+                    constructs Ok
+
+                let judge (f, n) = {
+                    guard n > 10 else Ok { n = 0 }
+                    match f.value with
+                        | On | Pending -> Ok { n = 1 }
+                        | Off -> Ok { n = 2 }
+                }
+
+                example judge
+                    | (Active(On), 50) -> Ok { n = 1 }
+                """, "example.refused"), 2));
+    }
+
+    /**
+     * An arm for a case that is itself a union admits the cases under it.
+     *
+     * <p>{@code OnceKind} stands for {@code Station} and {@code Hospital}, and {@code OtherKind} for
+     * {@code Clinic} and {@code Home}, which are what a value at the position is. The body tells the
+     * first two from the second two and nothing more.
+     */
+    @Test
+    void anArmForACaseThatIsAUnionAdmitsTheCasesUnderIt() {
+        assertEquals(2, groupsAt("k", toldApartIn("""
+                module example.union
+
+                data Station
+                data Hospital
+                data Clinic
+                data Home
+                data OnceKind = Station | Hospital
+                data OtherKind = Clinic | Home
+                data VisitKind = OnceKind | OtherKind
+
+                data Ok = { n: Int }
+
+                behavior judge : (k: VisitKind) -> Ok
+                    constructs Ok
+
+                let judge (k) =
+                    match k with
+                        | OnceKind -> Ok { n = 1 }
+                        | OtherKind -> Ok { n = 2 }
+
+                example judge
+                    | (Station) -> Ok { n = 1 }
+                """, "example.union"), 4));
+    }
+
+    /**
+     * A position the body reads and sends every class of one way makes no combination.
+     *
+     * <p>One arm for both cases is a decision about {@code k} that tells nothing apart, which is what
+     * a position nothing in the body is about comes to as well: a row combining its classes with
+     * another position's shows nothing the two rows apart do not.
+     */
+    @Test
+    void aPositionTheBodySendsAllOneWayMakesNoCombination() {
+        var partition = compiled("""
+                module example.oneway
+
+                data A
+                data B
+                data Kind = A | B
+
+                data Ok = { n: Int }
+
+                behavior judge : (k: Kind, n: Int) -> Ok
+                    constructs Ok
+
+                let judge (k, n) = {
+                    guard n > 10 else Ok { n = 0 }
+                    match k with
+                        | A | B -> Ok { n = 1 }
+                }
+
+                example judge
+                    | (A, 50) -> Ok { n = 1 }
+                """).db().ask(new Adequacy.Coverage("example.oneway")).value().get("judge");
+        PartitionEvidence.AxisCoverage k = partition.axes().stream()
+                .filter(each -> each.name().equals("k")).findFirst().orElseThrow();
+
+        assertEquals(1, groupsAt("k", partition.axes(), 2), () -> "at " + k);
+        assertTrue(partition.pairs().space().stream().noneMatch(pair ->
+                        pair.between().one().equals(k.at()) || pair.between().other().equals(k.at())),
+                () -> "no combination with `k`: " + partition.pairs());
+    }
+
+    /**
+     * A decision inside a function value is made of the values the way to the function let
+     * through.
+     *
+     * <p>No way in to the {@code match} inside the predicate is named, since the predicate runs
+     * wherever {@code List.filter} calls it. What the outer arm let through is known there all the
+     * same — {@code k} is an input and only {@code C} or {@code D} arrives — so the inner arms for
+     * {@code A} and {@code B} are taken by no run and the body tells {@code A} from {@code B}
+     * nowhere. Read without what the outer arm settled, they would split the two.
+     */
+    @Test
+    void aDecisionInsideAFunctionIsMadeOfWhatTheWayToItLetThrough() {
         assertEquals(3, groupsAt("k", toldApartIn("""
-                module example.pastattempt
+                module example.insidefunction
 
                 data A
                 data B
@@ -228,30 +338,106 @@ class APositionSaysHowFarTheBodyTellsItsClassesApartTest {
                 data D
                 data Kind = A | B | C | D
 
-                data Note = String
-                    invariant String.length(value) >= 1
-                data NoNote
+                data Ok = { n: Int }
+
+                behavior judge : (k: Kind, xs: List<Int>) -> Ok
+                    constructs Ok
+
+                let judge (k, xs) =
+                    match k with
+                        | A | B -> Ok { n = 1 }
+                        | C | D -> Ok { n = List.length(List.filter(x ->
+                                        match k with
+                                            | A -> true
+                                            | B -> false
+                                            | C -> true
+                                            | D -> false, xs)) }
+
+                example judge
+                    | (A, [1]) -> Ok { n = 1 }
+                """, "example.insidefunction"), 4));
+    }
+
+    /**
+     * A {@code match} on a name bound over several cases is a decision nothing can place.
+     *
+     * <p>{@code b} is the value matched at {@code lead.reason}, as one of the two cases under
+     * {@code BantFailure} — which is no one position, so the inner {@code match} is a fork about a
+     * subject the reading cannot name. It tells the two apart; read as about nothing, the position
+     * would be said to be told apart as two groups of three, which the inner arms refute. The outer
+     * arms are read, and what they say is part of the answer and not the whole of it.
+     */
+    @Test
+    void aMatchOnANameBoundOverSeveralCasesLeavesThePositionUnread() {
+        PartitionEvidence.AxisCoverage reason = toldApartIn("""
+                module example.bound
+
+                data NoBudget
+                data NoNeed
+                data BantFailure = NoBudget | NoNeed
+                data DuplicateOf
+                data Reason = BantFailure | DuplicateOf
+
+                data Lead = { reason: Reason }
+                data Ok = { n: Int }
+
+                behavior judge : (lead: Lead) -> Ok
+                    constructs Ok
+
+                let judge (lead) =
+                    match lead.reason with
+                        | BantFailure as b ->
+                            match b with
+                                | NoBudget -> Ok { n = 1 }
+                                | NoNeed -> Ok { n = 2 }
+                        | DuplicateOf -> Ok { n = 3 }
+
+                example judge
+                    | (Lead { reason = NoBudget }) -> Ok { n = 1 }
+                """, "example.bound").stream()
+                .filter(each -> each.name().equals("lead.reason")).findFirst().orElseThrow();
+
+        assertInstanceOf(BodyDistinction.Unread.class, reason.toldApart(), () -> "at " + reason);
+    }
+
+    /**
+     * And so is whether a construction held its rules, where the rules refuse a case of the value.
+     *
+     * <p>{@code Active(f)} is built only where {@code f} is not {@code Off}, so the two arms of the
+     * attempt tell {@code Off} from the other two. Which values an attempt tells apart is nothing
+     * its arms name, so the position is not said to be told apart by the {@code match} alone.
+     */
+    @Test
+    void anAttemptOnAValueOfThePositionLeavesItUnread() {
+        PartitionEvidence.AxisCoverage f = toldApartIn("""
+                module example.attempting
+
+                data On
+                data Off
+                data Pending
+                data Flag = On | Off | Pending
+                data Active = Flag invariant value /= Off
+                data NotActive
 
                 data Ok = { n: Int }
 
-                behavior judge : (k: Kind, text: String) -> Ok | NoNote
-                    constructs Ok, Note
+                behavior judge : (f: Flag) -> Ok | NotActive
+                    constructs Ok, Active
 
-                let judge (k, text) =
-                    match k with
-                        | A | B -> Ok { n = 1 }
-                        | C | D -> {
-                            guard Note(text) as note else NoNote
-                            match k with
-                                | A -> Ok { n = 2 }
-                                | B -> Ok { n = 3 }
-                                | C -> Ok { n = 4 }
-                                | D -> Ok { n = 5 }
-                        }
+                let judge (f) = {
+                    guard Active(f) as active else NotActive
+                    match f with
+                        | On -> Ok { n = 1 }
+                        | Off -> Ok { n = 1 }
+                        | Pending -> Ok { n = 1 }
+                }
 
                 example judge
-                    | (A, "a") -> Ok { n = 1 }
-                """, "example.pastattempt"), 4));
+                    | (On) -> Ok { n = 1 }
+                """, "example.attempting").stream()
+                .filter(each -> each.name().equals("f")).findFirst().orElseThrow();
+
+        assertInstanceOf(BodyDistinction.Unread.class, f.toldApart(), () -> "at " + f);
     }
 
     /**
@@ -303,14 +489,15 @@ class APositionSaysHowFarTheBodyTellsItsClassesApartTest {
     }
 
     /**
-     * And so is one matched past an attempted construction.
+     * And one matched past an attempted construction is not said to be taken wider than it is told
+     * apart.
      *
-     * <p>Which way an attempt goes is whether the value's own rules held, which no class of an input
-     * names, so no way in to anything after it is stated. The {@code match} after it is still a
-     * decision the body makes about the position, and tells both cases apart.
+     * <p>Which way an attempt goes is a decision nothing names a subject for, so what the body tells
+     * apart is not known at any position — the {@code match} after it among them — and nothing
+     * is raised.
      */
     @Test
-    void aSumMatchedPastAnAttemptedConstructionIsToldApartInFull() {
+    void aSumMatchedPastAnAttemptedConstructionIsNotSaidToBeTakenWider() {
         String model = """
                 module example.attempted
 
@@ -346,8 +533,12 @@ class APositionSaysHowFarTheBodyTellsItsClassesApartTest {
 
         assertTrue(partition.pairs().space().stream().anyMatch(p -> partition.pairs().unknown(p) > 0),
                 () -> "a combination the rows do not sit in: " + partition.pairs());
+        assertInstanceOf(BodyDistinction.Unread.class, partition.axes().stream()
+                        .filter(each -> each.name().equals("r")).findFirst().orElseThrow()
+                        .toldApart(),
+                () -> "what an attempt tells apart is not read: " + partition.axes());
         assertFalse(human.contains("r holds"),
-                () -> "a match past an attempt tells every case apart: " + human);
+                () -> "and nothing is raised about what is not read: " + human);
         assertInstanceOf(ReaderDisposition.Settled.class,
                 ReaderDisposition.of(partition.pairs(), partition.axes()),
                 () -> "nothing is taken wider than the body tells apart: " + partition.axes());

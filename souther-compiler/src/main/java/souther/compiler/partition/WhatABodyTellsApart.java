@@ -8,6 +8,7 @@ import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.Decision;
 import souther.compiler.reading.WayIn;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -44,6 +45,9 @@ final class WhatABodyTellsApart {
     /** Whether some way said something about the position this reading does not put to its
      *  classes. */
     private final boolean[] unread;
+    /** Whether some way a run takes holds a decision the reading could name no subject for, which
+     *  leaves what is told apart unknown at every position. */
+    private boolean subjectUnknown;
     private final List<Axis> axes;
     /** The rules the reading of the input read to the end and found no line in, with why. */
     private final List<RuleWithoutALine> noLine;
@@ -78,19 +82,42 @@ final class WhatABodyTellsApart {
     }
 
     /**
-     * Which position one condition is about, and the classes it admits there.
+     * What one condition says about the positions measured here.
      *
-     * @param at       the position, or -1 where this run measures none it could be about
-     * @param admitted the classes, or null where the condition is about the position and admits
-     *                 nothing this reading can put to its classes
+     * <p>Three answers, and the two that place nothing are not one. A condition about something
+     * this run measures no position of says nothing about any of them; a condition whose subject
+     * the reading could not name may be about any of them, and what it tells apart is not known.
+     * Read as one, a decision nothing could place would be a decision about nothing.
      */
-    private record Placed(int at, List<Boolean> admitted) {}
+    private sealed interface Placed {
+
+        /**
+         * About the {@code at}th position.
+         *
+         * @param admitted the classes it admits there, or null where it admits nothing this
+         *                 reading can put to the classes
+         */
+        record About(int at, List<Boolean> admitted) implements Placed {}
+
+        /** About nothing this run measures a position of. */
+        record AboutNoPosition() implements Placed {}
+
+        /** About something the reading could not name, which may be any of the positions. */
+        record SubjectUnknown() implements Placed {}
+    }
 
     private Placed placedOf(souther.compiler.reading.Condition condition) {
         return placed.computeIfAbsent(condition, each -> {
+            // A fork the reading could not name a subject for: a value no position is, a name bound
+            // over several cases, an attempted construction. Which way it goes may turn on any
+            // position's value — whether a construction holds its rules can refuse a case of what
+            // it is built from — and the condition says nothing of which.
+            if (each instanceof souther.compiler.reading.Condition.Arm) {
+                return new Placed.SubjectUnknown();
+            }
             int at = InteractionCells.positionOf(each, axes);
             if (at < 0) {
-                return new Placed(-1, null);
+                return new Placed.AboutNoPosition();
             }
             InteractionCells.Cell cell = InteractionCells.admittedBy(each, axes);
             if (cell != null) {
@@ -98,7 +125,7 @@ final class WhatABodyTellsApart {
                 for (boolean one : cell.allowed()[at]) {
                     admitted.add(one);
                 }
-                return new Placed(at, List.copyOf(admitted));
+                return new Placed.About(at, List.copyOf(admitted));
             }
             // A comparison with no line here, which the reading of the input read to the end and
             // found divides nothing that arrives at it: every value a run brings there goes the
@@ -107,9 +134,10 @@ final class WhatABodyTellsApart {
             // another would leave its position one nothing could be said about.
             if (each instanceof souther.compiler.reading.Condition.Side side
                     && dividesNothingThatArrives(side, axes.get(at))) {
-                return new Placed(at, Collections.nCopies(axes.get(at).classes().size(), true));
+                return new Placed.About(at,
+                        Collections.nCopies(axes.get(at).classes().size(), true));
             }
-            return new Placed(at, null);
+            return new Placed.About(at, null);
         });
     }
 
@@ -165,15 +193,23 @@ final class WhatABodyTellsApart {
     private void take(WayIn way) {
         boolean[][] here = new boolean[axes.size()][];
         boolean[] unreadHere = new boolean[axes.size()];
+        boolean subjectUnknownHere = false;
         List<Set<ModelOccurrence>> statedHere = new ArrayList<>();
         for (int at = 0; at < axes.size(); at++) {
             statedHere.add(new LinkedHashSet<>());
         }
         for (Decision decision : way.decisions()) {
             souther.compiler.reading.Condition each = decision.constrains();
-            Placed one = placedOf(each);
-            if (one.at() < 0) {
-                continue;
+            Placed.About one;
+            switch (placedOf(each)) {
+                case Placed.About it -> one = it;
+                case Placed.AboutNoPosition _ -> {
+                    continue;
+                }
+                case Placed.SubjectUnknown _ -> {
+                    subjectUnknownHere = true;
+                    continue;
+                }
             }
             if (one.admitted() == null) {
                 unreadHere[one.at()] = true;
@@ -197,6 +233,9 @@ final class WhatABodyTellsApart {
                 ModelOccurrence.statedAt(side.comparison()).ifPresent(statedHere.get(one.at())::add);
             }
         }
+        // Only for a way some value takes. A decision nothing could place is still one no run makes
+        // where the rest of its way admits no class.
+        subjectUnknown |= subjectUnknownHere;
         for (int at = 0; at < axes.size(); at++) {
             if (here[at] != null) {
                 splits.get(at).add(here[at]);
@@ -214,30 +253,35 @@ final class WhatABodyTellsApart {
         // not this behavior's, which is the whole question here, so it is not asked for.
         //
         // A line is filed under the construct its rule is stated at, which is what a decision is
-        // filed under too, so the two meet there; and the line carries the rule as well, which is
-        // what a parting — the same comparison read for where it parts the values rather than
-        // where it cuts them — carries and all it carries.
-        Set<RuleRef> rulesRead = new LinkedHashSet<>();
+        // filed under too, so the two meet there. A parting — a comparison read for where it parts
+        // the values rather than where it cuts them — carries the rule and not the construct, and a
+        // comparison's rule is the construct the author wrote, whichever reading of it this was.
+        Set<SourceConstructOrigin> written = new LinkedHashSet<>();
+        for (ModelOccurrence each : comparisonsRead.get(at)) {
+            written.add(each.origin());
+        }
         boolean ruleNoDecisionRead = false;
         for (RuleEvidenceOrigin origin : linesAndDivisions(axis)) {
-            if (!writtenInTheBody(origin.rule())) {
-                continue;
-            }
-            if (origin instanceof LineOrigin.ComparisonOrigin comparison
-                    && comparisonsRead.get(at).contains(comparison.read().states())) {
-                rulesRead.add(comparison.rule());
-            } else {
+            if (writtenInTheBody(origin.rule())
+                    && !(origin instanceof LineOrigin.ComparisonOrigin comparison
+                            && comparisonsRead.get(at).contains(comparison.read().states()))) {
                 ruleNoDecisionRead = true;
             }
         }
         for (Parting parting : axis.parted()) {
             for (AuthoredLine line : parting.alternatives()) {
                 RuleRef rule = line.which().rule();
-                ruleNoDecisionRead |= writtenInTheBody(rule) && !rulesRead.contains(rule);
+                ruleNoDecisionRead |= writtenInTheBody(rule)
+                        && !(rule instanceof RuleRef.Comparison comparison
+                                && written.contains(comparison.origin()));
             }
         }
-        if (unread[at] || ruleNoDecisionRead) {
-            return new BodyDistinction.Unread();
+        // Unread over anything read. What was read at the position is part of what the body tells
+        // apart there, and a part is never said as the whole.
+        boolean unplacedHere = unread[at] || ruleNoDecisionRead;
+        if (subjectUnknown || unplacedHere) {
+            return new BodyDistinction.Unread(groupsOf(axis.classes(), splits.get(at)),
+                    unplacedHere);
         }
         if (splits.get(at).isEmpty()) {
             return new BodyDistinction.Untouched();
@@ -272,16 +316,15 @@ final class WhatABodyTellsApart {
      * composes to: two classes some way takes one of and not the other are in different groups,
      * however many ways say nothing about them.
      */
-    private static List<Set<String>> groupsOf(List<PartitionClass> classes,
-                                             List<boolean[]> splits) {
-        Map<List<Boolean>, Set<String>> bySignature = new LinkedHashMap<>();
+    private static List<List<String>> groupsOf(List<PartitionClass> classes,
+                                              List<boolean[]> splits) {
+        Map<List<Boolean>, List<String>> bySignature = new LinkedHashMap<>();
         for (int c = 0; c < classes.size(); c++) {
             List<Boolean> signature = new ArrayList<>(splits.size());
             for (boolean[] split : splits) {
                 signature.add(split[c]);
             }
-            bySignature.computeIfAbsent(signature, _ -> new LinkedHashSet<>())
-                    .add(classes.get(c).id());
+            bySignature.computeIfAbsent(signature, _ -> new ArrayList<>()).add(classes.get(c).id());
         }
         return List.copyOf(bySignature.values());
     }

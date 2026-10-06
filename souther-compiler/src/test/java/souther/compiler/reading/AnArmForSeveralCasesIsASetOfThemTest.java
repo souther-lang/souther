@@ -84,4 +84,54 @@ class AnArmForSeveralCasesIsASetOfThemTest {
         assertEquals(1, unreachable,
                 () -> "only the inner arm for C is out of reach: " + read.arms());
     }
+
+    /**
+     * And past an attempted construction as well, where no way in is named.
+     *
+     * <p>Which way the attempt goes rules out nothing about {@code k}, which is an input and the same
+     * value wherever the run gets to. So what the outer arm let through holds past it, and an inner
+     * arm for a case outside that is one no run reaches — a proof, and not a way this reading could
+     * not name.
+     */
+    @Test
+    void anArmPastAnAttemptThatTheWayToItRulesOutIsReachedByNoRun() {
+        Compilation compilation = Compiler.analyzedModules(List.of("""
+                module example.pastattempt
+
+                data A
+                data B
+                data C
+                data Kind = A | B | C
+
+                data Note = String
+                    invariant String.length(value) >= 1
+                data NoNote
+
+                data Ok = { n: Int }
+
+                behavior judge : (k: Kind, text: String) -> Ok | NoNote
+                    constructs Ok, Note
+
+                let judge (k, text) =
+                    match k with
+                        | A | B -> {
+                            guard Note(text) as note else NoNote
+                            match k with
+                                | A -> Ok { n = 1 }
+                                | B -> Ok { n = 2 }
+                                | C -> Ok { n = 3 }
+                        }
+                        | C -> Ok { n = 4 }
+
+                example judge
+                    | (A, "a") -> Ok { n = 1 }
+                """), ModulePath.EMPTY, new ArrayList<>(), Adequacy.Asked.fullReport());
+        CoverageRead.Read read = compilation.db()
+                .ask(new Adequacy.Meets("example.pastattempt")).value().get("judge");
+
+        long unreachable = read.arms().values().stream()
+                .filter(each -> each instanceof PathAccess.Unreachable).count();
+        assertEquals(1, unreachable,
+                () -> "the inner arm for C is reached by no run: " + read.arms());
+    }
 }

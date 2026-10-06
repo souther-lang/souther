@@ -35,8 +35,9 @@ public sealed interface Condition {
      * written in, so two arms admitting the same cases are the same condition whichever order they
      * name them in.
      *
-     * @param names which cases, as the model spells them. Several where the arm is written for
-     *              several, since what the arm admits is each of them
+     * @param names which cases, as the model spells them: the leaves of the union, and so several
+     *              where the arm is written for several or for a case that is itself a union, since
+     *              what the arm admits is each value it can be
      */
     record Case(TermPath at, List<String> names) implements Condition {
 

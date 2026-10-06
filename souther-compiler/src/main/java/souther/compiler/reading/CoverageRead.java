@@ -207,10 +207,14 @@ public final class CoverageRead {
      * it. And a way no run takes is none: an arm for a case the way to the fork has already ruled
      * out tells apart cases that never arrive there.
      */
-    private void takes(Reach into) {
-        if (into.someRunArrives()) {
-            taken.addAll(into.known());
+    private void takes(Reach into, Reach own) {
+        if (!into.someRunArrives()) {
+            return;
         }
+        // Past the bound a way in is read no further, and nor is what is known on it: the fork's
+        // own ways stand for it, which reads a decision against more than it was made in and
+        // never against less.
+        taken.addAll(into.known().size() > MOST_WAYS_IN ? own.known() : into.known());
     }
 
     /**
@@ -310,7 +314,7 @@ public final class CoverageRead {
                             ? unnamed(reach, PathAccess.Unsupported.Why.NO_WAY_IN_CAN_BE_NAMED)
                             : under(reach, new Reach.Ways(List.of(new WayIn(went.holds()))));
                     if (went != null) {
-                        takes(into);
+                        takes(into, new Reach.Ways(List.of(new WayIn(went.holds()))));
                     }
                     arms.at(match, part, into);
                     Core.Case arm = match.cases().get(part);
@@ -335,6 +339,17 @@ public final class CoverageRead {
                 }
                 Reach into = unnamed(reach,
                         PathAccess.Unsupported.Why.THE_CONSTRUCTION_DECIDES_IT);
+                // And each arm is a way runs take all the same. Whether the rules held is a
+                // decision about the values the thing was made of — a rule refusing a case refuses
+                // it of whatever position the value came from — which nothing here can name, and
+                // which a reading of what the body tells apart is owed.
+                for (int arm = 0; arm <= constructed.els().size(); arm++) {
+                    Outcome went = naming.forkArm(constructed, arm);
+                    if (went != null) {
+                        Reach own = new Reach.Ways(List.of(new WayIn(went.holds())));
+                        takes(under(reach, own), own);
+                    }
+                }
                 int part = 0;
                 arms.at(constructed, part++, into);
                 walk(constructed.then(),
@@ -424,7 +439,7 @@ public final class CoverageRead {
         }
         List<WayIn> left = waysOf(through.paths());
         Reach into = under(reach, new Reach.Ways(left));
-        takes(into);
+        takes(into, new Reach.Ways(left));
         return into.ways().size() > MOST_WAYS_IN
                 ? new Reach.Unnameable(PathAccess.Unsupported.Why.MORE_WAYS_IN_THAN_ARE_READ)
                 : into;
@@ -441,7 +456,7 @@ public final class CoverageRead {
     private Reach waysInTo(Core.If iff, int part, CoverageNaming naming, Reach reach) {
         Reach own = waysInFor(iff, part, naming);
         Reach into = under(reach, own);
-        takes(into);
+        takes(into, own);
         if (into.ways().size() <= MOST_WAYS_IN) {
             return into;
         }

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Towards;
 import souther.compiler.reading.Factor;
@@ -488,10 +489,15 @@ public final class InteractionCells {
                 if (axis < 0) {
                     return null;
                 }
-                // Every case the arm answers for, and none where one of them is not a class here:
-                // an arm admitting a case this axis does not hold says something about the
-                // position no class of it reads.
+                // Every case the arm answers for. Where the axis is the union itself, its classes
+                // are the cases a value there can be, so a case the arm names and the axis has no
+                // class of is one the rules refuse there: no value is it, and it admits nothing.
+                // Anywhere else a case with no class is something about the position no class of
+                // this axis reads, and the condition places at none of them.
                 List<PartitionClass> classes = axes.get(axis).classes();
+                boolean ofTheUnion = axes.get(axis).path().equals(one.at()) && !classes.isEmpty()
+                        && classes.stream()
+                                .allMatch(each -> each.selects() instanceof Refinement.SumCase);
                 Cell cell = Cell.anything(axes);
                 Arrays.fill(cell.allowed()[axis], false);
                 for (String name : one.names()) {
@@ -502,10 +508,11 @@ public final class InteractionCells {
                             break;
                         }
                     }
-                    if (at < 0) {
+                    if (at >= 0) {
+                        cell.allowed()[axis][at] = true;
+                    } else if (!ofTheUnion) {
                         return null;
                     }
-                    cell.allowed()[axis][at] = true;
                 }
                 return cell;
             }
