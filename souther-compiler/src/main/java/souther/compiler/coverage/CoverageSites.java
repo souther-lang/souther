@@ -12,14 +12,12 @@ import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.Map;
 import java.util.SequencedMap;
-import java.util.Set;
 
 /**
  * The arms of a behavior's body that an {@code example} row can be in or not in.
@@ -878,6 +876,9 @@ public final class CoverageSites {
         private final IdentityHashMap<Core, int[][]> carried = new IdentityHashMap<>();
         private final SequencedMap<Integer, ArmReplacements.AtSite> replacements =
                 new LinkedHashMap<>();
+        /** How many nodes each subtree an arm's size was asked of is, counted once: an arm holding
+         *  a chain of conditions holds every arm further down it. */
+        private final IdentityHashMap<Core, Integer> sizes = new IdentityHashMap<>();
         /** Which node each fork of these bodies is, so that the one place forks are recognised is
          *  the one place two of them being one can be refused. */
         private final Map<ConstructOccurrence, Core> forks = new LinkedHashMap<>();
@@ -1078,37 +1079,39 @@ public final class CoverageSites {
         private void replacements(Core fork, SourceConstructOrigin origin, DraftArm[] arms,
                                   List<Core> bodies, List<BindingId> names) {
             List<Integer> candidates = new ArrayList<>();
+            int[] count = new int[bodies.size()];
             int size = 0;
             for (int part = 0; part < bodies.size(); part++) {
+                count[part] = nodesIn(bodies.get(part));
                 if (!(Core.withoutStanding(bodies.get(part)) instanceof Core.Unreachable)) {
                     candidates.add(part);
-                    size += nodesIn(bodies.get(part));
+                    size += count[part];
                 }
+            }
+            // A sibling that reads the name its own arm gives the value cannot stand anywhere
+            // else: that name stands for nothing there, so it is no program the body could be
+            // written as. Asked once of each sibling, since it is the sibling's and not the arm's.
+            boolean[] readsItsOwnName = new boolean[bodies.size()];
+            for (int sibling : candidates) {
+                BindingId own = names.get(sibling);
+                readsItsOwnName[sibling] = own != null && reads(bodies.get(sibling), own);
             }
             // What each arm does, apart from where it is written. An arm whose sibling does the
             // same thing is that sibling under another place, and answering as it is answering as
-            // itself: no row could tell the two apart, so it is no rewrite to ask a row about. Nor
-            // is a sibling that reads the name its own arm gives the value: standing anywhere else
-            // that name stands for nothing, so it is no program the body could be written as. And
+            // itself: no row could tell the two apart, so it is no rewrite to ask a row about. And
             // two siblings that do the same thing are one rewrite of the arm, asked once.
-            Binders binders = Binders.of(module, places);
-            List<ExecutableIdentity> does = new ArrayList<>();
-            for (Core body : bodies) {
-                does.add(ExecutableIdentity.of(body, binders));
-            }
+            DoesTheSame same = new DoesTheSame(bodies, count, Binders.of(module, places));
             boolean tooLarge = (long) size * (arms.length - 1) > MOST_NODES_A_FORK_CARRIES;
             int[][] carriedHere = new int[arms.length][];
             for (int part = 0; part < arms.length; part++) {
                 List<Integer> carriedParts = new ArrayList<>();
                 Map<Integer, ArmReplacements.Sibling> siblings = new LinkedHashMap<>();
-                Set<ExecutableIdentity> asked = new HashSet<>();
-                asked.add(does.get(part));
+                List<Integer> asked = new ArrayList<>(List.of(part));
                 for (int sibling : candidates) {
-                    BindingId own = names.get(sibling);
-                    if ((own != null && reads(bodies.get(sibling), own))
-                            || !asked.add(does.get(sibling))) {
+                    if (readsItsOwnName[sibling] || same.asOneOf(sibling, asked)) {
                         continue;
                     }
+                    asked.add(sibling);
                     if (tooLarge) {
                         siblings.put(sibling, new ArmReplacements.Sibling.NotCarried(
                                 ArmReplacements.Sibling.Why.TOO_LARGE));
@@ -1132,6 +1135,50 @@ public final class CoverageSites {
             carried.put(fork, carriedHere);
         }
 
+        /**
+         * Whether two arms of one fork do the same thing, asked of what each does.
+         *
+         * <p>What an arm does is built only where the answer is not already no: two arms of
+         * different sizes do different things, and what a large arm does is a copy of it. A chain
+         * of conditions holds the rest of the chain in one arm at every link, so building it for
+         * every arm of every link would copy the chain once per link.
+         */
+        private static final class DoesTheSame {
+
+            private final List<Core> bodies;
+
+            private final int[] count;
+
+            private final Binders binders;
+
+            private final ExecutableIdentity[] does;
+
+            DoesTheSame(List<Core> bodies, int[] count, Binders binders) {
+                this.bodies = bodies;
+                this.count = count;
+                this.binders = binders;
+                this.does = new ExecutableIdentity[bodies.size()];
+            }
+
+            /** Whether arm {@code part} does what one of {@code others} does. */
+            boolean asOneOf(int part, List<Integer> others) {
+                for (int other : others) {
+                    if (other == part || (count[other] == count[part]
+                            && identity(other).equals(identity(part)))) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            private ExecutableIdentity identity(int part) {
+                if (does[part] == null) {
+                    does[part] = ExecutableIdentity.of(bodies.get(part), binders);
+                }
+                return does[part];
+            }
+        }
+
         /** Whether {@code e} reads {@code binding} anywhere under it. */
         private static boolean reads(Core e, BindingId binding) {
             if (e instanceof Core.Read r && r.binding().equals(binding)) {
@@ -1143,9 +1190,14 @@ public final class CoverageSites {
         }
 
         /** How many nodes {@code e} is, which is what carrying it once more costs. */
-        private static int nodesIn(Core e) {
+        private int nodesIn(Core e) {
+            Integer known = sizes.get(e);
+            if (known != null) {
+                return known;
+            }
             int[] count = {1};
             Core.forEachChild(e, child -> count[0] += nodesIn(child));
+            sizes.put(e, count[0]);
             return count[0];
         }
 
