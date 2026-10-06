@@ -16,6 +16,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -25,7 +26,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>What a walk handed those ends is bounded by. Its figure counts the numbers it admits, so a
  * number between the ends the set turns down is a step nothing pays for — and carried onto
  * another number first, as a quotient's ends are carried onto the place, one such number is as
- * many steps as the divisor is wide. A set with holes gives no ends at all.
+ * many steps as the divisor is wide.
+ *
+ * <p>Ends given are held to that; a set giving none is not held to having holes. That side claims
+ * less, and nothing reads it as more.
  */
 class ASetGivenAsOneRunHoldsEveryNumberBetweenItsEndsTest {
 
@@ -65,14 +69,19 @@ class ASetGivenAsOneRunHoldsEveryNumberBetweenItsEndsTest {
         assertTrue(given >= 3, "the sets that are runs give their ends, so this checked some");
     }
 
-    /** A set with holes inside its extent gives none. */
+    /**
+     * A shape that takes values out takes at least one.
+     *
+     * <p>Taking none out is the run, or the whole order, under a shape whose answers are given for
+     * a set with something taken out of it — a state the shape would answer for wrongly, and one
+     * no rule leaves.
+     */
     @Test
-    void aSetWithHolesGivesNoEnds() {
-        for (NumericSet set : SETS) {
-            boolean holed = set instanceof NumericSet.InARunExcept
-                    || set instanceof NumericSet.AwayFrom;
-            assertEquals(holed, set.asOneRun() == null, set::toString);
-        }
+    void takingNothingOutIsNotASetOfThatShape() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new NumericSet.AwayFrom(List.of()));
+        assertThrows(IllegalArgumentException.class,
+                () -> new NumericSet.InARunExcept(run(0, true, 10, true), List.of()));
     }
 
     /** Every shape a set comes in is among the ones checked. */

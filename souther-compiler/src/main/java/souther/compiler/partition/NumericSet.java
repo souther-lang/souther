@@ -73,6 +73,11 @@ public sealed interface NumericSet {
 
         public AwayFrom {
             values = List.copyOf(values);
+            if (values.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "away from no values is the whole order, which no rule singling one out"
+                                + " leaves");
+            }
         }
 
         @Override
@@ -158,8 +163,8 @@ public sealed interface NumericSet {
             return new NumericDomain.Bounds(run.lineBelow(null), run.lineAbove(null));
         }
 
-        /** None: the values taken out are inside the run's ends, and no pair of ends leaves them
-         *  out. */
+        /** None, which claims less than may be true: a value taken out inside the run is a hole no
+         *  pair of ends leaves out, and one taken out at an end is not told apart from it here. */
         @Override
         public NumericDomain.Bounds asOneRun() {
             return null;
@@ -201,16 +206,21 @@ public sealed interface NumericSet {
     NumericDomain.Bounds extent();
 
     /**
-     * The ends between which every number is one of these, or null where no pair of ends says
-     * that.
+     * Ends that hold exactly these numbers — every number between them is one of these and none
+     * outside them is — or null where this set gives none.
      *
      * <p>Not {@link #extent()}, and the difference is what a walk's bound rests on. The extent says
      * nothing lies outside it; this says nothing between the ends is left out. A walk whose figure
      * counts the numbers it admits spends nothing on a number it steps over and turns down, so it
      * is bounded only where it is handed ends that hold nothing to turn down — and where the ends
      * are carried onto another number first, one hole in these becomes as many numbers as the
-     * carrying spreads it over. A run is its ends; a run with values taken out of it, and the order
-     * with values taken out of it, have holes no pair of ends can leave out.
+     * carrying spreads it over.
+     *
+     * <p><b>One way only.</b> Ends given are the set; null is no claim that the set has holes.
+     * Answered by the shape and not worked out of the numbers, a run with a value taken out at an
+     * end it keeps gives none, although on the whole numbers it is the run past that value. That
+     * is the side that claims less: a reader handed nothing composes nothing out of these ends, and
+     * a reader handed ends that held a hole would walk it unbounded.
      */
     NumericDomain.Bounds asOneRun();
 
