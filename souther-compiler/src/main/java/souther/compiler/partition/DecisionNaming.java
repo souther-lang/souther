@@ -196,7 +196,7 @@ final class DecisionNaming implements Naming<DecisionPath> {
     }
 
     /** The construct of the model {@code condition}'s truth is answered by, where it is one. */
-    private static Optional<ModelOccurrence> answeredAt(Condition condition) {
+    static Optional<ModelOccurrence> answeredAt(Condition condition) {
         return switch (condition) {
             case Condition.Compares one -> one.states();
             case Condition.Truth truth

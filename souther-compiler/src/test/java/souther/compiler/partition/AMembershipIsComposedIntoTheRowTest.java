@@ -65,6 +65,12 @@ class AMembershipIsComposedIntoTheRowTest {
             behavior boxed : (box: Box, n: Digit) -> Bool
             let boxed (box, n) = List.contains(n, box.held)
 
+            data Crowd = { campaigns: Set<Name> }
+                invariant Set.size(campaigns) >= 1
+
+            behavior crowded : (crowd: Crowd, priority: Name) -> Bool
+            let crowded (crowd, priority) = Set.contains(priority, crowd.campaigns)
+
             behavior paired : (pair: Pair, b: Bool) -> Bool
             let paired (pair, b) = Set.contains(b, pair.seen)
             """;
@@ -88,6 +94,15 @@ class AMembershipIsComposedIntoTheRowTest {
                 () -> "the campaigns do not hold the priority: " + row);
         assertEquals(List.of(), elementsOf(row.get(0), "campaigns"),
                 () -> "and the rules ask for none of them: " + row);
+    }
+
+    /** Kept from a value where the rules ask for one at the fewest: one other than it. */
+    @Test
+    void aContainerKeptFromAValueAndHoldingOneHoldsAnother() {
+        List<String> row = written(composedPast("crowded", false, Generator.CandidateCheck.ANY));
+        List<String> held = elementsOf(row.get(0), "campaigns");
+        assertEquals(1, held.size(), () -> "one, as the rules ask: " + row);
+        assertFalse(held.contains(row.get(1)), () -> "and not the priority: " + row);
     }
 
     /** The value at another position of the same parameter is read off the same assignment. */

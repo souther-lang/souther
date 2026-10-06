@@ -18,7 +18,9 @@ import java.util.Optional;
  * against these composes it against {@link RowDemand}s whichever condition stopped the row.
  *
  * @param demand   what the row has to be for the condition to come out that way
- * @param reaching what the way to the condition asks of the row
+ * @param reaching what the way to the condition asks of the row — and, where the demand is one a
+ *                 condition makes ({@link RowDemand.OfACondition}), the condition itself, which a
+ *                 composer meets the way it meets every condition on the way
  */
 public record HeldOutcome(RowDemand demand, Reachability.Reaching reaching) {
 

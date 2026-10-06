@@ -130,6 +130,7 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
             row(PARTITION + "ConstructionPlan", "node",
                     "(" + TYPE + "L" + INPUTS + "TermPath;" + INNERS + SYMBOLS + KINDS + SUMS
                             + "ILjava/util/Set;L" + INPUTS + "Requirements;L" + PARTITION
+                            + "ConstructionPlan$ContentsComposed;L" + PARTITION
                             + "ConstructionPlan$HowManyItHolds;)L" + PARTITION
                             + "ConstructionPlan$NodeResult;",
                     THE_POSITION),

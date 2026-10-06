@@ -5307,11 +5307,12 @@ public final class Adequacy {
         }
 
         /**
-         * What brings the comparison out the way {@code outcome} says, worked out once.
+         * What brings the comparison or the truth out the way {@code outcome} says, worked out once.
          *
-         * <p>The side is which of the border's roles stand inside it: a point in {@link PointRole#ON}
-         * or {@link PointRole#IN} is one the comparison holds at, and one in {@link PointRole#OFF}
-         * or {@link PointRole#OUT} one it fails at.
+         * <p>For a comparison, the side is which of the border's roles stand inside it: a point in
+         * {@link PointRole#ON} or {@link PointRole#IN} is one the comparison holds at, and one in
+         * {@link PointRole#OFF} or {@link PointRole#OUT} one it fails at. For a truth, what it
+         * coming out that way asks of a row ({@link ReachingCuts#heldAt}).
          */
         private static Optional<HeldOutcome> holding(MeasuredInput subject,
                                                      List<BorderAssessment> edges,
@@ -5347,7 +5348,12 @@ public final class Adequacy {
                     }
                 }
             }
-            return Optional.empty();
+            // No point of a border brings it out that way, and the outcome may be an operation's
+            // truth a fork's condition asks: what that coming out the way asked demands of a row,
+            // composed past the way to it.
+            return ModelOccurrence.statedAt(outcome.occurrence())
+                    .flatMap(answers -> reaching.heldAt(answers, outcome.held(),
+                            subject.quantities().region()));
         }
 
         private static souther.compiler.partition.FillResult rowsFor(
