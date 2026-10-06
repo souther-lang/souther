@@ -3,6 +3,7 @@ package souther.compiler.codegen;
 import souther.compiler.query.Bodies;
 
 import souther.compiler.check.EmittedDefinition;
+import souther.compiler.codegen.BodyGen.Places;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.DeclarationKinds;
@@ -761,10 +762,8 @@ public final class Backend {
                 }
                 cb.withMethodBody(emitted, desc, ClassFile.ACC_STATIC,
                         code -> {
-                    BodyGen gen = new BodyGen(ctx, code, null, cdFns, n);
-                    if (definition.placesAreCounted()) {
-                        gen.placesAreCounted();
-                    }
+                    BodyGen gen = new BodyGen(ctx, code, null, cdFns, n,
+                            definition.placesAreCounted() ? Places.COUNTED : Places.NUMBERED_NOWHERE);
                     for (int i = 0; i < n; i++) {
                         // a function parameter arrives as an Fn value (a closure); every other parameter
                         // as its boxed value. The type is the one the check settled for it.
@@ -1685,9 +1684,8 @@ public final class Backend {
                 emitCheckingApply(cb, cdB, spec, mtdApply, n);
             }
             cb.withMethodBody(bodyMethod, mtdApply, bodyFlags, code -> {
-                BodyGen gen = new BodyGen(ctx, code, null, cdB, n + 1);
                 // A body the coverage plan is made from, so a body whose places are counted.
-                gen.placesAreCounted();
+                BodyGen gen = new BodyGen(ctx, code, null, cdB, n + 1, Places.COUNTED);
                 gen.injectsInto(successType(spec.ret()));
                 gen.requireds(held, injected);
                 for (SpecImplementation.ParameterBinding.AnInput input

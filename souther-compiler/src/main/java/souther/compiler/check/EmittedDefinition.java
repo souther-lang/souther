@@ -50,7 +50,12 @@ public record EmittedDefinition(Core body, List<Parameter> parameters, LoweringR
 
     public EmittedDefinition {
         parameters = List.copyOf(parameters);
-        boolean handedOver = role instanceof LoweringRole.ValueHome;
+        // Every role by name, so a method of a new kind says which it takes before it is built.
+        boolean handedOver = switch (role) {
+            case LoweringRole.ValueHome _ -> true;
+            case LoweringRole.Helper _, LoweringRole.RowValue _,
+                 LoweringRole.PublishedValueEntry _, LoweringRole.FixtureValueEntry _ -> false;
+        };
         for (Parameter parameter : parameters) {
             if ((parameter instanceof Handover) != handedOver) {
                 throw new IllegalStateException("a method emitted as " + role + " takes "
@@ -65,9 +70,15 @@ public record EmittedDefinition(Core body, List<Parameter> parameters, LoweringR
      * <p>A value's method is: it is a body a run of every behavior that calls the value passes
      * through. A helper is not, nor is an entry or a row's value. The plan numbers the places of
      * exactly these bodies and the emitter records a run through exactly these, so both read it
-     * here; asked apart, one of them can number a place the other never writes.
+     * here; asked apart, one of them can number a place the other never writes. Every role is
+     * answered by name, so a method of a new kind is neither counted nor left out until someone
+     * says which.
      */
     public boolean placesAreCounted() {
-        return role instanceof LoweringRole.ValueHome;
+        return switch (role) {
+            case LoweringRole.ValueHome _ -> true;
+            case LoweringRole.Helper _, LoweringRole.RowValue _,
+                 LoweringRole.PublishedValueEntry _, LoweringRole.FixtureValueEntry _ -> false;
+        };
     }
 }
