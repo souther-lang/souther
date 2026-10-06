@@ -1,6 +1,7 @@
 package souther.compiler.codegen;
 
 import souther.compiler.check.Boundary;
+import souther.compiler.codegen.BodyGen.Places;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.EnumerationListings;
 import souther.compiler.ast.Hir;
@@ -199,7 +200,7 @@ final class ValueClassGen {
                                  SequencedMap<String, Type> fields, List<ValueShape.Invariant> clauses) {
         cb.withMethodBody(method, MethodTypeDesc.of(ConstantDescs.CD_boolean, fieldDescs(fields)),
                 ClassFile.ACC_STATIC | ClassFile.ACC_PUBLIC, code -> {
-                    BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
+                    BodyGen gen = new BodyGen(ctx, code, data, cdName, 0, Places.NUMBERED_NOWHERE);
                     bindFields(gen, data);
                     for (ValueShape.Invariant clause : clauses) {
                         gen.genExpr(clause.condition());   // the same boolean __construct checks
@@ -790,7 +791,8 @@ final class ValueClassGen {
                     mb.with(SignatureAttribute.of(
                             MethodSignature.parseFrom(constructSignature(fields, cdName))));
                     mb.withCode(code -> {
-                        BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
+                        BodyGen gen = new BodyGen(ctx, code, data, cdName, 0,
+                                Places.NUMBERED_NOWHERE);
 
                         // Canonicalized in the argument slots themselves, before a clause below reads
                         // any of them by the binding bindFields is about to install: a public

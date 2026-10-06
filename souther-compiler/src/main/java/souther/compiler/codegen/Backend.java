@@ -3,6 +3,7 @@ package souther.compiler.codegen;
 import souther.compiler.query.Bodies;
 
 import souther.compiler.check.EmittedDefinition;
+import souther.compiler.codegen.BodyGen.Places;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.DeclarationKinds;
@@ -293,18 +294,19 @@ public final class Backend {
                 }
             }
         }
-        // After the Lower stage the only non-behavior fns left are recursive helpers (spec §fn-declaration);
-        // each is lowered to a static method on the module's `$Fns` class rather than inlined.
+        // What the module emits as a method of its own rather than as a behavior — a value, a helper
+        // left standing where it recurses, a row's value, an entry (`LoweringRole.Emitted`) — is a
+        // static method on the module's `$Fns` class.
         Set<String> behaviorNames = new HashSet<>();
         for (Hir.BehaviorDef bd : module.behaviors()) {
             behaviorNames.add(bd.name());
         }
         // Both components: a method is emitted for what the module declared and for what it took on
         // to emit, and by the time a class is written there is no difference between them.
-        Map<String, Hir.FnDef> recHelpers = new LinkedHashMap<>();
+        Map<String, Hir.FnDef> methods = new LinkedHashMap<>();
         for (Hir.FnDef fn : emitted(module)) {
             if (!behaviorNames.contains(fn.name())) {
-                recHelpers.put(fn.name(), fn);
+                methods.put(fn.name(), fn);
             }
         }
         // What a name wraps is read off the declarations, for the check a codec's expressions are
@@ -347,7 +349,7 @@ public final class Backend {
         Backend b = new Backend(ctx, checked);
         // Before anything is written: a declaration wide enough that its generated method cannot hold
         // its arguments produces a class the JVM refuses at load time, and nothing downstream notices.
-        JvmLimits.checkParameterSlots(module, ctx, recHelpers, sigs, requirements);
+        JvmLimits.checkParameterSlots(module, ctx, methods, sigs, requirements);
         // A behavior's class capitalizes its first letter (spec §jvm-behavior). Data names are already
         // capitalized, so `behavior quote` producing `data Quote` would generate two classes named
         // `Quote`. Reject the collision here rather than let one silently overwrite the other.
@@ -600,18 +602,18 @@ public final class Backend {
                 }
             });
         }
-        if (!recHelpers.isEmpty()) {
-            // The helpers share one class, so the writer names a method rather than a definition: a
-            // method it would not write is the helper whose name it is, and a pool it would not hold
-            // belongs to all of them and so to the module. So does a text too long for a constant:
-            // one writer refuses it as the method is written and another only as the class is, and
-            // the definition it is said at may not turn on which JDK runs this.
+        if (!methods.isEmpty()) {
+            // The methods share one class, so the writer names a method rather than a definition: a
+            // method it would not write is the definition whose name it is, and a pool it would not
+            // hold belongs to all of them and so to the module. So does a text too long for a
+            // constant: one writer refuses it as the method is written and another only as the class
+            // is, and the definition it is said at may not turn on which JDK runs this.
             int from = ctx.carriedCount();
             try {
-                out.put(new GeneratedClass.Helpers(module.name()), b.generateRecursiveHelpers(recHelpers));
+                out.put(new GeneratedClass.Helpers(module.name()), b.generateMethods(methods));
             } catch (IllegalArgumentException e) {
                 JvmLimits.Exceeded exceeded = JvmLimits.exceeded(e);
-                Hir.FnDef helper = exceeded == null ? null : helperNamed(recHelpers, exceeded.method());
+                Hir.FnDef helper = exceeded == null ? null : helperNamed(methods, exceeded.method());
                 throw refusedFor(ctx, from, e, helper == null
                         ? asLimit(e, WrittenName.synthetic(module.name(), module.pos()))
                         : asLimit(e, helper.written()));
@@ -620,7 +622,7 @@ public final class Backend {
         // Which definition is the entry of which value is what its role says. The name it is emitted
         // under is an address and is never read back for a meaning.
         Map<String, ValueName.Helper> entries = new LinkedHashMap<>();
-        for (Hir.FnDef fn : recHelpers.values()) {
+        for (Hir.FnDef fn : methods.values()) {
             if (fn.role() instanceof DefinitionRole.PublishedValueEntry entry) {
                 entries.put(fn.name(), entry.of());
             }
@@ -725,17 +727,22 @@ public final class Backend {
     }
 
     /**
-     * Emits the module's recursive helpers as {@code static} methods on a package-private {@code $Fns}
-     * class (spec §fn-declaration). Each helper's declared parameter and return types are boxed as {@code Object}
-     * across the method boundary, unboxed on entry and boxed on return, so a self- or mutual call is a
-     * plain {@code invokestatic} — the recursion the inliner cannot express. The body is emitted through
-     * the same {@code emitBodyTail} path a behavior uses; a helper is pure, so it has no injected fields.
+     * Emits what the module runs as methods of its own as {@code static} methods on a package-private
+     * {@code $Fns} class (spec §fn-declaration). Each parameter and the return are boxed as
+     * {@code Object} across the method boundary, unboxed on entry and boxed on return, so a self- or
+     * mutual call of a helper is a plain {@code invokestatic} — the recursion the inliner cannot
+     * express. The body is emitted through the same {@code emitTail} path a behavior uses; none of
+     * these is a behavior, so none has injected fields.
+     *
+     * <p>A value's method records where a run went through it, as a behavior's body does: the plan
+     * numbered its places ({@link EmittedDefinition#placesAreCounted()}). The others are numbered
+     * nowhere, and are emitted without a probe.
      */
-    private byte[] generateRecursiveHelpers(Map<String, Hir.FnDef> helpers) {
+    private byte[] generateMethods(Map<String, Hir.FnDef> methods) {
         ClassDesc cdFns = ctx.cd(new GeneratedClass.Helpers(pkg));
         return build(cdFns, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);   // package-private, not exposed
-            for (Hir.FnDef h : helpers.values()) {
+            for (Hir.FnDef h : methods.values()) {
                 EmittedDefinition definition = emittedDefinition(checked.emittedDefinitions(),
                         h.name());
                 int n = definition.parameters().size();
@@ -755,7 +762,8 @@ public final class Backend {
                 }
                 cb.withMethodBody(emitted, desc, ClassFile.ACC_STATIC,
                         code -> {
-                    BodyGen gen = new BodyGen(ctx, code, null, cdFns, n);
+                    BodyGen gen = new BodyGen(ctx, code, null, cdFns, n,
+                            definition.placesAreCounted() ? Places.COUNTED : Places.NUMBERED_NOWHERE);
                     for (int i = 0; i < n; i++) {
                         // a function parameter arrives as an Fn value (a closure); every other parameter
                         // as its boxed value. The type is the one the check settled for it.
@@ -1676,9 +1684,8 @@ public final class Backend {
                 emitCheckingApply(cb, cdB, spec, mtdApply, n);
             }
             cb.withMethodBody(bodyMethod, mtdApply, bodyFlags, code -> {
-                BodyGen gen = new BodyGen(ctx, code, null, cdB, n + 1);
-                // The one body a coverage plan is made from, so the one body whose arms are counted.
-                gen.armsAreCounted();
+                // A body the coverage plan is made from, so a body whose places are counted.
+                BodyGen gen = new BodyGen(ctx, code, null, cdB, n + 1, Places.COUNTED);
                 gen.injectsInto(successType(spec.ret()));
                 gen.requireds(held, injected);
                 for (SpecImplementation.ParameterBinding.AnInput input

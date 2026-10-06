@@ -1,6 +1,7 @@
 package souther.compiler.codegen;
 
 import souther.compiler.check.Boundary;
+import souther.compiler.codegen.BodyGen.Places;
 import souther.compiler.check.Elaborator;
 import souther.compiler.check.Lower;
 import souther.compiler.check.Derived;
@@ -756,7 +757,8 @@ final class CodecGen {
             emitDefaultCtor(cb);
             // Raoh Decoder SAM: decode(Object in, Path path) -> Result. this=0, in=1, path=2.
             cb.withMethodBody("decode", MTD_Rdecode, ClassFile.ACC_PUBLIC, code -> {
-                AstExpressions gen = new AstExpressions(new BodyGen(ctx, code, data, cdName, 3));
+                AstExpressions gen = new AstExpressions(new BodyGen(ctx, code, data, cdName, 3,
+                        Places.NUMBERED_NOWHERE));
                 switch (dec) {
                     case Hir.PrimDecoder prim ->
                             emitPrimDecode(code, gen, prim, fields, src, invariants);
@@ -2039,7 +2041,8 @@ final class CodecGen {
             emitDefaultCtor(cb);
             emitSharedInstance(cb, cdEnc);
             cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
-                AstExpressions gen = new AstExpressions(new BodyGen(ctx, code, data, cdName, 2));
+                AstExpressions gen = new AstExpressions(new BodyGen(ctx, code, data, cdName, 2,
+                        Places.NUMBERED_NOWHERE));
                 code.aload(1);
                 code.checkcast(cdName);
                 int selfSlot = gen.slot(Type.ref(data.declares()));

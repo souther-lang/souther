@@ -108,7 +108,14 @@ public final class HelperTyping {
             //
             // What settles one is a value of this module: it has an answer to read. A value another
             // module declares was settled by that module's check, and a helper settles nothing.
-            ValueName settled = role instanceof LoweringRole.ValueHome home ? home.value() : null;
+            ValueName settled = switch (role) {
+                case LoweringRole.ValueHome home -> home.value();
+                case LoweringRole.Helper _, LoweringRole.RowValue _,
+                     LoweringRole.PublishedValueEntry _, LoweringRole.FixtureValueEntry _ -> null;
+                case LoweringRole.Behavior _, LoweringRole.ValueDeclaredElsewhere _ ->
+                        throw new IllegalStateException("`" + h.name() + "` is checked standalone as"
+                                + " `" + inliner.moduleName() + "`'s own, and its role is " + role);
+            };
             Scope env = Scope.NONE;
             List<Integer> inferred = new ArrayList<>();
             for (int i = 0; i < h.params().size(); i++) {
