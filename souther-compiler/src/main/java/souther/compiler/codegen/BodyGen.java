@@ -651,7 +651,8 @@ final class BodyGen {
          * was, at the same place; recording it here too would be the one place written twice.
          */
         private void answerProbe(Core e) {
-            if (!armsAreCounted || !ctx.measuring() || ctx.comparisonSiteOf(e).isPresent()) {
+            if (places != Places.COUNTED || !ctx.measuring()
+                    || ctx.comparisonSiteOf(e).isPresent()) {
                 return;
             }
             ctx.answerSiteOf(e).ifPresent(this::comparisonProbeAt);
@@ -660,7 +661,7 @@ final class BodyGen {
         /** Whether {@code e} is where an application the model states answers, in a build that
          *  records it. */
         private boolean answers(Core e) {
-            return armsAreCounted && ctx.measuring() && ctx.answerSiteOf(e).isPresent();
+            return places == Places.COUNTED && ctx.measuring() && ctx.answerSiteOf(e).isPresent();
         }
 
         /**
