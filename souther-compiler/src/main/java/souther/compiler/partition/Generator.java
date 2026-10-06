@@ -1776,9 +1776,13 @@ public final class Generator {
         // have composed anyway only by chance, and a row a rewrite is told by is one more line.
         Map<ReplacementOwed, ReplacementDisposition> replacementAnswers = new LinkedHashMap<>();
         for (ReplacementOwed asked : plan.replacementsOwed()) {
-            if (composed.size() >= budget.rowLimit()) {
+            // Held to the block only where the row is for one: a row that settles a measure is
+            // not one of the rows a person is handed, and how many of those there may be is no
+            // part of what the rows establish.
+            if (plan.rewrites().use() == RewriteSearch.For.THE_BLOCK
+                    && composed.size() >= budget.rowLimit()) {
                 replacementAnswers.put(asked, new ReplacementDisposition.NoneFound(
-                        ReplacementDisposition.Ended.THE_SEARCH_STOPPED));
+                        ReplacementDisposition.Ended.ROWS_A_BLOCK_MAY_HOLD));
                 continue;
             }
             if (trial == Trial.NOTHING_RUNS) {
@@ -1786,7 +1790,8 @@ public final class Generator {
                         ReplacementDisposition.Ended.NOTHING_RAN));
                 continue;
             }
-            ReplacementWitness looking = new ReplacementWitness(trial, ran, asked);
+            ReplacementWitness looking =
+                    new ReplacementWitness(trial, ran, asked, plan.rewrites().runs());
             GeneratedRow found = switch (asked) {
                 case ReplacementOwed.OfAnArm arm -> {
                     List<WhereToLook> here =
@@ -1798,7 +1803,7 @@ public final class Generator {
                                     List.of(new Purpose.ForAReplacement(asked)), looking::of,
                                     origins, references, answers)) {
                                 case Witness.Certified(GeneratedRow row, var _) -> seen = row;
-                                case Witness.Limited _ -> looking.stopped();
+                                case Witness.Limited _ -> looking.composingStopped();
                                 // A row nothing watched is not one a rewrite can be told on, and
                                 // the search asked for none; the rest found nothing and said why.
                                 case Witness.Unconfirmed _, Witness.Exhausted _,
@@ -1837,7 +1842,7 @@ public final class Generator {
                             }
                             if (searched.came().why().reason()
                                     == UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED) {
-                                looking.stopped();
+                                looking.composingStopped();
                             }
                         }
                     }
@@ -5675,16 +5680,6 @@ public final class Generator {
     }
 
     /**
-     * How many times the program a rewrite makes of the body may be run while one rewrite is looked
-     * for, and how many times the body itself where nothing else already counts its runs.
-     *
-     * <p>Its own figure and not a share of the composing's. What it bounds is runs, and a search for
-     * a row a rewrite is told by runs each candidate twice — the body, and the rewrite — over values
-     * chosen again within one candidate, which the figures over candidates never see.
-     */
-    private static final int MOST_RUNS_A_REWRITE_IS_LOOKED_FOR_WITH = 32;
-
-    /**
      * Whether a row is one a rewrite of the body answers differently on, for one rewrite, and how
      * the search for one ended where none was found.
      *
@@ -5692,23 +5687,32 @@ public final class Generator {
      * answer would notice is then what stating it is — and what would be stated is what the body
      * answers, so a row the two answer differently on is one a person writing its answer down would
      * have noticed the rewrite with.
+     *
+     * <p>Runs are counted against the measure's own figure and not a share of the composing's. What
+     * it bounds is runs, and a search for a row a rewrite is told by runs each candidate twice — the
+     * body, and the rewrite — over values chosen again within one candidate, which the figures over
+     * candidates never see. Each way the search stops is kept as itself, since which figure a wider
+     * run would have to raise is what a reader of an undecided rewrite acts on.
      */
     private static final class ReplacementWitness {
 
         private final Trial trial;
         private final Map<List<String>, ObservedRun> ran;
         private final ReplacementOwed asked;
+        private final int mostRuns;
         private int runs;
         /** Whether any row was asked about and answered alike. */
         private boolean alike;
-        /** Whether a run was wanted that there was no room or no way for. */
-        private boolean stopped;
+        /** The ways the search stopped with something left untried. */
+        private final Set<ReplacementDisposition.Ended> stopped =
+                EnumSet.noneOf(ReplacementDisposition.Ended.class);
 
         private ReplacementWitness(Trial trial, Map<List<String>, ObservedRun> ran,
-                                   ReplacementOwed asked) {
+                                   ReplacementOwed asked, int mostRuns) {
             this.trial = trial;
             this.ran = ran;
             this.asked = asked;
+            this.mostRuns = mostRuns;
         }
 
         /**
@@ -5718,21 +5722,21 @@ public final class Generator {
         Acceptance of(GeneratedRow row, ObservedRun written) {
             ObservedRun body = written != null ? written : run(row);
             if (body == null) {
-                stopped = true;
+                stopped.add(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE);
                 return Acceptance.STOPPED;
             }
             AnswerObservation rewritten;
             switch (asked) {
                 case ReplacementOwed.OfAnArm arm -> {
-                    if (runs >= MOST_RUNS_A_REWRITE_IS_LOOKED_FOR_WITH) {
-                        stopped = true;
+                    if (runs >= mostRuns) {
+                        stopped.add(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE);
                         return Acceptance.STOPPED;
                     }
                     runs++;
                     Optional<AnswerObservation> answered =
                             trial.runReplacing(row.toRun(), arm.replacing());
                     if (answered.isEmpty()) {
-                        stopped = true;
+                        stopped.add(ReplacementDisposition.Ended.A_RUN_DID_NOT_COME_BACK);
                         return Acceptance.STOPPED;
                     }
                     rewritten = answered.get();
@@ -5740,11 +5744,19 @@ public final class Generator {
                 case ReplacementOwed.ByOneAnswer one ->
                         rewritten = new AnswerObservation.Answered(one.answer());
             }
-            if (trial.change(body.answer(), rewritten) == AnswerChange.CHANGED) {
-                return Acceptance.TAKEN;
-            }
-            alike = true;
-            return Acceptance.PASSED;
+            return switch (trial.change(body.answer(), rewritten)) {
+                case CHANGED -> Acceptance.TAKEN;
+                case SAME -> {
+                    alike = true;
+                    yield Acceptance.PASSED;
+                }
+                // A run that came back with no answer, or one that could not be read in full, is
+                // not one the two were seen to answer alike on: it is one nothing was seen on.
+                case COULD_NOT_TELL -> {
+                    stopped.add(ReplacementDisposition.Ended.A_RUN_DID_NOT_COME_BACK);
+                    yield Acceptance.PASSED;
+                }
+            };
         }
 
         /** The body run on {@code row}, once per line, or null where no run is left. */
@@ -5754,7 +5766,7 @@ public final class Generator {
             if (already != null) {
                 return already;
             }
-            if (runs >= MOST_RUNS_A_REWRITE_IS_LOOKED_FOR_WITH) {
+            if (runs >= mostRuns) {
                 return null;
             }
             runs++;
@@ -5763,19 +5775,17 @@ public final class Generator {
             return now;
         }
 
-        /** A search that looked somewhere stopped with something left there untried. */
-        void stopped() {
-            stopped = true;
+        /** Composing the rows the search looked through stopped at a figure of its own. */
+        void composingStopped() {
+            stopped.add(ReplacementDisposition.Ended.A_FIGURE_OF_THE_COMPOSING);
         }
 
-        /** How the search ended, where nothing was found. */
+        /** How the search ended, where nothing was found: each way it stopped, and whether rows
+         *  were seen answered alike. */
         Set<ReplacementDisposition.Ended> ended() {
-            Set<ReplacementDisposition.Ended> out = new LinkedHashSet<>();
+            Set<ReplacementDisposition.Ended> out = new LinkedHashSet<>(stopped);
             if (alike) {
                 out.add(ReplacementDisposition.Ended.EVERY_ROW_ANSWERED_ALIKE);
-            }
-            if (stopped) {
-                out.add(ReplacementDisposition.Ended.THE_SEARCH_STOPPED);
             }
             if (out.isEmpty()) {
                 out.add(ReplacementDisposition.Ended.NOTHING_WAS_COMPOSED);

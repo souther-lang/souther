@@ -128,7 +128,8 @@ class AMeetingIsUndecidedOnlyByWhatBearsOnItTest {
         Compilation compilation = Compilation.ofSource(APART, "Main")
                 .withAdequacyPolicy(new AdequacyPolicy(
                         new AdequacyPolicy.OfTheMeasures(Budgets.measures().pairSpace(),
-                                cellsPerGroup, PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS),
+                                cellsPerGroup, PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS,
+                                Budgets.measures().rewriteRuns()),
                         Budgets.generation()));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();

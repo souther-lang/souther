@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.partition.Replacement;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -115,25 +116,93 @@ class ARewriteNoRowTellsApartIsAGapTest {
     void aBodyEveryRowAnswersAlikeIsAGap() {
         Map<Replacement, ReplacementEvidence.Outcome> rewrites = rewritesOf(SUM, "total");
 
-        ReplacementEvidence.Outcome oneAnswer = rewrites.get(new Replacement.ByOneAnswer());
+        List<ReplacementEvidence.Outcome> oneAnswer = oneAnswers(rewrites);
+        assertEquals(1, oneAnswer.size(), "every row answers one value: " + rewrites);
         ReplacementEvidence.Unnoticed gap =
-                assertInstanceOf(ReplacementEvidence.Unnoticed.class, oneAnswer,
+                assertInstanceOf(ReplacementEvidence.Unnoticed.class, oneAnswer.getFirst(),
                         "every row answers the same, and a row shows the body does not always: "
                                 + rewrites);
         assertTrue(gap.shownBy() instanceof ReplacementEvidence.ShownBy.AComposedRow,
                 "shown by a composed row: " + gap.shownBy());
     }
 
+    /** Two values, two rewrites, and each told apart by the row answering the other. */
     @Test
-    void aBodyTwoRowsAnswerDifferentlyIsNoticed() {
+    void aBodyTwoRowsAnswerDifferentlyIsNoticedOncePerValue() {
         String told = SUM.replace(
                 "| \"one of nothing\" : ([Item { amount = Amount(0), kind = Travel }]) -> Sum(0)",
                 "| \"one of five\" : ([Item { amount = Amount(5), kind = Travel }]) -> Sum(5)");
 
-        Map<Replacement, ReplacementEvidence.Outcome> rewrites = rewritesOf(told, "total");
+        List<ReplacementEvidence.Outcome> oneAnswer = oneAnswers(rewritesOf(told, "total"));
 
-        assertInstanceOf(ReplacementEvidence.Noticed.class,
-                rewrites.get(new Replacement.ByOneAnswer()), "two answers: " + rewrites);
+        assertEquals(2, oneAnswer.size(), "a rewrite per value: " + oneAnswer);
+        assertTrue(oneAnswer.stream().allMatch(ReplacementEvidence.Noticed.class::isInstance),
+                "each told apart: " + oneAnswer);
+    }
+
+    /**
+     * Rows that name only the case leave every value a rewrite could answer standing, and each is
+     * a rewrite of its own: answering what the first row came to and answering what the second
+     * came to are two programs, and a row telling one apart says nothing of the other.
+     */
+    @Test
+    void rowsNamingOnlyTheCaseLeaveARewritePerValue() {
+        List<ReplacementEvidence.Outcome> oneAnswer = oneAnswers(rewritesOf("""
+                module example.cases
+
+                data Ok = { n: Int }
+                data Err
+                data Result = Ok | Err
+
+                behavior f : (x: Int) -> Result
+                    constructs Ok
+
+                let f (x) = Ok { n = x }
+
+                example f
+                    | "nought" : (0) -> Ok
+                    | "one" : (1) -> Ok
+                """, "f"));
+
+        assertEquals(2, oneAnswer.size(), "a rewrite per value the rows came to: " + oneAnswer);
+        assertTrue(oneAnswer.stream().allMatch(ReplacementEvidence.Unnoticed.class::isInstance),
+                "neither told apart, and each shown to differ: " + oneAnswer);
+    }
+
+    /**
+     * A body reading nothing answers one value already, and that value is no rewrite of it: the
+     * rows are owed nothing for it however they are written.
+     */
+    @Test
+    void aBodyThatReadsNothingIsNoRewriteOfItsOwnAnswer() {
+        Map<Replacement, ReplacementEvidence.Outcome> rewrites = rewritesOf("""
+                module example.flat
+
+                data Ok = { n: Int }
+
+                behavior cancel : (x: Int) -> Ok
+                    constructs Ok
+
+                let cancel (x) = Ok { n = 1 }
+
+                example cancel
+                    | (0) -> Ok { n = 1 }
+                    | (5) -> Ok { n = 1 }
+                """, "cancel");
+
+        assertEquals(Map.of(), rewrites, "nothing to rewrite: " + rewrites);
+    }
+
+    /** The rewrites of a body answering one value, in the order the values were first answered. */
+    private static List<ReplacementEvidence.Outcome> oneAnswers(
+            Map<Replacement, ReplacementEvidence.Outcome> rewrites) {
+        List<ReplacementEvidence.Outcome> out = new ArrayList<>();
+        rewrites.forEach((rewrite, outcome) -> {
+            if (rewrite instanceof Replacement.ByOneAnswer) {
+                out.add(outcome);
+            }
+        });
+        return out;
     }
 
     private static Map<Replacement, ReplacementEvidence.Outcome> rewritesOf(String source,

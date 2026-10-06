@@ -19,7 +19,11 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Towards;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.RowIdentity;
+import souther.compiler.observe.RowRef;
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.source.SourceId;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.BorderQuantity;
@@ -278,8 +282,10 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                         souther.compiler.partition.CompositionBudget
                                 .PATHS_OF_A_DECISION_READ)));
         out.add(new Weakening.DecisionRuleReadShort("b"));
-        out.add(new Weakening.RewriteUndecided("b", new Replacement.ByOneAnswer(),
-                ReplacementEvidence.Undecided.Why.THE_SEARCH_STOPPED));
+        out.add(new Weakening.RewriteUndecided("b",
+                new Replacement.ByOneAnswer(new ObservedValue.Integer(0),
+                        new RowRef("b", new SourceId("m.sou"), new RowIdentity.Unnamed(1))),
+                java.util.Set.of(ReplacementEvidence.Undecided.Why.RUNS_SPENT)));
         return out;
     }
 

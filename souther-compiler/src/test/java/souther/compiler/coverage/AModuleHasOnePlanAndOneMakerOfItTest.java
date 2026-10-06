@@ -144,6 +144,10 @@ class AModuleHasOnePlanAndOneMakerOfItTest {
             // answered as a value a run can be told.
             "method carriedAt(souther.compiler.core.Core,int) : int[]",
             "method replacements() : souther.compiler.coverage.ArmReplacements",
+            // Where a body could answer other than one value, asked by its name and answered with
+            // the places of the arms on each way.
+            "method fromOneValue(java.lang.String) :"
+                    + " souther.compiler.coverage.ArmReplacements$Differs",
             // What a number means, which is the half of a plan that outlives the graph.
             "method numbering() : souther.compiler.coverage.SiteNumbering",
             "method identity() : souther.compiler.coverage.NumberingIdentity",

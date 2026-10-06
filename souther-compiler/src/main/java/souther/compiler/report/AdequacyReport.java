@@ -4173,7 +4173,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
             // The behavior and which rewrite: an arm answering as one of its siblings, written
             // with the fork the way an arm is and the sibling by its part, or the body answering
-            // one value, which is one rewrite whatever value the rows came to.
+            // one value, written as the first row that answered it — a rewrite per value, named
+            // by the row that sends a reader to the value, in the words a row is named by.
             case ObligationIdentity.OfAReplacement(var behavior, var replacement) -> {
                 into.put("behavior", behavior);
                 switch (replacement) {
@@ -4187,7 +4188,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         into.put("part", part);
                         into.put("with", with);
                     }
-                    case Replacement.ByOneAnswer() -> into.put("rewrite", "one_answer");
+                    case Replacement.ByOneAnswer(var _, var answeredBy) -> {
+                        into.put("rewrite", "one_answer");
+                        ObjectNode row = into.putObject("answeredBy");
+                        row.put("source", sources.written(answeredBy.source()));
+                        switch (answeredBy.identity()) {
+                            case RowIdentity.Named named -> row.put("name", named.name());
+                            case RowIdentity.Unnamed unnamed ->
+                                    row.put("ordinal", unnamed.ordinal());
+                        }
+                    }
                 }
             }
         }
@@ -5662,9 +5672,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 switch (each.outcome()) {
                     case ReplacementEvidence.Noticed _ -> one.put("disposition", "noticed");
                     case ReplacementEvidence.Unnoticed _ -> one.put("disposition", "unnoticed");
+                    // Every way it was left open, in the order the vocabulary declares them.
                     case ReplacementEvidence.Undecided(var why) -> {
                         one.put("disposition", "undecided");
-                        one.put("undecidedBecause", word(why.name()));
+                        ArrayNode because = one.putArray("undecidedBecause");
+                        why.forEach(way -> because.add(word(way.name())));
                     }
                 }
             }

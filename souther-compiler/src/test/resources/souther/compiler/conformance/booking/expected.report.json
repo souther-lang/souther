@@ -1080,7 +1080,11 @@
         "obligations" : [ {
           "obligationId" : {
             "behavior" : "book",
-            "rewrite" : "one_answer"
+            "rewrite" : "one_answer",
+            "answeredBy" : {
+              "source" : "0",
+              "name" : "a party of two takes a seat in the middle of the house"
+            }
           },
           "disposition" : "unnoticed"
         } ]
@@ -1091,7 +1095,11 @@
         "subject" : "book",
         "obligationId" : {
           "behavior" : "book",
-          "rewrite" : "one_answer"
+          "rewrite" : "one_answer",
+          "answeredBy" : {
+            "source" : "0",
+            "name" : "a party of two takes a seat in the middle of the house"
+          }
         },
         "code" : "E1939"
       } ]

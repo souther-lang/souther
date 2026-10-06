@@ -559,19 +559,24 @@ public sealed interface Weakening {
      * nothing about the next.
      */
     record RewriteUndecided(String behavior, Replacement replacement,
-                            ReplacementEvidence.Undecided.Why why) implements Weakening {
+                            java.util.Set<ReplacementEvidence.Undecided.Why> why)
+            implements Weakening {
 
         public RewriteUndecided {
             java.util.Objects.requireNonNull(behavior, "a rewrite is of some behavior's body");
             java.util.Objects.requireNonNull(replacement, "a rewrite left open is some rewrite");
-            java.util.Objects.requireNonNull(why, "a rewrite left open was left open for a reason");
+            if (why.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "a rewrite left open was left open for a reason");
+            }
+            why = java.util.Collections.unmodifiableSet(java.util.EnumSet.copyOf(why));
         }
 
-        /** A search stopped at how many rows a generation writes may go further where more are
-         *  allowed; nothing else that leaves a rewrite open is an allowance. */
+        /** A wider run could come to another answer where any of the ways it was left open is a
+         *  figure this compiler stopped at, or a run that did not come back. */
         @Override
         public RunSensitivity runSensitivity() {
-            return why == ReplacementEvidence.Undecided.Why.THE_SEARCH_STOPPED
+            return why.stream().anyMatch(ReplacementEvidence.Undecided.Why::anAllowance)
                     ? RunSensitivity.MAY_CHANGE : RunSensitivity.UNAFFECTED;
         }
     }

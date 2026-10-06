@@ -5649,7 +5649,7 @@
             "with" : 0
           },
           "disposition" : "undecided",
-          "undecidedBecause" : "nothing_was_composed"
+          "undecidedBecause" : [ "nothing_was_composed" ]
         }, {
           "obligationId" : {
             "behavior" : "出荷する",
@@ -5674,7 +5674,7 @@
             "with" : 0
           },
           "disposition" : "undecided",
-          "undecidedBecause" : "nothing_was_composed"
+          "undecidedBecause" : [ "nothing_was_composed" ]
         }, {
           "obligationId" : {
             "behavior" : "出荷する",

@@ -53,7 +53,7 @@ public final class Plans {
         return new CoverageSites.Plan(plan.sites(), plan.guards(), plan.byNode(),
                 plan.byComparison(), plan.armsByNode(), everywhere,
                 plan.whereEachArmsForkIsWritten(), plan.comparisons(), plan.numbering(),
-                plan.methods(), plan.carried(), plan.replacements());
+                plan.methods(), plan.carried(), plan.replacements(), plan.oneValue());
     }
 
     /**
@@ -79,7 +79,7 @@ public final class Plans {
         return new CoverageSites.Plan(plan.sites(), plan.guards(), plan.byNode(),
                 plan.byComparison(), arms, plan.mayRepeat(),
                 plan.whereEachArmsForkIsWritten(), plan.comparisons(), plan.numbering(),
-                plan.methods(), plan.carried(), plan.replacements());
+                plan.methods(), plan.carried(), plan.replacements(), plan.oneValue());
     }
 
     /** The nodes this plan numbered arms for, which is what a test counting forks walks. */

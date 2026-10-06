@@ -36,7 +36,9 @@ import java.lang.constant.DirectMethodHandleDesc;
 import java.lang.constant.MethodHandleDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -263,6 +265,31 @@ final class CodegenContext {
         this.coverage = plan;
     }
 
+    /**
+     * The forks whose arms are written without their siblings: the ones a method they stood in could
+     * not hold with them. Asked by identity, for the reason the plan is.
+     */
+    private Set<souther.compiler.core.Core> notCarrying =
+            Collections.newSetFromMap(new IdentityHashMap<>());
+
+    /** Every fork this emission wrote a sibling into, in the order it did. */
+    private final List<souther.compiler.core.Core> carriedSoFar = new ArrayList<>();
+
+    void setNotCarrying(Set<souther.compiler.core.Core> forks) {
+        this.notCarrying = forks;
+    }
+
+    /** How many forks this emission has written a sibling into, which is where a definition about
+     *  to be written starts counting its own. */
+    int carriedCount() {
+        return carriedSoFar.size();
+    }
+
+    /** The forks written with a sibling since {@code from}. */
+    List<souther.compiler.core.Core> carriedSince(int from) {
+        return List.copyOf(carriedSoFar.subList(from, carriedSoFar.size()));
+    }
+
     boolean measuring() {
         return !coverage.hasNoProbes();
     }
@@ -378,9 +405,18 @@ final class CodegenContext {
         return arms;
     }
 
-    /** The parts of the siblings the measuring classes carry in arm {@code part} of {@code node}. */
+    /** The parts of the siblings the measuring classes carry in arm {@code part} of {@code node}:
+     *  none at a fork a method could not hold them in, and the plan's everywhere else. */
     int[] carriedAt(souther.compiler.core.Core node, int part) {
-        return coverage.carriedAt(node, part);
+        if (notCarrying.contains(node)) {
+            return new int[0];
+        }
+        int[] carried = coverage.carriedAt(node, part);
+        if (carried.length > 0
+                && (carriedSoFar.isEmpty() || carriedSoFar.getLast() != node)) {
+            carriedSoFar.add(node);
+        }
+        return carried;
     }
 
     /**

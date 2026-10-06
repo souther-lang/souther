@@ -284,7 +284,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
                         RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES))
                         .reading(SYMBOLS),
                 AxesATestWrote.asAMeasurement("fee", List.of(days)));
-        return GenerationPlan.of(subject, classes, arms, List.of(), List.of(), List.of());
+        return GenerationPlan.of(subject, classes, arms, List.of(), List.of());
     }
 
     private static PartitionClass divided(String id, long value) {

@@ -480,7 +480,8 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
             case Allowance.ToMeasureWith(PatternPlan.Budget distinctions) ->
                     compilation.withAdequacyPolicy(new AdequacyPolicy(
                             new AdequacyPolicy.OfTheMeasures(Budgets.measures().pairSpace(),
-                                    Budgets.measures().cellsPerGroup(), distinctions),
+                                    Budgets.measures().cellsPerGroup(), distinctions,
+                                    Budgets.measures().rewriteRuns()),
                             Budgets.generation()));
             case Allowance.ToReadWith(ReadingPolicy reading) ->
                     compilation.withReadingPolicy(reading);

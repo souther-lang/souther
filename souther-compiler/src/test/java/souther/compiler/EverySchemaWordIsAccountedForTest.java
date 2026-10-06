@@ -461,7 +461,7 @@ class EverySchemaWordIsAccountedForTest {
             // And why one rewrite was left open, which is the entry's own word.
             new Vocabulary("replacement.obligations[].undecidedBecause",
                     List.of("$defs", "replacement", "properties", "obligations", "items",
-                            "properties", "undecidedBecause"),
+                            "properties", "undecidedBecause", "items"),
                     ReplacementEvidence.Undecided.Why.class),
             // Whether a row is owed at one rule at all, which is a different question from whether
             // one took it. Spelled here and held against the answers a search may come to, so an

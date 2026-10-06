@@ -116,7 +116,7 @@ class AnArmHandedToGenerationKeepsTheIdentityRowsOwedGaveItTest {
         // has no entry for it whatever the module measures.
         Generator.ArmOwed phantom = new Generator.ArmOwed(Numberings.arm(1, 0));
         GenerationPlan tamperedPlan = GenerationPlan.of(real.composed().plan().subject(),
-                List.of(), List.of(phantom), List.of(), List.of(), List.of());
+                List.of(), List.of(phantom), List.of(), List.of());
         FillResult tamperedFill = new FillResult(new LinkedHashMap<>(), List.of(), List.of(),
                 Discharge.of(tamperedPlan, List.of(new GenerationAnswer.Arm(
                         new GenerationObligation.Arm(phantom), new ArmDisposition.NoWayIn(

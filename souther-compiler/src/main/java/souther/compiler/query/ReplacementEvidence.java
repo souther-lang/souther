@@ -6,9 +6,12 @@ import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementOwed;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * What a behavior's rows establish about the rewrites of its body: for each, whether a row tells it
@@ -158,29 +161,55 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
     }
 
     /** Nothing here could say whether a row tells the rewrite from the body, and why. */
-    public record Undecided(Why why) implements Outcome {
+    public record Undecided(Set<Why> why) implements Outcome {
 
+        /**
+         * Every way it was left open, and not the one that ranks first: a search that ran out of
+         * runs and stopped composing besides was stopped by two figures, and a reader raising one
+         * of them is owed the other.
+         */
         public Undecided {
-            Objects.requireNonNull(why, "a rewrite left open was left open for a reason");
+            if (why.isEmpty()) {
+                throw new IllegalArgumentException("a rewrite left open was left open for a reason");
+            }
+            why = Collections.unmodifiableSet(EnumSet.copyOf(why));
+        }
+
+        public Undecided(Why why) {
+            this(EnumSet.of(why));
         }
 
         /** Why a rewrite was left open. */
         public enum Why {
             /** Carrying the sibling would grow the fork past what the classes allow. */
             TOO_LARGE,
-            /** No row answered with a value read in full. */
-            NOTHING_ANSWERED,
-            /** A row states an answer this could not read. */
+            /** A row states an answer this could not read, or neither held nor failed of the body
+             *  as written. */
             A_STATEMENT_WAS_NOT_READ,
             /** Every row the search composed was answered alike by the rewrite and the body.
              *  Not that every input is: the search looked where it looked. */
             NO_ROW_ANSWERED_DIFFERENTLY,
-            /** The search stopped with rows it had not tried. */
-            THE_SEARCH_STOPPED,
+            /** The search made as many runs as the measure lets one rewrite take, with rows left. */
+            RUNS_SPENT,
+            /** Composing the rows the search looked through stopped at a figure of its own. */
+            A_COMPOSING_FIGURE_REACHED,
+            /** A run the search asked for came back without an answer it could read. */
+            A_RUN_DID_NOT_COME_BACK,
             /** No row the search could look at was composed. */
             NOTHING_WAS_COMPOSED,
             /** Nothing could run a row. */
-            NOTHING_RAN
+            NOTHING_RAN;
+
+            /** Whether a wider run could come to another answer: a figure this compiler stopped
+             *  at could be raised, and a run that did not come back could come back. */
+            public boolean anAllowance() {
+                return switch (this) {
+                    case TOO_LARGE, RUNS_SPENT, A_COMPOSING_FIGURE_REACHED,
+                         A_RUN_DID_NOT_COME_BACK -> true;
+                    case A_STATEMENT_WAS_NOT_READ, NO_ROW_ANSWERED_DIFFERENTLY,
+                         NOTHING_WAS_COMPOSED, NOTHING_RAN -> false;
+                };
+            }
         }
     }
 
@@ -217,7 +246,7 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
         Summary summary = new Summary(rewrites);
         List<Weakening> open = new ArrayList<>(rowsBehind.causes());
         for (Rewrite each : rewrites) {
-            if (each.outcome() instanceof Undecided(Undecided.Why why)) {
+            if (each.outcome() instanceof Undecided(Set<Undecided.Why> why)) {
                 open.add(new Weakening.RewriteUndecided(behavior, each.replacement(), why));
             }
         }

@@ -98,14 +98,18 @@ class ABudgetIsTheCompilationsToSetTest {
     void aBudgetBelowOneIsRefused() {
         assertThrows(IllegalArgumentException.class,
                 () -> new AdequacyPolicy.OfTheMeasures(0, 4096,
-                        PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS), "a pair space of nought");
+                        PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS, 32), "a pair space of nought");
         assertThrows(IllegalArgumentException.class,
                 () -> new AdequacyPolicy.OfTheMeasures(20_000, 0,
-                        PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS),
+                        PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS, 32),
                 "no combination of a group");
         assertThrows(IllegalArgumentException.class,
-                () -> new AdequacyPolicy.OfTheMeasures(20_000, 4096, null),
+                () -> new AdequacyPolicy.OfTheMeasures(20_000, 4096, null, 32),
                 "nothing to build a behavior's distinctions with");
+        assertThrows(IllegalArgumentException.class,
+                () -> new AdequacyPolicy.OfTheMeasures(20_000, 4096,
+                        PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS, 0),
+                "no run for a rewrite to be looked for with");
         assertThrows(IllegalArgumentException.class,
                 () -> new AdequacyPolicy.OfTheGeneration(0, 4096), "no rows");
         assertThrows(IllegalArgumentException.class,
@@ -169,7 +173,8 @@ class ABudgetIsTheCompilationsToSetTest {
                 .withAdequacyPolicy(new AdequacyPolicy(
                         new AdequacyPolicy.OfTheMeasures(Budgets.measures().pairSpace(),
                                 Budgets.measures().cellsPerGroup(),
-                                new PatternPlan.Budget(1, 1, 1_000_000_000L)),
+                                new PatternPlan.Budget(1, 1, 1_000_000_000L),
+                                Budgets.measures().rewriteRuns()),
                         Budgets.generation()));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -253,7 +258,8 @@ class ABudgetIsTheCompilationsToSetTest {
                 .withAdequacyPolicy(new AdequacyPolicy(
                         new AdequacyPolicy.OfTheMeasures(pairSpace,
                                 Budgets.measures().cellsPerGroup(),
-                                PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS),
+                                PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS,
+                                Budgets.measures().rewriteRuns()),
                         Budgets.generation()));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();

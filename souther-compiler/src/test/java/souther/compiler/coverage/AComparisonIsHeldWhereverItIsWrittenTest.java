@@ -350,7 +350,7 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
                 () -> new CoverageSites.Plan(List.of(), List.of(), new IdentityHashMap<>(),
                         numbered, new IdentityHashMap<>(), java.util.Set.of(),
                         new LinkedHashMap<>(), catalogOf(checked), numbering, Methods.NONE,
-                        new IdentityHashMap<>(), ArmReplacements.NONE));
+                        new IdentityHashMap<>(), ArmReplacements.NONE, Map.of()));
         assertTrue(refused.getMessage().contains("one answer or they are two"),
                 refused.getMessage());
     }

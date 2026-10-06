@@ -54,22 +54,18 @@ public sealed interface ReplacementOwed {
     }
 
     /**
-     * The body answering {@code answer} whatever it is given: the one answer the rows of the
-     * behavior came to, which is the rewrite they cannot tell from the body.
+     * The body answering one value whatever it is given: a value the rows of the behavior came to,
+     * which is the rewrite they did not tell from the body.
      */
-    record ByOneAnswer(ObservedValue answer) implements ReplacementOwed {
+    record ByOneAnswer(Replacement.ByOneAnswer replacement) implements ReplacementOwed {
 
         public ByOneAnswer {
-            Objects.requireNonNull(answer, "a body answering one value answers some value");
-            if (answer.unread() != null) {
-                throw new IllegalArgumentException("a body answering one value answers a value read"
-                        + " in full: " + answer);
-            }
+            Objects.requireNonNull(replacement, "a body answering one value answers some value");
         }
 
-        @Override
-        public Replacement replacement() {
-            return new Replacement.ByOneAnswer();
+        /** The value the rewritten body answers. */
+        public ObservedValue answer() {
+            return replacement.answer();
         }
     }
 }

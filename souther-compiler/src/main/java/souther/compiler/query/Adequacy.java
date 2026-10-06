@@ -4336,7 +4336,13 @@ public final class Adequacy {
             souther.compiler.partition.GenerationPlan asked =
                     souther.compiler.partition.GenerationPlan.of(here.subject(), work.classes(),
                             work.arms().stream().map(RowWork.Arm::target).toList(),
-                            work.pairs(), work.meetings(), work.replacements());
+                            work.pairs(), work.meetings(), work.replacements(),
+                            // A row for a rewrite here is one more row of the block, looked for
+                            // under the figure the measure found it under.
+                            new souther.compiler.partition.RewriteSearch(
+                                    souther.compiler.partition.RewriteSearch.For.THE_BLOCK,
+                                    db.ask(new Front.Adequacy()).value().measures()
+                                            .rewriteRuns()));
             souther.compiler.partition.FillResult composed = here.searchedFor(asked);
             // The rows the requirement search already stood in each rule, which is where a row for
             // a rule comes from. Not a second search: settling whether a rule is owed a row is
@@ -4867,9 +4873,13 @@ public final class Adequacy {
                                     case EVERY_ROW_ANSWERED_ALIKE ->
                                             Generator.UnresolvedCombination.Reason
                                                     .NO_CERTIFIED_WITNESS;
-                                    case THE_SEARCH_STOPPED ->
+                                    case RUNS_A_REWRITE_MAY_TAKE, A_FIGURE_OF_THE_COMPOSING,
+                                         A_RUN_DID_NOT_COME_BACK ->
                                             Generator.UnresolvedCombination.Reason
                                                     .THE_SEARCH_LEFT_SOMETHING_UNTRIED;
+                                    case ROWS_A_BLOCK_MAY_HOLD ->
+                                            Generator.UnresolvedCombination.Reason
+                                                    .THE_BLOCK_IS_AS_LONG_AS_IT_MAY_BE;
                                     case NOTHING_WAS_COMPOSED, NOTHING_RAN ->
                                             Generator.UnresolvedCombination.Reason
                                                     .NOTHING_COMPOSES_ONE;

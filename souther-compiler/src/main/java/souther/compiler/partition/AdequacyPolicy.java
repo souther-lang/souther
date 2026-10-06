@@ -58,6 +58,8 @@ public record AdequacyPolicy(OfTheMeasures measures, OfTheGeneration generation)
 
         private final PatternPlan.Budget behaviorDistinctions;
 
+        private final int rewriteRuns;
+
         /**
          * @param pairSpace            how many two-class combinations across the behavior's
          *                             positions are counted off the rows. The space grows with the
@@ -73,9 +75,14 @@ public record AdequacyPolicy(OfTheMeasures measures, OfTheGeneration generation)
          *                             position's classes are not composed and it is recorded as one
          *                             this compiler did not divide, rather than divided by the
          *                             rules it could afford
+         * @param rewriteRuns          how many runs a search for an input one rewrite of a body
+         *                             answers differently on may make, counting the body's run and
+         *                             the rewrite's of each candidate. Past it the rewrite is left
+         *                             undecided and says it was this figure, which a wider run could
+         *                             go past
          */
         public OfTheMeasures(int pairSpace, int cellsPerGroup,
-                             PatternPlan.Budget behaviorDistinctions) {
+                             PatternPlan.Budget behaviorDistinctions, int rewriteRuns) {
             // A guardrail is a positive number a count is compared against. Refused here rather
             // than left to whoever writes it: a bound that admits nothing measures nothing, and a
             // bound of nought would report every behavior as partial over a space it never walked.
@@ -93,9 +100,20 @@ public record AdequacyPolicy(OfTheMeasures measures, OfTheGeneration generation)
                 throw new IllegalArgumentException(
                         "a measure builds what a behavior tells apart under some budget");
             }
+            if (rewriteRuns < 1) {
+                throw new IllegalArgumentException(
+                        "a search for a row a rewrite is told on runs at least once, so a limit below"
+                                + " one bounds nothing: " + rewriteRuns);
+            }
             this.pairSpace = pairSpace;
             this.cellsPerGroup = cellsPerGroup;
             this.behaviorDistinctions = behaviorDistinctions;
+            this.rewriteRuns = rewriteRuns;
+        }
+
+        /** How many runs a search for a row one rewrite is told on may make. */
+        public int rewriteRuns() {
+            return rewriteRuns;
         }
 
         public int pairSpace() {
@@ -142,19 +160,22 @@ public record AdequacyPolicy(OfTheMeasures measures, OfTheGeneration generation)
             return this == other || (other instanceof OfTheMeasures it
                     && pairSpace == it.pairSpace
                     && cellsPerGroup == it.cellsPerGroup
-                    && behaviorDistinctions.equals(it.behaviorDistinctions));
+                    && behaviorDistinctions.equals(it.behaviorDistinctions)
+                    && rewriteRuns == it.rewriteRuns);
         }
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(pairSpace, cellsPerGroup, behaviorDistinctions);
+            return java.util.Objects.hash(pairSpace, cellsPerGroup, behaviorDistinctions,
+                    rewriteRuns);
         }
 
         @Override
         public String toString() {
             return "OfTheMeasures[pairSpace=" + pairSpace
                     + ", cellsPerGroup=" + cellsPerGroup
-                    + ", behaviorDistinctions=" + behaviorDistinctions + "]";
+                    + ", behaviorDistinctions=" + behaviorDistinctions
+                    + ", rewriteRuns=" + rewriteRuns + "]";
         }
     }
 

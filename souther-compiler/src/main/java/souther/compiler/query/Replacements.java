@@ -1,9 +1,14 @@
 package souther.compiler.query;
 
 import souther.compiler.check.CheckSurface;
+import souther.compiler.check.PathReachability;
 import souther.compiler.check.Sig;
-import souther.compiler.core.Core;
 import souther.compiler.coverage.ArmProbe;
+import souther.compiler.coverage.ArmReplacements;
+import souther.compiler.coverage.ControlPlace;
+import souther.compiler.generated.EvaluationArtifact;
+import souther.compiler.generated.ProbeImage;
+import souther.compiler.observe.ArmObservation;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.observe.Comparisons;
 import souther.compiler.observe.ObservedValue;
@@ -18,8 +23,11 @@ import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.FixtureTemplate;
+import souther.compiler.partition.RewriteSearch;
+import souther.compiler.reach.Reachability;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,6 +35,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * The rewrites of each behavior's body and whether its rows tell them from the body: what the
@@ -65,6 +74,21 @@ public final class Replacements {
             ValueTypes types = ValueTypes.over(ExampleExecutions.checkedFieldTypes(db));
             Optional<SiteNumbering> numbering =
                     Optional.of(SiteNumbering.of(checked.numberingIdentity()));
+            Map<String, PathReachability.Answers.AsRun> arrived =
+                    db.ask(new Adequacy.Arrived(name)).value();
+            // Which siblings the classes the rows ran in carry, asked only of a run that recorded
+            // where the rows went: those are the classes that carry any, and asking where none
+            // were run would build them for nothing.
+            ArmReplacements carried = ArmReplacements.NONE;
+            if (byTarget.values().stream().anyMatch(Adequacy.RowReading::recordedArms)) {
+                EvaluationArtifact image = db.ask(
+                        new Output.EvaluationLinked(name, ArmObservation.RECORD)).value();
+                if (image != null
+                        && image.probes() instanceof ProbeImage.Instrumented(var _, var held)) {
+                    carried = held;
+                }
+            }
+            ArmReplacements inTheClasses = carried;
             return Adequacy.answerEveryBehavior(prepared.value(), behavior -> {
                 Sig sig = sigs.value().get(behavior.name());
                 List<RowOutcome> rows =
@@ -83,11 +107,15 @@ public final class Replacements {
                     }
                 }
                 Position at = Position.at(sig.outputType());
-                Core body = checked.behaviorBodies().get(behavior.name());
-                boolean readsItsInput = body == null
-                        || ReplacementReading.readsItsInput(name, behavior.name(), body);
-                return ReplacementReading.of(behavior.name(), checked.plan(), reached,
-                        readsItsInput, rows,
+                // What the model's own rules prove no run arrives at, with what the rows did taken
+                // in: a row through an arm shows the proof of it wrong, and a proof shown wrong
+                // closes no way.
+                PathReachability.Answers.AsRun arrives = arrived == null ? null
+                        : arrived.get(behavior.name());
+                Predicate<ControlPlace.Arm> unreached = arm -> arrives != null
+                        && arrives.answers().at(arm) instanceof Reachability.Unreachable;
+                return ReplacementReading.of(behavior.name(), checked.plan(), inTheClasses, reached,
+                        unreached, rows,
                         new ReplacementReading.Comparing() {
 
                             @Override
@@ -157,8 +185,12 @@ public final class Replacements {
             if (here == null) {
                 return Answer.absent();
             }
+            // On the measure's behalf and under its figure: what is found here decides whether a
+            // rewrite is a gap, so nothing the generation may spend stops it.
+            int runs = db.ask(new Front.Adequacy()).value().measures().rewriteRuns();
             FillResult composed = here.searchedFor(GenerationPlan.of(here.subject(), List.of(),
-                    List.of(), List.of(), List.of(), open));
+                    List.of(), List.of(), List.of(), open,
+                    new RewriteSearch(RewriteSearch.For.THE_MEASURE, runs)));
             Map<Replacement, Searched> out = new LinkedHashMap<>();
             for (ReplacementOwed each : open) {
                 ReplacementDisposition came = composed.discharge().at(each);
@@ -252,8 +284,6 @@ public final class Replacements {
                 case ReplacementReading.Standing.CannotBeAsked(var why) ->
                         new ReplacementEvidence.Undecided(switch (why) {
                             case TOO_LARGE -> ReplacementEvidence.Undecided.Why.TOO_LARGE;
-                            case NOTHING_ANSWERED ->
-                                    ReplacementEvidence.Undecided.Why.NOTHING_ANSWERED;
                             case A_STATEMENT_WAS_NOT_READ ->
                                     ReplacementEvidence.Undecided.Why.A_STATEMENT_WAS_NOT_READ;
                         });
@@ -272,21 +302,33 @@ public final class Replacements {
         }
 
         /**
-         * The one way a search that found nothing is said to have ended. A search stopped short
-         * outranks one that ran to the end, since a stop is what a wider run could go past.
+         * Every way a search that found nothing ended, each said as itself: which figure a wider
+         * run would have to raise is what a reader of an undecided rewrite acts on, and ranking
+         * one way over another would hand them one of two.
          */
-        private static ReplacementEvidence.Undecided.Why whyNoneFound(
+        private static Set<ReplacementEvidence.Undecided.Why> whyNoneFound(
                 Set<ReplacementDisposition.Ended> ended) {
-            if (ended.contains(ReplacementDisposition.Ended.THE_SEARCH_STOPPED)) {
-                return ReplacementEvidence.Undecided.Why.THE_SEARCH_STOPPED;
+            Set<ReplacementEvidence.Undecided.Why> out =
+                    EnumSet.noneOf(ReplacementEvidence.Undecided.Why.class);
+            for (ReplacementDisposition.Ended each : ended) {
+                out.add(switch (each) {
+                    case EVERY_ROW_ANSWERED_ALIKE ->
+                            ReplacementEvidence.Undecided.Why.NO_ROW_ANSWERED_DIFFERENTLY;
+                    case NOTHING_WAS_COMPOSED ->
+                            ReplacementEvidence.Undecided.Why.NOTHING_WAS_COMPOSED;
+                    case RUNS_A_REWRITE_MAY_TAKE -> ReplacementEvidence.Undecided.Why.RUNS_SPENT;
+                    case A_FIGURE_OF_THE_COMPOSING ->
+                            ReplacementEvidence.Undecided.Why.A_COMPOSING_FIGURE_REACHED;
+                    case A_RUN_DID_NOT_COME_BACK ->
+                            ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK;
+                    case NOTHING_RAN -> ReplacementEvidence.Undecided.Why.NOTHING_RAN;
+                    // The measure's search is asked for on the measure's behalf, which no block's
+                    // row limit stops ({@link RewriteSearch.For#THE_MEASURE}).
+                    case ROWS_A_BLOCK_MAY_HOLD -> throw new IllegalStateException(
+                            "a search for the measure stopped at the rows a block may hold");
+                });
             }
-            if (ended.contains(ReplacementDisposition.Ended.EVERY_ROW_ANSWERED_ALIKE)) {
-                return ReplacementEvidence.Undecided.Why.NO_ROW_ANSWERED_DIFFERENTLY;
-            }
-            if (ended.contains(ReplacementDisposition.Ended.NOTHING_WAS_COMPOSED)) {
-                return ReplacementEvidence.Undecided.Why.NOTHING_WAS_COMPOSED;
-            }
-            return ReplacementEvidence.Undecided.Why.NOTHING_RAN;
+            return out;
         }
     }
 

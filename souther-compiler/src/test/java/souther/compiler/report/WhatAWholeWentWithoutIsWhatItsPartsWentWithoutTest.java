@@ -207,7 +207,7 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
         Set<String> kinds = new LinkedHashSet<>();
         everything.forEach(each -> kinds.add(each.getClass().getSimpleName()));
         assertEquals(Set.of("ObservationIncomplete", "ModelReadingIncomplete",
-                        "DecisionRunNotWatched", "RewriteUndecided"), kinds,
+                        "DecisionRunNotWatched"), kinds,
                 () -> "the ways this model goes without something: " + kinds);
 
         // And at least one part carries a fact no other part of its behavior does, so the rule

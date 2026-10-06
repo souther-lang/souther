@@ -2299,7 +2299,7 @@
     },
     "replacementObligationId": {
       "type": "object",
-      "description": "What tells one rewrite of a body from every other: the behavior and which rewrite. `arm_as_sibling` is an arm answering as another arm of the same fork, written with the fork's coordinates the way an arm is, `part` the arm rewritten and `with` the sibling it answers as. `one_answer` is the body answering one value the rows observed whatever it is given, which is one rewrite whatever that value is. A key within this document: it names an entry of `replacement.obligations`, and a consumer joins a `rewrite_unnoticed` finding to the rewrite it is about on it.",
+      "description": "What tells one rewrite of a body from every other: the behavior and which rewrite. `arm_as_sibling` is an arm answering as another arm of the same fork, written with the fork's coordinates the way an arm is, `part` the arm rewritten and `with` the sibling it answers as. `one_answer` is the body answering one value the rows observed whatever it is given, one rewrite per value, and `answeredBy` is the first row that answered that value — the value named by a row that came to it, in the words a row is named by elsewhere in this document, rather than written out in a form of its own. A key within this document: it names an entry of `replacement.obligations`, and a consumer joins a `rewrite_unnoticed` finding to the rewrite it is about on it.",
       "required": [
         "behavior",
         "rewrite"
@@ -2323,9 +2323,17 @@
           "lowered",
           "part",
           "with"
-        ]
+        ],
+        "not": {
+          "required": [
+            "answeredBy"
+          ]
+        }
       },
       "else": {
+        "required": [
+          "answeredBy"
+        ],
         "not": {
           "anyOf": [
             {
@@ -2392,6 +2400,38 @@
         "with": {
           "type": "integer",
           "minimum": 0
+        },
+        "answeredBy": {
+          "type": "object",
+          "description": "The row a body answering one value is named by: its source, and its name where it wrote one and its ordinal within the source where it did not.",
+          "required": [
+            "source"
+          ],
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "required": [
+                "name"
+              ]
+            },
+            {
+              "required": [
+                "ordinal"
+              ]
+            }
+          ],
+          "properties": {
+            "source": {
+              "$ref": "#/$defs/sourceIdentity"
+            },
+            "name": {
+              "type": "string"
+            },
+            "ordinal": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
         }
       }
     },
@@ -2490,16 +2530,22 @@
                 ]
               },
               "undecidedBecause": {
-                "description": "Why a rewrite was left open. `too_large` is a fork that carrying the sibling would grow past what a class may hold. `nothing_answered` is no row answering with a value read in full, and `a_statement_was_not_read` a row stating something this could not read. `no_row_answered_differently` is a search that composed rows and found the rewrite answering each as the body does — where it looked, and not everywhere; `the_search_stopped` is one that stopped with rows untried; `nothing_was_composed` one that composed no row to look at; `nothing_ran` is nothing able to run a row.",
-                "enum": [
-                  "too_large",
-                  "nothing_answered",
-                  "a_statement_was_not_read",
-                  "no_row_answered_differently",
-                  "the_search_stopped",
-                  "nothing_was_composed",
-                  "nothing_ran"
-                ]
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "description": "Every way a rewrite was left open, in the order the words are listed here, each said as itself: a search stopped by two figures was stopped by both, and a reader raising one is owed the other. `too_large` is a fork that carrying the sibling would grow past what a class may hold. `a_statement_was_not_read` is a row stating something this could not read, or one that neither held nor failed of the body as written. `no_row_answered_differently` is a search that composed rows and found the rewrite answering each as the body does — where it looked, and not everywhere. `runs_spent` is a search that made as many runs as the measure lets one rewrite take with rows left; `a_composing_figure_reached` one whose composing stopped at a figure of its own; `a_run_did_not_come_back` one where a run it asked for came back with no answer it could read. `nothing_was_composed` is a search that composed no row to look at, and `nothing_ran` is nothing able to run a row.",
+                "items": {
+                  "enum": [
+                    "too_large",
+                    "a_statement_was_not_read",
+                    "no_row_answered_differently",
+                    "runs_spent",
+                    "a_composing_figure_reached",
+                    "a_run_did_not_come_back",
+                    "nothing_was_composed",
+                    "nothing_ran"
+                  ]
+                }
               }
             }
           }

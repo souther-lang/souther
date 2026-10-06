@@ -44,8 +44,18 @@ public sealed interface ReplacementDisposition {
         /** No row the search could look at was composed: the values were refused, or the way to
          *  where it had to look was not one this could write. */
         NOTHING_WAS_COMPOSED,
-        /** The search stopped with rows it had not tried. */
-        THE_SEARCH_STOPPED,
+        /** The search had made as many runs as the measure lets one rewrite take, with rows it had
+         *  not tried ({@link AdequacyPolicy.OfTheMeasures#rewriteRuns}). */
+        RUNS_A_REWRITE_MAY_TAKE,
+        /** Composing the rows it looked through stopped at a figure of its own, with assignments
+         *  it had not composed. */
+        A_FIGURE_OF_THE_COMPOSING,
+        /** A run the search asked for did not come back with an answer: it ran past what a run may
+         *  spend, or the rewrite could not be run. */
+        A_RUN_DID_NOT_COME_BACK,
+        /** The block the row would have gone in held as many rows as a block may. Only ever of a
+         *  search for the rows handed a person ({@link RewriteSearch.For#THE_BLOCK}). */
+        ROWS_A_BLOCK_MAY_HOLD,
         /** Nothing could run a row, so nothing could say what one answered. */
         NOTHING_RAN
     }

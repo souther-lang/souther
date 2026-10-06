@@ -1,5 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.observe.Limits;
+import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.RowRef;
 import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.Objects;
@@ -13,9 +16,9 @@ import java.util.Objects;
  * is fixed here and not read off how the body happens to be lowered, so a change in the library
  * under a body is not a change in what its rows are held to.
  *
- * <p>What a rewrite is and not what it would answer: the one value a body could be rewritten to
- * answer is whichever value its rows came to, which moves with the rows, and the rewrite asked about
- * does not.
+ * <p>A rewrite is a program, so two rewrites answering two values are two rewrites: a body answering
+ * one value is asked once per value the rows came to, and a row that tells one of them apart says
+ * nothing about another.
  */
 public sealed interface Replacement {
 
@@ -31,6 +34,23 @@ public sealed interface Replacement {
         }
     }
 
-    /** The body answering one value whatever it is given. */
-    record ByOneAnswer() implements Replacement {}
+    /**
+     * The body answering {@code answer} whatever it is given.
+     *
+     * @param answer     the value, read in full everywhere inside it
+     * @param answeredBy the first row that answered it, which is how a reader outside this compiler
+     *                   is sent to the value: a row is named in the module's own words, and a value
+     *                   would have to be written out in a form of its own
+     */
+    record ByOneAnswer(ObservedValue answer, RowRef answeredBy) implements Replacement {
+
+        public ByOneAnswer {
+            Objects.requireNonNull(answer, "a body answering one value answers some value");
+            Objects.requireNonNull(answeredBy, "and some row answered it");
+            if (!Limits.UNBOUNDED.admits(answer)) {
+                throw new IllegalArgumentException("a body answering one value answers a value read"
+                        + " in full, everywhere inside it: " + answer);
+            }
+        }
+    }
 }
