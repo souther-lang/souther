@@ -5923,6 +5923,18 @@ public final class Adequacy {
             return new Finding(subject, found.weakening(), about);
         }
 
+        /**
+         * The same, where what found it is the reading of one rewrite of a body.
+         *
+         * <p>A sixth, for the reason the two above are: another rewrite left open bears on that
+         * rewrite and not on this one, so what this went without is the reading's own to say
+         * ({@link ReplacementEvidence#each}).
+         */
+        public static Finding by(FindingSubject subject, ReplacementEvidence.OfOneRewrite found,
+                                 About about) {
+            return new Finding(subject, found.weakening(), about);
+        }
+
         /** The same, about a behavior. */
         public static Finding by(String behavior, ObligationCoverage found, About about) {
             return by(new FindingSubject.OfABehavior(behavior), found, about);
@@ -6664,23 +6676,12 @@ public final class Adequacy {
          */
         private static void rewriteFindings(String behavior, ReplacementEvidence rewrites,
                                             List<Finding> out) {
-            Optional<ReplacementEvidence.Summary> made = rewrites.measured().made();
-            if (made.isEmpty()) {
-                return;
-            }
-            List<Weakening> rowsBehind = new ArrayList<>();
-            for (Weakening each : rewrites.measured().weakening().causes()) {
-                if (!(each instanceof Weakening.RewriteUndecided)) {
-                    rowsBehind.add(each);
-                }
-            }
-            for (ReplacementEvidence.Rewrite each : made.get().rewrites()) {
-                if (each.outcome() instanceof ReplacementEvidence.Unnoticed(var shownBy,
+            for (ReplacementEvidence.OfOneRewrite each : rewrites.each()) {
+                if (each.rewrite().outcome() instanceof ReplacementEvidence.Unnoticed(var shownBy,
                         var lookFor)) {
-                    out.add(new Finding(new FindingSubject.OfABehavior(behavior),
-                            WeakeningSet.ofAll(rowsBehind),
-                            new About.ARewriteNoRowTellsApart(behavior, each.replacement(),
-                                    shownBy, lookFor)));
+                    out.add(Finding.by(new FindingSubject.OfABehavior(behavior), each,
+                            new About.ARewriteNoRowTellsApart(behavior,
+                                    each.rewrite().replacement(), shownBy, lookFor)));
                 }
             }
         }

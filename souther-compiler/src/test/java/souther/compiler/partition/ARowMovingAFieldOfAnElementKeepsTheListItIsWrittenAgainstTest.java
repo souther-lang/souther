@@ -53,6 +53,7 @@ class ARowMovingAFieldOfAnElementKeepsTheListItIsWrittenAgainstTest {
 
                         example total
                             | "the trip" : (trip) -> Sum { n = 15000 }
+                            | "the train" : ([train]) -> Sum { n = 3000 }
                         """));
     }
 
@@ -88,6 +89,7 @@ class ARowMovingAFieldOfAnElementKeepsTheListItIsWrittenAgainstTest {
 
                 example total
                     | "the trip" : (trip) -> Sum { n = 15000 }
+                    | "the train" : ([train]) -> Sum { n = 3000 }
                 """);
         assertEquals(List.of("List.map(items -> Item { ...items, payer = Advance }, trip)"), rows);
     }

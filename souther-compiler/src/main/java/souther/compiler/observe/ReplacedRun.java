@@ -43,9 +43,10 @@ public record ReplacedRun(SourceConstructOrigin fork, int part, int with,
 
     /** Whether the row told the replaced program from the written one. */
     public enum Noticed {
-        /** The row failed: what it states does not hold of the replaced program. */
+        /** The row ended the other way: it holds of one of the two programs and fails of the
+         *  other. */
         YES,
-        /** The row held: what it states holds of the replaced program as well. */
+        /** The row ended the same way: it holds of both, or fails of both. */
         NO,
         /** The row's answer is owed, so it states nothing a difference could fail. */
         STATES_NOTHING,

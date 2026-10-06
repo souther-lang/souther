@@ -115,7 +115,8 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
         // Every row holds nothing, so none of them answers differently under the rewrite and the
         // row the hint names is one the search composed.
         assertTrue(said.stream().anyMatch(each -> each.startsWith(
-                        "No row of `refund` would fail if this arm answered as another arm of its"
+                        "No row of `refund` would come out differently if this arm answered as"
+                                + " another arm of its"
                                 + " fork.")
                         && each.contains("Amount(")),
                 () -> "what a build is told: " + said);
@@ -133,7 +134,8 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
         // the body answering one value, which is asked of a body with no arm to rewrite.
         assertTrue(page.contains("replacement 0/3"), () -> "three rewrites, told apart by no row: "
                 + page);
-        assertTrue(page.contains("! no row would fail if an arm answered as its sibling"),
+        assertTrue(page.contains(
+                        "! no row would come out differently if an arm answered as its sibling"),
                 () -> "and the arm under it: " + page);
     }
 

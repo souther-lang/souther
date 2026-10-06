@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.check.CheckSurface;
 import souther.compiler.check.Sig;
+import souther.compiler.core.Core;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.observe.Comparisons;
@@ -82,7 +83,11 @@ public final class Replacements {
                     }
                 }
                 Position at = Position.at(sig.outputType());
-                return ReplacementReading.of(behavior.name(), checked.plan(), reached, rows,
+                Core body = checked.behaviorBodies().get(behavior.name());
+                boolean readsItsInput = body == null
+                        || ReplacementReading.readsItsInput(name, behavior.name(), body);
+                return ReplacementReading.of(behavior.name(), checked.plan(), reached,
+                        readsItsInput, rows,
                         new ReplacementReading.Comparing() {
 
                             @Override

@@ -219,6 +219,13 @@ class OnlyAProjectionSaysHowFarAMeasurementGotTest {
                                 + "Lsouther/compiler/query/InteractionEvidence$OfOneMeeting;"
                                 + "Lsouther/compiler/query/About;)"
                                 + "Lsouther/compiler/query/Adequacy$Finding;",
+                        // And the reading of one rewrite of a body, for the same reason: another
+                        // rewrite left open bears on that one and not on this.
+                        "souther.compiler.query.Adequacy$Finding#by("
+                                + "Lsouther/compiler/query/FindingSubject;"
+                                + "Lsouther/compiler/query/ReplacementEvidence$OfOneRewrite;"
+                                + "Lsouther/compiler/query/About;)"
+                                + "Lsouther/compiler/query/Adequacy$Finding;",
                         // And the walk over the rows at one line, which says which other lines
                         // those rows leave standing beside it. What it went without is asymmetric —
                         // a row read leaves fewer lines standing and never more — so it names one

@@ -18,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.Map;
+import java.util.SequencedMap;
 import java.util.Set;
 
 /**
@@ -875,7 +876,8 @@ public final class CoverageSites {
         private final Map<ConstructOccurrence, Integer> byComparison = new LinkedHashMap<>();
         private final IdentityHashMap<Core, DraftArm[]> armsByNode = new IdentityHashMap<>();
         private final IdentityHashMap<Core, int[][]> carried = new IdentityHashMap<>();
-        private final Map<Integer, ArmReplacements.AtSite> replacements = new LinkedHashMap<>();
+        private final SequencedMap<Integer, ArmReplacements.AtSite> replacements =
+                new LinkedHashMap<>();
         /** Which node each fork of these bodies is, so that the one place forks are recognised is
          *  the one place two of them being one can be refused. */
         private final Map<ConstructOccurrence, Core> forks = new LinkedHashMap<>();

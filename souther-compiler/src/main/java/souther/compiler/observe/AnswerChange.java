@@ -34,10 +34,19 @@ public enum AnswerChange {
             case AnswerObservation.Answered(ObservedValue before) -> switch (now) {
                 case AnswerObservation.NotAnswered _ -> CHANGED;
                 case AnswerObservation.Answered(ObservedValue after) ->
-                        before.unread() != null || after.unread() != null ? COULD_NOT_TELL
+                        !readInFull(before) || !readInFull(after) ? COULD_NOT_TELL
                                 : same.of(before, after) ? SAME : CHANGED;
             };
         };
+    }
+
+    /**
+     * Whether {@code value} is there in full, anywhere inside it, which is what a comparison of two
+     * values asks of each ({@link Comparisons#same}). Not the value's own word alone: a record read
+     * whole may hold a list cut short.
+     */
+    public static boolean readInFull(ObservedValue value) {
+        return Limits.UNBOUNDED.stoppedBy(value) == null;
     }
 
     /** Whether two values, each read in full, are the same value. */

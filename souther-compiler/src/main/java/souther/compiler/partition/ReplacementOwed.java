@@ -4,9 +4,11 @@ import souther.compiler.coverage.ArmProbe;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.SourceConstructOrigin;
 
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
+import java.util.SequencedMap;
+import java.util.TreeMap;
 
 /**
  * A rewrite of a behavior's body no row was seen to tell from the body as written, as a search for
@@ -29,15 +31,16 @@ public sealed interface ReplacementOwed {
      * @param occurrences every place a run through the arm is recorded, which is where a row for
      *                    it is looked for; a row has to go through one of them to be asked anything
      * @param replacing   the sites a run asks to answer with the sibling, and the part it asks for
-     *                    at each — every site of the arm the classes carry the sibling at
+     *                    at each — every site of the arm the classes carry the sibling at, in the
+     *                    order of the sites
      */
     record OfAnArm(SourceConstructOrigin fork, int part, int with, List<ArmProbe> occurrences,
-                   Map<Integer, Integer> replacing) implements ReplacementOwed {
+                   SequencedMap<Integer, Integer> replacing) implements ReplacementOwed {
 
         public OfAnArm {
             Objects.requireNonNull(fork, "an arm is an arm of some fork");
             occurrences = List.copyOf(occurrences);
-            replacing = Map.copyOf(replacing);
+            replacing = Collections.unmodifiableSequencedMap(new TreeMap<>(replacing));
             if (occurrences.isEmpty() || replacing.isEmpty()) {
                 throw new IllegalArgumentException("a replacement of an arm is looked for where a run"
                         + " through the arm is recorded and asked for where the classes carry it");

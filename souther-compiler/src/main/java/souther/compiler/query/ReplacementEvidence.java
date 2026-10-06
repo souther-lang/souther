@@ -8,13 +8,15 @@ import souther.compiler.partition.ReplacementOwed;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * What a behavior's rows establish about the rewrites of its body: for each, whether a row tells it
  * from the body as written.
  *
  * <p>Beside the arms and not one of them. A row goes through an arm whatever the arm answers, so
- * every arm can be reached by rows none of which would fail if the arm were written as its sibling;
+ * every arm can be reached by rows none of which would come out differently were the arm written
+ * as its sibling;
  * and a body with no fork in it has no arm to reach while its rows can all answer one value. What
  * this measures is whether what the rows state depends on what the body says, which reaching it does
  * not show.
@@ -114,7 +116,7 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
     /** What the rows came to about one rewrite. */
     public sealed interface Outcome permits Noticed, Unnoticed, Undecided {}
 
-    /** A row's statement fails of the rewrite: the row tells it from the body. */
+    /** A row comes out the other way under the rewrite: the row tells it from the body. */
     public record Noticed(RowIdentity by) implements Outcome {
 
         public Noticed {
@@ -123,7 +125,8 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
     }
 
     /**
-     * The rewrite answers some row differently from the body, and no row's statement fails of it.
+     * The rewrite answers some row differently from the body, and no row comes out differently
+     * under it.
      * A gap: writing down the answer of the row that shows it is a row that would.
      */
     public record Unnoticed(ShownBy shownBy, ReplacementOwed lookFor) implements Outcome {
@@ -138,10 +141,10 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
     public sealed interface ShownBy {
 
         /** A row the module writes: its run under the rewrite answered differently. */
-        record AWrittenRow(RowIdentity row) implements ShownBy {
+        record AWrittenRow(RowIdentity identity) implements ShownBy {
 
             public AWrittenRow {
-                Objects.requireNonNull(row, "a written row is some row");
+                Objects.requireNonNull(identity, "a written row is some row");
             }
         }
 
@@ -222,6 +225,40 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
         return new ReplacementEvidence(by.isEmpty()
                 ? new Measurement.Complete<>(summary)
                 : new Measurement.Partial<>(summary, by));
+    }
+
+    /**
+     * One rewrite as the measure read it. What reading it went without is what the rows did, and
+     * not that another rewrite was left open: that bears on the other one and on no other.
+     */
+    public record OfOneRewrite(Rewrite rewrite, WeakeningSet weakening) {
+
+        public OfOneRewrite {
+            Objects.requireNonNull(rewrite, "a reading of one rewrite is of some rewrite");
+            Objects.requireNonNull(weakening, "and says what it went without, or that it went"
+                    + " without nothing");
+        }
+    }
+
+    /** Every rewrite the measure read, each with what reading it went without; none where it has
+     *  no value. */
+    public List<OfOneRewrite> each() {
+        Optional<Summary> made = measured.made();
+        if (made.isEmpty()) {
+            return List.of();
+        }
+        List<Weakening> rowsBehind = new ArrayList<>();
+        for (Weakening cause : measured.weakening().causes()) {
+            if (!(cause instanceof Weakening.RewriteUndecided)) {
+                rowsBehind.add(cause);
+            }
+        }
+        WeakeningSet behind = WeakeningSet.ofAll(rowsBehind);
+        List<OfOneRewrite> out = new ArrayList<>();
+        for (Rewrite rewrite : made.get().rewrites()) {
+            out.add(new OfOneRewrite(rewrite, behind));
+        }
+        return List.copyOf(out);
     }
 
     /** Whether this behavior has a body for the measure to be about. */

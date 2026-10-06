@@ -350,7 +350,8 @@ public sealed interface ExampleMessage extends Message {
     record WriteARowAtThatInput(String input) implements ExampleMessage, Supporting {}
 
     /**
-     * No row of the behavior would fail if the arm pointed at answered as another arm of its fork.
+     * No row of the behavior would come out differently if the arm pointed at answered as another
+     * arm of its fork.
      *
      * <p>The behavior and not the arms. Where the arm is, is where this is pointed; which sibling it
      * was rewritten as is a part number, and a sentence spelling it would name something the author
@@ -359,7 +360,8 @@ public sealed interface ExampleMessage extends Message {
     @Code(DiagnosticCode.E1939)
     record NoRowTellsTheArmFromItsSibling(String behavior) implements ExampleMessage, Reported {}
 
-    /** No row of the behavior would fail if its body answered one value whatever it was given. */
+    /** No row of the behavior would come out differently if its body answered one value whatever
+     *  it was given. */
     @Code(DiagnosticCode.E1939)
     record NoRowTellsTheBodyFromOneAnswer(String behavior) implements ExampleMessage, Reported {}
 

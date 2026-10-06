@@ -1,10 +1,12 @@
 package souther.compiler.query;
 
+import souther.compiler.core.Core;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
+import souther.compiler.observe.Disposition;
 import souther.compiler.observe.Expectation;
 import souther.compiler.observe.ExpectationState;
 import souther.compiler.observe.ObservedValue;
@@ -14,6 +16,7 @@ import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowStatement;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementOwed;
+import souther.compiler.types.BindingOwner;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -32,8 +35,9 @@ import java.util.TreeMap;
  * rewrites are asked about is fixed here and not read off how the body happens to be lowered, so a
  * change of the library under a body is not a change of what its rows are held to.
  *
- * <p>A row is evidence against a rewrite where what it states fails of the rewrite. A rewrite no
- * row notices is a gap only where some run shows it answers differently from the body, since one
+ * <p>A row is evidence against a rewrite where it comes out the other way under it: what it states
+ * holds of one of the two bodies and fails of the other. A row wrong about both is evidence for
+ * neither. A rewrite no row notices is a gap only where some run shows it answers differently from the body, since one
  * that answers alike everywhere is the body under another spelling and no row could notice it; and
  * where nothing shows that, what is left is a search for an input that would.
  */
@@ -42,16 +46,16 @@ public final class ReplacementReading {
     /** What the written rows came to about one rewrite. */
     public sealed interface Standing {
 
-        /** A row's statement fails of the rewrite: the row tells it from the body. */
+        /** A row comes out the other way under the rewrite: the row tells it from the body. */
         record Noticed(RowIdentity by) implements Standing {}
 
-        /** A row's run of the rewrite answered differently from the body, and no row's statement
-         *  failed of it; {@code lookFor} is the rewrite as a search for a row telling it apart is
-         *  put to it. */
+        /** A row's run of the rewrite answered differently from the body, and no row came out
+         *  differently under it; {@code lookFor} is the rewrite as a search for a row telling it
+         *  apart is put to it. */
         record Unnoticed(RowIdentity shownBy, ReplacementOwed lookFor) implements Standing {}
 
-        /** No row's statement failed of the rewrite and no run showed it answering differently:
-         *  what is left to ask is whether any input would. */
+        /** No row came out differently under the rewrite and no run showed it answering
+         *  differently: what is left to ask is whether any input would. */
         record Open(ReplacementOwed lookFor) implements Standing {}
 
         /** The rewrite cannot be put to the rows, and why. */
@@ -63,8 +67,9 @@ public final class ReplacementReading {
             TOO_LARGE,
             /** No row answered with a value read in full, so there is no answer to hold one to. */
             NOTHING_ANSWERED,
-            /** A row that states an answer could not be read, so whether it fails of the rewrite
-             *  is not known. */
+            /** A row that states an answer could not be read, or neither held nor failed of the
+             *  body as written, so whether it comes out differently under the rewrite is not
+             *  known. */
             A_STATEMENT_WAS_NOT_READ
         }
     }
@@ -93,15 +98,15 @@ public final class ReplacementReading {
     /**
      * Every rewrite of {@code behavior}'s body {@code plan} can put to a row, and what {@code rows}
      * came to about each: the siblings of each arm in {@code reached}, in the order the plan numbered
-     * the arms, or, where there are none, the body answering one value.
+     * the arms, or, where there are none and {@code readsItsInput}, the body answering one value.
      *
      * <p>Only the arms a row reaches. What a rewrite of an arm asks is whether a row going through
      * it depends on what it answers, which is a question about the rows that go through it. The arms
      * are the ones the branch measure counts, wherever the helper they are written in is declared.
      */
     public static List<Account> of(String behavior, CoverageSites.Plan plan,
-                                   Set<ArmProbe> reached, List<RowOutcome> rows,
-                                   Comparing comparing) {
+                                   Set<ArmProbe> reached, boolean readsItsInput,
+                                   List<RowOutcome> rows, Comparing comparing) {
         List<Account> out = new ArrayList<>();
         Map<Replacement.OfAnArm, List<ArmProbe>> occurrences = new LinkedHashMap<>();
         Map<Replacement.OfAnArm, ArmReplacements.Sibling> siblings = new LinkedHashMap<>();
@@ -110,7 +115,8 @@ public final class ReplacementReading {
                 continue;
             }
             ArmProbe probe = site.place().probe().get();
-            ArmReplacements.AtSite at = plan.replacements().bySite().get(probe.raw());
+            ArmReplacements.AtSite at = plan.replacements()
+                    .ofArm(site.obligation().origin(), site.obligation().part()).orElse(null);
             if (at == null) {
                 continue;
             }
@@ -125,10 +131,31 @@ public final class ReplacementReading {
         // One answer only where no arm is rewritten. A body the rows go through a fork of is asked
         // about the fork, arm by arm; asked for one answer as well, a body whose other arms nothing
         // can reach would be asked whether it is the constant it is, and no input would ever say.
-        if (occurrences.isEmpty()) {
+        // And only where the body reads what it is given: one that does not answers one value
+        // already, and that value is no rewrite of it.
+        if (occurrences.isEmpty() && readsItsInput) {
             out.add(new Account(new Replacement.ByOneAnswer(), oneAnswerStanding(rows, comparing)));
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * Whether {@code body} reads any of the values {@code behavior} of {@code module} is given:
+     * its parameters, and the ones a helper's expansion took in their place.
+     */
+    public static boolean readsItsInput(String module, String behavior, Core body) {
+        BindingOwner signature = new BindingOwner.OfValue(module, behavior);
+        if (body instanceof Core.Read read
+                && (signature.equals(read.binding().owner())
+                        || (read.binding().owner() instanceof BindingOwner.Synthesized written
+                                && written.pass() == BindingOwner.Pass.INLINER
+                                && signature.equals(written.within())))) {
+            return true;
+        }
+        boolean[] found = {false};
+        Core.forEachChild(body, child -> found[0] = found[0]
+                || readsItsInput(module, behavior, child));
+        return found[0];
     }
 
     private static Standing armStanding(Replacement.OfAnArm replaced, List<ArmProbe> where,
@@ -163,16 +190,16 @@ public final class ReplacementReading {
 
     /**
      * The body answering one value: each value a row answered is a value the body could be
-     * rewritten to answer always, and the rewrite is told apart by a row whose statement fails of
-     * that value. The first value no row's statement fails of is the rewrite the rows leave
-     * standing.
+     * rewritten to answer always, and the rewrite is told apart by a row that comes out the other
+     * way against that value than it did against its own answer. The first value no row comes out
+     * differently against is the rewrite the rows leave standing.
      */
     private static Standing oneAnswerStanding(List<RowOutcome> rows, Comparing comparing) {
         List<RowOutcome> answered = new ArrayList<>();
         List<ObservedValue> values = new ArrayList<>();
         for (RowOutcome row : rows) {
             if (row.answer() instanceof AnswerObservation.Answered(ObservedValue value)
-                    && value.unread() == null) {
+                    && AnswerChange.readInFull(value)) {
                 answered.add(row);
                 values.add(value);
             }
@@ -196,13 +223,17 @@ public final class ReplacementReading {
                     continue;
                 }
                 // One whose statement was not carried states something, and nothing here can
-                // read what.
+                // read what. Nor can one that neither held nor failed of the body as written.
                 if (!(row.statement() instanceof RowStatement.Stated stated)
-                        || !(stated.expects() instanceof Expectation.Asserts asserts)) {
+                        || !(stated.expects() instanceof Expectation.Asserts asserts)
+                        || (row.disposition() != Disposition.HELD
+                                && row.disposition() != Disposition.FAILED)) {
                     unread = true;
                     continue;
                 }
-                if (!comparing.holds(asserts, always)) {
+                // Told apart by ending the other way under the rewrite, as a run of it is.
+                if (comparing.holds(asserts, always)
+                        != (row.disposition() == Disposition.HELD)) {
                     failing = row.identity();
                     break;
                 }

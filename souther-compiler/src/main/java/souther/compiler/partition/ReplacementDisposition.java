@@ -15,10 +15,10 @@ import java.util.Set;
 public sealed interface ReplacementDisposition {
 
     /** A row the rewrite answers differently on, composed and run. */
-    record Witnessed(RowId row) implements ReplacementDisposition {
+    record Witnessed(RowId witness) implements ReplacementDisposition {
 
         public Witnessed {
-            Objects.requireNonNull(row, "a row found is some row");
+            Objects.requireNonNull(witness, "a row found is some row");
         }
     }
 

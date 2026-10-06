@@ -1,4 +1,4 @@
-# ADR-0121: A row is evidence for an arm where a rewrite of it fails the row
+# ADR-0121: A row is evidence for an arm where a rewrite of it changes how the row comes out
 
 Status: Accepted. Extends ADR-0089 with one measure; the measures it lists keep their meaning.
 
@@ -32,21 +32,25 @@ ADR-0089 requires of every measure: it does not replace branch or class coverage
 no body is not measured by it.
 
 There are two rewrites and no others. An arm a row stating its answer goes through is rewritten as
-each sibling of its fork, run in the same environment. A body with no such arm is rewritten as one
-value the rows were seen to answer. Only there: a body whose rows go through a fork is asked about
-the fork, and a body whose other arms its declarations prove nothing reaches is the constant it
-answers, which no input would ever tell apart from itself. Both are edits of the source an author could make, so a finding reads
-against what was written; neither moves an input. A sibling that does the same thing as the arm is
-no rewrite of it, two siblings that do the same thing are one rewrite, and a sibling reading the name
-its own arm gives a value is no program the body could be written as. The arms are the ones the
-branch measure counts, so a helper is rewritten wherever it is declared, as it is measured wherever
-it is declared. An arm no row reaches is already owed under its own code and is not rewritten.
+each sibling of its fork, run in the same environment. A body with no such arm, which reads what it
+is given, is rewritten as one value the rows were seen to answer. Only there: a body whose rows go
+through a fork is asked about the fork arm by arm, and asked for one value as well, a body whose
+other arms its declarations prove nothing reaches would be asked whether it is the constant it is.
+A body that reads nothing it is given answers one value already. Both rewrites are edits of the
+source an author could make, so a finding reads against what was written; neither moves an input. A
+sibling that does the same thing as the arm is no rewrite of it, two siblings that do the same thing
+are one rewrite, and a sibling reading the name its own arm gives a value is no program the body
+could be written as. The arms are the ones the branch measure counts, so a helper is rewritten
+wherever it is declared, as it is measured wherever it is declared. An arm no row reaches is already
+owed under its own code and is not rewritten.
 
-A rewrite is a gap only where some input is shown to be answered differently by it and by the body,
-and no row's statement fails of it. Rows that fail of it notice it. A rewrite nobody showed to differ
-is left undecided, never concluded equivalent: a search that ran out establishes nothing about the
-inputs it did not try. Undecided weakens the measure and leaves the verdict undetermined, and
-`--strict` refuses only what is shown.
+A row tells a rewrite apart where it comes out the other way under it: it holds of one of the two
+bodies and fails of the other. A row that fails of both tells neither apart, which is what keeps a
+row written wrong from counting for the rewrite that happens to be wrong the same way. A rewrite is
+a gap only where some input is shown to be answered differently by it and by the body, and no row
+tells it apart. A rewrite nobody showed to differ is left undecided, never concluded equivalent: a
+search that ran out establishes nothing about the inputs it did not try. Undecided weakens the
+measure and leaves the verdict undetermined, and `--strict` refuses only what is shown.
 
 Inputs are varied only to look for such a witness: a row composed and run under both the body and
 the rewrite, compared on the same input. The search has a run budget of its own and its own purpose,

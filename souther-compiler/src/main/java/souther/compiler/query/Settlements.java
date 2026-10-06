@@ -856,12 +856,12 @@ public record Settlements(List<ObligationIdentity> requested,
                     asked = target;
                 }
             }
-            if (asked == null || asRead.row() == null) {
+            if (asked == null || asRead.toRun() == null) {
                 return new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);
             }
             AnswerObservation rewritten = switch (asked) {
                 case ReplacementOwed.OfAnArm arm ->
-                        trial.runReplacing(asRead.row(), arm.replacing()).orElse(null);
+                        trial.runReplacing(asRead.toRun(), arm.replacing()).orElse(null);
                 case ReplacementOwed.ByOneAnswer one ->
                         new AnswerObservation.Answered(one.answer());
             };

@@ -2842,9 +2842,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     var _, var rewrite, var _, var _)) {
                 out.append(String.format("      %s %s%n", mark(f.finding()), switch (rewrite) {
                     case Replacement.OfAnArm _ ->
-                            "no row would fail if an arm answered as its sibling";
+                            "no row would come out differently if an arm answered as its sibling";
                     case Replacement.ByOneAnswer _ ->
-                            "no row would fail if the body answered one value";
+                            "no row would come out differently if the body answered one value";
                 }));
             }
         }

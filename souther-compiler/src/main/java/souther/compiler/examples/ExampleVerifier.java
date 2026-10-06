@@ -1517,7 +1517,7 @@ public final class ExampleVerifier {
                     continue;
                 }
                 out.add(replacedRun(target, sig, outCases, row, state.reached.answer(),
-                        at.fork(), at.part(), with,
+                        state.disposition, at.fork(), at.part(), with,
                         replacements.replacing(at.fork(), at.part(), with)));
             }
         }
@@ -1527,7 +1527,7 @@ public final class ExampleVerifier {
     /** One replaced run of {@code row}, under a deadline of its own. */
     private ReplacedRun replacedRun(ExampleTarget target, Sig sig, Set<TypeSymbol> outCases,
                                     Hir.ExampleRow row, AnswerObservation written,
-                                    SourceConstructOrigin fork, int part,
+                                    Disposition asWritten, SourceConstructOrigin fork, int part,
                                     int with, Map<Integer, Integer> replacing) {
         ReplacedWork work = new ReplacedWork(this, target, sig, outCases, row, replacing);
         return switch (deadline.given(
@@ -1535,7 +1535,7 @@ public final class ExampleVerifier {
             case Deadline.Outcome.Finished(RowState state) -> new ReplacedRun(fork, part, with,
                     state.reached.answer(),
                     newFixtureReader().change(written, state.reached.answer(), sig.outputType()),
-                    noticed(state));
+                    noticed(asWritten, state.disposition));
             case Deadline.Outcome.Overran(Runnable abandon) -> {
                 abandon.run();
                 yield new ReplacedRun(fork, part, with, new AnswerObservation.NotAnswered(),
@@ -1562,16 +1562,22 @@ public final class ExampleVerifier {
     }
 
     /**
-     * Whether a replaced run's row told it from the written program, read off how the row ended:
-     * held is not noticing, failing is noticing, and a row whose answer is owed has nothing to fail.
+     * Whether a replaced run's row told it from the written program: the row ended one way under
+     * the program as written and the other way under the replaced one. A row failing under both is
+     * a row that is wrong about both, and tells neither from the other; one failing under the
+     * written program and holding under the replaced one tells them apart as surely as the other
+     * way round. A row whose answer is owed has nothing to hold or fail.
      */
-    private static ReplacedRun.Noticed noticed(RowState state) {
-        return switch (state.disposition) {
-            case HELD -> ReplacedRun.Noticed.NO;
-            case FAILED -> ReplacedRun.Noticed.YES;
-            case NOTHING_TO_HOLD -> ReplacedRun.Noticed.STATES_NOTHING;
-            case INCOMPLETE, PENDING -> ReplacedRun.Noticed.COULD_NOT_TELL;
-        };
+    private static ReplacedRun.Noticed noticed(Disposition asWritten, Disposition replaced) {
+        if (asWritten == Disposition.NOTHING_TO_HOLD || replaced == Disposition.NOTHING_TO_HOLD) {
+            return ReplacedRun.Noticed.STATES_NOTHING;
+        }
+        boolean decided = (asWritten == Disposition.HELD || asWritten == Disposition.FAILED)
+                && (replaced == Disposition.HELD || replaced == Disposition.FAILED);
+        if (!decided) {
+            return ReplacedRun.Noticed.COULD_NOT_TELL;
+        }
+        return asWritten == replaced ? ReplacedRun.Noticed.NO : ReplacedRun.Noticed.YES;
     }
 
     /**

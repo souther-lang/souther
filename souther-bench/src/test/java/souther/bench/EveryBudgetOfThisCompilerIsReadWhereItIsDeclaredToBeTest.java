@@ -112,12 +112,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "stops building an element along a way with another choice of the values"
                             + " asked inside it, under the figure the ways down are counted by,"
                             + " and hands it over the same way"),
-            Map.entry("souther.compiler.partition.Generator#build("
-                            + "Lsouther/compiler/partition/MeasuredInput$MeasuredAxes;[I"
-                            + "Lsouther/compiler/partition/Generator$HeldTogether;"
-                            + "Lsouther/compiler/partition/Generator$CandidateCheck;"
-                            + "Ljava/util/Map;Ljava/util/List;)"
-                            + "Lsouther/compiler/partition/Generator$Attempt;",
+            Map.entry("souther.compiler.partition.Generator#inputsFrom("
+                            + "Lsouther/compiler/partition/Generator$RowBeingComposed;I"
+                            + "Ljava/util/List;)"
+                            + "Lsouther/compiler/partition/Generator$RowComposed;",
                     "says a baseline whose every written way was refused was written fewer ways"
                             + " than it had, under the figure the ways were cut at"),
             Map.entry("souther.compiler.partition.LevelRealizer#<clinit>()V",
@@ -185,7 +183,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "the assignments a descent composes, marked where the bound is reached"),
             Map.entry("souther.compiler.partition.Generator#over("
                             + "Ljava/util/List;Ljava/util/List;"
-                            + "Lsouther/compiler/partition/Generator$Composing;)"
+                            + "Lsouther/compiler/partition/Generator$Composing;"
+                            + "Lsouther/compiler/partition/Generator$ValueTaking;)"
                             + "Lsouther/compiler/partition/Generator$Outcome;",
                     "the same bound over one pass of the assignments"),
             Map.entry("souther.compiler.partition.ConstructionPlan#node("

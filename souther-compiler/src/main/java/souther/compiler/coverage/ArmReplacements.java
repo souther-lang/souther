@@ -2,9 +2,13 @@ package souther.compiler.coverage;
 
 import souther.compiler.types.SourceConstructOrigin;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.SequencedMap;
+import java.util.TreeMap;
 
 /**
  * Which other arm's expression each numbered arm can be run with in its place.
@@ -25,16 +29,16 @@ import java.util.Objects;
  * handed the same one, and a sibling one of them thinks is there and the other does not is a run
  * asked for something the classes cannot do.
  *
- * @param bySite every numbered arm that has a sibling, by its site
+ * @param bySite every numbered arm that has a sibling, by its site, in the order of the sites
  */
-public record ArmReplacements(Map<Integer, AtSite> bySite) {
+public record ArmReplacements(SequencedMap<Integer, AtSite> bySite) {
 
     public ArmReplacements {
-        bySite = Map.copyOf(bySite);
+        bySite = Collections.unmodifiableSequencedMap(new TreeMap<>(bySite));
     }
 
     /** Nothing can be replaced: what a build that records nothing carries. */
-    public static final ArmReplacements NONE = new ArmReplacements(Map.of());
+    public static final ArmReplacements NONE = new ArmReplacements(new TreeMap<>());
 
     /**
      * One numbered arm and its siblings.
@@ -87,11 +91,22 @@ public record ArmReplacements(Map<Integer, AtSite> bySite) {
     }
 
     /**
+     * The siblings of arm {@code part} of {@code fork}, the arm an author wrote, or empty where it
+     * has none. Every site of one arm carries the same siblings, so any of them answers.
+     */
+    public Optional<AtSite> ofArm(SourceConstructOrigin fork, int part) {
+        return bySite.values().stream()
+                .filter(at -> at.fork().equals(fork) && at.part() == part)
+                .findFirst();
+    }
+
+    /**
      * The sites a run asks for to replace arm {@code part} of {@code fork} with arm {@code with}:
      * every site of that arm whose classes carry the sibling, each mapped to {@code with}.
      */
-    public Map<Integer, Integer> replacing(SourceConstructOrigin fork, int part, int with) {
-        Map<Integer, Integer> sites = new LinkedHashMap<>();
+    public SequencedMap<Integer, Integer> replacing(SourceConstructOrigin fork, int part,
+                                                    int with) {
+        SequencedMap<Integer, Integer> sites = new LinkedHashMap<>();
         bySite.forEach((site, at) -> {
             if (at.fork().equals(fork) && at.part() == part
                     && at.siblings().get(with) instanceof Sibling.Carried) {

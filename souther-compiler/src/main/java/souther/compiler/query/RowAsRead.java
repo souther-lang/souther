@@ -31,11 +31,11 @@ import java.util.Objects;
  * @param watched     what running it recorded, which a row whose values would not build still has:
  *                    the two are found out separately and one failing is not the other failing
  * @param answer      what running it answered, found out by the same run
- * @param row         the row itself, for a question that has to run it again under a rewrite of
- *                    the body; null where nothing here could read a row at all
+ * @param toRun       what it takes to run the row, for a question that has to run it again under
+ *                    a rewrite of the body; null where nothing here could read a row at all
  */
 public record RowAsRead(List<ObservedValue> values, Settlement.Reason whyNotRead,
-                        Generator.Watched watched, AnswerObservation answer, RowToRun row) {
+                        Generator.Watched watched, AnswerObservation answer, RowToRun toRun) {
 
     public RowAsRead {
         values = values == null ? null : List.copyOf(values);
