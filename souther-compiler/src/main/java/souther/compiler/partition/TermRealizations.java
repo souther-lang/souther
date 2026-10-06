@@ -1339,19 +1339,24 @@ final class TermRealizations {
      */
     private static Tried onTheOrder(NumericSet wanted, TermOrders orders, Place named,
                                     SearchRegion within) {
-        if (wanted instanceof NumericSet.At one) {
-            // A set of one number is that number, and there is nothing else it could have been.
-            return Tried.theOne(one.value());
-        }
         Set<CompositionRepertoire> ofTheRun =
                 Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED);
-        if (!(wanted instanceof NumericSet.InARun run)) {
+        switch (wanted) {
+            // A set of one number is that number, and there is nothing else it could have been.
+            case NumericSet.At one -> {
+                return Tried.theOne(one.value());
+            }
             // Anything but the values a rule singled out. Which place beside them to try is a
             // witness somebody pays for, and what a witness may cost is named where witnesses are
             // paid for — so a caller that paid names one and this tries it. Nothing built at it is
             // an answer about that number: the set holds every other one, and none was looked at.
-            return new Tried(named == null ? List.of() : List.of(named),
-                    new Remainder.SomeOf(ofTheRun));
+            case NumericSet.AwayFrom _ -> {
+                return new Tried(named == null ? List.of() : List.of(named),
+                        new Remainder.SomeOf(ofTheRun));
+            }
+            // A run, with or without values taken out of it, is looked in below — in the runs the
+            // set makes up, so a place a run holds is never offered for one that has it taken out.
+            case NumericSet.InARun _, NumericSet.InARunExcept _ -> { }
         }
         // Where the rules leave the number room, which narrows the run this looks in. Exhaustive
         // over what the region answers, because one of its answers is not a range: a region that
@@ -1368,8 +1373,8 @@ final class TermRealizations {
             }
             case null -> leaves = null;
         }
-        Place found = new Criterion.Within(run.run(), null, Towards.ABOVE).somewhereInside(
-                orders.answered(),
+        Place found = Criterion.Within.somewhereIn(wanted.region(orders.answered()),
+                Towards.ABOVE, orders.answered(),
                 leaves == null ? null : leaves.min(), leaves == null ? null : leaves.max());
         return new Tried(found == null ? List.of() : List.of(found),
                 new Remainder.SomeOf(ofTheRun));
@@ -1381,12 +1386,17 @@ final class TermRealizations {
      * <p>Every number but the ones a rule singled out is an order with holes in it, and no pair of
      * ends is that. Which is a population nothing here solves a value out of rather than a set
      * with nothing in it, so a caller says that and does not read these ends as open.
+     *
+     * <p>A run with values taken out of it has ends, and they are its run's: the holes are inside
+     * them, and every number stepped between them is read back against the set before it is
+     * offered ({@link #readsBackIntoEveryOne}). A walk spent on the numbers of a hole is a walk a
+     * figure stopped, which is what it says.
      */
     private static NumericDomain.Bounds quotientsAsked(NumericSet wanted) {
         return switch (wanted) {
             case NumericSet.At one -> new NumericDomain.Bounds(
                     Endpoint.inclusive(one.value()), Endpoint.inclusive(one.value()));
-            case NumericSet.InARun _ -> wanted.extent();
+            case NumericSet.InARun _, NumericSet.InARunExcept _ -> wanted.extent();
             case NumericSet.AwayFrom _ -> null;
         };
     }
@@ -1427,8 +1437,8 @@ final class TermRealizations {
      * the one place the carrier names where the ends do not close.
      *
      * <p>Stepped where both ends are written down. The ends are exactly the run the demands leave
-     * ({@link #numbersWhoseQuotientLiesIn}), so every number stepped is one the demands admit and
-     * the figure that counts them counts the work — a wide divisor makes the run wide and the
+     * ({@link #numbersWhoseQuotientLiesIn}), so every number stepped is inside what the demands
+     * leave, short of the holes a set has in it, and the figure that counts them counts the work — a wide divisor makes the run wide and the
      * figure stops the walk in it, rather than leaving a walk that steps without spending.
      *
      * <p>Where an end is open there is nothing to step from, so the carrier names a place the way

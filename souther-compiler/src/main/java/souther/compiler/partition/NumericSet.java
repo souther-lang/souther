@@ -31,9 +31,10 @@ import java.util.List;
  * int holds would be a number nothing offers.
  *
  * <p>Closed, with an arm per shape the rules leave. A rule that singles a value out leaves that
- * value and everything else; a rule that draws a line leaves the runs between the lines. A shape
- * added is an arm here, and everything that reads one of these stops compiling until it says what
- * it does about the new shape.
+ * value and everything else; a rule that draws a line leaves the runs between the lines; and the
+ * two on one position leave a run with the values singled out of it taken out. A shape added is an
+ * arm here, and everything that reads one of these stops compiling until it says what it does
+ * about the new shape.
  */
 public sealed interface NumericSet {
 
@@ -48,6 +49,11 @@ public sealed interface NumericSet {
         @Override
         public NumericDomain.Bounds extent() {
             return new NumericDomain.Bounds(new Endpoint(value, true), new Endpoint(value, true));
+        }
+
+        @Override
+        public LevelRegion region(Carrier on) {
+            return LevelRegion.point(new Level.OnACarrier(on, value));
         }
     }
 
@@ -75,6 +81,15 @@ public sealed interface NumericSet {
         public NumericDomain.Bounds extent() {
             return new NumericDomain.Bounds(null, null);
         }
+
+        @Override
+        public LevelRegion region(Carrier on) {
+            LevelRegion left = LevelRegion.EVERYTHING;
+            for (Place value : values) {
+                left = left.without(new Level.OnACarrier(on, value));
+            }
+            return left;
+        }
     }
 
     /** Inside one of the runs the lines a rule drew cut the position into. */
@@ -88,6 +103,53 @@ public sealed interface NumericSet {
         @Override
         public NumericDomain.Bounds extent() {
             return new NumericDomain.Bounds(run.lineBelow(null), run.lineAbove(null));
+        }
+
+        @Override
+        public LevelRegion region(Carrier on) {
+            return run.region();
+        }
+    }
+
+    /**
+     * Inside one of the runs the lines cut the position into, and none of the values singled out
+     * of that run.
+     *
+     * <p>What a value singled out beside a line leaves of the run it falls in. The run is not cut
+     * at the value: the values below it and above it are ones the rules treat alike, and two
+     * classes there would ask the rows for a distinction nothing in the model makes.
+     *
+     * @param excluded the values singled out that fall inside {@code run}, none of them twice
+     */
+    record InARunExcept(Band run, List<Place> excluded) implements NumericSet {
+
+        public InARunExcept {
+            excluded = List.copyOf(excluded);
+            if (excluded.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "a run with nothing taken out of it is the run, which is InARun");
+            }
+        }
+
+        @Override
+        public boolean holds(Place at, Carrier carrier) {
+            return run.holds(new Level.OnACarrier(carrier, at))
+                    && excluded.stream().noneMatch(at::sameAs);
+        }
+
+        /** The run's own ends: what is taken out is holes inside it and not where it stops. */
+        @Override
+        public NumericDomain.Bounds extent() {
+            return new NumericDomain.Bounds(run.lineBelow(null), run.lineAbove(null));
+        }
+
+        @Override
+        public LevelRegion region(Carrier on) {
+            LevelRegion left = run.region();
+            for (Place value : excluded) {
+                left = left.without(new Level.OnACarrier(on, value));
+            }
+            return left;
         }
     }
 
@@ -115,4 +177,13 @@ public sealed interface NumericSet {
      * the shapes they knew.
      */
     NumericDomain.Bounds extent();
+
+    /**
+     * These numbers as the runs of {@code on}'s order they make up.
+     *
+     * <p>What a search for a value walks, which is the same set {@link #holds} answers about and
+     * is said beside it for the same reason: a reader turning the shapes into runs itself would be
+     * a second account of what each shape means.
+     */
+    LevelRegion region(Carrier on);
 }

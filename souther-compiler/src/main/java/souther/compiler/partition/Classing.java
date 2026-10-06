@@ -58,7 +58,13 @@ final class Classing {
      */
     enum Vocabulary {
 
-        /** Every rule puts a line on the order the values are counted on. */
+        /**
+         * Every rule is a distinction on the order the values are counted on: a line drawn on it,
+         * or a value singled out of it.
+         *
+         * <p>Not every class this leaves is a run. A value singled out beside a line is a class of
+         * its own, and the run it falls in is a class without it ({@link OrderedClasses}).
+         */
         ON_AN_ORDER,
 
         /** Every rule tells a set of the values from the rest. */
@@ -223,8 +229,8 @@ final class Classing {
     sealed interface Classed {
 
         /**
-         * The order the values are counted on is the vocabulary, so the classes are the runs of
-         * them the caller works out.
+         * The order the values are counted on is the vocabulary, so the classes are what the lines
+         * and the values singled out leave on it together, which the caller works out.
          *
          * <p>Its own answer and not an empty list of classes. What this says is which algebra the
          * position's classes are written in, and a position genuinely divided into none is a

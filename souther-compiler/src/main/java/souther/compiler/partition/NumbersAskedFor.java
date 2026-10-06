@@ -5,7 +5,6 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.numeric.Place;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -73,23 +72,10 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
      *
      * <p>Exact both ways, because a class is what a rule leaves and the rules leave it whatever the
      * rest of the row turned out to be. So a walk of one of these is a walk of the question, and
-     * the shapes a class is written in are each a region: the value a rule singles out is one run
-     * of one place, the values it holds a number away from are the order with those taken out, and
-     * a run between lines is the run.
+     * which runs a class makes up is the class's own answer.
      */
     public static NumbersAskedFor ofTheClass(NumericSet admitted, Carrier on) {
-        return of(switch (admitted) {
-            case NumericSet.At(Place value) ->
-                    LevelRegion.point(new Level.OnACarrier(on, value));
-            case NumericSet.AwayFrom(List<Place> values) -> {
-                LevelRegion left = LevelRegion.EVERYTHING;
-                for (Place value : values) {
-                    left = left.without(new Level.OnACarrier(on, value));
-                }
-                yield left;
-            }
-            case NumericSet.InARun(Band run) -> run.region();
-        });
+        return of(admitted.region(on));
     }
 
     /**

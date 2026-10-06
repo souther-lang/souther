@@ -75,6 +75,33 @@ final class Intervals {
                             + subject + high.substring(subject.length());
         }
 
+        /**
+         * The class this range is less {@code taken}, as a report names it.
+         *
+         * <p>A value taken out at an end the range keeps is the end moved past it, and said that
+         * way: the run from ten up without ten is {@code 10 < x}, which is what an author reads it
+         * as. A value taken out inside it is said beside the range, because no pair of ends says it.
+         */
+        String label(Carrier carrier, List<Place> taken) {
+            Interval said = this;
+            List<String> holes = new ArrayList<>();
+            for (Place each : taken) {
+                if (said.lo != null && said.loInclusive && each.sameAs(said.lo)) {
+                    said = new Interval(said.lo, false, said.hi, said.hiInclusive, said.of);
+                } else if (said.hi != null && said.hiInclusive && each.sameAs(said.hi)) {
+                    said = new Interval(said.lo, said.loInclusive, said.hi, false, said.of);
+                } else {
+                    holes.add(carrier.written(each));
+                }
+            }
+            String range = said.label(carrier);
+            if (holes.isEmpty()) {
+                return range;
+            }
+            String away = "x /= " + String.join(", ", holes);
+            return range.equals("any") ? away : range + " and " + away;
+        }
+
         /** What both ends of this run relate a row to, where they relate it to the same thing.
          *  Null where one end names the position and the other a multiple of it. */
         private String subjectOf() {
@@ -155,49 +182,44 @@ final class Intervals {
     }
 
     /**
-     * The classes those ranges are, on the term {@code of} at a position of {@code type}.
+     * The class one of those ranges is, less the values in {@code taken} — which are classes of
+     * their own beside it ({@link OrderedClasses}).
      *
      * <p>The orders say how a row's value is read into a number and how its numbers are spaced; the
      * type says what a value written at one of them looks like. A range of lengths has the first and
      * not the second: five is not what is written at the position, a string of five characters is,
      * and which values carry a count is asked of what builds them rather than settled here.
      *
-     * <p>The orders are asked of the reading rather than handed in beside the term. Which order a
-     * number is measured on follows from where the reading has that term standing, so a caller
-     * working it out from whatever type reached it would be answering about wherever that type came
-     * from — and a caller handing the answer over is handing two arguments that can be about two
-     * terms.
+     * @param taken the values singled out that fall in {@code run}, none of them twice. Empty for a
+     *              run nothing singles a value out of
      */
-    static List<PartitionClass> classesOf(List<Band> runs, NumericTerm.FromOnePosition of,
-                                          Type type, Quantities reading,
-                                          RuleReadingContext ruleReading,
-                                          Endpoint min, Endpoint max) {
+    static PartitionClass classOf(Band run, List<Place> taken, NumericTerm.FromOnePosition of,
+                                  Type type, Quantities reading, RuleReadingContext ruleReading,
+                                  Endpoint min, Endpoint max) {
+        // Asked of the reading rather than handed in beside the term: which order a number is
+        // measured on follows from where the reading has that term standing.
         TermOrders orders = reading.ordersOf(of);
         // What the counts in a label stand for. A day count is a carrier and never a name for the
         // line, so the class an author reads is spelled in dates where the position holds them.
         Carrier carrier = orders.answered();
-        List<PartitionClass> classes = new ArrayList<>();
-        for (Band run : runs) {
-            String label = rangeOf(run, min, max).label(carrier);
-            String id = of + "/" + label;
-            // The run's own answer about what is in it. Read off a range of the position's counts,
-            // a class whose line falls at a place the position has no value for had no end to state
-            // — so it held every value, and two such classes each held everything the other did.
-            NumericSet admits = new NumericSet.InARun(run);
-            Recognition is = new Recognition.OfACount(of, orders, admits);
-            // Nothing composed here says what this compiler did not manage, and says nothing about
-            // what the run holds. Above a string a rule stops short of, the order declines to name
-            // a value on purpose — every string with that one as a prefix is greater, and choosing
-            // between them puts a character nobody wrote into a row somebody reads. So the sentence
-            // both empty answers carry is about composing: it is true of a run that holds nothing
-            // as much as of one the order would not choose in, and it is the only one of the two
-            // claims this compiler is in a position to make (ADR-0091).
-            classes.add(PartitionClass.of(id, label, is,
-                    standingFor(orders, admits, null, type, reading, ruleReading,
-                            "a value whose " + measureOf(of) + " is in this range")));
-        }
-        // Classes of the number the runs are runs of, said here because here is where that is known.
-        return classes.stream().map(each -> each.ofTheNumber(of)).toList();
+        String label = rangeOf(run, min, max).label(carrier, taken);
+        String id = of + "/" + label;
+        // The run's own answer about what is in it. Read off a range of the position's counts,
+        // a class whose line falls at a place the position has no value for had no end to state
+        // — so it held every value, and two such classes each held everything the other did.
+        NumericSet admits = taken.isEmpty()
+                ? new NumericSet.InARun(run) : new NumericSet.InARunExcept(run, taken);
+        Recognition is = new Recognition.OfACount(of, orders, admits);
+        // Nothing composed here says what this compiler did not manage, and says nothing about
+        // what the run holds. Above a string a rule stops short of, the order declines to name
+        // a value on purpose — every string with that one as a prefix is greater, and choosing
+        // between them puts a character nobody wrote into a row somebody reads. So the sentence
+        // both empty answers carry is about composing: it is true of a run that holds nothing
+        // as much as of one the order would not choose in, and it is the only one of the two
+        // claims this compiler is in a position to make.
+        return PartitionClass.of(id, label, is,
+                standingFor(orders, admits, null, type, reading, ruleReading,
+                        "a value whose " + measureOf(of) + " is in this range"));
     }
 
     /** What the range is a range of, in the words a reader of the report has: the operation where
