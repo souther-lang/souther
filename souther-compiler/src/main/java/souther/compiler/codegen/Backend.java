@@ -241,8 +241,8 @@ public final class Backend {
      * method holding the model's own code without them may be one the JVM holds. So the module is
      * written again without them, and only a definition too large without them is said as one.
      *
-     * @param forks the forks the definition carried siblings in
-     * @param limit what the author is told if the definition is too large without them
+     * <p>It carries the forks the definition wrote siblings in, and what the author is told if the
+     * definition is too large without them.
      */
     private static final class CarriedPastTheMethod extends RuntimeException {
 
