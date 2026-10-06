@@ -527,7 +527,7 @@ public final class InteractionCells {
                 // own operations — and no rule draws a line on such a place, so there is no cut of
                 // this axis it could be the reading of.
                 ModelOccurrence states =
-                        ModelOccurrence.statedAt(one.comparison()).orElse(null);
+                        ModelOccurrence.statedAt(one.statedAt()).orElse(null);
                 if (states == null) {
                     return null;
                 }
@@ -540,15 +540,26 @@ public final class InteractionCells {
                 if (home < 0) {
                     return null;
                 }
+                // A rule that names one value has no side its values are true on: what it
+                // distinguishes is that value from every other. So the cell is the value's own
+                // class, or every class but that one — the value where the rule is wanted to hold
+                // at it, which an equality held and an inequality broken both are.
+                //
+                // Only where the class says it is that one value and nothing else. A class holding
+                // it among others is one the rule cuts through, and no set of classes is what the
+                // rule admits.
+                if (guard.facts().claim() instanceof ComparisonClaim.Singled named) {
+                    if (!axes.get(axis).classes().get(home).holdsOnlyTheNumberAt(line.at())) {
+                        return null;
+                    }
+                    return named.holdsAtTheValue() == one.held()
+                            ? only(axes, axis, home, home) : allBut(axes, axis, home);
+                }
                 // Which side the comparison is true on, from the two facts the order carries: which
                 // side of it the cut value itself sits on, and whether the comparison holds there.
                 // The whole side and not its nearest class: the comparison admits every value out
                 // that way, and a reading that answered with one of them would have said more than
                 // the rule does — which is what makes two of them impossible to take together.
-                //
-                // Asked of a rule that ordered the values, and of no other. A rule that names one
-                // has no side its values are true on — what it distinguishes is that value from
-                // every other — so there is no cell either way of it to take.
                 if (!(guard.facts().claim() instanceof ComparisonClaim.Cut order)) {
                     return null;
                 }
@@ -569,6 +580,13 @@ public final class InteractionCells {
                 return null;
             }
         }
+    }
+
+    /** Everything open, and {@code axis} every class but {@code but}. */
+    private static Cell allBut(List<Axis> axes, int axis, int but) {
+        Cell cell = Cell.anything(axes);
+        cell.allowed()[axis][but] = false;
+        return cell;
     }
 
     /** Everything open but {@code axis}, which is left the classes from {@code from} to {@code to}. */

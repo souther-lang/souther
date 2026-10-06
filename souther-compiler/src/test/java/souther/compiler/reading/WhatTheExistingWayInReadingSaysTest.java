@@ -116,7 +116,7 @@ class WhatTheExistingWayInReadingSaysTest {
                 .findFirst().orElseThrow(() -> new AssertionError("no way reads both: " + ways));
         assertEquals(both.get(0).at(), both.get(1).at(),
                 () -> "one helper on one argument is one number: " + both);
-        assertNotEquals(both.get(0).comparison(), both.get(1).comparison(),
+        assertNotEquals(both.get(0).statedAt(), both.get(1).statedAt(),
                 () -> "and the two readings of it are told apart by where each is written: " + both);
     }
 

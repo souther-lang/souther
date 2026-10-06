@@ -116,6 +116,29 @@ public final class Recognitions {
     }
 
     /**
+     * Whether the number at {@code place} is the only number {@code what} holds.
+     *
+     * <p>Beside {@link #holdsTheNumberAt} and stronger. A rule naming one value tells that value
+     * from every other, and a class holding the value is the value's own class only where it holds
+     * nothing else: one holding it among others is a class the rule cuts through, and which of its
+     * values the rule admits is not something the class can say.
+     *
+     * <p>Answered from what the class says it is and never from where it sits or what it is
+     * called: a class of exactly one count says so ({@link NumericSet.At}), and so does a class of
+     * one value. Every other kind is not one number, or is one this does not claim to know is.
+     */
+    public static boolean holdsOnlyTheNumberAt(Recognition what, Place place) {
+        return switch (what) {
+            case Recognition.OfACount count ->
+                    count.is() instanceof NumericSet.At one && one.value().sameAs(place);
+            case Recognition.Under under -> holdsOnlyTheNumberAt(under.inner(), place);
+            case Recognition.AtAValue one -> one.at() != null && one.at().sameAs(place);
+            case Recognition.Truth _, Recognition.Held _, Recognition.OfASet _,
+                 Recognition.OfCase _, Recognition.Nothing _ -> false;
+        };
+    }
+
+    /**
      * What a class about a count makes of a value: the count is read, and then asked about.
      *
      * <p>The three answers a reading has, in one place. A value that is not a number is a value the

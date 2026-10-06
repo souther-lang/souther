@@ -145,7 +145,7 @@ final class WhatABodyTellsApart {
      *  nothing that arrives at it at {@code axis}. */
     private boolean dividesNothingThatArrives(souther.compiler.reading.Condition.Side side,
                                               Axis axis) {
-        ModelOccurrence states = ModelOccurrence.statedAt(side.comparison()).orElse(null);
+        ModelOccurrence states = ModelOccurrence.statedAt(side.statedAt()).orElse(null);
         if (states == null) {
             return false;
         }
@@ -236,7 +236,7 @@ final class WhatABodyTellsApart {
                 return;
             }
             if (each instanceof souther.compiler.reading.Condition.Side side) {
-                ModelOccurrence.statedAt(side.comparison()).ifPresent(statedHere.get(one.at())::add);
+                ModelOccurrence.statedAt(side.statedAt()).ifPresent(statedHere.get(one.at())::add);
             }
         }
         // Only for a way some value takes. A decision nothing could place is still one no run makes

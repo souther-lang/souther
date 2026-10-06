@@ -164,7 +164,7 @@ class AShortCircuitOperatorsPathsToAValueAreItsOutcomesTest {
             if (each.constrains() instanceof Condition.Side side) {
                 out.append(side.at()).append(side.held() ? " holds" : " fails")
                         .append(" #").append(
-                                met.computeIfAbsent(side.comparison(), _ -> met.size()));
+                                met.computeIfAbsent(side.statedAt(), _ -> met.size()));
             } else {
                 out.append(each.constrains());
             }

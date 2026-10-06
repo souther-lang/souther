@@ -15,6 +15,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.Allowance;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -158,7 +159,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
 
                 behavior pick : (xs: List<Bag>) -> Low | High
                 let pick (xs) =
-                    if List.any(p -> if List.isEmpty(p.tags) then true else false, xs)
+                    if List.any(p -> if List.contains(0, p.tags) then true else false, xs)
                         then High else Low"""));
     }
 
@@ -197,8 +198,8 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
 
                 behavior pick : (xs: List<Bag>, ys: List<Int>) -> Low | High
                 let pick (xs, ys) =
-                    if List.any(p -> if List.isEmpty(p.tags) then true else false, xs)
-                            && List.isEmpty(ys)
+                    if List.any(p -> if List.contains(0, p.tags) then true else false, xs)
+                            && List.contains(0, ys)
                         then High else Low"""));
     }
 
@@ -218,7 +219,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
 
                 behavior pick : (xs: List<Row>) -> Low | High
                 let pick (xs) =
-                    if List.any(p -> p.age > 18 && List.isEmpty(p.tags), xs)
+                    if List.any(p -> p.age > 18 && List.contains(0, p.tags), xs)
                         then High else Low"""));
     }
 
@@ -239,8 +240,8 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
                 behavior pick : (xs: List<Row>) -> Low | High
                 let pick (xs) =
                     if List.any(
-                            p -> (if List.isEmpty(p.tags) then true else false)
-                                    && List.isEmpty(p.other),
+                            p -> (if List.contains(0, p.tags) then true else false)
+                                    && List.contains(0, p.other),
                             xs)
                         then High else Low"""));
     }
@@ -280,7 +281,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
     void aForkOnWhatAnOperationAnswersIsTheForksOwn() {
         assertEquals(new Owned(0, 1), read("""
                 behavior pick : (xs: List<Int>) -> Low | High
-                let pick (xs) = if List.isEmpty(xs) then High else Low"""));
+                let pick (xs) = if List.contains(0, xs) then High else Low"""));
     }
 
     /**
@@ -296,7 +297,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
     void aForkOwningOnePartOfItsConditionStillStatesTheOtherOne() {
         assertEquals(new Owned(1, 1), read("""
                 behavior pick : (n: Int, xs: List<Int>) -> Low | High
-                let pick (n, xs) = if n > 0 && List.isEmpty(xs) then High else Low"""));
+                let pick (n, xs) = if n > 0 && List.contains(0, xs) then High else Low"""));
     }
 
     /**
@@ -305,7 +306,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
      * <p>Cutting a condition stops at a name — following it there would make the parts depend on
      * how many names an author put between the fork and what it tests — and the owner holding the
      * part asks the reading what the name stands for. So this fork is answered about
-     * {@code List.isEmpty(xs)} rather than about {@code ok}, and states a rule of its own for the
+     * {@code List.contains(0, xs)} rather than about {@code ok}, and states a rule of its own for the
      * same reason the one above it does.
      */
     @Test
@@ -313,7 +314,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
         assertEquals(new Owned(0, 1), read("""
                 behavior pick : (xs: List<Int>) -> Low | High
                 let pick (xs) = {
-                    let ok = List.isEmpty(xs)
+                    let ok = List.contains(0, xs)
                     if ok then High else Low
                 }"""));
     }
@@ -341,27 +342,91 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
     /**
      * A rule reaches a fork along what the library says the answer turns on, and no further.
      *
-     * <p><b>The pair this rests on.</b> {@code filter} and {@code map} are the same shape, and a
-     * reading that looked through the tree for a rule would credit both alike. Filtering answers
-     * fewer for exactly the reason the closure says; a mapping answers one per element whatever
-     * the closure said, so what a rule inside it decides is what the answers are and never how many
-     * — and a fork on whether the mapping is empty turns on neither.
+     * <p><b>The pair this rests on.</b> Both closures state the same comparison and both calls hold
+     * it below the fork, so a reading that looked through the tree for a rule would credit both
+     * alike. {@code List.any} answers what its closure said; {@code List.contains} says nothing
+     * about what it turns on, and what a rule inside the mapping decides is which values it is
+     * asked among — so the fork is owed a rule of its own.
      *
-     * <p>Which is why the size the two declare is not what is asked. Both answer at most as many as
-     * they walked, and so do a take and a distinct whose closures decide nothing; the fact read
-     * here is the one that says the closure is the reason
+     * <p>The fact read here is the one that says the closure is the reason
      * ({@link souther.compiler.semantics.OperationFact.TurnsOnWhetherAnArgumentHolds}).
      */
     @Test
     void aRuleReachesAForkAlongWhatTheAnswerTurnsOn() {
         assertEquals(new Owned(1, 0), read("""
                 behavior pick : (xs: List<Int>) -> Low | High
-                let pick (xs) = if List.isEmpty(List.filter(x -> x > 0, xs)) then High else Low"""),
-                "filtering answers fewer for the reason the closure gives");
+                let pick (xs) = if List.any(x -> x > 0, xs) then High else Low"""),
+                "a quantifier answers what the closure said");
         assertEquals(new Owned(1, 1), read("""
                 behavior pick : (xs: List<Int>) -> Low | High
-                let pick (xs) = if List.isEmpty(List.map(x -> x > 0, xs)) then High else Low"""),
-                "and a mapping answers as many either way, so the fork is owed a rule of its own");
+                let pick (xs) = if List.contains(true, List.map(x -> x > 0, xs)) then High else Low"""),
+                "and an operation turning on nothing declared is the fork's own");
+    }
+
+    /**
+     * A truth that means a comparison is that comparison's, as one the source wrote is.
+     *
+     * <p>The walk stops at a comparison, since what is inside it is what the comparison is read
+     * from. An emptiness check states one, and stops the walk at the same place: walked into, the
+     * closure handed to {@code filter} would leave the fork a part to state, while the same check
+     * written as the size against nought left it none — two accounts of one statement, the first
+     * filing the question its reading already stopped at a second time.
+     */
+    @Test
+    void anEmptinessCheckIsWhereTheWalkStopsAsTheComparisonItMeansIs() {
+        String empty = "List.isEmpty(List.filter(ys -> List.contains(0, ys), xs))";
+        String size = "List.length(List.filter(ys -> List.contains(0, ys), xs)) == 0";
+        assertEquals(everythingSaid(nested("xs", size)), everythingSaid(nested("xs", empty)));
+        assertEquals(new Owned(0, 0), read(nested("xs", empty)),
+                "no fork beside the comparison the check states");
+    }
+
+    /**
+     * And past an operation the walk follows, the same.
+     *
+     * <p>The case an owner asked only of the fork's own condition would miss: the check is inside a
+     * closure {@code List.any} turns on, so the walk reaches it before anything could ask whose it
+     * is.
+     */
+    @Test
+    void anEmptinessCheckInsideAClosureStopsTheWalkToo() {
+        String empty =
+                "List.any(p -> List.isEmpty(List.filter(y -> List.contains(y, [1, 2]), p)), xs)";
+        String size =
+                "List.any(p -> List.length(List.filter(y -> List.contains(y, [1, 2]), p)) == 0, xs)";
+        assertEquals(everythingSaid(nested("xs", size)), everythingSaid(nested("xs", empty)));
+    }
+
+    /**
+     * And a truth nothing reads inside the same closure is still the fork's.
+     *
+     * <p>The control for the two above: the walk stops at a comparison, and goes on everywhere it
+     * went before. Stopped at the closure instead, the part nothing read would go unfiled.
+     */
+    @Test
+    void aTruthNothingReadsInsideAClosureIsStillTheForks() {
+        assertEquals(List.of("xs[*]"), filedAt(nested("xs", "List.any(p -> List.contains(0, p), xs)")));
+    }
+
+    /** {@code pick} forking on {@code condition}, over a list of lists named {@code name}. */
+    private static String nested(String name, String condition) {
+        return """
+                behavior pick : (%s: List<List<Int>>) -> Low | High
+                let pick (%s) = if %s then High else Low""".formatted(name, name, condition);
+    }
+
+    /** What the readers of {@code pick} say: how many of each, where the forks are filed, and where
+     *  a rule came to no line and why. */
+    private static List<String> everythingSaid(String declaration) {
+        Both both = both(declaration);
+        List<String> out = new ArrayList<>();
+        out.add(new Owned(both.guards().thresholds().size(), both.forks().size()).toString());
+        both.forks().forEach(each -> out.add("fork at " + each.filed().keySet()));
+        both.guards().noLine().reported().forEach(each ->
+                out.add("no line at " + each.at() + " " + each.why().getClass().getSimpleName()));
+        both.guards().noLine().unclassified().forEach(each ->
+                out.add("unread at " + each.at() + " " + each.why().getClass().getSimpleName()));
+        return out;
     }
 
     /** And an operation whose whole answer is what the closure said of the elements. */
@@ -373,26 +438,6 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
         assertEquals(new Owned(1, 0), read("""
                 behavior pick : (xs: List<Int>) -> Low | High
                 let pick (xs) = if List.all(x -> x > 0, xs) then High else Low"""));
-    }
-
-    /**
-     * And a closure that changes how many are answered but never whether any are.
-     *
-     * <p>The third corner of the triangle the pair above makes. {@code List.distinctBy} answers
-     * fewer where its key sends two elements to one, so the key does decide the count — and it
-     * never decides emptiness, because the first element of what it walked is always kept. A fork
-     * on whether the answer is empty turns on neither the key nor what it said.
-     *
-     * <p>Which is why the aspect a fork on {@code List.isEmpty} reads is whether the answer holds
-     * anything and not how many it holds. Read as the count, the key would answer for this fork on
-     * a rule that says nothing about it.
-     */
-    @Test
-    void aClosureThatChangesTheCountAndNotTheEmptinessAnswersForNoFork() {
-        assertEquals(new Owned(1, 1), read("""
-                behavior pick : (xs: List<Int>) -> Low | High
-                let pick (xs) =
-                    if List.isEmpty(List.distinctBy(x -> x > 0, xs)) then High else Low"""));
     }
 
     /**
@@ -408,7 +453,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
         assertEquals(new Owned(0, 0), read("""
                 behavior pick : (xs: List<Int>) -> Low | High
                 let pick (xs) = {
-                    let unread = if List.isEmpty(xs) then 1 else 2
+                    let unread = if List.contains(0, xs) then 1 else 2
                     High
                 }"""));
     }
@@ -419,7 +464,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
         Compilation compilation = Compilation.ofSource(PRELUDE + """
 
                 behavior pick : (xs: List<Int>) -> Low | High
-                let pick (xs) = if List.isEmpty(xs) then High else Low
+                let pick (xs) = if List.contains(0, xs) then High else Low
                 """, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);

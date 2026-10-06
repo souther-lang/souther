@@ -504,7 +504,7 @@ public final class BehaviorSetStatements {
      *
      * <p><b>Taken part by part, as every other owner is.</b> A fork owned for one part of its
      * condition still states the other one, and a fork rule owns what it decides rather than the
-     * fork around it: {@code List.any(closure, xs) && List.isEmpty(ys)} states the closure's rule
+     * fork around it: {@code List.any(closure, xs) && List.contains(0, ys)} states the closure's rule
      * at the first part and something nobody read at the second, and dropping the whole fork for
      * the first would take the second's question with it.
      *
@@ -591,7 +591,7 @@ public final class BehaviorSetStatements {
         List<Standing> out = new ArrayList<>();
         for (ComparisonReadings.ForkMet each : forks) {
             // The parts of what it tests that no reader answers for. Asked part by part and not of
-            // the fork: `a > 0 && List.isEmpty(xs)` states a comparison and something nothing read,
+            // the fork: `a > 0 && List.contains(0, xs)` states a comparison and something nothing read,
             // and a fork answered for by one owner having claimed one part would leave the other
             // part unsaid — a model reported as fully read over a condition half of which nobody
             // took in.
@@ -620,7 +620,7 @@ public final class BehaviorSetStatements {
      *
      * <p>Both answers come from the reading of what the part is made of
      * ({@link GuardThresholds#namesIn}), which is the same reading a comparison's stop is described
-     * by. Written apart, a fork on {@code List.isEmpty(xs)} and a comparison against what the same
+     * by. Written apart, a fork on {@code List.contains(0, xs)} and a comparison against what the same
      * call answers would be two accounts of one shape, and an author reading them would be sent
      * after two different pieces of work.
      *
@@ -631,7 +631,7 @@ public final class BehaviorSetStatements {
      *
      * <p><b>Null where no part of it names a position of the input.</b> Such a fork is not a rule
      * this compiler failed to read: it is a rule about something the input has no part in —
-     * {@code List.isEmpty([1, 2, 3])} says nothing about any position, so there is no position for
+     * {@code List.contains(0, [1, 2, 3])} says nothing about any position, so there is no position for
      * a question to be about. The same threshold a comparison is held to, decided by the same
      * reading ({@link ComparisonAssessment.NoInput}), so a fork and a comparison over one shape do
      * not disagree about whether the model states anything.

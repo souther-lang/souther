@@ -81,12 +81,13 @@ class WhoAsksAReadingAboutAPlaceSaysWhichPlanItIsOfTest {
                             + " and holds them to each other there — before the shortcut for a"
                             + " reading that proves nothing unreached, which a foreign reading"
                             + " would otherwise leave by"),
-            new Licence("souther.compiler.partition.GuardThresholds.of -> arrivalAt", 1,
+            new Licence("souther.compiler.partition.GuardThresholds.watchedAt -> arrivalAt", 2,
                     "a step of the walk over one behavior's guards, whose way in takes the plan and"
-                            + " the reading together and holds them to each other there. What an"
-                            + " absence means here is that nothing is known about the comparison,"
-                            + " which restricts nothing — the widest answer there is, and the one a"
-                            + " reading of another module would give about every comparison"),
+                            + " the reading together and holds them to each other there, asked once"
+                            + " for a comparison and once for an application. What an absence"
+                            + " means here is that nothing is known about the construct, which"
+                            + " restricts nothing — the widest answer there is, and the one a"
+                            + " reading of another module would give about every construct"),
             new Licence("souther.compiler.query.Adequacy.BranchEvidence.owed -> at", 1,
                     "the arms and the reading both come out of the store under one module name,"
                             + " inside the one method that asks for either. Nothing hands this pair"

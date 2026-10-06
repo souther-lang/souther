@@ -51,10 +51,9 @@ interface WhatNamesStandFor {
             @Override
             public Optional<Boolean> everyRowBrings(Core comparison) {
                 return BooleanMeaning.asAComparison(comparison).flatMap(one ->
-                        AffineReading.read(one.stated(), read.domain(), reads, read.rules())
+                        AffineReading.read(one, read.domain(), reads, read.rules())
                                 instanceof AffineReading.OfAComparison.CutsNothing constant
-                                ? Optional.of(constant.holds(
-                                        one.stated().claim().statedRelation()))
+                                ? Optional.of(constant.holds(one.claim().statedRelation()))
                                 : Optional.empty());
             }
         };

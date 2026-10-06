@@ -1001,7 +1001,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return switch (read) {
             case DecisionRuleReading.AComparisonCameOut(var comparison, var _) -> comparison.at();
             case DecisionRuleReading.AnApplicationAnswered(var application, var _) ->
-                    application.at();
+                    application.writtenAt();
             case DecisionRuleReading.AForkTookAnArm(var arm) ->
                     Sites.placeOf(compilation.db(), arm.anchor());
             case DecisionRuleReading.AConditionIsNotShown _,
@@ -4326,9 +4326,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 out.put("at", one.at().toString());
                 out.put("outcome", one.spelled());
             }
-            case Condition.Side(var _, var comparison, var held) -> {
+            case Condition.Side(var _, var statedAt, var held) -> {
                 out.put("kind", "comparison");
-                constructId(out.putObject("construct"), comparison);
+                constructId(out.putObject("construct"), statedAt);
                 out.put("outcome", held ? "held" : "denied");
             }
             // A fork the reading could not name a position for. There is nothing to name it by but

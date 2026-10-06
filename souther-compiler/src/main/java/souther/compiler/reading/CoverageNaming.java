@@ -113,7 +113,14 @@ final class CoverageNaming implements Naming<Outcome> {
             return null;
         }
         NumericTerm at = drawn.term();
-        ControlPlace.Outcome outcome = outcomeAt(plan, comparison, held).orElse(null);
+        // Which construct of the model the decision is of. An application answering here comes
+        // first: the comparison is then the code of the operation it applies, which the model
+        // states nothing of, and the rule the author wrote — and drew a line by — is the
+        // application. Where none does, the comparison is the construct.
+        ControlPlace.Outcome outcome = plan.applicationAnsweringAt(comparison)
+                .flatMap(application -> plan.outcomeOf(application, held))
+                .or(() -> outcomeAt(plan, comparison, held))
+                .orElse(null);
         if (outcome == null) {
             return null;
         }

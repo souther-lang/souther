@@ -77,29 +77,31 @@ public sealed interface Condition {
      * things to steer a row by and one path, so a reader given the path has to pick between them
      * and has nothing to pick with.
      *
-     * @param at         which number, which is a location's own content or something taken of it
-     * @param comparison which place in the tree that runs, which is what tells one decision from
-     *                   another. The materialisation and not the construct of the model it is one
-     *                   of: an operation that evaluates a closure it was handed twice compares two
-     *                   values, so the two coming out different ways is a row doing two things and
-     *                   not a row contradicting itself. Read as one, a path the body has would be
-     *                   thrown away.
-     *                   <p>The occurrence and not the number it is instrumented under — the number
-     *                   is how a run is recorded and is no part of what this decision is
-     * @param held       the way it came out
+     * @param at       which number, which is a location's own content or something taken of it
+     * @param statedAt which construct stated the comparison, in which place in the tree that runs —
+     *                 a comparison the author wrote, or an application of an operation that means
+     *                 one. What tells one decision from another, and what a rule's line is filed
+     *                 under too. The materialisation and not the construct of the model it is one
+     *                 of: an operation that evaluates a closure it was handed twice compares two
+     *                 values, so the two coming out different ways is a row doing two things and not
+     *                 a row contradicting itself. Read as one, a path the body has would be thrown
+     *                 away.
+     *                 <p>The occurrence and not the number it is instrumented under — the number is
+     *                 how a run is recorded and is no part of what this decision is
+     * @param held     the way it came out
      */
-    record Side(NumericTerm at, ConstructOccurrence comparison, boolean held) implements Condition {
+    record Side(NumericTerm at, ConstructOccurrence statedAt, boolean held) implements Condition {
 
         /** The same comparison coming out the other way. */
         @Override
         public boolean excludes(Condition other) {
-            return other instanceof Side that && that.comparison.equals(comparison)
+            return other instanceof Side that && that.statedAt.equals(statedAt)
                     && that.held != held;
         }
 
         @Override
         public String toString() {
-            return at + (held ? " holds" : " fails") + " at " + comparison;
+            return at + (held ? " holds" : " fails") + " at " + statedAt;
         }
     }
 
