@@ -142,7 +142,7 @@ class ARewriteNoRowTellsApartIsAGapTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code() + " " + e.diagnostic()).toList(),
+                        .map(e -> e.diagnostic().code()).toList(),
                 "the model under test compiles");
         String module = compilation.modules().get(0);
         Map<String, ReplacementEvidence> measured =
