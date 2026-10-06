@@ -5,6 +5,7 @@ import souther.compiler.source.SourceId;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.meta.ModulePath;
+import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Applied;
 import souther.compiler.coverage.RunRecord;
 import souther.compiler.observe.Counting;
@@ -186,20 +187,22 @@ class ARowSaysWhatAppliedTheBehaviorTest {
                 () -> new RowOutcome(ran.at(), ran.target(), ran.identity(), ran.expectation(),
                         ran.stage(),
                         ran.disposition(), ran.failurePhase(), ran.expectedArm(), ran.resultArm(),
-                        ran.inputCases(), ran.inputs(), ran.statement(), Run.nothing()),
+                        ran.answer(), ran.inputCases(), ran.inputs(), ran.statement(),
+                        Run.nothing()),
                 "a row that applied the behavior says what applied it");
         assertThrows(IllegalArgumentException.class,
                 () -> new RowOutcome(ran.at(), ran.target(), ran.identity(), ran.expectation(),
                         Stage.FIXTURES_VALIDATED,
                         ran.disposition(), ran.failurePhase(), ran.expectedArm(), ran.resultArm(),
-                        ran.inputCases(), ran.inputs(), ran.statement(),
+                        new AnswerObservation.NotAnswered(), ran.inputCases(), ran.inputs(),
+                        ran.statement(),
                         new Run(new Applied.GeneratedHere(), new Counting.Read(1L, new RunRecord.NoAccount()))),
                 "and one that did not has nothing to say applied it");
         assertThrows(NullPointerException.class,
                 () -> new RowOutcome(ran.at(), ran.target(), ran.identity(), ran.expectation(),
                         ran.stage(),
                         ran.disposition(), ran.failurePhase(), ran.expectedArm(), ran.resultArm(),
-                        ran.inputCases(), ran.inputs(), ran.statement(), null),
+                        ran.answer(), ran.inputCases(), ran.inputs(), ran.statement(), null),
                 "and every row says what became of its evaluation");
     }
 }

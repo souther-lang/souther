@@ -12,6 +12,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.RunRecord;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.reach.Reachability;
 import souther.compiler.diag.DiagnosticCode;
@@ -5413,17 +5414,20 @@ public final class Adequacy {
                 // A row short of a stand-in the behavior requires is a row nothing applies, which
                 // is said here rather than by a construction failing: what comes back from that is
                 // a row nothing was seen doing, and so is this — but only this one knows why.
-                return new Generator.Watched.NoAccount();
+                return Generator.ObservedRun.nothingRan();
             }
             return application
                 .run(row.inputs().stream()
                         .map(souther.compiler.partition.FixtureTemplate::value).toList(), standing)
-                // Read under the numbering the caller is asking about. What a run left behind says
-                // which numbering it was made under, so a recording of classes numbered otherwise
-                // is refused here rather than answered about places it was never near.
-                .<Generator.Watched>map(seen -> new Generator.Watched.Ran(
-                        numbering.orElseThrow().align(seen)))
-                .orElseGet(Generator.Watched.NoAccount::new);
+                .map(ran -> new Generator.ObservedRun(switch (ran.recorded()) {
+                    // Read under the numbering the caller is asking about. What a run left behind
+                    // says which numbering it was made under, so a recording of classes numbered
+                    // otherwise is refused here rather than answered about places it was never near.
+                    case RunRecord.Recorded(var seen) ->
+                            new Generator.Watched.Ran(numbering.orElseThrow().align(seen));
+                    case RunRecord.NoAccount _ -> new Generator.Watched.NoAccount();
+                }, ran.answer()))
+                .orElseGet(Generator.ObservedRun::nothingRan);
         };
     }
 

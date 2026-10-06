@@ -52,7 +52,7 @@ public record RowAsRead(List<ObservedValue> values, Settlement.Reason whyNotRead
     public static RowAsRead of(Sig sig, FixturesAtTheBoundary building, Generator.Trial trial,
                                RowToRun row) {
         List<FixtureTemplate> inputs = row.inputs();
-        Generator.Watched watched = trial.run(row);
+        Generator.Watched watched = trial.run(row).watched();
         if (building == null || sig == null) {
             return new RowAsRead(null, Settlement.Reason.NOTHING_BUILT_THE_VALUES, watched);
         }

@@ -48,6 +48,7 @@ import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.observe.Applied;
+import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Counting;
 import souther.compiler.observe.Run;
 import souther.compiler.observe.RowOutcome;
@@ -1315,7 +1316,7 @@ public final class ExampleVerifier {
          * <p>Written only by the row's own worker, so reading it to write the next one is not a race
          * with another writer.
          */
-        volatile Reached reached = new Reached(Stage.NONE, null);
+        volatile Reached reached = new Reached(Stage.NONE, null, new AnswerObservation.NotAnswered());
         private Disposition disposition = Disposition.FAILED;
         private FailurePhase failurePhase = FailurePhase.NONE;
         private TypeSymbol expectedArm;
@@ -1363,7 +1364,13 @@ public final class ExampleVerifier {
 
         /** Records that the behavior was entered, and what entered it. */
         void entered(Applied applied) {
-            reached = new Reached(Stage.INVOKED, applied);
+            reached = new Reached(Stage.INVOKED, applied, new AnswerObservation.NotAnswered());
+        }
+
+        /** Records that the behavior answered, and what with. */
+        void answered(ObservedValue answer) {
+            reached = new Reached(Stage.ANSWERED, reached.applied(),
+                    new AnswerObservation.Answered(answer));
         }
 
         /**
@@ -1373,21 +1380,25 @@ public final class ExampleVerifier {
          * applied it, and a row whose answerer came back saying it never got in applied nothing.
          */
         void neverEntered() {
-            reached = new Reached(Stage.FIXTURES_VALIDATED, null);
+            reached = new Reached(Stage.FIXTURES_VALIDATED, null,
+                    new AnswerObservation.NotAnswered());
         }
     }
 
     /**
-     * How far a row's evaluation got, and what had entered the behavior if anything had.
+     * How far a row's evaluation got, what had entered the behavior if anything had, and what it
+     * answered if it had answered.
      *
-     * <p>The two together, because a reader of a row still running is entitled to a pair that some
-     * moment of the evaluation actually held. Null where nothing entered.
+     * <p>Together, because a reader of a row still running is entitled to values that some moment of
+     * the evaluation actually held: a row given up on while it compared its answer has one, and a
+     * stage read apart from it could say the row answered while the answer beside it says it did
+     * not. {@code applied} is null where nothing entered.
      */
-    record Reached(Stage stage, Applied applied) {
+    record Reached(Stage stage, Applied applied, AnswerObservation answer) {
 
         /** The same, having got as far as {@code next}. */
         Reached at(Stage next) {
-            return new Reached(next, applied);
+            return new Reached(next, applied, answer);
         }
     }
 
@@ -1419,8 +1430,8 @@ public final class ExampleVerifier {
         Reached reached = state.reached;
         return new RowOutcome(row.pos(), target.name(), row.identity(), expectationOf(row),
                 reached.stage(), state.disposition, state.failurePhase, state.expectedArm,
-                state.resultArm, state.inputCases, state.inputs, state.statement,
-                ran(reached, new Counting.Read(state.stepsSpent, state.recorded)));
+                state.resultArm, reached.answer(), state.inputCases, state.inputs,
+                state.statement, ran(reached, new Counting.Read(state.stepsSpent, state.recorded)));
     }
 
     /**
@@ -1503,7 +1514,7 @@ public final class ExampleVerifier {
                 RowStatement stated = evaluation.state.statement;
                 rows.add(new RowOutcome(row.pos(), target.name(),
                         row.identity(), expectationOf(row), reached.stage(), Disposition.INCOMPLETE,
-                        FailurePhase.TIMEOUT, null, null, List.of(),
+                        FailurePhase.TIMEOUT, null, null, reached.answer(), List.of(),
                         stated instanceof RowStatement.Stated values ? values.inputs() : List.of(),
                         stated, ran(reached, new Counting.Unread())));
             }
@@ -1819,8 +1830,10 @@ public final class ExampleVerifier {
         // The answer is in hand, which is as far as a row gets before anything is done with it. A
         // measure reading what the behavior answered reads a row that got here, and the two things
         // done with an answer — holding it to the declaration, holding it to what the row states —
-        // are past it rather than folded into it.
-        state.got(Stage.ANSWERED);
+        // are past it rather than folded into it. What it answered is kept as the compiler owns it,
+        // whatever the row states, so that a reader asking whether another run would have answered
+        // alike has the answer and not only its case.
+        state.answered(fixtures.observed(result));
         if (!keepsWhatIsDeclaredOfWhatItAnswered(fixtures, row, target, sig, args, result, out,
                 state)) {
             return;
@@ -1879,16 +1892,26 @@ public final class ExampleVerifier {
      * The same projection a Souther caller does, done on the loaded classes.
      */
     private Object projected(Object result, Type out) {
+        return projected(result, out, module.name(), kinds, sums);
+    }
+
+    /**
+     * {@link #projected(Object, Type)} for a caller holding the module's declarations rather than a
+     * verifier: a run of a row nobody wrote answers in the same classes, and what it answered is the
+     * value behind the bridge case for the same reason.
+     */
+    static Object projected(Object result, Type out, String module, DeclarationKinds kinds,
+                            SumCases sums) {
         if (result == null || !(out instanceof Type.Union)) {
             return result;
         }
         for (TypeSymbol member : AtomSpace.subjectAtoms(out, kinds, sums)) {
             if (!member.isDeclaredByLanguage()
                     && member instanceof TypeSymbol.AtModule at
-                    && at.module().equals(module.name())) {
+                    && at.module().equals(module)) {
                 continue;
             }
-            if (SoutherJvmAbi.nameOf(new GeneratedClass.BridgeCase(module.name(), member)).is(result.getClass())) {
+            if (SoutherJvmAbi.nameOf(new GeneratedClass.BridgeCase(module, member)).is(result.getClass())) {
                 try {
                     return result.getClass().getMethod("value").invoke(result);
                 } catch (ReflectiveOperationException e) {

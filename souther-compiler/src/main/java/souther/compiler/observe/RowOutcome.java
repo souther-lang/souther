@@ -93,6 +93,9 @@ import java.util.Objects;
  * @param expectedArm    the case the row's expectation constructs, or null when the text does not say
  * @param resultArm      the case the behavior answered with, or null when it did not run or did not
  *                       answer with a case
+ * @param answer         what the behavior answered, which a row has exactly where it got to
+ *                       {@link Stage#ANSWERED}. Beside {@link #resultArm} and not in place of it:
+ *                       that one is the case the answer is, and this is the answer
  * @param inputCases     the case each input fixture constructs, in order; an entry is null where the
  *                       text does not say
  * @param inputs         each input as the compiler owns it, in order
@@ -119,6 +122,7 @@ public record RowOutcome(SourcePos at,
                          FailurePhase failurePhase,
                          TypeSymbol expectedArm,
                          TypeSymbol resultArm,
+                         AnswerObservation answer,
                          List<TypeSymbol> inputCases,
                          List<ObservedValue> inputs,
                          RowStatement statement,
@@ -159,6 +163,14 @@ public record RowOutcome(SourcePos at,
             throw new IllegalArgumentException(
                     "a row that applied the behavior says what applied it, and one that did not says "
                             + "nothing did: " + stage + " with " + run.applied());
+        }
+        Objects.requireNonNull(answer, "a row says what the behavior answered, or that it did not");
+        if (stage.reached(Stage.ANSWERED) != answer instanceof AnswerObservation.Answered) {
+            // The stage is how far the row got and this is what it found there; the two are written
+            // together where the answer comes back, and a row recorded with one and not the other
+            // would have answered and have nothing to show for it, or the other way round.
+            throw new IllegalArgumentException("a row that got an answer says what it was, and one"
+                    + " that did not says it got none: " + stage + " with " + answer);
         }
         // What the source put where the answer goes and what became of the answer are held to each
         // other. Asked of {@link #expectation}, which is what the row was read as, and never of

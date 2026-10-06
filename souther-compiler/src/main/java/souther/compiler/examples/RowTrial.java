@@ -4,6 +4,7 @@ import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.execute.RowTrials;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BoundaryInput;
+import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.FakeTables;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
@@ -11,14 +12,19 @@ import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Contract;
 import souther.compiler.coverage.NumberingIdentity;
-import souther.compiler.coverage.Observation;
 import souther.compiler.coverage.Probe;
+import souther.compiler.coverage.RunRecord;
+import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
+import souther.compiler.evaluate.StepLimitExceeded;
 import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.generated.ProbeImage;
 import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.FieldTypes;
+import souther.compiler.observe.ObservedValue;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -78,7 +84,7 @@ public final class RowTrial {
     public static RowTrials over(Prepared.ForExamples module,
                               Symbols symbols,
                               SumCases sums,
-                              souther.compiler.check.DeclarationKinds kinds,
+                              DeclarationKinds kinds,
                               FieldTypes fields,
                               Map<String, ClassFileImage> classes,
                               ClassLoader parent,
@@ -98,26 +104,28 @@ public final class RowTrial {
             // expands a value is that row's, and a reader kept between them would be a session
             // spanning every candidate of every combination.
             return went(new FixtureReader(module, symbols, sums, kinds, fields, values, loader),
-                    module, ensures,
+                    module, kinds, sums, ensures,
                     applies, behavior, sig, inputs, answers, probes, steps);
         };
     }
 
     /**
-     * One row, built and applied, and what the probe saw while it was.
+     * One row, built and applied, what the probe saw while it was, and what it answered.
      *
      * <p>The recording is begun and read on this thread because the run is on this thread, and it
      * is begun only where there is something to record: classes generated without the calls that
      * write a run down leave no account, which is not the same as an account of a run that reached
      * nothing.
      */
-    private static Optional<Observation> went(FixtureReader fixtures,
-                                              Prepared.ForExamples module,
-                                              EnsuresChecks ensures,
-                                              Answerer.Answer.Something applies, String behavior,
-                                              Sig sig, List<Hir.Expr> inputs,
-                                              List<RowTrials.AnsweredWith> answers,
-                                              ProbeImage probes, EvaluationPolicy steps) {
+    private static Optional<RowTrials.Ran> went(FixtureReader fixtures,
+                                                Prepared.ForExamples module,
+                                                DeclarationKinds kinds,
+                                                SumCases sums,
+                                                EnsuresChecks ensures,
+                                                Answerer.Answer.Something applies, String behavior,
+                                                Sig sig, List<Hir.Expr> inputs,
+                                                List<RowTrials.AnsweredWith> answers,
+                                                ProbeImage probes, EvaluationPolicy steps) {
         List<BoundaryInput> ins = sig.ins();
         if (inputs.size() != ins.size()) {
             return Optional.empty();   // not a row of this behavior, so this is not the thing to run
@@ -156,16 +164,17 @@ public final class RowTrial {
         // and let go inside one arm, so there is no way to end one that was never begun — and what
         // comes back where nothing was watching is no account of a run rather than an account of
         // one that went nowhere.
+        AnswerReading reading = new AnswerReading(fixtures, sig.outputType(), module.name(), kinds,
+                sums);
         return switch (probes) {
-            case ProbeImage.Uninstrumented _ -> {
-                applied(applying, over, steps);
-                yield Optional.empty();
-            }
+            case ProbeImage.Uninstrumented _ -> applied(applying, over, steps, reading)
+                    .map(answer -> new RowTrials.Ran(new RunRecord.NoAccount(), answer));
             case ProbeImage.Instrumented(NumberingIdentity numbering) -> {
                 Probe.begin(numbering);
                 try {
-                    yield applied(applying, over, steps)
-                            ? Optional.of(Probe.snapshot()) : Optional.empty();
+                    yield applied(applying, over, steps, reading)
+                            .map(answer -> new RowTrials.Ran(
+                                    new RunRecord.Recorded(Probe.snapshot()), answer));
                 } finally {
                     // On every way out, including one nothing here catches. A recording left
                     // installed is where the next reader on this thread would start.
@@ -173,6 +182,31 @@ public final class RowTrial {
                 }
             }
         };
+    }
+
+    /**
+     * What a run's answer is read with: the value behind the bridge case it may arrive in, read
+     * into the form the compiler owns. What a written row's answer is read with as well, so that the
+     * same answer from either comes out as the same value.
+     */
+    private record AnswerReading(FixtureReader fixtures, Type out, String module,
+                                 DeclarationKinds kinds, SumCases sums) {
+
+        /**
+         * The answer, read. A budget running out while it is read leaves an answer that came back
+         * and could not be read, which is what it is: the run answered, and where it went is
+         * recorded whatever became of the reading.
+         */
+        AnswerObservation read(Object answered) {
+            ObservedValue value;
+            try {
+                value = fixtures.observed(
+                        ExampleVerifier.projected(answered, out, module, kinds, sums));
+            } catch (StepLimitExceeded | DepthLimitExceeded e) {
+                value = new ObservedValue.Unknown("the budget ran out while the answer was read");
+            }
+            return new AnswerObservation.Answered(value);
+        }
     }
 
     /**
@@ -240,37 +274,47 @@ public final class RowTrial {
     }
 
     /**
-     * Applies the behavior, and says whether it was applied at all.
+     * Applies the behavior, and says what it answered — or that it was not applied at all, which is
+     * the empty answer.
      *
      * <p>A run that aborts still went where it went, so what stopped it is dropped: nothing here is
-     * judging the row, and a generator has no expectation for it to have failed against. What is
-     * not a run at all is the implementation being out of reach, and that is the false answer.
+     * judging the row, and a generator has no expectation for it to have failed against. It answered
+     * nothing, and that is what it is said to have answered. What is not a run at all is the
+     * implementation being out of reach.
+     *
+     * <p>The answer is read inside the budget, as a written row's is: reading it walks what the run
+     * built, and that walk is counted the way the building was.
      *
      * <p>The budget is let go on every way out, a worker being something the next row would
      * otherwise start inside of.
      */
-    private static boolean applied(Answerer.Applying applying, List<Handed> over,
-                                   EvaluationPolicy steps) {
+    private static Optional<AnswerObservation> applied(Answerer.Applying applying,
+                                                       List<Handed> over, EvaluationPolicy steps,
+                                                       AnswerReading reading) {
         EvaluationContext.begin(steps.stepLimit(), steps.recursionDepthLimit());
         try {
-            applying.to(over);
-        } catch (ImplementationNotReached e) {
-            // Not a run at all: the implementation could not be reached to apply. Saying the row
-            // did nothing would be saying it went nowhere, and those are different facts.
-            return false;
-        } catch (InvocationFailure e) {
-            // It ran and stopped. Where it had got to is what is being asked for, and what stopped
-            // it is not.
-            //
-            // This one and no wider. What the applied code ends with arrives as this, so a
-            // throwable that is not one is this compiler failing to reach or drive its own output —
-            // and swallowed here it would come back as a candidate that ran and missed, which is a
-            // statement about the model. The seam says which failures it has
-            // ({@link Answerer.Applying#to}) and those are the ones read.
+            Object answered;
+            try {
+                answered = applying.to(over);
+            } catch (ImplementationNotReached e) {
+                // Not a run at all: the implementation could not be reached to apply. Saying the
+                // row did nothing would be saying it went nowhere, and those are different facts.
+                return Optional.empty();
+            } catch (InvocationFailure e) {
+                // It ran and stopped. Where it had got to is what is being asked for, and what
+                // stopped it is not.
+                //
+                // This one and no wider. What the applied code ends with arrives as this, so a
+                // throwable that is not one is this compiler failing to reach or drive its own
+                // output — and swallowed here it would come back as a candidate that ran and
+                // missed, which is a statement about the model. The seam says which failures it
+                // has ({@link Answerer.Applying#to}) and those are the ones read.
+                return Optional.of(new AnswerObservation.NotAnswered());
+            }
+            return Optional.of(reading.read(answered));
         } finally {
             EvaluationContext.end();
         }
-        return true;
     }
 
     private RowTrial() {}

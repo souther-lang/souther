@@ -16,6 +16,7 @@ import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.coverage.Runs;
 import souther.compiler.coverage.SeenComparison;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.observe.AnswerObservation;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -96,7 +97,8 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
         FillResult filled = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
                 // Seen doing everything the ways in name, and seen at no arm at all.
-                _ -> new Generator.Watched.Ran(waysWithoutTheArms(model)),
+                _ -> new Generator.ObservedRun(new Generator.Watched.Ran(waysWithoutTheArms(model)),
+                        new AnswerObservation.NotAnswered()),
                 List.of(), List.of(), List.copyOf(everyArm), Budgets.generation());
 
         for (ArmProbe probe : everyArm) {
@@ -116,7 +118,8 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
 
         FillResult filled = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
-                _ -> new Generator.Watched.Ran(everywhere(model, everyArm)),
+                _ -> new Generator.ObservedRun(new Generator.Watched.Ran(everywhere(model, everyArm)),
+                        new AnswerObservation.NotAnswered()),
                 List.of(), List.of(), List.copyOf(everyArm), Budgets.generation());
 
         assertTrue(GenerationFixtures.arms(filled.discharge()).values().stream().allMatch(ArmDisposition.Built.class::isInstance),

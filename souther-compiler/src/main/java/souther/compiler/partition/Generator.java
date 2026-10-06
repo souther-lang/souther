@@ -27,6 +27,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.types.ReachName;
@@ -1006,10 +1007,33 @@ public final class Generator {
     public interface Trial {
 
         /** What running {@code row} through the behavior came to. */
-        Watched run(RowToRun row);
+        ObservedRun run(RowToRun row);
 
         /** Nothing runs here — what a caller with no runtime to run against uses. */
-        Trial NOTHING_RUNS = _ -> new Watched.NoAccount();
+        Trial NOTHING_RUNS = _ -> ObservedRun.nothingRan();
+    }
+
+    /**
+     * What one composed row's run came to: where it went, and what it answered.
+     *
+     * <p>Two things and not one, because they are not found out together. Where a run went is what
+     * the classes recorded, and a run nothing recorded still answered; a run that aborted part way
+     * went where it went and answered nothing.
+     *
+     * @param watched where it went, or that nothing can say
+     * @param answer  what it answered, or that it answered nothing
+     */
+    public record ObservedRun(Watched watched, AnswerObservation answer) {
+
+        public ObservedRun {
+            Objects.requireNonNull(watched, "a run says where it went, or that nothing can say");
+            Objects.requireNonNull(answer, "a run says what it answered, or that it answered nothing");
+        }
+
+        /** A row nothing ran: nothing can say where it went, and it answered nothing. */
+        public static ObservedRun nothingRan() {
+            return new ObservedRun(new Watched.NoAccount(), new AnswerObservation.NotAnswered());
+        }
     }
 
     /**
@@ -2315,7 +2339,7 @@ public final class Generator {
                 return Optional.empty();
             }
             runs.left--;
-            Watched now = trial.run(row.toRun());
+            Watched now = trial.run(row.toRun()).watched();
             ran.put(writtenAs, now);
             return Optional.of(now);
         }
@@ -5700,7 +5724,7 @@ public final class Generator {
                         return Taken.NOT_TAKEN;   // this candidate is the run nobody did
                     }
                     runs++;
-                    watched = trial.run(named.toRun());
+                    watched = trial.run(named.toRun()).watched();
                     applied.put(written, watched);
                 }
                 switch (watched) {
