@@ -48,8 +48,10 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
      * readings meet the same conditions, and a column and the region a row for it is looked for in
      * are about one of them.
      *
-     * <p>Null where no row brings the condition out {@code held}, which is no path; and nothing
-     * for a part the source settles {@code held}, which is no column.
+     * <p>Null where no row brings the condition out {@code held}, which the reading of the ways
+     * does not let through, so it is met only where the two read the condition under different
+     * names ({@link DecisionNaming#side} says what that comes to); and nothing for a part the
+     * source settles {@code held}, which is no column.
      */
     List<Read> deciding(Condition condition, boolean held) {
         if (condition instanceof Condition.Joined joined

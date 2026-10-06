@@ -105,6 +105,13 @@ public sealed interface OnTheWay {
                 throw new IllegalArgumentException(
                         "a condition the source settles is some condition the reading met");
             }
+            // Named and placed as {@link Declined} is, and held to the same: the anchor and the
+            // name are one answer said twice.
+            if (anchor instanceof ConditionReportAnchor.WhereTheReadingMetIt(
+                    String _, ConditionOccurrence anchored) && !condition.equals(anchored)) {
+                throw new IllegalArgumentException("a condition settled here is reported here: "
+                        + condition + " reported at " + anchored);
+            }
         }
     }
 

@@ -193,12 +193,12 @@ final class TruthOutcomes {
                         && names.writtenOut(binary.right())
                         ? Outcomes.FIXED_UNNAMED : Outcomes.EITHER);
             }
-            if (!(e instanceof Core.PreservedCall applied)) {
+            AnOperationApplied applied = AnOperationApplied.of(e);
+            if (applied == null) {
                 return Outcomes.EITHER;
             }
-            ValueName operation = applied.declared().operation();
             var facts = DefaultBoundOperationFacts.get();
-            if (facts.meansTheSameAsASizeOfNought(operation) != null
+            if (facts.meansTheSameAsASizeOfNought(applied.operation()) != null
                     && applied.args().size() == 1) {
                 return emptiness(applied.args().getFirst());
             }
@@ -232,15 +232,16 @@ final class TruthOutcomes {
                 }
                 default -> { }
             }
-            if (!(e instanceof Core.PreservedCall applied)) {
+            AnOperationApplied applied = AnOperationApplied.of(e);
+            if (applied == null) {
                 return Outcomes.EITHER;
             }
             var facts = DefaultBoundOperationFacts.get();
-            ValueName operation = applied.declared().operation();
-            var turns = facts.turnsOnWhetherAnArgumentHolds(operation, AnswerAspect.EMPTINESS);
-            Core.Block kept = turns == null ? null
-                    : closure(applied.args().get(turns.argument().position()));
-            Integer handed = keptFrom(operation);
+            var turns = facts.turnsOnWhetherAnArgumentHolds(applied.operation(),
+                    AnswerAspect.EMPTINESS);
+            Core.Block kept = turns == null ? null : closure(applied.argument(turns.argument()));
+            DeclaredArgument from = keptFrom(applied.operation());
+            Core handed = from == null ? null : applied.argument(from);
             if (kept == null || handed == null) {
                 return everyArgumentWrittenOut(applied) ? Outcomes.FIXED_UNNAMED
                         : Outcomes.EITHER;
@@ -248,18 +249,18 @@ final class TruthOutcomes {
             // What is kept is what the closure holds of, out of what it was handed: kept by a
             // closure holding of nothing, nothing is, and that is the same as no element of what
             // it was handed meeting the closure.
-            return some(applied.args().get(handed), kept, false).denied();
+            return some(handed, kept, false).denied();
         }
 
         /**
          * Which argument {@code operation} keeps elements of, where what it answers is elements of
          * one argument's own — or null where the library says nothing of the kind.
          */
-        private static Integer keptFrom(ValueName operation) {
+        private static DeclaredArgument keptFrom(ValueName operation) {
             var built = DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
             return built != null && built.outputs().size() == 1
                     && built.lineage() instanceof ElementLineage.SameAs<DeclaredArgument>(var source)
-                    ? source.argument().position() : null;
+                    ? source.argument() : null;
         }
 
         /**
@@ -272,19 +273,19 @@ final class TruthOutcomes {
          * every element meeting it true, whatever the container — and the other way round, what
          * is left is whether the container holds anything.
          */
-        private Outcomes quantified(Core.PreservedCall applied) {
+        private Outcomes quantified(AnOperationApplied applied) {
             var facts = DefaultBoundOperationFacts.get();
-            ValueName operation = applied.declared().operation();
+            ValueName operation = applied.operation();
             var container = facts.readsItsContainer(operation);
             var turns = facts.turnsOnWhetherAnArgumentHolds(operation, AnswerAspect.TRUTH);
             if (container == null || turns == null) {
                 return null;
             }
-            Core.Block predicate = closure(applied.args().get(turns.argument().position()));
-            if (predicate == null) {
+            Core.Block predicate = closure(applied.argument(turns.argument()));
+            Core handed = applied.argument(container.container());
+            if (predicate == null || handed == null) {
                 return null;
             }
-            Core handed = applied.args().get(container.container().position());
             // Every element meeting p is no element failing it, which is some element meeting its
             // denial denied — so one rule answers both.
             return facts.statesItsPredicateOfEveryElement(operation)
@@ -328,6 +329,9 @@ final class TruthOutcomes {
         }
 
         private Core.Block closure(Core handed) {
+            if (handed == null) {
+                return null;
+            }
             Core e = Core.withoutStanding(names.denotes(handed));
             return e instanceof Core.Block block ? block : null;
         }
@@ -337,7 +341,7 @@ final class TruthOutcomes {
                     : BooleanMeaning.folded(e, symbols).map(Outcomes::only);
         }
 
-        private boolean everyArgumentWrittenOut(Core.PreservedCall applied) {
+        private boolean everyArgumentWrittenOut(AnOperationApplied applied) {
             return applied.args().stream().allMatch(names::writtenOut);
         }
 

@@ -6,6 +6,11 @@ import org.junit.jupiter.api.Timeout;
 import souther.compiler.KeptCalls;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
+import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.types.ReachName;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
@@ -57,6 +62,34 @@ class AWalkOverWhatAnAnswerTurnsOnAsksEachQuestionOnceTest {
         assertEquals(List.of(call),
                 WhatAForkTests.partsOfTheAnswer(call, through(e -> e == call ? e : call)),
                 "a reading that leads back to the question it came from answers it once");
+    }
+
+    /**
+     * An operation applied as a call to what its name reached is read as the same operation it is
+     * standing as itself: every element meeting what always holds turns on nothing, and some
+     * element meeting it turns on whether the list holds anything, which is the application.
+     */
+    @Test
+    void anOperationCalledByWhatItsNameReachedIsReadAsTheOperation() {
+        Core.Call every = calling(ValueName.Stdlib.operation("List", "all"));
+        Core.Call some = calling(ValueName.Stdlib.operation("List", "any"));
+        assertEquals(List.of(), WhatAForkTests.partsOfTheAnswer(every, through(e -> e)),
+                "true whatever the list is");
+        assertEquals(List.of(some), WhatAForkTests.partsOfTheAnswer(some, through(e -> e)),
+                "whether the list holds anything");
+    }
+
+    /** {@code operation} over a list and a closure that always holds, called by what its name
+     *  reached. */
+    private static Core.Call calling(ValueName.Stdlib.Operation operation) {
+        BindingOwner owner = new BindingOwner.OfValue("demo", "walk");
+        Core.Block holds = new Core.Block(
+                List.of(new Core.Binder("e", new BindingId(owner, 0))), List.of(Type.INT),
+                new Core.Bool(true, Type.BOOL, POS), POS);
+        Core.Read list = new Core.Read("xs", new BindingId(owner, 1), Type.list(Type.INT), POS);
+        return new Core.Call(new Core.Reached.OfDeclaration(new ReachName.OfLibrary(operation)),
+                List.of(holds, list), ConstructOccurrence.unwritten(),
+                Core.CallSettlement.None.INSTANCE, Type.BOOL, POS);
     }
 
     /** Names that stand for what {@code denotes} says, none of them for a written value. */

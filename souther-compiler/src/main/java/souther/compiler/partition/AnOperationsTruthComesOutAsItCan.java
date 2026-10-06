@@ -50,8 +50,8 @@ final class AnOperationsTruthComesOutAsItCan implements ComparisonWays {
         if (ComparisonWays.OF_THE_TREE.comesOut(e, want, settledBy)) {
             return true;
         }
-        return Core.withoutStanding(e) instanceof Core.PreservedCall applied
-                && applied.type() == Type.Prim.BOOL
+        return AnOperationApplied.of(e) != null
+                && Core.withoutStanding(e).type() == Type.Prim.BOOL
                 && outcomes.allows(want);
     }
 

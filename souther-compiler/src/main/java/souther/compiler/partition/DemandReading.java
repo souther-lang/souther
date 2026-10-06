@@ -211,23 +211,26 @@ final class DemandReading {
      */
     private static List<Read> ofAQuantifier(Core e, InputReads reads, InputReading read,
                                             boolean holding, String behavior) {
-        if (!(Core.withoutStanding(e) instanceof Core.PreservedCall call)) {
+        AnOperationApplied call = AnOperationApplied.of(e);
+        if (call == null) {
             return null;
         }
-        ValueName operation = call.declared().operation();
+        ValueName operation = call.operation();
         BoundOperationFacts facts = DefaultBoundOperationFacts.get();
         var container = facts.readsItsContainer(operation);
         var turns = facts.turnsOnWhetherAnArgumentHolds(operation, AnswerAspect.TRUTH);
-        if (container == null || turns == null) {
+        Core closure = turns == null ? null : call.argument(turns.argument());
+        Core over = container == null ? null : call.argument(container.container());
+        if (closure == null || over == null) {
             return null;
         }
-        Denotation handed = reads.denotes(call.args().get(turns.argument().position()),
-                read.rules().symbols(), read.rules().newtypes());
+        Denotation handed = reads.denotes(closure, read.rules().symbols(),
+                read.rules().newtypes());
         if (!(Core.withoutStanding(handed.value()) instanceof Core.Block block)) {
             return null;
         }
-        if (!(reads.pathOf(call.args().get(container.container().position()),
-                read.rules().newtypes()) instanceof PathResolution.At(TermPath held))) {
+        if (!(reads.pathOf(over, read.rules().newtypes())
+                instanceof PathResolution.At(TermPath held))) {
             return List.of(new Read.Unread(new OnTheWay.Why.ContainerAtNoPosition()));
         }
         TermPath element = held.element();

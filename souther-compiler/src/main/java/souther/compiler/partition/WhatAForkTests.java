@@ -1,7 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.CallArguments;
-import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.core.Core;
 import souther.compiler.semantics.AnswerAspect;
@@ -175,11 +173,10 @@ final class WhatAForkTests {
         // An operation whose answer is the same every time turns on nothing, whatever the library
         // says or does not say about it. Followed as a question instead, one the library says
         // nothing about would be where the walk stopped, and offered as a part that varies. Which
-        // answers the application can give is {@link TruthOutcomes}' to say, over the tree where
-        // the operation stands; an operation the tree that runs applies is the same every time
-        // where it is handed nothing but values the source wrote out.
-        if (operationOf(e) != null && (argumentsOf(e).stream().allMatch(names::writtenOut)
-                || TruthOutcomes.ofTheSide(e, aspect, names, null).isFixed())) {
+        // answers the application can give is {@link TruthOutcomes}' to say, in either shape the
+        // application stands in.
+        if (AnOperationApplied.of(e) != null
+                && TruthOutcomes.ofTheSide(e, aspect, names, null).isFixed()) {
             return Follow.FIXED;
         }
         // And beyond an operation the library says the answer turns on, what it turns on.
@@ -246,8 +243,9 @@ final class WhatAForkTests {
 
     /** Whether what the library says this answer turns on is the emptiness of what it was given. */
     private static boolean beyondIsAboutEmptiness(Core e, AnswerAspect aspect) {
-        return aspect == AnswerAspect.TRUTH && DefaultBoundOperationFacts.get()
-                .meansTheSameAsASizeOfNought(operationOf(e)) != null;
+        AnOperationApplied applied = AnOperationApplied.of(e);
+        return aspect == AnswerAspect.TRUTH && applied != null && DefaultBoundOperationFacts.get()
+                .meansTheSameAsASizeOfNought(applied.operation()) != null;
     }
 
     /**
@@ -265,64 +263,34 @@ final class WhatAForkTests {
      */
     private static Core beyond(Core e, AnswerAspect aspect,
                                WhatNamesStandFor names) {
-        ValueName operation = operationOf(e);
-        if (operation == null) {
+        AnOperationApplied applied = AnOperationApplied.of(e);
+        if (applied == null) {
             return null;
         }
+        ValueName operation = applied.operation();
         if (aspect == AnswerAspect.TRUTH
                 && DefaultBoundOperationFacts.get().meansTheSameAsASizeOfNought(operation) != null) {
-            Core container = only(e);
-            return container == null ? null : names.denotes(container);
+            // The one argument an operation of one value was given.
+            return applied.args().size() == 1 ? names.denotes(applied.args().getFirst()) : null;
         }
         var turns = DefaultBoundOperationFacts.get()
                 .turnsOnWhetherAnArgumentHolds(operation, aspect);
-        return turns == null ? null : answerOf(argument(e, turns.argument()), names);
+        Core handed = turns == null ? null : applied.argument(turns.argument());
+        return handed == null ? null : answerOf(handed, names);
     }
 
     /** Whether what the library says {@code e}'s answer turns on is a closure it was handed. */
     private static boolean throughAClosure(Core e, AnswerAspect aspect,
                                            WhatNamesStandFor names) {
-        ValueName operation = operationOf(e);
-        if (operation == null || beyondIsAboutEmptiness(e, aspect)) {
+        AnOperationApplied applied = AnOperationApplied.of(e);
+        if (applied == null || beyondIsAboutEmptiness(e, aspect)) {
             return false;
         }
         var turns = DefaultBoundOperationFacts.get()
-                .turnsOnWhetherAnArgumentHolds(operation, aspect);
-        Core handed = turns == null ? null : argument(e, turns.argument());
+                .turnsOnWhetherAnArgumentHolds(applied.operation(), aspect);
+        Core handed = turns == null ? null : applied.argument(turns.argument());
         return handed != null
                 && Core.withoutStanding(names.denotes(handed)) instanceof Core.Block;
-    }
-
-    /** Which library operation {@code e} applies, in either shape a representation gives one, or
-     *  null where it applies none. */
-    private static ValueName operationOf(Core e) {
-        return switch (Core.withoutStanding(e)) {
-            case Core.PreservedCall kept -> kept.declared().operation();
-            case Core.Call call when call.fn() instanceof Core.Reached reached -> reached.denotes();
-            default -> null;
-        };
-    }
-
-    private static List<Core> argumentsOf(Core e) {
-        return switch (Core.withoutStanding(e)) {
-            case Core.PreservedCall kept -> kept.args();
-            case Core.Call call -> call.args();
-            default -> List.of();
-        };
-    }
-
-    /** The one argument an operation of one value was given, or null where it took another
-     *  number of them. */
-    private static Core only(Core e) {
-        List<Core> args = argumentsOf(e);
-        return args.size() == 1 ? args.get(0) : null;
-    }
-
-    /** What {@code e} passes where {@code which} stands, or null where it passes nothing there. */
-    private static Core argument(Core e, DeclaredArgument which) {
-        List<Core> args = argumentsOf(e);
-        int at = CallArguments.positionOf(which, operationOf(e));
-        return at < 0 || at >= args.size() ? null : args.get(at);
     }
 
     /**

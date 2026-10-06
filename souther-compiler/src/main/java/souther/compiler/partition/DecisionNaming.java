@@ -101,7 +101,11 @@ final class DecisionNaming implements Naming<DecisionPath> {
         Condition condition = Condition.of(value, reads, meanings.states().symbols(),
                 meanings.states().newtypes(), numbering);
         List<DecisionMeanings.Read> decided = meanings.deciding(condition, held);
-        // No row brings it out this way, so no rule goes down this side.
+        // A side the reading of the ways let through and this reading sees no row take. Both ask
+        // which answers a value can give of the same reading, so they part only where it was read
+        // under different names — and then this naming has no words for the side, which is what
+        // null is ({@link Naming#side}): the way stays, short of whole, and is not dropped on the
+        // word of one of two readings that disagree.
         if (decided == null) {
             return null;
         }

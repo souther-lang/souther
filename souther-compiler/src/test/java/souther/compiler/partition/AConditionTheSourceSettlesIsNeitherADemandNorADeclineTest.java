@@ -158,6 +158,9 @@ class AConditionTheSourceSettlesIsNeitherADemandNorADeclineTest {
     void theWayPastSomeElementMeetingWhatAlwaysHoldsFailingIsTheEmptyContainer() {
         WayToTheBorder way = wayToTheGate("decideEmpty");
         assertEquals(List.of(), way.declined(), () -> "nothing on the way is declined: " + way);
+        RowDemand holdingNone = demandOf("holdsNone", true);
+        assertTrue(way.takenIn().stream().anyMatch(each -> each.demand().equals(holdingNone)),
+                () -> "the list holding none is what the composer is handed: " + way);
         Generator.BoundaryAttempt.Built built = assertInstanceOf(
                 Generator.BoundaryAttempt.Built.class, composedFor(way));
         assertEquals(List.of(), built.unrepresented().onTheWay(),
