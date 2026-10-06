@@ -8,7 +8,6 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.reading.Interaction;
 import souther.compiler.reading.CoverageRead;
@@ -90,11 +89,10 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("fee");
         Core body = checked.behaviorBodies().get("fee");
         assertNotNull(body);
-        CoverageSites.Plan plan = checked.plan();
         Partitions.Partitioning axes =
                 Partitions.of(spec.name(), inputs.reading(rules), ReadAs.THE_COMPILATION_DOES);
         return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules), axes),
-                CoverageRead.of(spec.name(), body, plan, inputs.reading(rules)));
+                CoverageRead.of(spec.name(), checked.run(spec.name()), inputs.reading(rules)));
     }
 
     /** The positions under two cases are both axes, which is what the assignments have to hold. */

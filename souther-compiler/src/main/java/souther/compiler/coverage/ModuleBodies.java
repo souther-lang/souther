@@ -34,13 +34,21 @@ import java.util.SequencedMap;
  * no behavior: nothing declares rows for it, and it has no answer of its own to state. So it is held
  * beside the behaviors, and the places of a behavior are its own and those of every method it calls.
  *
+ * <p><b>And so are the bodies a run passes through with no places counted.</b> A helper emitted as a
+ * method is one: a run goes through it, and the value methods it calls are run from inside it. Its
+ * places are not numbered, so it is held apart from the methods — and held at all, because a run
+ * read without it would lose every method it reaches only through one.
+ *
  * @param module whose module the bodies are of
  * @param bodies each behavior of that module, by name, in the order the module declares them
  * @param methods each value of that module emitted as a method, by name, in the order the module
  *                declares them
+ * @param passages each helper of that module emitted as a method, by name, in the order the module
+ *                 declares them. Nothing is numbered in these
  */
 public record ModuleBodies(String module, SequencedMap<String, Core> bodies,
-                           SequencedMap<String, Core> methods) {
+                           SequencedMap<String, Core> methods,
+                           SequencedMap<String, Core> passages) {
 
     public ModuleBodies {
         if (module == null) {
@@ -48,6 +56,7 @@ public record ModuleBodies(String module, SequencedMap<String, Core> bodies,
         }
         bodies = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(bodies));
         methods = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(methods));
+        passages = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(passages));
     }
 
 
@@ -66,17 +75,19 @@ public record ModuleBodies(String module, SequencedMap<String, Core> bodies,
     public boolean equals(Object other) {
         return other instanceof ModuleBodies that && module.equals(that.module)
                 && List.copyOf(bodies.entrySet()).equals(List.copyOf(that.bodies.entrySet()))
-                && List.copyOf(methods.entrySet()).equals(List.copyOf(that.methods.entrySet()));
+                && List.copyOf(methods.entrySet()).equals(List.copyOf(that.methods.entrySet()))
+                && List.copyOf(passages.entrySet()).equals(List.copyOf(that.passages.entrySet()));
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(module, List.copyOf(bodies.entrySet()),
-                List.copyOf(methods.entrySet()));
+                List.copyOf(methods.entrySet()), List.copyOf(passages.entrySet()));
     }
 
     /** A module with nothing in it, which is what a check that did not finish leaves. */
     public static ModuleBodies none() {
-        return new ModuleBodies("", new LinkedHashMap<>(), new LinkedHashMap<>());
+        return new ModuleBodies("", new LinkedHashMap<>(), new LinkedHashMap<>(),
+                new LinkedHashMap<>());
     }
 }

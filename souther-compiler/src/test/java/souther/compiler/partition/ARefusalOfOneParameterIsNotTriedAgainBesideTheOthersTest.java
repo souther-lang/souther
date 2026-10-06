@@ -315,8 +315,7 @@ class ARefusalOfOneParameterIsNotTriedAgainBesideTheOthersTest {
             Partitions.Partitioning partitioning = Partitions.of(spec.name(), domain.reading(rules),
                     ReadAs.THE_COMPILATION_DOES);
             return new Model(MeasuredInput.of(spec.name(), domain.reading(rules), partitioning),
-                    CoverageRead.of(spec.name(), checked.behaviorBodies().get(behavior),
-                            checked.plan(), domain.reading(rules)));
+                    CoverageRead.of(spec.name(), checked.run(spec.name()), domain.reading(rules)));
         }
     }
 }

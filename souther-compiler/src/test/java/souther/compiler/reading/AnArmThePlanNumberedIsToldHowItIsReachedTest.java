@@ -261,6 +261,7 @@ class AnArmThePlanNumberedIsToldHowItIsReachedTest {
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
         CoverageSites.Plan plan = checked.plan();
-        return new Read(CoverageRead.of(behavior, body, plan, inputs.reading(rules)), plan, behavior);
+        return new Read(CoverageRead.of(behavior, checked.run(behavior), inputs.reading(rules)),
+                plan, behavior);
     }
 }

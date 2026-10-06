@@ -191,7 +191,8 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
                     "and divides it into classes a row can be composed at");
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
                     partitioning),
-                    CoverageRead.of("fee", body, plan, inputs.reading(rules)), plan.numbering());
+                    CoverageRead.of("fee", checked.run("fee"), inputs.reading(rules)),
+                    plan.numbering());
         }
     }
 }
