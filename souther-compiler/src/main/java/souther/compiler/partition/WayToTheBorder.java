@@ -119,7 +119,11 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
         return new Requirements.Merge.Merged(out);
     }
 
-    /** The ones that narrow a region built from this. */
+    /**
+     * What the way asks of a row, each where it was taken in. Only some of them narrow a region
+     * built from this: what every element meets leaves it as it is, since a container holding none
+     * meets it.
+     */
     public List<OnTheWay.TakenIn> takenIn() {
         List<OnTheWay.TakenIn> out = new ArrayList<>();
         for (OnTheWay each : onTheWay) {

@@ -57,7 +57,69 @@ class ATruthAnOperationAnswersIsAWayThroughWhatItIsPartOfTest {
             let unsaid (r, flagged) =
                 if r.cost > 900 || List.contains(High, [ High ]) || flagged then Approved
                 else Asked
+
+            behavior everyMarkHolds : (marks: List<Int>, flagged: Bool) -> Approved | Asked
+            let everyMarkHolds (marks, flagged) =
+                if List.all(m -> true, marks) || flagged then Approved else Asked
+
+            behavior noMarkHolds : (marks: List<Int>, flagged: Bool) -> Approved | Asked
+            let noMarkHolds (marks, flagged) =
+                if List.any(m -> false, marks) || flagged then Approved else Asked
+
+            behavior someMarkHolds : (marks: List<Int>, flagged: Bool) -> Approved | Asked
+            let someMarkHolds (marks, flagged) =
+                if List.any(m -> true, marks) || flagged then Approved else Asked
+
+            behavior everyMarkFails : (marks: List<Int>, flagged: Bool) -> Approved | Asked
+            let everyMarkFails (marks, flagged) =
+                if List.all(m -> false, marks) || flagged then Approved else Asked
+
+            behavior writtenMarks : (r: Request, flagged: Bool) -> Approved | Asked
+            let writtenMarks (r, flagged) =
+                if List.any(m -> m > 3, [ 1, 5 ]) || flagged then Approved else Asked
+
+            behavior noneKept : (marks: List<Int>, flagged: Bool) -> Approved | Asked
+            let noneKept (marks, flagged) =
+                if List.isEmpty(List.filter(m -> false, marks)) || flagged then Approved
+                else Asked
             """;
+
+    /**
+     * A predicate fixed at one answer carries that answer through what the operation does with
+     * it: every element holding what always holds is true whatever the list, some element holding
+     * what never does is false, and the other two are whether the list holds anything.
+     */
+    @Test
+    void aPredicateFixedAtOneAnswerIsCarriedThroughTheOperation() {
+        assertEquals(List.of(1, 0), ruleCountAndTheFlag("everyMarkHolds"),
+                "every element holding what always holds settles the condition");
+        assertEquals(List.of(2, 2), ruleCountAndTheFlag("noMarkHolds"),
+                "some element holding what never holds is the flag alone");
+        assertEquals(List.of(3, 2), ruleCountAndTheFlag("someMarkHolds"),
+                "some element holding what always holds is whether there is one");
+        assertEquals(List.of(3, 2), ruleCountAndTheFlag("everyMarkFails"),
+                "every element holding what never holds is whether there is none");
+        assertEquals(List.of(1, 0), ruleCountAndTheFlag("noneKept"),
+                "nothing is kept by what never holds, so the list kept is always empty");
+    }
+
+    /**
+     * A predicate over a list written out that reads nothing but its element answers the same
+     * every time, and is no way out the other way round; one that reads the input beside its
+     * element still varies with the input, which `either` holds.
+     */
+    @Test
+    void aPredicateOverAWrittenListReadingOnlyItsElementIsTheSameEveryTime() {
+        assertEquals(2, DecisionReadings.readToTheEnd(MODEL, "writtenMarks").size(),
+                "neither way of the fixed part is a rule, and the way past it is one");
+    }
+
+    /** How many rules, and how many of them turn on the flag. */
+    private static List<Integer> ruleCountAndTheFlag(String behavior) {
+        List<DecisionRule> rules = DecisionReadings.readToTheEnd(MODEL, behavior);
+        return List.of(rules.size(),
+                (int) rules.stream().filter(rule -> turnsOnTheFlag(rule)).count());
+    }
 
     /** Three parts, each a way the condition comes out true, and the way none of them does. */
     @Test

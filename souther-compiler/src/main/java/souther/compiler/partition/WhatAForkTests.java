@@ -57,25 +57,14 @@ final class WhatAForkTests {
      * question about the atom rather than about the parts, and every owner that went through it
      * lost the parts again — the whole of what this is for is that they are asked one at a time. A
      * caller wanting to know who owns the atom composes it from the parts, where the composing is
-     * written down. Whether the atom answers the same whatever the input is another question, and
-     * {@link #answersTheSameWhateverTheInput} answers it off the same walk.
+     * written down. Which answers the atom can give is another question, and
+     * {@link TruthOutcomes} answers it.
      */
     static List<Core> partsOfTheAnswer(Core atom,
                                        UnaryOperator<Core> denotes) {
         List<Core> out = new ArrayList<>();
         turnsOn(atom, AnswerAspect.TRUTH, denotes, new HashMap<>(), out);
         return out;
-    }
-
-    /**
-     * Whether the truth of {@code atom} is the same whatever the input — and not which one it is.
-     *
-     * <p>Not a question about who owns what it turns on, which is what the parts are for. A walk
-     * that stopped is one that cannot say the answer is fixed, and is not this.
-     */
-    static boolean answersTheSameWhateverTheInput(Core atom, UnaryOperator<Core> denotes) {
-        return turnsOn(atom, AnswerAspect.TRUTH, denotes, new HashMap<>(), new ArrayList<>())
-                == Follow.FIXED;
     }
 
     /**
@@ -185,7 +174,8 @@ final class WhatAForkTests {
         // the library says nothing about would be where the walk stopped, and offered as a part
         // that varies.
         if (operationOf(e) != null && argumentsOf(e).stream()
-                .allMatch(each -> wholeValueWrittenOut(denotes.apply(each), denotes))) {
+                .allMatch(each -> TruthOutcomes.wholeValueWrittenOut(denotes.apply(each),
+                        denotes))) {
             return Follow.FIXED;
         }
         // And beyond an operation the library says the answer turns on, what it turns on.
@@ -194,10 +184,14 @@ final class WhatAForkTests {
                 : turnsOn(beyond, beyondIsAboutEmptiness(e, aspect)
                         ? AnswerAspect.EMPTINESS : AnswerAspect.TRUTH, denotes, met, out);
         // A closure is half of what an operation walking a container answers by, and the container
-        // is the other half — `List.any(x -> true, xs)` answers whether `xs` holds anything. This
-        // walk follows the closure and not the container, so where the closure answers the same
-        // whatever it is handed, the container decides, and the application is what is offered.
-        if (past == Follow.FIXED && throughAClosure(e, aspect, denotes)) {
+        // is the other half. This walk follows the closure and not the container, so where the
+        // closure answers the same whatever it is handed, which answer it is settles which half
+        // decides: `List.all(_ -> true, xs)` is true whatever `xs` is, and `List.any(_ -> true, xs)`
+        // is whether `xs` holds anything. Which of the two an operation is is the library's to say,
+        // and what that comes to is {@link TruthOutcomes}' answer; where the container decides, the
+        // application is what is offered.
+        if (past == Follow.FIXED && throughAClosure(e, aspect, denotes)
+                && !TruthOutcomes.ofTheSide(e, aspect, denotes, null).isFixed()) {
             past = Follow.STOPPED;
         }
         if (past != Follow.STOPPED) {
@@ -242,30 +236,6 @@ final class WhatAForkTests {
                  Core.UnitValue _, Core.ListLit _, Core.Tuple _, Core.OptionSome _,
                  Core.OptionNone _, Core.Construct _ -> true;
             default -> false;
-        };
-    }
-
-    /**
-     * Whether {@code e} is a value the source wrote out all the way down — a written value, and
-     * every part of one built out of written values.
-     *
-     * <p>Beside {@link #writtenOut} and asking more of the value. That one is whether an arm is an
-     * answer rather than a test, and a list is an answer however its elements were reached; this is
-     * whether the whole value is the same every time, which a list holding a position is not.
-     */
-    private static boolean wholeValueWrittenOut(Core standing, UnaryOperator<Core> denotes) {
-        return switch (Core.withoutStanding(standing)) {
-            case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
-                 Core.UnitValue _, Core.OptionNone _ -> true;
-            case Core.Neg negated -> wholeValueWrittenOut(denotes.apply(negated.operand()), denotes);
-            case Core.OptionSome some -> wholeValueWrittenOut(denotes.apply(some.value()), denotes);
-            case Core.ListLit list -> list.elements().stream()
-                    .allMatch(each -> wholeValueWrittenOut(denotes.apply(each), denotes));
-            case Core.Tuple tuple -> tuple.elements().stream()
-                    .allMatch(each -> wholeValueWrittenOut(denotes.apply(each), denotes));
-            case Core.Construct made -> made.values().stream()
-                    .allMatch(each -> wholeValueWrittenOut(denotes.apply(each.value()), denotes));
-            case null, default -> false;
         };
     }
 

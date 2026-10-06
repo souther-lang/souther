@@ -49,6 +49,12 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
             behavior allAboveTheFloor : (o: Order) -> Bool
             let allAboveTheFloor (o) = List.all(l -> o.floor > 3, o.lines)
 
+            behavior everyLineHolds : (o: Order) -> Bool
+            let everyLineHolds (o) = List.all(l -> true, o.lines)
+
+            behavior someLineHolds : (o: Order) -> Bool
+            let someLineHolds (o) = List.any(l -> true, o.lines)
+
             behavior emptyAsked : (o: Order) -> Bool
             let emptyAsked (o) = List.isEmpty(o.lines)
 
@@ -140,6 +146,24 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
         OnTheWay.Declined declined = assertInstanceOf(OnTheWay.Declined.class,
                 only("allAboveTheFloor", true));
         assertEquals(new OnTheWay.Why.MoreThanEachElement(), declined.why());
+    }
+
+    /**
+     * A fork on every element holding what always holds turns on nothing, and one on some element
+     * holding it turns on whether the list holds anything — which is the application, offered.
+     */
+    @Test
+    void aClosureFixedAtOneAnswerLeavesTheContainerToDecideOnlyWhereItDoes() {
+        assertEquals(List.of(), partsOf("everyLineHolds"),
+                "true whatever the list is, so there is nothing for it to turn on");
+        assertEquals(1, partsOf("someLineHolds").size(),
+                "whether the list holds anything, which the application is what is offered for");
+    }
+
+    private static List<Core> partsOf(String behavior) {
+        Read read = readingOf(behavior);
+        return WhatAForkTests.partsOfTheAnswer(read.body(), one -> read.reads()
+                .denotes(one, read.rules().symbols(), read.rules().newtypes()).value());
     }
 
     /** Everything the body's single condition asks of a row, coming out {@code holding}. */

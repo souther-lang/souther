@@ -63,12 +63,13 @@ public sealed interface Reachability {
     /**
      * Where a row for the border may be written, and what it has to be to get there.
      *
-     * @param boundedOnTheWay the cuts the walk took in, which are what a composer has to put the
-     *                        positions of somewhere {@code region} admits rather than somewhere the
-     *                        declarations do. The cuts and not the positions read off them: a cut
-     *                        over two positions is one statement about the pair, and a composer
-     *                        holding a bag of positions has no way to tell which of them it may
-     *                        settle apart from the others
+     * @param boundedOnTheWay what the walk asked of a row on the way, which a composer has to
+     *                        compose a row to meet rather than read off {@code region}: some of it
+     *                        narrowed the region and some of it, what every element meets, did not.
+     *                        The demands and not the positions read off them: a demand over two
+     *                        positions is one statement about the pair, and a composer holding a
+     *                        bag of positions has no way to tell which of them it may settle apart
+     *                        from the others
      */
     record Reaching(SearchRegion region, Requirements requirements,
                     List<OnTheWay.TakenIn> boundedOnTheWay) implements Reachability {
