@@ -119,32 +119,58 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
         if (on == null) {
             return ANYTHING;
         }
-        NumbersAskedFor asked = switch (within.projectionOf(term)) {
+        NumbersAskedFor asked = leaving(term, within, on);
+        for (OnTheWay.TakenIn cut : cuts) {
+            if (!cut.demand().terms().contains(term)) {
+                continue;
+            }
+            switch (cut.demand()) {
+                case RowDemand.Relational(var relation) ->
+                        asked = asked.meet(askedBy(relation, term, on, ANYTHING));
+                // What some element meets, which the region was not narrowed by. So what it leaves
+                // the term is read off a region that is, one relation of it at a time.
+                case RowDemand.Exists(var ofAnElement, var _) -> {
+                    for (RowDemand.Relational each : ofAnElement) {
+                        if (each.terms().contains(term)) {
+                            asked = asked.meet(askedBy(each.constraint(), term, on,
+                                    leaving(term, each.constraint().narrowing(within), on)));
+                        }
+                    }
+                }
+            }
+        }
+        return asked;
+    }
+
+    /** What {@code within} leaves {@code term}, on its own order. */
+    private static NumbersAskedFor leaving(NumericTerm.FromOnePosition term, SearchRegion within,
+                                           Carrier on) {
+        return switch (within.projectionOf(term)) {
             case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
                     of(between(held, on));
             // The rules leave the term nowhere, which is the whole of what is asked of it.
             case NumericDomain.FormProjection.NothingIsLeft _ -> of(new LevelRegion(List.of()));
             case null -> ANYTHING;
         };
-        for (OnTheWay.TakenIn cut : cuts) {
-            TakenConstraint taken = switch (cut.demand()) {
-                case RowDemand.Relational(var relation) -> relation;
-            };
-            if (!taken.terms().contains(term)) {
-                continue;
-            }
-            asked = asked.meet(switch (taken) {
-                case TakenConstraint.AwayFrom away ->
-                        of(LevelRegion.EVERYTHING.without(new Level.OnACarrier(on, away.at())));
-                // A form of one term says where that term runs, and the region was narrowed by it
-                // where it was taken in. Over several, what it leaves each of them is whatever the
-                // others took.
-                case TakenConstraint.Affine affine when affine.terms().size() > 1 ->
-                        onlyTogether(affine);
-                case TakenConstraint.Affine _, TakenConstraint.Ordered _ -> ANYTHING;
-            });
-        }
-        return asked;
+    }
+
+    /**
+     * What {@code taken} asks of {@code term} beside what a region leaves it.
+     *
+     * @param inTheRegion what a region narrowed by {@code taken} leaves the term, which is nothing
+     *                    more than the region already said where the region was narrowed by it
+     */
+    private static NumbersAskedFor askedBy(TakenConstraint taken, NumericTerm.FromOnePosition term,
+                                           Carrier on, NumbersAskedFor inTheRegion) {
+        return switch (taken) {
+            case TakenConstraint.AwayFrom away ->
+                    of(LevelRegion.EVERYTHING.without(new Level.OnACarrier(on, away.at())));
+            // A form of one term says where that term runs, which is the region's to say. Over
+            // several, what it leaves each of them is whatever the others took.
+            case TakenConstraint.Affine affine when affine.terms().size() > 1 ->
+                    onlyTogether(affine);
+            case TakenConstraint.Affine _, TakenConstraint.Ordered _ -> inTheRegion;
+        };
     }
 
     /** The run between a pair of ends, open where an end is not written. */

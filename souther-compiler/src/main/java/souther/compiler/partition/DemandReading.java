@@ -1,16 +1,27 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.BooleanMeaning;
+import souther.compiler.check.BoundOperationFacts;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.ConditionJoin;
+import souther.compiler.types.ValueName;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -38,36 +49,200 @@ final class DemandReading {
     }
 
     /**
-     * What a value the body asks the truth of states, coming out {@code holding}.
+     * What a condition coming out {@code holding} asks of a row, one entry for each thing it asks.
      *
-     * <p>The comparison it means where it means one, read as that comparison is: an emptiness check
-     * is its size against nought, and a denial is the comparison under it the other way round. The
-     * comparison is one no source wrote where the truth is an operation's answer, which is why it is
-     * read here and never named as a condition of the body — what a run through it is seen at is
+     * <p>A comparison is read as itself, and a value the body asks the truth of as the comparison
+     * it means where it means one: an emptiness check is its size against nought, and a denial is
+     * what is under it the other way round. That comparison is one no source wrote, which is why it
+     * is read here and never named as a condition of the body — what a run through it is seen at is
      * still the application the author wrote.
+     *
+     * <p>A conjunction coming out the way that gives both halves asks both, and the other way it
+     * says one of two things and asks neither: {@code A && B} failing names no half that failed.
+     * Which nodes are conjunctions is {@link Condition#of}'s answer, the one place a condition
+     * becomes a shape, and taken as it gave it.
+     */
+    static List<Read> of(Condition condition, InputReading read, boolean holding) {
+        return switch (condition) {
+            case Condition.Joined joined -> {
+                if (joined.how().under(holding) != ConditionJoin.BOTH) {
+                    yield List.of(new Read.Unread(new OnTheWay.Why.OneOfTwoThings()));
+                }
+                List<Read> both = new ArrayList<>(of(joined.left(), read, holding));
+                both.addAll(of(joined.right(), read, holding));
+                yield List.copyOf(both);
+            }
+            case Condition.Compares one ->
+                    List.of(ofAComparison(one.comparison().stated(), one.reads(), read, holding));
+            case Condition.Truth truth -> ofATruth(truth.value(), truth.reads(), read, holding,
+                    truth.occurrence().behavior());
+        };
+    }
+
+    /**
+     * What a value the body asks the truth of asks of a row.
      *
      * <p>Bindings and names are looked through on the way down, as {@link Condition#of} looks
      * through them: a denial the library writes as a body binds what it denies, and what it binds
      * is the truth.
+     *
+     * @param behavior whose body the truth is in, which is whose a predicate handed to an
+     *                 operation inside it is
      */
-    static Read ofATruth(Core value, InputReads reads, InputReading read, boolean holding) {
+    private static List<Read> ofATruth(Core value, InputReads reads, InputReading read,
+                                       boolean holding, String behavior) {
         Core e = Core.withoutStanding(value);
         if (e instanceof Core.LetIn let) {
-            return ofATruth(let.body(), reads.and(let.binder(), let.value()), read, holding);
+            return ofATruth(let.body(), reads.and(let.binder(), let.value()), read, holding,
+                    behavior);
         }
         // It terminates because a binder's value can only mention binders introduced before it.
         if (e instanceof Core.Read name
                 && reads.meaningOf(name, read.rules().symbols(), read.rules().newtypes())
                         instanceof ReadMeaning.Through through) {
-            return ofATruth(through.denotes().value(), through.denotes().at(), read, holding);
+            return ofATruth(through.denotes().value(), through.denotes().at(), read, holding,
+                    behavior);
         }
         Optional<BooleanMeaning.UnderADenial> denied = BooleanMeaning.underADenial(e, holding);
         if (denied.isPresent()) {
-            return ofATruth(denied.get().part(), reads, read, denied.get().positive());
+            return ofATruth(denied.get().part(), reads, read, denied.get().positive(), behavior);
         }
-        return BooleanMeaning.asAComparison(e)
+        List<Read> quantified = ofAQuantifier(e, reads, read, holding, behavior);
+        if (quantified != null) {
+            return quantified;
+        }
+        return List.of(BooleanMeaning.asAComparison(e)
                 .map(comparison -> ofAComparison(comparison.stated(), reads, read, holding))
-                .orElse(new Read.Unread(new OnTheWay.Why.NoWordsForTheShape()));
+                .orElse(new Read.Unread(new OnTheWay.Why.NoWordsForTheShape())));
+    }
+
+    /**
+     * What a predicate the library says is asked of a container's elements asks of a row, or null
+     * where {@code e} applies no such predicate.
+     *
+     * <p>Which operation asks it of every element and which of one is the library's to say
+     * ({@code StatesItsPredicateOfEveryElement}), and the two ways each comes out are two demands
+     * and not four: some element meeting the predicate, or every element meeting what it is
+     * coming out the way asked. {@code List.any} failing is every element failing its predicate,
+     * and {@code List.all} failing is some element failing it.
+     *
+     * <p>The predicate is read where the closure was written, with what it is handed standing at
+     * the container's elements. What every element meets is a relation over the elements, and a
+     * region can be narrowed by it — an empty container meets it too, so no row that passes is
+     * left out — except where the relation is about something beside the element, which an empty
+     * container does not answer for. What some element meets is not a region's to carry
+     * ({@link RowDemand.Exists}), which holds the container holding at least one with it.
+     */
+    private static List<Read> ofAQuantifier(Core e, InputReads reads, InputReading read,
+                                            boolean holding, String behavior) {
+        if (!(Core.withoutStanding(e) instanceof Core.PreservedCall call)) {
+            return null;
+        }
+        ValueName operation = call.declared().operation();
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+        var container = facts.readsItsContainer(operation);
+        var turns = facts.turnsOnWhetherAnArgumentHolds(operation, AnswerAspect.TRUTH);
+        if (container == null || turns == null) {
+            return null;
+        }
+        Denotation handed = reads.denotes(call.args().get(turns.argument().position()),
+                read.rules().symbols(), read.rules().newtypes());
+        if (!(Core.withoutStanding(handed.value()) instanceof Core.Block block)) {
+            return null;
+        }
+        if (!(reads.pathOf(call.args().get(container.container().position()),
+                read.rules().newtypes()) instanceof PathResolution.At(TermPath held))) {
+            return List.of(new Read.Unread(new OnTheWay.Why.ContainerAtNoPosition()));
+        }
+        TermPath element = held.element();
+        boolean everyElement = facts.statesItsPredicateOfEveryElement(operation) == holding;
+        List<Read> out = new ArrayList<>();
+        List<RowDemand.Relational> ofSome = new ArrayList<>();
+        // Named apart from the body's own conditions: nothing reports one of these by its name,
+        // and filed under the body's numbering they would take names the body's conditions have.
+        Condition predicate = Condition.of(block.body(), handed.at(), read.rules().symbols(),
+                read.rules().newtypes(),
+                new ConditionNumbering(read.symbols().module(), behavior));
+        for (Read each : of(predicate, read, holding)) {
+            switch (each) {
+                case Read.Unread _ -> out.add(each);
+                case Read.Demands(RowDemand.Relational relation)
+                        when everyElement && !aboutOnly(relation, element) ->
+                        out.add(new Read.Unread(new OnTheWay.Why.MoreThanEachElement()));
+                // About the element and nothing beside it, or about some element: what some
+                // element meets, the parts of it about nothing of the element hold of the row
+                // whichever element it is, so those are relations of the row like any other.
+                case Read.Demands(RowDemand.Relational relation)
+                        when !everyElement && aboutAny(relation, element) -> ofSome.add(relation);
+                case Read.Demands(RowDemand.Relational _) -> out.add(each);
+                // A quantifier inside a quantifier asks of an element's own elements, which is
+                // nothing a single relation of the outer element says.
+                case Read.Demands(RowDemand.Exists _) ->
+                        out.add(new Read.Unread(new OnTheWay.Why.NoWordsForTheShape()));
+            }
+        }
+        if (!everyElement) {
+            Optional<RowDemand.Relational> holdingOne =
+                    Optional.ofNullable(holdingOne(held, operation, read));
+            // An element meeting nothing this reading could state is still the container holding
+            // one, which every row past it does.
+            if (!ofSome.isEmpty()) {
+                out.add(new Read.Demands(new RowDemand.Exists(ofSome, holdingOne)));
+            } else {
+                holdingOne.ifPresent(one -> out.add(new Read.Demands(one)));
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /** Whether every term {@code relation} is over stands inside {@code element}. */
+    private static boolean aboutOnly(RowDemand.Relational relation, TermPath element) {
+        return relation.constraint().terms().stream()
+                .allMatch(term -> term.subjectPath().isAtOrUnder(element));
+    }
+
+    /** Whether some term {@code relation} is over stands inside {@code element}. */
+    private static boolean aboutAny(RowDemand.Relational relation, TermPath element) {
+        return relation.constraint().terms().stream()
+                .anyMatch(term -> term.subjectPath().isAtOrUnder(element));
+    }
+
+    /**
+     * That the container at {@code held} holds at least one, as its size against one — or null
+     * where its size is no term of this input or the region cannot carry it.
+     *
+     * <p>The size is the one the container's own library means by emptiness
+     * ({@code MeansTheSameAsASizeOfNought}), asked of the library the quantifier is in: a list is
+     * walked by the list's operations, and its size is the list's.
+     */
+    private static RowDemand.Relational holdingOne(TermPath held, ValueName quantifier,
+                                                   InputReading read) {
+        if (!(quantifier instanceof ValueName.Stdlib.Operation(String library, String _))) {
+            return null;
+        }
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+        for (ValueName emptiness : facts.meansTheSameAsASizeOfNought()) {
+            if (!(emptiness instanceof ValueName.Stdlib.Operation(String at, String _))
+                    || !at.equals(library)) {
+                continue;
+            }
+            if (!(facts.meansTheSameAsASizeOfNought(emptiness).size().operation()
+                    instanceof ValueName.Stdlib size)) {
+                return null;
+            }
+            NumericTerm.TakenOf count = NumericTerm.TakenOf.of(size, held,
+                    read.domain().at(held).type(), read.rules().inners(), read.rules().symbols());
+            if (count == null) {
+                return null;
+            }
+            LinearForm<NumericTerm> atLeastOne =
+                    LinearForm.atomMinusConstant(count, ExactRatio.ONE);
+            return read.quantities().region().assuming(atLeastOne, Rel.GE)
+                    instanceof SearchRegion.Assumption.Taken
+                    ? new RowDemand.Relational(new TakenConstraint.Affine(atLeastOne, Rel.GE))
+                    : null;
+        }
+        return null;
     }
 
     /**

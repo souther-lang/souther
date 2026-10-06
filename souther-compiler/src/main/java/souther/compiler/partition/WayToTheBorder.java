@@ -73,16 +73,13 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
             if (each instanceof OnTheWay.TakenIn taken) {
                 region = switch (taken.demand()) {
                     // Taken in, and the region is asked to take it in: an entry here is one the
-                    // region said it could carry when the walk recorded it, so a refusal now is
-                    // this compiler holding two readings of one constraint that disagree. Loud,
-                    // because the quiet answer is the region a search would then run over — wider
-                    // than what every reader of this account was told it had been narrowed to.
-                    case RowDemand.Relational(TakenConstraint.Affine affine) ->
-                            region.assuming(affine.form(), affine.rel()).taken();
-                    case RowDemand.Relational(TakenConstraint.Ordered ordered) ->
-                            region.assuming(ordered.term(), ordered.at(), ordered.rel());
-                    case RowDemand.Relational(TakenConstraint.AwayFrom away) ->
-                            region.apartFrom(away.term(), away.at());
+                    // region said it could carry when the walk recorded it.
+                    case RowDemand.Relational(var relation) -> relation.narrowing(region);
+                    // That some element meets these says nothing every row past it holds of each
+                    // element, so the region is narrowed only by the container holding one. What
+                    // the element meets is composed where the row is.
+                    case RowDemand.Exists(var _, var holdingOne) -> holdingOne.isPresent()
+                            ? holdingOne.get().constraint().narrowing(region) : region;
                 };
             }
         }

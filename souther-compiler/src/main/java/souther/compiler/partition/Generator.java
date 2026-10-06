@@ -25,6 +25,7 @@ import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.Classification;
@@ -2306,7 +2307,7 @@ public final class Generator {
             return switch (demand) {
                 case RowDemand.AtAPoint point -> point.fixing().keySet().stream()
                         .anyMatch(target -> against.contains(target.writeRoot().head()));
-                case RowDemand.Relational(var relation) -> relation.terms().stream()
+                case RowDemand.OfACondition condition -> condition.terms().stream()
                         .anyMatch(term -> against.contains(term.subjectPath().head()));
             };
         }
@@ -4379,27 +4380,42 @@ public final class Generator {
     private static Placed placing(MeasuredInput subject, WitnessSearch looking, SearchRegion here,
                                   Map<RealizationTarget, Place> alreadyStanding,
                                   Requirements assumed, OnTheWay.TakenIn cut) {
-        TakenConstraint taken = switch (cut.demand()) {
-            case RowDemand.Relational(var relation) -> relation;
+        // The region the cut's numbers are chosen in. What every row past it holds the region a
+        // search runs over was narrowed by already; that some element meets something it was not,
+        // and the cut is placed in a region that is, for this cut alone — the element written
+        // meets it, and every element a list writes is that one. Where no element can, none does,
+        // so nothing left there is the proof a cut's own reading gives.
+        SearchRegion within = here;
+        List<TakenConstraint> stated = switch (cut.demand()) {
+            case RowDemand.Relational(var relation) -> List.of(relation);
+            case RowDemand.Exists(var ofAnElement, var _) -> {
+                List<TakenConstraint> each = ofAnElement.stream()
+                        .map(RowDemand.Relational::constraint).toList();
+                for (TakenConstraint one : each) {
+                    within = one.narrowing(within);
+                }
+                yield each;
+            }
         };
         // What the cut says, asked as the one thing it says. A cut over two positions is a
         // statement about their sum, and the rules can leave that sum nowhere while leaving each
         // position somewhere — so the positions asked one at a time answer a weaker question
         // than the cut put. Asked here, before the cut is taken apart into the positions a
         // value has to be chosen at.
-        if (taken instanceof TakenConstraint.Affine affine
-                && here.projectionOf(affine.form())
-                        instanceof souther.compiler.numeric.NumericDomain.FormProjection
-                                .NothingIsLeft) {
-            return new Placed.AtNone(new ReachabilityGap.ProvedImpossible(cut));
+        for (TakenConstraint one : stated) {
+            if (one instanceof TakenConstraint.Affine affine
+                    && within.projectionOf(affine.form())
+                            instanceof NumericDomain.FormProjection.NothingIsLeft) {
+                return new Placed.AtNone(new ReachabilityGap.ProvedImpossible(cut));
+            }
         }
         // What routing this cut's numbers came to is kept by the search until the cut is placed.
         // Where each of them is written and which case the row was taken to be to write it there
         // are part of placing the cut, and a cut is placed at every position it names or at none —
         // so a cut that comes to nothing leaves the row the case it had, and the next cut chooses
         // as freely as this one did.
-        return new CutPlacing(subject, looking, here, alreadyStanding, cut,
-                List.copyOf(taken.terms()))
+        return new CutPlacing(subject, looking, within, alreadyStanding, cut,
+                List.copyOf(cut.demand().terms()))
                 .from(0, assumed, new LinkedHashMap<>(), new LinkedHashMap<>());
     }
 
@@ -5204,10 +5220,7 @@ public final class Generator {
             out.put(each, asking);
         }
         for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
-            TakenConstraint taken = switch (cut.demand()) {
-                case RowDemand.Relational(var relation) -> relation;
-            };
-            for (NumericTerm term : taken.terms()) {
+            for (NumericTerm term : cut.demand().terms()) {
                 NumericTerm.FromOnePosition at = term.atOnePosition();
                 if (at == null) {
                     continue;
@@ -5873,7 +5886,7 @@ public final class Generator {
         for (HeldOutcome each : held) {
             switch (each.demand()) {
                 case RowDemand.AtAPoint point -> points.add(point);
-                case RowDemand.Relational _ -> {
+                case RowDemand.OfACondition _ -> {
                     return new HeldTogether.Refused(new Attempt(null,
                             UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, null,
                             Optional.of("a condition held as a relation is not composed here")));
@@ -7024,7 +7037,7 @@ public final class Generator {
                 continue;   // an axis decides here
             }
             RuleKey field = fieldUnder(slot.at());
-            souther.compiler.numeric.NumericDomain.Bounds here =
+            NumericDomain.Bounds here =
                     field == null ? null : left.at(field).bounds();
             List<FixtureTemplate> stands = Partitions.representativesHolding(slot.type(), reading,
                     here, field == null ? null : left.heldAt(field));

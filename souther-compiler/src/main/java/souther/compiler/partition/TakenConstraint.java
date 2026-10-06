@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
@@ -35,6 +36,21 @@ public sealed interface TakenConstraint {
      * per shape and a vocabulary added later would be one the composer walks past.
      */
     java.util.Set<NumericTerm> terms();
+
+    /**
+     * {@code region} with this taken in.
+     *
+     * <p>Asked of a constraint that was read off a region able to carry it, so a refusal now is
+     * this compiler holding two readings of one constraint that disagree — and is loud, because the
+     * quiet answer is a region wider than every reader of it was told it had been narrowed to.
+     */
+    default SearchRegion narrowing(SearchRegion region) {
+        return switch (this) {
+            case Affine affine -> region.assuming(affine.form(), affine.rel()).taken();
+            case Ordered ordered -> region.assuming(ordered.term(), ordered.at(), ordered.rel());
+            case AwayFrom away -> region.apartFrom(away.term(), away.at());
+        };
+    }
 
     /**
      * An inequality over a form of the input's numbers: {@code form rel 0}.

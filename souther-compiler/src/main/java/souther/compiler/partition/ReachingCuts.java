@@ -117,8 +117,9 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison)
             // A truth is taken in for what it asks of a row, and stays the truth it is: what a
             // report names and where a run through it is seen are the condition the author wrote,
             // and only the demand is read as the comparison it means.
-            case Condition.Truth truth -> List.of(onTheWay(truth.occurrence(), truth.anchor(),
-                    DemandReading.ofATruth(truth.value(), truth.reads(), read, holding)));
+            case Condition.Truth truth -> DemandReading.of(truth, read, holding).stream()
+                    .map(each -> onTheWay(truth.occurrence(), truth.anchor(), each))
+                    .toList();
         };
     }
 

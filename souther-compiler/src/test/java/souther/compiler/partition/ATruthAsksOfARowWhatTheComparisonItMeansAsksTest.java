@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
@@ -20,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A value the body asks the truth of asks of a row what the comparison it means asks.
@@ -35,7 +38,16 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
             module example.truths
 
             data Line = { price: Int }
-            data Order = { lines: List<Line> }
+            data Order = { lines: List<Line>, floor: Int }
+
+            behavior someDear : (o: Order) -> Bool
+            let someDear (o) = List.any(l -> l.price >= 10, o.lines)
+
+            behavior allCheap : (o: Order) -> Bool
+            let allCheap (o) = List.all(l -> l.price < 10, o.lines)
+
+            behavior allAboveTheFloor : (o: Order) -> Bool
+            let allAboveTheFloor (o) = List.all(l -> o.floor > 3, o.lines)
 
             behavior emptyAsked : (o: Order) -> Bool
             let emptyAsked (o) = List.isEmpty(o.lines)
@@ -85,6 +97,56 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
         }
     }
 
+    /**
+     * Some element meeting a predicate and every element failing it are the two ways one
+     * quantifier comes out, and the other quantifier over the denied predicate asks the same.
+     */
+    @Test
+    void aQuantifierAsksWhatTheOtherAsksOfTheDeniedPredicate() {
+        for (boolean holding : List.of(true, false)) {
+            assertEquals(demandsOf("allCheap", !holding), demandsOf("someDear", holding),
+                    "List.any(p) coming out " + holding + " asks what List.all(not p) coming out "
+                            + !holding + " asks");
+        }
+    }
+
+    /**
+     * Every element meeting it is a relation of the elements alone, and some element meeting it
+     * is the container holding one and an element that meets it — which no region is narrowed by.
+     */
+    @Test
+    void everyElementIsARelationAndSomeElementIsNot() {
+        List<RowDemand> every = demandsOf("someDear", false);
+        assertEquals(1, every.size(), () -> "one relation of the elements: " + every);
+        assertInstanceOf(RowDemand.Relational.class, every.getFirst());
+
+        List<RowDemand> some = demandsOf("someDear", true);
+        assertEquals(1, some.size(), () -> "an element, with the container holding it: " + some);
+        RowDemand.Exists element = assertInstanceOf(RowDemand.Exists.class, some.getFirst(),
+                "an element that meets the predicate");
+        assertTrue(element.holdingOne().isPresent(), "and the container holding at least one");
+        assertNotEquals(every.getFirst(), element.ofAnElement().getFirst(),
+                "what some element meets is the predicate, and what every element meets when it"
+                        + " fails is its denial");
+    }
+
+    /** What every element has to meet is not narrowed on where it is about more than the element:
+     *  an empty list meets it whatever the rest says. */
+    @Test
+    void everyElementMeetingWhatIsNotAboutTheElementIsDeclined() {
+        OnTheWay.Declined declined = assertInstanceOf(OnTheWay.Declined.class,
+                only("allAboveTheFloor", true));
+        assertEquals(new OnTheWay.Why.MoreThanEachElement(), declined.why());
+    }
+
+    /** Everything the body's single condition asks of a row, coming out {@code holding}. */
+    private static List<RowDemand> demandsOf(String behavior, boolean holding) {
+        return readingOf(behavior).stating(holding).stream()
+                .map(each -> (RowDemand) assertInstanceOf(OnTheWay.TakenIn.class, each,
+                        () -> behavior + " asks something of a row: " + each).demand())
+                .toList();
+    }
+
     /** What the body's single condition asks of a row, coming out {@code holding}. */
     private static RowDemand demandOf(String behavior, boolean holding) {
         return assertInstanceOf(OnTheWay.TakenIn.class, only(behavior, holding),
@@ -116,13 +178,15 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
             String module = compilation.modules().getFirst();
             Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
             assertNotNull(checked, "the model under test compiles");
-            Core body = checked.behaviorBodies().get(name);
-            assertNotNull(body, () -> "the model under test writes " + name);
+            // The tree the analysis reads, where the language's operations still stand as written
+            // — which is the one a condition on the way is read off.
+            AnalysisBody analysis = checked.analysisBodies().get(name);
+            assertNotNull(analysis, () -> "the model under test writes " + name);
             RuleReadingSource rules = RuleReadings.of(compilation, module);
             InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get(name);
-            InputReads reads = InputReads.ofParameters(inputs.parameterReads(),
-                    checked.elementBindings().get(name));
-            return new Read(body, inputs.reading(rules), reads, rules, module, name);
+            InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
+                    ElementBindings.of(analysis, rules.newtypes()));
+            return new Read(analysis.core(), inputs.reading(rules), reads, rules, module, name);
         });
     }
 }

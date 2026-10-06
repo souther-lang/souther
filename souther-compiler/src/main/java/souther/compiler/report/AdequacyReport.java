@@ -3730,6 +3730,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     "an outcome that states one of two things";
             case OnTheWay.Why.ForkArmNotReadAsANarrowing _ ->
                     "an arm of a fork this reading could not read as a narrowing of a position";
+            case OnTheWay.Why.ContainerAtNoPosition _ ->
+                    "a condition about what a container holds, over a container that stands at no"
+                            + " position";
+            case OnTheWay.Why.MoreThanEachElement _ ->
+                    "a condition every element has to meet that is about more than the element";
         };
     }
 

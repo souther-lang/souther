@@ -32,8 +32,12 @@ import java.util.List;
 record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
                         DecisionComparison comparisons) {
 
-    /** One condition of a path: the column it is, and what it states about the input. */
-    record Read(DecidedCondition answer, OnTheWay onTheWay) {}
+    /**
+     * One condition of a path: the column it is, and what it states about the input.
+     *
+     * @param onTheWay what it asks of a row, which is as many things as it asks and one column
+     */
+    record Read(DecidedCondition answer, List<OnTheWay> onTheWay) {}
 
     /**
      * What {@code condition} coming out {@code held} decides, one entry per condition consulted.
@@ -51,11 +55,40 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
             out.addAll(deciding(joined.right(), held));
             return List.copyOf(out);
         }
-        List<Read> out = new ArrayList<>();
-        for (OnTheWay each : states.stating(condition, held)) {
-            out.add(new Read(answerOf(condition, each, held), each));
-        }
-        return List.copyOf(out);
+        List<OnTheWay> stated = states.stating(condition, held);
+        return List.of(new Read(oneRelation(stated) && (!(condition instanceof Condition.Truth)
+                || oneRelation(states.stating(condition, !held)))
+                ? answerOf(condition, stated.getFirst(), held)
+                : asOneColumn(condition, held), stated));
+    }
+
+    /**
+     * Whether what was stated is one thing a column can be read off.
+     *
+     * <p>Asked of a truth both ways it comes out, because the column is the truth's and the two
+     * ways are its two answers. A truth that means a comparison is that comparison's column either
+     * way; one that some element meets one way and every element fails the other is a relation
+     * only one way round, and a column read off that way would make the two answers of one fork
+     * answers to two different questions.
+     */
+    private static boolean oneRelation(List<OnTheWay> stated) {
+        return stated.size() == 1
+                && !(stated.getFirst() instanceof OnTheWay.TakenIn(var _, RowDemand.Exists _));
+    }
+
+    /**
+     * The column a condition that asks several things of a row is.
+     *
+     * <p>One, because it is one condition: every element of a list meeting two things is two
+     * relations a row is composed against and one distinction the body draws. No relation of them
+     * is the column, so it is the condition's own where what it is about is a subject a row
+     * controls, and otherwise one this reading has no column for.
+     */
+    private DecidedCondition asOneColumn(Condition condition, boolean held) {
+        DecidedCondition read = ofASubject(condition, held);
+        return read != null ? read
+                : new DecidedCondition.Unread(new DecisionCondition.AConditionNotRead(
+                        condition.occurrence(), new OnTheWay.Why.NoWordsForTheShape()), held);
     }
 
     /**
@@ -68,6 +101,12 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
      */
     private DecidedCondition answerOf(Condition condition, OnTheWay one, boolean held) {
         return switch (one) {
+            // That some element meets something is no column over the input's numbers: which
+            // element did is nothing a value at one position says. So the condition is the column
+            // it is where what it is about is a subject a row controls, and otherwise one this
+            // reading has no column for. Only a condition the body asks is read this way, so there
+            // is one to ask.
+            case OnTheWay.TakenIn(var _, RowDemand.Exists _) -> asOneColumn(condition, held);
             case OnTheWay.TakenIn(var _, RowDemand.Relational(var taken)) -> {
                 Rel proposition = taken.rel().orItsDenial();
                 DecisionCondition.Comparison column = switch (taken) {
@@ -133,7 +172,7 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
     Read entering(Core.Match match, int part, InputReads reads, ConditionNumbering numbering) {
         OnTheWay onTheWay = states.entering(match, part, reads, numbering);
         if (!(onTheWay instanceof OnTheWay.Declined)) {
-            return new Read(answerOf(null, onTheWay, true), onTheWay);
+            return new Read(answerOf(null, onTheWay, true), List.of(onTheWay));
         }
         // Where the arithmetic had no position to narrow, the fork may still be on something a row
         // controls. The arm says which case it turned out to be either way, and the two arms of one
@@ -143,9 +182,9 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
         Refinement narrowing = match.cases().get(part).selectedCase().map(Refinement::of)
                 .orElse(null);
         return subject == null || narrowing == null
-                ? new Read(answerOf(null, onTheWay, true), onTheWay)
+                ? new Read(answerOf(null, onTheWay, true), List.of(onTheWay))
                 : new Read(new DecidedCondition.Narrowed(
-                        new DecisionCondition.ACase(subject), narrowing), onTheWay);
+                        new DecisionCondition.ACase(subject), narrowing), List.of(onTheWay));
     }
 
     /**
@@ -158,6 +197,6 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
     Read attempting(Core.IfConstructed attempt, int part, SourcePos at,
                     ConditionNumbering numbering) {
         OnTheWay onTheWay = states.attempting(attempt, part, at, numbering);
-        return new Read(answerOf(null, onTheWay, true), onTheWay);
+        return new Read(answerOf(null, onTheWay, true), List.of(onTheWay));
     }
 }

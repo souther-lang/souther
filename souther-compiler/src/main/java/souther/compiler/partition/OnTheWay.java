@@ -194,5 +194,25 @@ public sealed interface OnTheWay {
          */
         record ForkArmNotReadAsANarrowing() implements Why {}
 
+        /**
+         * A condition about what a container holds, over a container this reading could not
+         * follow to a position of the input.
+         *
+         * <p>What such a condition asks of a row is something of the container's elements, and an
+         * element is somewhere only where the container is: with no position for the container
+         * there is nowhere for what is asked of its elements to be written.
+         */
+        record ContainerAtNoPosition() implements Why {}
+
+        /**
+         * A condition every element of a container has to meet, which says something of more than
+         * the element.
+         *
+         * <p>Every element meeting it is also what an empty container does, whatever the rest of
+         * the condition says. So where the condition is about something beside the element, a row
+         * past it need not meet that part — and narrowing on it would exclude rows that arrive.
+         */
+        record MoreThanEachElement() implements Why {}
+
     }
 }
