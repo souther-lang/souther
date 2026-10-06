@@ -8,6 +8,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -99,8 +100,13 @@ final class DecisionNaming implements Naming<DecisionPath> {
     public DecisionPath side(Core value, boolean held) {
         Condition condition = Condition.of(value, reads, meanings.states().symbols(),
                 meanings.states().newtypes(), numbering);
+        List<DecisionMeanings.Read> decided = meanings.deciding(condition, held);
+        // No row brings it out this way, so no rule goes down this side.
+        if (decided == null) {
+            return null;
+        }
         DecisionPath path = DecisionPath.NOWHERE;
-        for (DecisionMeanings.Read each : meanings.deciding(condition, held)) {
+        for (DecisionMeanings.Read each : decided) {
             path = path.and(each.answer(), shownBy(each.answer(), condition, held),
                     each.onTheWay());
             if (path == null) {

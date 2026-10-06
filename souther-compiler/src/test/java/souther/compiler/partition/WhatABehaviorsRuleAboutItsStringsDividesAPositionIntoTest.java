@@ -339,7 +339,7 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
                 inputs.parameterReads(), checked.elementBindings().get("f"),
                 new RuleReachNumbering(module, "f"));
         Allowance<NumericTerm.FromOnePosition> allowance = Allowance.of(budget);
-        return BehaviorSetStatements.of("f", read, rules.symbols(), rules.newtypes(), allowance,
+        return BehaviorSetStatements.of("f", read, inputs.reading(rules), allowance,
                 List.of(), new RuleReachNumbering(rules.symbols().module(), "f"));
     }
 }

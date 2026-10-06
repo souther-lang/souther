@@ -44,9 +44,23 @@ final class DemandReading {
         /** A demand a composer can build a row against. */
         record Demands(RowDemand.OfACondition demand) implements Read {}
 
+        /**
+         * Nothing to build against, because the answer is the same for every row: it asks nothing
+         * of one where that answer is the way asked, and no row comes out of it that way where it
+         * is not.
+         *
+         * <p>Apart from {@link Unread}, which says this reading could not state what is asked. A
+         * condition the source settles was read to the end, and taken for one that was not, a way
+         * past it would be reported as a way this compiler fell short on.
+         */
+        record Settled(boolean thisWay) implements Read {}
+
         /** None, and what stopped it. */
         record Unread(OnTheWay.Why why) implements Read {}
     }
+
+    /** One thing a condition asks, and which condition of the shape asks it. */
+    record Stated(Condition where, Read read) {}
 
     /**
      * What a condition coming out {@code holding} asks of a row, one entry for each thing it asks.
@@ -56,27 +70,78 @@ final class DemandReading {
      * what is under it the other way round. That comparison is one no source wrote, which is why it
      * is read here and never named as a condition of the body — what a run through it is seen at is
      * still the application the author wrote.
-     *
-     * <p>A conjunction coming out the way that gives both halves asks both, and the other way it
-     * says one of two things and asks neither: {@code A && B} failing names no half that failed.
-     * Which nodes are conjunctions is {@link Condition#of}'s answer, the one place a condition
-     * becomes a shape, and taken as it gave it.
      */
     static List<Read> of(Condition condition, InputReading read, boolean holding) {
+        return stated(condition, read, holding).stream().map(Stated::read).toList();
+    }
+
+    /**
+     * The same, each with the condition of the shape it was read off — the one a report about it
+     * is sent to.
+     *
+     * <p>A conjunction coming out the way that gives both halves asks both. The other way it says
+     * one of two things, and that asks neither — {@code A && B} failing names no half that failed —
+     * unless the source settles a half: one that always comes out this way settles the whole, and
+     * one that never does leaves the other half as all that is said. Which nodes are conjunctions
+     * is {@link Condition#of}'s answer, the one place a condition becomes a shape, and taken as it
+     * gave it; and this is the one place what a conjunction asks is composed, so a way on to a
+     * border and a predicate asked of each element read one connective one way.
+     */
+    static List<Stated> stated(Condition condition, InputReading read, boolean holding) {
         return switch (condition) {
             case Condition.Joined joined -> {
-                if (joined.how().under(holding) != ConditionJoin.BOTH) {
-                    yield List.of(new Read.Unread(new OnTheWay.Why.OneOfTwoThings()));
+                List<Stated> left = stated(joined.left(), read, holding);
+                List<Stated> right = stated(joined.right(), read, holding);
+                if (joined.how().under(holding) == ConditionJoin.BOTH) {
+                    List<Stated> both = new ArrayList<>(left);
+                    both.addAll(right);
+                    yield List.copyOf(both);
                 }
-                List<Read> both = new ArrayList<>(of(joined.left(), read, holding));
-                both.addAll(of(joined.right(), read, holding));
-                yield List.copyOf(both);
+                Settling l = Settling.of(left);
+                Settling r = Settling.of(right);
+                if (l == Settling.THIS_WAY || r == Settling.THIS_WAY) {
+                    yield List.of(new Stated(joined, new Read.Settled(true)));
+                }
+                if (l == Settling.NEVER) {
+                    yield right;
+                }
+                if (r == Settling.NEVER) {
+                    yield left;
+                }
+                yield List.of(new Stated(joined,
+                        new Read.Unread(new OnTheWay.Why.OneOfTwoThings())));
             }
-            case Condition.Compares one ->
-                    List.of(ofAComparison(one.comparison().stated(), one.reads(), read, holding));
+            case Condition.Compares one -> List.of(new Stated(one,
+                    ofAComparison(one.comparison().stated(), one.reads(), read, holding)));
             case Condition.Truth truth -> ofATruth(truth.value(), truth.reads(), read, holding,
-                    truth.occurrence().behavior());
+                    truth.occurrence().behavior()).stream()
+                    .map(each -> new Stated(truth, each))
+                    .toList();
         };
+    }
+
+    /**
+     * Whether what was read of a condition is settled for every row.
+     *
+     * <p>Never where something it asks never comes out the way asked, since all of it is asked at
+     * once; the way asked where every part of it always does; and otherwise not settled.
+     */
+    private enum Settling {
+        THIS_WAY, NEVER, OPEN;
+
+        static Settling of(List<Stated> read) {
+            boolean every = true;
+            for (Stated each : read) {
+                if (each.read() instanceof Read.Settled(boolean thisWay)) {
+                    if (!thisWay) {
+                        return NEVER;
+                    }
+                } else {
+                    every = false;
+                }
+            }
+            return every ? THIS_WAY : OPEN;
+        }
     }
 
     /**
@@ -91,6 +156,16 @@ final class DemandReading {
      */
     private static List<Read> ofATruth(Core value, InputReads reads, InputReading read,
                                        boolean holding, String behavior) {
+        // Which answers it can give, before what it asks: one the source settles asks nothing of
+        // a row, or is a way no row takes, and read for its relations it would be neither — a
+        // predicate always holding states no relation of the element, and every element meeting
+        // it is not a container holding none. {@link TruthOutcomes} is the one reading of that,
+        // which the ways a body is walked are read by too.
+        TruthOutcomes.Outcomes outcomes = TruthOutcomes.ofTheTruth(value,
+                WhatNamesStandFor.in(reads, read), read.rules().symbols());
+        if (outcomes.always(holding) || outcomes.always(!holding)) {
+            return List.of(new Read.Settled(outcomes.always(holding)));
+        }
         Core e = Core.withoutStanding(value);
         if (e instanceof Core.LetIn let) {
             return ofATruth(let.body(), reads.and(let.binder(), let.value()), read, holding,
@@ -164,9 +239,15 @@ final class DemandReading {
         Condition predicate = Condition.of(block.body(), handed.at(), read.rules().symbols(),
                 read.rules().newtypes(),
                 new ConditionNumbering(read.symbols().module(), behavior));
+        // Whether what is asked of the element is something no element meets, which leaves every
+        // element meeting it to a container holding none and some element meeting it to nothing.
+        boolean noElementMeetsIt = false;
         for (Read each : of(predicate, read, holding)) {
             switch (each) {
                 case Read.Unread _ -> out.add(each);
+                // Met by every element whatever it is, which holds the element to nothing.
+                case Read.Settled(boolean thisWay) when thisWay -> { }
+                case Read.Settled _ -> noElementMeetsIt = true;
                 case Read.Demands(RowDemand.Relational relation)
                         when everyElement && !aboutOnly(relation, element) ->
                         out.add(new Read.Unread(new OnTheWay.Why.MoreThanEachElement()));
@@ -184,20 +265,35 @@ final class DemandReading {
             }
         }
         if (everyElement) {
+            // Every element meeting what none meets is the container holding none, and nothing
+            // else of the predicate is asked of an element that is not there.
+            if (noElementMeetsIt) {
+                RowDemand.Relational none = sizeAgainst(held, operation, read, false);
+                return List.of(none != null ? new Read.Demands(none)
+                        : new Read.Unread(new OnTheWay.Why.SizeOfTheContainerNotStated()));
+            }
             if (!ofTheElement.isEmpty()) {
                 out.add(new Read.Demands(new RowDemand.ForAll(ofTheElement,
                         Optional.ofNullable(sizeAgainst(held, operation, read, false)))));
             }
-            return List.copyOf(out);
+            // Every element meeting what every element meets, whatever the container holds.
+            return out.isEmpty() ? List.of(new Read.Settled(true)) : List.copyOf(out);
+        }
+        // Some element meeting what none meets is no row's.
+        if (noElementMeetsIt) {
+            return List.of(new Read.Settled(false));
         }
         Optional<RowDemand.Relational> holdingOne =
                 Optional.ofNullable(sizeAgainst(held, operation, read, true));
         // An element meeting nothing this reading could state is still the container holding
-        // one, which every row past it does.
+        // one, which every row past it does — and where that cannot be said either, it is said
+        // that it could not, rather than nothing being asked.
         if (!ofTheElement.isEmpty()) {
             out.add(new Read.Demands(new RowDemand.Exists(ofTheElement, holdingOne)));
         } else {
-            holdingOne.ifPresent(one -> out.add(new Read.Demands(one)));
+            out.add(holdingOne.<Read>map(Read.Demands::new)
+                    .orElseGet(() -> new Read.Unread(
+                            new OnTheWay.Why.SizeOfTheContainerNotStated())));
         }
         return List.copyOf(out);
     }
@@ -308,10 +404,10 @@ final class DemandReading {
                 };
             }
             // Read from end to end, and the quantity it cuts is nothing. `a - a > 0` constrains no
-            // position, so there is nothing for a region to be narrowed by and nothing this
-            // compiler fell short of — which is why it is not asked again as written.
-            case AffineReading.OfAComparison.CutsNothing _ ->
-                    new Read.Unread(new OnTheWay.Why.ComparisonStatesNoQuantity());
+            // position: its two sides differ by the same amount on every row, so it comes out one
+            // way for all of them — which asks nothing of a row, or is a way none takes.
+            case AffineReading.OfAComparison.CutsNothing constant -> new Read.Settled(
+                    constant.holds(comparison.claim().statedRelation()) == holding);
             // Read from end to end and the difference of the two sides has no number to state to a
             // region. Nothing is narrowed by it, and nothing was left unread — so it is not asked
             // again as written, which is a reading of a spelling and would say nothing more.

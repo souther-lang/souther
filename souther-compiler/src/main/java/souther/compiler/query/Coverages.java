@@ -49,6 +49,9 @@ import souther.compiler.partition.BoundaryLine;
 import souther.compiler.partition.PartitionClass;
 import souther.compiler.partition.Partitions;
 import souther.compiler.partition.InputClassifications;
+import souther.compiler.partition.Generator;
+import souther.compiler.partition.Reachability;
+import souther.compiler.partition.WayToTheBorder;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -1298,16 +1301,21 @@ final class Coverages {
                     return new Looked(SearchOutcomes.of(new ItemAssessment.Attempt.Unavailable(
                             ItemAssessment.Attempt.Reason.NO_CLASSES)), null);
                 }
-                // A way one position would have to take two of its cases to reach, which no value
-                // is. Said in that word and not in the one for a walk that tried what the rules
-                // leave and reached nothing: nothing was walked here, and what settles it is that
-                // the two cases are not in one value.
-                if (!(reaching instanceof souther.compiler.partition.Reachability.Reaching able)) {
-                    return new Looked(SearchOutcomes.of(new ItemAssessment.Attempt.Unresolved(
-                            new souther.compiler.partition.Generator.UnresolvedCombination(
-                                    java.util.List.of(label),
-                                    souther.compiler.partition.Generator.UnresolvedCombination
-                                            .Reason.ONE_POSITION_CANNOT_BE_BOTH), within)), null);
+                // A way no value takes: one position would have to take two of its cases, or a
+                // condition on it comes out the other way for every row. Said in that word and not
+                // in the one for a walk that tried what the rules leave and reached nothing:
+                // nothing was walked here, and what settles it is the model.
+                Reachability.Reaching able;
+                switch (reaching) {
+                    case Reachability.Reaching way -> able = way;
+                    case Reachability.NothingReaches _ -> {
+                        return noRowTakes(label, within,
+                                Generator.UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH);
+                    }
+                    case Reachability.NothingComesOutThatWay _ -> {
+                        return noRowTakes(label, within, Generator.UnresolvedCombination.Reason
+                                .A_CONDITION_NEVER_COMES_OUT_THAT_WAY);
+                    }
                 }
                 SearchRegion region = narrowing.apply(able.region());
                 // Where a row would have to stand is asked of the quantity, and finding one there of
@@ -1383,6 +1391,13 @@ final class Coverages {
              * row was built.
              */
             private record Looked(SearchOutcomes outcomes, Realization.Found composed) {}
+
+            /** A way no value takes, said in the word for what the model settled it by. */
+            private static Looked noRowTakes(String label, WayToTheBorder within,
+                                             Generator.UnresolvedCombination.Reason why) {
+                return new Looked(SearchOutcomes.of(new ItemAssessment.Attempt.Unresolved(
+                        new Generator.UnresolvedCombination(List.of(label), why), within)), null);
+            }
 
             /**
              * What the values came to, said with whatever of this compiler's ended the asking.

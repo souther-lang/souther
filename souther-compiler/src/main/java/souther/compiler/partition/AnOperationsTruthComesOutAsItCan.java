@@ -1,10 +1,9 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.ScopeStep;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.flow.ComparisonWays;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.types.Type;
 
@@ -25,35 +24,40 @@ import java.util.function.Function;
  * it varies, so it is answered with which ones those are ({@link TruthOutcomes}) — a truth fixed at
  * false is passed the way it comes out, and one this reading cannot name is stood behind neither
  * way.
+ *
+ * <p>And a value the source settles comes out the one way it does, whatever the tree's own reading
+ * would stand behind. A comparison whose sides differ by the same amount on every row is one the
+ * tree reads as coming out either way, and a way past it the other way is a way no row takes —
+ * which is what {@link DemandReading} says of it too, from the same answer.
  */
 final class AnOperationsTruthComesOutAsItCan implements ComparisonWays {
 
     private final InputReads reads;
-    private final Symbols symbols;
-    private final DeclarationNewtypes newtypes;
+    private final InputReading read;
 
-    AnOperationsTruthComesOutAsItCan(InputReads reads, Symbols symbols,
-                                     DeclarationNewtypes newtypes) {
+    AnOperationsTruthComesOutAsItCan(InputReads reads, InputReading read) {
         this.reads = reads;
-        this.symbols = symbols;
-        this.newtypes = newtypes;
+        this.read = read;
     }
 
     @Override
     public boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy) {
+        TruthOutcomes.Outcomes outcomes = TruthOutcomes.ofTheTruth(e,
+                WhatNamesStandFor.in(reads, read), read.rules().symbols());
+        if (outcomes.always(true) || outcomes.always(false)) {
+            return outcomes.allows(want);
+        }
         if (ComparisonWays.OF_THE_TREE.comesOut(e, want, settledBy)) {
             return true;
         }
         return Core.withoutStanding(e) instanceof Core.PreservedCall applied
                 && applied.type() == Type.Prim.BOOL
-                && TruthOutcomes.ofTheTruth(applied,
-                        WhatNamesStandFor.in(reads, symbols, newtypes), symbols).allows(want);
+                && outcomes.allows(want);
     }
 
     @Override
     public ComparisonWays entering(ScopeStep step) {
-        InputReads inside = reads.entering(step, symbols, newtypes);
-        return inside == reads ? this
-                : new AnOperationsTruthComesOutAsItCan(inside, symbols, newtypes);
+        InputReads inside = reads.entering(step, read.rules().symbols(), read.rules().newtypes());
+        return inside == reads ? this : new AnOperationsTruthComesOutAsItCan(inside, read);
     }
 }

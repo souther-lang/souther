@@ -3,6 +3,7 @@ package souther.compiler.query;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.partition.Generator;
+import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.RowToRun;
 import souther.compiler.partition.RulesTaken;
 
@@ -94,6 +95,24 @@ public sealed interface RuleRequirement {
             public AnArmNothingReaches {
                 if (arm == null) {
                     throw new IllegalArgumentException("an arm nothing reaches is some arm");
+                }
+            }
+        }
+
+        /**
+         * The way goes past a condition no row brings out the way it goes.
+         *
+         * <p>{@link souther.compiler.partition.Reachability.NothingComesOutThatWay} is where that
+         * is established — a predicate that always holds, sides whose difference is the same on
+         * every row — and this carries which condition it was.
+         */
+        record AConditionNeverComesOutThatWay(OnTheWay.Settled condition) implements Excluded {
+
+            public AConditionNeverComesOutThatWay {
+                if (condition == null || condition.thisWay()) {
+                    throw new IllegalArgumentException(
+                            "a way out of reach this way is past a condition no row brings out"
+                                    + " that way: " + condition);
                 }
             }
         }

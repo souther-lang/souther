@@ -78,6 +78,11 @@ final class TruthOutcomes {
             };
         }
 
+        /** Whether it comes out {@code value} for every input, which this reading can say. */
+        boolean always(boolean value) {
+            return this == only(value);
+        }
+
         /** Whether it is the same whatever the input. */
         boolean isFixed() {
             return switch (this) {
@@ -179,6 +184,10 @@ final class TruthOutcomes {
                     Outcomes right = truth(binary.right());
                     return joined.get().under(true) == ConditionJoin.BOTH
                             ? left.and(right) : left.or(right);
+                }
+                Optional<Boolean> everyRow = names.everyRowBrings(e);
+                if (everyRow.isPresent()) {
+                    return Outcomes.only(everyRow.get());
                 }
                 return folded(e).orElseGet(() -> names.writtenOut(binary.left())
                         && names.writtenOut(binary.right())

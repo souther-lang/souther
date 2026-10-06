@@ -697,6 +697,12 @@ public sealed interface AnotherLineTheRowsAllow {
                     case OnTheWay.Declined _ -> {
                         return false;
                     }
+                    // Settled for every row: past it whatever a step moves, or past it for none.
+                    case OnTheWay.Settled settled -> {
+                        if (!settled.thisWay()) {
+                            return false;
+                        }
+                    }
                     // Which case a value turned out to be. A step moves numbers and a narrowing is
                     // about a position being one of its cases, so a step that moves no number of
                     // that position leaves it as the row had it; one that does is past what this

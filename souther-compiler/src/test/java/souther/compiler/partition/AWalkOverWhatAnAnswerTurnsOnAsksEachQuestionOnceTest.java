@@ -9,6 +9,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -69,6 +70,11 @@ class AWalkOverWhatAnAnswerTurnsOnAsksEachQuestionOnceTest {
             @Override
             public boolean writtenOut(Core e) {
                 return false;
+            }
+
+            @Override
+            public Optional<Boolean> everyRowBrings(Core comparison) {
+                return Optional.empty();
             }
         };
     }

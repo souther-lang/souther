@@ -11,7 +11,6 @@ import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.LinkedHashMap;
@@ -100,27 +99,16 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison)
      * not be carried.
      */
     static List<OnTheWay> stating(Condition node, InputReading read, boolean holding) {
-        return switch (node) {
-            // Coming out the way that gives both halves, each of them came out that way too. The
-            // other composition says a disjunction of things, which is not a list of cuts and is
-            // not approximated into one: `A && B` being false says one of them failed and names
-            // neither, and narrowing on either would exclude rows that arrive. So the whole node is
-            // declined, at the whole node's place.
-            case Condition.Joined joined -> joined.how().under(holding) == ConditionJoin.BOTH
-                    ? and(stating(joined.left(), read, holding),
-                            stating(joined.right(), read, holding))
-                    : List.of(new OnTheWay.Declined(joined.occurrence(), joined.anchor(),
-                            new OnTheWay.Why.OneOfTwoThings()));
-            case Condition.Compares one -> List.of(onTheWay(one.occurrence(), one.anchor(),
-                    DemandReading.ofAComparison(one.comparison().stated(), one.reads(), read,
-                            holding)));
-            // A truth is taken in for what it asks of a row, and stays the truth it is: what a
-            // report names and where a run through it is seen are the condition the author wrote,
-            // and only the demand is read as the comparison it means.
-            case Condition.Truth truth -> DemandReading.of(truth, read, holding).stream()
-                    .map(each -> onTheWay(truth.occurrence(), truth.anchor(), each))
-                    .toList();
-        };
+        // What the condition asks is {@link DemandReading}'s, connectives and all, and each thing
+        // it asks is put on the way at the condition of the shape that asked it. A truth stays
+        // the truth it is: what a report names and where a run through it is seen are the
+        // condition the author wrote, and only the demand is read as the comparison it means. A
+        // disjunction of things is put at the whole node, since neither operand is what could not
+        // be carried.
+        return DemandReading.stated(node, read, holding).stream()
+                .map(each -> onTheWay(each.where().occurrence(), each.where().anchor(),
+                        each.read()))
+                .toList();
     }
 
     /**
@@ -212,6 +200,8 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison)
                                      DemandReading.Read read) {
         return switch (read) {
             case DemandReading.Read.Demands(var demand) -> new OnTheWay.TakenIn(at, demand);
+            case DemandReading.Read.Settled(var thisWay) ->
+                    new OnTheWay.Settled(condition, at, thisWay);
             case DemandReading.Read.Unread(var why) -> new OnTheWay.Declined(condition, at, why);
         };
     }
@@ -239,12 +229,4 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison)
             return new ReachingCuts(Lookup.built(put -> byComparison.forEach(put::put)));
         }
     }
-
-    /** What a caller is carrying, with more added, keeping what was already there. */
-    private static List<OnTheWay> and(List<OnTheWay> assumed, List<OnTheWay> more) {
-        List<OnTheWay> out = new java.util.ArrayList<>(assumed);
-        out.addAll(more);
-        return List.copyOf(out);
-    }
-
 }

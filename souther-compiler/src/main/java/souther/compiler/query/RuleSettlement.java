@@ -56,7 +56,8 @@ public record RuleSettlement(RuleRequirement requirement, RuleSearch search,
             case RuleRequirement.Required _ -> search instanceof RuleSearch.Composed;
             // Read off the rules before a search was made, both of them.
             case RuleRequirement.Excluded.OnePositionCannotBeBoth _,
-                 RuleRequirement.Excluded.AnArmNothingReaches _ ->
+                 RuleRequirement.Excluded.AnArmNothingReaches _,
+                 RuleRequirement.Excluded.AConditionNeverComesOutThatWay _ ->
                     search instanceof RuleSearch.NotMade;
             // And the one the composings themselves proved, which is what they came back with.
             case RuleRequirement.Excluded.TheRulesLeaveNoValueForIt _ ->

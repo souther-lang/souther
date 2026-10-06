@@ -5,6 +5,7 @@ import souther.compiler.inputs.SearchRegion;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * How a row for one border came to be looked for where it is: every condition on the way, in the
@@ -51,21 +52,25 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     }
 
     /**
-     * {@code base} with exactly the {@link OnTheWay.TakenIn} entries taken in, in the order they are
-     * written.
+     * {@code base} narrowed by what of the {@link OnTheWay.TakenIn} entries a region can say, in
+     * the order they are written.
      *
      * <p>Three things hold of what comes back, and the first two are {@link SearchRegion}'s own:
      *
      * <pre>what reaches the border ⊆ this ⊆ what the declarations leave</pre>
      *
      * <p>A {@link OnTheWay.Declined} entry never narrows it — it is the record that something on the
-     * way is not represented in what comes back.
+     * way is not represented in what comes back. Nor does a {@link OnTheWay.Settled} one, which asks
+     * nothing of a row or is a way none takes ({@link #neverComesOut}).
      *
-     * <p>And a {@link OnTheWay.TakenIn} entry is one the region represents, which is settled where
-     * the entry is made rather than hoped for here. It does not follow that the region is narrower
-     * for each of them: a constraint the rules already hold is taken in again and leaves the region
-     * where it was. What holds is the one thing a reader of an account acts on — that what is
-     * written down as taken in is in the region a search runs over.
+     * <p>And what a {@link OnTheWay.TakenIn} entry asks is what a composer builds a row to meet;
+     * the region carries the part of it a region can say, which is settled where the entry is made
+     * rather than hoped for here. A relation is that whole; that some element meets something is
+     * the container holding one; that every element does is nothing a region says, since a
+     * container holding none meets it and a region reads a term inside the elements as one that is
+     * there. Nor is the region narrower for each relation: a constraint the rules already hold is
+     * taken in again and leaves it where it was. What holds is the one thing a reader of an account
+     * acts on — that the region a search runs over admits every row that meets what was taken in.
      */
     public SearchRegion narrowing(SearchRegion base) {
         SearchRegion region = base;
@@ -132,6 +137,23 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
             }
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * The first condition on the way that no row brings out the way the walk went, or empty where
+     * every one of them can be.
+     *
+     * <p>A fact about the model, as two narrowings no position can hold together are
+     * ({@link #requirements()}): a border down such a way is one nothing reaches, and a row
+     * composed for it would be one for a way no input takes.
+     */
+    public Optional<OnTheWay.Settled> neverComesOut() {
+        for (OnTheWay each : onTheWay) {
+            if (each instanceof OnTheWay.Settled settled && !settled.thisWay()) {
+                return Optional.of(settled);
+            }
+        }
+        return Optional.empty();
     }
 
     /** The ones this reading could state in neither vocabulary, which is what a search composing

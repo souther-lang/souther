@@ -180,18 +180,22 @@ class AComparisonAgainstAWrittenValueIsCarriedOnItsOwnOrderTest {
     }
 
     /**
-     * A comparison read to the end whose positions cancel says so, and is not the other word.
+     * A comparison read to the end whose positions cancel comes out one way for every row, and is
+     * settled rather than declined.
      *
-     * <p>The two used to arrive as one absence. A reading that stopped is this compiler falling
-     * short of a rule the model states; a quantity that cancelled is a rule that constrains no
-     * position, and there is nothing for an author to change — so a report that gave them one word
-     * described a rule read in full as one whose shape defeated the reader.
+     * <p>A reading that stopped is this compiler falling short of a rule the model states; a
+     * quantity that cancelled is a rule that comes out the same on every row. {@code p.m - p.m > 0}
+     * is false on all of them, so the way past it holding is one no row takes, and the way past it
+     * failing asks nothing — and neither is a condition this reading could not state.
      */
     @Test
-    void aComparisonWhosePositionsCancelSaysThatAndNotTheOtherWord() {
-        OnTheWay.Declined left = assertInstanceOf(OnTheWay.Declined.class,
+    void aComparisonWhosePositionsCancelIsSettledEitherWay() {
+        OnTheWay.Settled holding = assertInstanceOf(OnTheWay.Settled.class,
                 only("positionsCancel", true));
-        assertEquals(new OnTheWay.Why.ComparisonStatesNoQuantity(), left.why());
+        assertEquals(false, holding.thisWay(), "no row brings `p.m - p.m > 0` out true");
+        OnTheWay.Settled failing = assertInstanceOf(OnTheWay.Settled.class,
+                only("positionsCancel", false));
+        assertEquals(true, failing.thisWay(), "and every row brings it out false");
     }
 
     /**

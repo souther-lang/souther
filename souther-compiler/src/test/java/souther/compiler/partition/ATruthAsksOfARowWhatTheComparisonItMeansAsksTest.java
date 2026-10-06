@@ -193,8 +193,8 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
 
     private static List<Core> partsOf(String behavior) {
         Read read = readingOf(behavior);
-        return WhatAForkTests.partsOfTheAnswer(read.body(), WhatNamesStandFor.in(read.reads(),
-                read.rules().symbols(), read.rules().newtypes()));
+        return WhatAForkTests.partsOfTheAnswer(read.body(),
+                WhatNamesStandFor.in(read.reads(), read.read()));
     }
 
     /** Everything the body's single condition asks of a row, coming out {@code holding}. */

@@ -3112,6 +3112,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case RuleRequirement.Excluded.AnArmNothingReaches _ ->
                     new Said(5, 0, "its way goes through an arm the rules leave nothing for, which"
                             + " is an arm the branch count is made without");
+            case RuleRequirement.Excluded.AConditionNeverComesOutThatWay _ ->
+                    new Said(6, 0, "its way goes past a condition that comes out the other way"
+                            + " for every row");
             // In the words the composings were said in, which are the model's. The other two here
             // are read off the rules before anything is composed and have nothing of a search to
             // say; this one is what the composings themselves proved, so what they came back with
@@ -3147,7 +3150,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 clauses.add(clause);
             }
         }
-        return new Said(6, PublicationOrders.positionOf(proofs.ways().get(0).reason()),
+        return new Said(7, PublicationOrders.positionOf(proofs.ways().get(0).reason()),
                 String.join("; ", clauses));
     }
 
@@ -3774,14 +3777,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // between positions there, which is something a cut carries perfectly well.
             case OnTheWay.Why.ComparisonNotRepresentedAsACut _ ->
                     "a comparison this reading could not turn into a cut";
-            // And the other way a comparison leaves a region unnarrowed, which is not a shortfall
-            // of this compiler: the rule was read to the end and constrains no position, so there
-            // is nothing an author would change.
-            case OnTheWay.Why.ComparisonStatesNoQuantity _ ->
-                    "a comparison that constrains no position";
-            // And the third, which is neither: the rule was read in full and constrains both of the
-            // positions it names, and what is missing is an order to measure them on. An author
-            // acts on the types here rather than on how the comparison was written.
+            // And the other, which is not a shortfall in how it was written: the rule was read in
+            // full and constrains both of the positions it names, and what is missing is an order
+            // to measure them on. An author acts on the types here rather than on how the
+            // comparison was written.
             case OnTheWay.Why.QuantityStandsOnNoOrder _ ->
                     "a comparison whose quantity stands on no order this compiler measures";
             case OnTheWay.Why.OneOfTwoThings _ ->
@@ -3793,6 +3792,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             + " position";
             case OnTheWay.Why.MoreThanEachElement _ ->
                     "a condition every element has to meet that is about more than the element";
+            case OnTheWay.Why.SizeOfTheContainerNotStated _ ->
+                    "a condition about what a container holds that comes to how many it holds,"
+                            + " which is no number this reading measures";
         };
     }
 
@@ -3850,6 +3852,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // to go looking for.
             case ONE_POSITION_CANNOT_BE_BOTH ->
                     at + " would need one position to be two things at once, which no value is";
+            case A_CONDITION_NEVER_COMES_OUT_THAT_WAY ->
+                    at + " is past a condition that comes out the other way for every row";
             case NOTHING_TO_BUILD_AGAINST -> "there was nothing to build a candidate against";
             case NO_VALUES_WERE_ASKED_FOR ->
                     "this build composed no values, so no row was written for " + at;
@@ -5777,6 +5781,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case RuleRequirement.Excluded.OnePositionCannotBeBoth _ ->
                     "the_way_needs_one_position_to_be_two";
             case RuleRequirement.Excluded.AnArmNothingReaches _ -> "an_arm_nothing_reaches";
+            case RuleRequirement.Excluded.AConditionNeverComesOutThatWay _ ->
+                    "a_condition_never_comes_out_that_way";
             case RuleRequirement.Excluded.TheRulesLeaveNoValueForIt _ ->
                     "the_rules_leave_no_value_for_it";
             case RuleRequirement.Unsettled.AComposedRowWentElsewhere _ ->

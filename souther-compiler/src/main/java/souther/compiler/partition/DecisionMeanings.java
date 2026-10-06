@@ -42,24 +42,49 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
     /**
      * What {@code condition} coming out {@code held} decides, one entry per condition consulted.
      *
-     * <p>The connective is walked here for the reason {@link ReachingCuts#stating} walks it: a
+     * <p>The connective is walked here for the reason {@link DemandReading#stated} walks it: a
      * joined condition coming out the way that gives both halves is both halves having come out
      * that way, and the other composition says one of them failed and names neither. So the two
      * readings meet the same conditions, and a column and the region a row for it is looked for in
      * are about one of them.
+     *
+     * <p>Null where no row brings the condition out {@code held}, which is no path; and nothing
+     * for a part the source settles {@code held}, which is no column.
      */
     List<Read> deciding(Condition condition, boolean held) {
         if (condition instanceof Condition.Joined joined
                 && joined.how().under(held) == souther.compiler.semantics.ConditionJoin.BOTH) {
-            List<Read> out = new ArrayList<>(deciding(joined.left(), held));
-            out.addAll(deciding(joined.right(), held));
+            List<Read> left = deciding(joined.left(), held);
+            List<Read> right = deciding(joined.right(), held);
+            if (left == null || right == null) {
+                return null;
+            }
+            List<Read> out = new ArrayList<>(left);
+            out.addAll(right);
             return List.copyOf(out);
         }
         List<OnTheWay> stated = states.stating(condition, held);
-        return List.of(new Read(oneRelation(stated) && (!(condition instanceof Condition.Truth)
-                || oneRelation(states.stating(condition, !held)))
-                ? answerOf(condition, stated.getFirst(), held)
+        // What the source settles is no distinction the body draws: coming out this way for every
+        // row it is no column, and coming out the other way for every row there is no rule down
+        // this side at all.
+        if (stated.stream().anyMatch(each -> each instanceof OnTheWay.Settled settled
+                && !settled.thisWay())) {
+            return null;
+        }
+        List<OnTheWay> asked = asked(stated);
+        if (asked.isEmpty()) {
+            return List.of();
+        }
+        return List.of(new Read(oneRelation(asked) && (!(condition instanceof Condition.Truth)
+                || oneRelation(asked(states.stating(condition, !held))))
+                ? answerOf(condition, asked.getFirst(), held)
                 : asOneColumn(condition, held), stated));
+    }
+
+    /** What was stated less what the source settles this way, which asks nothing of a row and is
+     *  no part of a column. */
+    private static List<OnTheWay> asked(List<OnTheWay> stated) {
+        return stated.stream().filter(each -> !(each instanceof OnTheWay.Settled)).toList();
     }
 
     /**
@@ -77,6 +102,8 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
             case OnTheWay.TakenIn(var _, RowDemand.Exists _),
                  OnTheWay.TakenIn(var _, RowDemand.ForAll _) -> false;
             case OnTheWay.Narrowed _, OnTheWay.Declined _ -> true;
+            // Taken off before a column is read ({@link #asked}): it asks nothing to read one off.
+            case OnTheWay.Settled _ -> false;
         };
     }
 
@@ -144,6 +171,10 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
                         : new DecidedCondition.Unread(new DecisionCondition.AConditionNotRead(
                                 declined.condition(), declined.why()), held);
             }
+            // A condition the source settles is no distinction, and is taken off before a column
+            // is asked for ({@link #deciding}); nor does an arm of a fork come back as one.
+            case OnTheWay.Settled settled -> throw new IllegalArgumentException(
+                    "a condition the source settles is no column: " + settled);
         };
     }
 

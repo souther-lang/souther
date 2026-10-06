@@ -557,21 +557,22 @@ public final class PublicationOrders {
             case NOT_ALL_CANDIDATES_COULD_BE_OFFERED -> 1;
             case THE_RULES_LEAVE_NOTHING_THERE -> 2;
             case ONE_POSITION_CANNOT_BE_BOTH -> 3;
-            case NOTHING_COMPOSES_ONE -> 4;
-            case NOTHING_STANDS_IN_FOR_A_DEPENDENCY -> 5;
-            case A_TABLE_IS_WHAT_THIS_NEEDS -> 6;
-            case NOTHING_TO_BUILD_AGAINST -> 7;
-            case THE_WAY_IN_PLACES_AT_NO_CLASS -> 8;
-            case THE_SEARCH_LEFT_SOMETHING_UNTRIED -> 9;
-            case THE_BLOCK_IS_AS_LONG_AS_IT_MAY_BE -> 10;
-            case THE_GROUP_WAS_NOT_OFFERED -> 11;
-            case THE_POSITION_WAS_WITHHELD -> 12;
-            case NO_VALUES_WERE_ASKED_FOR -> 13;
-            case NO_CANDIDATE_WAS_OFFERED -> 14;
-            case NO_CERTIFIED_WITNESS -> 15;
-            case NO_READING_OF_THE_LINE_COULD_BE_SEARCHED -> 16;
-            case THE_ROWS_WERE_NOT_READ -> 17;
-            case LINKAGE_FAILED -> 18;
+            case A_CONDITION_NEVER_COMES_OUT_THAT_WAY -> 4;
+            case NOTHING_COMPOSES_ONE -> 5;
+            case NOTHING_STANDS_IN_FOR_A_DEPENDENCY -> 6;
+            case A_TABLE_IS_WHAT_THIS_NEEDS -> 7;
+            case NOTHING_TO_BUILD_AGAINST -> 8;
+            case THE_WAY_IN_PLACES_AT_NO_CLASS -> 9;
+            case THE_SEARCH_LEFT_SOMETHING_UNTRIED -> 10;
+            case THE_BLOCK_IS_AS_LONG_AS_IT_MAY_BE -> 11;
+            case THE_GROUP_WAS_NOT_OFFERED -> 12;
+            case THE_POSITION_WAS_WITHHELD -> 13;
+            case NO_VALUES_WERE_ASKED_FOR -> 14;
+            case NO_CANDIDATE_WAS_OFFERED -> 15;
+            case NO_CERTIFIED_WITNESS -> 16;
+            case NO_READING_OF_THE_LINE_COULD_BE_SEARCHED -> 17;
+            case THE_ROWS_WERE_NOT_READ -> 18;
+            case LINKAGE_FAILED -> 19;
         };
     }
 

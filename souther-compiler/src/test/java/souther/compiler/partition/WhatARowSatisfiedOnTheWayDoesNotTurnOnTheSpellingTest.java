@@ -108,6 +108,7 @@ class WhatARowSatisfiedOnTheWayDoesNotTurnOnTheSpellingTest {
             case OnTheWay.TakenIn taken -> taken.demand().toString();
             case OnTheWay.Narrowed narrowed -> narrowed.position().toString();
             case OnTheWay.Declined left -> left.why().toString();
+            case OnTheWay.Settled settled -> "settled " + settled.thisWay();
         }).toList().toString();
     }
 

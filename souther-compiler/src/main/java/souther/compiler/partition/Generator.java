@@ -484,6 +484,15 @@ public final class Generator {
              * nothing composed, an author would go looking for a row that cannot exist.
              */
             ONE_POSITION_CANNOT_BE_BOTH,
+            /**
+             * A condition on the way comes out the other way for every row.
+             *
+             * <p>What the model settles, as the one above is: a predicate that always holds, or two
+             * sides whose difference is the same on every row, leaves a way past it that no input
+             * takes. Reported as a value nothing composed, an author would go looking for a row
+             * that cannot exist.
+             */
+            A_CONDITION_NEVER_COMES_OUT_THAT_WAY,
             /** The module's classes were not there to build a candidate against. */
             NOTHING_TO_BUILD_AGAINST,
             /**
@@ -637,7 +646,8 @@ public final class Generator {
              */
             public boolean provesInfeasible() {
                 return switch (this) {
-                    case THE_RULES_LEAVE_NOTHING_THERE, ONE_POSITION_CANNOT_BE_BOTH -> true;
+                    case THE_RULES_LEAVE_NOTHING_THERE, ONE_POSITION_CANNOT_BE_BOTH,
+                         A_CONDITION_NEVER_COMES_OUT_THAT_WAY -> true;
                     // Every one of these is this compiler falling short, and none of them is the
                     // model saying anything: another value of the same classes may well build.
                     case NOTHING_COMPOSES_ONE, ALL_CANDIDATES_REJECTED,
@@ -744,7 +754,8 @@ public final class Generator {
                     case ALL_CANDIDATES_REJECTED, NOT_ALL_CANDIDATES_COULD_BE_OFFERED,
                          THE_RULES_LEAVE_NOTHING_THERE,
                          NOTHING_STANDS_IN_FOR_A_DEPENDENCY, A_TABLE_IS_WHAT_THIS_NEEDS,
-                         ONE_POSITION_CANNOT_BE_BOTH, NOTHING_TO_BUILD_AGAINST,
+                         ONE_POSITION_CANNOT_BE_BOTH, A_CONDITION_NEVER_COMES_OUT_THAT_WAY,
+                         NOTHING_TO_BUILD_AGAINST,
                          NO_VALUES_WERE_ASKED_FOR, LINKAGE_FAILED, NO_CERTIFIED_WITNESS,
                          THE_GROUP_WAS_NOT_OFFERED, THE_POSITION_WAS_WITHHELD,
                          THE_ROWS_WERE_NOT_READ, THE_WAY_IN_PLACES_AT_NO_CLASS,

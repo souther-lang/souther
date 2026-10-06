@@ -2211,6 +2211,10 @@ public final class Adequacy {
                 case souther.compiler.partition.Reachability.NothingReaches nothing ->
                         RuleSettlement.read(new RuleRequirement.Excluded.OnePositionCannotBeBoth(
                                 nothing.why()));
+                case souther.compiler.partition.Reachability.NothingComesOutThatWay never ->
+                        RuleSettlement.read(
+                                new RuleRequirement.Excluded.AConditionNeverComesOutThatWay(
+                                        never.condition()));
                 case souther.compiler.partition.Reachability.Reaching reaching ->
                         whatASearchFinds(ruled, probe, taken, reaching);
             };
