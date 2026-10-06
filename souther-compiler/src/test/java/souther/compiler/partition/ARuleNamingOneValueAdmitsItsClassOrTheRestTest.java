@@ -107,7 +107,7 @@ class ARuleNamingOneValueAdmitsItsClassOrTheRestTest {
     /** Whether {@code side} is a way out of a rule that drew a line on {@code axis} naming one
      *  value, asked of the line and not of how the rule was spelled. */
     private static boolean namesOneValue(souther.compiler.reading.Condition.Side side, Axis axis) {
-        ModelOccurrence states = ModelOccurrence.statedAt(side.comparison()).orElse(null);
+        ModelOccurrence states = ModelOccurrence.statedAt(side.statedAt()).orElse(null);
         for (Cut cut : axis.cuts()) {
             for (LineOrigin origin : cut.origins()) {
                 if (origin instanceof LineOrigin.ComparisonOrigin guard

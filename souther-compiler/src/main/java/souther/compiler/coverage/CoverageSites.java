@@ -496,7 +496,14 @@ public final class CoverageSites {
             this.answersByNode = new IdentityHashMap<>();
             this.answersByApplication = new LinkedHashMap<>();
             for (AnsweredAt answer : this.answered) {
-                this.answersByNode.put(answer.node(), answer.site());
+                // One application per node. Two the model states working their answers out at one
+                // node would be one place a run is seen at answering for two constructs, and filed
+                // by node the second would take the first's place without anything saying so.
+                AnswerSite before = this.answersByNode.put(answer.node(), answer.site());
+                if (before != null) {
+                    throw new IllegalArgumentException("the applications " + before.application()
+                            + " and " + answer.site().application() + " answer at one node");
+                }
                 this.answersByApplication.put(answer.site().application(), answer.site());
             }
             this.mayRepeat = mayRepeat;
@@ -1307,26 +1314,40 @@ public final class CoverageSites {
          */
         private void walk(Core e, boolean reachable) {
             OccurrenceLineage outer = standingIn;
-            OccurrenceLineage mine = lineageOf(e);
-            if (mine != null) {
+            Stands stands = standsIn(e);
+            if (stands != null) {
                 if (reachable && answers(e)) {
-                    answerOf(e, mine, outer);
+                    answerOf(e, stands.answering(), stands.lineage(), outer);
                 }
-                standingIn = mine;
+                standingIn = stands.lineage();
             }
             descend(e, reachable);
             standingIn = outer;
         }
 
         /**
+         * The copy a node stands in, and the node under it whose value is the node's.
+         *
+         * <p>Two facts and not one, because a copy is found at one node and answers at another. The
+         * bindings an operation's copy opens with are where the walk meets the copy, and what the
+         * application answers is the value of what they bind it around — which is where a run is on
+         * the stack with the answer, and which may be a comparison the plan already watches.
+         */
+        private record Stands(Core answering, OccurrenceLineage lineage) {}
+
+        /**
          * Where {@code e}'s answer is worked out, if {@code e} is the node an application of one of
          * the language's operations answers at and the model states that application.
          *
          * <p>Two shapes, both answering a truth. An operation the library implements in the
-         * language is copied into the body where it is applied, and the node that opens the copy
-         * answers what the application answers: nothing in the tree that runs is the application
-         * itself, so its answer is recorded where the copy is entered. One the runtime implements
-         * stays a call, and the call is the application.
+         * language is copied into the body where it is applied, and nothing in the tree that runs
+         * is the application itself: the copy is found where it is entered, and its answer is
+         * recorded at the node inside the copy's bindings whose value it is ({@link #standsIn}).
+         * One the runtime implements stays a call, and the call is the application.
+         *
+         * <p>Where a reader is sent is where the copy was found ({@code found}), which is where the
+         * application is written. The node the answer is worked out at is the operation's own
+         * code, and a place there is a place in the library.
          *
          * <p>Only where the model states the application. One written inside another operation's
          * own body is copied once per application of that operation, and the model states none of
@@ -1335,14 +1356,17 @@ public final class CoverageSites {
          *
          * <p>A node that is itself a comparison this plan numbers is recorded at the comparison's
          * place. The two are one value at one place, and a second number for it would be a place
-         * the emitter writes twice.
+         * the emitter writes twice. Which is what the answer of an operation whose code compares is:
+         * the copy's comparison is where the run has the answer, and the application is recorded
+         * there with it.
          *
          * <p>Only the copies opened inside the last closure the node applies. A closure handed to
          * an operation is applied inside that operation's copy, so a node can open both — and what
          * it answers is the closure's answer, not the operation's: {@code List.map} answers a list,
          * and the truth an element's closure answers is the application written in the closure.
          */
-        private void answerOf(Core e, OccurrenceLineage mine, OccurrenceLineage outer) {
+        private void answerOf(Core found, Core e, OccurrenceLineage mine,
+                              OccurrenceLineage outer) {
             if (!Type.BOOL.equals(e.type())) {
                 return;
             }
@@ -1395,7 +1419,7 @@ public final class CoverageSites {
                 raw = numbering.number(new SiteAddress.ConditionOutcome(places.of(e)));
             }
             answers.put(application,
-                    new DraftAnswer(e, behavior, application, Citation.of(e.pos()), raw));
+                    new DraftAnswer(e, behavior, application, Citation.of(found.pos()), raw));
         }
 
         /**
@@ -1415,8 +1439,12 @@ public final class CoverageSites {
          * not: its value is its body's, and looked through, the copy its body opens would be read
          * as opened at the author's {@code let}, and what the application answered would be put
          * where the {@code let} is written.
+         *
+         * <p>The node the bindings are looked through to is the one the copy answers at: the value
+         * of a binding is its body's, and the copy's own bindings stand around the code that works
+         * the answer out.
          */
-        private static OccurrenceLineage lineageOf(Core e) {
+        private static Stands standsIn(Core e) {
             Core at = e;
             while (true) {
                 ConstructOccurrence occurrence;
@@ -1434,7 +1462,8 @@ public final class CoverageSites {
                     case Core.Match match -> occurrence = match.occurrence();
                     default -> occurrence = null;
                 }
-                return occurrence == null || !occurrence.isWritten() ? null : occurrence.lineage();
+                return occurrence == null || !occurrence.isWritten() ? null
+                        : new Stands(at, occurrence.lineage());
             }
         }
 

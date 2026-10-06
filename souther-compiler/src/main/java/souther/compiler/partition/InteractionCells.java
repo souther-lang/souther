@@ -527,7 +527,7 @@ public final class InteractionCells {
                 // own operations — and no rule draws a line on such a place, so there is no cut of
                 // this axis it could be the reading of.
                 ModelOccurrence states =
-                        ModelOccurrence.statedAt(one.comparison()).orElse(null);
+                        ModelOccurrence.statedAt(one.statedAt()).orElse(null);
                 if (states == null) {
                     return null;
                 }

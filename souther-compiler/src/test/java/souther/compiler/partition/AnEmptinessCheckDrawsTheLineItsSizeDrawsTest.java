@@ -10,8 +10,12 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.query.Sites;
+import souther.compiler.reading.CoverageRead;
+import souther.compiler.reading.Decision;
+import souther.compiler.reading.WayIn;
 import souther.compiler.types.SourceConstruct;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -37,6 +41,46 @@ class AnEmptinessCheckDrawsTheLineItsSizeDrawsTest {
     private static final String EMPTY = "List.isEmpty(order.lines)";
 
     private static final String SIZE = "List.length(order.lines) == 0";
+
+    /**
+     * What the body tells apart reads the two spellings alike, and the denied two alike.
+     *
+     * <p>A decision on the check is the application coming out one way, placed on the size's axis
+     * the way the comparison it means is: the class of no lines, or the rest.
+     */
+    @Test
+    void whatTheBodyTellsApartIsTheSameForBothSpellings() {
+        assertEquals(toldApartOf(SIZE), toldApartOf(EMPTY));
+        assertEquals(toldApartOf("List.length(order.lines) /= 0"),
+                toldApartOf("Bool.not(List.isEmpty(order.lines))"));
+        assertTrue(toldApartOf(EMPTY).getFirst().startsWith("Drawn"),
+                () -> "the classes are told apart: " + toldApartOf(EMPTY));
+    }
+
+    /** And the decision is the application's, as the plan names where it answers. */
+    @Test
+    void aDecisionOnTheCheckIsTheApplications() {
+        Compilation compilation = compiled(bill(EMPTY));
+        CoverageRead.Read read =
+                compilation.db().ask(new Adequacy.Meets("demo")).value().get("bill");
+        List<SourceConstruct> kinds = new ArrayList<>();
+        for (WayIn way : read.taken()) {
+            for (Decision each : way.decisions()) {
+                if (each.constrains() instanceof souther.compiler.reading.Condition.Side side
+                        && side.at().toString().startsWith("List.length")
+                        && !kinds.contains(side.statedAt().origin().kind())) {
+                    kinds.add(side.statedAt().origin().kind());
+                }
+            }
+        }
+        assertEquals(List.of(SourceConstruct.CALL), kinds);
+    }
+
+    /** What the body tells apart at each axis, in the order the axes are. */
+    private static List<String> toldApartOf(String guard) {
+        return measured(bill(guard)).axes().stream()
+                .map(axis -> String.valueOf(axis.toldApart())).toList();
+    }
 
     /** The axis, its classes and the line, which is everything the two spellings share. */
     @Test
