@@ -547,10 +547,10 @@ public final class CoverageRead {
             if (known.isEmpty()) {
                 return new Reach.Nothing(PathAccess.Unreachable.Why.CONTRADICTS_WHAT_ALREADY_HELD);
             }
-            // Past the bound nothing is known rather than some of it, which leaves what a run
-            // here decided read against more than it was decided in, and never less.
-            return known.size() > MOST_WAYS_IN ? new Reach.Unnameable(why)
-                    : new Reach.Unnameable(why, known);
+            // Past the bound what is known is the step's own and nothing above it, which leaves what
+            // a run here decided read against more than it was decided in, and never less — and
+            // never drops what the step itself decided.
+            return new Reach.Unnameable(why, known.size() > MOST_WAYS_IN ? step.known() : known);
         }
         List<WayIn> held = both(above.ways(), step.ways());
         if (held.isEmpty()) {

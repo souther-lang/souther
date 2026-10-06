@@ -492,13 +492,17 @@ final class Coverages {
         // BodyDistinction#makesCombinations}). A position nothing in the body is about answers the
         // same however the other one moves, so the product of it with anything asks for a row that
         // shows nothing the two rows apart do not.
+        boolean[] combining = new boolean[axes.size()];
+        for (int i = 0; i < axes.size(); i++) {
+            combining[i] = toldApartAt(toldApart, axes.get(i)).makesCombinations();
+        }
         List<PartitionEvidence.PairSpace.AxisPair> space = new ArrayList<>();
         for (int i = 0; i < axes.size(); i++) {
-            if (!toldApartAt(toldApart, axes.get(i)).makesCombinations()) {
+            if (!combining[i]) {
                 continue;
             }
             for (int j = i + 1; j < axes.size(); j++) {
-                if (!toldApartAt(toldApart, axes.get(j)).makesCombinations()) {
+                if (!combining[j]) {
                     continue;
                 }
                 long between = combinationsOf(axes.get(i), axes.get(j));

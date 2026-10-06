@@ -215,6 +215,12 @@ final class WhatABodyTellsApart {
                 unreadHere[one.at()] = true;
                 continue;
             }
+            // A position with no classes has nothing for the condition to tell apart, and nothing
+            // it admits says whether a value takes the way: that is asked of a position a value at
+            // it is in some class of.
+            if (one.admitted().isEmpty()) {
+                continue;
+            }
             boolean any = false;
             if (here[one.at()] == null) {
                 here[one.at()] = new boolean[one.admitted().size()];
