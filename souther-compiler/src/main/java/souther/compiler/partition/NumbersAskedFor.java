@@ -126,13 +126,13 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
             }
             switch (cut.demand()) {
                 case RowDemand.Relational(var relation) ->
-                        asked = asked.meet(askedBy(relation, term, on, ANYTHING));
+                        asked = asked.meet(askedBy(relation, on, ANYTHING));
                 // What some element meets, which the region was not narrowed by. So what it leaves
                 // the term is read off a region that is, one relation of it at a time.
                 case RowDemand.Exists(var ofAnElement, var _) -> {
                     for (RowDemand.Relational each : ofAnElement) {
                         if (each.terms().contains(term)) {
-                            asked = asked.meet(askedBy(each.constraint(), term, on,
+                            asked = asked.meet(askedBy(each.constraint(), on,
                                     leaving(term, each.constraint().narrowing(within), on)));
                         }
                     }
@@ -155,13 +155,13 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
     }
 
     /**
-     * What {@code taken} asks of {@code term} beside what a region leaves it.
+     * What {@code taken} asks of a term it is over, beside what a region leaves the term.
      *
      * @param inTheRegion what a region narrowed by {@code taken} leaves the term, which is nothing
      *                    more than the region already said where the region was narrowed by it
      */
-    private static NumbersAskedFor askedBy(TakenConstraint taken, NumericTerm.FromOnePosition term,
-                                           Carrier on, NumbersAskedFor inTheRegion) {
+    private static NumbersAskedFor askedBy(TakenConstraint taken, Carrier on,
+                                           NumbersAskedFor inTheRegion) {
         return switch (taken) {
             case TakenConstraint.AwayFrom away ->
                     of(LevelRegion.EVERYTHING.without(new Level.OnACarrier(on, away.at())));
