@@ -57,8 +57,8 @@ final class WhatAForkTests {
      * question about the atom rather than about the parts, and every owner that went through it
      * lost the parts again — the whole of what this is for is that they are asked one at a time. A
      * caller wanting to know who owns the atom composes it from the parts, where the composing is
-     * written down. Whether the atom may come out either way is another question, and
-     * {@link #mayBeEither} answers it off the same walk.
+     * written down. Whether the atom answers the same whatever the input is another question, and
+     * {@link #answersTheSameWhateverTheInput} answers it off the same walk.
      */
     static List<Core> partsOfTheAnswer(Core atom,
                                        UnaryOperator<Core> denotes) {
@@ -68,17 +68,14 @@ final class WhatAForkTests {
     }
 
     /**
-     * Whether the truth of {@code atom} may be either, which is everything but a walk that found
-     * it the same whatever the input.
+     * Whether the truth of {@code atom} is the same whatever the input — and not which one it is.
      *
-     * <p>Not a question about who owns what it turns on, which is what the parts are for; this is
-     * whether a way through a body can come out each way at it. A walk that stopped is one that
-     * cannot say the answer is fixed, so it is answered as one that may vary — the same reading a
-     * truth at a position gets.
+     * <p>Not a question about who owns what it turns on, which is what the parts are for. A walk
+     * that stopped is one that cannot say the answer is fixed, and is not this.
      */
-    static boolean mayBeEither(Core atom, UnaryOperator<Core> denotes) {
+    static boolean answersTheSameWhateverTheInput(Core atom, UnaryOperator<Core> denotes) {
         return turnsOn(atom, AnswerAspect.TRUTH, denotes, new HashMap<>(), new ArrayList<>())
-                != Follow.FIXED;
+                == Follow.FIXED;
     }
 
     /**
@@ -183,6 +180,14 @@ final class WhatAForkTests {
         if (e instanceof Core.LetIn let) {
             return turnsOn(let.body(), aspect, denotes, met, out);
         }
+        // An operation handed nothing but values the source wrote out answers the same every time,
+        // whatever the library says or does not say about it. Followed as a question instead, one
+        // the library says nothing about would be where the walk stopped, and offered as a part
+        // that varies.
+        if (operationOf(e) != null && argumentsOf(e).stream()
+                .allMatch(each -> wholeValueWrittenOut(denotes.apply(each), denotes))) {
+            return Follow.FIXED;
+        }
         // And beyond an operation the library says the answer turns on, what it turns on.
         Core beyond = beyond(e, aspect, denotes);
         Follow past = beyond == null ? Follow.STOPPED
@@ -237,6 +242,30 @@ final class WhatAForkTests {
                  Core.UnitValue _, Core.ListLit _, Core.Tuple _, Core.OptionSome _,
                  Core.OptionNone _, Core.Construct _ -> true;
             default -> false;
+        };
+    }
+
+    /**
+     * Whether {@code e} is a value the source wrote out all the way down — a written value, and
+     * every part of one built out of written values.
+     *
+     * <p>Beside {@link #writtenOut} and asking more of the value. That one is whether an arm is an
+     * answer rather than a test, and a list is an answer however its elements were reached; this is
+     * whether the whole value is the same every time, which a list holding a position is not.
+     */
+    private static boolean wholeValueWrittenOut(Core standing, UnaryOperator<Core> denotes) {
+        return switch (Core.withoutStanding(standing)) {
+            case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
+                 Core.UnitValue _, Core.OptionNone _ -> true;
+            case Core.Neg negated -> wholeValueWrittenOut(denotes.apply(negated.operand()), denotes);
+            case Core.OptionSome some -> wholeValueWrittenOut(denotes.apply(some.value()), denotes);
+            case Core.ListLit list -> list.elements().stream()
+                    .allMatch(each -> wholeValueWrittenOut(denotes.apply(each), denotes));
+            case Core.Tuple tuple -> tuple.elements().stream()
+                    .allMatch(each -> wholeValueWrittenOut(denotes.apply(each), denotes));
+            case Core.Construct made -> made.values().stream()
+                    .allMatch(each -> wholeValueWrittenOut(denotes.apply(each.value()), denotes));
+            case null, default -> false;
         };
     }
 

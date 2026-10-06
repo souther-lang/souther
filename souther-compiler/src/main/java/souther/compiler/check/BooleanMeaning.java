@@ -42,6 +42,18 @@ public final class BooleanMeaning {
     }
 
     /**
+     * The truth {@code e} comes to at compile time, or empty where it is not one this compiler
+     * folds.
+     *
+     * <p>The checker's folding ({@link CoreConstantEval}) and not a second one, under no binding
+     * the reading was told of: a name is followed only where the tree still binds it.
+     */
+    public static Optional<Boolean> folded(Core e, Symbols symbols) {
+        return CoreConstantEval.against(symbols, Denotations.none()).eval(e)
+                .filter(Boolean.class::isInstance).map(Boolean.class::cast);
+    }
+
+    /**
      * The comparison {@code part} means, or empty where it means none.
      *
      * <p>A comparison is itself, and an emptiness check is its size against nought — a comparison

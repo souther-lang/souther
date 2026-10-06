@@ -123,6 +123,7 @@ public sealed interface ReachabilityGap {
                 }
                 case Uncomposed(var _, Why.TwoNumbersAtOneLocation _) -> twoAtOneLocation = true;
                 case Uncomposed(var _, Why.NoValueComposedForItsPositions _),
+                     Uncomposed(var _, Why.ElementsWrittenAlike _),
                      ProvedImpossible _ -> { }
                 case Unstated _ -> throw new IllegalArgumentException(
                         "a way of writing a cut is one the walk stated: " + each);
@@ -216,5 +217,16 @@ public sealed interface ReachabilityGap {
          * positions hold no value.
          */
         record TwoNumbersAtOneLocation() implements Why {}
+
+        /**
+         * A condition about a container's elements, which no row of elements written alike meets.
+         *
+         * <p>A row writes every element of a container as the one element composed for it, so what
+         * this looked through is the rows whose elements are all one value. Some element meeting a
+         * condition while another fails it, or a container holding none where the size could not
+         * be said, is beyond that — so this is never the rules leaving nothing, and a reader is not
+         * told the way is closed.
+         */
+        record ElementsWrittenAlike() implements Why {}
     }
 }

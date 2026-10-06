@@ -80,6 +80,13 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                     // the element meets is composed where the row is.
                     case RowDemand.Exists(var _, var holdingOne) -> holdingOne.isPresent()
                             ? holdingOne.get().constraint().narrowing(region) : region;
+                    // That every element meets these, which a container holding none does. A
+                    // region reads a term inside the elements as the value of one that is there,
+                    // so narrowed on, it would leave nothing where the rules leave the element
+                    // nothing — and the way past an empty container would be proved closed. And
+                    // the container is not held to holding none either, since elements meeting
+                    // these are a way past it too.
+                    case RowDemand.ForAll _ -> region;
                 };
             }
         }

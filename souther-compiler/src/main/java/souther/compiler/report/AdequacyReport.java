@@ -3632,6 +3632,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                 .TwoNumbersAtOneLocation _ ->
                                 "a condition on another number taken where this row is already"
                                         + " being written for one";
+                        // Not that the rules leave nothing: rows whose elements differ were not
+                        // looked through, and an author may well write one.
+                        case ReachabilityGap.Why.ElementsWrittenAlike _ ->
+                                "a condition on a container's elements that no row of elements"
+                                        + " written alike meets";
                         // What stopped the looking, and not that nothing was found. An author does
                         // nothing about the first and may do something about the second.
                         // A value it could not hold is said after the figures and apart from them,

@@ -103,6 +103,46 @@ public sealed interface RowDemand {
     }
 
     /**
+     * That every element a container holds meets every one of these — which a container holding
+     * none does.
+     *
+     * <p>Not a relation a region can be narrowed by, for the same reason {@link Exists} is not: a
+     * term inside a container's elements is read by a region as the value of an element that is
+     * there, and this says nothing about one being there. Narrowed on, a region would leave no
+     * value where the rules leave the element none, and the way past an empty container would be
+     * proved closed.
+     *
+     * <p>So what is done with these is compose, two ways round: elements that all meet them, and
+     * where no element can be written that does, the container holding none.
+     *
+     * @param ofEachElement what every element is to meet, every one of it about the element alone
+     * @param holdingNone   the container's size at most nought, where the size is a number of this
+     *                      input a region can carry — the way to meet this with no element at all
+     */
+    record ForAll(List<Relational> ofEachElement, Optional<Relational> holdingNone)
+            implements OfACondition {
+
+        public ForAll {
+            ofEachElement = List.copyOf(ofEachElement);
+            if (ofEachElement.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "every element meeting nothing in particular is no demand on a row");
+            }
+        }
+
+        /** The numbers the element is written with and the container's size, which are what a
+         *  row composed for this places — the first where it writes an element, the second where
+         *  it writes none. */
+        @Override
+        public Set<NumericTerm> terms() {
+            Set<NumericTerm> out = new LinkedHashSet<>();
+            ofEachElement.forEach(each -> out.addAll(each.terms()));
+            holdingNone.ifPresent(none -> out.addAll(none.terms()));
+            return Collections.unmodifiableSet(out);
+        }
+    }
+
+    /**
      * Where the terms of one comparison stand, at a point of its border on the side it comes out
      * on.
      *

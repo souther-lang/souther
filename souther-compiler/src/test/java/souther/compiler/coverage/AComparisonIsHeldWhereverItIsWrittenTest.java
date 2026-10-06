@@ -349,7 +349,7 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> new CoverageSites.Plan(List.of(), List.of(), new IdentityHashMap<>(),
-                        numbered, new IdentityHashMap<>(), new IdentityHashMap<>(), Set.of(),
+                        numbered, new IdentityHashMap<>(), List.of(), Set.of(),
                         new LinkedHashMap<>(), catalogOf(checked), numbering, Methods.NONE));
         assertTrue(refused.getMessage().contains("one answer or they are two"),
                 refused.getMessage());

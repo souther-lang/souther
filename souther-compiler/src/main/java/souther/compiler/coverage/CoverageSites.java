@@ -383,8 +383,10 @@ public final class CoverageSites {
         private final IdentityHashMap<Core, int[]> byNode;
         private final Map<ConstructOccurrence, ConditionOutcomeSite> byComparison;
         private final IdentityHashMap<Core, ControlPlace.Arm[]> armsByNode;
-        /** Where each application the model states answers, by the node it answers at. By identity
-         *  for the reason {@code byNode} is. */
+        /** Where each application the model states answers, and the node it answers at, in the
+         *  order the walk met them. */
+        private final List<AnsweredAt> answered;
+        /** The same, by the node it answers at. By identity for the reason {@code byNode} is. */
         private final IdentityHashMap<Core, AnswerSite> answersByNode;
         /** The same, by the application. */
         private final Map<ConstructOccurrence, AnswerSite> answersByApplication;
@@ -412,7 +414,7 @@ public final class CoverageSites {
         Plan(List<Site> sites, List<GuardRef> guards, IdentityHashMap<Core, int[]> byNode,
              Map<ConstructOccurrence, ConditionOutcomeSite> byComparison,
              IdentityHashMap<Core, ControlPlace.Arm[]> armsByNode,
-             IdentityHashMap<Core, AnswerSite> answersByNode,
+             List<AnsweredAt> answered,
              java.util.Set<Core> mayRepeat,
              Map<Integer, Citation> reachedAt,
              ComparisonCatalog comparisons,
@@ -443,8 +445,8 @@ public final class CoverageSites {
             for (Site site : sites) {
                 addressed.add(site.index());
             }
-            for (AnswerSite answer : answersByNode.values()) {
-                addressed.add(answer.index());
+            for (AnsweredAt answer : answered) {
+                addressed.add(answer.site().index());
             }
             if (numbering.identity().byNumber().size() != addressed.size()) {
                 throw new IllegalArgumentException("this plan numbered " + addressed.size()
@@ -457,10 +459,12 @@ public final class CoverageSites {
             this.byNode = byNode;
             this.byComparison = byComparison;
             this.armsByNode = armsByNode;
-            this.answersByNode = answersByNode;
+            this.answered = List.copyOf(answered);
+            this.answersByNode = new IdentityHashMap<>();
             this.answersByApplication = new LinkedHashMap<>();
-            for (AnswerSite answer : answersByNode.values()) {
-                this.answersByApplication.put(answer.application(), answer);
+            for (AnsweredAt answer : this.answered) {
+                this.answersByNode.put(answer.node(), answer.site());
+                this.answersByApplication.put(answer.site().application(), answer.site());
             }
             this.mayRepeat = mayRepeat;
             this.reachedAt = reachedAt;
@@ -527,6 +531,10 @@ public final class CoverageSites {
             return answersByNode;
         }
 
+        List<AnsweredAt> answered() {
+            return answered;
+        }
+
         /**
          * Where the answer {@code node} works out is recorded, or empty where it is not where an
          * application the model states answers.
@@ -540,15 +548,15 @@ public final class CoverageSites {
         }
 
         /** Every place an answer is recorded at, which is what an emitter is held to having
-         *  written. */
+         *  written, in the order the walk met them. */
         public List<AnswerSite> answers() {
-            return List.copyOf(answersByNode.values());
+            return answered.stream().map(AnsweredAt::site).toList();
         }
 
         /** The places an answer of {@code behavior}'s is recorded at, in its own body and in the
-         *  values it calls. */
+         *  values it calls, in the order the walk met them. */
         public List<AnswerSite> answers(String behavior) {
-            return answersByNode.values().stream()
+            return answered.stream().map(AnsweredAt::site)
                     .filter(answer -> methods.owes(behavior, answer.body()))
                     .toList();
         }
@@ -578,7 +586,7 @@ public final class CoverageSites {
         }
 
         public static final Plan NONE = new Plan(List.of(), List.of(), new IdentityHashMap<>(),
-                new LinkedHashMap<>(), new IdentityHashMap<>(), new IdentityHashMap<>(),
+                new LinkedHashMap<>(), new IdentityHashMap<>(), List.of(),
                 Set.of(), new LinkedHashMap<>(),
                 ComparisonCatalog.of(ModuleBodies.none()),
                 SiteNumbering.of(NumberingIdentity.forThePlanOfNothing()), Methods.NONE);
@@ -829,12 +837,12 @@ public final class CoverageSites {
             }
             armsByNode.put(node, here);
         });
-        IdentityHashMap<Core, AnswerSite> answersByNode = new IdentityHashMap<>();
-        walk.answersByNode.forEach((node, draft) -> answersByNode.put(node,
-                new AnswerSite(draft.body(), draft.application(), draft.at(),
-                        numbering.outcome(draft.raw()))));
+        List<AnsweredAt> answered = walk.answers.values().stream()
+                .map(draft -> new AnsweredAt(draft.node(), new AnswerSite(draft.body(),
+                        draft.application(), draft.at(), numbering.outcome(draft.raw()))))
+                .toList();
         return new Plan(List.copyOf(sites), List.copyOf(guards), walk.byNode,
-                byComparison, armsByNode, answersByNode, walk.mayRepeat,
+                byComparison, armsByNode, answered, walk.mayRepeat,
                 Map.copyOf(walk.reachedAt),
                 comparisons, numbering, found.methods());
     }
@@ -893,9 +901,20 @@ public final class CoverageSites {
                                        int raw, int ordinal, Obligation obligation)
             implements DraftSite {}
 
-    /** Where one application's answer is recorded, as the walk has it. */
-    private record DraftAnswer(String body, ConstructOccurrence application, Citation at,
-                               int raw) {}
+    /** Where one application's answer is recorded, as the walk has it, and the node it is
+     *  recorded at. */
+    private record DraftAnswer(Core node, String body, ConstructOccurrence application,
+                               Citation at, int raw) {}
+
+    /**
+     * One place an answer is recorded, and the node the emitter records it at.
+     *
+     * <p>A pair and not two maps, because the plan is handed these in the order the walk met them
+     * and asked for them two ways: by node, which is what the emitter walks, and in that order,
+     * which is what a reader listing them reads. Handed as a map by node, the order would be the
+     * order nodes hash in, which changes from run to run.
+     */
+    record AnsweredAt(Core node, AnswerSite site) {}
 
     /** One arm as the walk has it: which arm it is, and the number its place was given where the
      *  emitter records one. */
@@ -924,10 +943,8 @@ public final class CoverageSites {
         private final IdentityHashMap<Core, int[]> byNode = new IdentityHashMap<>();
         private final Map<ConstructOccurrence, Integer> byComparison = new LinkedHashMap<>();
         /** Where the answer of each application of an operation the model states is recorded, by
-         *  the application. */
+         *  the application, in the order the walk met them. */
         private final Map<ConstructOccurrence, DraftAnswer> answers = new LinkedHashMap<>();
-        /** The same, by the node that answers it, which is what the emitter is walking. */
-        private final IdentityHashMap<Core, DraftAnswer> answersByNode = new IdentityHashMap<>();
         /** The copy the node the walk is at stands in, as the nearest node above it that says. */
         private OccurrenceLineage standingIn = OccurrenceLineage.ORIGINAL;
         private final IdentityHashMap<Core, DraftArm[]> armsByNode = new IdentityHashMap<>();
@@ -1087,30 +1104,38 @@ public final class CoverageSites {
             if (raw == null) {
                 raw = numbering.number(new SiteAddress.ConditionOutcome(places.of(e)));
             }
-            DraftAnswer draft = new DraftAnswer(behavior, application, Citation.of(e.pos()), raw);
-            answers.put(application, draft);
-            answersByNode.put(e, draft);
+            answers.put(application,
+                    new DraftAnswer(e, behavior, application, Citation.of(e.pos()), raw));
         }
 
         /**
          * The node one walk step stands at, as the copy it stands in: read where the node carries
-         * one, and through a binding to what answers for it where it does not.
+         * one, and through the binding that opens a copy of one of the language's operations to
+         * what answers for it.
          *
          * <p>Null where nothing on the way says. A name, a literal or a value built from parts stand
          * in whatever copy their parent stands in, and say nothing of it themselves. So does a
          * widening: it is a node of its own, standing as another type, and the node it holds is
          * where the value an application answers is on the stack — asked next, against the copy
          * the widening's parent stands in.
+         *
+         * <p>And so does every other binding. Which copy a binding is part of is what owns its
+         * binder, so the binding an operation's copy opens with — its parameters bound to what the
+         * application handed it — is the copy and is looked through. A binding an author wrote is
+         * not: its value is its body's, and looked through, the copy its body opens would be read
+         * as opened at the author's {@code let}, and what the application answered would be put
+         * where the {@code let} is written.
          */
         private static OccurrenceLineage lineageOf(Core e) {
             Core at = e;
             while (true) {
                 ConstructOccurrence occurrence;
                 switch (at) {
-                    case Core.LetIn let -> {
+                    case Core.LetIn let when opensACopyOfAnOperation(let) -> {
                         at = let.body();
                         continue;
                     }
+                    case Core.LetIn _ -> occurrence = null;
                     case Core.Widen _ -> occurrence = null;
                     case Core.Binary binary -> occurrence = binary.occurrence();
                     case Core.Call call -> occurrence = call.occurrence();
@@ -1121,6 +1146,13 @@ public final class CoverageSites {
                 }
                 return occurrence == null || !occurrence.isWritten() ? null : occurrence.lineage();
             }
+        }
+
+        /** Whether {@code let} binds what an application of one of the language's operations
+         *  handed the copy of it, which is the binding that copy opens with. */
+        private static boolean opensACopyOfAnOperation(Core.LetIn let) {
+            return let.binder().binding().owner() instanceof BindingOwner.Expansion copy
+                    && copy.expanded() instanceof ValueName.Stdlib.Operation;
         }
 
         /**

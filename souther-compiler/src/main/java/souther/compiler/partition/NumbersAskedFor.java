@@ -127,16 +127,34 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
             switch (cut.demand()) {
                 case RowDemand.Relational(var relation) ->
                         asked = asked.meet(askedBy(relation, on, ANYTHING));
-                // What some element meets, which the region was not narrowed by. So what it leaves
-                // the term is read off a region that is, one relation of it at a time.
-                case RowDemand.Exists(var ofAnElement, var _) -> {
-                    for (RowDemand.Relational each : ofAnElement) {
-                        if (each.terms().contains(term)) {
-                            asked = asked.meet(askedBy(each.constraint(), on,
-                                    leaving(term, each.constraint().narrowing(within), on)));
-                        }
+                // What an element meets, which the region was not narrowed by. So what it leaves
+                // the term is read off a region that is, one relation of it at a time — the
+                // element a row writes is the one these numbers are chosen for.
+                case RowDemand.Exists(var ofAnElement, var _) ->
+                        asked = asked.meet(ofTheElement(ofAnElement, term, within, on));
+                // And where the container is written holding none, its size is the number placed.
+                case RowDemand.ForAll(var ofEachElement, var holdingNone) -> {
+                    asked = asked.meet(ofTheElement(ofEachElement, term, within, on));
+                    if (holdingNone.isPresent()) {
+                        asked = asked.meet(ofTheElement(List.of(holdingNone.get()), term, within,
+                                on));
                     }
                 }
+            }
+        }
+        return asked;
+    }
+
+    /** What the relations an element is to meet ask of {@code term}, each read off a region it
+     *  narrows. */
+    private static NumbersAskedFor ofTheElement(List<RowDemand.Relational> relations,
+                                                NumericTerm.FromOnePosition term,
+                                                SearchRegion within, Carrier on) {
+        NumbersAskedFor asked = ANYTHING;
+        for (RowDemand.Relational each : relations) {
+            if (each.terms().contains(term)) {
+                asked = asked.meet(askedBy(each.constraint(), on,
+                        leaving(term, each.constraint().narrowing(within), on)));
             }
         }
         return asked;

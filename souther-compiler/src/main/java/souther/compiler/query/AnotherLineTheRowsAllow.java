@@ -715,12 +715,17 @@ public sealed interface AnotherLineTheRowsAllow {
                             return false;
                         }
                     }
-                    // That some element meets these, which a step leaves as it was where it moves
-                    // none of their numbers. One that does may move the element that met them,
-                    // and which element that was is nothing an input's numbers say.
-                    case OnTheWay.TakenIn(var _, RowDemand.Exists(var ofAnElement, var _)) -> {
-                        if (ofAnElement.stream().anyMatch(relation -> !Collections.disjoint(
-                                relation.constraint().terms(), moved))) {
+                    // That some element meets these, or every element does, which a step leaves as
+                    // it was where it moves none of their numbers. One that does may move an
+                    // element they are about, and which elements those are is nothing an input's
+                    // numbers say.
+                    case OnTheWay.TakenIn(var _, RowDemand.Exists exists) -> {
+                        if (!Collections.disjoint(exists.terms(), moved)) {
+                            return false;
+                        }
+                    }
+                    case OnTheWay.TakenIn(var _, RowDemand.ForAll every) -> {
+                        if (!Collections.disjoint(every.terms(), moved)) {
                             return false;
                         }
                     }

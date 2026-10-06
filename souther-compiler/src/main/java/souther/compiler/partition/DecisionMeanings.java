@@ -72,8 +72,12 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
      * answers to two different questions.
      */
     private static boolean oneRelation(List<OnTheWay> stated) {
-        return stated.size() == 1
-                && !(stated.getFirst() instanceof OnTheWay.TakenIn(var _, RowDemand.Exists _));
+        return stated.size() == 1 && switch (stated.getFirst()) {
+            case OnTheWay.TakenIn(var _, RowDemand.Relational _) -> true;
+            case OnTheWay.TakenIn(var _, RowDemand.Exists _),
+                 OnTheWay.TakenIn(var _, RowDemand.ForAll _) -> false;
+            case OnTheWay.Narrowed _, OnTheWay.Declined _ -> true;
+        };
     }
 
     /**
@@ -106,7 +110,8 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
             // it is where what it is about is a subject a row controls, and otherwise one this
             // reading has no column for. Only a condition the body asks is read this way, so there
             // is one to ask.
-            case OnTheWay.TakenIn(var _, RowDemand.Exists _) -> asOneColumn(condition, held);
+            case OnTheWay.TakenIn(var _, RowDemand.Exists _),
+                 OnTheWay.TakenIn(var _, RowDemand.ForAll _) -> asOneColumn(condition, held);
             case OnTheWay.TakenIn(var _, RowDemand.Relational(var taken)) -> {
                 Rel proposition = taken.rel().orItsDenial();
                 DecisionCondition.Comparison column = switch (taken) {

@@ -4380,23 +4380,74 @@ public final class Generator {
     private static Placed placing(MeasuredInput subject, WitnessSearch looking, SearchRegion here,
                                   Map<RealizationTarget, Place> alreadyStanding,
                                   Requirements assumed, OnTheWay.TakenIn cut) {
-        // The region the cut's numbers are chosen in. What every row past it holds the region a
-        // search runs over was narrowed by already; that some element meets something it was not,
-        // and the cut is placed in a region that is, for this cut alone — the element written
-        // meets it, and every element a list writes is that one. Where no element can, none does,
-        // so nothing left there is the proof a cut's own reading gives.
-        SearchRegion within = here;
-        List<TakenConstraint> stated = switch (cut.demand()) {
-            case RowDemand.Relational(var relation) -> List.of(relation);
-            case RowDemand.Exists(var ofAnElement, var _) -> {
-                List<TakenConstraint> each = ofAnElement.stream()
-                        .map(RowDemand.Relational::constraint).toList();
-                for (TakenConstraint one : each) {
-                    within = one.narrowing(within);
+        return switch (cut.demand()) {
+            // What every row past it holds, which the region a search runs over was narrowed by
+            // already — so what is left there is what the rules leave, and nothing left is a
+            // proof.
+            case RowDemand.Relational(var relation) -> placedIn(subject, looking, here,
+                    alreadyStanding, assumed, cut, List.of(relation), false);
+            // What an element meets, which the region was not narrowed by. Placed in a region that
+            // is, for this cut alone: the element written meets it, and every element a list
+            // writes is that one.
+            case RowDemand.Exists(var ofAnElement, var _) -> asComposedOnly(cut,
+                    placedIn(subject, looking, here, alreadyStanding, assumed, cut,
+                            constraints(ofAnElement), true));
+            // And where no element can be written that meets them, the container holding none,
+            // which every element of meets them.
+            case RowDemand.ForAll(var ofEachElement, var holdingNone) -> {
+                Placed some = placedIn(subject, looking, here, alreadyStanding, assumed, cut,
+                        constraints(ofEachElement), true);
+                if (some instanceof Placed.AtAll || holdingNone.isEmpty()) {
+                    yield asComposedOnly(cut, some);
                 }
-                yield each;
+                Placed none = placedIn(subject, looking, here, alreadyStanding, assumed, cut,
+                        List.of(holdingNone.get().constraint()), true);
+                yield asComposedOnly(cut, none instanceof Placed.AtAll ? none : some);
             }
         };
+    }
+
+    private static List<TakenConstraint> constraints(List<RowDemand.Relational> relations) {
+        return relations.stream().map(RowDemand.Relational::constraint).toList();
+    }
+
+    /**
+     * What placing a cut about a container's elements came to, with nothing it found standing for
+     * a proof.
+     *
+     * <p>A region reads a term inside the elements as the value of one element, and a row writes
+     * every element as that one. What that leaves nothing for is a row of elements written alike,
+     * and the condition may still hold of a row whose elements differ — so nothing found here is
+     * what this composer did, and never what the model settles.
+     */
+    private static Placed asComposedOnly(OnTheWay.TakenIn cut, Placed placed) {
+        return placed instanceof Placed.AtNone(ReachabilityGap.ProvedImpossible _)
+                ? new Placed.AtNone(new ReachabilityGap.Uncomposed(cut,
+                        new ReachabilityGap.Why.ElementsWrittenAlike()))
+                : placed;
+    }
+
+    /**
+     * {@code cut} placed at the numbers {@code stated} is over, in {@code here} — narrowed by each
+     * of them where {@code narrowHere} says the region a search runs over was not.
+     *
+     * <p>Not narrowed where it was. What the way took in is in the region already, and a cut
+     * handed over from elsewhere — what an answer standing a dependency in is asked — may be one
+     * the region was never able to carry: narrowed again, it would be refused at the place the
+     * cut is placed rather than reported as the cut it is.
+     */
+    private static Placed placedIn(MeasuredInput subject, WitnessSearch looking, SearchRegion here,
+                                   Map<RealizationTarget, Place> alreadyStanding,
+                                   Requirements assumed, OnTheWay.TakenIn cut,
+                                   List<TakenConstraint> stated, boolean narrowHere) {
+        SearchRegion within = here;
+        Set<NumericTerm> terms = new LinkedHashSet<>();
+        for (TakenConstraint one : stated) {
+            if (narrowHere) {
+                within = one.narrowing(within);
+            }
+            terms.addAll(one.terms());
+        }
         // What the cut says, asked as the one thing it says. A cut over two positions is a
         // statement about their sum, and the rules can leave that sum nowhere while leaving each
         // position somewhere — so the positions asked one at a time answer a weaker question
@@ -4414,8 +4465,7 @@ public final class Generator {
         // are part of placing the cut, and a cut is placed at every position it names or at none —
         // so a cut that comes to nothing leaves the row the case it had, and the next cut chooses
         // as freely as this one did.
-        return new CutPlacing(subject, looking, within, alreadyStanding, cut,
-                List.copyOf(cut.demand().terms()))
+        return new CutPlacing(subject, looking, within, alreadyStanding, cut, List.copyOf(terms))
                 .from(0, assumed, new LinkedHashMap<>(), new LinkedHashMap<>());
     }
 
@@ -5219,30 +5269,21 @@ public final class Generator {
         for (RealizationTarget each : fixing.keySet()) {
             out.put(each, asking);
         }
-        for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
-            for (NumericTerm term : cut.demand().terms()) {
-                NumericTerm.FromOnePosition at = term.atOnePosition();
-                if (at == null) {
-                    continue;
-                }
-                // The target the row was composed at, and not one built from the number here. Where
-                // a row writes a number is chosen once, where the positions of the way are placed
-                // ({@link Standing#routed}) — worked out again, a number read at a name every case
-                // of a sum spreads would be filed under the sum's own name while the row stands at
-                // a position under a case, and the search would be built for a number nothing had
-                // said what it was one of.
-                RealizationTarget target = routed.get(at);
-                // A number no place was chosen for, which is a cut this reader could not act on.
-                // What became of the cut is said where it was read, and there is no row standing at
-                // this number to ask anything about.
-                if (target == null) {
-                    continue;
-                }
-                NumbersAskedFor leaves = NumbersAskedFor.askedOf(at, reaching.region(),
-                        carrierOf(at, subject.quantities()), reaching.boundedOnTheWay());
-                out.merge(target, leaves, NumbersAskedFor::meet);
-            }
-        }
+        // Every number a place was chosen for on the way, and not every number a cut names. A cut
+        // may be met more than one way — every element meeting a condition, or a container holding
+        // none — and what the row stands at is whichever way was placed; asked of the cut's numbers
+        // instead, a number placed by the other way would stand with nothing saying what it is one
+        // of.
+        //
+        // The target is the one the row was composed at, and not one built from the number here.
+        // Where a row writes a number is chosen once, where the positions of the way are placed
+        // ({@link Standing#routed}) — worked out again, a number read at a name every case of a sum
+        // spreads would be filed under the sum's own name while the row stands at a position under
+        // a case, and the search would be built for a number nothing had said what it was one of.
+        routed.forEach((at, target) -> out.merge(target,
+                NumbersAskedFor.askedOf(at, reaching.region(), carrierOf(at, subject.quantities()),
+                        reaching.boundedOnTheWay()),
+                NumbersAskedFor::meet));
         return out;
     }
 

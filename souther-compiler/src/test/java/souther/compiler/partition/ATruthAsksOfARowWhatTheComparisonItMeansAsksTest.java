@@ -111,21 +111,24 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
     }
 
     /**
-     * Every element meeting it is a relation of the elements alone, and some element meeting it
-     * is the container holding one and an element that meets it — which no region is narrowed by.
+     * Neither way round is a relation of the row. Every element meeting it is met by a container
+     * holding none, and some element meeting it is met by one element and not the rest — so each
+     * carries the container's size it is met with, and neither is a relation a region takes.
      */
     @Test
-    void everyElementIsARelationAndSomeElementIsNot() {
+    void neitherWayRoundIsARelationOfTheRow() {
         List<RowDemand> every = demandsOf("someDear", false);
-        assertEquals(1, every.size(), () -> "one relation of the elements: " + every);
-        assertInstanceOf(RowDemand.Relational.class, every.getFirst());
+        assertEquals(1, every.size(), () -> "every element, or none: " + every);
+        RowDemand.ForAll each = assertInstanceOf(RowDemand.ForAll.class, every.getFirst(),
+                "what every element meets, which a list holding none does");
+        assertTrue(each.holdingNone().isPresent(), "with the list holding none as a way to it");
 
         List<RowDemand> some = demandsOf("someDear", true);
         assertEquals(1, some.size(), () -> "an element, with the container holding it: " + some);
         RowDemand.Exists element = assertInstanceOf(RowDemand.Exists.class, some.getFirst(),
                 "an element that meets the predicate");
         assertTrue(element.holdingOne().isPresent(), "and the container holding at least one");
-        assertNotEquals(every.getFirst(), element.ofAnElement().getFirst(),
+        assertNotEquals(each.ofEachElement().getFirst(), element.ofAnElement().getFirst(),
                 "what some element meets is the predicate, and what every element meets when it"
                         + " fails is its denial");
     }

@@ -127,11 +127,12 @@ final class DemandReading {
      * and {@code List.all} failing is some element failing it.
      *
      * <p>The predicate is read where the closure was written, with what it is handed standing at
-     * the container's elements. What every element meets is a relation over the elements, and a
-     * region can be narrowed by it — an empty container meets it too, so no row that passes is
-     * left out — except where the relation is about something beside the element, which an empty
-     * container does not answer for. What some element meets is not a region's to carry
-     * ({@link RowDemand.Exists}), which holds the container holding at least one with it.
+     * the container's elements. Neither way round is a relation a region can be narrowed by: a
+     * region reads a term inside the elements as the value of one that is there, and what every
+     * element meets is met by a container holding none ({@link RowDemand.ForAll}), while what some
+     * element meets is met by one element and not the rest ({@link RowDemand.Exists}). Every
+     * element meeting a relation about something beside the element is declined, since an empty
+     * container meets it whatever that part says.
      */
     private static List<Read> ofAQuantifier(Core e, InputReads reads, InputReading read,
                                             boolean holding, String behavior) {
@@ -157,7 +158,7 @@ final class DemandReading {
         TermPath element = held.element();
         boolean everyElement = facts.statesItsPredicateOfEveryElement(operation) == holding;
         List<Read> out = new ArrayList<>();
-        List<RowDemand.Relational> ofSome = new ArrayList<>();
+        List<RowDemand.Relational> ofTheElement = new ArrayList<>();
         // Named apart from the body's own conditions: nothing reports one of these by its name,
         // and filed under the body's numbering they would take names the body's conditions have.
         Condition predicate = Condition.of(block.body(), handed.at(), read.rules().symbols(),
@@ -173,24 +174,30 @@ final class DemandReading {
                 // element meets, the parts of it about nothing of the element hold of the row
                 // whichever element it is, so those are relations of the row like any other.
                 case Read.Demands(RowDemand.Relational relation)
-                        when !everyElement && aboutAny(relation, element) -> ofSome.add(relation);
+                        when everyElement || aboutAny(relation, element) ->
+                        ofTheElement.add(relation);
                 case Read.Demands(RowDemand.Relational _) -> out.add(each);
                 // A quantifier inside a quantifier asks of an element's own elements, which is
                 // nothing a single relation of the outer element says.
-                case Read.Demands(RowDemand.Exists _) ->
+                case Read.Demands(RowDemand.Exists _), Read.Demands(RowDemand.ForAll _) ->
                         out.add(new Read.Unread(new OnTheWay.Why.NoWordsForTheShape()));
             }
         }
-        if (!everyElement) {
-            Optional<RowDemand.Relational> holdingOne =
-                    Optional.ofNullable(holdingOne(held, operation, read));
-            // An element meeting nothing this reading could state is still the container holding
-            // one, which every row past it does.
-            if (!ofSome.isEmpty()) {
-                out.add(new Read.Demands(new RowDemand.Exists(ofSome, holdingOne)));
-            } else {
-                holdingOne.ifPresent(one -> out.add(new Read.Demands(one)));
+        if (everyElement) {
+            if (!ofTheElement.isEmpty()) {
+                out.add(new Read.Demands(new RowDemand.ForAll(ofTheElement,
+                        Optional.ofNullable(sizeAgainst(held, operation, read, false)))));
             }
+            return List.copyOf(out);
+        }
+        Optional<RowDemand.Relational> holdingOne =
+                Optional.ofNullable(sizeAgainst(held, operation, read, true));
+        // An element meeting nothing this reading could state is still the container holding
+        // one, which every row past it does.
+        if (!ofTheElement.isEmpty()) {
+            out.add(new Read.Demands(new RowDemand.Exists(ofTheElement, holdingOne)));
+        } else {
+            holdingOne.ifPresent(one -> out.add(new Read.Demands(one)));
         }
         return List.copyOf(out);
     }
@@ -208,15 +215,16 @@ final class DemandReading {
     }
 
     /**
-     * That the container at {@code held} holds at least one, as its size against one — or null
-     * where its size is no term of this input or the region cannot carry it.
+     * That the container at {@code held} holds at least one, or none, as its size against one or
+     * against nought — or null where its size is no term of this input or the region cannot
+     * carry it.
      *
      * <p>The size is the one the container's own library means by emptiness
      * ({@code MeansTheSameAsASizeOfNought}), asked of the library the quantifier is in: a list is
      * walked by the list's operations, and its size is the list's.
      */
-    private static RowDemand.Relational holdingOne(TermPath held, ValueName quantifier,
-                                                   InputReading read) {
+    private static RowDemand.Relational sizeAgainst(TermPath held, ValueName quantifier,
+                                                    InputReading read, boolean atLeastOne) {
         if (!(quantifier instanceof ValueName.Stdlib.Operation(String library, String _))) {
             return null;
         }
@@ -235,11 +243,14 @@ final class DemandReading {
             if (count == null) {
                 return null;
             }
-            LinearForm<NumericTerm> atLeastOne =
-                    LinearForm.atomMinusConstant(count, ExactRatio.ONE);
-            return read.quantities().region().assuming(atLeastOne, Rel.GE)
+            // `count - 1 >= 0`, or `count <= 0`.
+            LinearForm<NumericTerm> form = atLeastOne
+                    ? LinearForm.<NumericTerm>atomMinusConstant(count, ExactRatio.ONE)
+                    : LinearForm.<NumericTerm>atom(count);
+            Rel rel = atLeastOne ? Rel.GE : Rel.LE;
+            return read.quantities().region().assuming(form, rel)
                     instanceof SearchRegion.Assumption.Taken
-                    ? new RowDemand.Relational(new TakenConstraint.Affine(atLeastOne, Rel.GE))
+                    ? new RowDemand.Relational(new TakenConstraint.Affine(form, rel))
                     : null;
         }
         return null;

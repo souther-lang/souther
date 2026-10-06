@@ -129,7 +129,7 @@ public record DecisionReading(String behavior, List<Ruled> found, Enumeration en
         ValueArrivals<DecisionPath> arrivals = ValueArrivals.ofBodyWhereTheOperationsStand(body,
                 new DecisionNaming(meanings(read, dependencies), reads, numbering,
                         PATHS_READ.maximum()),
-                new TruthsMayComeOutEitherWay(reads, read.rules().symbols(),
+                new AnOperationsTruthComesOutAsItCan(reads, read.rules().symbols(),
                         read.rules().newtypes()),
                 analysis.templates()::bodyOf);
         if (!(arrivals.waysAt(body) instanceof Paths.Held<DecisionPath> held)) {
