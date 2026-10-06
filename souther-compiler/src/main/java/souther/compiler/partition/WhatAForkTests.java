@@ -169,13 +169,18 @@ final class WhatAForkTests {
         if (e instanceof Core.LetIn let) {
             return turnsOn(let.body(), aspect, denotes, met, out);
         }
-        // An operation handed nothing but values the source wrote out answers the same every time,
-        // whatever the library says or does not say about it. Followed as a question instead, one
-        // the library says nothing about would be where the walk stopped, and offered as a part
-        // that varies.
-        if (operationOf(e) != null && argumentsOf(e).stream()
+        // An operation whose answer is the same every time turns on nothing, whatever the library
+        // says or does not say about it. Followed as a question instead, one the library says
+        // nothing about would be where the walk stopped, and offered as a part that varies — and
+        // a closure it is handed would be walked without knowing that what it is handed is
+        // written out, and a part of it offered that asks the same thing every time. Which
+        // answers the application can give is {@link TruthOutcomes}' to say, over the tree where
+        // the operation stands; an operation the tree that runs applies is the same every time
+        // where it is handed nothing but values the source wrote out.
+        if (operationOf(e) != null && (argumentsOf(e).stream()
                 .allMatch(each -> TruthOutcomes.wholeValueWrittenOut(denotes.apply(each),
-                        denotes))) {
+                        denotes))
+                || TruthOutcomes.ofTheSide(e, aspect, denotes, null).isFixed())) {
             return Follow.FIXED;
         }
         // And beyond an operation the library says the answer turns on, what it turns on.
@@ -187,11 +192,9 @@ final class WhatAForkTests {
         // is the other half. This walk follows the closure and not the container, so where the
         // closure answers the same whatever it is handed, which answer it is settles which half
         // decides: `List.all(_ -> true, xs)` is true whatever `xs` is, and `List.any(_ -> true, xs)`
-        // is whether `xs` holds anything. Which of the two an operation is is the library's to say,
-        // and what that comes to is {@link TruthOutcomes}' answer; where the container decides, the
-        // application is what is offered.
-        if (past == Follow.FIXED && throughAClosure(e, aspect, denotes)
-                && !TruthOutcomes.ofTheSide(e, aspect, denotes, null).isFixed()) {
+        // is whether `xs` holds anything. The first was answered above, as an application the same
+        // every time; here the container decides, and the application is what is offered.
+        if (past == Follow.FIXED && throughAClosure(e, aspect, denotes)) {
             past = Follow.STOPPED;
         }
         if (past != Follow.STOPPED) {

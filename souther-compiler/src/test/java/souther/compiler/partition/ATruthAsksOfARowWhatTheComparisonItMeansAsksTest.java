@@ -55,6 +55,9 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
             behavior someLineHolds : (o: Order) -> Bool
             let someLineHolds (o) = List.any(l -> true, o.lines)
 
+            behavior someWordWritten : (o: Order) -> Bool
+            let someWordWritten (o) = List.any(s -> String.contains("x", s), [ "x" ])
+
             behavior emptyAsked : (o: Order) -> Bool
             let emptyAsked (o) = List.isEmpty(o.lines)
 
@@ -158,6 +161,8 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
                 "true whatever the list is, so there is nothing for it to turn on");
         assertEquals(1, partsOf("someLineHolds").size(),
                 "whether the list holds anything, which the application is what is offered for");
+        assertEquals(List.of(), partsOf("someWordWritten"),
+                "an operation applied to a word written out turns on nothing either");
     }
 
     private static List<Core> partsOf(String behavior) {

@@ -4,7 +4,6 @@ import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.Symbols;
-import souther.compiler.core.BlockReaches;
 import souther.compiler.core.Core;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ConditionJoin;
@@ -13,6 +12,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.ValueName;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -133,7 +133,7 @@ final class TruthOutcomes {
      * @param symbols the library the checker folds against, or null where nothing is folded
      */
     static Outcomes ofTheTruth(Core truth, UnaryOperator<Core> denotes, Symbols symbols) {
-        return new Reading(denotes, symbols).truth(truth, Map.of());
+        return new Reading(denotes, symbols).truth(truth, Scope.OUTSIDE);
     }
 
     /**
@@ -144,8 +144,8 @@ final class TruthOutcomes {
                               Symbols symbols) {
         Reading reading = new Reading(denotes, symbols);
         return switch (aspect) {
-            case TRUTH -> reading.truth(application, Map.of());
-            case EMPTINESS -> reading.emptiness(application, Map.of());
+            case TRUTH -> reading.truth(application, Scope.OUTSIDE);
+            case EMPTINESS -> reading.emptiness(application, Scope.OUTSIDE);
         };
     }
 
@@ -157,59 +157,97 @@ final class TruthOutcomes {
      * a list holding a position is a list of that position's values.
      */
     static boolean wholeValueWrittenOut(Core standing, UnaryOperator<Core> denotes) {
+        return wholeValueWrittenOut(standing, denotes, Set.of());
+    }
+
+    /**
+     * The same, with each of {@code written} standing for a written value nobody gave — what a
+     * predicate is handed from a container written out.
+     */
+    private static boolean wholeValueWrittenOut(Core standing, UnaryOperator<Core> denotes,
+                                                Set<BindingId> written) {
         return switch (Core.withoutStanding(standing)) {
             case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
                  Core.UnitValue _, Core.OptionNone _ -> true;
-            case Core.Neg negated -> wholeValueWrittenOut(denotes.apply(negated.operand()), denotes);
-            case Core.OptionSome some -> wholeValueWrittenOut(denotes.apply(some.value()), denotes);
+            case Core.Read name -> written.contains(name.binding());
+            case Core.Neg negated ->
+                    wholeValueWrittenOut(denotes.apply(negated.operand()), denotes, written);
+            case Core.OptionSome some ->
+                    wholeValueWrittenOut(denotes.apply(some.value()), denotes, written);
             case Core.ListLit list -> list.elements().stream()
-                    .allMatch(each -> wholeValueWrittenOut(denotes.apply(each), denotes));
+                    .allMatch(each -> wholeValueWrittenOut(denotes.apply(each), denotes, written));
             case Core.Tuple tuple -> tuple.elements().stream()
-                    .allMatch(each -> wholeValueWrittenOut(denotes.apply(each), denotes));
+                    .allMatch(each -> wholeValueWrittenOut(denotes.apply(each), denotes, written));
             case Core.Construct made -> made.values().stream()
-                    .allMatch(each -> wholeValueWrittenOut(denotes.apply(each.value()), denotes));
+                    .allMatch(each -> wholeValueWrittenOut(denotes.apply(each.value()), denotes,
+                            written));
             case null, default -> false;
         };
     }
 
     /**
-     * One reading, with the bindings met inside the value read as what they bind.
+     * The bindings met inside the value: what a {@code let} binds, and which names stand for a
+     * written value without one being given.
      *
      * <p>A binding the library writes — a denial binds what it denies — is one the reading
-     * outside the value has not got, so the bindings met on the way down are held here and asked
-     * first.
+     * outside the value has not got, so these are asked before it.
+     */
+    private record Scope(Map<BindingId, Core> bound, Set<BindingId> written) {
+
+        static final Scope OUTSIDE = new Scope(Map.of(), Set.of());
+
+        Scope with(Core.LetIn let) {
+            Map<BindingId, Core> out = new HashMap<>(bound);
+            out.put(let.binder().binding(), let.value());
+            return new Scope(out, written);
+        }
+
+        /** With what {@code block} is handed standing for written values. */
+        Scope handingWrittenValuesTo(Core.Block block) {
+            Set<BindingId> out = new HashSet<>(written);
+            block.params().forEach(each -> out.add(each.binding()));
+            return new Scope(bound, out);
+        }
+    }
+
+    /**
+     * One reading, over the tree where the language's operations stand — so an application of
+     * one is read for what the library says it does, and never handed to a reading of the tree
+     * that runs, which has no such node.
      */
     private record Reading(UnaryOperator<Core> denotes, Symbols symbols) {
 
-        Outcomes truth(Core standing, Map<BindingId, Core> bound) {
+        Outcomes truth(Core standing, Scope scope) {
             Core e = Core.withoutStanding(standing);
             switch (e) {
                 case Core.Bool written -> {
                     return Outcomes.only(written.value());
                 }
                 case Core.LetIn let -> {
-                    return truth(let.body(), with(bound, let));
+                    return truth(let.body(), scope.with(let));
                 }
                 case Core.Read name -> {
-                    Core value = valueOf(name, bound);
-                    return value == null ? Outcomes.EITHER : truth(value, bound);
+                    Core value = valueOf(name, scope);
+                    return value != null ? truth(value, scope) : unsaid(name, scope);
                 }
                 default -> { }
             }
             Optional<BooleanMeaning.UnderADenial> denied = BooleanMeaning.underADenial(e, true);
             if (denied.isPresent()) {
-                Outcomes under = truth(denied.get().part(), bound);
+                Outcomes under = truth(denied.get().part(), scope);
                 return denied.get().positive() ? under : under.denied();
             }
             if (e instanceof Core.Binary binary) {
                 Optional<ConditionJoin> joined = ConditionJoin.of(binary.op());
                 if (joined.isPresent()) {
-                    Outcomes left = truth(binary.left(), bound);
-                    Outcomes right = truth(binary.right(), bound);
+                    Outcomes left = truth(binary.left(), scope);
+                    Outcomes right = truth(binary.right(), scope);
                     return joined.get().under(true) == ConditionJoin.BOTH
                             ? left.and(right) : left.or(right);
                 }
-                return folded(e).orElse(Outcomes.EITHER);
+                return folded(e).orElseGet(() -> writtenOut(binary.left(), scope)
+                        && writtenOut(binary.right(), scope)
+                        ? Outcomes.FIXED_UNNAMED : Outcomes.EITHER);
             }
             if (!(e instanceof Core.PreservedCall applied)) {
                 return Outcomes.EITHER;
@@ -218,9 +256,9 @@ final class TruthOutcomes {
             var facts = DefaultBoundOperationFacts.get();
             if (facts.meansTheSameAsASizeOfNought(operation) != null
                     && applied.args().size() == 1) {
-                return emptiness(applied.args().getFirst(), bound);
+                return emptiness(applied.args().getFirst(), scope);
             }
-            Outcomes quantified = quantified(applied, bound);
+            Outcomes quantified = quantified(applied, scope);
             if (quantified != null) {
                 return quantified;
             }
@@ -228,19 +266,20 @@ final class TruthOutcomes {
             if (folded.isPresent()) {
                 return folded.get();
             }
-            return everyArgumentWrittenOut(applied) ? Outcomes.FIXED_UNNAMED : Outcomes.EITHER;
+            return everyArgumentWrittenOut(applied, scope) ? Outcomes.FIXED_UNNAMED
+                    : Outcomes.EITHER;
         }
 
         /** Whether what {@code standing} comes to is empty: true is empty. */
-        Outcomes emptiness(Core standing, Map<BindingId, Core> bound) {
+        Outcomes emptiness(Core standing, Scope scope) {
             Core e = Core.withoutStanding(standing);
             switch (e) {
                 case Core.LetIn let -> {
-                    return emptiness(let.body(), with(bound, let));
+                    return emptiness(let.body(), scope.with(let));
                 }
                 case Core.Read name -> {
-                    Core value = valueOf(name, bound);
-                    return value == null ? Outcomes.EITHER : emptiness(value, bound);
+                    Core value = valueOf(name, scope);
+                    return value != null ? emptiness(value, scope) : unsaid(name, scope);
                 }
                 case Core.ListLit list -> {
                     return Outcomes.only(list.elements().isEmpty());
@@ -257,16 +296,16 @@ final class TruthOutcomes {
             ValueName operation = applied.declared().operation();
             var turns = facts.turnsOnWhetherAnArgumentHolds(operation, AnswerAspect.EMPTINESS);
             Core.Block kept = turns == null ? null
-                    : closure(applied.args().get(turns.argument().position()), bound);
+                    : closure(applied.args().get(turns.argument().position()), scope);
             Integer handed = keptFrom(operation);
             if (kept == null || handed == null) {
-                return everyArgumentWrittenOut(applied) ? Outcomes.FIXED_UNNAMED
+                return everyArgumentWrittenOut(applied, scope) ? Outcomes.FIXED_UNNAMED
                         : Outcomes.EITHER;
             }
             // What is kept is what the closure holds of, out of what it was handed: kept by a
             // closure holding of nothing, nothing is, and that is the same as no element of what
             // it was handed meeting the closure.
-            return some(applied.args().get(handed), kept, bound).denied();
+            return some(applied.args().get(handed), kept, scope, false).denied();
         }
 
         /**
@@ -290,7 +329,7 @@ final class TruthOutcomes {
          * every element meeting it true, whatever the container — and the other way round, what
          * is left is whether the container holds anything.
          */
-        private Outcomes quantified(Core.PreservedCall applied, Map<BindingId, Core> bound) {
+        private Outcomes quantified(Core.PreservedCall applied, Scope scope) {
             var facts = DefaultBoundOperationFacts.get();
             ValueName operation = applied.declared().operation();
             var container = facts.readsItsContainer(operation);
@@ -298,7 +337,7 @@ final class TruthOutcomes {
             if (container == null || turns == null) {
                 return null;
             }
-            Core.Block predicate = closure(applied.args().get(turns.argument().position()), bound);
+            Core.Block predicate = closure(applied.args().get(turns.argument().position()), scope);
             if (predicate == null) {
                 return null;
             }
@@ -306,12 +345,8 @@ final class TruthOutcomes {
             // Every element meeting p is no element failing it, which is some element meeting its
             // denial denied — so one rule answers both.
             return facts.statesItsPredicateOfEveryElement(operation)
-                    ? some(handed, predicate, bound, true).denied()
-                    : some(handed, predicate, bound, false);
-        }
-
-        private Outcomes some(Core container, Core.Block predicate, Map<BindingId, Core> bound) {
-            return some(container, predicate, bound, false);
+                    ? some(handed, predicate, scope, true).denied()
+                    : some(handed, predicate, scope, false);
         }
 
         /**
@@ -319,36 +354,33 @@ final class TruthOutcomes {
          * {@code failing} — from what each can give.
          *
          * <p>None where the container holds none or no element can meet it; whether the container
-         * holds anything where every element does. Over a container written out, which elements
-         * meet it is the same every time, so a predicate that may vary from element to element
-         * gives one answer this cannot name rather than either.
+         * holds anything where every element does. What the predicate is handed is an element of
+         * the container, so over a container written out it is a written value, and the
+         * predicate is read with it standing for one: what it answers is then the same every time
+         * exactly where nothing else it reads varies, however it differs from one element to the
+         * next.
          */
-        private Outcomes some(Core container, Core.Block predicate, Map<BindingId, Core> bound,
+        private Outcomes some(Core container, Core.Block predicate, Scope scope,
                               boolean failing) {
-            Outcomes each = truth(predicate.body(), bound);
+            Scope inside = writtenOut(container, scope)
+                    ? scope.handingWrittenValuesTo(predicate) : scope;
+            Outcomes each = truth(predicate.body(), inside);
             if (failing) {
                 each = each.denied();
             }
-            Outcomes empty = emptiness(container, bound);
+            Outcomes empty = emptiness(container, scope);
             // A container holding none has no element meeting anything.
             if (empty == Outcomes.ONLY_TRUE) {
                 return Outcomes.ONLY_FALSE;
             }
-            // A container written out holds the same elements every time, so where the predicate
-            // reads nothing but the element it is handed, what they meet is the same every time
-            // too, however it differs from one element to the next. One that reads anything else
-            // varies with that.
-            boolean sameEveryTime = wholeValueWrittenOut(denotes.apply(container), denotes)
-                    && BlockReaches.of(predicate, Set.of()).bindings().isEmpty();
             return switch (each) {
                 case ONLY_FALSE -> Outcomes.ONLY_FALSE;
                 // Every element meets it, so some does exactly where there is one.
                 case ONLY_TRUE -> empty.denied();
                 // Each meeting it or not, beside a container that may hold one: what a container
                 // that holds one comes to is what its elements do, and an empty one is none.
-                case EITHER -> sameEveryTime ? Outcomes.FIXED_UNNAMED
-                        : empty == Outcomes.ONLY_FALSE || empty == Outcomes.EITHER
-                                ? Outcomes.EITHER : Outcomes.UNKNOWN;
+                case EITHER -> empty == Outcomes.ONLY_FALSE || empty == Outcomes.EITHER
+                        ? Outcomes.EITHER : Outcomes.UNKNOWN;
                 case FIXED_UNNAMED -> empty == Outcomes.ONLY_FALSE
                         || empty == Outcomes.FIXED_UNNAMED
                         ? Outcomes.FIXED_UNNAMED : Outcomes.UNKNOWN;
@@ -356,10 +388,10 @@ final class TruthOutcomes {
             };
         }
 
-        private Core.Block closure(Core handed, Map<BindingId, Core> bound) {
+        private Core.Block closure(Core handed, Scope scope) {
             Core e = Core.withoutStanding(handed);
             if (e instanceof Core.Read name) {
-                Core value = valueOf(name, bound);
+                Core value = valueOf(name, scope);
                 e = value == null ? e : Core.withoutStanding(value);
             }
             return e instanceof Core.Block block ? block : null;
@@ -370,26 +402,43 @@ final class TruthOutcomes {
                     : BooleanMeaning.folded(e, symbols).map(Outcomes::only);
         }
 
-        private boolean everyArgumentWrittenOut(Core.PreservedCall applied) {
-            return applied.args().stream()
-                    .allMatch(each -> wholeValueWrittenOut(denotes.apply(each), denotes));
+        private boolean everyArgumentWrittenOut(Core.PreservedCall applied, Scope scope) {
+            return applied.args().stream().allMatch(each -> writtenOut(each, scope));
+        }
+
+        /** Whether {@code standing} is a value written out, with the names in it read here. */
+        private boolean writtenOut(Core standing, Scope scope) {
+            UnaryOperator<Core> here = one -> resolved(one, scope);
+            return wholeValueWrittenOut(here.apply(standing), here, scope.written());
+        }
+
+        /** What {@code one} stands for here, or itself where it is a name nothing gives. */
+        private Core resolved(Core one, Scope scope) {
+            if (!(Core.withoutStanding(one) instanceof Core.Read name)) {
+                return denotes.apply(one);
+            }
+            Core value = valueOf(name, scope);
+            return value == null ? one : value;
+        }
+
+        /**
+         * What a name nothing gives a value for comes to: the same every time where it stands for
+         * a written value, and either otherwise.
+         */
+        private static Outcomes unsaid(Core.Read name, Scope scope) {
+            return scope.written().contains(name.binding()) ? Outcomes.FIXED_UNNAMED
+                    : Outcomes.EITHER;
         }
 
         /** What {@code name} stands for, or null where nothing says. */
-        private Core valueOf(Core.Read name, Map<BindingId, Core> bound) {
-            Core here = bound.get(name.binding());
+        private Core valueOf(Core.Read name, Scope scope) {
+            Core here = scope.bound().get(name.binding());
             if (here != null) {
                 return here;
             }
             Core denoted = denotes.apply(name);
             return Core.withoutStanding(denoted) instanceof Core.Read same
                     && same.binding().equals(name.binding()) ? null : denoted;
-        }
-
-        private static Map<BindingId, Core> with(Map<BindingId, Core> bound, Core.LetIn let) {
-            Map<BindingId, Core> out = new HashMap<>(bound);
-            out.put(let.binder().binding(), let.value());
-            return out;
         }
     }
 }

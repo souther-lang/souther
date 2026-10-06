@@ -78,6 +78,20 @@ class ATruthAnOperationAnswersIsAWayThroughWhatItIsPartOfTest {
             let writtenMarks (r, flagged) =
                 if List.any(m -> m > 3, [ 1, 5 ]) || flagged then Approved else Asked
 
+            behavior writtenWords : (r: Request, flagged: Bool) -> Approved | Asked
+            let writtenWords (r, flagged) =
+                if List.any(s -> String.contains("x", s), [ "x" ]) || flagged then Approved
+                else Asked
+
+            behavior writtenLists : (r: Request, flagged: Bool) -> Approved | Asked
+            let writtenLists (r, flagged) =
+                if List.any(xs -> List.isEmpty(xs), [ [ 1 ], [] ]) || flagged then Approved
+                else Asked
+
+            behavior writtenMarksAgainstTheInput : (r: Request, flagged: Bool) -> Approved | Asked
+            let writtenMarksAgainstTheInput (r, flagged) =
+                if List.any(m -> m > r.cost, [ 1, 5 ]) || flagged then Approved else Asked
+
             behavior noneKept : (marks: List<Int>, flagged: Bool) -> Approved | Asked
             let noneKept (marks, flagged) =
                 if List.isEmpty(List.filter(m -> false, marks)) || flagged then Approved
@@ -112,6 +126,22 @@ class ATruthAnOperationAnswersIsAWayThroughWhatItIsPartOfTest {
     void aPredicateOverAWrittenListReadingOnlyItsElementIsTheSameEveryTime() {
         assertEquals(2, DecisionReadings.readToTheEnd(MODEL, "writtenMarks").size(),
                 "neither way of the fixed part is a rule, and the way past it is one");
+        assertEquals(3, DecisionReadings.readToTheEnd(MODEL, "writtenMarksAgainstTheInput")
+                        .size(),
+                "an element written out set against the input varies with the input");
+    }
+
+    /**
+     * What a predicate over a list written out applies an operation to is a written value, so the
+     * operation's answer is the same every time — read in the tree where the operation stands, the
+     * one this is asked of.
+     */
+    @Test
+    void anOperationAppliedToAWrittenElementIsTheSameEveryTime() {
+        assertEquals(2, DecisionReadings.readToTheEnd(MODEL, "writtenWords").size(),
+                "what a written word contains is the same every time");
+        assertEquals(2, DecisionReadings.readToTheEnd(MODEL, "writtenLists").size(),
+                "and so is whether a written list is empty");
     }
 
     /** How many rules, and how many of them turn on the flag. */
