@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.NameReach;
+import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 
 import java.util.ArrayList;
@@ -65,6 +67,99 @@ record ContentsAsked(List<Asked> asked) {
             }
         }
         return new ContentsAsked(out);
+    }
+
+    /**
+     * Every way of writing what is asked under cases a row that is already {@code trying} can be,
+     * in the order the model declares the cases.
+     *
+     * <p><b>The place a container or a value is named is where a row writes it, except at a name
+     * every case of a sum spreads.</b> There the row writes one of the cases, and the container
+     * stands under whichever it is — so a container asked for at the sum's own name is no position
+     * of the row at all, and composed there it would be composed nowhere. Each way says where under
+     * the cases every container and value of it stands, which is a position the plan of the
+     * parameter holds; what the case it stands under requires travels with the path.
+     *
+     * <p><b>Every case and not one of them,</b> for the reason a number at such a name is written
+     * every way ({@code Generator.waysToWrite}): which case the row is decides which rules hold of
+     * the value, so it is not settled here. And all of them under cases the row can be at once:
+     * two names of one sum are written under one case, and a way that put them under two would be
+     * a value that is both.
+     *
+     * <p>A case whose reading stopped before putting the name anywhere is no place to write it, and
+     * is not a way.
+     */
+    List<ContentsAsked> ways(NameReach reach, Requirements trying) {
+        Set<TermPath> named = new LinkedHashSet<>();
+        for (Asked each : asked) {
+            named.add(each.container());
+            named.add(each.value());
+        }
+        List<TermPath> paths = List.copyOf(named);
+        List<List<NameReach.CaseStanding>> standings = new ArrayList<>();
+        for (TermPath each : paths) {
+            standings.add(standingsOf(reach, each, Requirements.NONE, 0));
+        }
+        List<ContentsAsked> out = new ArrayList<>();
+        written(paths, standings, 0, trying, new LinkedHashMap<>(), out);
+        return List.copyOf(out);
+    }
+
+    /** The ways from the {@code next}-th named path on, under what the ones before it took. */
+    private void written(List<TermPath> paths, List<List<NameReach.CaseStanding>> standings,
+                         int next, Requirements trying, Map<TermPath, TermPath> at,
+                         List<ContentsAsked> out) {
+        if (next == paths.size()) {
+            List<Asked> under = new ArrayList<>();
+            for (Asked each : asked) {
+                under.add(new Asked(at.get(each.container()), at.get(each.value()),
+                        each.holding()));
+            }
+            out.add(new ContentsAsked(under));
+            return;
+        }
+        for (NameReach.CaseStanding standing : standings.get(next)) {
+            if (trying.merge(standing.assuming()) instanceof Requirements.Merge.Merged(
+                    Requirements taken)
+                    && taken.merge(standing.position().requirements())
+                            instanceof Requirements.Merge.Merged(Requirements both)) {
+                at.put(paths.get(next), standing.position());
+                written(paths, standings, next + 1, both, at, out);
+                at.remove(paths.get(next));
+            }
+        }
+    }
+
+    /**
+     * Where the name at {@code path} stands under the cases it crosses, with what each case
+     * requires — or the path itself, requiring nothing, where nothing crosses.
+     *
+     * <p>Followed one crossing at a time, since a name under two sums is moved by the outer one
+     * before the inner one can see it ({@link NameReach#standingOf}); bounded by the crossings the
+     * walk recorded, because each step takes one of them.
+     */
+    private static List<NameReach.CaseStanding> standingsOf(NameReach reach, TermPath path,
+                                                            Requirements assuming, int crossed) {
+        if (crossed > reach.crossings().size()) {
+            throw new IllegalStateException(
+                    "a name was followed past every crossing this reading recorded: " + path);
+        }
+        List<NameReach.CaseStanding> under = switch (reach.standingOf(path)) {
+            case NameReach.Standing.AtThePathItself _ -> null;
+            case NameReach.Standing.UnderTheCases(var standings) -> standings;
+            case NameReach.Standing.CasesIncomplete(var standings, var _) -> standings;
+        };
+        if (under == null) {
+            return List.of(new NameReach.CaseStanding(assuming, path));
+        }
+        List<NameReach.CaseStanding> out = new ArrayList<>();
+        for (NameReach.CaseStanding each : under) {
+            if (assuming.merge(each.assuming()) instanceof Requirements.Merge.Merged(
+                    Requirements both)) {
+                out.addAll(standingsOf(reach, each.position(), both, crossed + 1));
+            }
+        }
+        return out;
     }
 
     /**

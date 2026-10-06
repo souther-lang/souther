@@ -224,6 +224,94 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
                 () -> "nothing is said to be left no row or refused by the model: " + rows);
     }
 
+    /**
+     * The same where the lead is one of two cases, both of which have the campaigns: the set is a
+     * name every case spreads, and the row is written as one of the cases holding it there.
+     */
+    private static final String SCORED_OVER_A_SUM = """
+            module example.settle
+
+            data Name = String
+                invariant String.length(value) >= 1 && String.length(value) <= 8
+
+            data LeadCommon = { campaigns: Set<Name> }
+            data NewLead = { ...LeadCommon, fresh: Bool }
+            data WorkingLead = { ...LeadCommon, touches: Int }
+            data OpenLead = NewLead | WorkingLead
+
+            data Score = { points: Int }
+
+            let campaignsOf (lead: OpenLead): Set<Name> = lead.campaigns
+
+            behavior settle : (lead: OpenLead, priority: Name) -> Score
+
+            let settle (lead, priority) =
+                Score { points = if Set.contains(priority, campaignsOf(lead)) then 25 else 0 }
+            """;
+
+    /** And where the container is a name every case of a sum spreads. */
+    @Test
+    void eachSideIsOfferedARowWhereTheContainerIsSpreadByTheCases() {
+        Rows rows = generatedOf(SCORED_OVER_A_SUM);
+        assertEquals(2, rows.rules().size(), () -> "a row for each side: " + rows);
+        for (Map.Entry<Boolean, List<String>> each : rows.rules().entrySet()) {
+            List<String> row = each.getValue();
+            assertEquals(each.getKey(), holds(row.get(0), row.get(1)),
+                    () -> "the row for the side coming out " + each.getKey() + ": " + row);
+        }
+    }
+
+    /** A guard on an operation's truth that asks two things of a row at once. */
+    private static final String TWO_THINGS_AT_ONCE = """
+            module example.settle
+
+            data Plain
+            data Express
+            data Kind = Plain | Express
+
+            data Item = { n: Int }
+                invariant n >= 0 && n <= 9
+
+            data Order = { items: List<Item>, gate: Int }
+                invariant gate >= -5 && gate <= 5
+
+            data Done = { n: Int }
+            data Refused
+
+            behavior settle : (kind: Kind, order: Order) -> Done | Refused
+                constructs Done
+
+            let settle (kind, order) = {
+                guard List.any(i -> i.n > 5 && order.gate > 0, order.items) else Refused
+                match kind with
+                    | Plain -> Done { n = 1 }
+                    | Express -> Done { n = 2 }
+            }
+            """;
+
+    /**
+     * Some element meeting what the predicate asks of it, and what the predicate asks of the rest
+     * of the row beside it, are one truth coming out — so a row is held to both, rather than to
+     * neither for there being two.
+     */
+    @Test
+    void aTruthAskingTwoThingsAtOnceHoldsTheRowToBoth() {
+        Rows rows = generatedOf(TWO_THINGS_AT_ONCE);
+        for (String kind : List.of("kind=Plain", "kind=Express")) {
+            List<String> row = rows.classes().get(kind);
+            assertNotNull(row, () -> "a row is offered for " + kind + ": " + rows);
+            Matcher gate = Pattern.compile("gate = (-?\\d+)").matcher(row.get(1));
+            assertTrue(gate.find() && Integer.parseInt(gate.group(1)) > 0,
+                    () -> "the gate is past the guard: " + row);
+            Matcher n = Pattern.compile("n = (\\d+)").matcher(row.get(1));
+            boolean some = false;
+            while (n.find()) {
+                some |= Integer.parseInt(n.group(1)) > 5;
+            }
+            assertTrue(some, () -> "and some item is: " + row);
+        }
+    }
+
     /** A rule on each side of the membership is offered a row on that side. */
     @Test
     void eachSideOfTheMembershipIsOfferedARowThatTakesIt() {

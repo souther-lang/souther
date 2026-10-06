@@ -89,13 +89,15 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
 
     /**
      * What brings the truth the application {@code application} answers out {@code held}, where a
-     * fork's condition asks it: the one demand it coming out that way makes of a row, and the way
-     * to it with that demand taken in — or empty where it makes none this reading stated, makes
-     * several, or no row takes the way.
+     * fork's condition asks it: every demand it coming out that way makes of a row, and the way to
+     * it with those taken in — or empty where it asks something this reading could not state, asks
+     * nothing, or no row takes the way.
      *
-     * <p>The demand is on the way the row is held to and not only beside it. What a row has to be
-     * for a truth to come out a way is a condition a composer meets the way it meets every condition
-     * on the way to it, so the way it is held to is the way to the truth and the truth itself.
+     * <p>The demands are on the way the row is held to and not only beside it. What a row has to
+     * be for a truth to come out a way is a condition a composer meets the way it meets every
+     * condition on the way to it, so the way it is held to is the way to the truth and the truth
+     * itself. All of them, because a truth asks them all at once: some element meeting a predicate
+     * and what the predicate asks of the rest of the row are one coming out.
      *
      * @param declarations what the declarations leave, which the way narrows
      */
@@ -106,24 +108,24 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
             return Optional.empty();
         }
         List<OnTheWay> asked = held ? met.holding() : met.failing();
-        List<OnTheWay.TakenIn> taken = new ArrayList<>();
+        List<RowDemand> demands = new ArrayList<>();
         for (OnTheWay each : asked) {
             switch (each) {
-                case OnTheWay.TakenIn in -> taken.add(in);
+                case OnTheWay.TakenIn in -> demands.add(in.demand());
                 case OnTheWay.Settled _ -> { }
                 case OnTheWay.Declined _, OnTheWay.Narrowed _ -> {
                     return Optional.empty();
                 }
             }
         }
-        if (taken.size() != 1) {
+        if (demands.isEmpty()) {
             return Optional.empty();
         }
         List<OnTheWay> way = new ArrayList<>(met.assumed());
         way.addAll(asked);
         return Reachability.of(new WayToTheBorder(way), declarations)
                 instanceof Reachability.Reaching reaching
-                ? Optional.of(new HeldOutcome(taken.getFirst().demand(), reaching))
+                ? Optional.of(new HeldOutcome(demands, reaching))
                 : Optional.empty();
     }
 

@@ -235,6 +235,17 @@ public sealed interface OnTheWay {
         record ContainerAtNoPosition() implements Why {}
 
         /**
+         * A condition about whether a container holds a value, where the value stands at no
+         * position of the input.
+         *
+         * <p>Read and not of a shape this has no words for: the container is at a position and
+         * what is asked of it is plain. What is missing is somewhere to read the value from — a
+         * value written in the source, or one a helper builds — and what a row would hold is
+         * that value, which nothing here writes into the container yet.
+         */
+        record ValueAtNoPosition() implements Why {}
+
+        /**
          * A condition every element of a container has to meet, which says something of more than
          * the element.
          *

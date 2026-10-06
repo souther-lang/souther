@@ -5342,8 +5342,9 @@ public final class Adequacy {
                         if (new LevelRealizer().realize(quantity.standingAt(owed.criterion()),
                                 able.region(), subject.witnessSearch())
                                 instanceof Realization.Found at) {
-                            return Optional.of(new HeldOutcome(new RowDemand.AtAPoint(at.fixing(),
-                                    quantity.asksOfEachTerm(owed.criterion())), able));
+                            return Optional.of(new HeldOutcome(List.of(new RowDemand.AtAPoint(
+                                    at.fixing(), quantity.asksOfEachTerm(owed.criterion()))),
+                                    able));
                         }
                     }
                 }

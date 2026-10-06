@@ -8,6 +8,7 @@ import souther.compiler.coverage.ControlPlace;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleKey;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Shape;
@@ -2451,7 +2452,8 @@ public final class Generator {
                     Optional<HeldOutcome> holds =
                             each.at() instanceof ControlPlace.Outcome outcome
                                     ? holding.at(outcome) : Optional.empty();
-                    if (holds.isEmpty() || writesAnyOf(holds.get().demand(), against)) {
+                    if (holds.isEmpty() || holds.get().demands().stream()
+                            .anyMatch(demand -> writesAnyOf(demand, against))) {
                         demands = null;
                         break;
                     }
@@ -4452,19 +4454,34 @@ public final class Generator {
         }
         // What the way asks containers to hold that no region placed, and the order that lets every
         // container be composed after the parameters it is handed a value of.
-        ContentsAsked contents = ContentsAsked.of(reaching.boundedOnTheWay());
-        CompositionOrder order;
-        switch (CompositionOrder.of(parametersOf(subject), contents)) {
-            case CompositionOrder.Result.Ordered(CompositionOrder ordered) -> order = ordered;
-            case CompositionOrder.Result.Circular circular -> {
-                return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
-                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                        circularly(circular)), where.unrepresented());
+        // Every way of writing them under the cases the row can be, the first that composes taken:
+        // a container a name every case of a sum spreads is composed under one of the cases.
+        List<ContentsAsked> ways = ContentsAsked.of(reaching.boundedOnTheWay())
+                .ways(subject.reach(), reaching.requirements());
+        if (ways.isEmpty()) {
+            return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
+                    UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, NO_CASE_HOLDS_THEM),
+                    where.unrepresented());
+        }
+        FixtureTemplate[] composed = null;
+        ParameterCameToNothing failed = null;
+        for (ContentsAsked contents : ways) {
+            CompositionOrder order;
+            switch (CompositionOrder.of(parametersOf(subject), contents)) {
+                case CompositionOrder.Result.Ordered(CompositionOrder ordered) -> order = ordered;
+                case CompositionOrder.Result.Circular circular -> {
+                    return new BoundaryAttempt.Unresolved(new UnresolvedCombination(
+                            List.of(label), UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                            circularly(circular)), where.unrepresented());
+                }
+            }
+            composed = new FixtureTemplate[order.parameters().size()];
+            failed = new InOrder(subject, order, composed, standing, decided, settled, reaching,
+                    check, contents).from(0, Map.of());
+            if (failed == null) {
+                break;
             }
         }
-        FixtureTemplate[] composed = new FixtureTemplate[order.parameters().size()];
-        ParameterCameToNothing failed = new InOrder(subject, order, composed, standing, decided,
-                settled, reaching, check, contents).from(0, Map.of());
         if (failed != null) {
             Outcome tried = failed.tried();
             Map<TermPath, List<FixtureTemplate>> here = failed.here();
@@ -4563,6 +4580,43 @@ public final class Generator {
         return subject.parameters().subList(0,
                 Math.min(subject.parameters().size(), subject.types().size()));
     }
+
+    /**
+     * From how few to how many elements the values fixed at a container hold, or null where one of
+     * them is not written out as its elements.
+     *
+     * <p>A container's own number is how many it holds, and a class of one is a run of those —
+     * so the fewest and the most of the values standing for it are sizes the class takes, and
+     * every size between them is one it takes as well.
+     */
+    private static DeclaredBounds.CountRange sizesOf(List<FixtureTemplate> values) {
+        int least = Integer.MAX_VALUE;
+        int most = -1;
+        for (FixtureTemplate each : values) {
+            Hir.Expr written = each.value();
+            // Under the names it wears, each of which is written round the value it wraps.
+            while (written instanceof Hir.Apply applied && applied.args().size() == 1) {
+                written = applied.args().getFirst();
+            }
+            if (!(written instanceof Hir.ListLit(List<Hir.Expr> elements, var _, var _, var _))) {
+                return null;
+            }
+            least = Math.min(least, elements.size());
+            most = Math.max(most, elements.size());
+        }
+        return most < 0 ? null : new DeclaredBounds.CountRange(least, most);
+    }
+
+    /** {@code holds}, narrowed to {@code to} where there is one. */
+    private static DeclaredBounds.CountRange within(DeclaredBounds.CountRange holds,
+                                                    DeclaredBounds.CountRange to) {
+        return to == null ? holds : new DeclaredBounds.CountRange(
+                Math.max(holds.least(), to.least()), Math.min(holds.most(), to.most()));
+    }
+
+    /** What is said of a row no case of which holds every container and value it is asked of. */
+    private static final String NO_CASE_HOLDS_THEM = "no case the row can be holds every"
+            + " container and value the way asks to be written into one";
 
     /** What is said of a row whose parameters are each to hold a value of another of them. */
     private static String circularly(CompositionOrder.Result.Circular circular) {
@@ -6590,11 +6644,13 @@ public final class Generator {
     private static HeldTogether heldTogether(MeasuredInput subject, List<HeldOutcome> held) {
         List<RowDemand.AtAPoint> points = new ArrayList<>();
         for (HeldOutcome each : held) {
-            switch (each.demand()) {
-                case RowDemand.AtAPoint point -> points.add(point);
-                // A condition's own demand is on the way the row is held to
-                // ({@link ReachingCuts#heldAt}), and is composed with the rest of it below.
-                case RowDemand.OfACondition _ -> { }
+            for (RowDemand demand : each.demands()) {
+                switch (demand) {
+                    case RowDemand.AtAPoint point -> points.add(point);
+                    // A condition's own demand is on the way the row is held to
+                    // ({@link ReachingCuts#heldAt}), and is composed with the rest of it below.
+                    case RowDemand.OfACondition _ -> { }
+                }
             }
         }
         Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
@@ -6632,11 +6688,15 @@ public final class Generator {
                         Optional.empty()));
             }
         }
-        Map<RealizationTarget, NumbersAskedFor> asking = new LinkedHashMap<>();
+        // What each number the way placed is a number of, asked once and whether or not a point is
+        // held beside it: a row held to a condition's own demand alone stands at the numbers the
+        // way placed and at no point. Then each point's own numbers, asked of what that point asks.
+        Map<RealizationTarget, NumbersAskedFor> asking = new LinkedHashMap<>(
+                whatEachOfThemIsANumberOf(subject, Map.of(), where.routed(),
+                        NumbersAskedFor.ANYTHING, reaching));
         for (RowDemand.AtAPoint each : points) {
-            whatEachOfThemIsANumberOf(subject, each.fixing(), where.routed(), each.asking(),
-                    reaching).forEach((target, of) -> asking.merge(target, of,
-                            NumbersAskedFor::meet));
+            whatEachOfThemIsANumberOf(subject, each.fixing(), Map.of(), each.asking(), reaching)
+                    .forEach((target, of) -> asking.merge(target, of, NumbersAskedFor::meet));
         }
         return new HeldTogether.Asked(new LinkedHashMap<>(atThoseNumbers(where.at(), asking)),
                 where.at(), required, reaching, ContentsAsked.of(reaching.boundedOnTheWay()));
@@ -7018,18 +7078,41 @@ public final class Generator {
                                 + "` would have to hold two values at once")));
             }
         }
-        CompositionOrder order;
-        switch (CompositionOrder.of(parametersOf(subject), holding.contents())) {
-            case CompositionOrder.Result.Ordered(CompositionOrder ordered) -> order = ordered;
-            case CompositionOrder.Result.Circular circular -> {
-                return RowComposed.Failed.ofTheRow(new Attempt(null,
-                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, null,
-                        Optional.of(circularly(circular))));
+        // Every way of writing what the containers are handed under the cases this row can be,
+        // tried in turn: a way whose rows were all passed over or came to nothing may be followed
+        // by one under another case that does not.
+        List<ContentsAsked> ways = holding.contents().ways(subject.reach(), required);
+        if (ways.isEmpty()) {
+            return RowComposed.Failed.ofTheRow(new Attempt(null,
+                    UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, null,
+                    Optional.of(NO_CASE_HOLDS_THEM)));
+        }
+        RowComposed came = null;
+        boolean passedOver = false;
+        for (ContentsAsked contents : ways) {
+            CompositionOrder order;
+            switch (CompositionOrder.of(parametersOf(subject), contents)) {
+                case CompositionOrder.Result.Ordered(CompositionOrder ordered) -> order = ordered;
+                case CompositionOrder.Result.Circular circular -> {
+                    return RowComposed.Failed.ofTheRow(new Attempt(null,
+                            UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, null,
+                            Optional.of(circularly(circular))));
+                }
+            }
+            came = inputsFrom(new RowBeingComposed(axes, given, check, holding, contents,
+                    together.keySet(), decided, required, taking, order), 0,
+                    new FixtureTemplate[order.parameters().size()], Map.of());
+            switch (came) {
+                case RowComposed.Taken _, RowComposed.Halted _ -> {
+                    return came;
+                }
+                case RowComposed.PassedOver _ -> passedOver = true;
+                case RowComposed.Failed _ -> { }
             }
         }
-        return inputsFrom(new RowBeingComposed(axes, given, check, holding, together.keySet(),
-                decided, required, taking, order), 0,
-                new FixtureTemplate[order.parameters().size()], Map.of());
+        // Every way passed over or came to nothing: passed over where some row was, which is the
+        // caller's answer and not a failure, and otherwise what the last of them came to.
+        return passedOver ? new RowComposed.PassedOver() : came;
     }
 
     /**
@@ -7037,13 +7120,15 @@ public final class Generator {
      * is: the locations decided, what the classes and the comparisons require, and what the caller
      * makes of each row.
      *
-     * @param order the order the parameters are composed in, and what each turns on
+     * @param contents what the containers are handed, written under the cases this row is being
+     *                 tried as ({@link ContentsAsked#ways})
+     * @param order    the order the parameters are composed in, and what each turns on
      */
     private record RowBeingComposed(MeasuredInput.MeasuredAxes axes, Map<String, Written> given,
                                     CandidateCheck check, HeldTogether.Asked holding,
-                                    Set<TermPath> composedAt, LocationWrites decided,
-                                    Requirements required, RowTaking taking,
-                                    CompositionOrder order) {}
+                                    ContentsAsked contents, Set<TermPath> composedAt,
+                                    LocationWrites decided, Requirements required,
+                                    RowTaking taking, CompositionOrder order) {}
 
     /**
      * The row from the {@code next}-th parameter in the order on, with {@code composed} holding
@@ -7090,7 +7175,7 @@ public final class Generator {
             // what stands at a field it does not move is nothing it says — so where a container
             // is handed one of those, there is no value to hand it, and that is said rather than
             // the parameter composed afresh: the value the author chose is the row's.
-            Set<TermPath> read = row.holding().contents().composedUnder(head).read();
+            Set<TermPath> read = row.contents().composedUnder(head).read();
             if (!written.writesAt(read)) {
                 return RowComposed.Failed.at(p, atThis(new Attempt(null,
                         UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, head,
@@ -7147,7 +7232,7 @@ public final class Generator {
         RowComposed[] cameToNothing = {null};
         boolean[] passedOver = {false};
         Outcome tried = valueFor(subject, p, row.axes().axes(), row.composedAt(),
-                row.decided(), row.required(), new Handed(row.holding().contents(), elsewhere),
+                row.decided(), row.required(), new Handed(row.contents(), elsewhere),
                 checking, value -> {
                     composed[p] = value.value();
                     after[0] = inputsFrom(row, next + 1, composed, with(elsewhere, value.read()));
@@ -7319,11 +7404,28 @@ public final class Generator {
         // how many the list holds is not a row.
         FieldDomains under = rulesOf(subject.types().get(p), subject.ruleReading(),
                 under(root, settled));
+        // A container handed values is built to hold them, and not chosen whole. What a class or a
+        // number fixed there is how many it holds — a container's own number is its size, and a
+        // class of one is a run of sizes — so it is built to a size among the ones fixed, and the
+        // values that were fixed are not what the row writes. Where a value fixed there is one
+        // this cannot count, it stays fixed and is said below as nothing composed.
+        ConstructionPlan.ContentsComposed handedHere = handed.asked().composedUnder(root.head());
+        Map<TermPath, List<FixtureTemplate>> fixed = new LinkedHashMap<>(decided);
+        Map<TermPath, DeclaredBounds.CountRange> sized = new LinkedHashMap<>();
+        for (Map.Entry<TermPath, List<FixtureTemplate>> each : decided.entrySet()) {
+            DeclaredBounds.CountRange counted = handedHere.handedTo(each.getKey())
+                    ? sizesOf(each.getValue()) : null;
+            if (counted != null) {
+                fixed.remove(each.getKey());
+                sized.put(each.getKey(), counted);
+            }
+        }
         ConstructionPlan.Result planned = ConstructionPlan.of(subject.types().get(p), root,
                 subject.rules().inners(), subject.symbols(), subject.rules().kinds(),
                 subject.rules().sums(),
-                decided.keySet(), additional, handed.asked().composedUnder(root.head()),
-                (at, building) -> heldRange(under, at, building, subject.ruleReading()));
+                fixed.keySet(), additional, handedHere,
+                (at, building) -> within(heldRange(under, at, building, subject.ruleReading()),
+                        sized.get(at)));
         ConstructionPlan plan;
         switch (planned) {
             case ConstructionPlan.Result.Planned made -> plan = made.plan();
@@ -7378,14 +7480,26 @@ public final class Generator {
         // Said here, before anything is searched for, rather than as every value composed coming
         // to nothing for want of a value to hand over — which would read as the model refusing
         // them.
-        for (TermPath read : handed.asked().composedUnder(root.head()).read()) {
+        ConstructionPlan.ContentsComposed contents = handedHere;
+        for (TermPath read : contents.read()) {
             if (plan.at(read) == null) {
                 return new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                         "a container is handed the value at `" + read + "`, which is inside a"
                                 + " value composed whole");
             }
         }
-        Choices choices = choicesOf(subject, plan, decided, under);
+        // And a container handed values that the plan does not build: one fixed at a value this
+        // cannot count, or one inside a value chosen whole. What it is to hold would be asked of
+        // nothing, and the row composed would stand for a condition it was never made to meet.
+        for (TermPath container : contents.paths()) {
+            if (contents.handedTo(container)
+                    && !(plan.at(container) instanceof ConstructionPlan.Held)) {
+                return new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                        "`" + container + "` is to hold a value handed to it, and is written as a"
+                                + " whole value this does not build");
+            }
+        }
+        Choices choices = choicesOf(subject, plan, fixed, under);
         if (choices.missingAt() != null) {
             // A position nothing stands at is the declarations' answer where the plan reached
             // everything, and this compiler's where it did not: what the search would have been
@@ -7413,7 +7527,7 @@ public final class Generator {
         // are asserted, which is the only way `a < b` is met in general.
         // Handed to the caller as every value the walk composes is: the caller is what composes the
         // parameters after this one, so a value it was never handed is a row with nothing after it.
-        Outcome conditioned = conditioned(subject, p, plan, decided, settled, composing);
+        Outcome conditioned = conditioned(subject, p, plan, fixed, settled, composing);
         if (conditioned instanceof Outcome.Built(ComposedValue value)) {
             return switch (taking.take(value)) {
                 case TAKEN -> conditioned;

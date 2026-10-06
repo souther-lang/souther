@@ -52,6 +52,19 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
             behavior listed : (lead: Lead) -> Bool
             let listed (lead) = List.contains(lead.picked, lead.names)
 
+            data LeadCommon = { campaigns: Set<Name> }
+            data NewLead = { ...LeadCommon, fresh: Bool }
+            data WorkingLead = { ...LeadCommon, touches: Int }
+            data OpenLead = NewLead | WorkingLead
+
+            let campaignsOfOpen (lead: OpenLead): Set<Name> = lead.campaigns
+
+            behavior spread : (lead: OpenLead, priority: Name) -> Bool
+            let spread (lead, priority) = Set.contains(priority, campaignsOfOpen(lead))
+
+            behavior written : (lead: Lead) -> Bool
+            let written (lead) = Set.contains(Name("q"), lead.campaigns)
+
             data Tally = { counts: List<Int> }
 
             behavior someBig : (t: Tally) -> Bool
@@ -129,6 +142,31 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
         }
     }
 
+    /**
+     * A container a name every case of a sum spreads is read as that name, and its size is a
+     * number of the input there as well — read the way a size written in a comparison is.
+     */
+    @Test
+    void aContainerEveryCaseSpreadsIsReadAtItsNameWithItsSize() {
+        RowDemand.Exists some = assertInstanceOf(RowDemand.Exists.class, asked("spread", true));
+        assertEquals("lead.campaigns", some.container().toString());
+        assertTrue(some.holdingOne().isPresent(), () -> "the size is a number here: " + some);
+    }
+
+    /**
+     * A value written in the source stands at no position, and the membership is declined as
+     * that — read, and short of somewhere to read the value from — rather than as a shape this
+     * has no words for.
+     */
+    @Test
+    void aValueAtNoPositionIsDeclinedAsThat() {
+        for (boolean holding : List.of(true, false)) {
+            OnTheWay.Declined declined = assertInstanceOf(OnTheWay.Declined.class,
+                    stated("written", holding));
+            assertInstanceOf(OnTheWay.Why.ValueAtNoPosition.class, declined.why());
+        }
+    }
+
     /** A container built out of another asks nothing of the other. */
     @Test
     void aContainerBuiltOutOfAnotherIsNoPosition() {
@@ -148,7 +186,9 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
         Bodies.Elaborated checked =
                 COMPILATION.db().ask(new Bodies.Checked(module())).value();
         assertNotNull(checked, () -> "the model under test compiles: "
-                + COMPILATION.diagnostics());
+                + COMPILATION.diagnostics().values().stream().flatMap(List::stream)
+                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said())
+                .toList());
         AnalysisBody analysis = checked.analysisBodies().get(behavior);
         assertNotNull(analysis, () -> "the model under test writes " + behavior);
         InputDomain inputs = COMPILATION.db().ask(new Adequacy.Inputs(module())).value()

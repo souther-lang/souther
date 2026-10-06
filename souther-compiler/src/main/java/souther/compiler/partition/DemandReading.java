@@ -11,7 +11,6 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
-import souther.compiler.inputs.Position;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
@@ -20,6 +19,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ConditionJoin;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -319,8 +319,8 @@ final class DemandReading {
      * <p>The element is compared with a position and not with a number. Two strings differ by a
      * distance on nothing, so what is asked is that the value at that position is written into the
      * container, or kept out of it — which is a demand a composer meets and no region narrows by.
-     * A value that stands at no position of the input is declined: a value written in the source
-     * is a bound on the element's own order, which this reading does not yet draw here.
+     * A value that stands at no position of the input is declined as that: a value written in the
+     * source is a bound on the element's own order, which this reading does not yet draw here.
      */
     private static Read ofAMembership(ValueName operation, Core over, Core value,
                                       InputReads reads, InputReading read, boolean holding) {
@@ -330,7 +330,7 @@ final class DemandReading {
         }
         if (!(reads.pathOf(value, read.rules().newtypes()) instanceof PathResolution.At(
                 TermPath at))) {
-            return new Read.Unread(new OnTheWay.Why.NoWordsForTheShape());
+            return new Read.Unread(new OnTheWay.Why.ValueAtNoPosition());
         }
         RowDemand.OfAnElement element = holding ? new RowDemand.SameAs(at)
                 : new RowDemand.DifferentFrom(at);
@@ -391,14 +391,14 @@ final class DemandReading {
                     instanceof ValueName.Stdlib size)) {
                 return null;
             }
-            // A path the reading of the input holds no position at is a container whose size is
-            // no number of this input: the path is where the argument stands, and which positions
-            // the input is read at is the reading's.
-            Position position = read.domain().at(held);
-            if (position == null) {
+            // What stands at the container, resolved the one way a term's type is: a name every
+            // case of a sum spreads is no position of the input, and the declarations say what it
+            // is ({@link InputNumber}, which reads a size written in a comparison, asks the same).
+            Type container = read.domain().typeAt(held, read.rules());
+            if (container == null) {
                 return null;
             }
-            NumericTerm.TakenOf count = NumericTerm.TakenOf.of(size, held, position.type(),
+            NumericTerm.TakenOf count = NumericTerm.TakenOf.of(size, held, container,
                     read.rules().inners(), read.rules().symbols());
             if (count == null) {
                 return null;

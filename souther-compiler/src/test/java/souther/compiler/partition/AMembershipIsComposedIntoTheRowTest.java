@@ -3,13 +3,16 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.Carrier;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.numeric.Count;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -118,6 +121,30 @@ class AMembershipIsComposedIntoTheRowTest {
         List<String> held = elementsOf(row.get(0), "campaigns");
         assertEquals(1, held.size(), () -> "one, as the rules ask: " + row);
         assertFalse(held.contains(row.get(1)), () -> "and not the priority: " + row);
+    }
+
+    /**
+     * A container whose size a point fixes is built to that size holding the value, rather than
+     * written as the values standing for the size — which hold whatever they happen to.
+     */
+    @Test
+    void aContainerWhoseSizeIsFixedHoldsTheValueAtThatSize() {
+        RowDemand.Exists some = assertInstanceOf(RowDemand.Exists.class,
+                ((OnTheWay.TakenIn) stated("direct", true).getFirst()).demand());
+        NumericTerm size = some.holdingOne().orElseThrow().terms().iterator().next();
+        List<OnTheWay.TakenIn> way = List.of((OnTheWay.TakenIn) stated("direct", true).getFirst());
+        SearchRegion region = new WayToTheBorder(List.copyOf(way))
+                .narrowing(domain("direct").quantities(rules()).region());
+        Carrier on = domain("direct").quantities(rules()).ordersOf(size.atOnePosition())
+                .answered();
+        List<String> row = written(Generator.probeFixing(subject("direct"), "size 2",
+                Map.of(new RealizationTarget.AtOnePosition(size.atOnePosition()), Count.of(2)),
+                NumbersAskedFor.of(LevelRegion.point(new Level.OnACarrier(on, Count.of(2)))),
+                new Reachability.Reaching(region, Requirements.NONE, way),
+                Generator.CandidateCheck.ANY));
+        List<String> campaigns = elementsOf(row.get(0), "campaigns");
+        assertEquals(2, campaigns.size(), () -> "the size the point fixes: " + row);
+        assertTrue(campaigns.contains(row.get(1)), () -> "holding the priority: " + row);
     }
 
     /** The value at another position of the same parameter is read off the same assignment. */
