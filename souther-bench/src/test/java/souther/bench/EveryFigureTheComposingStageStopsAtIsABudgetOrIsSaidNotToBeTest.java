@@ -81,6 +81,8 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
                     "how many readings of a row's values one run tries"),
             Map.entry("souther.compiler.partition.Generator.MOST_RUNS_PER_INTERPRETATION",
                     "how many runs one reading of a row's values is given"),
+            Map.entry("souther.compiler.partition.Generator.MOST_RUNS_REPAIRING_A_ROW",
+                    "how many runs exchanging a class's row for one further in may make"),
             Map.entry("souther.compiler.partition.StandingAtAPoint.MOST_READINGS",
                     "how many element-wise readings of one row a point is tried against")));
 

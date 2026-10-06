@@ -215,6 +215,113 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
                 rowsOf(TWO_AMOUNTS.replace("CONDITION", "a > 0 || b > 0")).get("kind=Plain"));
     }
 
+    /**
+     * A row written against a value the module states keeps it, though the guard refuses it.
+     *
+     * <p>The value is one the author chose, and what it does to the body is what the row says about
+     * it. So the row is looked past only from the value it was written against, and with that value
+     * where it stands — a composed amount would get past the guard, and is not what is asked.
+     */
+    @Test
+    void aRowKeepsTheValueTheModelStatesThoughItStopsAtTheGuard() {
+        String stating = MODEL + """
+
+                let noAmount: Int = 0
+                """;
+        assertEquals("Plain, noAmount", rowsOf(stating).get("kind=Plain"));
+    }
+
+    /**
+     * And a field of it the row is not about stays where it stands, though moving it with the row's
+     * own class written beside it would get past the guard.
+     */
+    @Test
+    void aRowKeepsEveryFieldOfTheValueTheModelStatesThatItIsNotAbout() {
+        String stating = """
+                module example.settle
+
+                data Plain
+                data Express
+                data Kind = Plain | Express
+
+                data Claim = { kind: Kind, amount: Int }
+
+                data Done = { n: Int }
+                data Refused
+
+                behavior settle : (claim: Claim) -> Done | Refused
+                    constructs Done
+
+                let settle (claim) = {
+                    guard claim.amount > 0 else Refused
+                    match claim.kind with
+                        | Plain -> Done { n = claim.amount }
+                        | Express -> Done { n = claim.amount + 500 }
+                }
+
+                let unpaid: Claim = Claim { kind = Plain, amount = 0 }
+                """;
+        assertEquals("Claim { ...unpaid, kind = Express }",
+                rowsOf(stating).get("claim.kind=Express"));
+    }
+
+    /**
+     * A value the module states for a parameter the row composes is not one the row keeps.
+     *
+     * <p>The author's row states both parameters, and the row for {@code Meal} is written against
+     * it — but its list is composed, since no edit of the stated list makes an element a meal. What
+     * stops it at the guard is then a value this compiler chose, and the row is held past it. The
+     * row about {@code Express} writes the stated list and keeps it, short of the guard as the
+     * author's own row is.
+     */
+    private static final String STATED_BESIDE_COMPOSED = """
+            module example.settle
+
+            data Plain
+            data Express
+            data Kind = Plain | Express
+
+            data Amount = Int
+                invariant value >= 0
+
+            data People = Int
+                invariant value >= 1
+
+            data Common = { amount: Amount }
+            data Travel = { ...Common }
+            data Meal = { ...Common, people: People }
+            data Cost = Travel | Meal
+
+            data Item = { cost: Cost }
+
+            data Done = { n: Int }
+            data Refused
+
+            behavior settle : (kind: Kind, items: List<Item>) -> Done | Refused
+                constructs Done
+
+            let settle (kind, items) = {
+                guard List.sum(List.map(i -> i.cost.amount.value, items)) > 0 else Refused
+                match kind with
+                    | Plain -> Done { n = 1 }
+                    | Express -> Done { n = 2 }
+            }
+
+            let trip: List<Item> = [Item { cost = Travel { amount = Amount(0) } }]
+
+            example settle
+                | "nothing spent" : (Plain, trip) -> Refused
+            """;
+
+    @Test
+    void aParameterTheRowComposesBesideAStatedValueIsHeldPastTheGuard() {
+        Map<String, String> rows = rowsOf(STATED_BESIDE_COMPOSED);
+        assertEquals("Plain, [Item { cost = Meal { amount = Amount(1), people = People(1) } }]",
+                rows.get("items[*].cost=Meal"));
+        assertEquals("Express, trip", rows.get("kind=Express"),
+                "the row that writes the stated list keeps it");
+    }
+
     /** What each row is for, by its label, and what it writes. */
     private static Map<String, String> rowsOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");

@@ -51,7 +51,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.SequencedMap;
 import java.util.Set;
-import java.util.function.Predicate;
+import java.util.function.Function;
 
 /**
  * Rows for the classes and the arms a caller says are owed one.
@@ -2035,6 +2035,22 @@ public final class Generator {
     private static final int MOST_REPAIRS = 64;
 
     /**
+     * How many runs one row's exchange for a row that gets further into the body may make.
+     *
+     * <p>Counted in runs, for the reason {@link #MOST_RUNS_PER_INTERPRETATION} is: whether a row got
+     * further is what only the behavior says, so every row this looks at costs a run, while a
+     * candidate the model refuses costs only its composing, which {@link #MOST_REPAIRS} bounds. The
+     * run of the row being exchanged counts too — it is work done to decide between rows, and a row
+     * run once costs nothing the second time.
+     *
+     * <p>Over the whole exchange and not each guard or each way past one. What it bounds is what
+     * a row costs beyond being found, and a share per guard would be a bound that grows with the
+     * body. Running out costs nothing but the preference: the row the class search took, or the
+     * furthest found before, is the row.
+     */
+    private static final int MOST_RUNS_REPAIRING_A_ROW = 16;
+
+    /**
      * The classes a row is composed for, in the order a search settles them.
      *
      * <p>What a requirement is and how a search is told about it are two things. A class of a
@@ -2151,15 +2167,16 @@ public final class Generator {
      * and never the class the row is for. Where a pinned class is what fails the guard, no row
      * holds both and nothing is found: the row stopping there is the row about that class.
      *
-     * <p>Only at the positions the row composed from the classes. A parameter the row writes as the
-     * value the model states is a value the author chose, and what that value does to the body is
-     * what the row says about it; it stays written the way it was, and a row that would move it is
-     * not taken.
+     * <p>Against the origin the row was found from and no other, and with every position of a
+     * parameter the row writes as the value the model states held at the class the row stands at
+     * there. That value is one the author chose, and what it does to the body is what the row says
+     * about it; so the search walks only rows that keep it, rather than building others and turning
+     * them away.
      *
      * <p>Kept only where the new row was seen in the rest of the block. Each guard is looked past
-     * once, and at each the ways tried are no more than the reading of the body holds for one value,
-     * so there are no more searches than that for every guard. What was held before is held after,
-     * so a row past the second guard is still past the first.
+     * once, and what deciding between rows costs is runs, so that is what is counted
+     * ({@link #MOST_RUNS_REPAIRING_A_ROW}); where they run out, the row furthest in so far goes out.
+     * What was held before is held after, so a row past the second guard is still past the first.
      *
      * @param read    the reading of the body, which says where a guard's rest of the block is and
      *                what holds on the way there
@@ -2171,22 +2188,26 @@ public final class Generator {
     private record GoingOn(CoverageRead.Read read, Trial trial, Map<List<String>, Watched> ran,
                            ComparisonHeld.Of holding) {
 
-        /**
-         * {@code found}, or a row for the same requirement that got further into the body.
-         *
-         * @param against the parameters {@code found} writes as the value the model states
-         */
+        /** The row {@code found} took, or a row for the same requirement that got further in. */
         GeneratedRow past(MeasuredInput.MeasuredAxes axes, Pins pins, List<Purpose> purposes,
-                          GeneratedRow found, Set<String> against,
-                          List<ResolvedOrigin> origins, CandidateCheck check,
+                          Searched found, CandidateCheck check,
                           FixtureReferences references, List<StoodInAnswer> answers) {
             // Not run at all where the body has no guard for a run to stop at. Nothing could be
             // exchanged, and a run is what every other search of this run is bounded in.
+            Runs runs = new Runs();
             if (read.restOfTheBlock().isEmpty()
-                    || !(watched(found) instanceof Watched.Ran(AlignedObservation seen))) {
-                return found;   // nothing says how far it got, so nothing is further
+                    || !(watched(found.row(), runs).orElse(null)
+                            instanceof Watched.Ran(AlignedObservation seen))) {
+                return found.row();   // nothing says how far it got, so nothing is further
             }
-            GeneratedRow best = found;
+            Candidate from = found.from();
+            Set<String> against = found.against();
+            // The classes the row stands at, at every position of a parameter it writes as the
+            // value the model states.
+            Admits keeping = (axis, cls) ->
+                    !against.contains(axes.axes().get(axis).path().head())
+                            || cls == from.where()[axis];
+            GeneratedRow best = found.row();
             List<ComparisonHeld> held = List.of();
             Set<ArmProbe> tried = new LinkedHashSet<>();
             while (true) {
@@ -2196,19 +2217,29 @@ public final class Generator {
                     return best;
                 }
                 GeneratedRow further = null;
-                for (List<ComparisonHeld> way : waysOn(seen, rest.get())) {
+                ArmProbe goneOn = rest.get().arm();
+                for (List<ComparisonHeld> way : waysOn(seen, rest.get(), against)) {
                     List<ComparisonHeld> both = new ArrayList<>(held);
                     both.addAll(way);
-                    GeneratedRow row = search(axes, pins, purposes, found, against, origins, check,
-                            references, answers, List.copyOf(both), rest.get().arm());
-                    if (row != null) {
-                        further = row;
+                    Searched searched = search(axes, pins, purposes, List.of(from.from()), keeping,
+                            check, references, answers, List.copyOf(both),
+                            row -> switch (watched(row, runs).orElse(null)) {
+                                case null -> Acceptance.STOPPED;
+                                case Watched.Ran(AlignedObservation run) when run.lit(goneOn) ->
+                                        Acceptance.TAKEN;
+                                default -> Acceptance.PASSED;
+                            });
+                    if (searched.row() != null) {
+                        further = searched.row();
                         held = List.copyOf(both);
                         break;
                     }
+                    if (runs.left == 0) {
+                        return best;
+                    }
                 }
-                if (further == null
-                        || !(watched(further) instanceof Watched.Ran(AlignedObservation now))) {
+                if (further == null || !(watched(further, runs).orElse(null)
+                        instanceof Watched.Ran(AlignedObservation now))) {
                     return best;
                 }
                 best = further;
@@ -2216,35 +2247,9 @@ public final class Generator {
             }
         }
 
-        /**
-         * The class's own search again, held to {@code held} besides, taking only a row that writes
-         * what {@code found} wrote as the model's value the same way and was seen going on into
-         * {@code goneOn}; or null where it found none.
-         *
-         * <p>The values the model states first and then the composition, each with a budget of its
-         * own, as the search that found {@code found} walked them.
-         */
-        private GeneratedRow search(MeasuredInput.MeasuredAxes axes, Pins pins,
-                                    List<Purpose> purposes, GeneratedRow found,
-                                    Set<String> against, List<ResolvedOrigin> origins,
-                                    CandidateCheck check, FixtureReferences references,
-                                    List<StoodInAnswer> answers, List<ComparisonHeld> held,
-                                    ArmProbe goneOn) {
-            Predicate<GeneratedRow> accepts = row -> writtenAlike(found, row, against,
-                    axes.subject())
-                    && watched(row) instanceof Watched.Ran(AlignedObservation run)
-                    && run.lit(goneOn);
-            String label = String.join(" with ", pins.labels());
-            Building stated = new Building(axes, pins, purposes, label, check, MOST_REPAIRS,
-                    references, answers, held, accepts);
-            if (nearestFirst(axes.axes(), pins.reading(), origins, (_, _) -> true, stated)
-                    == Traversal.SATISFIED) {
-                return stated.found;
-            }
-            Building composing = new Building(axes, pins, purposes, label, check, MOST_REPAIRS,
-                    references, answers, held, accepts);
-            return composing(axes.axes(), pins.reading(), origins, (_, _) -> true, composing)
-                    == Traversal.SATISFIED ? composing.found : null;
+        /** The runs one row's repair may still make. */
+        private static final class Runs {
+            private int left = MOST_RUNS_REPAIRING_A_ROW;
         }
 
         /**
@@ -2259,14 +2264,18 @@ public final class Generator {
          * <p>What the run already did is no demand: it was seen doing it, and the row it is
          * composed again holds it as the row did, or holds it by the classes. A part of a way that
          * is an arm, or a comparison no border offers a point on the side it comes out on, is one
-         * nothing here can hold a row to, and the way is not one this offers.
+         * nothing here can hold a row to, and the way is not one this offers. Nor is one whose
+         * comparison stands a term at a parameter the row writes as the value the model states
+         * ({@code against}): holding it would compose that parameter afresh, and the value the
+         * author chose is the row's.
          *
          * <p>Fewest first, because what the row did is the best guess at what a row like it does:
          * the way the row went through the guard's condition with one comparison turned round
          * changes the row least.
          */
         private List<List<ComparisonHeld>> waysOn(AlignedObservation seen,
-                                                  TheRestOfTheBlock stopped) {
+                                                  TheRestOfTheBlock stopped,
+                                                  Set<String> against) {
             List<List<ComparisonHeld>> out = new ArrayList<>();
             for (List<ControlClaim> way : stopped.ways()) {
                 List<ComparisonHeld> demands = new ArrayList<>();
@@ -2277,7 +2286,8 @@ public final class Generator {
                     Optional<ComparisonHeld> holds =
                             each.at() instanceof ControlPlace.Outcome outcome
                                     ? holding.at(outcome) : Optional.empty();
-                    if (holds.isEmpty()) {
+                    if (holds.isEmpty() || holds.get().fixing().keySet().stream()
+                            .anyMatch(target -> against.contains(target.writeRoot().head()))) {
                         demands = null;
                         break;
                     }
@@ -2291,10 +2301,23 @@ public final class Generator {
             return out;
         }
 
-        /** What running {@code row} came to, run once whoever asks. */
-        private Watched watched(GeneratedRow row) {
-            return ran.computeIfAbsent(new ComposedRow(row.inputs(), row.answers()).writtenAs(),
-                    _ -> trial.run(row.toRun()));
+        /**
+         * What running {@code row} came to, run once whoever asks; or empty where it has not been
+         * run and {@code runs} has none left. A row run already costs nothing.
+         */
+        private Optional<Watched> watched(GeneratedRow row, Runs runs) {
+            List<String> writtenAs = new ComposedRow(row.inputs(), row.answers()).writtenAs();
+            Watched already = ran.get(writtenAs);
+            if (already != null) {
+                return Optional.of(already);
+            }
+            if (runs.left == 0) {
+                return Optional.empty();
+            }
+            runs.left--;
+            Watched now = trial.run(row.toRun());
+            ran.put(writtenAs, now);
+            return Optional.of(now);
         }
 
         /**
@@ -2311,17 +2334,6 @@ public final class Generator {
             return Optional.empty();
         }
 
-        /** Whether {@code other} writes every parameter of {@code against} as {@code found} does. */
-        private static boolean writtenAlike(GeneratedRow found, GeneratedRow other,
-                                            Set<String> against, MeasuredInput subject) {
-            for (int p = 0; p < subject.parameters().size(); p++) {
-                if (against.contains(subject.parameters().get(p))
-                        && !found.inputs().get(p).text().equals(other.inputs().get(p).text())) {
-                    return false;
-                }
-            }
-            return true;
-        }
     }
 
     /**
@@ -2338,6 +2350,62 @@ public final class Generator {
                                    List<ResolvedOrigin> origins, CandidateCheck check,
                                    FixtureReferences references,
                                    List<StoodInAnswer> answers, GoingOn goingOn) {
+        Searched searched = search(axes, pins, purposes, origins, (_, _) -> true, check,
+                references, answers, List.of(), _ -> Acceptance.TAKEN);
+        return searched.row() == null ? new Composed(null, searched.came())
+                : new Composed(goingOn.past(axes, pins, purposes, searched, check, references,
+                        answers), null);
+    }
+
+    /**
+     * What one search for a requirement came to: the row it took and the candidate it was built
+     * from, or what its walks came to where it took none.
+     *
+     * @param row     the row, or null where none was taken
+     * @param from    the origin the row was written against and the classes it was built at, or
+     *                null where no row was taken
+     * @param against the parameters the row writes as the value the origin states. Not every
+     *                parameter the origin states: one whose classes cannot be written against that
+     *                value is composed instead, and the row says nothing about the stated value there
+     * @param came    what the walks came to, or null where a row was taken
+     */
+    private record Searched(GeneratedRow row, Candidate from, Set<String> against,
+                            CameToNothing came) {}
+
+    /** What a search makes of a row that holds every pin. */
+    private enum Acceptance {
+
+        /** The row this search is for. */
+        TAKEN,
+
+        /** Not this one, and the walk goes on. */
+        PASSED,
+
+        /** Not this one, and nothing more is asked: what deciding a row costs has run out. */
+        STOPPED
+    }
+
+    /**
+     * The search for a requirement, and the only one: every row taken for a class, and every row a
+     * class's row is exchanged for, is found by this.
+     *
+     * <p>The values the module states first and then the composition, each with a budget of its
+     * own, and what the two came to added up where neither took a row. What differs between the
+     * callers is what they hand in — the origins walked, the classes a position may stand at, the
+     * comparisons a row is held to beside the pins, and what a row has to be to be taken — and none
+     * of those is a way of searching.
+     *
+     * @param origins what a row may be written against
+     * @param admits  the classes each position may stand at beside the pins
+     * @param held    the comparisons every candidate is held to beside the pins
+     * @param accepts what a row that holds every pin has to be besides
+     */
+    private static Searched search(MeasuredInput.MeasuredAxes axes, Pins pins,
+                                   List<Purpose> purposes, List<ResolvedOrigin> origins,
+                                   Admits admits, CandidateCheck check,
+                                   FixtureReferences references, List<StoodInAnswer> answers,
+                                   List<ComparisonHeld> held,
+                                   Function<GeneratedRow, Acceptance> accepts) {
         String label = String.join(" with ", pins.labels());
         // What the pins ask for and nothing else, which is what every other position being free
         // means. Written as a reading, it goes through the same walk a combination's readings do.
@@ -2348,19 +2416,17 @@ public final class Generator {
         // question nobody asked it. What order they are walked in is {@link #nearestFirst}'s to
         // say; how many of them may be built is this class's own budget.
         Building building = new Building(axes, pins, purposes, label, check, MOST_REPAIRS,
-                references, answers);
-        Traversal stated = nearestFirst(axes.axes(), reading, origins, (_, _) -> true, building);
+                references, answers, held, accepts);
+        Traversal stated = nearestFirst(axes.axes(), reading, origins, admits, building);
         if (stated == Traversal.SATISFIED) {
-            return new Composed(goingOn.past(axes, pins, purposes, building.found,
-                    building.foundAgainst, origins, check, references, answers), null);
+            return new Searched(building.found, building.foundAt, building.foundAgainst, null);
         }
         // The composition, whatever the stated values spent, and with a budget of its own.
         Building composing = new Building(axes, pins, purposes, label, check, MOST_REPAIRS,
-                references, answers);
-        Traversal composed = composing(axes.axes(), reading, origins, (_, _) -> true, composing);
+                references, answers, held, accepts);
+        Traversal composed = composing(axes.axes(), reading, origins, admits, composing);
         if (composed == Traversal.SATISFIED) {
-            return new Composed(goingOn.past(axes, pins, purposes, composing.found,
-                    composing.foundAgainst, origins, check, references, answers), null);
+            return new Searched(composing.found, composing.foundAt, composing.foundAgainst, null);
         }
         // What the walks came to, added up the way a combination's readings are. What is pinned
         // is one reading — a class apiece at the positions the requirement names — so what is left
@@ -2399,7 +2465,8 @@ public final class Generator {
         // taken met. Which walk the word came from is settled by which ran last and which candidate
         // by which got furthest; a figure is something a walk ran into, and it is a number somebody
         // can raise whichever candidate was in front of it.
-        return new Composed(null, new CameToNothing(why, building.met.and(composing.met)));
+        return new Searched(null, null, Set.of(),
+                new CameToNothing(why, building.met.and(composing.met)));
     }
 
     /**
@@ -2455,7 +2522,10 @@ public final class Generator {
         /** The row, once one lands in the class. */
         private GeneratedRow found;
 
-        /** The parameters the row writes as the value the model states, once there is one. */
+        /** The candidate the row was built from, once there is one. */
+        private Candidate foundAt;
+
+        /** The parameters the row writes as the value the origin states, once there is one. */
         private Set<String> foundAgainst;
 
         /** The run's minter for the references what this composes will hold. */
@@ -2472,19 +2542,12 @@ public final class Generator {
         private final HeldTogether held;
 
         /** What a row that holds every pin has to be besides, to be the one this takes. */
-        private final Predicate<GeneratedRow> accepts;
-
-        private Building(MeasuredInput.MeasuredAxes axes, Pins pins, List<Purpose> purposes,
-                         String label, CandidateCheck check, int most,
-                         FixtureReferences references, List<StoodInAnswer> answers) {
-            this(axes, pins, purposes, label, check, most, references, answers, List.of(),
-                    _ -> true);
-        }
+        private final Function<GeneratedRow, Acceptance> accepts;
 
         private Building(MeasuredInput.MeasuredAxes axes, Pins pins, List<Purpose> purposes,
                          String label, CandidateCheck check, int most,
                          FixtureReferences references, List<StoodInAnswer> answers,
-                         List<ComparisonHeld> held, Predicate<GeneratedRow> accepts) {
+                         List<ComparisonHeld> held, Function<GeneratedRow, Acceptance> accepts) {
             this.axes = axes;
             this.pins = pins;
             this.purposes = purposes;
@@ -2532,12 +2595,17 @@ public final class Generator {
                 return Taken.AND_MORE;
             }
             GeneratedRow row = new GeneratedRow(purposes, made.row().inputs(), made.row().answers());
-            if (!accepts.test(row)) {
-                return Taken.AND_MORE;
-            }
-            found = row;
-            foundAgainst = Set.copyOf(given.keySet());
-            return Taken.AND_DONE;
+            return switch (accepts.apply(row)) {
+                case TAKEN -> {
+                    found = row;
+                    foundAt = candidate;
+                    foundAgainst = Set.copyOf(given.keySet());
+                    yield Taken.AND_DONE;
+                }
+                case PASSED -> Taken.AND_MORE;
+                // What deciding cost ran out in front of this row, which is the work nobody did.
+                case STOPPED -> Taken.NOT_TAKEN;
+            };
         }
     }
 
