@@ -26,6 +26,11 @@ public final class Plans {
     private Plans() {
     }
 
+    /** {@code run}, read against its plan answering that a run may come back to anywhere. */
+    public static RunBodies whereEverythingRepeats(RunBodies run) {
+        return run.under(whereEverythingRepeats(run.plan()));
+    }
+
     /**
      * {@code plan}, answering that a run may come back to anywhere.
      *

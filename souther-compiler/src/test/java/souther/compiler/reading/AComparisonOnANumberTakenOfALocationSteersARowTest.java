@@ -361,8 +361,8 @@ class AComparisonOnANumberTakenOfALocationSteersARowTest {
         assertNotNull(body, "the behavior under test has a body");
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("gate");
-        return new Read(CoverageRead.of("gate", body,
-                checked.plan(),
+        return new Read(CoverageRead.of("gate",
+                checked.run("gate"),
                 inputs.reading(rules)), rules.symbols());
     }
 

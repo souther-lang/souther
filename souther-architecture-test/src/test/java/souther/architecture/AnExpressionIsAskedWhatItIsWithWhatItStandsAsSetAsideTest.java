@@ -657,7 +657,7 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                         + "partition/RuleReachNumbering;Ljava/util/Set;L" + c
                         + "partition/PredicateReadings$Builds;)V", 1, GOES_ON_INTO_IT);
         row(out, c + "reading/Arms", "restOfTheBlock",
-                "(Ljava/lang/String;" + core + ")Ljava/util/SequencedMap;", 1,
+                "(Ljava/lang/String;)Ljava/util/SequencedMap;", 1,
                 "whether the fork a guard's arms were met at is an if: the node is the fork the"
                         + " plan numbered those arms under, which is the if itself and never a"
                         + " value standing as one");

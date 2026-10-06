@@ -45,6 +45,9 @@ final class Arms {
      *  are two nodes, which is what makes them two forks. */
     private final Map<ArmProbe, Core> forkOf = new LinkedHashMap<>();
 
+    /** The body each arm was met in: the behavior's own, or a method it calls. */
+    private final Map<ArmProbe, Core> bodyOf = new LinkedHashMap<>();
+
     Arms(CoverageSites.Plan plan) {
         this.plan = plan;
     }
@@ -56,8 +59,11 @@ final class Arms {
      * — and it is the same answer that decides both: what a run at the arm would be seen doing is
      * what the reading here is handed on with, and where there is none there is nothing to hold a
      * row to.
+     *
+     * @param body the body {@code fork} is written in, which is what a name in its condition is
+     *             read against
      */
-    void at(Core fork, int part, Reach reach) {
+    void at(Core fork, int part, Reach reach, Core body) {
         ControlPlace.Arm[] arms = plan.armsOf(fork);
         if (arms == null || part < 0 || part >= arms.length || arms[part] == null) {
             return;
@@ -65,6 +71,7 @@ final class Arms {
         ControlClaim.of(arms[part]).ifPresent(arrivesAt -> {
             byArm.put(arms[part].probe().get(), reach.told(arrivesAt));
             forkOf.put(arms[part].probe().get(), fork);
+            bodyOf.put(arms[part].probe().get(), body);
         });
     }
 
@@ -76,12 +83,13 @@ final class Arms {
      * <p>Paired by the node the walk met them at — compared as that object, since two splices of
      * one helper are two guards and a run past one has not passed the other.
      *
-     * <p>The ways are read off {@code body} by the walk that reads it, named for what a run would
-     * be seen doing ({@link WhatARunIsSeenDoing}), and asked of each guard's condition. Over the
-     * whole body and not the condition alone, because what a name in the condition stands for is
-     * what the body bound it to above. Not walked where the body has no guard.
+     * <p>The ways are read off the body the guard is written in by the walk that reads it, named
+     * for what a run would be seen doing ({@link WhatARunIsSeenDoing}), and asked of each guard's
+     * condition. Over the whole body and not the condition alone, because what a name in the
+     * condition stands for is what the body bound it to above. Not walked where the body has no
+     * guard, and once for each body that has one.
      */
-    SequencedMap<ArmProbe, TheRestOfTheBlock> restOfTheBlock(String behavior, Core body) {
+    SequencedMap<ArmProbe, TheRestOfTheBlock> restOfTheBlock(String behavior) {
         Map<Core, ArmProbe> heldAt = new IdentityHashMap<>();
         List<CoverageSites.ArmSite> sites = plan.arms(behavior);
         for (CoverageSites.ArmSite arm : sites) {
@@ -91,7 +99,7 @@ final class Arms {
             }
         }
         SequencedMap<ArmProbe, TheRestOfTheBlock> out = new LinkedHashMap<>();
-        ValueArrivals<List<ControlClaim>> seen = null;
+        Map<Core, ValueArrivals<List<ControlClaim>>> seenIn = new IdentityHashMap<>();
         for (CoverageSites.ArmSite arm : sites) {
             Core fork = forkOf.get(arm.index());
             ArmProbe goesOn = heldAt.get(fork);
@@ -100,10 +108,11 @@ final class Arms {
                     || !(fork instanceof Core.If guard)) {
                 continue;
             }
-            if (seen == null) {
-                WhatARunIsSeenDoing naming = new WhatARunIsSeenDoing(plan);
-                seen = ValueArrivals.ofBody(body, naming, naming.eitherWay());
-            }
+            ValueArrivals<List<ControlClaim>> seen = seenIn.computeIfAbsent(
+                    bodyOf.get(arm.index()), body -> {
+                        WhatARunIsSeenDoing naming = new WhatARunIsSeenDoing(plan);
+                        return ValueArrivals.ofBody(body, naming, naming.eitherWay());
+                    });
             List<List<ControlClaim>> ways =
                     seen.waysTo(guard.cond(), partOf(fork, goesOn) == 0)
                             instanceof Ways.Known<List<ControlClaim>> known

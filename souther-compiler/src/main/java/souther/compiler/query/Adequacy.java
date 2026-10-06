@@ -18,6 +18,7 @@ import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ArmReportAnchor;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.RunBodies;
 import souther.compiler.coverage.RunRecord;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.reach.Reachability;
@@ -1139,10 +1140,6 @@ public final class Adequacy {
                 return Answer.absent();
             }
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
-            CoverageSites.Plan plan =
-                    checked.present() ? checked.value().plan() : CoverageSites.Plan.NONE;
-            Map<String, souther.compiler.core.Core> bodies =
-                    checked.present() ? checked.value().behaviorBodies() : Map.of();
             Map<String, CoverageRead.Read> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
                 // Read off the one classification every other reader of this walk reads. A
@@ -1154,10 +1151,12 @@ public final class Adequacy {
                                         InputDomain read)))) {
                     continue;
                 }
-                // The lowered body, which is the tree the plan numbers its arms in. The analysis
-                // tree beside it holds the operations the language's own combinators stand for,
-                // and a walk of that one would find meetings at nodes no arm of the plan is in.
-                out.put(spec.name(), CoverageRead.of(spec.name(), bodies.get(spec.name()), plan,
+                // The lowered bodies, which are the trees the plan numbers its arms in. The
+                // analysis tree beside each holds the operations the language's own combinators
+                // stand for, and a walk of that one would find meetings at nodes no arm of the plan
+                // is in.
+                out.put(spec.name(), CoverageRead.of(spec.name(),
+                        checked.present() ? checked.value().run(spec.name()) : RunBodies.NONE,
                         readingOf(db, read, reading.value())));
             }
             return Answer.of(Ordered.map(out));

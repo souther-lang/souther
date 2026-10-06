@@ -7,6 +7,7 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.Plans;
+import souther.compiler.coverage.RunBodies;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -117,8 +118,8 @@ class AGroupIsOnlyOfferedWhereARunPassesItOnceTest {
     void aMeetingARunMayComeBackToIsNotOffered() {
         Model model = Model.of(SHIPPING, "shippingFee");
 
-        List<Interaction> asIfRepeated = CoverageRead.of(model.behavior(), model.body(),
-                Plans.whereEverythingRepeats(model.plan()), model.inputs().reading(model.rules()))
+        List<Interaction> asIfRepeated = CoverageRead.of(model.behavior(),
+                Plans.whereEverythingRepeats(model.run()), model.inputs().reading(model.rules()))
                 .interactions();
 
         assertTrue(asIfRepeated.isEmpty(),
@@ -126,7 +127,7 @@ class AGroupIsOnlyOfferedWhereARunPassesItOnceTest {
     }
 
     /** One model, read the way the generator reads it. */
-    private record Model(String behavior, Core body, CoverageSites.Plan plan, InputDomain inputs,
+    private record Model(String behavior, RunBodies run, InputDomain inputs,
                          RuleReadingSource rules) {
 
         static Model of(String source, String behavior) {
@@ -135,16 +136,19 @@ class AGroupIsOnlyOfferedWhereARunPassesItOnceTest {
             String module = compilation.modules().get(0);
             Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
             assertNotNull(checked, "the model under test compiles");
-            Core body = checked.behaviorBodies().get(behavior);
-            assertNotNull(body, "the behavior under test has a body");
-            return new Model(behavior, body,
-                    checked.plan(),
+            assertNotNull(checked.behaviorBodies().get(behavior),
+                    "the behavior under test has a body");
+            return new Model(behavior, checked.run(behavior),
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior),
                     RuleReadings.of(compilation, module));
         }
 
         List<Interaction> groups() {
-            return CoverageRead.of(behavior, body, plan, inputs.reading(rules)).interactions();
+            return CoverageRead.of(behavior, run, inputs.reading(rules)).interactions();
+        }
+
+        CoverageSites.Plan plan() {
+            return run.plan();
         }
     }
 }

@@ -160,7 +160,8 @@ class AClaimIsWhatARunThatSettledItWouldBeSeenToDoTest {
             souther.compiler.generated.EvaluationArtifact artifact = compilation.db()
                     .ask(new Output.Evaluated(module, ArmObservation.RECORD)).value();
             assertNotNull(artifact, "the model under test emits measured classes");
-            return new Model(CoverageRead.of(name, body, plan, inputs.reading(rules)).interactions(),
+            return new Model(
+                    CoverageRead.of(name, checked.run(name), inputs.reading(rules)).interactions(),
                     plan.numbering(), new Behavior(artifact.classes(), module, name, plan));
         }
 

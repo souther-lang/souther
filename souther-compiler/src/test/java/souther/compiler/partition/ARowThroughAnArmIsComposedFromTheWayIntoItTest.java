@@ -260,7 +260,8 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
                     Partitions.of(spec.name(), inputs.reading(rules), ReadAs.THE_COMPILATION_DOES);
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
                     partitioning),
-                    CoverageRead.of(spec.name(), body, plan, inputs.reading(rules)), plan.numbering());
+                    CoverageRead.of(spec.name(), checked.run(spec.name()), inputs.reading(rules)),
+                    plan.numbering());
         }
     }
 }

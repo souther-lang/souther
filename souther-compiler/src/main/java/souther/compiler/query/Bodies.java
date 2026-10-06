@@ -90,6 +90,7 @@ import souther.compiler.coverage.DecisionSource;
 import souther.compiler.coverage.DecisionSources;
 import souther.compiler.coverage.ModuleBodies;
 import souther.compiler.coverage.NumberingIdentity;
+import souther.compiler.coverage.RunBodies;
 import souther.compiler.coverage.SuppliedRules;
 import souther.compiler.sites.SemanticSnapshot;
 import souther.compiler.types.BindingOwner;
@@ -3807,6 +3808,18 @@ public final class Bodies {
          */
         public CoverageSites.Plan plan() {
             return plan;
+        }
+
+        /**
+         * The bodies a run of {@code behavior} goes through — its own and the methods of the values
+         * it calls — together with {@link #plan()}.
+         *
+         * <p>Handed out here, where the trees are, and as one value with the plan of them. The plan
+         * is an index and hands out no way into what it indexes; and a reader handed the trees and
+         * the plan apart could be reading trees the plan is not of.
+         */
+        public RunBodies run(String behavior) {
+            return RunBodies.of(of, plan, behavior);
         }
 
         /**

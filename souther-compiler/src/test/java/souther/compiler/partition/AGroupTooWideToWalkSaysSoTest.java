@@ -9,7 +9,6 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.reading.Interaction;
 import souther.compiler.reading.CoverageRead;
@@ -446,10 +445,9 @@ class AGroupTooWideToWalkSaysSoTest {
                     souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
             Core body = checked.behaviorBodies().get("total");
             assertNotNull(body, "the behavior under test has a body");
-            CoverageSites.Plan plan = checked.plan();
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
                     partitioning),
-                    CoverageRead.of("total", body, plan, inputs.reading(rules)));
+                    CoverageRead.of("total", checked.run("total"), inputs.reading(rules)));
         }
     }
 }

@@ -226,8 +226,8 @@ class ACandidateThatMissedIsNotOfferedTest {
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
                     Partitions.of(spec.name(), inputs.reading(rules),
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
-                    CoverageRead.of(spec.name(), body,
-                            checked.plan(), inputs.reading(rules)),
+                    CoverageRead.of(spec.name(),
+                            checked.run(spec.name()), inputs.reading(rules)),
                     checked.plan().numbering());
         }
     }
