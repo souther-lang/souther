@@ -1103,7 +1103,7 @@ public final class CoverageSites {
                 asked.add(does.get(part));
                 for (int sibling : candidates) {
                     BindingId own = names.get(sibling);
-                    if (own != null && reads(bodies.get(sibling), own)
+                    if ((own != null && reads(bodies.get(sibling), own))
                             || !asked.add(does.get(sibling))) {
                         continue;
                     }

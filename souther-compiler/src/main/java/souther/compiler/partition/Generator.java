@@ -1794,7 +1794,7 @@ public final class Generator {
                     GeneratedRow seen = null;
                     for (ArmProbe probe : arm.occurrences()) {
                         for (WhereToLook place : whereToLookFor(probe, read, here, axes.axes())) {
-                            switch (witnessFor(axes, place.at, check, trial, ran, List.of(probe),
+                            switch (witnessFor(axes, place.at, check, trial, ran,
                                     List.of(new Purpose.ForAReplacement(asked)), looking::of,
                                     origins, references, answers)) {
                                 case Witness.Certified(GeneratedRow row, var _) -> seen = row;
@@ -5654,23 +5654,23 @@ public final class Generator {
         List<Purpose> composedFor = new ArrayList<>(
                 takes.stream().map(Purpose.ForAnArm::new).map(Purpose.class::cast).toList());
         composedFor.addAll(alsoFor);
-        return witnessing(new Reading(axes, selection, check, trial, applied, takes,
+        return witnessing(new Reading(axes, selection, check, trial, applied,
                 List.copyOf(composedFor), null, origins, references, answers));
     }
 
     /**
-     * A row through {@code takes} at {@code selection} that is {@code furthermore} besides, composed
-     * for {@code composedFor} alone: what a row is looked for here is not the arms it is held to go
-     * through, which are where it is looked for.
+     * A row at {@code selection} that is {@code furthermore} besides, composed for
+     * {@code composedFor} alone: what a row is looked for here is not the arms the selection holds
+     * it to go through, which are where it is looked for.
      */
     private static Witness witnessFor(MeasuredInput.MeasuredAxes axes,
                                       CellSelection selection, CandidateCheck check, Trial trial,
-                                      Map<List<String>, ObservedRun> applied, List<ArmProbe> takes,
+                                      Map<List<String>, ObservedRun> applied,
                                       List<Purpose> composedFor,
                                       Furthermore furthermore,
                                       List<ResolvedOrigin> origins, FixtureReferences references,
                                       List<StoodInAnswer> answers) {
-        return witnessing(new Reading(axes, selection, check, trial, applied, takes, composedFor,
+        return witnessing(new Reading(axes, selection, check, trial, applied, composedFor,
                 furthermore, origins, references, answers));
     }
 
@@ -5825,8 +5825,6 @@ public final class Generator {
 
         private final Map<List<String>, ObservedRun> applied;
 
-        private final List<ArmProbe> takes;
-
         /** What the row this composes is composed for. */
         private final List<Purpose> composedFor;
 
@@ -5874,7 +5872,7 @@ public final class Generator {
 
         private Reading(MeasuredInput.MeasuredAxes axes, CellSelection selection,
                         CandidateCheck check, Trial trial, Map<List<String>, ObservedRun> applied,
-                        List<ArmProbe> takes, List<Purpose> composedFor,
+                        List<Purpose> composedFor,
                         Furthermore furthermore,
                         List<ResolvedOrigin> origins,
                         FixtureReferences references, List<StoodInAnswer> answers) {
@@ -5883,7 +5881,6 @@ public final class Generator {
             this.check = check;
             this.trial = trial;
             this.applied = applied;
-            this.takes = takes;
             this.composedFor = composedFor;
             this.furthermore = furthermore;
             this.origins = origins;
@@ -7982,8 +7979,8 @@ public final class Generator {
         // was not among what the positions ordinarily offer, which is what holding something back
         // is for.
         boolean ranOut = tried instanceof Outcome.PassedOver
-                || tried instanceof Outcome.Unresolved(UnresolvedCombination.Reason why,
-                        String _) && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED;
+                || (tried instanceof Outcome.Unresolved(UnresolvedCombination.Reason why,
+                        String _) && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED);
         if (!ranOut || !choices.anythingHeldBack()) {
             return tried;
         }

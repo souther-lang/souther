@@ -107,7 +107,7 @@ class ARewriteNoRowTellsApartIsAGapTest {
 
         assertTrue(rewrites.keySet().stream().noneMatch(each ->
                         each instanceof Replacement.OfAnArm(var _, var part, var with)
-                                && (part == 1 && with == 2 || part == 2 && with == 1)),
+                                && ((part == 1 && with == 2) || (part == 2 && with == 1))),
                 "the two arms answering one constant are not rewrites of each other: " + rewrites);
     }
 
