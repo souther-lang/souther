@@ -1481,7 +1481,8 @@ public final class Generator {
                 nowhere.add(CameToNothing.metNothing(new UnresolvedCombination(List.of(),
                         UnresolvedCombination.Reason.THE_GROUP_WAS_NOT_OFFERED)));
             }
-            unresolved.addAll(nowhere);
+            // The arm's own account and no cell's. Nothing was composed, so there is no cell this
+            // is a fact about, and a line said for one would name nothing.
             failed.computeIfAbsent(probe, _ -> new ArrayList<>()).addAll(nowhere);
         }
         // One entry per arm the run was asked about, in the order it was asked. An arm the limit

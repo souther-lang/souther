@@ -7,13 +7,10 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
-import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.numeric.LinearForm;
-import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.ModelOccurrence;
 
@@ -114,13 +111,14 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison)
                             stating(joined.right(), read, holding))
                     : List.of(new OnTheWay.Declined(joined.occurrence(), joined.anchor(),
                             new OnTheWay.Why.OneOfTwoThings()));
-            case Condition.Compares one -> List.of(of(one, read, holding));
-            // A truth is not an inequality over a form, which is what a cut is. Read as one here,
-            // the region a search looks in would be narrowed by a proposition this arithmetic
-            // cannot state, and the decision a body draws on such a value is a different question
-            // asked elsewhere.
-            case Condition.Truth truth -> List.of(new OnTheWay.Declined(
-                    truth.occurrence(), truth.anchor(), new OnTheWay.Why.NoWordsForTheShape()));
+            case Condition.Compares one -> List.of(onTheWay(one.occurrence(), one.anchor(),
+                    DemandReading.ofAComparison(one.comparison().stated(), one.reads(), read,
+                            holding)));
+            // A truth is taken in for what it asks of a row, and stays the truth it is: what a
+            // report names and where a run through it is seen are the condition the author wrote,
+            // and only the demand is read as the comparison it means.
+            case Condition.Truth truth -> List.of(onTheWay(truth.occurrence(), truth.anchor(),
+                    DemandReading.ofATruth(truth.value(), truth.reads(), read, holding)));
         };
     }
 
@@ -206,129 +204,15 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison)
     }
 
     /**
-     * What {@code comparison} states about this input, coming out {@code holding} — or a decline
-     * where the arithmetic reads nothing here.
-     *
-     * <p>Read once, off the same {@link AffineReading} every other reader of a comparison uses. A
-     * second reading of what a comparison says is a second thing to keep in step with how a border
-     * is drawn, and the two disagreeing is a region that excludes the very level the border is at.
-     *
-     * <p><b>Three answers and not one absence.</b> A reading that ran to the end and found the
-     * quantity empty, and a reading that stopped, are opposite facts — and both used to arrive here
-     * as a {@code null}. The second is not a decline on its own: the arithmetic stopping is what a
-     * written value on a carrier that counts nothing does, and such a comparison still says where on
-     * that carrier's order the position lies. So the stopped reading is asked again as written, and
-     * only a comparison neither vocabulary carries is declined.
-     *
-     * <p>The reason the same comparison gets for drawing no line is {@link UnreadComparison}'s and
-     * answers another question: {@code 1 < 2} is a form nothing reads over there and constrains no
-     * position here, and a form this arithmetic cannot carry is a comparison between two positions
-     * over there while a relation between two positions is exactly what a cut carries here.
+     * What a condition's demand comes to on the way: taken in where there is one, and declined at
+     * the condition with the reason where there is none.
      */
-    private static OnTheWay of(Condition.Compares comparison, InputReading read, boolean holding) {
-        ConditionReportAnchor at = comparison.anchor();
-        return switch (AffineReading.read(comparison.comparison().stated(), read.domain(),
-                comparison.reads(), read.rules())) {
-            case AffineReading.OfAComparison.Cuts(var affine) -> {
-                // What the comparison states, in the words a domain is told things in. Taken the
-                // way the path met it: an arm reached by the condition failing has what holds
-                // exactly where the comparison does not.
-                Rel states = affine.claim().statedRelation();
-                // The form with the threshold moved into it, since what a domain is told is
-                // `f rel 0`.
-                LinearForm<NumericTerm> against =
-                        affine.form().minus(LinearForm.constant(affine.cut())).orNull();
-                // A form no ratio holds once the threshold is moved into it is a comparison this
-                // cannot state to a region, which is a comparison not represented as a cut.
-                if (against == null) {
-                    yield new OnTheWay.Declined(comparison.occurrence(), at,
-                            new OnTheWay.Why.ComparisonNotRepresentedAsACut());
-                }
-                Rel met = holding ? states : states.denied();
-                // And whether a region can carry it, asked of a region rather than decided from
-                // the shape of the form. That a reading reached the end of a comparison is a fact
-                // about the arithmetic's reading; whether the values it is over stand on anything
-                // a region measures them on is the region's, and the two are not each other — a
-                // difference between two positions holding records is read perfectly and is a
-                // distance on nothing.
-                yield switch (read.quantities().region().assuming(against, met)) {
-                    case SearchRegion.Assumption.Taken _ ->
-                            new OnTheWay.TakenIn(at, new RowDemand.Relational(
-                                    new TakenConstraint.Affine(against, met)));
-                    case SearchRegion.Assumption.Refused(var why) ->
-                            new OnTheWay.Declined(comparison.occurrence(), at, whyDeclined(why));
-                };
-            }
-            // Read from end to end, and the quantity it cuts is nothing. `a - a > 0` constrains no
-            // position, so there is nothing for a region to be narrowed by and nothing this
-            // compiler fell short of — which is why it is not asked again as written.
-            case AffineReading.OfAComparison.CutsNothing _ ->
-                    new OnTheWay.Declined(comparison.occurrence(), at,
-                            new OnTheWay.Why.ComparisonStatesNoQuantity());
-            // Read from end to end and the difference of the two sides has no number to state to a
-            // region. Nothing is narrowed by it, and nothing was left unread — so it is not asked
-            // again as written, which is a reading of a spelling and would say nothing more.
-            case AffineReading.OfAComparison.NotHeld _ ->
-                    new OnTheWay.Declined(comparison.occurrence(), at,
-                            new OnTheWay.Why.ComparisonNotRepresentedAsACut());
-            // The arithmetic stopped, which is what a written value on an order that counts nothing
-            // does. Asked as written, and declined only where that reading comes to nothing either.
-            case AffineReading.OfAComparison.Stopped _ -> {
-                OnTheWay.TakenIn ordered = onAnOrder(comparison, read, holding, at);
-                yield ordered != null ? ordered
-                        : new OnTheWay.Declined(comparison.occurrence(), at,
-                                new OnTheWay.Why.ComparisonNotRepresentedAsACut());
-            }
+    private static OnTheWay onTheWay(ConditionOccurrence condition, ConditionReportAnchor at,
+                                     DemandReading.Read read) {
+        return switch (read) {
+            case DemandReading.Read.Demands(var demand) -> new OnTheWay.TakenIn(at, demand);
+            case DemandReading.Read.Unread(var why) -> new OnTheWay.Declined(condition, at, why);
         };
-    }
-
-    /**
-     * A region's refusal in the words an account of the way is written in.
-     *
-     * <p>Two vocabularies because they answer to two readers. What a region says is about its own
-     * algebra and names the term it has no order for; what an account of the way says is what an
-     * author is to make of a condition that narrowed nothing. Written as one, either the region
-     * would be naming conditions or the report would be reading terms.
-     */
-    private static OnTheWay.Why whyDeclined(SearchRegion.Refusal why) {
-        return switch (why) {
-            case SearchRegion.Refusal.NoOrderUnderATerm _ ->
-                    new OnTheWay.Why.QuantityStandsOnNoOrder();
-        };
-    }
-
-    /**
-     * The comparison as a bound on one position's own order, or null where it draws none.
-     *
-     * <p>Read where the arithmetic stopped and nowhere else, so a spelling never settles what the
-     * canonical form has already settled — the arrangement {@link Cutting} is under, reached here
-     * for the same reason and off the same reading ({@link ComparedLine#asWritten}). What that
-     * reading answers is which position was compared and where on its order the written value
-     * falls, which is the whole of an ordered constraint.
-     *
-     * <p>Taken the way the path met it, like the form above: an arm reached by the condition failing
-     * has what holds exactly where the comparison does not. Which is why the relation is settled
-     * before the bound is asked for and not after: {@code /= } coming out one way and {@code ==}
-     * coming out the other are the same relation, and a reading that looked at what the author
-     * wrote would carry one of them and refuse the other.
-     *
-     * <p>A bound where the relation says where the run stops and a hole where it does not, which
-     * are two shapes and not one with a flag: an end moves where a chooser looks, and a hole leaves
-     * the run where it was and takes one value out of it.
-     */
-    private static OnTheWay.TakenIn onAnOrder(Condition.Compares comparison, InputReading read,
-                                              boolean holding, ConditionReportAnchor at) {
-        ComparedLine drawn = ComparedLine.asWritten(
-                comparison.comparison().stated(), read, comparison.reads());
-        if (drawn == null) {
-            return null;
-        }
-        Rel states = drawn.claim().statedRelation();
-        Rel met = holding ? states : states.denied();
-        TakenConstraint taken = TakenConstraint.Ordered.isABound(met)
-                ? new TakenConstraint.Ordered(drawn.term(), drawn.value(), met)
-                : new TakenConstraint.AwayFrom(drawn.term(), drawn.value());
-        return new OnTheWay.TakenIn(at, new RowDemand.Relational(taken));
     }
 
     /** These conditions, with the rule stated at {@code states} reached under {@code assumed}. */
