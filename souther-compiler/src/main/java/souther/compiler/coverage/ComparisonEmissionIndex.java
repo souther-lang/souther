@@ -47,7 +47,7 @@ public final class ComparisonEmissionIndex {
      * both.
      */
     public record EmittedComparison(ConstructOccurrence occurrence,
-                                    Optional<ComparisonEmissionSite> site) {
+                                    Optional<ConditionOutcomeSite> site) {
 
         public EmittedComparison {
             if (occurrence == null || site == null) {

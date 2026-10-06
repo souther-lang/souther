@@ -5,7 +5,7 @@ import souther.compiler.types.WrittenOwner;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.Measurement;
 import souther.compiler.check.Carrier;
-import souther.compiler.coverage.ComparisonEmissionSite;
+import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.CorePath;
 import souther.compiler.coverage.NodeAddress;
 import souther.compiler.coverage.NumberingIdentity;
@@ -75,11 +75,11 @@ final class AReportOfOneBorder {
      * numbering and of nothing else, so what is written here is the numbering — one comparison, in
      * the body this fixture stands for — and the place is read out of it.
      */
-    private static final ComparisonEmissionSite WHERE =
+    private static final ConditionOutcomeSite WHERE =
             SiteNumbering.of(new NumberingIdentity("example.rate", Map.of(),
-                            List.of(new SiteAddress.Comparison(
+                            List.of(new SiteAddress.ConditionOutcome(
                                     new NodeAddress("example.rate", Set.of(CorePath.ROOT))))))
-                    .comparison(0);
+                    .outcome(0);
 
     /** The number the lines below are on, which their orders are the orders of. */
     private static final NumericTerm.ValueOf AT_W_A =

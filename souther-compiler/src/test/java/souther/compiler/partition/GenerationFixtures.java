@@ -16,7 +16,7 @@ import java.util.Set;
  *
  * <p>None of these is what a build asks for — {@link Generator#fill(GenerationPlan, List,
  * Generator.CandidateCheck, CoverageRead.Read, Generator.Trial, List, AnswersStoodIn,
- * ComparisonHeld.Of, AdequacyPolicy.OfTheGeneration)} is, and it is the only form main ever calls. What is owed a row
+ * HeldOutcome.Of, AdequacyPolicy.OfTheGeneration)} is, and it is the only form main ever calls. What is owed a row
  * is {@code Adequacy.RowsOwed}'s answer there, read off the measure and not off the written rows a
  * second time. A test standing the search up in isolation has no such measure to read, so it needs
  * a way to name obligations of its own — which is what these are for, and why they read the rows
@@ -78,7 +78,7 @@ final class GenerationFixtures {
         return Generator.fill(planOver(subject, everyClassNoRowSitsIn(subject, existing),
                         List.copyOf(read.arms().keySet())),
                 existing, check, read, trial, List.of(), AnswersStoodIn.REQUIRING_NOTHING,
-                ComparisonHeld.Of.NOTHING, budget);
+                HeldOutcome.Of.NOTHING, budget);
     }
 
     /**
@@ -94,7 +94,7 @@ final class GenerationFixtures {
                            List<ClassOfAPosition> classesOwed, List<ArmProbe> armsOwed,
                            AdequacyPolicy.OfTheGeneration budget) {
         return Generator.fill(planOver(subject, classesOwed, armsOwed), existing, check, read,
-                trial, baselines, AnswersStoodIn.REQUIRING_NOTHING, ComparisonHeld.Of.NOTHING,
+                trial, baselines, AnswersStoodIn.REQUIRING_NOTHING, HeldOutcome.Of.NOTHING,
                 budget);
     }
 

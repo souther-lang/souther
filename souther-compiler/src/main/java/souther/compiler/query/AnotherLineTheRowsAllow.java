@@ -17,6 +17,7 @@ import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.OrderedAffineBoundary;
 import souther.compiler.partition.QuantityKey;
+import souther.compiler.partition.RowDemand;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.TakenConstraint;
 import souther.compiler.partition.WayToTheBorder;
@@ -696,6 +697,12 @@ public sealed interface AnotherLineTheRowsAllow {
                     case OnTheWay.Declined _ -> {
                         return false;
                     }
+                    // Settled for every row: past it whatever a step moves, or past it for none.
+                    case OnTheWay.Settled settled -> {
+                        if (!settled.thisWay()) {
+                            return false;
+                        }
+                    }
                     // Which case a value turned out to be. A step moves numbers and a narrowing is
                     // about a position being one of its cases, so a step that moves no number of
                     // that position leaves it as the row had it; one that does is past what this
@@ -705,12 +712,26 @@ public sealed interface AnotherLineTheRowsAllow {
                             return false;
                         }
                     }
-                    case OnTheWay.TakenIn(var _, var taken) -> {
+                    case OnTheWay.TakenIn(var _, RowDemand.Relational(var taken)) -> {
                         if (Collections.disjoint(taken.terms(), moved)) {
                             continue;   // the row's answer at it, unmoved
                         }
                         Boolean holds = holdsAt(taken, from, at);
                         if (holds == null || !holds) {
+                            return false;
+                        }
+                    }
+                    // That some element meets these, or every element does, which a step leaves as
+                    // it was where it moves none of their numbers. One that does may move an
+                    // element they are about, and which elements those are is nothing an input's
+                    // numbers say.
+                    case OnTheWay.TakenIn(var _, RowDemand.Exists exists) -> {
+                        if (!Collections.disjoint(exists.terms(), moved)) {
+                            return false;
+                        }
+                    }
+                    case OnTheWay.TakenIn(var _, RowDemand.ForAll every) -> {
+                        if (!Collections.disjoint(every.terms(), moved)) {
                             return false;
                         }
                     }

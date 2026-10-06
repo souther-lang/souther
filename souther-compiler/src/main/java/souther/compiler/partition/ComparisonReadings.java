@@ -379,7 +379,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     }
                     Set<Core> owned = Collections.newSetFromMap(new IdentityHashMap<>());
                     for (Core atom : atoms) {
-                        if (statedElsewhere(atom, reads, symbols, in.newtypes()).isEmpty()) {
+                        if (statedElsewhere(atom, reads, in.read()).isEmpty()) {
                             owned.add(atom);
                         }
                     }
@@ -523,13 +523,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * as "something in there is owned", the second went with the first — which is the same partial
      * ownership a condition's own parts are cut along, lost one step past the operation.
      */
-    static List<Core> statedElsewhere(Core atom, InputReads reads, Symbols symbols,
-                                      DeclarationNewtypes newtypes) {
+    static List<Core> statedElsewhere(Core atom, InputReads reads, InputReading read) {
         List<Core> left = new ArrayList<>();
-        for (Core part : WhatAForkTests.partsOfTheAnswer(atom,
-                one -> reads.denotes(one, symbols, newtypes).value())) {
+        for (Core part : WhatAForkTests.partsOfTheAnswer(atom, WhatNamesStandFor.in(reads, read))) {
             if (comparisonAt(part) == null
-                    && !(reads.pathOf(part, newtypes) instanceof PathResolution.At)) {
+                    && !(reads.pathOf(part, read.rules().newtypes())
+                            instanceof PathResolution.At)) {
                 left.add(part);
             }
         }
@@ -538,10 +537,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
 
     /** The parts of what {@code atom} decides that none of the three readers answers for, which is
      *  what a fork over it is left stating. */
-    static List<Core> leftUnread(Core atom, PredicateReadings read, InputReads reads,
-                                 Symbols symbols, DeclarationNewtypes newtypes) {
-        return statedElsewhere(atom, reads, symbols, newtypes).stream()
-                .filter(part -> !read.statesOneAt(part))
+    static List<Core> leftUnread(Core atom, PredicateReadings predicates, InputReads reads,
+                                 InputReading read) {
+        return statedElsewhere(atom, reads, read).stream()
+                .filter(part -> !predicates.statesOneAt(part))
                 .toList();
     }
 }

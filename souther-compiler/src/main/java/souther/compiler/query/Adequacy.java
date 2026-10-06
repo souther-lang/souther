@@ -71,12 +71,13 @@ import souther.compiler.partition.BodyDistinction;
 import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.ClassOfAPosition;
-import souther.compiler.partition.ComparisonHeld;
+import souther.compiler.partition.HeldOutcome;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.LevelRealizer;
 import souther.compiler.partition.MeasuredInput;
 import souther.compiler.partition.ReachingCuts;
 import souther.compiler.partition.Realization;
+import souther.compiler.partition.RowDemand;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.PointRole;
@@ -2210,6 +2211,10 @@ public final class Adequacy {
                 case souther.compiler.partition.Reachability.NothingReaches nothing ->
                         RuleSettlement.read(new RuleRequirement.Excluded.OnePositionCannotBeBoth(
                                 nothing.why()));
+                case souther.compiler.partition.Reachability.NothingComesOutThatWay never ->
+                        RuleSettlement.read(
+                                new RuleRequirement.Excluded.AConditionNeverComesOutThatWay(
+                                        never.condition()));
                 case souther.compiler.partition.Reachability.Reaching reaching ->
                         whatASearchFinds(ruled, probe, taken, reaching);
             };
@@ -5294,10 +5299,10 @@ public final class Adequacy {
          * that this compiler has no demand to hand over, and never that the comparison does not
          * come out that way.
          */
-        private static ComparisonHeld.Of heldBy(MeasuredInput subject,
-                                                List<BorderAssessment> edges,
-                                                ReachingCuts reaching) {
-            Map<ControlPlace.Outcome, Optional<ComparisonHeld>> found = new LinkedHashMap<>();
+        private static HeldOutcome.Of heldBy(MeasuredInput subject,
+                                             List<BorderAssessment> edges,
+                                             ReachingCuts reaching) {
+            Map<ControlPlace.Outcome, Optional<HeldOutcome>> found = new LinkedHashMap<>();
             return outcome -> found.computeIfAbsent(outcome,
                     asked -> holding(subject, edges, reaching, asked));
         }
@@ -5309,10 +5314,10 @@ public final class Adequacy {
          * or {@link PointRole#IN} is one the comparison holds at, and one in {@link PointRole#OFF}
          * or {@link PointRole#OUT} one it fails at.
          */
-        private static Optional<ComparisonHeld> holding(MeasuredInput subject,
-                                                        List<BorderAssessment> edges,
-                                                        ReachingCuts reaching,
-                                                        ControlPlace.Outcome outcome) {
+        private static Optional<HeldOutcome> holding(MeasuredInput subject,
+                                                     List<BorderAssessment> edges,
+                                                     ReachingCuts reaching,
+                                                     ControlPlace.Outcome outcome) {
             for (BorderAssessment edge : edges) {
                 Optional<ModelOccurrence> comparison = edge.border().origin().comparisonAt();
                 if (!edge.border().origin().recordedAt().contains(outcome.at())
@@ -5337,8 +5342,8 @@ public final class Adequacy {
                         if (new LevelRealizer().realize(quantity.standingAt(owed.criterion()),
                                 able.region(), subject.witnessSearch())
                                 instanceof Realization.Found at) {
-                            return Optional.of(new ComparisonHeld(at.fixing(),
-                                    quantity.asksOfEachTerm(owed.criterion()), able));
+                            return Optional.of(new HeldOutcome(new RowDemand.AtAPoint(at.fixing(),
+                                    quantity.asksOfEachTerm(owed.criterion())), able));
                         }
                     }
                 }
@@ -5353,7 +5358,7 @@ public final class Adequacy {
                 Optional<SiteNumbering> numbering, RowReading observed,
                 FixturesAtTheBoundary building,
                 Generator.Trial trial, List<souther.compiler.partition.StandInAttempt> stood,
-                ComparisonHeld.Of holding,
+                HeldOutcome.Of holding,
                 souther.compiler.partition.AdequacyPolicy.OfTheGeneration budget) {
             if (observed.someRowsUnseen()) {
                 // Rows exist that nothing read. What they cover is unknown, so what is left uncovered
@@ -7680,8 +7685,12 @@ public final class Adequacy {
             switch (read) {
                 case DecisionRuleReading.AComparisonCameOut(var comparison, var held) ->
                         label(built, comparison.at(), held
-                                ? new ExampleMessage.TheRuleTakesThisComparisonHolding()
-                                : new ExampleMessage.TheRuleTakesThisComparisonFailing());
+                                ? new ExampleMessage.TheRuleTakesThisConditionHolding()
+                                : new ExampleMessage.TheRuleTakesThisConditionFailing());
+                case DecisionRuleReading.AnApplicationAnswered(var application, var held) ->
+                        label(built, application.at(), held
+                                ? new ExampleMessage.TheRuleTakesThisConditionHolding()
+                                : new ExampleMessage.TheRuleTakesThisConditionFailing());
                 case DecisionRuleReading.AForkTookAnArm(var arm) ->
                         label(built, Sites.placeOf(db, arm.anchor()),
                                 new ExampleMessage.TheRuleGoesThroughThisArm(phraseFor(arm)));
@@ -7690,7 +7699,7 @@ public final class Adequacy {
                 // an author acts on — and a note is written for each so that the rule is never
                 // described by fewer conditions than it turns on.
                 case DecisionRuleReading.AConditionIsNotShown _,
-                        DecisionRuleReading.AComparisonIsNotPlaced _,
+                        DecisionRuleReading.AnOutcomeIsNotPlaced _,
                         DecisionRuleReading.AForkIsNotPlaced _ ->
                         built.hint(new ExampleMessage.OneConditionOfTheRuleIsNotShown());
             }

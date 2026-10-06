@@ -142,6 +142,7 @@ class NothingThatWalksATreeNamesTheReadingOfTheInputTest {
         // like the environment by contract — it answers under a binding and inside an arm — so
         // moving one along is what a naming does rather than a shape one of them happens to have.
         assertEquals(List.of(
+                        "souther/compiler/partition/AnOperationsTruthComesOutAsItCan",
                         "souther/compiler/partition/DecisionNaming",
                         "souther/compiler/reading/CoverageNaming",
                         "souther/compiler/reading/NumberWays"),

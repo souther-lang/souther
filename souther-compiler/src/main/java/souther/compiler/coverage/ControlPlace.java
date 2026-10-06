@@ -9,8 +9,8 @@ import java.util.Optional;
  * Which control alternative of the tree that runs this is, with what a plan has worked out for
  * observing it and for reporting about it.
  *
- * <p>Which one it is is the tree's answer. An arm is {@link ArmOccurrence} and a comparison coming
- * out one way is the comparison's own {@link ConstructOccurrence} beside the way it came out;
+ * <p>Which one it is is the tree's answer. An arm is {@link ArmOccurrence} and a condition coming
+ * out one way is the condition's own {@link ConstructOccurrence} beside the way it came out;
  * neither is a number anything handed out. What this adds is the plan's part: where a run through
  * the place is recorded, and which question locates a report about it. None of those addresses
  * names the place, and a reading that took one for the place would be reading the emitter.
@@ -107,51 +107,51 @@ public sealed interface ControlPlace {
     }
 
     /**
-     * The place a comparison comes out one way.
+     * The place a condition comes out one way.
      *
      * <p>Which arm that leads to is not this, and the two are not each other's. A condition stops as
      * soon as it is settled, so under {@code A && B} the arm taken when the condition fails is
      * reached both by a value that made {@code B} false and by one that never reached {@code B} —
-     * the arm cannot say which comparison came out which way, and a line is drawn on the comparison.
+     * the arm cannot say which part came out which way, and a line is drawn on the part.
      *
-     * <p><b>Which comparison, and separately where a run through it is written down.</b> The
-     * comparison is a construct of the tree that runs and stands there whether anything instruments
-     * it or not; the site is an address the emitter issued, and its own account of itself is that it
-     * is an address and not an identity. Held by the site alone, this said which comparison it was
-     * about only for as long as every comparison anyone asked after was one the emitter had
-     * numbered — which is the reading the arm side stopped making when an arm came to name its fork
-     * rather than its probe.
+     * <p><b>Which construct, and separately where a run through it is written down.</b> The
+     * construct is one of the tree that runs and stands there whether anything instruments it or
+     * not; the site is an address the emitter issued, and its own account of itself is that it is an
+     * address and not an identity. Held by the site alone, this said which construct it was about
+     * only for as long as every construct anyone asked after was one the emitter had numbered —
+     * which is the reading the arm side stopped making when an arm came to name its fork rather than
+     * its probe.
      *
      * <p>One place and one way, so there is nothing here for a caller to pair wrongly. What pairs
-     * the comparison with the site is {@link CoverageSites.Plan#outcomeOf}, which is the only maker
-     * of one of these and takes the site from the plan that holds the comparison.
+     * the construct with the site is {@link CoverageSites.Plan#outcomeOf}, which is the only maker
+     * of one of these and takes the site from the plan that holds the construct.
      *
-     * <p><b>Only where a run through the comparison could be recorded.</b> The plan numbers a
-     * comparison standing where a row can get to and where what it stands in answers a value, so a
-     * comparison with no site is one in a position no run reaches. There is no place here for it and
+     * <p><b>Only where a run through the condition could be recorded.</b> The plan numbers a
+     * condition standing where a row can get to and where what it stands in answers a value, so a
+     * condition with no site is one in a position no run reaches. There is no place here for it and
      * no claim to make about it, which is the same rule an arm with no probe is refused a claim by.
      *
-     * @param comparison which comparison of the tree that runs
+     * @param occurrence which construct of the tree that runs the condition is
      * @param at         where this plan records a run through it
      * @param held       the way it came out
      */
-    record Outcome(ConstructOccurrence comparison, ComparisonEmissionSite at, boolean held)
+    record Outcome(ConstructOccurrence occurrence, ConditionOutcomeSite at, boolean held)
             implements ControlPlace {
 
         public Outcome {
-            if (comparison == null) {
+            if (occurrence == null) {
                 throw new IllegalArgumentException(
-                        "a comparison coming out one way is some comparison");
+                        "a condition coming out one way is some construct");
             }
             if (at == null) {
                 throw new IllegalArgumentException(
-                        "a place a comparison comes out one way is a place");
+                        "a place a condition comes out one way is a place");
             }
         }
 
         @Override
         public String toString() {
-            return comparison + (held ? " holds" : " fails");
+            return occurrence + (held ? " holds" : " fails");
         }
     }
 }

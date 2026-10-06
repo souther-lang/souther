@@ -107,7 +107,7 @@ class AWalkOfNumbersOnNoOrderHasCoveredNoQuestionTest {
         NumericTerm.FromOnePosition term = new NumericTerm.ValueOf(TermPath.of("b"));
         OnTheWay.TakenIn away = new OnTheWay.TakenIn(
                 new ConditionReportAnchor.WhereTheReadingMetIt("m", new ConditionOccurrence("b", 0)),
-                new TakenConstraint.AwayFrom(term, Count.of(1)));
+                new RowDemand.Relational(new TakenConstraint.AwayFrom(term, Count.of(1))));
 
         NumbersAskedFor asked = NumbersAskedFor.askedOf(term, NothingTheRulesSay.REGION, null,
                 List.of(away));

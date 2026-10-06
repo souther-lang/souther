@@ -200,7 +200,7 @@ public final class BehaviorSetStatements {
                           RuleReachNumbering reaches) {
         return of(behavior,
                 PredicateReadings.of(behavior, body, stated, read, parameters, elements, reaches),
-                read.symbols(), read.newtypes(), allowance, forks, reaches);
+                read, allowance, forks, reaches);
     }
 
     /**
@@ -211,11 +211,12 @@ public final class BehaviorSetStatements {
      * one of these rules has been expanded into what it does, so the behavior would come back
      * stating nothing about the strings at any of its positions.
      */
-    static Read of(String behavior, PredicateReadings read, Symbols symbols,
-                   DeclarationNewtypes newtypes,
+    static Read of(String behavior, PredicateReadings read, InputReading reading,
                    Allowance<NumericTerm.FromOnePosition> allowance,
                    List<ComparisonReadings.ForkMet> forks,
                    RuleReachNumbering reaches) {
+        Symbols symbols = reading.symbols();
+        DeclarationNewtypes newtypes = reading.newtypes();
         List<Asked> asked = new ArrayList<>();
         List<ClassingBlocker> blocked = new ArrayList<>();
         List<StandingQuestion.NothingClassifiesIt> nothingClassifies = new ArrayList<>();
@@ -256,7 +257,7 @@ public final class BehaviorSetStatements {
             state(each, answers.get(each.term()), statements, blocked);
         }
         return new Read(statements, blocked, nothingClassifies,
-                ofTheirOwn(behavior, read, symbols, newtypes, forks, reaches));
+                ofTheirOwn(behavior, read, reading, forks, reaches));
     }
 
     /**
@@ -518,11 +519,12 @@ public final class BehaviorSetStatements {
      * that reached the first condition goes on through it to the second along the same edges.
      */
     private static List<ForkOfItsOwn> ofTheirOwn(String behavior, PredicateReadings read,
-                                                 Symbols symbols, DeclarationNewtypes newtypes,
+                                                 InputReading reading,
                                                  List<ComparisonReadings.ForkMet> forks,
                                                  RuleReachNumbering reaches) {
-        List<Standing> standing =
-                standingRules(behavior, read, symbols, newtypes, forks, reaches);
+        Symbols symbols = reading.symbols();
+        DeclarationNewtypes newtypes = reading.newtypes();
+        List<Standing> standing = standingRules(behavior, read, reading, forks, reaches);
         List<ForkOfItsOwn> out = new ArrayList<>();
         for (Standing each : standing) {
             List<Unread> left = new ArrayList<>();
@@ -581,9 +583,11 @@ public final class BehaviorSetStatements {
     }
 
     private static List<Standing> standingRules(String behavior, PredicateReadings read,
-                                                Symbols symbols, DeclarationNewtypes newtypes,
+                                                InputReading reading,
                                                 List<ComparisonReadings.ForkMet> forks,
                                                 RuleReachNumbering reaches) {
+        Symbols symbols = reading.symbols();
+        DeclarationNewtypes newtypes = reading.newtypes();
         List<Standing> out = new ArrayList<>();
         for (ComparisonReadings.ForkMet each : forks) {
             // The parts of what it tests that no reader answers for. Asked part by part and not of
@@ -594,7 +598,7 @@ public final class BehaviorSetStatements {
             List<Unread> unread = new ArrayList<>();
             for (Core atom : each.leftHere()) {
                 List<Core> parts =
-                        ComparisonReadings.leftUnread(atom, read, each.reads(), symbols, newtypes);
+                        ComparisonReadings.leftUnread(atom, read, each.reads(), reading);
                 if (!parts.isEmpty()) {
                     unread.add(new Unread(atom, parts));
                 }

@@ -484,6 +484,15 @@ public final class Generator {
              * nothing composed, an author would go looking for a row that cannot exist.
              */
             ONE_POSITION_CANNOT_BE_BOTH,
+            /**
+             * A condition on the way comes out the other way for every row.
+             *
+             * <p>What the model settles, as the one above is: a predicate that always holds, or two
+             * sides whose difference is the same on every row, leaves a way past it that no input
+             * takes. Reported as a value nothing composed, an author would go looking for a row
+             * that cannot exist.
+             */
+            A_CONDITION_NEVER_COMES_OUT_THAT_WAY,
             /** The module's classes were not there to build a candidate against. */
             NOTHING_TO_BUILD_AGAINST,
             /**
@@ -637,7 +646,8 @@ public final class Generator {
              */
             public boolean provesInfeasible() {
                 return switch (this) {
-                    case THE_RULES_LEAVE_NOTHING_THERE, ONE_POSITION_CANNOT_BE_BOTH -> true;
+                    case THE_RULES_LEAVE_NOTHING_THERE, ONE_POSITION_CANNOT_BE_BOTH,
+                         A_CONDITION_NEVER_COMES_OUT_THAT_WAY -> true;
                     // Every one of these is this compiler falling short, and none of them is the
                     // model saying anything: another value of the same classes may well build.
                     case NOTHING_COMPOSES_ONE, ALL_CANDIDATES_REJECTED,
@@ -744,7 +754,8 @@ public final class Generator {
                     case ALL_CANDIDATES_REJECTED, NOT_ALL_CANDIDATES_COULD_BE_OFFERED,
                          THE_RULES_LEAVE_NOTHING_THERE,
                          NOTHING_STANDS_IN_FOR_A_DEPENDENCY, A_TABLE_IS_WHAT_THIS_NEEDS,
-                         ONE_POSITION_CANNOT_BE_BOTH, NOTHING_TO_BUILD_AGAINST,
+                         ONE_POSITION_CANNOT_BE_BOTH, A_CONDITION_NEVER_COMES_OUT_THAT_WAY,
+                         NOTHING_TO_BUILD_AGAINST,
                          NO_VALUES_WERE_ASKED_FOR, LINKAGE_FAILED, NO_CERTIFIED_WITNESS,
                          THE_GROUP_WAS_NOT_OFFERED, THE_POSITION_WAS_WITHHELD,
                          THE_ROWS_WERE_NOT_READ, THE_WAY_IN_PLACES_AT_NO_CLASS,
@@ -1226,7 +1237,7 @@ public final class Generator {
                                         CandidateCheck check,
                                         souther.compiler.reading.CoverageRead.Read read,
                                         Trial trial, List<Baseline> baselines,
-                                        AnswersStoodIn stood, ComparisonHeld.Of holding,
+                                        AnswersStoodIn stood, HeldOutcome.Of holding,
                                         AdequacyPolicy.OfTheGeneration budget) {
         return switch (stood) {
             case AnswersStoodIn.NothingComposed(var why) ->
@@ -1242,7 +1253,7 @@ public final class Generator {
                                       CandidateCheck check,
                                       souther.compiler.reading.CoverageRead.Read read,
                                       Trial trial, List<Baseline> baselines,
-                                      List<StoodInAnswer> answers, ComparisonHeld.Of holding,
+                                      List<StoodInAnswer> answers, HeldOutcome.Of holding,
                                       AdequacyPolicy.OfTheGeneration budget) {
         MeasuredInput subject = plan.subject();
         List<ClassOfAPosition> classesOwed = plan.classesOwed();
@@ -1539,7 +1550,8 @@ public final class Generator {
                 nowhere.add(CameToNothing.metNothing(new UnresolvedCombination(List.of(),
                         UnresolvedCombination.Reason.THE_GROUP_WAS_NOT_OFFERED)));
             }
-            unresolved.addAll(nowhere);
+            // The arm's own account and no cell's. Nothing was composed, so there is no cell this
+            // is a fact about, and a line said for one would name nothing.
             failed.computeIfAbsent(probe, _ -> new ArrayList<>()).addAll(nowhere);
         }
         // One entry per arm the run was asked about, in the order it was asked. An arm the limit
@@ -2314,7 +2326,7 @@ public final class Generator {
      * <p>What it holds the row to is what gets it past the guard the run stopped at: a way the
      * guard's condition lets a run go on ({@link TheRestOfTheBlock#ways}), each comparison of it the
      * run did not come out the way it asks held the way a point of its border on that side is
-     * ({@link ComparisonHeld}). Held beside the pins and not in place of them, and the search is
+     * ({@link HeldOutcome}). Held beside the pins and not in place of them, and the search is
      * the class's own search again with those demands besides — so what is chosen again is a value
      * inside the classes the row already stands in, or a class of a position the row is not about,
      * and never the class the row is for. Where a pinned class is what fails the guard, no row
@@ -2339,7 +2351,7 @@ public final class Generator {
      * @param holding what holds each comparison of the body
      */
     private record GoingOn(CoverageRead.Read read, Trial trial, Map<List<String>, ObservedRun> ran,
-                           ComparisonHeld.Of holding) {
+                           HeldOutcome.Of holding) {
 
         /** The row {@code found} took, or a row for the same requirement that got further in. */
         GeneratedRow past(MeasuredInput.MeasuredAxes axes, Pins pins, List<Purpose> purposes,
@@ -2361,7 +2373,7 @@ public final class Generator {
                     !against.contains(axes.axes().get(axis).path().head())
                             || cls == from.where()[axis];
             GeneratedRow best = found.row();
-            List<ComparisonHeld> held = List.of();
+            List<HeldOutcome> held = List.of();
             Set<ArmProbe> tried = new LinkedHashSet<>();
             while (true) {
                 Optional<TheRestOfTheBlock> rest = restOfTheBlockShortOf(seen);
@@ -2371,8 +2383,8 @@ public final class Generator {
                 }
                 GeneratedRow further = null;
                 ArmProbe goneOn = rest.get().arm();
-                for (List<ComparisonHeld> way : waysOn(seen, rest.get(), against)) {
-                    List<ComparisonHeld> both = new ArrayList<>(held);
+                for (List<HeldOutcome> way : waysOn(seen, rest.get(), against)) {
+                    List<HeldOutcome> both = new ArrayList<>(held);
                     both.addAll(way);
                     Searched searched = search(axes, pins, purposes, List.of(from.from()), keeping,
                             check, references, answers, List.copyOf(both),
@@ -2426,21 +2438,20 @@ public final class Generator {
          * the way the row went through the guard's condition with one comparison turned round
          * changes the row least.
          */
-        private List<List<ComparisonHeld>> waysOn(AlignedObservation seen,
+        private List<List<HeldOutcome>> waysOn(AlignedObservation seen,
                                                   TheRestOfTheBlock stopped,
                                                   Set<String> against) {
-            List<List<ComparisonHeld>> out = new ArrayList<>();
+            List<List<HeldOutcome>> out = new ArrayList<>();
             for (List<ControlClaim> way : stopped.ways()) {
-                List<ComparisonHeld> demands = new ArrayList<>();
+                List<HeldOutcome> demands = new ArrayList<>();
                 for (ControlClaim each : way) {
                     if (each.satisfiedBy(seen)) {
                         continue;
                     }
-                    Optional<ComparisonHeld> holds =
+                    Optional<HeldOutcome> holds =
                             each.at() instanceof ControlPlace.Outcome outcome
                                     ? holding.at(outcome) : Optional.empty();
-                    if (holds.isEmpty() || holds.get().fixing().keySet().stream()
-                            .anyMatch(target -> against.contains(target.writeRoot().head()))) {
+                    if (holds.isEmpty() || writesAnyOf(holds.get().demand(), against)) {
                         demands = null;
                         break;
                     }
@@ -2452,6 +2463,16 @@ public final class Generator {
             }
             out.sort(Comparator.comparingInt(List::size));
             return out;
+        }
+
+        /** Whether holding the row to {@code demand} composes a parameter in {@code against}. */
+        private static boolean writesAnyOf(RowDemand demand, Set<String> against) {
+            return switch (demand) {
+                case RowDemand.AtAPoint point -> point.fixing().keySet().stream()
+                        .anyMatch(target -> against.contains(target.writeRoot().head()));
+                case RowDemand.OfACondition condition -> condition.terms().stream()
+                        .anyMatch(term -> against.contains(term.subjectPath().head()));
+            };
         }
 
         /**
@@ -2557,7 +2578,7 @@ public final class Generator {
                                    List<Purpose> purposes, List<ResolvedOrigin> origins,
                                    Admits admits, CandidateCheck check,
                                    FixtureReferences references, List<StoodInAnswer> answers,
-                                   List<ComparisonHeld> held,
+                                   List<HeldOutcome> held,
                                    Function<GeneratedRow, Acceptance> accepts) {
         return search(axes, pins, purposes, origins, admits, check, references, answers, held,
                 accepts, false);
@@ -2572,7 +2593,7 @@ public final class Generator {
                                    List<Purpose> purposes, List<ResolvedOrigin> origins,
                                    Admits admits, CandidateCheck check,
                                    FixtureReferences references, List<StoodInAnswer> answers,
-                                   List<ComparisonHeld> held,
+                                   List<HeldOutcome> held,
                                    Function<GeneratedRow, Acceptance> accepts,
                                    boolean rechoosing) {
         String label = String.join(" with ", pins.labels());
@@ -2720,7 +2741,7 @@ public final class Generator {
         private Building(MeasuredInput.MeasuredAxes axes, Pins pins, List<Purpose> purposes,
                          String label, CandidateCheck check, int most,
                          FixtureReferences references, List<StoodInAnswer> answers,
-                         List<ComparisonHeld> held, Function<GeneratedRow, Acceptance> accepts,
+                         List<HeldOutcome> held, Function<GeneratedRow, Acceptance> accepts,
                          boolean rechoosing) {
             this.rechoosing = rechoosing;
             this.axes = axes;
@@ -4596,24 +4617,131 @@ public final class Generator {
     private static Placed placing(MeasuredInput subject, WitnessSearch looking, SearchRegion here,
                                   Map<RealizationTarget, Place> alreadyStanding,
                                   Requirements assumed, OnTheWay.TakenIn cut) {
+        return switch (cut.demand()) {
+            // What every row past it holds, which the region a search runs over was narrowed by
+            // already — so what is left there is what the rules leave, and nothing left is a
+            // proof.
+            case RowDemand.Relational(var relation) -> placedIn(subject, looking, here,
+                    alreadyStanding, assumed, cut, List.of(relation), false);
+            // What an element meets, which the region was not narrowed by. Placed in a region that
+            // is, for this cut alone: the element written meets it, and every element a list
+            // writes is that one.
+            case RowDemand.Exists(var ofAnElement, var _) -> asComposedOnly(cut,
+                    placedIn(subject, looking, here, alreadyStanding, assumed, cut,
+                            constraints(ofAnElement), true),
+                    noElementCanMeet(constraints(ofAnElement), subject));
+            // And where no element can be written that meets them, the container holding none,
+            // which every element of meets them. Closed only where neither way is open: no element
+            // the rules allow meets them, and the container cannot hold none.
+            case RowDemand.ForAll(var ofEachElement, var holdingNone) -> {
+                Placed some = placedIn(subject, looking, here, alreadyStanding, assumed, cut,
+                        constraints(ofEachElement), true);
+                if (some instanceof Placed.AtAll || holdingNone.isEmpty()) {
+                    yield asComposedOnly(cut, some, false);
+                }
+                Placed none = placedIn(subject, looking, here, alreadyStanding, assumed, cut,
+                        List.of(holdingNone.get().constraint()), true);
+                if (none instanceof Placed.AtAll) {
+                    yield none;
+                }
+                yield asComposedOnly(cut, some,
+                        none instanceof Placed.AtNone(ReachabilityGap.ProvedImpossible _)
+                                && noElementCanMeet(constraints(ofEachElement), subject));
+            }
+        };
+    }
+
+    /**
+     * Whether no element the rules of the input allow meets every one of {@code ofAnElement}.
+     *
+     * <p>Asked of what the declarations leave and of nothing the way added. A way can hold a
+     * condition on the element it is walking — a rule inside a closure handed one — and that is
+     * about one element; a region holding both it and these would leave nothing where two
+     * elements meet the two. What the declarations leave is what every element holds, so what
+     * that leaves nothing for is something no element is.
+     */
+    private static boolean noElementCanMeet(List<TakenConstraint> ofAnElement,
+                                            MeasuredInput subject) {
+        SearchRegion rules = subject.quantities().region();
+        for (TakenConstraint one : ofAnElement) {
+            rules = one.narrowing(rules);
+        }
+        for (TakenConstraint one : ofAnElement) {
+            for (NumericTerm term : one.terms()) {
+                if (rules.projectionOf(term)
+                        instanceof NumericDomain.FormProjection.NothingIsLeft) {
+                    return true;
+                }
+            }
+            if (one instanceof TakenConstraint.Affine affine && rules.projectionOf(affine.form())
+                    instanceof NumericDomain.FormProjection.NothingIsLeft) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static List<TakenConstraint> constraints(List<RowDemand.Relational> relations) {
+        return relations.stream().map(RowDemand.Relational::constraint).toList();
+    }
+
+    /**
+     * What placing a cut about a container's elements came to, with nothing it found standing for
+     * a proof unless {@code provedByTheRules} says the rules themselves leave it nothing.
+     *
+     * <p>A region reads a term inside the elements as the value of one element, and a row writes
+     * every element as that one. What that leaves nothing for is a row of elements written alike,
+     * and the condition may still hold of a row whose elements differ — so nothing found here is
+     * what this composer did, and the model's word only where the declarations alone settle it.
+     */
+    private static Placed asComposedOnly(OnTheWay.TakenIn cut, Placed placed,
+                                         boolean provedByTheRules) {
+        return placed instanceof Placed.AtNone(ReachabilityGap.ProvedImpossible _)
+                && !provedByTheRules
+                ? new Placed.AtNone(new ReachabilityGap.Uncomposed(cut,
+                        new ReachabilityGap.Why.ElementsWrittenAlike()))
+                : placed;
+    }
+
+    /**
+     * {@code cut} placed at the numbers {@code stated} is over, in {@code here} — narrowed by each
+     * of them where {@code narrowHere} says the region a search runs over was not.
+     *
+     * <p>Not narrowed where it was. What the way took in is in the region already, and a cut
+     * handed over from elsewhere — what an answer standing a dependency in is asked — may be one
+     * the region was never able to carry: narrowed again, it would be refused at the place the
+     * cut is placed rather than reported as the cut it is.
+     */
+    private static Placed placedIn(MeasuredInput subject, WitnessSearch looking, SearchRegion here,
+                                   Map<RealizationTarget, Place> alreadyStanding,
+                                   Requirements assumed, OnTheWay.TakenIn cut,
+                                   List<TakenConstraint> stated, boolean narrowHere) {
+        SearchRegion within = here;
+        Set<NumericTerm> terms = new LinkedHashSet<>();
+        for (TakenConstraint one : stated) {
+            if (narrowHere) {
+                within = one.narrowing(within);
+            }
+            terms.addAll(one.terms());
+        }
         // What the cut says, asked as the one thing it says. A cut over two positions is a
         // statement about their sum, and the rules can leave that sum nowhere while leaving each
         // position somewhere — so the positions asked one at a time answer a weaker question
         // than the cut put. Asked here, before the cut is taken apart into the positions a
         // value has to be chosen at.
-        if (cut.taken() instanceof TakenConstraint.Affine affine
-                && here.projectionOf(affine.form())
-                        instanceof souther.compiler.numeric.NumericDomain.FormProjection
-                                .NothingIsLeft) {
-            return new Placed.AtNone(new ReachabilityGap.ProvedImpossible(cut));
+        for (TakenConstraint one : stated) {
+            if (one instanceof TakenConstraint.Affine affine
+                    && within.projectionOf(affine.form())
+                            instanceof NumericDomain.FormProjection.NothingIsLeft) {
+                return new Placed.AtNone(new ReachabilityGap.ProvedImpossible(cut));
+            }
         }
         // What routing this cut's numbers came to is kept by the search until the cut is placed.
         // Where each of them is written and which case the row was taken to be to write it there
         // are part of placing the cut, and a cut is placed at every position it names or at none —
         // so a cut that comes to nothing leaves the row the case it had, and the next cut chooses
         // as freely as this one did.
-        return new CutPlacing(subject, looking, here, alreadyStanding, cut,
-                List.copyOf(cut.taken().terms()))
+        return new CutPlacing(subject, looking, within, alreadyStanding, cut, List.copyOf(terms))
                 .from(0, assumed, new LinkedHashMap<>(), new LinkedHashMap<>());
     }
 
@@ -5417,30 +5545,21 @@ public final class Generator {
         for (RealizationTarget each : fixing.keySet()) {
             out.put(each, asking);
         }
-        for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
-            for (NumericTerm term : cut.taken().terms()) {
-                NumericTerm.FromOnePosition at = term.atOnePosition();
-                if (at == null) {
-                    continue;
-                }
-                // The target the row was composed at, and not one built from the number here. Where
-                // a row writes a number is chosen once, where the positions of the way are placed
-                // ({@link Standing#routed}) — worked out again, a number read at a name every case
-                // of a sum spreads would be filed under the sum's own name while the row stands at
-                // a position under a case, and the search would be built for a number nothing had
-                // said what it was one of.
-                RealizationTarget target = routed.get(at);
-                // A number no place was chosen for, which is a cut this reader could not act on.
-                // What became of the cut is said where it was read, and there is no row standing at
-                // this number to ask anything about.
-                if (target == null) {
-                    continue;
-                }
-                NumbersAskedFor leaves = NumbersAskedFor.askedOf(at, reaching.region(),
-                        carrierOf(at, subject.quantities()), reaching.boundedOnTheWay());
-                out.merge(target, leaves, NumbersAskedFor::meet);
-            }
-        }
+        // Every number a place was chosen for on the way, and not every number a cut names. A cut
+        // may be met more than one way — every element meeting a condition, or a container holding
+        // none — and what the row stands at is whichever way was placed; asked of the cut's numbers
+        // instead, a number placed by the other way would stand with nothing saying what it is one
+        // of.
+        //
+        // The target is the one the row was composed at, and not one built from the number here.
+        // Where a row writes a number is chosen once, where the positions of the way are placed
+        // ({@link Standing#routed}) — worked out again, a number read at a name every case of a sum
+        // spreads would be filed under the sum's own name while the row stands at a position under
+        // a case, and the search would be built for a number nothing had said what it was one of.
+        routed.forEach((at, target) -> out.merge(target,
+                NumbersAskedFor.askedOf(at, reaching.region(), carrierOf(at, subject.quantities()),
+                        reaching.boundedOnTheWay()),
+                NumbersAskedFor::meet));
         return out;
     }
 
@@ -6305,9 +6424,20 @@ public final class Generator {
      * already takes in what the earlier guard holding asks, and a meet of the two would be that way
      * met with a part of itself.
      */
-    private static HeldTogether heldTogether(MeasuredInput subject, List<ComparisonHeld> held) {
+    private static HeldTogether heldTogether(MeasuredInput subject, List<HeldOutcome> held) {
+        List<RowDemand.AtAPoint> points = new ArrayList<>();
+        for (HeldOutcome each : held) {
+            switch (each.demand()) {
+                case RowDemand.AtAPoint point -> points.add(point);
+                case RowDemand.OfACondition _ -> {
+                    return new HeldTogether.Refused(new Attempt(null,
+                            UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, null,
+                            Optional.of("a condition held as a relation is not composed here")));
+                }
+            }
+        }
         Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
-        for (ComparisonHeld each : held) {
+        for (RowDemand.AtAPoint each : points) {
             for (Map.Entry<RealizationTarget, Place> at : each.fixing().entrySet()) {
                 Place already = fixing.putIfAbsent(at.getKey(), at.getValue());
                 if (already != null && !already.equals(at.getValue())) {
@@ -6342,7 +6472,7 @@ public final class Generator {
             }
         }
         Map<RealizationTarget, NumbersAskedFor> asking = new LinkedHashMap<>();
-        for (ComparisonHeld each : held) {
+        for (RowDemand.AtAPoint each : points) {
             whatEachOfThemIsANumberOf(subject, each.fixing(), where.routed(), each.asking(),
                     reaching).forEach((target, of) -> asking.merge(target, of,
                             NumbersAskedFor::meet));

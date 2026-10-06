@@ -113,7 +113,7 @@ class AValuesPlacesAreRecordedWhereItsMethodRunsTest {
             apply.invoke(ctor.newInstance(), n);
             Observation seen = Probe.snapshot();
             Set<Integer> out = new LinkedHashSet<>(seen.arms());
-            seen.comparisons().forEach(way -> out.add(way.at()));
+            seen.outcomes().forEach(way -> out.add(way.at()));
             return out;
         } catch (ReflectiveOperationException e) {
             throw new AssertionError(e);

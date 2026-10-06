@@ -63,21 +63,30 @@ final class DecisionPath {
      *
      * @param states the condition in the words a composer of a row already works from, so that a
      *               column of a decision table and the region a row for it is looked for in cannot
-     *               be read off two accounts of one comparison
+     *               be read off two accounts of one comparison. As many as the condition asks of a
+     *               row — every element of a list meeting two things is two relations and one
+     *               column — and all of them about the one condition
      */
-    record Consulted(DecidedCondition answer, ShownBy shown, OnTheWay states) {
+    record Consulted(DecidedCondition answer, ShownBy shown, List<OnTheWay> states) {
 
         Consulted {
-            if (answer == null || shown == null || states == null) {
+            if (answer == null || shown == null || states == null || states.isEmpty()) {
                 throw new IllegalArgumentException("a condition a path consulted is an answer,"
                         + " where it is seen, and what it states");
             }
+            states = List.copyOf(states);
+        }
+
+        /** Where a report about the condition asks for its place, which every entry for it
+         *  shares. */
+        ConditionReportAnchor anchor() {
+            return states.getFirst().anchor();
         }
     }
 
     /** This path with {@code answer} on it, or null where the path already answers that column the
      *  other way. */
-    DecisionPath and(DecidedCondition answer, ShownBy shown, OnTheWay states) {
+    DecisionPath and(DecidedCondition answer, ShownBy shown, List<OnTheWay> states) {
         return and(new DecisionPath(List.of(new Consulted(answer, shown, states))));
     }
 
@@ -107,7 +116,8 @@ final class DecisionPath {
 
     /** What this path states about the input, which is what a search composes a row against. */
     WayToTheBorder states() {
-        return new WayToTheBorder(consulted.stream().map(Consulted::states).toList());
+        return new WayToTheBorder(consulted.stream()
+                .flatMap(each -> each.states().stream()).toList());
     }
 
     /**
@@ -126,16 +136,19 @@ final class DecisionPath {
             switch (asked) {
                 case Asked.Stated(var demand) -> stated.add(demand);
                 case Asked.NotStated(var why) ->
-                        declined.add(new DemandGap.Unstated(each.states().anchor(), why));
+                        declined.add(new DemandGap.Unstated(each.anchor(), why));
                 case Asked.OfTheInput _ -> { }
             }
             // Which condition it is, the way the reading names one, and taken off the walk's own
             // entry for the same consulted condition. A decline is the only entry that names one,
             // and it is the only entry this has anything to reconcile with: what the walk took in
             // it took in, and there is nothing there for the answer side to answer for.
-            if (!(asked instanceof Asked.OfTheInput)
-                    && each.states() instanceof OnTheWay.Declined left) {
-                takenUp.add(left.condition());
+            if (!(asked instanceof Asked.OfTheInput)) {
+                for (OnTheWay state : each.states()) {
+                    if (state instanceof OnTheWay.Declined left) {
+                        takenUp.add(left.condition());
+                    }
+                }
             }
         }
         return stated.isEmpty() && declined.isEmpty()
@@ -165,7 +178,7 @@ final class DecisionPath {
     private static final Asked OF_THE_INPUT = new Asked.OfTheInput();
 
     private static Asked asked(Consulted one) {
-        ConditionReportAnchor anchor = one.states().anchor();
+        ConditionReportAnchor anchor = one.anchor();
         return switch (one.answer()) {
             case DecidedCondition.Narrowed(var condition, var to) ->
                     condition.of() instanceof DecisionSubject.AnAnswer at

@@ -449,6 +449,55 @@ public final class InputReads {
     }
 
     /**
+     * Whether {@code e} is a value the source wrote out all the way down, read here — which is a
+     * value the same every time.
+     *
+     * <p>A written value, one built out of written values, and a name that stands for one: the one
+     * value it denotes, or every value it can take where those are written down
+     * ({@link ReadMeaning.OneOf}). The last is what a closure handed the elements of a list written
+     * out is handed, so what it applies to its parameter is applied to a written value — and it is
+     * here and not with a reader of the closure because what a name stands for is this reading's
+     * answer. A reader that kept its own account of which names are written would be a second
+     * answer, and one that knew it only for the closure it happened to be walking would read the
+     * same name two ways.
+     *
+     * <p>A list is written out only where every element is: a list holding a position is a list of
+     * that position's values.
+     */
+    public boolean writtenOut(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
+        return writtenOut(new Denotation(e, this), symbols, newtypes, new HashSet<>());
+    }
+
+    private static boolean writtenOut(Denotation from, Symbols symbols,
+                                      DeclarationNewtypes newtypes, Set<BindingId> met) {
+        Denotation at = standing(from, symbols, newtypes, met);
+        InputReads reads = at.at();
+        return switch (Core.withoutStanding(at.value())) {
+            case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
+                 Core.UnitValue _, Core.OptionNone _ -> true;
+            case Core.Read name -> reads.meaningOf(name, symbols, newtypes, new HashSet<>(met))
+                    instanceof ReadMeaning.OneOf one
+                    && one.alternatives().stream()
+                            .allMatch(each -> writtenOut(each, symbols, newtypes,
+                                    new HashSet<>(met)));
+            case Core.Neg negated -> writtenOut(new Denotation(negated.operand(), reads),
+                    symbols, newtypes, new HashSet<>(met));
+            case Core.OptionSome some -> writtenOut(new Denotation(some.value(), reads),
+                    symbols, newtypes, new HashSet<>(met));
+            case Core.ListLit list -> list.elements().stream()
+                    .allMatch(each -> writtenOut(new Denotation(each, reads), symbols, newtypes,
+                            new HashSet<>(met)));
+            case Core.Tuple tuple -> tuple.elements().stream()
+                    .allMatch(each -> writtenOut(new Denotation(each, reads), symbols, newtypes,
+                            new HashSet<>(met)));
+            case Core.Construct made -> made.values().stream()
+                    .allMatch(each -> writtenOut(new Denotation(each.value(), reads), symbols,
+                            newtypes, new HashSet<>(met)));
+            case null, default -> false;
+        };
+    }
+
+    /**
      * The same, through the bindings a walk into a container has already met.
      *
      * <p>One set for the whole answer, because the answer reaches back into this: a name an

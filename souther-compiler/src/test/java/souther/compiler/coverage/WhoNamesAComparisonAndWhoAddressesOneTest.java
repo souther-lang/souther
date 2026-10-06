@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * <p><b>Two questions, and only one of them is answered by handing something out.</b> Which
  * comparison a reading is talking about is the {@link souther.compiler.types.ConstructOccurrence}
  * the tree carries, so there is nothing to hand out and no second place that could; what has a
- * {@link ComparisonEmissionSite} is what the plan instruments, which is fewer — a comparison behind
+ * {@link ConditionOutcomeSite} is what the plan instruments, which is fewer — a comparison behind
  * an abort is one no run reaches. Held as one value the two were the same number, so a reading
  * asking which comparison it was looking at got an answer that was true only while every comparison
  * the catalog held had been numbered.
@@ -47,7 +47,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class WhoNamesAComparisonAndWhoAddressesOneTest {
 
-    private static final String SITE = "souther/compiler/coverage/ComparisonEmissionSite";
+    private static final String SITE = "souther/compiler/coverage/ConditionOutcomeSite";
 
     private static final String ARM = "souther/compiler/coverage/ArmProbe";
 
@@ -61,10 +61,10 @@ class WhoNamesAComparisonAndWhoAddressesOneTest {
     private record Licence(String who, int makes, String why) { }
 
     private static final List<Licence> MAY_ADDRESS = List.of(
-            new Licence("souther.compiler.coverage.SiteNumbering.comparison", 1,
+            new Licence("souther.compiler.coverage.SiteNumbering.outcome", 1,
                     "the numbering asked what a number of its own addresses, which is the one way"
                             + " a number becomes a place — and it is refused where that numbering"
-                            + " handed the number out to something other than a comparison, or"
+                            + " handed the number out to something other than a condition, or"
                             + " never handed it out at all. Everything holding one of these got it"
                             + " here: the walk that numbers the places carries numbers until the"
                             + " numbering is finished, because until then there is no numbering"

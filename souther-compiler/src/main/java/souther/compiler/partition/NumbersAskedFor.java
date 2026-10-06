@@ -119,29 +119,72 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
         if (on == null) {
             return ANYTHING;
         }
-        NumbersAskedFor asked = switch (within.projectionOf(term)) {
+        NumbersAskedFor asked = leaving(term, within, on);
+        for (OnTheWay.TakenIn cut : cuts) {
+            if (!cut.demand().terms().contains(term)) {
+                continue;
+            }
+            asked = asked.meet(switch (cut.demand()) {
+                case RowDemand.Relational(var relation) -> askedBy(relation, on, ANYTHING);
+                // What an element meets, which the region was not narrowed by. So what it leaves
+                // the term is read off a region that is, one relation of it at a time — the
+                // element a row writes is the one these numbers are chosen for.
+                case RowDemand.Exists(var ofAnElement, var _) ->
+                        ofTheElement(ofAnElement, term, within, on);
+                // The container holding none is the other way of meeting it, and not a second thing
+                // it asks: met here beside the elements, a size another cut holds at one or more
+                // would be left no number by a way that was not the one placed.
+                case RowDemand.ForAll(var ofEachElement, var _) ->
+                        ofTheElement(ofEachElement, term, within, on);
+            });
+        }
+        return asked;
+    }
+
+    /** What the relations an element is to meet ask of {@code term}, each read off a region it
+     *  narrows. */
+    private static NumbersAskedFor ofTheElement(List<RowDemand.Relational> relations,
+                                                NumericTerm.FromOnePosition term,
+                                                SearchRegion within, Carrier on) {
+        NumbersAskedFor asked = ANYTHING;
+        for (RowDemand.Relational each : relations) {
+            if (each.terms().contains(term)) {
+                asked = asked.meet(askedBy(each.constraint(), on,
+                        leaving(term, each.constraint().narrowing(within), on)));
+            }
+        }
+        return asked;
+    }
+
+    /** What {@code within} leaves {@code term}, on its own order. */
+    private static NumbersAskedFor leaving(NumericTerm.FromOnePosition term, SearchRegion within,
+                                           Carrier on) {
+        return switch (within.projectionOf(term)) {
             case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
                     of(between(held, on));
             // The rules leave the term nowhere, which is the whole of what is asked of it.
             case NumericDomain.FormProjection.NothingIsLeft _ -> of(new LevelRegion(List.of()));
             case null -> ANYTHING;
         };
-        for (OnTheWay.TakenIn cut : cuts) {
-            if (!cut.taken().terms().contains(term)) {
-                continue;
-            }
-            asked = asked.meet(switch (cut.taken()) {
-                case TakenConstraint.AwayFrom away ->
-                        of(LevelRegion.EVERYTHING.without(new Level.OnACarrier(on, away.at())));
-                // A form of one term says where that term runs, and the region was narrowed by it
-                // where it was taken in. Over several, what it leaves each of them is whatever the
-                // others took.
-                case TakenConstraint.Affine affine when affine.terms().size() > 1 ->
-                        onlyTogether(affine);
-                case TakenConstraint.Affine _, TakenConstraint.Ordered _ -> ANYTHING;
-            });
-        }
-        return asked;
+    }
+
+    /**
+     * What {@code taken} asks of a term it is over, beside what a region leaves the term.
+     *
+     * @param inTheRegion what a region narrowed by {@code taken} leaves the term, which is nothing
+     *                    more than the region already said where the region was narrowed by it
+     */
+    private static NumbersAskedFor askedBy(TakenConstraint taken, Carrier on,
+                                           NumbersAskedFor inTheRegion) {
+        return switch (taken) {
+            case TakenConstraint.AwayFrom away ->
+                    of(LevelRegion.EVERYTHING.without(new Level.OnACarrier(on, away.at())));
+            // A form of one term says where that term runs, which is the region's to say. Over
+            // several, what it leaves each of them is whatever the others took.
+            case TakenConstraint.Affine affine when affine.terms().size() > 1 ->
+                    onlyTogether(affine);
+            case TakenConstraint.Affine _, TakenConstraint.Ordered _ -> inTheRegion;
+        };
     }
 
     /** The run between a pair of ends, open where an end is not written. */

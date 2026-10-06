@@ -990,6 +990,9 @@ public final class GeneratedRows {
             case ONE_POSITION_CANNOT_BE_BOTH ->
                     "it would need one position to be two things at once, which no value is, so"
                             + " there is no row to write";
+            case A_CONDITION_NEVER_COMES_OUT_THAT_WAY ->
+                    "it is past a condition that comes out the other way for every row, so there"
+                            + " is no row to write";
             case NOTHING_TO_BUILD_AGAINST ->
                     "the module's classes were not there to build a candidate against";
             case NO_VALUES_WERE_ASKED_FOR ->

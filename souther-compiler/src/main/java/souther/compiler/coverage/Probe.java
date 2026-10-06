@@ -18,7 +18,7 @@ import java.util.Set;
  * and a thread-shared recording would attribute every row's arms to every row.
  *
  * <p>One recording and not one per shape of thing recorded. What a run leaves behind is the arms it
- * passed through and the ways its comparisons came out, and the two are one run's — begun together,
+ * passed through and the ways its conditions came out, and the two are one run's — begun together,
  * read together and let go together. Kept as two thread locals they would be two lifecycles that
  * happen to be driven from the same three calls, and a shape added later would be a third: nothing
  * would stop one of them being begun and another read.
@@ -45,9 +45,9 @@ public final class Probe {
         /** The arms, as bits, because an arm is a number and a run passes many. */
         private final BitSet arms = new BitSet();
 
-        /** The comparisons, as the ways they came out. A comparison is recorded by how it answered
+        /** The conditions, as the ways they came out. A condition is recorded by how it answered
          *  and by nothing else: that a way out of it exists is its having been reached. */
-        private final Set<ComparisonOutcome> comparisons = new LinkedHashSet<>();
+        private final Set<RecordedConditionOutcome> outcomes = new LinkedHashSet<>();
 
         private Recording(NumberingIdentity numbering) {
             this.numbering = numbering;
@@ -64,10 +64,10 @@ public final class Probe {
     }
 
     /**
-     * Called by probed code where a comparison this plan numbers answered, with the value it
+     * Called by probed code where a condition this plan numbers answered, with the value it
      * answered.
      *
-     * <p>One entry and not two. That the comparison was reached and the way it came out are one
+     * <p>One entry and not two. That the condition was reached and the way it came out are one
      * fact recorded once: a way out of it exists, and a reader asking whether it was reached is
      * asking whether any does. Written as a way out and a bit beside it, the two would be a rule
      * something has to keep in step, and a run holding one without the other would be a value every
@@ -76,10 +76,10 @@ public final class Probe {
      * <p>Takes the value rather than a second site chosen from it, so that the numbering the emitter
      * was given is the numbering it uses and a way out is never a number a reading picked.
      */
-    public static void compared(boolean held, int site) {
+    public static void condition(boolean held, int site) {
         Recording recording = RECORDING.get();
         if (recording != null) {
-            recording.comparisons.add(new ComparisonOutcome(site, held));
+            recording.outcomes.add(new RecordedConditionOutcome(site, held));
         }
     }
 
@@ -113,7 +113,7 @@ public final class Probe {
                 at = recording.arms.nextSetBit(at + 1)) {
             arms.add(at);
         }
-        return new Observation(recording.numbering, arms, recording.comparisons);
+        return new Observation(recording.numbering, arms, recording.outcomes);
     }
 
     /** Stops collecting, and lets go of the recording. A worker thread outlives the row it ran, so a

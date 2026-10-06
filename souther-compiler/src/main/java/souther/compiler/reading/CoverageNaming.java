@@ -124,7 +124,7 @@ final class CoverageNaming implements Naming<Outcome> {
         // here reads both halves of to notice.
         return ControlClaim.of(outcome)
                 .map(claim -> one(new Decision(
-                        new Condition.Side(at, outcome.comparison(), held), claim)))
+                        new Condition.Side(at, outcome.occurrence(), held), claim)))
                 .orElse(null);
     }
 

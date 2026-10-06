@@ -21,6 +21,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -130,14 +131,15 @@ class AHoleARuleLeavesIsNotInTheRunAProjectionComesBackAsTest {
     }
 
     private static OnTheWay.TakenIn awayFrom(NumericTerm.FromOnePosition term, long value) {
-        return new OnTheWay.TakenIn(WHERE, new TakenConstraint.AwayFrom(term, Count.of(value)));
+        return new OnTheWay.TakenIn(WHERE,
+                new RowDemand.Relational(new TakenConstraint.AwayFrom(term, Count.of(value))));
     }
 
     private static OnTheWay.TakenIn overAForm(NumericTerm.FromOnePosition one,
                                               NumericTerm.FromOnePosition other) {
-        return new OnTheWay.TakenIn(WHERE, new TakenConstraint.Affine(
+        return new OnTheWay.TakenIn(WHERE, new RowDemand.Relational(new TakenConstraint.Affine(
                 LinearForm.<NumericTerm>sumOfAtoms(one, other),
-                Rel.GE));
+                Rel.GE)));
     }
 
     private static NumbersAskedFor asked(NumericDomain.Bounds leaves, OnTheWay.TakenIn... cuts) {
@@ -206,7 +208,7 @@ class AHoleARuleLeavesIsNotInTheRunAProjectionComesBackAsTest {
         NumbersAskedFor asked = asked(NumericDomain.Bounds.OPEN, form);
 
         assertTrue(asked.values().contains(at(7)), "nothing of the order is taken away");
-        assertEquals(List.of(form.taken()), asked.onlyTogether(),
+        assertEquals(List.of(relationOf(form)), asked.onlyTogether(),
                 "and the condition is what says why that is not the whole answer");
         assertFalse(asked.isWalkedWhole(), "so the term is not walked whole by walking its order");
     }
@@ -214,8 +216,8 @@ class AHoleARuleLeavesIsNotInTheRunAProjectionComesBackAsTest {
     /** A form of one term is the region's to answer, and adds nothing here. */
     @Test
     void aFormOfOneTermIsAlreadyWhatTheRegionLeaves() {
-        OnTheWay.TakenIn ofOne = new OnTheWay.TakenIn(WHERE, new TakenConstraint.Affine(
-                LinearForm.<NumericTerm>atom(LENGTH), Rel.GE));
+        OnTheWay.TakenIn ofOne = new OnTheWay.TakenIn(WHERE, new RowDemand.Relational(
+                new TakenConstraint.Affine(LinearForm.<NumericTerm>atom(LENGTH), Rel.GE)));
         NumbersAskedFor asked = asked(
                 new NumericDomain.Bounds(Endpoint.inclusive(Count.of(2)), null), ofOne);
 
@@ -234,8 +236,12 @@ class AHoleARuleLeavesIsNotInTheRunAProjectionComesBackAsTest {
 
         assertFalse(asked.values().contains(at(1)), "the hole is out of the question");
         assertTrue(asked.values().contains(at(2)), "and the rest of the order is in it");
-        assertEquals(List.of(form.taken()), asked.onlyTogether(),
+        assertEquals(List.of(relationOf(form)), asked.onlyTogether(),
                 "with the condition over the form carried beside it");
+    }
+
+    private static TakenConstraint relationOf(OnTheWay.TakenIn cut) {
+        return assertInstanceOf(RowDemand.Relational.class, cut.demand()).constraint();
     }
 
     /** A region that leaves the term nowhere is the whole of what is asked of it. */

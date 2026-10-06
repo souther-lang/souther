@@ -68,7 +68,7 @@ class AComparisonSaysWhichWayItCameOutTest {
 
         assertEquals(armsOf(early, plan), armsOf(late, plan),
                 "both rows leave through the same arm, which is why the arm cannot say this");
-        assertNotEquals(early.comparisons(), late.comparisons(),
+        assertNotEquals(early.outcomes(), late.outcomes(),
                 "and the comparisons they answered are not the same");
     }
 
@@ -87,20 +87,20 @@ class AComparisonSaysWhichWayItCameOutTest {
 
         Observation early = submit.observing(-1L);
 
-        assertEquals(1, early.comparisons().size(),
+        assertEquals(1, early.outcomes().size(),
                 "the condition settled at the first comparison, so one comparison answered");
-        ComparisonOutcome first = early.comparisons().iterator().next();
+        RecordedConditionOutcome first = early.outcomes().iterator().next();
         assertFalse(first.held(), "and it answered by failing");
 
         Observation late = submit.observing(500L);
-        ComparisonOutcome second = late.comparisons().stream()
+        RecordedConditionOutcome second = late.outcomes().stream()
                 .filter(each -> each.at() != first.at())
                 .findFirst()
                 .orElseThrow(() -> new AssertionError(
                         "the row that answered both comparisons reached the second one"));
-        assertFalse(early.comparisons().contains(new ComparisonOutcome(second.at(), true)),
+        assertFalse(early.outcomes().contains(new RecordedConditionOutcome(second.at(), true)),
                 "the row that short-circuited did not have it come out one way");
-        assertFalse(early.comparisons().contains(new ComparisonOutcome(second.at(), false)),
+        assertFalse(early.outcomes().contains(new RecordedConditionOutcome(second.at(), false)),
                 "nor the other");
     }
 
@@ -114,13 +114,13 @@ class AComparisonSaysWhichWayItCameOutTest {
         Observation refused = submit.observing(500L);
         Observation accepted = submit.observing(50L);
 
-        ComparisonOutcome failed = refused.comparisons().stream()
+        RecordedConditionOutcome failed = refused.outcomes().stream()
                 .filter(each -> !each.held())
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("the second comparison failed for this row"));
-        assertTrue(accepted.comparisons().contains(new ComparisonOutcome(failed.at(), true)),
+        assertTrue(accepted.outcomes().contains(new RecordedConditionOutcome(failed.at(), true)),
                 "and the row inside the range answered the same comparison the other way");
-        assertFalse(accepted.comparisons().contains(failed),
+        assertFalse(accepted.outcomes().contains(failed),
                 "which is not the way this one came out");
     }
 
@@ -149,7 +149,7 @@ class AComparisonSaysWhichWayItCameOutTest {
                 assertFalse(comparisons.contains(arm),
                         "no comparison of this plan is recorded as an arm: " + arm);
             }
-            assertFalse(seen.comparisons().isEmpty(),
+            assertFalse(seen.outcomes().isEmpty(),
                     "and every one of these rows evaluated a comparison");
         }
     }

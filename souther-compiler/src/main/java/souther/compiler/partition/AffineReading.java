@@ -17,8 +17,10 @@ import souther.compiler.inputs.PathResolution;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -79,11 +81,24 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * them in is not carried here and is not the order they were met in: that is how the rule
          * was spelled, and it is settled where the coordinates are made
          * ({@link AffineReading#filedAt}).
+         *
+         * <p>{@code difference} is what the left side exceeds the right by, which is the same for
+         * every row — so which way the comparison comes out is settled by it and the relation, and
+         * a reader asking that is not sent back to the operands to fold them a second way.
          */
-        record CutsNothing(java.util.Set<NumericTerm> read) implements OfAComparison {
+        record CutsNothing(java.util.Set<NumericTerm> read, ExactRatio difference)
+                implements OfAComparison {
 
             public CutsNothing {
                 read = java.util.Set.copyOf(read);
+                Objects.requireNonNull(difference,
+                        "a comparison that cuts nothing still has its two sides' difference");
+            }
+
+            /** Whether a comparison stating {@code rel} of its left side against its right comes
+             *  out holding, which is the same for every row. */
+            boolean holds(Rel rel) {
+                return rel.holds(difference.signum());
             }
         }
 
@@ -147,7 +162,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 }
                 LinearForm<NumericTerm> whole = difference.value();
                 if (whole.coefs().isEmpty()) {
-                    return new OfAComparison.CutsNothing(named);
+                    return new OfAComparison.CutsNothing(named, whole.constant());
                 }
                 AffineReading here = new AffineReading(
                         new LinearForm<>(ExactRatio.ZERO, whole.coefs()),

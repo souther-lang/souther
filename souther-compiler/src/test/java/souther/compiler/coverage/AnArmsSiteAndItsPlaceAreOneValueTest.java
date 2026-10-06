@@ -223,7 +223,7 @@ class AnArmsSiteAndItsPlaceAreOneValueTest {
     /** Anything else a run is written and read in, which this reading is never asked with. */
     private static boolean namesARunsOwnVocabulary(Type taken) {
         return mentions(taken, each -> RunSite.class.isAssignableFrom(each)
-                || each == ComparisonOutcome.class || each == int.class);
+                || each == RecordedConditionOutcome.class || each == int.class);
     }
 
     /**

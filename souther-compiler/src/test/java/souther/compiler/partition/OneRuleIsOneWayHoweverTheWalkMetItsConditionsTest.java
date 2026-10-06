@@ -7,6 +7,8 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
@@ -60,9 +62,9 @@ class OneRuleIsOneWayHoweverTheWalkMetItsConditionsTest {
         DecisionCondition.AComparison column = new DecisionCondition.AComparison(form, Rel.GT);
         return new DecisionPath.Consulted(new DecidedCondition.Compared(column, held),
                 new ShownBy.NothingIsRecorded(column),
-                new OnTheWay.Declined(new ConditionOccurrence("b", against),
+                List.of(new OnTheWay.Declined(new ConditionOccurrence("b", against),
                         new ConditionReportAnchor.WhereTheReadingMetIt(
                                 "b", new ConditionOccurrence("b", against)),
-                        new OnTheWay.Why.NoWordsForTheShape()));
+                        new OnTheWay.Why.NoWordsForTheShape())));
     }
 }

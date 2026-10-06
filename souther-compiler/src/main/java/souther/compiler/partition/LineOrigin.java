@@ -8,7 +8,7 @@ import souther.compiler.check.PartId;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReportAnchor;
-import souther.compiler.coverage.ComparisonEmissionSite;
+import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.publish.PublishedSentence;
@@ -193,7 +193,7 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
          */
         public record Read(RuleRef.Comparison rule, ModelOccurrence states,
                            RuleReportAnchor anchor,
-                           List<ComparisonEmissionSite> recordedAt) {
+                           List<ConditionOutcomeSite> recordedAt) {
 
             public Read {
                 if (rule == null || states == null || anchor == null) {
@@ -607,7 +607,7 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
      * One projection for both would hand a reading the emitter's number and let it stand for the
      * comparison, which is how the two came to be one value.
      */
-    default List<ComparisonEmissionSite> recordedAt() {
+    default List<ConditionOutcomeSite> recordedAt() {
         return switch (this) {
             case ComparisonOrigin g -> g.read().recordedAt();
             case NarrowedOrigin n -> n.bound().recordedAt();

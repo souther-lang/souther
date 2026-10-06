@@ -8,6 +8,9 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 
+import java.util.List;
+import java.util.Optional;
+
 /**
  * How the decision a body states writes down what got a run to an answer.
  *
@@ -97,8 +100,17 @@ final class DecisionNaming implements Naming<DecisionPath> {
     public DecisionPath side(Core value, boolean held) {
         Condition condition = Condition.of(value, reads, meanings.states().symbols(),
                 meanings.states().newtypes(), numbering);
+        List<DecisionMeanings.Read> decided = meanings.deciding(condition, held);
+        // A side the reading of the ways let through and this reading sees no row take. Both ask
+        // which answers a value can give of the same reading, so they part only where it was read
+        // under different names — and then this naming has no words for the side, which is what
+        // null is ({@link Naming#side}): the way stays, short of whole, and is not dropped on the
+        // word of one of two readings that disagree.
+        if (decided == null) {
+            return null;
+        }
         DecisionPath path = DecisionPath.NOWHERE;
-        for (DecisionMeanings.Read each : meanings.deciding(condition, held)) {
+        for (DecisionMeanings.Read each : decided) {
             path = path.and(each.answer(), shownBy(each.answer(), condition, held),
                     each.onTheWay());
             if (path == null) {
@@ -172,13 +184,26 @@ final class DecisionNaming implements Naming<DecisionPath> {
     /**
      * Where a run through one condition is recorded, said in the model's words.
      *
-     * <p>The comparison's own construct of the model, which is what the tree the rules are read off
-     * and the tree that runs agree about. A condition of any other shape has none to be seen at, and
-     * says so rather than being left off the path.
+     * <p>The construct of the model that answers the truth, which is what the tree the rules are
+     * read off and the tree that runs agree about: a comparison, or an application of one of the
+     * language's operations. A condition with no such construct — a truth asked of a name the body
+     * was handed — has none to be seen at, and says so rather than being left off the path.
      */
     private static ShownBy shownBy(DecidedCondition answer, Condition condition, boolean held) {
-        return condition instanceof Condition.Compares one && one.states().isPresent()
-                ? new ShownBy.AtAComparison(one.states().orElseThrow(), held)
+        Optional<ModelOccurrence> answered = answeredAt(condition);
+        return answered.isPresent() ? new ShownBy.AtAnOutcome(answered.get(), held)
                 : new ShownBy.NothingIsRecorded(answer.condition());
+    }
+
+    /** The construct of the model {@code condition}'s truth is answered by, where it is one. */
+    private static Optional<ModelOccurrence> answeredAt(Condition condition) {
+        return switch (condition) {
+            case Condition.Compares one -> one.states();
+            case Condition.Truth truth
+                    when Core.withoutStanding(truth.value()) instanceof Core.PreservedCall applied
+                    && applied.occurrence().isWritten() ->
+                    ModelOccurrence.statedAt(applied.occurrence());
+            default -> Optional.empty();
+        };
     }
 }

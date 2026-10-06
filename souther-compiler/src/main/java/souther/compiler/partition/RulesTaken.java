@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.core.Core;
 import souther.compiler.coverage.AlignedObservation;
+import souther.compiler.coverage.AnswerEmissionIndex;
 import souther.compiler.coverage.ArmEmissionIndex;
 import souther.compiler.coverage.ComparisonEmissionIndex;
 import souther.compiler.coverage.ControlClaim;
@@ -121,6 +122,7 @@ public final class RulesTaken {
      */
     public static RulesTaken of(DecisionReading read, Core emitted, CoverageSites.Plan plan) {
         ComparisonEmissionIndex comparisons = ComparisonEmissionIndex.ofBody(emitted, plan);
+        AnswerEmissionIndex answers = AnswerEmissionIndex.ofBody(emitted, plan);
         ArmEmissionIndex arms = ArmEmissionIndex.ofBody(emitted, plan);
         List<Recognised> recognisable = new ArrayList<>();
         for (DecisionReading.Ruled ruled : read.found()) {
@@ -130,7 +132,8 @@ public final class RulesTaken {
             List<List<ControlClaim>> conditions = new ArrayList<>();
             boolean everyOne = true;
             for (ShownBy each : ruled.shownBy()) {
-                List<ControlClaim> alternatives = claimsFor(each, comparisons, arms, plan);
+                List<ControlClaim> alternatives =
+                        claimsFor(each, comparisons, answers, arms, plan);
                 everyOne &= !alternatives.isEmpty();
                 conditions.add(alternatives);
             }
@@ -152,17 +155,24 @@ public final class RulesTaken {
      */
     private static List<ControlClaim> claimsFor(ShownBy shown,
                                                 ComparisonEmissionIndex comparisons,
+                                                AnswerEmissionIndex answers,
                                                 ArmEmissionIndex arms,
                                                 CoverageSites.Plan plan) {
         List<ControlClaim> out = new ArrayList<>();
         switch (shown) {
-            case ShownBy.AtAComparison at -> {
+            // A construct of the model is a comparison or an application and never both, so it is
+            // looked for among the copies of each and found among one.
+            case ShownBy.AtAnOutcome at -> {
                 for (ComparisonEmissionIndex.EmittedComparison made
-                        : comparisons.madeFor(at.comparison())) {
+                        : comparisons.madeFor(at.construct())) {
                     // Asked of the plan, which is the one maker of a place a comparison comes out
                     // one way: it takes the address for the comparison being asked about, so the
                     // two are one answer rather than a pair assembled here.
                     plan.outcomeOf(made.occurrence(), at.held())
+                            .flatMap(ControlClaim::of).ifPresent(out::add);
+                }
+                for (CoverageSites.AnswerSite made : answers.madeFor(at.construct())) {
+                    plan.outcomeOf(made.application(), at.held())
                             .flatMap(ControlClaim::of).ifPresent(out::add);
                 }
             }

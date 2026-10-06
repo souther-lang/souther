@@ -1,7 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.coverage.AlignedObservation;
-import souther.compiler.coverage.ComparisonEmissionSite;
+import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.ElementsTaken;
 import souther.compiler.observe.ObservedValue;
@@ -159,7 +159,7 @@ public final class StandingAtAPoint {
      */
     public static Met met(MeasuredInput.BorderReading line,
                           List<ObservedInputs> observed, Criterion criterion,
-                          List<ComparisonEmissionSite> watched) {
+                          List<ConditionOutcomeSite> watched) {
         BorderQuantity quantity = line.quantity();
         BehaviorInputs where = line.subject().inputs();
         Set<ReadingGap> unreadable = new LinkedHashSet<>();
@@ -257,7 +257,7 @@ public final class StandingAtAPoint {
      */
     public static RowsRead valuesOf(MeasuredInput.BorderReading line,
                                     List<ObservedInputs> observed,
-                                    List<ComparisonEmissionSite> watched) {
+                                    List<ConditionOutcomeSite> watched) {
         BorderQuantity quantity = line.quantity();
         BehaviorInputs where = line.subject().inputs();
         List<Map<souther.compiler.inputs.NumericTerm, souther.compiler.numeric.Place>> read =
@@ -610,7 +610,7 @@ public final class StandingAtAPoint {
      * <p>Asked for all of them, a row would owe a run through every copy an operation happens to
      * make — a debt against how the library is written rather than against anything the model says.
      */
-    static boolean gotAnAnswerOutOfTheRule(List<ComparisonEmissionSite> watched,
+    static boolean gotAnAnswerOutOfTheRule(List<ConditionOutcomeSite> watched,
                                            AlignedObservation account) {
         return watched.stream().anyMatch(account::reached);
     }

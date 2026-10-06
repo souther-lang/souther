@@ -1,7 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.diag.SourceLayouts;
-import souther.compiler.coverage.ComparisonEmissionSite;
+import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.Numberings;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ModelOccurrence;
@@ -204,7 +204,7 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
 
     /** The place this fixture's comparison is at. One of them, so that two readings built here
      *  address one place. */
-    private static final ComparisonEmissionSite WHERE = Numberings.comparison(1, 0);
+    private static final ConditionOutcomeSite WHERE = Numberings.comparison(1, 0);
 
     private static LineOrigin aComparison() {
         SourceConstructOrigin wrote = new SourceConstructOrigin(

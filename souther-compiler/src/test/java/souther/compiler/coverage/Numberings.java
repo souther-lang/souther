@@ -107,16 +107,16 @@ public final class Numberings {
     }
 
     /** The comparison {@code raw} of a numbering of {@code many} comparisons. */
-    public static ComparisonEmissionSite comparison(int many, int raw) {
-        return ofComparisons(many).comparison(raw);
+    public static ConditionOutcomeSite comparison(int many, int raw) {
+        return ofComparisons(many).outcome(raw);
     }
 
     /** The comparisons of one numbering, by their numbers. */
-    public static Map<Integer, ComparisonEmissionSite> comparisons(int many) {
+    public static Map<Integer, ConditionOutcomeSite> comparisons(int many) {
         SiteNumbering numbering = ofComparisons(many);
-        Map<Integer, ComparisonEmissionSite> out = new LinkedHashMap<>();
+        Map<Integer, ConditionOutcomeSite> out = new LinkedHashMap<>();
         for (int at = 0; at < many; at++) {
-            out.put(at, numbering.comparison(at));
+            out.put(at, numbering.outcome(at));
         }
         return out;
     }
@@ -136,7 +136,7 @@ public final class Numberings {
         for (int at = 0; at < families.length; at++) {
             byNumber.add(switch (families[at]) {
                 case ARM -> armAt(at);
-                case COMPARISON -> new SiteAddress.Comparison(
+                case COMPARISON -> new SiteAddress.ConditionOutcome(
                         new NodeAddress("fixture", java.util.Set.of(pathTo(at))));
             });
         }

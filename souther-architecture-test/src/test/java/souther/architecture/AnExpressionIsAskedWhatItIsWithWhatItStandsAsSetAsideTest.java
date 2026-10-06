@@ -620,6 +620,12 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "coverage/ComparisonEmissionIndex", "walk",
                 "(" + core + "L" + c + "coverage/CoverageSites$Plan;Ljava/util/Map;)V", 1,
                 GOES_ON_INTO_IT);
+        row(out, c + "coverage/CoverageSites$Walk", "answerOf",
+                "(" + core + "L" + c + "types/OccurrenceLineage;L" + c
+                        + "types/OccurrenceLineage;)V", 2,
+                "whether the node the walk stands at is where an application answers, which is the"
+                        + " node the emitter copies a value off: a Widen is a node of its own and is"
+                        + " walked on into what it holds, which is asked the same question next");
         row(out, c + "coverage/Methods", "collectCalls",
                 "(" + core + "Ljava/util/Map;Ljava/util/Set;)V", 1, GOES_ON_INTO_IT);
         row(out, c + "coverage/NodeAddresses", "binderSlots", "(" + core + ")V", 1,

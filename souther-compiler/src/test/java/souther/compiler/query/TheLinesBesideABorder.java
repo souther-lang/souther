@@ -25,6 +25,7 @@ import souther.compiler.partition.Level;
 import souther.compiler.partition.LineFacts;
 import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.OnTheWay;
+import souther.compiler.partition.RowDemand;
 import souther.compiler.partition.TakenConstraint;
 import souther.compiler.partition.WayToTheBorder;
 import souther.compiler.partition.WhichLine;
@@ -84,12 +85,12 @@ final class TheLinesBesideABorder {
         Map<NumericTerm, ExactRatio> onlyX = new LinkedHashMap<>();
         onlyX.put(X, ExactRatio.ONE);
         return new WayToTheBorder(List.of(
-                new OnTheWay.TakenIn(anchor(),
+                new OnTheWay.TakenIn(anchor(), new RowDemand.Relational(
                         new TakenConstraint.Affine(
-                                new LinearForm<>(ExactRatio.ZERO, onlyX), Rel.LE)),
-                new OnTheWay.TakenIn(anchor(),
+                                new LinearForm<>(ExactRatio.ZERO, onlyX), Rel.LE))),
+                new OnTheWay.TakenIn(anchor(), new RowDemand.Relational(
                         new TakenConstraint.Affine(
-                                new LinearForm<>(ExactRatio.ZERO, onlyX), Rel.GE))));
+                                new LinearForm<>(ExactRatio.ZERO, onlyX), Rel.GE)))));
     }
 
     /**
@@ -106,9 +107,9 @@ final class TheLinesBesideABorder {
         xAndZ.put(X, ExactRatio.ONE);
         xAndZ.put(new NumericTerm.ValueOf(TermPath.of("z")), ExactRatio.ONE);
         return new WayToTheBorder(List.of(
-                new OnTheWay.TakenIn(anchor(),
+                new OnTheWay.TakenIn(anchor(), new RowDemand.Relational(
                         new TakenConstraint.Affine(
-                                new LinearForm<>(ExactRatio.of(-10), xAndZ), Rel.LE))));
+                                new LinearForm<>(ExactRatio.of(-10), xAndZ), Rel.LE)))));
     }
 
     /** And one holding a condition nothing turned into something a row can be held against. */

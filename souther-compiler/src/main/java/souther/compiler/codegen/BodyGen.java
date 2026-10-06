@@ -27,7 +27,7 @@ import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
 import souther.compiler.core.GrowingFold;
-import souther.compiler.coverage.ComparisonEmissionSite;
+import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.CoverageSites;
 
 import souther.compiler.core.EnsuresEnforcement;
@@ -421,6 +421,15 @@ final class BodyGen {
         void emitTail(Core e, ClassDesc cdB, Set<ValueName.Behavior> requiredNames,
                       Type expected) {
             emitLine(e);
+            // Where an application answers, the answer is recorded as a value, and in tail position
+            // a node that answers with one of its parts never has its value in one place: each part
+            // returns on its own. So it is worked out as a value and returned.
+            if (answers(e)) {
+                Type rt = emitValue(e, expected);
+                box(code, rt);
+                returnValue();
+                return;
+            }
             switch (e) {
                 case Core.LetIn li -> {
                     if (Core.withoutStanding(li.value()) instanceof Core.Call call
@@ -631,17 +640,42 @@ final class BodyGen {
         }
 
         /**
-         * The call itself, written for the place a run through this comparison is recorded at.
+         * Records which way an application of one of the language's operations answered, where the
+         * node just emitted is where an application the model states answers.
+         *
+         * <p>After the value, for the reason a comparison's is: the application answered only once
+         * its value is on the stack. That value is the truth the node works out, so it is copied
+         * off as it stands.
+         *
+         * <p>A node that is itself a comparison the plan numbers was recorded where the comparison
+         * was, at the same place; recording it here too would be the one place written twice.
+         */
+        private void answerProbe(Core e) {
+            if (places != Places.COUNTED || !ctx.measuring()
+                    || ctx.comparisonSiteOf(e).isPresent()) {
+                return;
+            }
+            ctx.answerSiteOf(e).ifPresent(this::comparisonProbeAt);
+        }
+
+        /** Whether {@code e} is where an application the model states answers, in a build that
+         *  records it. */
+        private boolean answers(Core e) {
+            return places == Places.COUNTED && ctx.measuring() && ctx.answerSiteOf(e).isPresent();
+        }
+
+        /**
+         * The call itself, written for the place a run through this truth is recorded at.
          *
          * <p>The number is asked of the place twice for the one act: the emitter records that it
          * wrote this number, and writes it into the instruction. What the instruction carries is a
          * number and nothing else — a probed class has no numbering to ask what it addresses.
          */
-        private void comparisonProbeAt(ComparisonEmissionSite site) {
+        private void comparisonProbeAt(ConditionOutcomeSite site) {
             ctx.emitted(site.raw());
             code.dup();
             code.loadConstant(site.raw());
-            code.invokestatic(CD_Probe, "compared", MTD_Probe_compared);
+            code.invokestatic(CD_Probe, "condition", MTD_Probe_condition);
         }
 
         /**
@@ -884,6 +918,7 @@ final class BodyGen {
                 // through emitValue; one reaching here was handed to a position that does neither.
                 case Core.Block _ -> throw new IllegalStateException("a block is not a value");
             }
+            answerProbe(e);
             // `unreachable` is typed Never, and what is on the stack is the shape the position asked
             // for, so that is what the caller is told is there.
             if (e instanceof Core.Unreachable && expected != null && !(expected instanceof Type.Never)) {

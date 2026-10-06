@@ -4,6 +4,7 @@ import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * What a row has to be for a search to reach one border, in the words a composer works in.
@@ -42,6 +43,10 @@ public sealed interface Reachability {
      * @param declarations what the declarations leave, which the way narrows
      */
     static Reachability of(WayToTheBorder way, SearchRegion declarations) {
+        Optional<OnTheWay.Settled> never = way.neverComesOut();
+        if (never.isPresent()) {
+            return new NothingComesOutThatWay(never.get());
+        }
         return switch (way.requirements()) {
             case Requirements.Merge.Merged(var required) -> new Reaching(
                     way.narrowing(declarations), required, way.takenIn());
@@ -63,12 +68,13 @@ public sealed interface Reachability {
     /**
      * Where a row for the border may be written, and what it has to be to get there.
      *
-     * @param boundedOnTheWay the cuts the walk took in, which are what a composer has to put the
-     *                        positions of somewhere {@code region} admits rather than somewhere the
-     *                        declarations do. The cuts and not the positions read off them: a cut
-     *                        over two positions is one statement about the pair, and a composer
-     *                        holding a bag of positions has no way to tell which of them it may
-     *                        settle apart from the others
+     * @param boundedOnTheWay what the walk asked of a row on the way, which a composer has to
+     *                        compose a row to meet rather than read off {@code region}: some of it
+     *                        narrowed the region and some of it, what every element meets, did not.
+     *                        The demands and not the positions read off them: a demand over two
+     *                        positions is one statement about the pair, and a composer holding a
+     *                        bag of positions has no way to tell which of them it may settle apart
+     *                        from the others
      */
     record Reaching(SearchRegion region, Requirements requirements,
                     List<OnTheWay.TakenIn> boundedOnTheWay) implements Reachability {
@@ -91,4 +97,23 @@ public sealed interface Reachability {
      * happened is that nothing arrives here at all.
      */
     record NothingReaches(Requirements.Merge.Conflict why) implements Reachability {}
+
+    /**
+     * A condition on the way comes out the other way for every row, so no row takes it.
+     *
+     * <p>The same kind of fact as the one above and not a search that came up short: what settles
+     * it is what the source wrote — a predicate that always holds, sides whose difference is the
+     * same on every row — and a search composing against it would report every candidate refused
+     * for a way nothing arrives at.
+     */
+    record NothingComesOutThatWay(OnTheWay.Settled condition) implements Reachability {
+
+        public NothingComesOutThatWay {
+            if (condition == null || condition.thisWay()) {
+                throw new IllegalArgumentException(
+                        "a way no row takes is closed by a condition no row brings out that way: "
+                                + condition);
+            }
+        }
+    }
 }

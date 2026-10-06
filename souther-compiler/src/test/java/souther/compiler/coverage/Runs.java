@@ -25,12 +25,12 @@ public final class Runs {
     /** A run of {@code numbering} that did everything {@code claims} names and nothing else. */
     public static AlignedObservation doing(SiteNumbering numbering, List<ControlClaim> claims) {
         Set<ArmProbe> arms = new LinkedHashSet<>();
-        Set<SeenComparison> ways = new LinkedHashSet<>();
+        Set<SeenConditionOutcome> ways = new LinkedHashSet<>();
         for (ControlClaim claim : claims) {
             switch (claim.at()) {
                 case ControlPlace.Arm arm -> arm.probe().ifPresent(arms::add);
                 case ControlPlace.Outcome point ->
-                        ways.add(new SeenComparison(point.at(), point.held()));
+                        ways.add(new SeenConditionOutcome(point.at(), point.held()));
             }
         }
         return new AlignedObservation(numbering.identity(), arms, ways);
@@ -38,7 +38,7 @@ public final class Runs {
 
     /** A run of {@code numbering} at those places. */
     public static AlignedObservation of(SiteNumbering numbering, Set<ArmProbe> arms,
-                                        Set<SeenComparison> ways) {
+                                        Set<SeenConditionOutcome> ways) {
         return new AlignedObservation(numbering.identity(), arms, ways);
     }
 

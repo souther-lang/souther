@@ -5997,8 +5997,7 @@
         },
         "disposition" : "met"
       } ],
-      "status" : "partial",
-      "weakening" : [ "decision_of_row_unreadable" ],
+      "status" : "complete",
       "signature" : {
         "status" : "unavailable",
         "reason" : "not_a_sum",
@@ -6758,9 +6757,7 @@
       },
       "decision" : {
         "coverage" : {
-          "status" : "unavailable",
-          "reason" : "no_rule_is_recognisable",
-          "weakening" : [ "decision_of_row_unreadable" ]
+          "status" : "complete"
         },
         "obligations" : [ {
           "obligationId" : {
@@ -6774,7 +6771,10 @@
               "condition" : "指示.区分",
               "outcome" : "通常"
             } ]
-          }
+          },
+          "taken" : false,
+          "requirement" : "unsettled",
+          "because" : "a_composed_row_was_short_of_the_way"
         }, {
           "obligationId" : {
             "behavior" : "送料を出す",
@@ -6787,7 +6787,8 @@
               "condition" : "指示.区分",
               "outcome" : "通常"
             } ]
-          }
+          },
+          "taken" : true
         }, {
           "obligationId" : {
             "behavior" : "送料を出す",
@@ -6800,7 +6801,8 @@
               "condition" : "指示.区分",
               "outcome" : "速達"
             } ]
-          }
+          },
+          "taken" : true
         }, {
           "obligationId" : {
             "behavior" : "送料を出す",
@@ -6813,7 +6815,9 @@
               "condition" : "指示.区分",
               "outcome" : "速達"
             } ]
-          }
+          },
+          "taken" : false,
+          "requirement" : "required"
         }, {
           "obligationId" : {
             "behavior" : "送料を出す",
@@ -6826,7 +6830,10 @@
               "condition" : "指示.区分",
               "outcome" : "冷蔵"
             } ]
-          }
+          },
+          "taken" : false,
+          "requirement" : "unsettled",
+          "because" : "a_composed_row_was_short_of_the_way"
         }, {
           "obligationId" : {
             "behavior" : "送料を出す",
@@ -6839,7 +6846,8 @@
               "condition" : "指示.区分",
               "outcome" : "冷蔵"
             } ]
-          }
+          },
+          "taken" : true
         } ]
       },
       "interaction" : {
@@ -7377,6 +7385,23 @@
           } ]
         },
         "code" : "E1936"
+      }, {
+        "kind" : "decision_rule_uncovered",
+        "disposition" : "refused",
+        "subject" : "送料を出す",
+        "obligationId" : {
+          "behavior" : "送料を出す",
+          "conditions" : [ {
+            "kind" : "not_read",
+            "condition" : "condition 3 of `送料を出す`",
+            "outcome" : "denied"
+          }, {
+            "kind" : "case",
+            "condition" : "指示.区分",
+            "outcome" : "速達"
+          } ]
+        },
+        "code" : "E1935"
       } ]
     } ]
   } ],

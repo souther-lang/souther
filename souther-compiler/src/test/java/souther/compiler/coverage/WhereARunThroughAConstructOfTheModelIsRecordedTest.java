@@ -83,7 +83,7 @@ class WhereARunThroughAConstructOfTheModelIsRecordedTest {
      */
     @Test
     void aHelperCalledTwiceIsTwoConstructsWithTwoPlaces() {
-        Set<ComparisonEmissionSite> places = new LinkedHashSet<>();
+        Set<ConditionOutcomeSite> places = new LinkedHashSet<>();
         List<ModelOccurrence> picked = new ArrayList<>();
         for (Compiled each : compiled(List.of(SPLICED))) {
             ComparisonEmissionIndex index =
