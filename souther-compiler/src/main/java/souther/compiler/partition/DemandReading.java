@@ -187,7 +187,7 @@ final class DemandReading {
             return quantified;
         }
         return List.of(BooleanMeaning.asAComparison(e)
-                .map(comparison -> ofAComparison(comparison.stated(), reads, read, holding))
+                .map(comparison -> ofAComparison(comparison, reads, read, holding))
                 .orElse(new Read.Unread(new OnTheWay.Why.NoWordsForTheShape())));
     }
 

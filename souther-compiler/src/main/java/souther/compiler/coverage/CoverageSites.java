@@ -623,6 +623,18 @@ public final class CoverageSites {
             return answer == null ? Optional.empty() : Optional.of(answer.index());
         }
 
+        /**
+         * Which application answers at {@code node}, in the copy of the body it stands in, or empty
+         * where none the model states does.
+         *
+         * <p>The same question as {@link #answerSiteOf} answered with the construct rather than the
+         * place, for a reader that files what it found about the node under what a rule names.
+         */
+        public Optional<ConstructOccurrence> applicationAnsweringAt(Core node) {
+            AnswerSite answer = answersByNode.get(node);
+            return answer == null ? Optional.empty() : Optional.of(answer.application());
+        }
+
         /** Every place an answer is recorded at, which is what an emitter is held to having
          *  written, in the order the walk met them. */
         public List<AnswerSite> answers() {

@@ -200,11 +200,11 @@ public sealed interface OperationFact {
      * nothing, and a reading that took the size for the cause would say a rule inside such a call
      * decides what the call comes to.
      *
-     * <p>Which is what a reader wants it for. A rule written inside a closure reaches a fork
-     * testing the call only along an edge declared here: {@code List.isEmpty(List.filter(p, xs))}
-     * turns on what {@code p} answered, and {@code List.isEmpty(List.map(p, xs))} does not — the
-     * mapping answers one per element whatever the closure said, so a rule inside it says nothing
-     * about whether the answer is empty.
+     * <p>Which is what a reader wants it for. A rule written inside a closure reaches what the call
+     * answers only along an edge declared here: {@code List.any(p, xs)} turns on what {@code p}
+     * answered, and so does whether {@code List.filter(p, xs)} holds anything — while whether
+     * {@code List.map(p, xs)} does not, since the mapping answers one per element whatever the
+     * closure said, and a rule inside it says nothing about whether the answer is empty.
      *
      * <p><b>Nothing here is about the type of what stands there.</b> What is stated is about the
      * answer, and a closure and a truth are both things that answer; which argument may carry the

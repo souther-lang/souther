@@ -32,6 +32,7 @@ import souther.compiler.diag.Citation;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.PathReachability;
+import souther.compiler.coverage.AnswerEmissionIndex;
 import souther.compiler.coverage.ComparisonEmissionIndex;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.EmittedComparisonState;
@@ -200,6 +201,7 @@ public final class GuardThresholds {
         // the two readings agree about.
         ComparisonEmissionIndex index =
                 ComparisonEmissionIndex.ofBody(emitted, plan);
+        AnswerEmissionIndex answers = AnswerEmissionIndex.ofBody(emitted, plan);
         ReachingCuts.Collected cuts = new ReachingCuts.Collected();
         for (ComparisonReadings.Reading each : comparisons.comparisons()) {
             // Which comparison of the model this is. Total over what this walk reads, and read off
@@ -214,27 +216,8 @@ public final class GuardThresholds {
                     .orElseThrow(() -> new IllegalStateException("`" + behavior + "` reads a"
                             + " comparison at " + each.at() + " that states no construct of the"
                             + " model, in a tree where the language's operations stand"));
-            // And every place the emitted tree writes it. One rule may be written there more than
-            // once — a library operation evaluating a closure it was handed twice writes the
-            // comparison twice — and none at all is the two trees disagreeing about the body,
-            // which is raised rather than answered around.
-            //
-            // That there is always one rests on the emitted tree expanding everything this one does
-            // and more, so a construct reached here was reached there. It is an argument and not a
-            // proof about every rewrite the emitted tree goes through afterwards, which is why it
-            // is raised rather than assumed away: a rewrite that dropped a comparison an author
-            // wrote would say so here rather than taking a rule out of the measurement quietly.
-            List<ComparisonEmissionIndex.EmittedComparison> made =
-                    index.madeFor(stated);
-            if (made.isEmpty()) {
-                throw new IllegalStateException("`" + behavior + "` reads a comparison at "
-                        + each.at() + " that the tree it runs does not hold");
-            }
             List<EmittedComparisonState.Observation> watched =
-                    new ArrayList<>();
-            made.forEach(one -> one.site().ifPresent(site -> watched.add(
-                    new EmittedComparisonState.Observation(
-                            one.occurrence(), site, arrives.arrivalAt(one.occurrence())))));
+                    watchedAt(behavior, each, stated, index, answers, arrives);
             EmittedComparisonState placed = watched.isEmpty()
                     ? new EmittedComparisonState.NotInstrumented()
                     : new EmittedComparisonState.Instrumented(watched);
@@ -272,6 +255,57 @@ public final class GuardThresholds {
         }
         return new Guards(found, withoutALine.found(), between, cuts.made(),
                 comparisons.forks(), comparisons.conditionsMet());
+    }
+
+    /**
+     * Every place the tree that runs records which way the construct {@code each} was written as
+     * came out, with what arrives at the line at each.
+     *
+     * <p>Looked for where that construct is recorded, which is the construct's own answer: a
+     * comparison is recorded where it is taken, and an application where it answers. Which of the
+     * two the line is drawn on decides nothing here — an emptiness check states a comparison and is
+     * watched where the operation answers, because that is what the author wrote and what a run
+     * goes through.
+     *
+     * <p>One rule may be written into the tree that runs more than once — a library operation
+     * evaluating a closure it was handed twice writes it twice — so this is a list.
+     *
+     * <p>A comparison held nowhere there is the two trees disagreeing about the body, and it is
+     * raised rather than answered around. That there is always one rests on the emitted tree
+     * expanding everything this one does and more, so a construct reached here was reached there —
+     * an argument and not a proof about every rewrite the emitted tree goes through afterwards,
+     * which is why it is raised rather than assumed: a rewrite that dropped a comparison an author
+     * wrote would say so here rather than taking a rule out of the measurement quietly. An
+     * application cannot be held to that. The plan records an answer only where a run can answer, so
+     * one behind an abort has nowhere it is recorded and nothing tells it from one that is not held
+     * — both are a construct nothing watches, which is what an empty list says.
+     */
+    private static List<EmittedComparisonState.Observation> watchedAt(
+            String behavior, ComparisonReadings.Reading each, ModelOccurrence stated,
+            ComparisonEmissionIndex comparisons, AnswerEmissionIndex answers,
+            PathReachability.Answers arrives) {
+        List<EmittedComparisonState.Observation> out = new ArrayList<>();
+        switch (each.occurrence().origin().kind()) {
+            case BINARY -> {
+                List<ComparisonEmissionIndex.EmittedComparison> made = comparisons.madeFor(stated);
+                if (made.isEmpty()) {
+                    throw new IllegalStateException("`" + behavior + "` reads a comparison at "
+                            + each.at() + " that the tree it runs does not hold");
+                }
+                made.forEach(one -> one.site().ifPresent(site -> out.add(
+                        new EmittedComparisonState.Observation(
+                                one.occurrence(), site, arrives.arrivalAt(one.occurrence())))));
+            }
+            case CALL -> answers.madeFor(stated).forEach(one -> out.add(
+                    new EmittedComparisonState.Observation(
+                            one.application(), one.index(),
+                            arrives.arrivalAt(one.application()))));
+            case IF, GUARD, COMPREHENSION, MATCH, COLLECTION_LITERAL, NOT_WRITTEN ->
+                    throw new IllegalStateException("`" + behavior + "` reads a comparison at "
+                            + each.at() + " stated by a " + each.occurrence().origin().kind()
+                            + ", which states none");
+        }
+        return out;
     }
 
     /**

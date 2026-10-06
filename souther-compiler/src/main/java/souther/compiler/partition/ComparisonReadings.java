@@ -2,11 +2,12 @@ package souther.compiler.partition;
 
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.Choice;
-import souther.compiler.check.Comparison;
+import souther.compiler.check.BooleanMeaning;
 import souther.compiler.diag.Citation;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.ScopeStep;
+import souther.compiler.check.StatedComparison;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.ValueTemplates;
 import souther.compiler.core.Core;
@@ -141,22 +142,36 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * comparison inside an expanded helper is about the argument the call handed it, and read
      * against the names outside the binding it is about nothing at all.
      *
-     * @param assumed every condition on the way here, each with what became of it. Empty says
-     *                nothing stood on the way, which a comparison at the top of a body is; one this
-     *                reading has no arithmetic for is on the list as a decline, so the two are not
-     *                one answer
+     * @param occurrence the construct the author wrote, which is what the rule is identified and
+     *                   cited by — a comparison, or an application of an operation the library says
+     *                   means one
+     * @param statement  what that construct states. Not a node: an emptiness check states its size
+     *                   against nought, which no source wrote and which stands nowhere
+     * @param assumed    every condition on the way here, each with what became of it. Empty says
+     *                   nothing stood on the way, which a comparison at the top of a body is; one
+     *                   this reading has no arithmetic for is on the list as a decline, so the two
+     *                   are not one answer
      */
-    record Reading(ConstructOccurrence occurrence, Comparison comparison, Citation at,
+    record Reading(ConstructOccurrence occurrence, StatedComparison statement, Citation at,
                    InputReads reads,
                    List<OnTheWay> assumed, BoundaryPolicy.Standing standing) {
 
         Reading {
-            if (occurrence == null || comparison == null || at == null) {
+            if (occurrence == null || statement == null || at == null) {
                 throw new IllegalArgumentException(
                         "a reading is of some comparison of the model, placed somewhere");
             }
         }
     }
+
+    /**
+     * A comparison some construct of the model states, and that construct.
+     *
+     * <p>Two facts and not one, because they come apart. A comparison the source wrote is both, and
+     * an emptiness check is an application the author wrote stating a comparison they did not: the
+     * line is drawn on what is stated, and the rule is the construct that was written.
+     */
+    private record StatedAt(ConstructOccurrence written, StatedComparison statement) { }
 
 
     /**
@@ -307,25 +322,21 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                              List<ForkMet> forks, ConditionNumbering numbering) {
         Symbols symbols = in.symbols();
         RuleReadingSource ruleSource = in.rules();
-        // A comparison the source wrote, recognised by the one thing that says what one is
-        // ({@link Comparison#of}). A binary this compiler composed states no rule of the model and
-        // is not one, which is what an unwritten construct says of itself.
-        Comparison comparison = comparisonAt(e);
-        if (comparison != null) {
-            Core.Binary binary = (Core.Binary) e;
-            // Which comparison of the model it is, off the node. The two readings of a body hold
-            // different comparisons and agree about this, so it is what a reader below joins on.
-            ConstructOccurrence stands = binary.occurrence();
-            Citation where = Citation.of(binary.pos());
+        StatedAt stated = statedAt(e);
+        if (stated != null) {
+            // Which construct of the model it is, off the node. The two readings of a body hold
+            // different copies of it and agree about this, so it is what a reader below joins on.
+            ConstructOccurrence stands = stated.written();
+            Citation where = Citation.of(e.pos());
             // Read only where the policy admits it, and under the names in force here, which is
             // the one environment the comparison is about. `answer` is null: a body has nothing
             // that is the answer.
             BoundaryPolicy.Standing standing = BoundaryPolicy.refuses(live)
                     .<BoundaryPolicy.Standing>map(BoundaryPolicy.Standing.Refused::new)
                     .orElseGet(() -> new BoundaryPolicy.Standing.Admitted(
-                            ComparisonAssessment.of(in.behavior(), comparison.stated(), where,
+                            ComparisonAssessment.of(in.behavior(), stated.statement(), where,
                                     in.read(), reads, null, in.answering(), false)));
-            out.add(new Reading(stands, comparison, where, reads, assumed, standing));
+            out.add(new Reading(stands, stated.statement(), where, reads, assumed, standing));
         }
         switch (e) {
             // The right operand runs only where the left came out the way that leaves the answer
@@ -478,15 +489,28 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     }
 
     /**
-     * The comparison of the model {@code e} is, or null where it is not one.
+     * The comparison of the model {@code e} states and the construct it is written as, or null
+     * where it states none.
      *
-     * <p>The one thing that says what a comparison is ({@link Comparison#of}), asked once. A binary
-     * this compiler composed states no rule of the model and is not one, which is what an unwritten
-     * construct says of itself.
+     * <p>What a construct means is the checker's answer ({@link BooleanMeaning#asAComparison}),
+     * asked once: a comparison states itself, and an operation the library says means a size
+     * against nought states that. Only of a construct an author wrote — one this compiler composed
+     * states no rule of the model, which is what an unwritten construct says of itself.
+     *
+     * <p>Asked of the node as it stands and not through what it stands as, so a comparison held as
+     * another type is met once, where it is, and not again at its wrapper.
      */
-    private static Comparison comparisonAt(Core e) {
-        return e instanceof Core.Binary binary && binary.origin() != null
-                && binary.origin().isWritten() ? Comparison.of(binary).orElse(null) : null;
+    private static StatedAt statedAt(Core e) {
+        ConstructOccurrence written = switch (e) {
+            case Core.Binary binary -> binary.occurrence();
+            case Core.PreservedCall call -> call.occurrence();
+            default -> null;
+        };
+        if (written == null || !written.isWritten()) {
+            return null;
+        }
+        return BooleanMeaning.asAComparison(e)
+                .map(statement -> new StatedAt(written, statement)).orElse(null);
     }
 
 
@@ -518,7 +542,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * <p><b>Answered as the parts nobody else states, and not as whether somebody states one.</b>
      * What an operation's answer turns on is as many things as the closure states
      * ({@link WhatAForkTests#partsOfTheAnswer}): a closure answering
-     * {@code p.age > 18 && List.isEmpty(p.tags)} states a comparison and something nothing here
+     * {@code p.age > 18 && List.contains(0, p.tags)} states a comparison and something nothing here
      * reads, and the fork around the operation states the second whoever owns the first. Answered
      * as "something in there is owned", the second went with the first — which is the same partial
      * ownership a condition's own parts are cut along, lost one step past the operation.
@@ -526,7 +550,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     static List<Core> statedElsewhere(Core atom, InputReads reads, InputReading read) {
         List<Core> left = new ArrayList<>();
         for (Core part : WhatAForkTests.partsOfTheAnswer(atom, WhatNamesStandFor.in(reads, read))) {
-            if (comparisonAt(part) == null
+            if (statedAt(part) == null
                     && !(reads.pathOf(part, read.rules().newtypes())
                             instanceof PathResolution.At)) {
                 left.add(part);

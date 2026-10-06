@@ -402,15 +402,27 @@ public final class Sites {
                     Answer<WrittenForks> written = db.ask(new ForksWrittenIn(module));
                     yield written.present() ? written.value().at(it.origin()) : null;
                 }
-                // A comparison is a binary, which is what the writing module files every one of
-                // under the identity a condition is asked by. Which of them a reading calls a rule
-                // is that reading's answer and is not asked again here.
-                case RuleRef.Comparison it -> {
-                    Answer<WrittenConditions> written = db.ask(new ConditionsWrittenIn(module));
-                    yield written.present()
-                            ? written.value().at(new WrittenCondition.Construct(it.origin()))
-                            : null;
-                }
+                // What a comparison is called is what it states, and where it is written is what
+                // the author wrote it as: a binary, filed under the identity a condition is asked
+                // by, or an application of an operation the library says means one. Which of them
+                // a reading calls a rule is that reading's answer and is not asked again here.
+                case RuleRef.Comparison it -> switch (it.origin().kind()) {
+                    case BINARY -> {
+                        Answer<WrittenConditions> written =
+                                db.ask(new ConditionsWrittenIn(module));
+                        yield written.present()
+                                ? written.value().at(new WrittenCondition.Construct(it.origin()))
+                                : null;
+                    }
+                    case CALL -> {
+                        Answer<WrittenApplications> written =
+                                db.ask(new ApplicationsWrittenIn(module));
+                        yield written.present() ? written.value().at(it.origin()) : null;
+                    }
+                    case IF, GUARD, COMPREHENSION, MATCH, COLLECTION_LITERAL, NOT_WRITTEN ->
+                            throw new IllegalStateException("a comparison of a body is written as a"
+                                    + " binary or an application, and this as " + it.origin());
+                };
                 case RuleRef.Predicate it -> {
                     Answer<WrittenApplications> written =
                             db.ask(new ApplicationsWrittenIn(module));

@@ -165,6 +165,8 @@ class AModuleHasOnePlanAndOneMakerOfItTest {
             "method probesOf(souther.compiler.core.Core) : int[]",
             "method answerSiteOf(souther.compiler.core.Core) :"
                     + " java.util.Optional<souther.compiler.coverage.ConditionOutcomeSite>",
+            "method applicationAnsweringAt(souther.compiler.core.Core) :"
+                    + " java.util.Optional<souther.compiler.types.ConstructOccurrence>",
             // Where the fork of each place this plan reached is written.
             "method whereEachArmsForkIsWritten() :"
                     + " java.util.Map<java.lang.Integer, souther.compiler.diag.Citation>");

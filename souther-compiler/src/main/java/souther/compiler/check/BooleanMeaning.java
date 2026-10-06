@@ -58,9 +58,14 @@ public final class BooleanMeaning {
      *
      * <p>A comparison is itself, and an emptiness check is its size against nought — a comparison
      * no source wrote, composed by this reading.
+     *
+     * <p>A statement and not a {@link Comparison}, because the second of those stands nowhere: the
+     * binary an emptiness check is read as is this reading's, and handed out as a comparison it
+     * would be a node a reader could ask where it is written. Where the statement came from is the
+     * asker's, who holds the construct it asked about.
      */
-    public static Optional<Comparison> asAComparison(Core part) {
+    public static Optional<StatedComparison> asAComparison(Core part) {
         return Core.withoutStanding(Conditions.asSizeComparison(part)) instanceof Core.Binary binary
-                ? Comparison.of(binary) : Optional.empty();
+                ? Comparison.of(binary).map(Comparison::stated) : Optional.empty();
     }
 }

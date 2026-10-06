@@ -15,6 +15,7 @@ import souther.compiler.inputs.PositionBounds;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.reach.ComparisonArrival;
 import souther.compiler.reach.PathDecision;
 import souther.compiler.reach.Proof;
 import souther.compiler.reach.Reachability;
@@ -441,6 +442,7 @@ public final class PathReachability {
         if (e instanceof Core.Binary comparison) {
             outcomesAt(comparison, k, at, reads, decided);
         }
+        answeredAt(e, k);
         if (k.reachesNothing()) {
             // Nothing stands here, so nothing below is a place anything arrives at either. The arms
             // under this are left absent, which reads as unsettled: the arm that made it so was
@@ -558,8 +560,28 @@ public final class PathReachability {
             if (child instanceof Core.Binary comparison) {
                 outcomesAt(comparison, k, at, reads, decided);
             }
+            answeredAt(child, k);
             unreached(child, k, at, reads, decided);
         });
+    }
+
+    /**
+     * What arrives at {@code node}, where an application the model states answers there.
+     *
+     * <p>A line is drawn on what such an application means — an emptiness check states a size
+     * against nought — and is dropped by the same fact a comparison's is: nothing arriving where it
+     * is asked. So what arrives is filed under the application, the way it is under a comparison.
+     *
+     * <p>Whether anything arrives, and no projection beside it. A projection says where the value at
+     * one position lies, read off the side of a comparison that is that position; an application
+     * has arguments and no side, and what it states is about a number of what stands there rather
+     * than the value itself — which is not what a reader applying a projection asks of it.
+     */
+    private void answeredAt(Core node, Known k) {
+        plan.applicationAnsweringAt(node).ifPresent(application -> arriving.put(application,
+                k.reachesNothing()
+                        ? new ComparisonArrival.NothingArrives()
+                        : new ComparisonArrival.NoProjection()));
     }
 
     /**

@@ -165,14 +165,18 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
      * <p>The other half of what a closure being one rule buys: the line here is drawn by reading
      * what {@code filter} answers of what its closure said, so a spelling that lost the closure
      * would lose the line rather than the fork.
+     *
+     * <p>Beside it, the emptiness check is a rule of its own: the size of what {@code filter}
+     * answered, against nought. That size is a value made from {@code xs} and its elements, and
+     * the reading stops there at both — the same two places {@code List.length(...) == 0} leaves.
      */
     @Test
     void aClosureReadThroughWhatTheOperationAnswers() {
-        assertEquals(new Read(1, 0, 0), read("""
+        assertEquals(new Read(1, 0, 2), read("""
                 behavior pick : (xs: List<Int>) -> Low | High
                 let pick (xs) =
                     if List.isEmpty(List.filter(x -> x > 0, xs)) then High else Low"""));
-        assertEquals(new Read(1, 0, 0), read("""
+        assertEquals(new Read(1, 0, 2), read("""
                 behavior pick : (xs: List<Int>) -> Low | High
                 let pick (xs) = {
                     let positive = (x) -> x > 0
@@ -187,14 +191,16 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
      * closure the author supplied crosses two operations before anything applies it. The rule
      * inside it is the author's at both, and what says so is which copy was handed the closure —
      * the outer one — rather than which copy stands where it is finally applied.
+     *
+     * <p>The emptiness check stops at a value made from {@code xs}, as the one above does.
      */
     @Test
     void aClosureOneOperationHandsToAnother() {
-        assertEquals(new Read(1, 0, 0), read("""
+        assertEquals(new Read(1, 0, 2), read("""
                 behavior pick : (xs: Set<Int>) -> Low | High
                 let pick (xs) =
                     if Set.isEmpty(Set.filter(x -> x > 0, xs)) then High else Low"""));
-        assertEquals(new Read(1, 0, 0), read("""
+        assertEquals(new Read(1, 0, 2), read("""
                 behavior pick : (xs: Set<Int>) -> Low | High
                 let pick (xs) = {
                     let positive = (x) -> x > 0

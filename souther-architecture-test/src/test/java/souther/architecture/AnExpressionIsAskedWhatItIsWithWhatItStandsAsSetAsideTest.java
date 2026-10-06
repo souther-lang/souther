@@ -634,10 +634,11 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "coverage/NormalReturn", "mayEnter", "(" + core + "I)Z", 1, OF_A_FORK);
         row(out, c + "partition/ComparisonAssessment", "readsAnswer",
                 "(" + core + "L" + c + "types/BindingId;)Z", 1, COUNTS_THROUGH_IT);
-        row(out, c + "partition/ComparisonReadings", "comparisonAt",
-                "(" + core + ")L" + c + "check/Comparison;", 1,
-                "whether the node the walk stands at is a comparison a source wrote: a Widen is"
-                        + " not, and the comparison under it is met one step down");
+        row(out, c + "partition/ComparisonReadings", "statedAt",
+                "(" + core + ")L" + c + "partition/ComparisonReadings$StatedAt;", 1,
+                "whether the node the walk stands at is a construct a source wrote that states a"
+                        + " comparison: a Widen is not, and the construct under it is met one step"
+                        + " down");
         row(out, c + "partition/ComparisonReadings", "walk",
                 "(" + core + "L" + c + "partition/ComparisonReadings$Body;L" + c
                         + "inputs/InputReads;L" + c + "partition/LiveFlow;Ljava/util/List;Z"

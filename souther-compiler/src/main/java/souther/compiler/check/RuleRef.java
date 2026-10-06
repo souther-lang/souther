@@ -159,6 +159,13 @@ public sealed interface RuleRef permits RuleRef.Named, RuleRef.Written {
     /**
      * A comparison a definition wrote, read for the answer of some behavior.
      *
+     * <p><b>A comparison is what the rule states, not what the author wrote.</b> {@code
+     * List.length(xs) == 0} and {@code List.isEmpty(xs)} draw one line on one number, and the second
+     * is an application: the library says the operation means a size against nought. So the
+     * construct {@link #origin} names is a binary or an application, and it is what the rule is
+     * identified and cited by — what it states is read off it by whoever draws the line. Two
+     * spellings of one comparison in one body are two rules written, and two origins.
+     *
      * <p>The comparison and not the fork testing it. A condition can be an application of a
      * function parameter, so one predicate handed to two calls is one rule and two predicates
      * written apart are two — neither of which the fork can say. Which fork this comparison was
@@ -213,7 +220,7 @@ public sealed interface RuleRef permits RuleRef.Named, RuleRef.Written {
      * <p><b>Only for the parts of a condition nothing else answers for.</b> {@code if x > 0} states
      * its rule as a comparison, and that comparison is what a question about it is filed under; a
      * fork there as well would be one construct raising two questions and a report telling a reader
-     * twice. A condition is several things at once — {@code a > 0 && List.isEmpty(xs)} states a
+     * twice. A condition is several things at once — {@code a > 0 && List.contains(0, xs)} states a
      * comparison and something nothing read — so one fork may stand beside a comparison of the same
      * condition, each answering for its own part of it.
      *
