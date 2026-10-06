@@ -109,7 +109,8 @@ final class GenerationFixtures {
     static GenerationPlan planOver(MeasuredInput subject, List<ClassOfAPosition> classes,
                                    List<ArmProbe> arms) {
         return GenerationPlan.of(subject, classes,
-                arms.stream().map(Generator.ArmOwed::new).toList(), List.of(), List.of());
+                arms.stream().map(Generator.ArmOwed::new).toList(), List.of(), List.of(),
+                List.of());
     }
 
     /**

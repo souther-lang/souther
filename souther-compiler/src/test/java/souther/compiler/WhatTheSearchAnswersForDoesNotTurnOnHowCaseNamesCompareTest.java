@@ -119,7 +119,8 @@ class WhatTheSearchAnswersForDoesNotTurnOnHowCaseNamesCompareTest {
                             out.put(behavior + " class " + obligation.target(), kindOf(disposition));
                     case GenerationAnswer.Arm(var obligation, var disposition) ->
                             out.put(behavior + " arm " + obligation.target(), kindOf(disposition));
-                    case GenerationAnswer.Pair _, GenerationAnswer.Meeting _ -> { }
+                    case GenerationAnswer.Pair _, GenerationAnswer.Meeting _,
+                         GenerationAnswer.Replacement _ -> { }
                 }
             });
             // And what searching each rule of the decision established, which is the other half of

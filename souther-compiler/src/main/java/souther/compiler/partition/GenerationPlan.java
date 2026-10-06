@@ -146,12 +146,14 @@ public final class GenerationPlan {
                                     List<Generator.ArmOwed> armsOwed,
                                     List<ObligationIdentity.OfAFallbackPairCell> pairsOwed,
                                     List<ObligationIdentity.OfACombinationOfDecisions>
-                                            meetingsOwed) {
+                                            meetingsOwed,
+                                    List<ReplacementOwed> replacementsOwed) {
         List<GenerationObligation> out = new ArrayList<>();
         classesOwed.forEach(each -> out.add(new GenerationObligation.Class(each)));
         armsOwed.forEach(each -> out.add(new GenerationObligation.Arm(each)));
         pairsOwed.forEach(each -> out.add(new GenerationObligation.Pair(each)));
         meetingsOwed.forEach(each -> out.add(new GenerationObligation.Meeting(each)));
+        replacementsOwed.forEach(each -> out.add(new GenerationObligation.Replacement(each)));
         return new GenerationPlan(subject, out);
     }
 
@@ -208,6 +210,21 @@ public final class GenerationPlan {
         List<ObligationIdentity.OfACombinationOfDecisions> out = new ArrayList<>();
         for (GenerationObligation each : obligations) {
             if (each instanceof GenerationObligation.Meeting(var target)) {
+                out.add(target);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * One rewrite of the body apiece that no row was seen to tell from it. Beside the arms and
+     * not among them: a row through every arm can answer every rewrite of them alike, which is the
+     * whole reason it is asked about.
+     */
+    public List<ReplacementOwed> replacementsOwed() {
+        List<ReplacementOwed> out = new ArrayList<>();
+        for (GenerationObligation each : obligations) {
+            if (each instanceof GenerationObligation.Replacement(var target)) {
                 out.add(target);
             }
         }

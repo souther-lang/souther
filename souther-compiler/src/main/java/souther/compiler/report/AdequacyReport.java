@@ -20,6 +20,7 @@ import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.RegionSlot;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleCitations;
 import souther.compiler.check.RuleRef;
@@ -27,6 +28,7 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.ObligationIdentity;
+import souther.compiler.partition.Replacement;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.ClosureGap;
@@ -4116,6 +4118,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     ObjectNode one = of.addObject();
                     one.put("axis", each.at().toString());
                     one.put("class", each.classId());
+                }
+            }
+            // The behavior and which rewrite: an arm answering as one of its siblings, written
+            // with the fork the way an arm is and the sibling by its part, or the body answering
+            // one value, which is one rewrite whatever value the rows came to.
+            case ObligationIdentity.OfAReplacement(var behavior, var replacement) -> {
+                into.put("behavior", behavior);
+                switch (replacement) {
+                    case Replacement.OfAnArm(var fork, var part, var with) -> {
+                        WrittenOwner.Body body = WrittenOwner.theBodyThatWrote(fork.owner());
+                        into.put("rewrite", "armAsSibling");
+                        into.put("module", body.module());
+                        into.put("definition", body.definition());
+                        into.put("construct", fork.ordinal());
+                        into.put("lowered", fork.lowered());
+                        into.put("part", part);
+                        into.put("with", with);
+                    }
+                    case Replacement.ByOneAnswer() -> into.put("rewrite", "oneAnswer");
                 }
             }
         }

@@ -4,8 +4,12 @@ import souther.compiler.carrier.Lookup;
 import souther.compiler.execute.BoundaryValues;
 import souther.compiler.execute.ExampleExecution;
 import souther.compiler.execute.RowTrials;
+import souther.compiler.observe.AnswerChange;
+import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Classification;
+import souther.compiler.partition.ReplacementOwed;
+import souther.compiler.partition.RowToRun;
 import souther.compiler.inputs.TermPath;
 
 
@@ -4157,6 +4161,7 @@ public final class Adequacy {
             List<ObligationIdentity.OfAFallbackPairCell> pairs = new ArrayList<>();
             List<ObligationIdentity.OfACombinationOfDecisions> meetings = new ArrayList<>();
             Set<DecisionRule> rules = new LinkedHashSet<>();
+            Set<ReplacementOwed> replacements = new LinkedHashSet<>();
             for (Finding finding : owed) {
                 switch (finding.about()) {
                     // A combination the body settles together is where an arm is looked for and is
@@ -4216,7 +4221,8 @@ public final class Adequacy {
                             new Generator.ArmOwed(each.getValue())))
                     .toList();
             return Answer.of(new RowWork(classesOwed(measured), armsOwed,
-                    pairs, meetings, List.copyOf(rules), pointsOwed(db, name, behavior)));
+                    pairs, meetings, List.copyOf(rules), pointsOwed(db, name, behavior),
+                    List.copyOf(replacements)));
         }
 
         /**
@@ -4379,7 +4385,7 @@ public final class Adequacy {
             souther.compiler.partition.GenerationPlan asked =
                     souther.compiler.partition.GenerationPlan.of(subject, work.classes(),
                             work.arms().stream().map(RowWork.Arm::target).toList(),
-                            work.pairs(), work.meetings());
+                            work.pairs(), work.meetings(), work.replacements());
             // The meetings of this body, read once for the module. A behavior with no entry is one
             // whose body was not lowered, which is nothing to search in rather than a search that
             // found nothing — and is the same condition the guards above answer for.
@@ -5408,26 +5414,48 @@ public final class Adequacy {
             return Generator.Trial.NOTHING_RUNS;
         }
         RowTrials.OfBehavior application = trials.forBehavior(behavior, sig);
-        return row -> {
-            List<RowTrials.AnsweredWith> standing = requires.standingIn(row.answers());
-            if (standing == null) {
-                // A row short of a stand-in the behavior requires is a row nothing applies, which
-                // is said here rather than by a construction failing: what comes back from that is
-                // a row nothing was seen doing, and so is this — but only this one knows why.
-                return Generator.ObservedRun.nothingRan();
+        return new Generator.Trial() {
+
+            @Override
+            public Generator.ObservedRun run(RowToRun row) {
+                List<RowTrials.AnsweredWith> standing = requires.standingIn(row.answers());
+                if (standing == null) {
+                    // A row short of a stand-in the behavior requires is a row nothing applies,
+                    // which is said here rather than by a construction failing: what comes back
+                    // from that is a row nothing was seen doing, and so is this — but only this one
+                    // knows why.
+                    return Generator.ObservedRun.nothingRan();
+                }
+                return application.run(valuesOf(row), standing)
+                        .map(ran -> new Generator.ObservedRun(switch (ran.recorded()) {
+                            // Read under the numbering the caller is asking about. What a run left
+                            // behind says which numbering it was made under, so a recording of
+                            // classes numbered otherwise is refused here rather than answered about
+                            // places it was never near.
+                            case RunRecord.Recorded(var seen) ->
+                                    new Generator.Watched.Ran(numbering.orElseThrow().align(seen));
+                            case RunRecord.NoAccount _ -> new Generator.Watched.NoAccount();
+                        }, ran.answer()))
+                        .orElseGet(Generator.ObservedRun::nothingRan);
             }
-            return application
-                .run(row.inputs().stream()
-                        .map(souther.compiler.partition.FixtureTemplate::value).toList(), standing)
-                .map(ran -> new Generator.ObservedRun(switch (ran.recorded()) {
-                    // Read under the numbering the caller is asking about. What a run left behind
-                    // says which numbering it was made under, so a recording of classes numbered
-                    // otherwise is refused here rather than answered about places it was never near.
-                    case RunRecord.Recorded(var seen) ->
-                            new Generator.Watched.Ran(numbering.orElseThrow().align(seen));
-                    case RunRecord.NoAccount _ -> new Generator.Watched.NoAccount();
-                }, ran.answer()))
-                .orElseGet(Generator.ObservedRun::nothingRan);
+
+            @Override
+            public Optional<AnswerObservation> runReplacing(RowToRun row,
+                                                            Map<Integer, Integer> replacing) {
+                List<RowTrials.AnsweredWith> standing = requires.standingIn(row.answers());
+                return standing == null ? Optional.empty()
+                        : application.runReplacing(valuesOf(row), standing, replacing);
+            }
+
+            @Override
+            public AnswerChange change(AnswerObservation was, AnswerObservation now) {
+                return application.change(was, now);
+            }
+
+            private static List<Hir.Expr> valuesOf(RowToRun row) {
+                return row.inputs().stream()
+                        .map(souther.compiler.partition.FixtureTemplate::value).toList();
+            }
         };
     }
 

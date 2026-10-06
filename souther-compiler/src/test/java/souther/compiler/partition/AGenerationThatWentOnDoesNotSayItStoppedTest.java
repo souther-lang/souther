@@ -97,7 +97,8 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
     /** A run asked for nothing, which is what a reason about the run alone is written against. */
     private static FillResult stoppedWith(GenerationReason why) {
         GenerationPlan plan =
-                GenerationPlan.of(subject(), List.of(), List.of(), List.of(), List.of());
+                GenerationPlan.of(subject(), List.of(), List.of(), List.of(), List.of(),
+                        List.of());
         return new FillResult(new LinkedHashMap<>(), List.of(), List.of(why),
                 Discharge.nothingAskedOf(plan));
     }

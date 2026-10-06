@@ -3,10 +3,12 @@ package souther.compiler.execute;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Sig;
 import souther.compiler.coverage.RunRecord;
+import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -33,7 +35,6 @@ public interface RowTrials {
      * combination as untried as it was; a row that ran and reached nothing is a row that missed, and
      * the two must not come back as one value.
      */
-    @FunctionalInterface
     interface OfBehavior {
 
         /**
@@ -45,6 +46,19 @@ public interface RowTrials {
          *                applies
          */
         Optional<Ran> run(List<Hir.Expr> inputs, List<AnsweredWith> answers);
+
+        /**
+         * What running {@code inputs} answered with the arms at {@code replacing}'s sites answering
+         * as the parts it maps them to, or empty where nothing could run them.
+         *
+         * <p>Nothing is recorded: the program run is not the one the module's places are of.
+         */
+        Optional<AnswerObservation> runReplacing(List<Hir.Expr> inputs,
+                                                 List<AnsweredWith> answers,
+                                                 Map<Integer, Integer> replacing);
+
+        /** Whether this behavior answering {@code now} answered differently from {@code was}. */
+        AnswerChange change(AnswerObservation was, AnswerObservation now);
     }
 
     /**

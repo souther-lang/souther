@@ -158,7 +158,8 @@ class TwoRunsOfOnePlanThatDisagreeAboutWhatTheyReadAreRefusedTest {
     void twoPlansOfOneValueAreOneQuestion() {
         GenerationPlan asked = planOver(List.of(A_CLASS), 1);
         GenerationPlan same = GenerationPlan.of(asked.subject(), asked.classesOwed(),
-                asked.armsOwed(), asked.pairsOwed(), asked.meetingsOwed());
+                asked.armsOwed(), asked.pairsOwed(), asked.meetingsOwed(),
+                asked.replacementsOwed());
 
         assertNotSame(asked, same);
         assertEquals(asked, same);
@@ -226,7 +227,7 @@ class TwoRunsOfOnePlanThatDisagreeAboutWhatTheyReadAreRefusedTest {
                         RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES))
                         .reading(SYMBOLS),
                 AxesATestWrote.asAMeasurement("fee", List.of(days)));
-        return GenerationPlan.of(subject, classes, List.of(), List.of(), List.of());
+        return GenerationPlan.of(subject, classes, List.of(), List.of(), List.of(), List.of());
     }
 
     private static PartitionClass divided(String id, long value) {

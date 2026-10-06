@@ -90,6 +90,11 @@ public record FillResult(SequencedMap<RowId, ComposedRow> composed,
                         answered.add(built.rowId());
                     }
                 }
+                case GenerationAnswer.Replacement(var _, var disposition) -> {
+                    if (disposition instanceof ReplacementDisposition.Witnessed(RowId row)) {
+                        answered.add(row);
+                    }
+                }
             }
         }
         if (!answered.equals(composed.keySet())) {
@@ -196,6 +201,22 @@ public record FillResult(SequencedMap<RowId, ComposedRow> composed,
                     }
                     answers.add(new GenerationAnswer.Meeting(q,
                             offering(ClassDisposition.acrossRuns(runs), searched, composed, named)));
+                }
+                // A row the rewrite answers differently on, from the first run that found one;
+                // where none did, every way the runs ended.
+                case GenerationObligation.Replacement q -> {
+                    ReplacementDisposition together = null;
+                    for (int run = 0; run < searched.size(); run++) {
+                        ReplacementDisposition its = searched.get(run).discharge().at(q.target());
+                        if (its instanceof ReplacementDisposition.Witnessed(RowId row)) {
+                            together = new ReplacementDisposition.Witnessed(
+                                    naming(searched, composed, named, run, row));
+                            break;
+                        }
+                        together = together == null ? its
+                                : ReplacementDisposition.together(together, its);
+                    }
+                    answers.add(new GenerationAnswer.Replacement(q, together));
                 }
             }
         }
@@ -327,6 +348,11 @@ public record FillResult(SequencedMap<RowId, ComposedRow> composed,
                 case GenerationObligation.Meeting q -> answers.add(new GenerationAnswer.Meeting(q,
                         new ClassDisposition.Unresolved(CameToNothing.metNothing(
                                 new Generator.UnresolvedCombination(List.of(), why)))));
+                // Nothing was composed, which a search for a rewrite ends in as surely as one
+                // for an arm: the reasons say why nothing was.
+                case GenerationObligation.Replacement q -> answers.add(
+                        new GenerationAnswer.Replacement(q, new ReplacementDisposition.NoneFound(
+                                ReplacementDisposition.Ended.NOTHING_WAS_COMPOSED)));
             }
         }
         return new FillResult(new LinkedHashMap<>(), List.of(), reasons,
@@ -409,6 +435,13 @@ public record FillResult(SequencedMap<RowId, ComposedRow> composed,
                             && built.rowId().equals(id)) {
                         purposes.add(new Generator.Purpose.ForACombinationOfDecisions(
                                 obligation.target().settled()));
+                    }
+                }
+                // And the rewrites this row is answered differently on.
+                case GenerationAnswer.Replacement(var obligation, var disposition) -> {
+                    if (disposition instanceof ReplacementDisposition.Witnessed(RowId witness)
+                            && witness.equals(id)) {
+                        purposes.add(new Generator.Purpose.ForAReplacement(obligation.target()));
                     }
                 }
             }

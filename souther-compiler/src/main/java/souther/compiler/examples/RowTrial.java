@@ -11,6 +11,7 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Contract;
+import souther.compiler.coverage.Intervention;
 import souther.compiler.coverage.NumberingIdentity;
 import souther.compiler.coverage.Probe;
 import souther.compiler.coverage.RunRecord;
@@ -21,6 +22,7 @@ import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.generated.ProbeImage;
 import souther.compiler.jvm.ClassFileImage;
+import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.ObservedValue;
@@ -96,36 +98,100 @@ public final class RowTrial {
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
         Answerer answerer = Answering.generatedHere().over(generated, loader);
         EnsuresChecks ensures = new EnsuresChecks(loader, contracts, signatures.keySet());
-        return (behavior, sig) -> (inputs, answers) -> {
-            if (!(answerer.of(behavior) instanceof Answerer.Answer.Something applies)) {
-                return Optional.empty();   // nothing applies this behavior, so nothing ran
+        return (behavior, sig) -> new RowTrials.OfBehavior() {
+
+            @Override
+            public Optional<RowTrials.Ran> run(List<Hir.Expr> inputs,
+                                               List<RowTrials.AnsweredWith> answers) {
+                return ready(inputs, answers).flatMap(ready -> went(ready, probes, steps));
             }
-            // One reader per row, the way a written row has one: what a reading builds up while it
-            // expands a value is that row's, and a reader kept between them would be a session
-            // spanning every candidate of every combination.
-            return went(new FixtureReader(module, symbols, sums, kinds, fields, values, loader),
-                    module, kinds, sums, ensures,
-                    applies, behavior, sig, inputs, answers, probes, steps);
+
+            @Override
+            public Optional<AnswerObservation> runReplacing(List<Hir.Expr> inputs,
+                                                            List<RowTrials.AnsweredWith> answers,
+                                                            Map<Integer, Integer> replacing) {
+                return ready(inputs, answers).flatMap(ready -> {
+                    Intervention.begin(replacing);
+                    try {
+                        return applied(ready.applying(), ready.over(), steps, ready.reading());
+                    } finally {
+                        Intervention.end();
+                    }
+                });
+            }
+
+            @Override
+            public AnswerChange change(AnswerObservation was, AnswerObservation now) {
+                return reader().change(was, now, sig.outputType());
+            }
+
+            private Optional<Ready> ready(List<Hir.Expr> inputs,
+                                          List<RowTrials.AnsweredWith> answers) {
+                if (!(answerer.of(behavior) instanceof Answerer.Answer.Something applies)) {
+                    return Optional.empty();   // nothing applies this behavior, so nothing ran
+                }
+                return RowTrial.ready(reader(), module, kinds, sums, ensures, applies, behavior,
+                        sig, inputs, answers);
+            }
+
+            /**
+             * One reader per row, the way a written row has one: what a reading builds up while it
+             * expands a value is that row's, and a reader kept between them would be a session
+             * spanning every candidate of every combination.
+             */
+            private FixtureReader reader() {
+                return new FixtureReader(module, symbols, sums, kinds, fields, values, loader);
+            }
         };
     }
 
+    /** A row built and ready to be applied, and what its answer will be read with. */
+    private record Ready(Answerer.Applying applying, List<Handed> over, AnswerReading reading) {}
+
     /**
-     * One row, built and applied, what the probe saw while it was, and what it answered.
+     * One row, applied, what the probe saw while it was, and what it answered.
      *
      * <p>The recording is begun and read on this thread because the run is on this thread, and it
      * is begun only where there is something to record: classes generated without the calls that
      * write a run down leave no account, which is not the same as an account of a run that reached
      * nothing.
      */
-    private static Optional<RowTrials.Ran> went(FixtureReader fixtures,
-                                                Prepared.ForExamples module,
-                                                DeclarationKinds kinds,
-                                                SumCases sums,
-                                                EnsuresChecks ensures,
-                                                Answerer.Answer.Something applies, String behavior,
-                                                Sig sig, List<Hir.Expr> inputs,
-                                                List<RowTrials.AnsweredWith> answers,
-                                                ProbeImage probes, EvaluationPolicy steps) {
+    private static Optional<RowTrials.Ran> went(Ready ready, ProbeImage probes,
+                                                EvaluationPolicy steps) {
+        // Under the numbering the classes about to be run were emitted with, or not at all where
+        // they record nothing. Asked once and answered by the shape: the recording is begun, read
+        // and let go inside one arm, so there is no way to end one that was never begun — and what
+        // comes back where nothing was watching is no account of a run rather than an account of
+        // one that went nowhere.
+        return switch (probes) {
+            case ProbeImage.Uninstrumented _ ->
+                    applied(ready.applying(), ready.over(), steps, ready.reading())
+                            .map(answer -> new RowTrials.Ran(new RunRecord.NoAccount(), answer));
+            case ProbeImage.Instrumented(NumberingIdentity numbering, var _) -> {
+                Probe.begin(numbering);
+                try {
+                    yield applied(ready.applying(), ready.over(), steps, ready.reading())
+                            .map(answer -> new RowTrials.Ran(
+                                    new RunRecord.Recorded(Probe.snapshot()), answer));
+                } finally {
+                    // On every way out, including one nothing here catches. A recording left
+                    // installed is where the next reader on this thread would start.
+                    Probe.end();
+                }
+            }
+        };
+    }
+
+    /**
+     * One row, built and gathered for an application, or empty where it could not be: a value
+     * that could not be made is a row that never ran.
+     */
+    private static Optional<Ready> ready(FixtureReader fixtures, Prepared.ForExamples module,
+                                         DeclarationKinds kinds, SumCases sums,
+                                         EnsuresChecks ensures,
+                                         Answerer.Answer.Something applies, String behavior,
+                                         Sig sig, List<Hir.Expr> inputs,
+                                         List<RowTrials.AnsweredWith> answers) {
         List<BoundaryInput> ins = sig.ins();
         if (inputs.size() != ins.size()) {
             return Optional.empty();   // not a row of this behavior, so this is not the thing to run
@@ -159,29 +225,8 @@ public final class RowTrial {
             // went is how a defect in the runner comes back as a defect in the model.
             return Optional.empty();
         }
-        // Under the numbering the classes about to be run were emitted with, or not at all where
-        // they record nothing. Asked once and answered by the shape: the recording is begun, read
-        // and let go inside one arm, so there is no way to end one that was never begun — and what
-        // comes back where nothing was watching is no account of a run rather than an account of
-        // one that went nowhere.
-        AnswerReading reading = new AnswerReading(fixtures, sig.outputType(), module.name(), kinds,
-                sums);
-        return switch (probes) {
-            case ProbeImage.Uninstrumented _ -> applied(applying, over, steps, reading)
-                    .map(answer -> new RowTrials.Ran(new RunRecord.NoAccount(), answer));
-            case ProbeImage.Instrumented(NumberingIdentity numbering, var _) -> {
-                Probe.begin(numbering);
-                try {
-                    yield applied(applying, over, steps, reading)
-                            .map(answer -> new RowTrials.Ran(
-                                    new RunRecord.Recorded(Probe.snapshot()), answer));
-                } finally {
-                    // On every way out, including one nothing here catches. A recording left
-                    // installed is where the next reader on this thread would start.
-                    Probe.end();
-                }
-            }
-        };
+        return Optional.of(new Ready(applying, over,
+                new AnswerReading(fixtures, sig.outputType(), module.name(), kinds, sums)));
     }
 
     /**
