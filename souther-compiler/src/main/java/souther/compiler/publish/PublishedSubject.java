@@ -196,9 +196,14 @@ public sealed interface PublishedSubject {
             return SubjectWord.RULE;
         }
 
+        /**
+         * The place, the rule and what stopped it. One rule read at one place can be stopped by
+         * two things — one reading short of the syntax and another of the domain — and the two are
+         * two entries a reader is sent to read differently.
+         */
         @Override
         public String identity() {
-            return at + "/" + ruleId;
+            return at + "/" + ruleId + "/" + String.join(",", stopped);
         }
     }
 

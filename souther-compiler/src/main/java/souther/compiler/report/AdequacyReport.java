@@ -1948,7 +1948,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // open and nothing about what they were, with no mark in the body to find them by; the
             // lines below name each one and say where it leaves them, both read from what the
             // measurement established rather than worked out again here.
-            for (AdequacyUncertainty each : whatKeepsTheVerdictOpen()) {
+            //
+            // In the order the document writes them in. The facts are a set, so the order they
+            // come in is no order at all, and the page and the document list them alike.
+            DocumentSources sources = new DocumentSources(rendering);
+            for (AdequacyUncertainty each : PublicationOrders.WHAT_HOLDS_A_VERDICT_OPEN.arrangeBy(
+                    whatKeepsTheVerdictOpen(), it -> openingOf(it, sources, places))) {
                 // What it is about and what to do with it, and not the word the document writes
                 // for the kind: those are for a consumer keyed on this report, and a person reading
                 // a line is owed a sentence. What kind of thing it is comes out in what is said to
@@ -6280,13 +6285,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // Once for the fold below, for the reason the page's own line gives.
         PublishedRuleHandle.WhereARuleIs places = rulePlaces();
         for (AdequacyUncertainty each : whatKeepsTheVerdictOpen()) {
-            // The reason beside it, where the kind is one that has one. A measure nobody made says
-            // what it was waiting for, and that word is one this document already writes wherever a
-            // measure has no number — so a reader meets one vocabulary and not two.
-            Optional<NotMeasuredWord> why = each instanceof AdequacyUncertainty.NotMeasured it
-                    ? Optional.of(NotMeasuredWord.of(it.why())) : Optional.empty();
-            said.add(new PublishedOpening(kindOf(each), why, each.runSensitivity(),
-                    publishedSubject(each.subject(), sources, places)));
+            said.add(openingOf(each, sources, places));
         }
         for (PublishedOpening each : PublicationOrders.WHAT_HOLDS_A_VERDICT_OPEN
                 .arrange(said).written()) {
@@ -6299,6 +6298,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             each.reason().ifPresent(reason -> fact.put("reason", word(reason)));
             fact.put("runSensitivity", word(each.runSensitivity()));
         }
+    }
+
+    /** What the document writes for one thing keeping the verdict open. */
+    private static PublishedOpening openingOf(AdequacyUncertainty each, DocumentSources sources,
+                                              PublishedRuleHandle.WhereARuleIs places) {
+        // The reason beside it, where the kind is one that has one. A measure nobody made says
+        // what it was waiting for, and that word is one this document already writes wherever a
+        // measure has no number — so a reader meets one vocabulary and not two.
+        Optional<NotMeasuredWord> why = each instanceof AdequacyUncertainty.NotMeasured it
+                ? Optional.of(NotMeasuredWord.of(it.why())) : Optional.empty();
+        return new PublishedOpening(kindOf(each), why, each.runSensitivity(),
+                publishedSubject(each.subject(), sources, places));
     }
 
     /**
