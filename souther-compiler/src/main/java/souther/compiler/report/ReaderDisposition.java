@@ -1,6 +1,7 @@
 package souther.compiler.report;
 
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.partition.BodyDistinction;
 import souther.compiler.query.NotMeasuredReason;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.publish.WeakeningVocabulary;
@@ -85,10 +86,10 @@ public sealed interface ReaderDisposition {
      * Whether this behavior needs the distinction a position of its input carries.
      *
      * <p>A decision and not an operation. What the compiler has is that the position holds more
-     * classes than this behavior's rules composed, and that combinations those classes take part in
-     * are unknown because no row reaches a combination the behavior never tells apart. What that is
-     * worth is the author's: a value passed through untouched is as ordinary as an input wider than
-     * it needs to be.
+     * classes than this behavior's body tells apart, and that combinations those classes take part
+     * in are unknown because no row reaches a combination the behavior never tells apart. What that
+     * is worth is the author's: a value passed through untouched is as ordinary as an input wider
+     * than it needs to be.
      */
     record ReconsiderWhatThisBehaviorNeedsToDistinguish(Subject subject)
             implements ReaderDisposition {}
@@ -153,31 +154,40 @@ public sealed interface ReaderDisposition {
      * Where the combinations a behavior's rows do not reach leave a reader.
      *
      * <p>Nobody is owed a row at one, so the question is whether there is anything to look at. There
-     * is where a position the relations run between holds more classes than this behavior's rules
-     * composed: the combinations those classes take part in are ones no row can reach, and what to
-     * do about that is a judgement about the model rather than a row.
+     * is where a position the relations run between holds more classes than this behavior's body
+     * tells apart: the combinations those classes take part in are ones no row can reach, and what
+     * to do about that is a judgement about the model rather than a row.
      *
-     * <p>Where every position is divided as far as its rules divide it, the combinations left are
-     * ones the rows happen not to sit in, and there is nothing further here — which is what
-     * {@link Settled} says and is not the same as saying nothing is owed.
+     * <p>Where the body tells every position's classes apart, the combinations left are ones the
+     * rows happen not to sit in, and there is nothing further here — which is what {@link Settled}
+     * says and is not the same as saying nothing is owed.
      *
      * <p>Read from the axes and not from the count. How many are unknown says how much of the
      * product the rows reach; whether any of it is out of their reach is the positions' answer.
      */
     static ReaderDisposition of(PartitionEvidence.PairSpace pairs,
                                 List<PartitionEvidence.AxisCoverage> axes) {
-        return widerThanTheyAreSeparated(pairs, axes).isEmpty()
+        List<Wider> wider = widerThanTheyAreSeparated(pairs, axes);
+        return wider.isEmpty()
                 ? new Settled()
                 : new ReconsiderWhatThisBehaviorNeedsToDistinguish(new Subject.OfABehavior(
-                        widerThanTheyAreSeparated(pairs, axes).getFirst().at().behavior()));
+                        wider.getFirst().axis().at().behavior()));
     }
 
     /**
-     * The positions a behavior takes wider than its own rules separate, and whose classes take part
-     * in a relation no row reaches.
+     * A position the body tells apart into fewer groups than it holds classes.
+     *
+     * @param groups how many groups the body leaves the classes in, which is one where it tells
+     *               none of them apart
+     */
+    record Wider(PartitionEvidence.AxisCoverage axis, int groups) {}
+
+    /**
+     * The positions a behavior takes wider than its body tells apart, and whose classes take part in
+     * a relation no row reaches.
      *
      * <p>Both halves, and the second of them per relation. A position with more classes than the
-     * rules composed is nothing to weigh where every relation it is in was reached: what makes it
+     * body tells apart is nothing to weigh where every relation it is in was reached: what makes it
      * worth a reader's time is that some of what it carries is out of every row's reach, and that
      * is a fact about one relation and not about the space. Asked of the space, a position whose
      * own relations are all covered would be raised because another two positions left something
@@ -187,14 +197,25 @@ public sealed interface ReaderDisposition {
      * combinations and the decision this leaves a reader are one answer, and worked out twice they
      * are two that can differ.
      */
-    static List<PartitionEvidence.AxisCoverage> widerThanTheyAreSeparated(
+    static List<Wider> widerThanTheyAreSeparated(
             PartitionEvidence.PairSpace pairs, List<PartitionEvidence.AxisCoverage> axes) {
         if (pairs.counted().made().isEmpty()) {
             return List.of();
         }
-        List<PartitionEvidence.AxisCoverage> out = new ArrayList<>();
+        List<Wider> out = new ArrayList<>();
         for (PartitionEvidence.AxisCoverage axis : axes) {
-            if (axis.cutOrParted() || axis.divides().size() >= axis.classes().size()) {
+            // How many groups the body leaves the classes in, where that was read. A body that says
+            // something here this compiler does not read into classes, or no body at all, leaves
+            // nothing to say the position is taken wider than it is told apart.
+            int groups;
+            switch (axis.toldApart()) {
+                case BodyDistinction.Untouched _ -> groups = 1;
+                case BodyDistinction.Drawn it -> groups = it.groups().size();
+                case BodyDistinction.Unread _, BodyDistinction.NoBody _ -> {
+                    continue;
+                }
+            }
+            if (groups >= axis.classes().size()) {
                 continue;
             }
             // A position the space has no relation for, where the behavior has others. The space
@@ -214,13 +235,13 @@ public sealed interface ReaderDisposition {
                 if (here) {
                     inARelation = true;
                     if (pairs.unknown(pair) > 0) {
-                        out.add(axis);
+                        out.add(new Wider(axis, groups));
                         break;
                     }
                 }
             }
             if (!inARelation && axes.size() > 1) {
-                out.add(axis);
+                out.add(new Wider(axis, groups));
             }
         }
         return List.copyOf(out);

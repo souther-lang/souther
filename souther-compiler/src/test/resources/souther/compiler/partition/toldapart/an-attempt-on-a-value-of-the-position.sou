@@ -1,0 +1,28 @@
+// Whether a construction held its rules is a decision nothing can place, where the rules refuse a
+// case of the value.
+//
+// Active(f) is built only where `f` is not Off, so the two arms of the attempt tell Off from the
+// other two. Which values an attempt tells apart is nothing its arms name, and the `match` tells
+// apart less than every case, so the position is not said to be told apart by the `match` alone.
+//
+// told apart at f: unread
+module example.attempting
+
+data On
+data Off
+data Pending
+data Flag = On | Off | Pending
+data Active = Flag invariant value /= Off
+data NotActive
+
+data Ok = { n: Int }
+
+behavior judge : (f: Flag) -> Ok | NotActive
+    constructs Ok, Active
+
+let judge (f) = {
+    guard Active(f) as active else NotActive
+    match f with
+        | On | Pending -> Ok { n = 1 }
+        | Off -> Ok { n = 2 }
+}

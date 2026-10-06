@@ -60,6 +60,7 @@ import souther.compiler.observe.Stage;
 import souther.compiler.partition.AnswersStoodIn;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
+import souther.compiler.partition.BodyDistinction;
 import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.DomainPoint;
@@ -1877,22 +1878,21 @@ public final class Adequacy {
             // Counted with nothing a body claims in scope. What was claimed travels beside the
             // numbers rather than into them ({@link Claimed}), and the two meet where a report
             // is written.
-            // And which of its positions the body decides on, where there is a body. A pair of
-            // classes is a thing to ask a row for because the behavior tells the two apart; a
-            // position no decision is about keeps the rows its own classes are owed and makes no
-            // combination with anything. A behavior with no body has no such reading and its
-            // space is over every position measured — the difference is what is known, not a
-            // rule for one kind of behavior.
+            // And how far the body tells each position's classes apart, where there is a body. A
+            // pair of classes is a thing to ask a row for because the behavior tells the two
+            // apart, and a position wider than the body tells apart is what a reader is left to
+            // weigh — both are read off this one answer. A behavior with no body has no such
+            // reading, which is what is known about it and not a rule for one kind of behavior.
             Map<String, CoverageRead.Read> met = db.ask(new Meets(name)).value();
             Bodies.Elaborated checked = db.ask(new Bodies.Observable(name)).value();
-            Set<souther.compiler.partition.AxisId> decided =
+            Map<AxisId, BodyDistinction> toldApart =
                     checked == null || !checked.behaviorBodies().containsKey(spec.name())
                             || met == null || met.get(spec.name()) == null
-                            ? null
-                            : souther.compiler.partition.PairFallbackPositions.of(
-                                    met.get(spec.name()), subject.axes().axes());
+                            ? BodyDistinction.withoutABody(subject.axes().axes())
+                            : BodyDistinction.of(met.get(spec.name()), subject.axes().axes(),
+                                    subject.partitioning().rulesWithoutALine());
             return Coverages.of(subject, seen,
-                    db.ask(new Front.Adequacy()).value().measures(), decided);
+                    db.ask(new Front.Adequacy()).value().measures(), toldApart);
         }
     }
 

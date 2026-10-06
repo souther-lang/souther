@@ -1948,7 +1948,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // open and nothing about what they were, with no mark in the body to find them by; the
             // lines below name each one and say where it leaves them, both read from what the
             // measurement established rather than worked out again here.
-            for (AdequacyUncertainty each : whatKeepsTheVerdictOpen()) {
+            //
+            // In the order the document writes them in. The facts are a set, so the order they
+            // come in is no order at all, and the page and the document list them alike.
+            DocumentSources sources = new DocumentSources(rendering);
+            for (AdequacyUncertainty each : PublicationOrders.WHAT_HOLDS_A_VERDICT_OPEN.arrangeBy(
+                    whatKeepsTheVerdictOpen(), it -> openingOf(it, sources, places))) {
                 // What it is about and what to do with it, and not the word the document writes
                 // for the kind: those are for a consumer keyed on this report, and a person reading
                 // a line is owed a sentence. What kind of thing it is comes out in what is said to
@@ -2213,16 +2218,27 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
             // Not a finding: nothing is owed here, and what the line says is what the model already
             // decided rather than something the rows left undone.
+            List<ReaderDisposition.Wider> wider =
+                    ReaderDisposition.widerThanTheyAreSeparated(partition.pairs(), partition.axes());
             for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
-                // A position divided into more classes than this behavior's rules composed, whose
+                // A position holding more classes than this behavior's body tells apart, whose
                 // classes take part in a relation no row reaches. Asked of the one thing that
                 // answers it, which is what the decision this leaves a reader is read from: worked
                 // out again here, the line and the decision would be two answers to one question.
-                if (ReaderDisposition.widerThanTheyAreSeparated(partition.pairs(), partition.axes())
-                        .contains(axis)) {
-                    out.append(String.format("      · %s holds %d classes and this behavior's rules"
-                                    + " compose %d of them%n",
-                            axis.name(), axis.classes().size(), axis.divides().size()));
+                //
+                // Said in groups, because a body that asks whether a value is one of two cases out
+                // of four tells the four apart as two groups.
+                for (ReaderDisposition.Wider each : wider) {
+                    if (!each.axis().at().equals(axis.at())) {
+                        continue;
+                    }
+                    out.append(each.groups() <= 1
+                            ? String.format("      · %s holds %d classes and this behavior does"
+                                            + " not tell them apart%n",
+                                    axis.name(), axis.classes().size())
+                            : String.format("      · %s holds %d classes and this behavior tells"
+                                            + " them apart as %d groups%n",
+                                    axis.name(), axis.classes().size(), each.groups()));
                 }
                 // Which rule composed the classes, for a reader told that no row is in one of them.
                 // The lines above name the class; this names what made it, so that a reader sent
@@ -4204,10 +4220,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         switch (condition) {
             // The position and which case of it, which is the same pair an axis of this document
             // is named by. No construct: what the run matched is the case, wherever it is written.
-            case Condition.Case(var at, var name) -> {
+            case Condition.Case one -> {
                 out.put("kind", "case");
-                out.put("at", at.toString());
-                out.put("outcome", name);
+                out.put("at", one.at().toString());
+                out.put("outcome", one.spelled());
             }
             case Condition.Side(var _, var comparison, var held) -> {
                 out.put("kind", "comparison");
@@ -6280,13 +6296,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // Once for the fold below, for the reason the page's own line gives.
         PublishedRuleHandle.WhereARuleIs places = rulePlaces();
         for (AdequacyUncertainty each : whatKeepsTheVerdictOpen()) {
-            // The reason beside it, where the kind is one that has one. A measure nobody made says
-            // what it was waiting for, and that word is one this document already writes wherever a
-            // measure has no number — so a reader meets one vocabulary and not two.
-            Optional<NotMeasuredWord> why = each instanceof AdequacyUncertainty.NotMeasured it
-                    ? Optional.of(NotMeasuredWord.of(it.why())) : Optional.empty();
-            said.add(new PublishedOpening(kindOf(each), why, each.runSensitivity(),
-                    publishedSubject(each.subject(), sources, places)));
+            said.add(openingOf(each, sources, places));
         }
         for (PublishedOpening each : PublicationOrders.WHAT_HOLDS_A_VERDICT_OPEN
                 .arrange(said).written()) {
@@ -6299,6 +6309,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             each.reason().ifPresent(reason -> fact.put("reason", word(reason)));
             fact.put("runSensitivity", word(each.runSensitivity()));
         }
+    }
+
+    /** What the document writes for one thing keeping the verdict open. */
+    private static PublishedOpening openingOf(AdequacyUncertainty each, DocumentSources sources,
+                                              PublishedRuleHandle.WhereARuleIs places) {
+        // The reason beside it, where the kind is one that has one. A measure nobody made says
+        // what it was waiting for, and that word is one this document already writes wherever a
+        // measure has no number — so a reader meets one vocabulary and not two.
+        Optional<NotMeasuredWord> why = each instanceof AdequacyUncertainty.NotMeasured it
+                ? Optional.of(NotMeasuredWord.of(it.why())) : Optional.empty();
+        return new PublishedOpening(kindOf(each), why, each.runSensitivity(),
+                publishedSubject(each.subject(), sources, places));
     }
 
     /**

@@ -1,0 +1,25 @@
+// Five cases the body never asks about, and a line drawn somewhere else.
+//
+// The cases are classes of `why` because of the type, and nothing the body decides on is about
+// them, so every class goes one way.
+//
+// told apart at why: untouched
+// told apart at n: 2 groups of 2
+module example.untouched
+
+data TooShort
+data TooLong
+data WrongCase
+data Repeated
+data Banned
+data Refusal = TooShort | TooLong | WrongCase | Repeated | Banned
+
+data Ok = { n: Int }
+
+behavior judge : (why: Refusal, n: Int) -> Ok
+    constructs Ok
+
+let judge (why, n) = {
+    guard n > 10 else Ok { n = 0 }
+    Ok { n = 1 }
+}

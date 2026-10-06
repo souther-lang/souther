@@ -1,0 +1,21 @@
+// A behavior with no body tells apart what nobody read.
+//
+// What it tells apart is not known: the reading is missing, and nothing about the behavior says it
+// takes a position wider than it needs.
+//
+// told apart at a: no body
+// told apart at c: no body
+module example.injected
+
+data Yes
+data No
+data Flag = Yes | No
+
+data A1
+data A2
+data A3
+data Wide = A1 | A2 | A3
+
+data Ok = { n: Int }
+
+behavior judge : (a: Flag, c: Wide) -> Ok

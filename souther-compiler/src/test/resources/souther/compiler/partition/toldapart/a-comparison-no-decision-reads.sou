@@ -1,0 +1,26 @@
+// A comparison the body writes where no decision reads it is not read as telling nothing apart.
+//
+// The predicate handed to `List.filter` divides the elements into classes, and the walk that finds
+// the decisions does not enter it. What the body tells apart there is real and is not read into
+// classes, so nothing is said about the position.
+//
+// What is not read leaves `f` as it is: the `match` tells both of its cases apart, and nothing a
+// reading could add would tell them apart further.
+//
+// told apart at f: 2 groups of 2
+// told apart at xs[*]: unread
+module example.filtered
+
+data Yes
+data No
+data Flag = Yes | No
+
+data Ok = { n: Int }
+
+behavior judge : (f: Flag, xs: List<Int>) -> Ok
+    constructs Ok
+
+let judge (f, xs) =
+    match f with
+        | Yes -> Ok { n = List.length(List.filter(x -> x > 10, xs)) }
+        | No -> Ok { n = 0 }

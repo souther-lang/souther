@@ -1,0 +1,25 @@
+// An arm for a case that is itself a union admits the cases under it.
+//
+// OnceKind stands for Station and Hospital, and OtherKind for Clinic and Home, which are what a
+// value at the position is. The body tells the first two from the second two and nothing more.
+//
+// told apart at k: 2 groups of 4
+module example.union
+
+data Station
+data Hospital
+data Clinic
+data Home
+data OnceKind = Station | Hospital
+data OtherKind = Clinic | Home
+data VisitKind = OnceKind | OtherKind
+
+data Ok = { n: Int }
+
+behavior judge : (k: VisitKind) -> Ok
+    constructs Ok
+
+let judge (k) =
+    match k with
+        | OnceKind -> Ok { n = 1 }
+        | OtherKind -> Ok { n = 2 }

@@ -1,0 +1,16 @@
+// A comparison in a region no run reaches tells nothing apart, and leaves nothing unread.
+//
+// The inner guard is made under `n < -5` and asks whether `n > 0`, so no run takes it either way.
+// The reading of the input draws no line for it, and what the body tells apart at `n` is the outer
+// comparison alone.
+//
+// told apart at n: 2 groups of 2
+module example.unreachedcomparison
+
+data Ok = { n: Int }
+
+behavior judge : (n: Int) -> Ok
+    constructs Ok
+
+let judge (n) =
+    if n < -5 then (if n > 0 then Ok { n = 1 } else Ok { n = 2 }) else Ok { n = 3 }

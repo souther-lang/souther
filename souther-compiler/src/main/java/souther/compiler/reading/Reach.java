@@ -65,8 +65,29 @@ sealed interface Reach {
         }
     }
 
-    /** Nothing here can be said in the terms a way in is written in. */
-    record Unnameable(PathAccess.Unsupported.Why why) implements Reach {
+    /**
+     * Nothing here can be said in the terms a way in is written in.
+     *
+     * @param known what is known to hold here as far as it was named: the decisions the ways above
+     *              the step nothing states had settled, and whatever is settled under it since. A
+     *              step nothing states is taken to rule out nothing, so these are no ways in — a
+     *              row composed along one may not get here — and are what a run here is known to
+     *              have decided. One way with nothing in it where nothing is known
+     */
+    record Unnameable(PathAccess.Unsupported.Why why, List<WayIn> known) implements Reach {
+
+        public Unnameable {
+            known = List.copyOf(known);
+            if (known.isEmpty()) {
+                throw new IllegalArgumentException("a place runs reach is known by some way, even"
+                        + " one nothing is known on; none is Nothing");
+            }
+        }
+
+        /** A step nothing states, with nothing known about what holds there. */
+        Unnameable(PathAccess.Unsupported.Why why) {
+            this(why, List.of(new WayIn(List.of())));
+        }
 
         @Override
         public List<WayIn> ways() {
@@ -81,6 +102,37 @@ sealed interface Reach {
 
     /** The ways to go on under, which the last two have none of. */
     List<WayIn> ways();
+
+    /**
+     * What a run here is known to have decided, one conjunction per way it may have come.
+     *
+     * <p>The ways themselves where they are named. Under a step nothing states, what was named above
+     * it and since — which steers no row and is still what holds wherever a run is. Nothing where
+     * no run comes.
+     */
+    default List<WayIn> known() {
+        return switch (this) {
+            case Ways it -> it.ways();
+            case Coarse it -> it.ways();
+            case Unnameable it -> it.known();
+            case Nothing _ -> List.of();
+        };
+    }
+
+    /**
+     * Whether some run gets here.
+     *
+     * <p>Not whether the ways here are named. A place under a way in nothing states is one runs
+     * reach and this reading cannot say how; a place nothing reaches is one no run gets to, which
+     * is a proof about the body. A reader asking what the body does there asks this, and an empty
+     * list of ways answers it for neither.
+     */
+    default boolean someRunArrives() {
+        return switch (this) {
+            case Ways _, Coarse _, Unnameable _ -> true;
+            case Nothing _ -> false;
+        };
+    }
 
     /**
      * What a place reached this way is told, which is never the coarse ways themselves.
