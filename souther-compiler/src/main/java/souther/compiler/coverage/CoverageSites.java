@@ -12,11 +12,13 @@ import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The arms of a behavior's body that an {@code example} row can be in or not in.
@@ -1085,7 +1087,8 @@ public final class CoverageSites {
             // same thing is that sibling under another place, and answering as it is answering as
             // itself: no row could tell the two apart, so it is no rewrite to ask a row about. Nor
             // is a sibling that reads the name its own arm gives the value: standing anywhere else
-            // that name stands for nothing, so it is no program the body could be written as.
+            // that name stands for nothing, so it is no program the body could be written as. And
+            // two siblings that do the same thing are one rewrite of the arm, asked once.
             Binders binders = Binders.of(module, places);
             List<ExecutableIdentity> does = new ArrayList<>();
             for (Core body : bodies) {
@@ -1096,10 +1099,12 @@ public final class CoverageSites {
             for (int part = 0; part < arms.length; part++) {
                 List<Integer> carriedParts = new ArrayList<>();
                 Map<Integer, ArmReplacements.Sibling> siblings = new LinkedHashMap<>();
+                Set<ExecutableIdentity> asked = new HashSet<>();
+                asked.add(does.get(part));
                 for (int sibling : candidates) {
                     BindingId own = names.get(sibling);
-                    if (sibling == part || does.get(sibling).equals(does.get(part))
-                            || own != null && reads(bodies.get(sibling), own)) {
+                    if (own != null && reads(bodies.get(sibling), own)
+                            || !asked.add(does.get(sibling))) {
                         continue;
                     }
                     if (tooLarge) {

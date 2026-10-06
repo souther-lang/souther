@@ -2,11 +2,15 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.Located;
+import souther.compiler.diag.Messages;
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -92,6 +96,45 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
                         + Adequacy.accountOf(compilation.db(), "example.refund"));
         assertEquals(AdequacyReport.AdequacyStatus.NOT_SATISFIED,
                 AdequacyReport.of(compilation).adequacy());
+    }
+
+    /** A build is warned at the arm, and sent to the row the two answer differently on. */
+    @Test
+    void aBuildIsWarnedAtTheArmAndToldWhichRowToWriteDown() {
+        Compilation compilation = Compilation.ofSource(NOTHING_HELD, "Main");
+        compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
+        compilation.answerEverything();
+        List<String> said = compilation.warnings().stream()
+                .map(Located::diagnostic)
+                .filter(d -> "E1939".equals(d.code()))
+                .map(d -> Messages.render(d.said(), Locale.ENGLISH) + " | "
+                        + d.notes().stream()
+                                .map(n -> Messages.render(n.said(), Locale.ENGLISH)).toList())
+                .toList();
+
+        // Every row holds nothing, so none of them answers differently under the rewrite and the
+        // row the hint names is one the search composed.
+        assertTrue(said.stream().anyMatch(each -> each.startsWith(
+                        "No row of `refund` would fail if this arm answered as another arm of its"
+                                + " fork.")
+                        && each.contains("Amount(")),
+                () -> "what a build is told: " + said);
+    }
+
+    /** And the page says it beside the arms, with the gap under the count. */
+    @Test
+    void thePageSaysHowManyRewritesTheRowsTellApart() {
+        Compilation compilation = compiled(NOTHING_HELD);
+        String page = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+
+        // Four: the arm answering what the item holds written as the arms answering nothing, which
+        // are one rewrite since the two do the same; each of those written as the first; and the
+        // body answering one value.
+        assertTrue(page.contains("replacement 0/4"), () -> "four rewrites, told apart by no row: "
+                + page);
+        assertTrue(page.contains("! no row would fail if an arm answered as its sibling"),
+                () -> "and the arm under it: " + page);
     }
 
     @Test

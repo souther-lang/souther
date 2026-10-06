@@ -7262,7 +7262,7 @@ A warning (<<what-a-build-refuses-over-is-the-account>>). Said of a border every
 [,text]
 ----
 No row of `refund` would fail if this arm answered as another arm of its fork.
-  hint: Write down the whole answer of item = Item { amount = Amount(1), payer = OutOfPocket }, which the two answer differently.
+  hint: Write a row at (Item { amount = Amount(1), payer = OutOfPocket }), which the two answer differently at.
 ----
 
 A warning (<<what-a-build-refuses-over-is-the-account>>). Said of a behavior with a body, at the arm a rewrite replaces or at the body when the rewrite is one answer (<<every-rewrite-of-a-body-is-told-apart>>).
@@ -7273,7 +7273,7 @@ A warning (<<what-a-build-refuses-over-is-the-account>>). Said of a behavior wit
 
 *A rewrite is a gap only where it is shown to differ.* That no row fails is not enough by itself: a rewrite that answers the same as the body on every input is the same model. So a rewrite is reported where an input was found that the body and the rewrite answer differently, and that input is what the hint names. A search that ran out without finding one leaves the rewrite undecided, which weakens the measure and is not a gap; nothing here concludes two bodies are the same from a search that stopped.
 
-*And a row's statement is what fails.* A rewrite is told apart by a row whose written answer, or whatever else the row states, the rewritten body does not keep. A row with its answer left open fails no rewrite, which is why the hint asks for the answer to be written down.
+*And a row's statement is what fails.* A rewrite is told apart by a row whose written answer, or whatever else the row states, the rewritten body does not keep. Where a row the module writes is the one the two answer differently on, the hint asks for that row's whole answer to be written down, since a row stating less, or nothing, fails no rewrite; where it is a row this compiler composed, the hint is that row.
 
 Told apart from <<e1918>>, which is an arm no row goes through, and from <<e1938>>, which is a border a line beside it is not told from. This one is said only of what the rows do reach.
 

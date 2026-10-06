@@ -1918,6 +1918,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 partition(out, behavior, module.declaredIn(), rendering, behavior.rulePlace());
                 branch(out, behavior, module.declaredIn(), rendering);
                 decision(out, behavior, module.declaredIn(), rendering);
+                replacement(out, behavior);
                 // Under the behavior it names, because a reason printed at the module's foot is
                 // read as belonging to whichever behavior came last. That was survivable while the
                 // only reasons naming one were rare; a position that could not be read is not.
@@ -2810,6 +2811,43 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return combination.inOrder().stream()
                 .map(each -> "`" + each.classId() + "` at " + each.at())
                 .collect(java.util.stream.Collectors.joining(" with "));
+    }
+
+    /**
+     * How many rewrites of the body some row tells apart, out of the rewrites put to the rows.
+     *
+     * <p>Beside the arms and never among them: a row goes through an arm whatever the arm answers,
+     * so the arms can be counted in full over rows none of which would notice one answering as its
+     * sibling. A rewrite left open is counted out of the number and said beside it, since nothing
+     * showed it to be a gap; one shown to be is said under the line, one to a line.
+     */
+    private void replacement(StringBuilder out, BehaviorReport behavior) {
+        ReplacementEvidence replacement = behavior.evidence().replacement();
+        if (replacement == null) {
+            return;
+        }
+        ReportMeasurement<ReplacementEvidence.Summary> measured =
+                ReportMeasurement.of(replacement.measured());
+        if (!measured.counted()) {
+            sayWhy(out, "replacement", measured.reason());
+            return;
+        }
+        ReplacementEvidence.Summary rewrites = measured.get();
+        String open = rewrites.undecided() == 0 ? ""
+                : String.format("   %d left open", rewrites.undecided());
+        out.append(String.format("    replacement %d/%d%s%n", rewrites.noticed(),
+                rewrites.noticed() + rewrites.unnoticed(), open));
+        for (ReportedFinding f : behavior.reported()) {
+            if (f.finding().about() instanceof About.ARewriteNoRowTellsApart(
+                    var _, var rewrite, var _, var _)) {
+                out.append(String.format("      %s %s%n", mark(f.finding()), switch (rewrite) {
+                    case Replacement.OfAnArm _ ->
+                            "no row would fail if an arm answered as its sibling";
+                    case Replacement.ByOneAnswer _ ->
+                            "no row would fail if the body answered one value";
+                }));
+            }
+        }
     }
 
     /**

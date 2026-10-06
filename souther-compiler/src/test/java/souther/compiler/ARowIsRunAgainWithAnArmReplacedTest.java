@@ -72,8 +72,10 @@ class ARowIsRunAgainWithAnArmReplacedTest {
     void aRowWhoseAnswerEverySiblingWouldGiveNoticesNoReplacement() {
         Map<Integer, ReplacedRun> runs = replacedOf(rowNamed("nothing out of pocket"));
 
-        assertEquals(List.of(1, 2), List.copyOf(runs.keySet()),
-                "the arm it went through is replaced by each of its siblings: " + runs);
+        // Once and not twice: the second and the third arm do the same thing, so answering as
+        // either is one rewrite of the first.
+        assertEquals(List.of(1), List.copyOf(runs.keySet()),
+                "the arm it went through is replaced by its sibling: " + runs);
         for (ReplacedRun run : runs.values()) {
             assertEquals(ReplacedRun.Noticed.NO, run.noticed(), "the row holds either way: " + run);
             assertEquals(0, amountIn(run.answer()));
@@ -86,7 +88,7 @@ class ARowIsRunAgainWithAnArmReplacedTest {
     void aRowWhoseAnswerNoSiblingGivesNoticesEveryReplacement() {
         Map<Integer, ReplacedRun> runs = replacedOf(rowNamed("something out of pocket"));
 
-        assertEquals(List.of(1, 2), List.copyOf(runs.keySet()));
+        assertEquals(List.of(1), List.copyOf(runs.keySet()));
         for (ReplacedRun run : runs.values()) {
             assertEquals(ReplacedRun.Noticed.YES, run.noticed(), "the row fails: " + run);
             assertEquals(0, amountIn(run.answer()), "and what came back is the sibling's answer");
@@ -115,7 +117,7 @@ class ARowIsRunAgainWithAnArmReplacedTest {
     void aRowWhoseAnswerIsOwedStatesNothingAReplacementCouldFail() {
         Map<Integer, ReplacedRun> runs = replacedOf(rowNamed("owed"));
 
-        assertEquals(List.of(1, 2), List.copyOf(runs.keySet()));
+        assertEquals(List.of(1), List.copyOf(runs.keySet()));
         for (ReplacedRun run : runs.values()) {
             assertEquals(ReplacedRun.Noticed.STATES_NOTHING, run.noticed());
             assertEquals(AnswerChange.CHANGED, run.changed(),
