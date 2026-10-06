@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.DeclaredBounds;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
@@ -368,37 +369,71 @@ final class Witnesses {
     }
 
     /**
-     * A collection of {@code carrier} holding {@code chosen} and counting {@code needed}, or null
-     * where none was built.
+     * A collection of {@code carrier} holding every one of {@code holding}, nothing equal to any of
+     * {@code keptOut}, and as many as the rules let it hold — or null where none can be built.
      *
-     * <p>For a row being built around one element. What the rest are is not what was asked for, and
-     * what they may be is: a list may hold the same value again and a set may not, and a caller
-     * padding one by hand would have to know which — the thing this reader is for.
+     * <p>For a row being built around what it is asked to hold. What the rest are is not what was
+     * asked for, and what they may be is: a list may hold the same value again and a set may not,
+     * and a caller padding one by hand would have to know which — the thing this reader is for.
      *
-     * <p><b>How many, and not a floor to read one off.</b> What the rules leave the position and
-     * what a collection holding the chosen value comes to are two numbers, and the second is made
-     * from the first in one place ({@link ConstructionPlan#neededToHold}). Read again here, the
-     * conversion would be written twice and a caller handing over the floor would build the same
-     * collection as one handing over the count.
+     * <p><b>How many is worked out here, where the values are in hand.</b> The fewest the rules
+     * allow, and never fewer than the values it holds — which for a set is how many of them differ,
+     * so two values handed over that are one value are one element. A container holding nothing
+     * asked of it and kept to the rules' floor may hold none at all.
+     *
+     * <p>Null where the values cannot all stand together: one value both written in and kept out,
+     * more than the rules leave room for, or a type with too few values to fill the rest with none
+     * kept out. Each of those is a container nothing can build, said as nothing built rather than
+     * as a container of the wrong size or holding what it was to hold none of.
      */
-    static FixtureTemplate holdingAlso(souther.compiler.check.Shape.Sequence carrier,
-                                       FixtureTemplate chosen, int needed,
-                                       RuleReadingContext reading) {
-        if (needed < 1) {
-            throw new IllegalArgumentException(
-                    "a collection built around a value holds it: " + needed);
+    static FixtureTemplate holding(Shape.Sequence carrier,
+                                   List<FixtureTemplate> holding, List<FixtureTemplate> keptOut,
+                                   DeclaredBounds.CountRange holds, RuleReadingContext reading) {
+        Set<String> out = new LinkedHashSet<>();
+        keptOut.forEach(each -> out.add(each.text()));
+        boolean list = carrier.kind() == Shape.Sequence.Kind.LIST;
+        Set<String> written = new LinkedHashSet<>();
+        List<FixtureTemplate> elements = new ArrayList<>();
+        for (FixtureTemplate each : holding) {
+            if (out.contains(each.text())) {
+                return null;
+            }
+            if (written.add(each.text()) || list) {
+                elements.add(each);
+            }
         }
-        if (carrier.kind() == souther.compiler.check.Shape.Sequence.Kind.LIST) {
-            List<FixtureTemplate> elements = new ArrayList<>();
+        int needed = Math.max(holds.least(), elements.size());
+        if (needed > holds.most()) {
+            return null;
+        }
+        // A list may say one of its values again, and the one it was asked to hold is the value
+        // that is surely one the element's rules admit.
+        if (list && !elements.isEmpty()) {
             while (elements.size() < needed) {
-                elements.add(chosen);
+                elements.add(elements.getFirst());
             }
             return FixtureTemplate.collection(elements);
         }
-        List<FixtureTemplate> elements =
-                distinctFrom(chosen, carrier.element(), needed, reading, Set.of());
-        // Fewer than asked for is a type with too few values, which is a set the rules want and
-        // nothing can build — said as nothing built rather than as a set of the wrong size.
+        // One more than the values that may be passed over, since each kept out or already held
+        // may be among them.
+        int many = needed + out.size() + written.size() + 1;
+        for (FixtureTemplate each : distinctValuesOf(carrier.element(), many, reading, Set.of())) {
+            if (elements.size() >= needed) {
+                break;
+            }
+            if (out.contains(each.text())) {
+                continue;
+            }
+            if (list) {
+                while (elements.size() < needed) {
+                    elements.add(each);
+                }
+            } else if (written.add(each.text())) {
+                elements.add(each);
+            }
+        }
+        // Fewer than asked for is a type with too few values, which is a container the rules want
+        // and nothing can build.
         return elements.size() < needed ? null : FixtureTemplate.collection(elements);
     }
 

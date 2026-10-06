@@ -2470,8 +2470,8 @@ public final class Generator {
             return switch (demand) {
                 case RowDemand.AtAPoint point -> point.fixing().keySet().stream()
                         .anyMatch(target -> against.contains(target.writeRoot().head()));
-                case RowDemand.OfACondition condition -> condition.terms().stream()
-                        .anyMatch(term -> against.contains(term.subjectPath().head()));
+                case RowDemand.OfACondition condition -> condition.positions().stream()
+                        .anyMatch(position -> against.contains(position.head()));
             };
         }
 
@@ -4407,36 +4407,23 @@ public final class Generator {
             }
             heldBack.put(at, edge.met());
         }
-        List<FixtureTemplate> inputs = new ArrayList<>();
-        for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
-            String head = subject.parameters().get(p);
-            // Whether a candidate was turned away for standing somewhere else, which is what tells
-            // a search that ran out of candidates from one that certified none of the ones it had.
-            // Per parameter, since it is this parameter's search the answer is about: shared, a
-            // candidate turned away under one parameter would name the reason another failed for.
-            boolean[] uncertified = {false};
-            CandidateCheck certified =
-                    certifying(check, subject, p, standing, uncertified);
-            Map<TermPath, List<FixtureTemplate>> here = new LinkedHashMap<>();
-            for (RealizationTarget target : standing.keySet()) {
-                // A position the way also narrows is not fixed at a value here. What has to hold of
-                // it is one thing said two ways — a place the item asks for, and a case the way
-                // says the value turned out to be — and one location is decided once: the narrowing
-                // says how the value is built and the place says which of the values built that way
-                // is accepted ({@link #certifying}). Handed over as both, it is a position with two
-                // accounts, which is what {@link ConstructionPlan} refuses and what it is right to
-                // refuse.
-                if (target.writeRoot().head().equals(head)
-                        && reaching.requirements().at(target.writeRoot()) == null) {
-                    here.put(target.writeRoot(), decided.at(target.writeRoot()));
-                }
-            }
-            Outcome tried = valueAt(subject, p, here, settled, reaching.requirements(), certified,
-                    ValueTaking.FIRST);
-            if (tried instanceof Outcome.Built(FixtureTemplate value)) {
-                inputs.add(value);
-                continue;
-            }
+        // What the way asks containers to hold that no region placed, and the order that lets every
+        // container be composed after the parameters it is handed a value of.
+        ContentsAsked contents = ContentsAsked.of(reaching.boundedOnTheWay());
+        List<Integer> order = compositionOrder(subject, contents);
+        if (order == null) {
+            return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
+                    UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                    "each of " + contents.composedAfter().keySet() + " is to hold a value of"
+                            + " another of them, and they are composed one after another"),
+                    where.unrepresented());
+        }
+        FixtureTemplate[] composed = new FixtureTemplate[order.size()];
+        ParameterCameToNothing failed = new InOrder(subject, order, composed, standing, decided,
+                settled, reaching, check, contents).from(0, Map.of());
+        if (failed != null) {
+            Outcome tried = failed.tried();
+            Map<TermPath, List<FixtureTemplate>> here = failed.here();
             // What the edge under this parameter held back is learned here and not where the
             // search ran, so this is where it is put to the rule — the same rule, and not a second
             // reading of it: an offer still holding values means nothing has been exhausted, and a
@@ -4456,7 +4443,7 @@ public final class Generator {
                      Outcome.Halted _ -> tried;
                 case Outcome.Unresolved(UnresolvedCombination.Reason word, String said) -> {
                     UnresolvedCombination.Reason itsWord =
-                            nothingStoodWhereItWasBuilt(uncertified[0], word);
+                            nothingStoodWhereItWasBuilt(failed.uncertified(), word);
                     yield whatTheSearchCameTo(whatTheEdgeHeldBack(heldBack, here, itsWord),
                             new LinkedHashMap<>(), Set.of(),
                             new Outcome.Unresolved(itsWord, said));
@@ -4468,7 +4455,7 @@ public final class Generator {
                 case Outcome.Limited(UnresolvedCombination.Reason word, String said,
                                      Set<CompositionBudget> planCut) -> {
                     UnresolvedCombination.Reason itsWord =
-                            nothingStoodWhereItWasBuilt(uncertified[0], word);
+                            nothingStoodWhereItWasBuilt(failed.uncertified(), word);
                     yield whatTheSearchCameTo(whatTheEdgeHeldBack(heldBack, here, itsWord),
                             new LinkedHashMap<>(), planCut,
                             new Outcome.Unresolved(itsWord, said));
@@ -4507,12 +4494,14 @@ public final class Generator {
                         BoundaryAttempt.Unplanned.at(label, by, where.unrepresented());
                 // A row was composed, which was answered above and is not an account of a point
                 // nothing was composed for. Nor is a value passed over or a search stopped by its
-                // caller: this one takes the first value composed and never stops.
+                // caller: what that came to is a parameter after it nothing was composed for, and
+                // that parameter's answer is the one handed here ({@link InOrder}).
                 case Outcome.Built _, Outcome.PassedOver _, Outcome.Halted _ ->
                         throw new IllegalStateException("a composed row is not something to say a"
                                 + " point came to nothing in");
             };
         }
+        List<FixtureTemplate> inputs = List.of(composed);
         return switch (stood.outcome()) {
             // The values stand at the point and nothing stands in for what the behavior requires,
             // so there is no row here to offer. Said as what the search came to, because a row a
@@ -4523,6 +4512,151 @@ public final class Generator {
                     new GeneratedRow(List.of(new Purpose.ForAPoint(label)), inputs, answers),
                     where.unrepresented());
         };
+    }
+
+    /**
+     * The parameters in the order they are composed: each after every parameter its containers are
+     * handed a value of, and otherwise in the order they are declared — or null where two of them
+     * are each to hold a value of the other.
+     *
+     * <p>Not the order a row is written in, which stays the declared one. A container that is to
+     * hold the value at another parameter is composed knowing that value, so that parameter has to
+     * have been composed first; nothing else about a parameter turns on another, so everything else
+     * keeps the order it had.
+     */
+    private static List<Integer> compositionOrder(MeasuredInput subject, ContentsAsked contents) {
+        int count = Math.min(subject.parameters().size(), subject.types().size());
+        Map<String, Set<String>> after = contents.composedAfter();
+        List<Integer> out = new ArrayList<>();
+        Set<String> placed = new LinkedHashSet<>();
+        while (out.size() < count) {
+            int next = -1;
+            for (int p = 0; p < count && next < 0; p++) {
+                String head = subject.parameters().get(p);
+                if (!placed.contains(head) && after.getOrDefault(head, Set.of()).stream()
+                        .allMatch(other -> placed.contains(other)
+                                || !subject.parameters().subList(0, count).contains(other))) {
+                    next = p;
+                }
+            }
+            if (next < 0) {
+                return null;
+            }
+            out.add(next);
+            placed.add(subject.parameters().get(next));
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * One parameter nothing was composed for, and what its search came to.
+     *
+     * @param parameter   which parameter
+     * @param tried       what its search came to
+     * @param uncertified whether a candidate was turned away for standing somewhere else
+     * @param here        the positions of it the caller had decided
+     */
+    private record ParameterCameToNothing(int parameter, Outcome tried, boolean uncertified,
+                                          Map<TermPath, List<FixtureTemplate>> here) {}
+
+    /**
+     * Composing the parameters of one row in the order {@link #compositionOrder} gives.
+     *
+     * <p><b>A parameter another one is handed a value of is not settled at its first value.</b> The
+     * container may be one no value of the first lets be built — a set of two booleans that is to
+     * hold neither of them — and another value would. So where a parameter later in the order is
+     * handed a value of this one, each value composed here is handed on, and one the later
+     * parameter comes to nothing under is passed over for the next. Where it came to nothing for
+     * a reason no value of this one changes, the walk stops there: nothing here would be different
+     * with another value.
+     *
+     * <p>Where no parameter after it is handed a value of it, the first value is the row's, as it
+     * always was: nothing after it turns on it.
+     *
+     * @param composed each parameter's value, by its declared position, filled as the walk goes
+     */
+    private record InOrder(MeasuredInput subject, List<Integer> order, FixtureTemplate[] composed,
+                           Map<RealizationTarget, Place> standing, LocationWrites decided,
+                           Map<TermPath, Place> settled, Reachability.Reaching reaching,
+                           CandidateCheck check, ContentsAsked contents) {
+
+        /**
+         * The parameters from the {@code next}-th in the order on, or the first of them nothing
+         * was composed for.
+         *
+         * @param elsewhere what stands at the positions of the parameters composed so far that a
+         *                  container is handed
+         */
+        ParameterCameToNothing from(int next, Map<TermPath, FixtureTemplate> elsewhere) {
+            if (next == order.size()) {
+                return null;
+            }
+            int p = order.get(next);
+            String head = subject.parameters().get(p);
+            // Whether a candidate was turned away for standing somewhere else, which is what tells
+            // a search that ran out of candidates from one that certified none of the ones it had.
+            // Per parameter, since it is this parameter's search the answer is about: shared, a
+            // candidate turned away under one parameter would name the reason another failed for.
+            boolean[] uncertified = {false};
+            CandidateCheck certified = certifying(check, subject, p, standing, uncertified);
+            Map<TermPath, List<FixtureTemplate>> here = new LinkedHashMap<>();
+            for (RealizationTarget target : standing.keySet()) {
+                // A position the way also narrows is not fixed at a value here. What has to hold of
+                // it is one thing said two ways — a place the item asks for, and a case the way
+                // says the value turned out to be — and one location is decided once: the narrowing
+                // says how the value is built and the place says which of the values built that way
+                // is accepted ({@link #certifying}). Handed over as both, it is a position with two
+                // accounts, which is what {@link ConstructionPlan} refuses and what it is right to
+                // refuse.
+                if (target.writeRoot().head().equals(head)
+                        && reaching.requirements().at(target.writeRoot()) == null) {
+                    here.put(target.writeRoot(), decided.at(target.writeRoot()));
+                }
+            }
+            boolean awaited = order.subList(next + 1, order.size()).stream()
+                    .anyMatch(later -> readsOf(later).contains(head));
+            ParameterCameToNothing[] after = {null};
+            ValueTaking taking = !awaited ? ValueTaking.FIRST : value -> {
+                composed[p] = value.value();
+                after[0] = from(next + 1, with(elsewhere, value.read()));
+                if (after[0] == null) {
+                    return Acceptance.TAKEN;
+                }
+                return readsOf(after[0].parameter()).contains(head)
+                        ? Acceptance.PASSED : Acceptance.STOPPED;
+            };
+            Outcome tried = valueAt(subject, p, here, settled, reaching.requirements(),
+                    new Handed(contents, elsewhere), certified, taking);
+            return switch (tried) {
+                // Taken where the rest was composed with it, and taken first where nothing after
+                // it turns on it — so the rest is still to compose.
+                case Outcome.Built(ComposedValue value) -> {
+                    if (awaited) {
+                        yield null;
+                    }
+                    composed[p] = value.value();
+                    yield from(next + 1, with(elsewhere, value.read()));
+                }
+                // Passed over or stopped for what a parameter after it came to, which is what
+                // nothing being composed is about.
+                case Outcome.PassedOver _, Outcome.Halted _ -> after[0];
+                case Outcome.Unresolved _, Outcome.Stopped _, Outcome.Unexhausted _,
+                     Outcome.OfferShort _, Outcome.Limited _, Outcome.Unplanned _ ->
+                        new ParameterCameToNothing(p, tried, uncertified[0], here);
+            };
+        }
+
+        /** The parameters whose positions a container of parameter {@code p} is handed. */
+        private Set<String> readsOf(int p) {
+            return contents.composedAfter().getOrDefault(subject.parameters().get(p), Set.of());
+        }
+
+        private static Map<TermPath, FixtureTemplate> with(Map<TermPath, FixtureTemplate> before,
+                                                           Map<TermPath, FixtureTemplate> read) {
+            Map<TermPath, FixtureTemplate> out = new LinkedHashMap<>(before);
+            out.putAll(read);
+            return out;
+        }
     }
 
     /**
@@ -4573,6 +4707,12 @@ public final class Generator {
             assumed = both;
         }
         for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
+            // What an element is asked with no relation among it has no number to place: that the
+            // element is another position's value is met where the container is composed
+            // ({@link ContentsAsked}), and a region has nothing to say about it.
+            if (placesNoNumber(cut.demand())) {
+                continue;
+            }
             // The whole of what one cut comes to, arrived at before any of it is the row's. What a
             // cut takes is one decision — where each of its numbers stands, where the row writes
             // them, and what the row had to be taken as — and a reader that applied the parts as it
@@ -4626,14 +4766,16 @@ public final class Generator {
             // What an element meets, which the region was not narrowed by. Placed in a region that
             // is, for this cut alone: the element written meets it, and every element a list
             // writes is that one.
-            case RowDemand.Exists(var ofAnElement, var _) -> asComposedOnly(cut,
+            case RowDemand.Exists exists -> asComposedOnly(cut,
                     placedIn(subject, looking, here, alreadyStanding, assumed, cut,
-                            constraints(ofAnElement), true),
-                    noElementCanMeet(constraints(ofAnElement), subject));
+                            constraints(exists.relations()), true),
+                    noElementCanMeet(constraints(exists.relations()), subject));
             // And where no element can be written that meets them, the container holding none,
             // which every element of meets them. Closed only where neither way is open: no element
             // the rules allow meets them, and the container cannot hold none.
-            case RowDemand.ForAll(var ofEachElement, var holdingNone) -> {
+            case RowDemand.ForAll every -> {
+                List<RowDemand.Relational> ofEachElement = every.relations();
+                Optional<RowDemand.Relational> holdingNone = every.holdingNone();
                 Placed some = placedIn(subject, looking, here, alreadyStanding, assumed, cut,
                         constraints(ofEachElement), true);
                 if (some instanceof Placed.AtAll || holdingNone.isEmpty()) {
@@ -4683,6 +4825,16 @@ public final class Generator {
 
     private static List<TakenConstraint> constraints(List<RowDemand.Relational> relations) {
         return relations.stream().map(RowDemand.Relational::constraint).toList();
+    }
+
+    /** Whether {@code demand} asks an element nothing but to be, or not to be, another position's
+     *  value — which places no number. */
+    private static boolean placesNoNumber(RowDemand.OfACondition demand) {
+        return switch (demand) {
+            case RowDemand.Relational _ -> false;
+            case RowDemand.Exists exists -> exists.relations().isEmpty();
+            case RowDemand.ForAll every -> every.relations().isEmpty();
+        };
     }
 
     /**
@@ -6918,7 +7070,7 @@ public final class Generator {
         RowComposed[] after = {null};
         Outcome tried = valueFor(subject, p, row.axes().axes(), row.composedAt(),
                 row.decided(), row.required(), checking, value -> {
-                    inputs.add(value);
+                    inputs.add(value.value());
                     after[0] = inputsFrom(row, p + 1, inputs);
                     inputs.removeLast();
                     return switch (after[0]) {
@@ -7004,7 +7156,8 @@ public final class Generator {
                 here.putIfAbsent(location, already);
             }
         }
-        return valueAt(subject, p, here, settledIn(here), required, check, taking);
+        return valueAt(subject, p, here, settledIn(here), required, Handed.NOTHING, check,
+                taking);
     }
 
     /**
@@ -7034,11 +7187,14 @@ public final class Generator {
      * What a path under a refinement requires is read from the path, where it is written, and the
      * plan puts the two together — so a caller with nothing of its own to add hands over nothing
      * and loses none of it.
+     *
+     * @param handed what this parameter's containers are to hold and to hold nothing equal to, and
+     *               what the parameters composed before it came to where those are read
      */
     private static Outcome valueAt(MeasuredInput subject, int p,
                                    Map<TermPath, List<FixtureTemplate>> decided,
                                    Map<TermPath, Place> settled,
-                                   Requirements additional, CandidateCheck check,
+                                   Requirements additional, Handed handed, CandidateCheck check,
                                    ValueTaking taking) {
         // Where a value has to be built under this parameter, worked out once. What each position
         // may take, the search that chooses them one at a time, and the composing of what was chosen
@@ -7054,7 +7210,7 @@ public final class Generator {
         ConstructionPlan.Result planned = ConstructionPlan.of(subject.types().get(p), root,
                 subject.rules().inners(), subject.symbols(), subject.rules().kinds(),
                 subject.rules().sums(),
-                decided.keySet(), additional,
+                decided.keySet(), additional, handed.asked().composedUnder(root.head()),
                 (at, building) -> heldRange(under, at, building, subject.ruleReading()));
         ConstructionPlan plan;
         switch (planned) {
@@ -7118,7 +7274,7 @@ public final class Generator {
                             choices.missingAt()));
         }
         // One for every pass below, so what one of them found refused is known to the others.
-        Composing composing = new Composing(p, plan, subject.ruleReading(), check);
+        Composing composing = new Composing(p, plan, subject.ruleReading(), check, handed);
         Outcome product = walk(choices, composing, taking, subject.ruleReading());
         // A value taken is the answer, and so is every value composed being passed over or the
         // caller stopping: what the pass below is for is values the walk could not compose, and
@@ -7134,7 +7290,7 @@ public final class Generator {
         // Handed to the caller as every value the walk composes is: the caller is what composes the
         // parameters after this one, so a value it was never handed is a row with nothing after it.
         Outcome conditioned = conditioned(subject, p, plan, decided, settled, composing);
-        if (conditioned instanceof Outcome.Built(FixtureTemplate value)) {
+        if (conditioned instanceof Outcome.Built(ComposedValue value)) {
             return switch (taking.take(value)) {
                 case TAKEN -> conditioned;
                 case PASSED -> new Outcome.PassedOver();
@@ -7443,7 +7599,7 @@ public final class Generator {
         // reading a settling states and not a second one of the declaration.
         ConditionedCandidates candidates = new ConditionedCandidates(subject.ruleReading(),
                 rulesOf(subject.types().get(p), subject.ruleReading(), Map.of()));
-        FixtureTemplate built = descend(subject, p, positions, 0, new LinkedHashMap<>(),
+        ComposedValue built = descend(subject, p, positions, 0, new LinkedHashMap<>(),
                 new LinkedHashMap<>(settled), decided, composing, budget, candidates);
         if (built != null) {
             return new Outcome.Built(built);
@@ -7511,15 +7667,17 @@ public final class Generator {
         private final ConstructionPlan plan;
         private final RuleReadingContext reading;
         private final CandidateCheck check;
+        private final Handed handed;
         private final Map<TermPath, Type> typeAt = new HashMap<>();
         private final Set<Map<TermPath, String>> refused = new HashSet<>();
 
         Composing(int parameter, ConstructionPlan plan, RuleReadingContext reading,
-                  CandidateCheck check) {
+                  CandidateCheck check, Handed handed) {
             this.parameter = parameter;
             this.plan = plan;
             this.reading = reading;
             this.check = check;
+            this.handed = handed;
             for (ConstructionPlan.Slot each : plan.slots()) {
                 typeAt.put(each.at(), each.type());
             }
@@ -7550,9 +7708,10 @@ public final class Generator {
             if (!budget.spend()) {
                 return new Tried.OutOfBudget();
             }
-            FixtureTemplate built = compose(plan.root(), chosen, reading);
+            FromTheAssignment values = new FromTheAssignment(chosen, plan, handed);
+            FixtureTemplate built = compose(plan.root(), values, reading);
             if (built != null && check.refuse(parameter, built).isEmpty()) {
-                return new Tried.Built(built);
+                return new Tried.Built(new ComposedValue(built, values.read(reading)));
             }
             refused.add(written);
             return new Tried.Refused();
@@ -7562,7 +7721,7 @@ public final class Generator {
         sealed interface Tried {
 
             /** Composed, and the decoder took it. */
-            record Built(FixtureTemplate value) implements Tried {}
+            record Built(ComposedValue value) implements Tried {}
 
             /** Composed, and refused. */
             record Refused() implements Tried {}
@@ -7583,7 +7742,7 @@ public final class Generator {
      * @param budget  assignments left to compose, shared down the whole search
      * @param candidates what a position can take under a settling, shared down the whole search
      */
-    private static FixtureTemplate descend(MeasuredInput subject, int p,
+    private static ComposedValue descend(MeasuredInput subject, int p,
                                            List<ConstructionPlan.Slot> positions, int index,
                                            Map<TermPath, FixtureTemplate> chosen,
                                            Map<TermPath, Place> settled,
@@ -7608,7 +7767,7 @@ public final class Generator {
             if (number != null) {
                 settled.put(where, number);
             }
-            FixtureTemplate found = descend(subject, p, positions, index + 1, chosen, settled,
+            ComposedValue found = descend(subject, p, positions, index + 1, chosen, settled,
                     decided, composing, budget, candidates);
             if (found != null) {
                 return found;
@@ -7962,10 +8121,29 @@ public final class Generator {
     @FunctionalInterface
     private interface ValueTaking {
 
-        Acceptance take(FixtureTemplate value);
+        Acceptance take(ComposedValue value);
 
         /** The first value composed, which is what every search but a witness's wants. */
         ValueTaking FIRST = _ -> Acceptance.TAKEN;
+    }
+
+    /**
+     * One parameter's value as composed, and what stands at the positions of it another
+     * container is handed.
+     *
+     * <p>Both, because the second is of the first: a container under another parameter that is to
+     * hold the value at one of this one's positions holds what this value has there, and the
+     * assignment that says so is gone once the value is built. Worked out where it is built
+     * ({@link Composing#attempt}) and carried with it, rather than read back out of the value.
+     *
+     * @param value the parameter's value
+     * @param read  what stands at each position of it a value is read at
+     */
+    private record ComposedValue(FixtureTemplate value, Map<TermPath, FixtureTemplate> read) {
+
+        ComposedValue {
+            read = Map.copyOf(read);
+        }
     }
 
     /**
@@ -7980,7 +8158,7 @@ public final class Generator {
     private sealed interface Outcome {
 
         /** A value was composed, and the caller took it. */
-        record Built(FixtureTemplate value) implements Outcome {}
+        record Built(ComposedValue composed) implements Outcome {}
 
         /**
          * Values were composed, and the caller passed over every one of them.
@@ -8340,10 +8518,27 @@ public final class Generator {
      * composes an {@code Approved} and the row carries {@code DecisionN(Approved { id = 1 })}.
      * Composed without that, the row carries a value of a type the parameter does not declare.
      */
-    private static FixtureTemplate compose(ConstructionPlan.Node node,
-                                           Map<TermPath, FixtureTemplate> chosen,
+    private static FixtureTemplate compose(ConstructionPlan.Node node, FromTheAssignment values,
                                            RuleReadingContext reading) {
-        return PlanComposer.compose(node, new FromTheAssignment(chosen), reading);
+        return PlanComposer.compose(node, values, reading);
+    }
+
+    /**
+     * What one parameter's containers are handed when it is composed: what is asked of them, and
+     * what the parameters composed before it came to at the positions a value is read at.
+     *
+     * @param asked     what the way asks of containers' contents, for every parameter
+     * @param elsewhere what stands at a position of another parameter, where that one was composed
+     *                  before this
+     */
+    private record Handed(ContentsAsked asked, Map<TermPath, FixtureTemplate> elsewhere) {
+
+        /** Nothing handed, and nothing read. */
+        static final Handed NOTHING = new Handed(ContentsAsked.NONE, Map.of());
+
+        Handed {
+            elsewhere = Map.copyOf(elsewhere);
+        }
     }
 
     /**
@@ -8352,13 +8547,44 @@ public final class Generator {
      * <p>Every position of the plan is one the search chose at, so every field of a record is
      * composed from what stands under it and nothing here reads a rule. What is left where a
      * position has nothing is nothing: a row missing a value the plan asks for is not a row.
+     *
+     * <p>A value a container is handed is what stands at its position: composed out of this
+     * assignment where the position is of this value, and what the parameter it is of was composed
+     * as where it is of another.
      */
-    private record FromTheAssignment(Map<TermPath, FixtureTemplate> chosen)
+    private record FromTheAssignment(Map<TermPath, FixtureTemplate> chosen,
+                                     ConstructionPlan plan, Handed handed)
             implements PlanComposer.Values {
 
         @Override
         public FixtureTemplate at(ConstructionPlan.Slot slot) {
             return chosen.get(slot.at());
+        }
+
+        @Override
+        public ContainerContents contentsOf(TermPath container, PlanComposer.Under under) {
+            return handed.asked().contentsOf(container, value -> {
+                if (!value.head().equals(plan.root().at().head())) {
+                    return handed.elsewhere().get(value);
+                }
+                ConstructionPlan.Node node = plan.at(value);
+                return node == null ? null : under.of(node);
+            });
+        }
+
+        /** What stands at each position of this value another container's value is read at,
+         *  leaving out a position nothing composes. */
+        Map<TermPath, FixtureTemplate> read(RuleReadingContext reading) {
+            Map<TermPath, FixtureTemplate> out = new LinkedHashMap<>();
+            for (TermPath each
+                    : handed.asked().composedUnder(plan.root().at().head()).read()) {
+                ConstructionPlan.Node node = plan.at(each);
+                FixtureTemplate value = node == null ? null : compose(node, this, reading);
+                if (value != null) {
+                    out.put(each, value);
+                }
+            }
+            return out;
         }
 
         @Override

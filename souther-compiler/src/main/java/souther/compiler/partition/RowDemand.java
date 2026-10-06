@@ -1,13 +1,16 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Place;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -42,6 +45,31 @@ public sealed interface RowDemand {
          * shapes that act would be written once per shape.
          */
         Set<NumericTerm> terms();
+
+        /**
+         * Every position whose value this turns on.
+         *
+         * <p>Apart from {@link #terms}, which are the numbers among them. That an element is equal
+         * to the value at another position turns on both and is no number of either, so a reader
+         * asking whether a row still meets this after something of it moved asks these, and one
+         * asking where a number is written asks the terms.
+         */
+        Set<TermPath> positions();
+    }
+
+    /**
+     * What an element of a container is to meet, about the element and nothing beside it but the
+     * values it is compared with.
+     *
+     * <p>Two vocabularies, because a composer meets them two ways. A relation over the element's
+     * numbers or its own order is placed by a region, the way every relation is; that the element
+     * is the value at another position is no relation a region carries — two strings differ by a
+     * distance on nothing — and is met by writing that value into the container, or keeping it out.
+     */
+    sealed interface OfAnElement {
+
+        /** Every position whose value this turns on, given the element it is asked of. */
+        Set<TermPath> positions(TermPath element);
     }
 
     /**
@@ -51,12 +79,80 @@ public sealed interface RowDemand {
      * vocabularies the relation is spelled in is {@link TakenConstraint}'s answer, so a reader that
      * narrows a region asks this arm and nothing beside it.
      */
-    record Relational(TakenConstraint constraint) implements OfACondition {
+    record Relational(TakenConstraint constraint) implements OfACondition, OfAnElement {
 
         @Override
         public Set<NumericTerm> terms() {
             return constraint.terms();
         }
+
+        @Override
+        public Set<TermPath> positions() {
+            Set<TermPath> out = new LinkedHashSet<>();
+            constraint.terms().forEach(term -> out.add(term.subjectPath()));
+            return Collections.unmodifiableSet(out);
+        }
+
+        @Override
+        public Set<TermPath> positions(TermPath element) {
+            return positions();
+        }
+    }
+
+    /**
+     * That the element is equal to the value at {@code value}.
+     *
+     * <p>The element is not named here: it is always the element of the container the demand
+     * holding this is about, and named twice the two could name different containers.
+     */
+    record SameAs(TermPath value) implements OfAnElement {
+
+        public SameAs {
+            Objects.requireNonNull(value, "the position whose value the element is");
+        }
+
+        @Override
+        public Set<TermPath> positions(TermPath element) {
+            return Set.of(element, value);
+        }
+    }
+
+    /** That the element is unequal to the value at {@code value}. */
+    record DifferentFrom(TermPath value) implements OfAnElement {
+
+        public DifferentFrom {
+            Objects.requireNonNull(value, "the position whose value the element is not");
+        }
+
+        @Override
+        public Set<TermPath> positions(TermPath element) {
+            return Set.of(element, value);
+        }
+    }
+
+    /** The relations among {@code asked}, which are what a region places. */
+    static List<Relational> relationsAmong(List<OfAnElement> asked) {
+        List<Relational> out = new ArrayList<>();
+        for (OfAnElement each : asked) {
+            if (each instanceof Relational relation) {
+                out.add(relation);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /** The numbers {@code asked} is written with. */
+    private static Set<NumericTerm> termsOf(List<OfAnElement> asked) {
+        Set<NumericTerm> out = new LinkedHashSet<>();
+        relationsAmong(asked).forEach(each -> out.addAll(each.terms()));
+        return out;
+    }
+
+    /** Every position {@code asked} of an element of {@code container} turns on. */
+    private static Set<TermPath> positionsOf(TermPath container, List<OfAnElement> asked) {
+        Set<TermPath> out = new LinkedHashSet<>();
+        asked.forEach(each -> out.addAll(each.positions(container.element())));
+        return out;
     }
 
     /**
@@ -77,28 +173,51 @@ public sealed interface RowDemand {
      * <p>Where nothing an element can be meets them, no element does, which is what makes a cut
      * nothing can place here a proof the condition never comes out this way.
      *
+     * <p>The container is held and not read back off the element's numbers. That the element is
+     * another position's value is a demand with no number in it, and a container worked out from
+     * the terms would be no container at all there.
+     *
+     * @param container   the container an element of which is to meet them
      * @param ofAnElement what the element is to meet, every one of it about the element alone
      * @param holdingOne  the container's size at least one, where the size is a number of this
      *                    input a region can carry
      */
-    record Exists(List<Relational> ofAnElement, Optional<Relational> holdingOne)
+    record Exists(TermPath container, List<OfAnElement> ofAnElement,
+                  Optional<Relational> holdingOne)
             implements OfACondition {
 
         public Exists {
+            Objects.requireNonNull(container, "a container an element of which meets them");
             ofAnElement = List.copyOf(ofAnElement);
             if (ofAnElement.isEmpty()) {
                 throw new IllegalArgumentException(
                         "an element meeting nothing in particular is the container holding one");
             }
+            // The value is written into the container as an element of its own, so what else is
+            // asked of the element would be asked of another one: some element being `v` and
+            // meeting `p` is not `v` written beside an element meeting `p`.
+            if (ofAnElement.size() > 1
+                    && ofAnElement.stream().anyMatch(each -> each instanceof SameAs)) {
+                throw new IllegalArgumentException("an element that is another position's value"
+                        + " is asked nothing beside it: " + ofAnElement);
+            }
+        }
+
+        /** The relations among what the element is to meet. */
+        public List<Relational> relations() {
+            return relationsAmong(ofAnElement);
         }
 
         /** The numbers the element is written with, which are what a row composed for this
          *  places. */
         @Override
         public Set<NumericTerm> terms() {
-            Set<NumericTerm> out = new LinkedHashSet<>();
-            ofAnElement.forEach(each -> out.addAll(each.terms()));
-            return Collections.unmodifiableSet(out);
+            return Collections.unmodifiableSet(termsOf(ofAnElement));
+        }
+
+        @Override
+        public Set<TermPath> positions() {
+            return Collections.unmodifiableSet(positionsOf(container, ofAnElement));
         }
     }
 
@@ -115,14 +234,17 @@ public sealed interface RowDemand {
      * <p>So what is done with these is compose, two ways round: elements that all meet them, and
      * where no element can be written that does, the container holding none.
      *
+     * @param container     the container every element of which is to meet them
      * @param ofEachElement what every element is to meet, every one of it about the element alone
      * @param holdingNone   the container's size at most nought, where the size is a number of this
      *                      input a region can carry — the way to meet this with no element at all
      */
-    record ForAll(List<Relational> ofEachElement, Optional<Relational> holdingNone)
+    record ForAll(TermPath container, List<OfAnElement> ofEachElement,
+                  Optional<Relational> holdingNone)
             implements OfACondition {
 
         public ForAll {
+            Objects.requireNonNull(container, "a container every element of which meets them");
             ofEachElement = List.copyOf(ofEachElement);
             if (ofEachElement.isEmpty()) {
                 throw new IllegalArgumentException(
@@ -130,14 +252,25 @@ public sealed interface RowDemand {
             }
         }
 
+        /** The relations among what every element is to meet. */
+        public List<Relational> relations() {
+            return relationsAmong(ofEachElement);
+        }
+
         /** The numbers the element is written with and the container's size, which are what a
          *  row composed for this places — the first where it writes an element, the second where
          *  it writes none. */
         @Override
         public Set<NumericTerm> terms() {
-            Set<NumericTerm> out = new LinkedHashSet<>();
-            ofEachElement.forEach(each -> out.addAll(each.terms()));
+            Set<NumericTerm> out = termsOf(ofEachElement);
             holdingNone.ifPresent(none -> out.addAll(none.terms()));
+            return Collections.unmodifiableSet(out);
+        }
+
+        @Override
+        public Set<TermPath> positions() {
+            Set<TermPath> out = positionsOf(container, ofEachElement);
+            holdingNone.ifPresent(none -> out.addAll(none.positions()));
             return Collections.unmodifiableSet(out);
         }
     }

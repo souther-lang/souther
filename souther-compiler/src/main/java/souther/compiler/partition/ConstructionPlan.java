@@ -21,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
 
@@ -164,39 +165,37 @@ final class ConstructionPlan {
     }
 
     /**
-     * A sequence composed out of what stands at its element.
+     * A sequence composed out of what it is asked to hold, rather than chosen whole.
      *
-     * <p>Only where a class is to be put there. A list nothing is being placed inside is a value
-     * like any other and is chosen whole, which is what keeps the rules about how many it holds
-     * with the one reader that has them — so this is the shape of a list a row is being built
-     * <em>into</em>, and not the shape of every list.
+     * <p>Only where something is asked of what it holds: a class put at its element, or values the
+     * caller hands over to be written into it or kept out of it ({@link ContentsComposed}). A list
+     * nothing is asked of is a value like any other and is chosen whole, which is what keeps the
+     * rules about how many it holds with the one reader that has them — so this is the shape of a
+     * list a row is being built <em>into</em>, and not the shape of every list.
      *
      * <p>One element and not however many. What a class at an element asks for is a list holding a
      * value in it; what the other elements are is a separate question, and answering it here would
-     * decide it for every rule at once. So what is built here holds the element in the class and
-     * whatever else the rules ask the list for, which is the least a row can be and still meet both
-     * ({@link #neededToHold}).
+     * decide it for every rule at once. So what is built here holds the element in the class, the
+     * values handed over, and whatever else the rules ask the list for — which is the least a row
+     * can be and still meet all of them. How many that is is worked out where the values are in
+     * hand ({@link Witnesses#holding}), since two values handed over to a set may be one.
      *
-     * @param worn  {@link Node#worn}: every name the position wears, since what is composed here
-     *              is bare
-     * @param under  the element's own position
-     * @param needed how many this has to hold for the value to be placed in it: the fewest the
-     *               rules allow, and never fewer than one. The element being placed is one of them
-     *               and the rest are values of the element's type — a class at an element asks for
-     *               a list holding a value in it, and a list that met that and broke the rule about
-     *               how many it holds is not a row.
-     *               <p>Named for what it is and not for the end it is read off. The floor is the
-     *               rules'; this is what the composing has to make, and the two part wherever the
-     *               rules ask for none.
+     * @param worn     {@link Node#worn}: every name the position wears, since what is composed
+     *                 here is bare
+     * @param under    the element's own position, where a class is put there
+     * @param holds    from how few to how many the rules let it hold
+     * @param handed   whether the caller hands over values to write into it or keep out of it,
+     *                 which is asked of the caller when it is composed and of nobody otherwise
      */
-    record Held(TermPath at, Type type, List<TypeSymbol> worn, Node under, int needed)
+    record Held(TermPath at, Type type, List<TypeSymbol> worn, Optional<Node> under,
+                DeclaredBounds.CountRange holds, boolean handed)
             implements Node {
 
         Held {
             worn = List.copyOf(worn);
-            if (needed < 1) {
-                throw new IllegalArgumentException(
-                        "a list built around an element holds it: " + needed);
+            if (under.isEmpty() && !handed) {
+                throw new IllegalArgumentException("a list built rather than chosen is built to"
+                        + " hold something asked of it: " + at);
             }
         }
     }
@@ -409,6 +408,56 @@ final class ConstructionPlan {
     }
 
     /**
+     * The containers a caller hands values to when a plan is composed, and the positions of the
+     * value those are read at.
+     *
+     * <p>Positions and nothing about where the values come from. Which value is written into a
+     * container is the caller's to say when it composes — it may be read off another parameter
+     * altogether — and what the plan needs of it is only where a container is built rather than
+     * chosen whole, whether something has to be placed in it, and which positions of its own a
+     * value is read at, since each of those is a position the plan has to hold.
+     *
+     * @param holdingOne the containers a value is written into
+     * @param keepingOut the containers a value is kept out of
+     * @param read       the positions of this value a value handed over is read at
+     */
+    record ContentsComposed(Set<TermPath> holdingOne, Set<TermPath> keepingOut,
+                            Set<TermPath> read) {
+
+        /** Nothing handed over, which is what a plan with no container asked of is made with. */
+        static final ContentsComposed NONE = new ContentsComposed(Set.of(), Set.of(), Set.of());
+
+        ContentsComposed {
+            holdingOne = Set.copyOf(holdingOne);
+            keepingOut = Set.copyOf(keepingOut);
+            read = Set.copyOf(read);
+        }
+
+        /** Whether values are handed to the container at {@code container}. */
+        boolean handedTo(TermPath container) {
+            return holdingOne.contains(container) || keepingOut.contains(container);
+        }
+
+        /** Whether a value is written into the container at {@code container}. */
+        boolean holdsOneAt(TermPath container) {
+            return holdingOne.contains(container);
+        }
+
+        /** Every position named here. */
+        Set<TermPath> paths() {
+            Set<TermPath> out = new LinkedHashSet<>(holdingOne);
+            out.addAll(keepingOut);
+            out.addAll(read);
+            return out;
+        }
+
+        /** Whether one of them stands strictly under {@code here}. */
+        boolean reachesUnder(TermPath here) {
+            return paths().stream().anyMatch(each -> !each.equals(here) && each.isAtOrUnder(here));
+        }
+    }
+
+    /**
      * The plan for one parameter, against everything that has to hold of it.
      *
      * <p><b>The requirements are put together here and nowhere else.</b> A path states what has to
@@ -425,12 +474,19 @@ final class ConstructionPlan {
      * @param additional what has to hold besides whatever {@code decided} already states. Named for
      *                   that, because a caller handing over the whole of it is the arrangement this
      *                   exists to stop
+     * @param contents   the containers the caller hands values to when the plan is composed, and
+     *                   the positions of this value those values are read at. Each is a position
+     *                   that has to exist, so what its path requires is required as a fixed path's
+     *                   is
      */
     static Result of(Type declared, TermPath at, NewtypeInners inners, Symbols symbols,
                      DeclarationKinds kinds, SumCases sums, Set<TermPath> decided,
-                     Requirements additional, HowManyItHolds howMany) {
+                     Requirements additional, ContentsComposed contents,
+                     HowManyItHolds howMany) {
         Requirements required = additional;
-        for (TermPath fixed : decided) {
+        Set<TermPath> standing = new LinkedHashSet<>(decided);
+        standing.addAll(contents.paths());
+        for (TermPath fixed : standing) {
             switch (required.merge(fixed.requirements())) {
                 case Requirements.Merge.Merged both -> required = both.requirements();
                 case Requirements.Merge.Conflict against -> {
@@ -455,7 +511,7 @@ final class ConstructionPlan {
             }
         }
         return switch (node(declared, at, inners, symbols, kinds, sums, 0, decided, required,
-                howMany)) {
+                contents, howMany)) {
             case NodeResult.Made(Node root) -> new Result.Planned(new ConstructionPlan(root));
             case NodeResult.Refused(ModelRefusal why) -> new Result.Refused(why);
             case NodeResult.Beyond(Set<CompositionBudget> by) -> new Result.Beyond(by);
@@ -536,6 +592,29 @@ final class ConstructionPlan {
                 .anyMatch(each -> !each.equals(here) && each.isAtOrUnder(here));
     }
 
+    /**
+     * The position of the plan at {@code at}, or null where the plan holds none there — a path
+     * inside a value chosen whole, or under an element.
+     */
+    Node at(TermPath at) {
+        return found(root, at);
+    }
+
+    private static Node found(Node node, TermPath at) {
+        if (node.at().equals(at)) {
+            return node;
+        }
+        if (!(node instanceof Built built)) {
+            return null;
+        }
+        for (Node each : built.under().values()) {
+            if (at.isAtOrUnder(each.at())) {
+                return found(each, at);
+            }
+        }
+        return null;
+    }
+
     /** Every position a value is chosen at, in the order they are composed. */
     List<Slot> slots() {
         List<Slot> out = new ArrayList<>();
@@ -547,7 +626,7 @@ final class ConstructionPlan {
         switch (node) {
             case Slot slot -> out.add(slot);
             case Built built -> built.under().values().forEach(each -> collect(each, out));
-            case Held held -> collect(held.under(), out);
+            case Held held -> held.under().ifPresent(element -> collect(element, out));
             // Not a position a value is chosen at: the requirement settled it, so there is nothing
             // here for the search to offer and nothing for it to be refused at.
             case Exact _ -> { }
@@ -559,7 +638,7 @@ final class ConstructionPlan {
                                    DeclarationKinds kinds, SumCases sums,
                                    int depth,
                                    Set<TermPath> decided, Requirements required,
-                                   HowManyItHolds howMany) {
+                                   ContentsComposed contents, HowManyItHolds howMany) {
         // What the requirements leave standing here, worked out before anything is decided about
         // the position. Read once and in full: what is built, whether the search chooses it, and
         // where every path below it hangs all follow from it.
@@ -597,19 +676,27 @@ final class ConstructionPlan {
             // this position, whether the descent has anything to reach, and whether the rules leave
             // room for it are one question — is the caller asking for something inside this list —
             // and read twice they are free to come apart over one list.
-            boolean demanded = anythingIsAskedUnder(here, decided, required);
-            // How many it would have to hold, and how many it may, off one reading. The floor is
-            // how many the rules ask the whole collection to hold and the value being placed is one
-            // of them, so what a collection holding it comes to is the floor, or one where the
-            // rules ask for none.
+            //
+            // Two things may be asked of it, and they are asked apart because they build different
+            // things: something placed at its element is a position under it the search chooses a
+            // value at, and values handed over to be written into it or kept out of it are no
+            // position at all — what stands at the element of a list holding nothing equal to a
+            // value is whatever the rules leave, and a position chosen there would make it hold one.
+            boolean elementAsked = anythingIsAskedUnder(here, decided, required);
+            boolean handed = contents.handedTo(here);
+            boolean demanded = elementAsked || handed;
+            // How many it may hold, off one reading, and whether something has to be placed in it.
+            // The floor is how many the rules ask the whole collection to hold and the value being
+            // placed is one of them, so what a collection holding it comes to is the floor, or one
+            // where the rules ask for none.
             DeclaredBounds.CountRange holds = demanded ? howMany.at(here, building) : null;
-            int needed = demanded ? neededToHold(holds) : 0;
+            boolean placesOne = elementAsked || contents.holdsOneAt(here);
             // Asked before the figure and before the descent, because this is the model's answer
             // and those are this compiler's. A list the rules leave no room in holds nothing
             // however far this had read, so a figure named beside it sends an author to raise one
             // that changes nothing, and a figure named instead of it says this compiler did not
             // look, of a position it has the answer for.
-            if (demanded && holds.most() < needed) {
+            if (placesOne && holds.most() < neededToHold(holds)) {
                 return new NodeResult.Refused(new ModelRefusal.NoRoom(here, holds));
             }
             // A sequence is planned by asking what stands at its element, so the figure is met here
@@ -619,14 +706,19 @@ final class ConstructionPlan {
             if (asDeepAsThisGoes) {
                 return givenUpAt(descent, here, building, settled.outer(), demanded);
             }
+            if (!elementAsked && handed) {
+                return new NodeResult.Made(
+                        new Held(here, building, worn, Optional.empty(), holds, true));
+            }
             NodeResult inside = node(sequence.element(), here.element(), inners, symbols,
                     kinds, sums,
-                    depth + 1, decided, required, howMany);
+                    depth + 1, decided, required, contents, howMany);
             if (!(inside instanceof NodeResult.Made(Node element))) {
                 return inside;
             }
             if (demanded) {
-                return new NodeResult.Made(new Held(here, building, worn, element, needed));
+                return new NodeResult.Made(
+                        new Held(here, building, worn, Optional.of(element), holds, handed));
             }
             // Nothing was asked for inside it, so the list is chosen whole — but where the walk
             // that would have found something gave up part-way, that is not the same answer. Read
@@ -651,7 +743,7 @@ final class ConstructionPlan {
             // caller's value out of what it built. What the two answers differ in is what would
             // change them — a figure is raised, and this is a narrowing the caller has yet to
             // state.
-            if (anythingIsAskedUnder(here, decided, required)) {
+            if (anythingIsAskedUnder(here, decided, required) || contents.reachesUnder(here)) {
                 return new NodeResult.Unnarrowed(here,
                         narrowingsAt(settled, inners, symbols, kinds, sums));
             }
@@ -660,7 +752,7 @@ final class ConstructionPlan {
         }
         if (asDeepAsThisGoes) {
             return givenUpAt(descent, here, building, settled.outer(),
-                    anythingIsAskedUnder(here, decided, required));
+                    anythingIsAskedUnder(here, decided, required) || contents.reachesUnder(here));
         }
         SequencedMap<String, Node> under = new LinkedHashMap<>();
         Set<CompositionBudget> beyond = new LinkedHashSet<>();
@@ -668,7 +760,7 @@ final class ConstructionPlan {
         for (Map.Entry<String, Type> field : composed.fields().entrySet()) {
             switch (node(field.getValue(), here.then(field.getKey()), inners, symbols, kinds,
                     sums, depth + 1,
-                    decided, required, howMany)) {
+                    decided, required, contents, howMany)) {
                 case NodeResult.Made(Node built) -> under.put(field.getKey(), built);
                 // The model settling that there is no value ends the walk. Nothing a field further
                 // along could say outranks it, and one proof is the whole of what a reader gets — a
@@ -906,7 +998,7 @@ final class ConstructionPlan {
                 case Leaf.Beneath(Set<CompositionBudget> cutBy) -> cutBy;
             };
             case Built built -> across(built.under().values());
-            case Held held -> cutBy(held.under());
+            case Held held -> held.under().map(ConstructionPlan::cutBy).orElse(Set.of());
             case Exact _ -> Set.of();
         };
     }

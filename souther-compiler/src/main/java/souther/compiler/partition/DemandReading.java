@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.BoundOperationFacts;
+import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.core.Core;
@@ -10,6 +11,7 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
+import souther.compiler.inputs.Position;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
@@ -218,6 +220,11 @@ final class DemandReading {
         ValueName operation = call.operation();
         BoundOperationFacts facts = DefaultBoundOperationFacts.get();
         var container = facts.readsItsContainer(operation);
+        DeclaredArgument asked = facts.asksWhetherItsContainerHolds(operation);
+        if (asked != null) {
+            return List.of(ofAMembership(operation, call.argument(container.container()),
+                    call.argument(asked), reads, read, holding));
+        }
         var turns = facts.turnsOnWhetherAnArgumentHolds(operation, AnswerAspect.TRUTH);
         Core closure = turns == null ? null : call.argument(turns.argument());
         Core over = container == null ? null : call.argument(container.container());
@@ -236,7 +243,7 @@ final class DemandReading {
         TermPath element = held.element();
         boolean everyElement = facts.statesItsPredicateOfEveryElement(operation) == holding;
         List<Read> out = new ArrayList<>();
-        List<RowDemand.Relational> ofTheElement = new ArrayList<>();
+        List<RowDemand.OfAnElement> ofTheElement = new ArrayList<>();
         // Named apart from the body's own conditions: nothing reports one of these by its name,
         // and filed under the body's numbering they would take names the body's conditions have.
         Condition predicate = Condition.of(block.body(), handed.at(), read.rules().symbols(),
@@ -276,8 +283,7 @@ final class DemandReading {
                         : new Read.Unread(new OnTheWay.Why.SizeOfTheContainerNotStated()));
             }
             if (!ofTheElement.isEmpty()) {
-                out.add(new Read.Demands(new RowDemand.ForAll(ofTheElement,
-                        Optional.ofNullable(sizeAgainst(held, operation, read, false)))));
+                out.add(new Read.Demands(quantified(held, operation, read, true, ofTheElement)));
             }
             // Every element meeting what every element meets, whatever the container holds.
             return out.isEmpty() ? List.of(new Read.Settled(true)) : List.copyOf(out);
@@ -292,13 +298,61 @@ final class DemandReading {
         // one, which every row past it does — and where that cannot be said either, it is said
         // that it could not, rather than nothing being asked.
         if (!ofTheElement.isEmpty()) {
-            out.add(new Read.Demands(new RowDemand.Exists(ofTheElement, holdingOne)));
+            out.add(new Read.Demands(quantified(held, operation, read, false, ofTheElement)));
         } else {
             out.add(holdingOne.<Read>map(Read.Demands::new)
                     .orElseGet(() -> new Read.Unread(
                             new OnTheWay.Why.SizeOfTheContainerNotStated())));
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * What a container holding the value at {@code value} — or holding nothing equal to it — asks of
+     * a row.
+     *
+     * <p>A quantifier and read as one: holding it is some element equal to the value, and not
+     * holding it is every element unequal to it. So it lands where {@code List.any} and
+     * {@code List.all} land ({@link #quantified}), and a row composed for
+     * {@code Set.contains(v, xs)} is one composed for {@code List.any(e -> e == v, xs)}.
+     *
+     * <p>The element is compared with a position and not with a number. Two strings differ by a
+     * distance on nothing, so what is asked is that the value at that position is written into the
+     * container, or kept out of it — which is a demand a composer meets and no region narrows by.
+     * A value that stands at no position of the input is declined: a value written in the source
+     * is a bound on the element's own order, which this reading does not yet draw here.
+     */
+    private static Read ofAMembership(ValueName operation, Core over, Core value,
+                                      InputReads reads, InputReading read, boolean holding) {
+        if (!(reads.pathOf(over, read.rules().newtypes()) instanceof PathResolution.At(
+                TermPath held))) {
+            return new Read.Unread(new OnTheWay.Why.ContainerAtNoPosition());
+        }
+        if (!(reads.pathOf(value, read.rules().newtypes()) instanceof PathResolution.At(
+                TermPath at))) {
+            return new Read.Unread(new OnTheWay.Why.NoWordsForTheShape());
+        }
+        RowDemand.OfAnElement element = holding ? new RowDemand.SameAs(at)
+                : new RowDemand.DifferentFrom(at);
+        return new Read.Demands(quantified(held, operation, read, !holding, List.of(element)));
+    }
+
+    /**
+     * Some element of the container at {@code held} meeting every one of {@code ofTheElement}, or
+     * every element meeting them — with the container's size where it is a number a region
+     * carries.
+     *
+     * <p>The one place a demand on a container's elements is made, whatever operation it was
+     * written with.
+     */
+    private static RowDemand.OfACondition quantified(TermPath held, ValueName operation,
+                                                     InputReading read, boolean everyElement,
+                                                     List<RowDemand.OfAnElement> ofTheElement) {
+        return everyElement
+                ? new RowDemand.ForAll(held, ofTheElement,
+                        Optional.ofNullable(sizeAgainst(held, operation, read, false)))
+                : new RowDemand.Exists(held, ofTheElement,
+                        Optional.ofNullable(sizeAgainst(held, operation, read, true)));
     }
 
     /** Whether every term {@code relation} is over stands inside {@code element}. */
@@ -337,8 +391,15 @@ final class DemandReading {
                     instanceof ValueName.Stdlib size)) {
                 return null;
             }
-            NumericTerm.TakenOf count = NumericTerm.TakenOf.of(size, held,
-                    read.domain().at(held).type(), read.rules().inners(), read.rules().symbols());
+            // A path the reading of the input holds no position at is a container whose size is
+            // no number of this input: the path is where the argument stands, and which positions
+            // the input is read at is the reading's.
+            Position position = read.domain().at(held);
+            if (position == null) {
+                return null;
+            }
+            NumericTerm.TakenOf count = NumericTerm.TakenOf.of(size, held, position.type(),
+                    read.rules().inners(), read.rules().symbols());
             if (count == null) {
                 return null;
             }

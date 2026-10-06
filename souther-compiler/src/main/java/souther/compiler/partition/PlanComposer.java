@@ -4,8 +4,11 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.types.TypeReachName;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.SequencedMap;
 
 /**
@@ -49,6 +52,19 @@ final class PlanComposer {
          *              whatever a walk of them came to.
          */
         SequencedMap<String, FixtureTemplate> under(ConstructionPlan.Built built, Under under);
+
+        /**
+         * What the container at {@code container} is to hold and to hold nothing equal to, or null
+         * where a value it is handed has nothing to stand for it.
+         *
+         * <p>Asked only of a container the plan says values are handed to
+         * ({@link ConstructionPlan.Held#handed}), so a caller that hands none over has nothing to
+         * answer and is never asked.
+         *
+         * @param under composes a position of the plan, which is how a value read at a position of
+         *              the same value is reached — composed the one way every position is
+         */
+        ContainerContents contentsOf(TermPath container, Under under);
     }
 
     /** Composing one position of the plan, which is what a caller is given to reach below a field. */
@@ -84,9 +100,10 @@ final class PlanComposer {
     }
 
     /**
-     * The collection this plan builds around what stands at its element.
+     * The collection this plan builds around what it is asked to hold.
      *
-     * <p>Holding as many as the plan says and not one: what a class at an element asks for is a
+     * <p>What stands at its element where a class is put there, the values the caller hands over,
+     * and as many beside them as the rules ask for: what a class at an element asks for is a
      * collection holding a value in it, and where the rules ask the collection for more than that
      * a collection of one is not a row.
      *
@@ -96,22 +113,34 @@ final class PlanComposer {
      */
     private static FixtureTemplate held(ConstructionPlan.Held plan, Values values,
                                         RuleReadingContext reading) {
-        FixtureTemplate element = compose(plan.under(), values, reading);
-        if (element == null) {
-            return null;
+        List<FixtureTemplate> holding = new ArrayList<>();
+        List<FixtureTemplate> keptOut = List.of();
+        if (plan.under().isPresent()) {
+            FixtureTemplate element = compose(plan.under().get(), values, reading);
+            if (element == null) {
+                return null;
+            }
+            holding.add(element);
+        }
+        if (plan.handed()) {
+            ContainerContents contents =
+                    values.contentsOf(plan.at(), node -> compose(node, values, reading));
+            if (contents == null) {
+                return null;
+            }
+            holding.addAll(contents.holding());
+            keptOut = contents.keptOut();
         }
         RuleReadingSource ruleSource = reading.source();
-        // The one placed in the class, and enough beside it for the collection to be one the rules
-        // admit. What may stand beside it is the carrier's business — a list may hold the same
-        // value again and a set may not — so the collection is asked for whole rather than padded
-        // here.
+        // What may stand beside them is the carrier's business — a list may hold the same value
+        // again and a set may not — so the collection is asked for whole rather than padded here.
         if (!(TypeView.shapeOf(plan.type(), ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums())
                 instanceof Shape.Sequence carrier)) {
             return null;
         }
         FixtureTemplate collection =
-                Witnesses.holdingAlso(carrier, element, plan.needed(), reading);
+                Witnesses.holding(carrier, holding, keptOut, plan.holds(), reading);
         if (collection == null) {
             return null;
         }

@@ -1132,7 +1132,7 @@ final class ContainersAddingUp {
             return ConstructionPlan.of(element, at, reading.source().inners(),
                     reading.source().symbols(),
                     reading.source().kinds(), reading.source().sums(), decided,
-                    inside.required(),
+                    inside.required(), ConstructionPlan.ContentsComposed.NONE,
                     (_, building) -> Partitions.heldRange(building, reading, null));
         }
 
