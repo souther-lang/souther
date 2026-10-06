@@ -4391,20 +4391,57 @@ public final class Generator {
             // writes is that one.
             case RowDemand.Exists(var ofAnElement, var _) -> asComposedOnly(cut,
                     placedIn(subject, looking, here, alreadyStanding, assumed, cut,
-                            constraints(ofAnElement), true));
+                            constraints(ofAnElement), true),
+                    noElementCanMeet(constraints(ofAnElement), subject));
             // And where no element can be written that meets them, the container holding none,
-            // which every element of meets them.
+            // which every element of meets them. Closed only where neither way is open: no element
+            // the rules allow meets them, and the container cannot hold none.
             case RowDemand.ForAll(var ofEachElement, var holdingNone) -> {
                 Placed some = placedIn(subject, looking, here, alreadyStanding, assumed, cut,
                         constraints(ofEachElement), true);
                 if (some instanceof Placed.AtAll || holdingNone.isEmpty()) {
-                    yield asComposedOnly(cut, some);
+                    yield asComposedOnly(cut, some, false);
                 }
                 Placed none = placedIn(subject, looking, here, alreadyStanding, assumed, cut,
                         List.of(holdingNone.get().constraint()), true);
-                yield asComposedOnly(cut, none instanceof Placed.AtAll ? none : some);
+                if (none instanceof Placed.AtAll) {
+                    yield none;
+                }
+                yield asComposedOnly(cut, some,
+                        none instanceof Placed.AtNone(ReachabilityGap.ProvedImpossible _)
+                                && noElementCanMeet(constraints(ofEachElement), subject));
             }
         };
+    }
+
+    /**
+     * Whether no element the rules of the input allow meets every one of {@code ofAnElement}.
+     *
+     * <p>Asked of what the declarations leave and of nothing the way added. A way can hold a
+     * condition on the element it is walking — a rule inside a closure handed one — and that is
+     * about one element; a region holding both it and these would leave nothing where two
+     * elements meet the two. What the declarations leave is what every element holds, so what
+     * that leaves nothing for is something no element is.
+     */
+    private static boolean noElementCanMeet(List<TakenConstraint> ofAnElement,
+                                            MeasuredInput subject) {
+        SearchRegion rules = subject.quantities().region();
+        for (TakenConstraint one : ofAnElement) {
+            rules = one.narrowing(rules);
+        }
+        for (TakenConstraint one : ofAnElement) {
+            for (NumericTerm term : one.terms()) {
+                if (rules.projectionOf(term)
+                        instanceof NumericDomain.FormProjection.NothingIsLeft) {
+                    return true;
+                }
+            }
+            if (one instanceof TakenConstraint.Affine affine && rules.projectionOf(affine.form())
+                    instanceof NumericDomain.FormProjection.NothingIsLeft) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static List<TakenConstraint> constraints(List<RowDemand.Relational> relations) {
@@ -4413,15 +4450,17 @@ public final class Generator {
 
     /**
      * What placing a cut about a container's elements came to, with nothing it found standing for
-     * a proof.
+     * a proof unless {@code provedByTheRules} says the rules themselves leave it nothing.
      *
      * <p>A region reads a term inside the elements as the value of one element, and a row writes
      * every element as that one. What that leaves nothing for is a row of elements written alike,
      * and the condition may still hold of a row whose elements differ — so nothing found here is
-     * what this composer did, and never what the model settles.
+     * what this composer did, and the model's word only where the declarations alone settle it.
      */
-    private static Placed asComposedOnly(OnTheWay.TakenIn cut, Placed placed) {
+    private static Placed asComposedOnly(OnTheWay.TakenIn cut, Placed placed,
+                                         boolean provedByTheRules) {
         return placed instanceof Placed.AtNone(ReachabilityGap.ProvedImpossible _)
+                && !provedByTheRules
                 ? new Placed.AtNone(new ReachabilityGap.Uncomposed(cut,
                         new ReachabilityGap.Why.ElementsWrittenAlike()))
                 : placed;

@@ -132,14 +132,11 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
                 // element a row writes is the one these numbers are chosen for.
                 case RowDemand.Exists(var ofAnElement, var _) ->
                         asked = asked.meet(ofTheElement(ofAnElement, term, within, on));
-                // And where the container is written holding none, its size is the number placed.
-                case RowDemand.ForAll(var ofEachElement, var holdingNone) -> {
-                    asked = asked.meet(ofTheElement(ofEachElement, term, within, on));
-                    if (holdingNone.isPresent()) {
-                        asked = asked.meet(ofTheElement(List.of(holdingNone.get()), term, within,
-                                on));
-                    }
-                }
+                // The container holding none is the other way of meeting it, and not a second thing
+                // it asks: met here beside the elements, a size another cut holds at one or more
+                // would be left no number by a way that was not the one placed.
+                case RowDemand.ForAll(var ofEachElement, var _) ->
+                        asked = asked.meet(ofTheElement(ofEachElement, term, within, on));
             }
         }
         return asked;
