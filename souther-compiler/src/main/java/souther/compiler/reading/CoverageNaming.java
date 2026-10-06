@@ -152,7 +152,7 @@ final class CoverageNaming implements Naming<Outcome> {
         }
         List<String> names = match.cases().get(part).pattern().selectors().stream()
                 .map(selector -> selector.name().name()).toList();
-        return one(new Decision(new Condition.Case(at, String.join("|", names)), claim));
+        return one(new Decision(new Condition.Case(at, names), claim));
     }
 
     /**
@@ -183,7 +183,7 @@ final class CoverageNaming implements Naming<Outcome> {
                     case PathResolution.MayStandAt _ -> null;
                 };
                 yield read == null ? new Condition.Arm(place.arm())
-                        : new Condition.Case(read, holding ? "true" : "false");
+                        : new Condition.Case(read, List.of(holding ? "true" : "false"));
             }
             case Choice.Decides.ItWasBuilt _ -> new Condition.Arm(place.arm());
             case Choice.Decides.ItDeparted _ -> new Condition.Arm(place.arm());
@@ -261,7 +261,7 @@ final class CoverageNaming implements Naming<Outcome> {
             Condition each = already.constrains();
             boolean otherWay = switch (added.constrains()) {
                 case Condition.Case one -> each instanceof Condition.Case other
-                        && other.at().equals(one.at()) && !other.name().equals(one.name());
+                        && other.at().equals(one.at()) && !other.names().equals(one.names());
                 case Condition.Side one -> each instanceof Condition.Side other
                         && other.comparison().equals(one.comparison()) && other.held() != one.held();
                 case Condition.Arm one -> each instanceof Condition.Arm other

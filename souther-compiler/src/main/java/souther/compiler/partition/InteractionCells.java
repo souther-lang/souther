@@ -474,21 +474,40 @@ public final class InteractionCells {
         return false;
     }
 
-    /** Which classes {@code condition} leaves its position, or null where it names none. */
-    private static Cell admittedBy(souther.compiler.reading.Condition condition, List<Axis> axes) {
+    /**
+     * Which classes {@code condition} leaves its position, or null where it names none.
+     *
+     * <p>The one reading of a condition into classes. What a body tells apart at a position is
+     * this asked of every condition about it ({@link BodyDistinction}), so a cell and that answer
+     * cannot read one condition two ways.
+     */
+    static Cell admittedBy(souther.compiler.reading.Condition condition, List<Axis> axes) {
         switch (condition) {
             case souther.compiler.reading.Condition.Case one -> {
                 int axis = axisAt(axes, one.at());
                 if (axis < 0) {
                     return null;
                 }
+                // Every case the arm answers for, and none where one of them is not a class here:
+                // an arm admitting a case this axis does not hold says something about the
+                // position no class of it reads.
                 List<PartitionClass> classes = axes.get(axis).classes();
-                for (int c = 0; c < classes.size(); c++) {
-                    if (classes.get(c).label().equals(one.name())) {
-                        return only(axes, axis, c, c);
+                Cell cell = Cell.anything(axes);
+                Arrays.fill(cell.allowed()[axis], false);
+                for (String name : one.names()) {
+                    int at = -1;
+                    for (int c = 0; c < classes.size(); c++) {
+                        if (classes.get(c).label().equals(name)) {
+                            at = c;
+                            break;
+                        }
                     }
+                    if (at < 0) {
+                        return null;
+                    }
+                    cell.allowed()[axis][at] = true;
                 }
-                return null;
+                return cell;
             }
             case souther.compiler.reading.Condition.Side one -> {
                 int axis = axisOf(axes, one.at());

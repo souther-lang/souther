@@ -13,6 +13,7 @@ import souther.compiler.inputs.WhatAQuestionStandsOn;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.partition.AxisId;
+import souther.compiler.partition.BodyDistinction;
 import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.RuleEvidenceOrigin;
 import souther.compiler.partition.UndividedPosition;
@@ -852,6 +853,12 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      *                measurement, because it is what the model says and is so whether or not
      *                anybody counted. Nothing a body declares narrows it — what it declared is said
      *                beside these numbers ({@link ClaimAnnotations}) and never into them
+     * @param divides   which rules the classes were composed out of, which is where they came from
+     *                  and says nothing about what this behavior does with them
+     * @param toldApart how far this behavior's body tells the classes apart, which is the answer
+     *                  to whether it takes the position wider than it needs. Its own value beside
+     *                  {@code divides}, because a {@code match} over the cases of a sum composes no
+     *                  class and tells every one of them apart
      * @param reached what the rows reached of them, where anybody counted. A position nothing was
      *                measured at used to carry an empty {@code covered} and a zero count beside a
      *                status saying so, which reads exactly like a position every class of which
@@ -859,7 +866,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      */
     public record AxisCoverage(AxisId at, String path,
                                List<String> classes, List<RuleEvidenceOrigin> divides,
-                               boolean cutOrParted,
+                               BodyDistinction toldApart,
                                Reading read, Measurement<Reached> reached) {
 
         /**
@@ -957,23 +964,27 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         /** Which classes there are is a fact about the model, and no row has to exist for it to be
          *  so — which is why a position nothing was measured at still names them. */
         public static AxisCoverage noRows(AxisId at, String path, List<String> classes,
-                                          List<RuleEvidenceOrigin> divides, boolean cutOrParted,
-                                          Reading read) {
-            return new AxisCoverage(at, path, classes, divides, cutOrParted, read,
+                                          List<RuleEvidenceOrigin> divides,
+                                          BodyDistinction toldApart, Reading read) {
+            return new AxisCoverage(at, path, classes, divides, toldApart, read,
                     new Measurement.NotMeasured<>(AxisCoverage.NoRows.NO_ROWS));
         }
 
         /** The same, where nobody asked for a measurement at all. */
         public static AxisCoverage notAsked(AxisId at, String path, List<String> classes,
-                                            List<RuleEvidenceOrigin> divides, boolean cutOrParted,
-                                            Reading read) {
-            return new AxisCoverage(at, path, classes, divides, cutOrParted, read,
+                                            List<RuleEvidenceOrigin> divides,
+                                            BodyDistinction toldApart, Reading read) {
+            return new AxisCoverage(at, path, classes, divides, toldApart, read,
                     new Measurement.NotMeasured<>(NothingWasAsked.NOT_ASKED));
         }
 
         public AxisCoverage {
             classes = List.copyOf(classes);
             divides = List.copyOf(divides);
+            if (toldApart == null) {
+                throw new IllegalArgumentException(
+                        "a position with no account of what the body tells apart there: " + path);
+            }
             if (read == null) {
                 throw new IllegalArgumentException(
                         "a position with no account of what was read about its values: " + path);

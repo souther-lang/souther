@@ -28,6 +28,8 @@ import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.Axis;
+import souther.compiler.partition.AxisId;
+import souther.compiler.partition.BodyDistinction;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.ReachingCuts;
@@ -260,7 +262,7 @@ final class Coverages {
     static PartitionEvidence of(souther.compiler.partition.MeasuredInput subject,
                                 souther.compiler.query.Adequacy.RowReading observed,
                                 souther.compiler.partition.AdequacyPolicy.OfTheMeasures budget,
-                                Set<souther.compiler.partition.AxisId> decided) {
+                                Map<AxisId, BodyDistinction> toldApart) {
         List<RowOutcome> rows = observed.rowsSeen();
         Partitions.Partitioning partitioning = subject.partitioning();
 
@@ -278,7 +280,8 @@ final class Coverages {
         // at rather than of whichever measure happens to be in hand.
         for (Readings.AtPosition at : readings.positions()) {
             for (Readings.AxisReading reading : at.axes()) {
-                axes.add(coverageOf(at, reading, readings, partitioning, observed.rowsWereRead()));
+                axes.add(coverageOf(at, reading, readings, partitioning, observed.rowsWereRead(),
+                        toldApartAt(toldApart, reading.axis())));
             }
         }
         // Each measure asked its own closure, and neither told from the length of what came back.
@@ -288,7 +291,7 @@ final class Coverages {
         return new PartitionEvidence(
                 PartitionDerivation.of(axes, partitioning.partitionClosure(),
                         partitioning.inputIsEmpty()),
-                pairsOf(subject.behavior(), readings, observed.rowsWereRead(), budget, decided),
+                pairsOf(subject.behavior(), readings, observed.rowsWereRead(), budget, toldApart),
                 partitioning.undivided(), partitioning.rulesWithoutALine(), partitioning.blocked(),
                 // What the model asked and nothing answered, taken whole and not gathered as the
                 // axes are walked. The questions are the model's; whether a position could be
@@ -466,8 +469,7 @@ final class Coverages {
                                                       Readings readings, boolean asked,
                                                       souther.compiler.partition.AdequacyPolicy
                                                               .OfTheMeasures budget,
-                                                      Set<souther.compiler.partition.AxisId>
-                                                              decided) {
+                                                      Map<AxisId, BodyDistinction> toldApart) {
         // Every measure a row is placed at, which is the locations above flattened rather than a
         // list somebody gathered beside them. A pair is between two positions, so this question is
         // the one that reads across them.
@@ -486,20 +488,17 @@ final class Coverages {
         // Kept as the pairs they were worked out between, rather than added up here. Which two
         // positions a combination is between is what the walk knows at the moment it counts, and a
         // sum is the one projection of that from which no reader can get it back.
-        // Over the positions the body decides on, where something read a body. What a combination
-        // of two classes asks is that the behavior was tried with both at once, which is worth
-        // asking where the behavior tells them apart: a position no decision is about answers the
+        // Over the positions the body says something about ({@link
+        // BodyDistinction#makesCombinations}). A position nothing in the body is about answers the
         // same however the other one moves, so the product of it with anything asks for a row that
-        // shows nothing the two rows apart do not. Null is a behavior with no body to read — the
-        // space is then over every position measured, because what is missing is the reading and
-        // not the relevance.
+        // shows nothing the two rows apart do not.
         List<PartitionEvidence.PairSpace.AxisPair> space = new ArrayList<>();
         for (int i = 0; i < axes.size(); i++) {
-            if (decided != null && !decided.contains(axes.get(i).id())) {
+            if (!toldApartAt(toldApart, axes.get(i)).makesCombinations()) {
                 continue;
             }
             for (int j = i + 1; j < axes.size(); j++) {
-                if (decided != null && !decided.contains(axes.get(j).id())) {
+                if (!toldApartAt(toldApart, axes.get(j)).makesCombinations()) {
                     continue;
                 }
                 long between = combinationsOf(axes.get(i), axes.get(j));
@@ -581,15 +580,19 @@ final class Coverages {
     }
 
     /**
-     * Whether the rules made this position's classes by cutting or parting its values.
+     * What the body tells apart at {@code axis}, which every measure handed to this was read for.
      *
-     * <p>Asked of the axis's own two lists, which are what say so. A position whose classes are the
-     * cases of a sum has neither: nothing was cut, nothing was parted, and the classes are what the
-     * value's shape already had. So this is what tells a division the rules made from one they
-     * merely count.
+     * <p>Refused rather than taken as unknown where it is missing. The answer was read off the same
+     * axes this walks, so a measure it has nothing for is one this was handed from somewhere else.
      */
-    private static boolean cutOrParted(Axis axis) {
-        return !axis.cuts().isEmpty() || !axis.parted().isEmpty();
+    private static BodyDistinction toldApartAt(Map<AxisId, BodyDistinction> toldApart,
+                                               Axis axis) {
+        BodyDistinction at = toldApart.get(axis.id());
+        if (at == null) {
+            throw new IllegalArgumentException("`" + axis.id() + "` is a measure nothing read"
+                    + " what the body tells apart at");
+        }
+        return at;
     }
 
     /**
@@ -721,7 +724,7 @@ final class Coverages {
     private static PartitionEvidence.AxisCoverage coverageOf(Readings.AtPosition where,
             Readings.AxisReading reading, Readings readings,
             souther.compiler.partition.Partitions.Partitioning partitioning,
-            boolean asked) {
+            boolean asked, BodyDistinction toldApart) {
         Axis axis = reading.axis();
         souther.compiler.partition.PositionAccount at = where.position().position();
         List<String> classes = axis.classes().stream().map(PartitionClass::id).toList();
@@ -750,18 +753,18 @@ final class Coverages {
         // below, and a build that asked for no measurement read no row.
         if (!asked) {
             return PartitionEvidence.AxisCoverage.notAsked(axis.id(),
-                    axis.term().toString(), classes, axis.divides(), cutOrParted(axis), read);
+                    axis.term().toString(), classes, axis.divides(), toldApart, read);
         }
         if (readings.noRows() && !readings.someRowsUnseen()) {
             return PartitionEvidence.AxisCoverage.noRows(axis.id(),
-                    axis.term().toString(), classes, axis.divides(), cutOrParted(axis), read);
+                    axis.term().toString(), classes, axis.divides(), toldApart, read);
         }
         PartitionEvidence.AxisCoverage.Reached reached =
                 new PartitionEvidence.AxisCoverage.Reached(reading.covered(),
                         reading.couldNotSay());
         WeakeningSet by = readings.weakening(List.of(reading));
         return new PartitionEvidence.AxisCoverage(axis.id(), axis.term().toString(),
-                classes, axis.divides(), cutOrParted(axis), read, by.isEmpty()
+                classes, axis.divides(), toldApart, read, by.isEmpty()
                         ? new Measurement.Complete<>(reached)
                         : new Measurement.Partial<>(reached, by));
     }

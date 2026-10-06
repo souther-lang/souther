@@ -14,7 +14,9 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * One reading of a body's decisions: where a run can get to, and what holds on the way.
@@ -104,6 +106,9 @@ public final class CoverageRead {
     /** How each arm the plan numbered is reached. */
     private final Arms arms;
 
+    /** What every fork of the body is taken by, in the order the walk met them. */
+    private final Set<Condition> decided = new LinkedHashSet<>();
+
     private CoverageRead(ValueArrivals<Outcome> reading, Meetings meetings, Arms arms) {
         this.reading = reading;
         this.meetings = meetings;
@@ -129,12 +134,19 @@ public final class CoverageRead {
      *                     and not a habit of whatever map was handed over. Written as any map, an
      *                     unordered one was as admissible, and the order a plan is asked in would
      *                     have come from wherever that map put its keys
+     * @param decided      every condition a fork of the body is taken by, in the order the walk met
+     *                     them, whatever holds on the way to the fork. What the body tells apart
+     *                     about its input, which is not the ways in: a {@code match} past an
+     *                     attempted construction is reached by a way in nothing states and is still
+     *                     a decision about the position it matches on
      */
     public record Read(List<Interaction> interactions,
-                       java.util.SequencedMap<ArmProbe, PathAccess> arms) {
+                       java.util.SequencedMap<ArmProbe, PathAccess> arms,
+                       List<Condition> decided) {
 
         public Read {
             interactions = List.copyOf(interactions);
+            decided = List.copyOf(decided);
             arms = java.util.Collections.unmodifiableSequencedMap(
                     new java.util.LinkedHashMap<>(arms));
         }
@@ -174,9 +186,24 @@ public final class CoverageRead {
                         source.newtypes()));
         Meetings meetings = new Meetings(plan, reading);
         Arms arms = new Arms(plan);
-        new CoverageRead(reading, meetings, arms)
-                .walk(body, naming, new Reach.Ways(List.of(new WayIn(List.of()))), true);
-        return new Read(meetings.found(), arms.found(behavior));
+        CoverageRead walked = new CoverageRead(reading, meetings, arms);
+        walked.walk(body, naming, new Reach.Ways(List.of(new WayIn(List.of()))), true);
+        return new Read(meetings.found(), arms.found(behavior), List.copyOf(walked.decided));
+    }
+
+    /**
+     * That a fork of the body is taken by the decisions of {@code ways}.
+     *
+     * <p>Said where the fork is and whatever holds on the way to it. A fork under a way in nothing
+     * states — past an attempted construction, inside a function value — is still a decision the
+     * body makes about its input, and what holds on the way to it is a different question.
+     */
+    private void decides(List<WayIn> ways) {
+        for (WayIn way : ways) {
+            for (Decision each : way.decisions()) {
+                decided.add(each.constrains());
+            }
+        }
     }
 
     /**
@@ -248,6 +275,9 @@ public final class CoverageRead {
                 walk(match.scrutinee(), naming, reach, observed);
                 for (int part = 0; part < match.cases().size(); part++) {
                     Outcome went = naming.matchCase(match, part);
+                    if (went != null) {
+                        decides(List.of(new WayIn(went.holds())));
+                    }
                     // One way in and never more, so nothing here can go over the bound. A case the
                     // reading could not name is a way in nothing states, which is what is inside it
                     // as much as it is the arm itself.
@@ -365,7 +395,9 @@ public final class CoverageRead {
             return new Reach.Nothing(
                     PathAccess.Unreachable.Why.THE_CONDITION_NEVER_COMES_OUT_THAT_WAY);
         }
-        Reach into = under(reach, new Reach.Ways(waysOf(through.paths())));
+        List<WayIn> left = waysOf(through.paths());
+        decides(left);
+        Reach into = under(reach, new Reach.Ways(left));
         return into.ways().size() > MOST_WAYS_IN
                 ? new Reach.Unnameable(PathAccess.Unsupported.Why.MORE_WAYS_IN_THAN_ARE_READ)
                 : into;
@@ -380,7 +412,9 @@ public final class CoverageRead {
      * are all in hand at once.
      */
     private Reach waysInTo(Core.If iff, int part, CoverageNaming naming, Reach reach) {
-        Reach into = under(reach, waysInFor(iff, part, naming));
+        Reach own = waysInFor(iff, part, naming);
+        decides(own.ways());
+        Reach into = under(reach, own);
         if (into.ways().size() <= MOST_WAYS_IN) {
             return into;
         }

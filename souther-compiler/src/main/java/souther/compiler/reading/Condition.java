@@ -5,6 +5,8 @@ import souther.compiler.coverage.ArmOccurrence;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 
+import java.util.List;
+
 /**
  * One decision of a body coming out one way, said in terms of the input it is about.
  *
@@ -18,13 +20,27 @@ public sealed interface Condition {
     /**
      * A case of a union the body matched on.
      *
-     * @param name which case, as the model spells it
+     * @param names which cases the arm answers for, as the model spells them, in the order they are
+     *              written. Several where the arm is written for several, since what the arm admits
+     *              is each of them
      */
-    record Case(TermPath at, String name) implements Condition {
+    record Case(TermPath at, List<String> names) implements Condition {
+
+        public Case {
+            names = List.copyOf(names);
+            if (names.isEmpty()) {
+                throw new IllegalArgumentException("an arm at " + at + " answers for no case");
+            }
+        }
+
+        /** The cases as one word, which is how a document and a person are shown them. */
+        public String spelled() {
+            return String.join("|", names);
+        }
 
         @Override
         public String toString() {
-            return at + "=" + name;
+            return at + "=" + spelled();
         }
     }
 
