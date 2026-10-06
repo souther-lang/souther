@@ -143,6 +143,7 @@ class NothingThatWalksATreeNamesTheReadingOfTheInputTest {
         // moving one along is what a naming does rather than a shape one of them happens to have.
         assertEquals(List.of(
                         "souther/compiler/partition/DecisionNaming",
+                        "souther/compiler/partition/TruthsMayComeOutEitherWay",
                         "souther/compiler/reading/CoverageNaming",
                         "souther/compiler/reading/NumberWays"),
                 moves.stream().sorted().toList());

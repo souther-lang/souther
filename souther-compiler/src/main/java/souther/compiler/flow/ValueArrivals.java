@@ -161,8 +161,18 @@ public final class ValueArrivals<P> {
      */
     public static <P> ValueArrivals<P> ofBodyWhereTheOperationsStand(
             Core body, Naming<P> naming, Function<Core.MaterialisedValue, Core> templates) {
-        return ofBody(body, naming, ComparisonWays.OF_THE_TREE, WhereTheOperationsAre.STAND_IN_IT,
-                templates, new IdentityHashMap<>());
+        return ofBodyWhereTheOperationsStand(body, naming, ComparisonWays.OF_THE_TREE, templates);
+    }
+
+    /**
+     * The same, with what says which ways a value comes out handed in: a reader that can say more
+     * than the tree does about an operation's answer says it here, for both halves at once.
+     */
+    public static <P> ValueArrivals<P> ofBodyWhereTheOperationsStand(
+            Core body, Naming<P> naming, ComparisonWays ways,
+            Function<Core.MaterialisedValue, Core> templates) {
+        return ofBody(body, naming, ways, WhereTheOperationsAre.STAND_IN_IT, templates,
+                new IdentityHashMap<>());
     }
 
     private static <P> ValueArrivals<P> ofBody(Core body, Naming<P> naming, ComparisonWays ways,

@@ -3604,7 +3604,7 @@
               "outcome" : "denied"
             }, {
               "kind" : "not_read",
-              "condition" : "condition 1 of `seat`",
+              "condition" : "condition 0 of `seat`",
               "outcome" : "held"
             } ]
           },
@@ -3620,7 +3620,7 @@
               "outcome" : "held"
             }, {
               "kind" : "not_read",
-              "condition" : "condition 1 of `seat`",
+              "condition" : "condition 0 of `seat`",
               "outcome" : "held"
             } ]
           },
@@ -3632,7 +3632,7 @@
             "behavior" : "seat",
             "conditions" : [ {
               "kind" : "not_read",
-              "condition" : "condition 1 of `seat`",
+              "condition" : "condition 0 of `seat`",
               "outcome" : "denied"
             } ]
           },
@@ -3648,7 +3648,7 @@
           "behavior" : "seat",
           "conditions" : [ {
             "kind" : "not_read",
-            "condition" : "condition 1 of `seat`",
+            "condition" : "condition 0 of `seat`",
             "outcome" : "denied"
           } ]
         },

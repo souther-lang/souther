@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.UnaryOperator;
 
 /**
  * Which expressions a fork's answer turns on, following only what the library says it does.
@@ -52,17 +53,32 @@ final class WhatAForkTests {
      * second went with the first — and that is the same partial ownership a condition's own parts
      * are cut along, lost one step past the operation.
      *
-     * <p><b>And there is no answer here that says only whether.</b> One was, for a reader with a
+     * <p><b>And no answer about ownership says only whether.</b> One was, for a reader with a
      * question about the atom rather than about the parts, and every owner that went through it
      * lost the parts again — the whole of what this is for is that they are asked one at a time. A
-     * caller wanting an answer about the atom composes it from the parts, where the composing is
-     * written down.
+     * caller wanting to know who owns the atom composes it from the parts, where the composing is
+     * written down. Whether the atom may come out either way is another question, and
+     * {@link #mayBeEither} answers it off the same walk.
      */
     static List<Core> partsOfTheAnswer(Core atom,
-                                       java.util.function.UnaryOperator<Core> denotes) {
+                                       UnaryOperator<Core> denotes) {
         List<Core> out = new ArrayList<>();
         turnsOn(atom, AnswerAspect.TRUTH, denotes, new HashMap<>(), out);
         return out;
+    }
+
+    /**
+     * Whether the truth of {@code atom} may be either, which is everything but a walk that found
+     * it the same whatever the input.
+     *
+     * <p>Not a question about who owns what it turns on, which is what the parts are for; this is
+     * whether a way through a body can come out each way at it. A walk that stopped is one that
+     * cannot say the answer is fixed, so it is answered as one that may vary — the same reading a
+     * truth at a position gets.
+     */
+    static boolean mayBeEither(Core atom, UnaryOperator<Core> denotes) {
+        return turnsOn(atom, AnswerAspect.TRUTH, denotes, new HashMap<>(), new ArrayList<>())
+                != Follow.FIXED;
     }
 
     /**
@@ -87,7 +103,7 @@ final class WhatAForkTests {
     }
 
     private static Follow turnsOn(Core standing, AnswerAspect aspect,
-                                  java.util.function.UnaryOperator<Core> denotes,
+                                  UnaryOperator<Core> denotes,
                                   Map<Asked, Follow> met, List<Core> out) {
         // What an answer turns on does not turn on the type it stands as.
         Core e = Core.withoutStanding(standing);
@@ -113,7 +129,7 @@ final class WhatAForkTests {
     }
 
     private static Follow answering(Core standing, AnswerAspect aspect,
-                                    java.util.function.UnaryOperator<Core> denotes,
+                                    UnaryOperator<Core> denotes,
                                     Map<Asked, Follow> met, List<Core> out) {
         Core e = Core.withoutStanding(standing);
         // Whether it holds is decided by the parts of it that decide it, which is the same cut a
@@ -244,7 +260,7 @@ final class WhatAForkTests {
      * other would read one model two ways depending on whether the author named a value.
      */
     private static Core beyond(Core e, AnswerAspect aspect,
-                               java.util.function.UnaryOperator<Core> denotes) {
+                               UnaryOperator<Core> denotes) {
         ValueName operation = operationOf(e);
         if (operation == null) {
             return null;
@@ -261,7 +277,7 @@ final class WhatAForkTests {
 
     /** Whether what the library says {@code e}'s answer turns on is a closure it was handed. */
     private static boolean throughAClosure(Core e, AnswerAspect aspect,
-                                           java.util.function.UnaryOperator<Core> denotes) {
+                                           UnaryOperator<Core> denotes) {
         ValueName operation = operationOf(e);
         if (operation == null || beyondIsAboutEmptiness(e, aspect)) {
             return false;
@@ -313,7 +329,7 @@ final class WhatAForkTests {
      * rule inside it decides nothing — and one model would be read two ways depending on whether the
      * author bound the closure before handing it over.
      */
-    private static Core answerOf(Core e, java.util.function.UnaryOperator<Core> denotes) {
+    private static Core answerOf(Core e, UnaryOperator<Core> denotes) {
         Core stands = denotes.apply(e);
         return Core.withoutStanding(stands) instanceof Core.Block block ? block.body() : stands;
     }
