@@ -22,14 +22,18 @@ import java.util.Objects;
  * @param part   which of its arms
  * @param with   which sibling answered in its place
  * @param answer what the run answered
+ * @param changed whether that is a different answer from the one the written program gave the
+ *                row, which is what shows the replacement matters on this input whatever the row
+ *                states
  * @param noticed whether what the row states told the replaced program from the written one
  */
 public record ReplacedRun(SourceConstructOrigin fork, int part, int with,
-                          AnswerObservation answer, Noticed noticed) {
+                          AnswerObservation answer, AnswerChange changed, Noticed noticed) {
 
     public ReplacedRun {
         Objects.requireNonNull(fork, "an arm is an arm of some fork");
         Objects.requireNonNull(answer, "a run says what it answered, or that it answered nothing");
+        Objects.requireNonNull(changed, "a run says whether its answer changed, or that it cannot");
         Objects.requireNonNull(noticed, "a run says whether the row noticed, or why it cannot");
         if (part == with) {
             throw new IllegalArgumentException("an arm replaced by itself is the arm: part " + part

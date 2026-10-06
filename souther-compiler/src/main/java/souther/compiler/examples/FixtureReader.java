@@ -11,7 +11,10 @@ import souther.compiler.check.Symbols;
 import souther.compiler.cst.SyntaxKind;
 import souther.compiler.core.IntNegation;
 import souther.compiler.core.Kernel;
+import souther.compiler.observe.AnswerChange;
+import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Asserted;
+import souther.compiler.observe.Comparisons;
 import souther.compiler.observe.Expectation;
 import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.Limits;
@@ -1859,6 +1862,16 @@ public final class FixtureReader {
      */
     NeutralValue neutralAt(Object value, Type position, String what) {
         return new NeutralValue(neutral.of(value, Position.at(position), what));
+    }
+
+    /**
+     * Whether a behavior answering {@code now} answered differently from one answering {@code was},
+     * both standing at {@code position}: the same reading of what being the same value means that
+     * a comparison with a row makes.
+     */
+    AnswerChange change(AnswerObservation was, AnswerObservation now, Type position) {
+        return AnswerChange.between(was, now,
+                (left, right) -> Comparisons.same(left, right, types, Position.at(position)));
     }
 
     /**

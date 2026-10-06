@@ -3,6 +3,7 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.meta.ModulePath;
+import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.ReplacedRun;
@@ -76,6 +77,8 @@ class ARowIsRunAgainWithAnArmReplacedTest {
         for (ReplacedRun run : runs.values()) {
             assertEquals(ReplacedRun.Noticed.NO, run.noticed(), "the row holds either way: " + run);
             assertEquals(0, amountIn(run.answer()));
+            assertEquals(AnswerChange.SAME, run.changed(),
+                    "and nothing changed on this input to be noticed");
         }
     }
 
@@ -87,6 +90,7 @@ class ARowIsRunAgainWithAnArmReplacedTest {
         for (ReplacedRun run : runs.values()) {
             assertEquals(ReplacedRun.Noticed.YES, run.noticed(), "the row fails: " + run);
             assertEquals(0, amountIn(run.answer()), "and what came back is the sibling's answer");
+            assertEquals(AnswerChange.CHANGED, run.changed());
         }
     }
 
@@ -104,6 +108,8 @@ class ARowIsRunAgainWithAnArmReplacedTest {
                 "answering what the item holds is not answering nothing");
         assertEquals(ReplacedRun.Noticed.NO, runs.get(2).noticed(),
                 "answering the same constant is");
+        assertEquals(AnswerChange.CHANGED, runs.get(0).changed());
+        assertEquals(AnswerChange.SAME, runs.get(2).changed());
     }
 
     @Test
@@ -113,6 +119,8 @@ class ARowIsRunAgainWithAnArmReplacedTest {
         assertEquals(List.of(1, 2), List.copyOf(runs.keySet()));
         for (ReplacedRun run : runs.values()) {
             assertEquals(ReplacedRun.Noticed.STATES_NOTHING, run.noticed());
+            assertEquals(AnswerChange.CHANGED, run.changed(),
+                    "a row stating nothing still shows the replacement answers differently");
             assertEquals(0, amountIn(run.answer()),
                     "and what the replacement answered is kept all the same");
         }

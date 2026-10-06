@@ -53,6 +53,7 @@ import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.observe.Applied;
+import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Counting;
 import souther.compiler.observe.Run;
@@ -1515,7 +1516,7 @@ public final class ExampleVerifier {
                         || !asked.add(List.of(at.fork(), at.part(), with))) {
                     continue;
                 }
-                out.add(replacedRun(target, sig, outCases, row,
+                out.add(replacedRun(target, sig, outCases, row, state.reached.answer(),
                         at.fork(), at.part(), with,
                         replacements.replacing(at.fork(), at.part(), with)));
             }
@@ -1525,17 +1526,20 @@ public final class ExampleVerifier {
 
     /** One replaced run of {@code row}, under a deadline of its own. */
     private ReplacedRun replacedRun(ExampleTarget target, Sig sig, Set<TypeSymbol> outCases,
-                                    Hir.ExampleRow row, SourceConstructOrigin fork, int part,
+                                    Hir.ExampleRow row, AnswerObservation written,
+                                    SourceConstructOrigin fork, int part,
                                     int with, Map<Integer, Integer> replacing) {
         ReplacedWork work = new ReplacedWork(this, target, sig, outCases, row, replacing);
         return switch (deadline.given(
                 new Deadline.Work.Replaced(target.name(), row.pos(), row.identity()), work)) {
-            case Deadline.Outcome.Finished(RowState state) ->
-                    new ReplacedRun(fork, part, with, state.reached.answer(), noticed(state));
+            case Deadline.Outcome.Finished(RowState state) -> new ReplacedRun(fork, part, with,
+                    state.reached.answer(),
+                    newFixtureReader().change(written, state.reached.answer(), sig.outputType()),
+                    noticed(state));
             case Deadline.Outcome.Overran(Runnable abandon) -> {
                 abandon.run();
                 yield new ReplacedRun(fork, part, with, new AnswerObservation.NotAnswered(),
-                        ReplacedRun.Noticed.COULD_NOT_TELL);
+                        AnswerChange.COULD_NOT_TELL, ReplacedRun.Noticed.COULD_NOT_TELL);
             }
             case Deadline.Outcome.Threw(Throwable cause) -> {
                 if (cause instanceof java.util.concurrent.CancellationException) {
@@ -1547,7 +1551,7 @@ public final class ExampleVerifier {
                 if (overspending(cause) != null || cause instanceof StackExhaustedException
                         || cause instanceof StackOverflowError) {
                     yield new ReplacedRun(fork, part, with, new AnswerObservation.NotAnswered(),
-                            ReplacedRun.Noticed.COULD_NOT_TELL);
+                            AnswerChange.COULD_NOT_TELL, ReplacedRun.Noticed.COULD_NOT_TELL);
                 }
                 if (cause instanceof RuntimeException re) {
                     throw re;
