@@ -1042,13 +1042,11 @@ public final class CoverageSites {
         }
 
         /**
-         * Where {@code body} could answer other than one value: the ways to an answer that reads
-         * anything, and to an answer that is not the first one that reads nothing.
+         * Where {@code body} could answer other than one value: the ways to an answer that is not
+         * the same on every run, and to an answer that is not the first one that is.
          *
-         * <p>An answer reading nothing is the same value however the body was entered — what it is
-         * given arrives by a name, and so does what a dependency answers — so a body whose every
-         * other way the rules close answers that one value. Which value is not worked out here: a
-         * run of the body came to it, and that run is what says.
+         * <p>A body whose every other way the rules close answers that one value. Which value is
+         * not worked out here: a run of the body came to it, and that run is what says.
          */
         private DraftDiffers fromOneValue(Core body) {
             List<Leaf> leaves = new ArrayList<>();
@@ -1057,7 +1055,7 @@ public final class CoverageSites {
             }
             Leaf one = null;
             for (Leaf leaf : leaves) {
-                if (!readsAnything(leaf.answer())) {
+                if (sameOnEveryRun(leaf.answer())) {
                     one = leaf;
                     break;
                 }
@@ -1067,7 +1065,7 @@ public final class CoverageSites {
             }
             List<List<DraftArm>> ways = new ArrayList<>();
             for (Leaf leaf : leaves) {
-                if (readsAnything(leaf.answer()) || !sameAs(leaf.answer(), one.answer())) {
+                if (!sameOnEveryRun(leaf.answer()) || !sameAs(leaf.answer(), one.answer())) {
                     if (leaf.way().isEmpty()) {
                         return DraftDiffers.ALWAYS;
                     }
@@ -1136,14 +1134,34 @@ public final class CoverageSites {
                     each -> ExecutableIdentity.of(each, Binders.of(module, places)));
         }
 
-        /** Whether {@code e} reads any name at all, anywhere under it. */
-        private static boolean readsAnything(Core e) {
-            if (e instanceof Core.Read) {
-                return true;
-            }
-            boolean[] found = {false};
-            Core.forEachChild(e, child -> found[0] = found[0] || readsAnything(child));
-            return found[0];
+        /**
+         * Whether {@code e} comes to the same value on every run, however the body was entered and
+         * whatever its dependencies answer.
+         *
+         * <p>Asked of what each kind of node is, with no default: a value reaches a body from
+         * outside by more than a name — a dependency's answer arrives as a call, and a function
+         * value as an application — so what a node does with the run is a question for each kind,
+         * and a kind added later is a decision this has to make rather than one it makes by
+         * falling through. Narrow on purpose. A literal, and what is built or computed from
+         * literals alone, is the same on every run; everything that calls, applies, reads, binds
+         * or branches is not said to be, which leaves some answers that are always one value
+         * unproven and proves none that are not.
+         */
+        private static boolean sameOnEveryRun(Core e) {
+            return switch (e) {
+                case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
+                     Core.UnitValue _, Core.OptionNone _ -> true;
+                case Core.Neg _, Core.FieldAccess _, Core.Binary _, Core.ListLit _,
+                     Core.OptionSome _, Core.Tuple _, Core.TupleGet _, Core.Construct _,
+                     Core.Widen _ -> {
+                    boolean[] all = {true};
+                    Core.forEachChild(e, child -> all[0] = all[0] && sameOnEveryRun(child));
+                    yield all[0];
+                }
+                case Core.Read _, Core.Call _, Core.PreservedCall _, Core.Apply _,
+                     Core.MaterialisedValue _, Core.FieldProjection _, Core.Block _, Core.If _,
+                     Core.IfConstructed _, Core.LetIn _, Core.Match _, Core.Unreachable _ -> false;
+            };
         }
 
         /**

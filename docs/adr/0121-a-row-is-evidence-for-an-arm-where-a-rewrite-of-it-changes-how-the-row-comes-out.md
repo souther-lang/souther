@@ -55,9 +55,11 @@ Whether a rewrite is a gap is asked three ways, and two of them are kept apart o
   and the rewrite is the same program where every answer that is not the sibling's lies down a way
   the rules prove no run arrives at — two guards no input passes both of leave the way past them
   answering only the second guard's answer, and rewriting that way as that answer is no rewrite. A
-  body is answering one value already where every answer it can come to reads nothing and all of
-  them are one expression; what arrives from outside does so by a name, a dependency's answer
-  included, so an answer that reads nothing is the same on every run. A rewrite proven the same is no
+  body is answering one value already where every answer it can come to is the same on every run
+  and all of them are one expression. Only a literal, and what is built or computed from literals
+  alone, counts as the same on every run: a value reaches a body from outside by more than a name —
+  a dependency's answer arrives as a call, a function value as an application — so an answer that
+  calls, applies, reads, binds or branches is not proven anything. A rewrite proven the same is no
   obligation and is not asked about.
 - **Neither.** A search for an input the two part at found none. That establishes nothing about the
   inputs it did not try, so the rewrite is left undecided, never concluded the same. Undecided
@@ -108,9 +110,11 @@ search separated as undetermined, with no proof at all, was refused the other wa
 a constant, and a guard nothing gets past, would leave models undetermined that every input agrees
 about, and the author could write no row to settle it.
 
-Deciding that the body reads nothing by asking only whether it reads its parameters was refused: a
-dependency's answer arrives as something read too, and a body answering what a dependency answers
-changes with what each row stands it in with.
+Deciding that an answer is the same on every run by asking whether it reads a name was refused, and
+so was asking only whether it reads its parameters: a dependency's answer arrives as a call and not
+as a name, and a body answering what a dependency answers changes with what each row stands it in
+with. Which kinds of node count is decided for each kind, with nothing falling through, so a kind
+added to the language is not proven the same until somebody says it is.
 
 ## Consequences
 

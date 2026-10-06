@@ -193,6 +193,41 @@ class ARewriteNoRowTellsApartIsAGapTest {
         assertEquals(Map.of(), rewrites, "nothing to rewrite: " + rewrites);
     }
 
+    /**
+     * A body answering what a dependency answers reads no name, and is not one value for that: the
+     * dependency's answer arrives as a call, and each row stands it in with a value of its own.
+     * Answering either row's value always is a rewrite of the body, told apart by the other row.
+     */
+    @Test
+    void aBodyAnsweringWhatADependencyAnswersIsNotOneValue() {
+        List<ReplacementEvidence.Outcome> oneAnswer = oneAnswers(rewritesOf("""
+                module example.filing
+
+                data Stamp = String
+                data Filed = { at: Stamp }
+
+                behavior now : () -> Stamp
+
+                behavior file : (at: Stamp) -> Filed
+                    constructs Filed
+                    depends on now
+
+                let file (at, now) = Filed { at = now() }
+
+                example file
+                    | "ten" : (Stamp("x"))
+                        with now = Stamp("10:00")
+                        -> Filed { at = Stamp("10:00") }
+                    | "nine" : (Stamp("x"))
+                        with now = Stamp("09:00")
+                        -> Filed { at = Stamp("09:00") }
+                """, "file"));
+
+        assertEquals(2, oneAnswer.size(), "a rewrite per value the rows came to: " + oneAnswer);
+        assertTrue(oneAnswer.stream().allMatch(ReplacementEvidence.Noticed.class::isInstance),
+                "each told apart by the other row: " + oneAnswer);
+    }
+
     /** The rewrites of a body answering one value, in the order the values were first answered. */
     private static List<ReplacementEvidence.Outcome> oneAnswers(
             Map<Replacement, ReplacementEvidence.Outcome> rewrites) {
