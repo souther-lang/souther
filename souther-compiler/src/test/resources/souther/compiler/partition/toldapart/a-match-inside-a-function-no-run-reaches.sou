@@ -1,0 +1,35 @@
+// Nor one inside a function value, where no run reaches the function.
+//
+// The body of a block runs where something calls it, which no way in states, and it is still held
+// to what holds where the block is made.
+//
+// told apart at f: 2 groups of 2
+// told apart at r: untouched
+// told apart at n: 2 groups of 2
+module example.unreachedblock
+
+data Yes
+data No
+data Flag = Yes | No
+
+data Draft
+data Submitted
+data Request = Draft | Submitted
+
+data Ok = { n: Int }
+
+behavior judge : (f: Flag, r: Request, xs: List<Int>, n: Int) -> Ok
+    constructs Ok
+
+let judge (f, r, xs, n) = {
+    guard n > 10 else Ok { n = 0 }
+    match f with
+        | Yes -> Ok { n = 1 }
+        | No ->
+            match f with
+                | Yes -> Ok { n = List.length(List.filter(x ->
+                    match r with
+                        | Draft -> true
+                        | Submitted -> false, xs)) }
+                | No -> Ok { n = 4 }
+}

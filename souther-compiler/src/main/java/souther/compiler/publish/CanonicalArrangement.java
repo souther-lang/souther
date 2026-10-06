@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
 
 /**
  * Everything of one kind a document writes, in the order it writes them.
@@ -115,6 +117,36 @@ public final class CanonicalArrangement<T> {
                 }
             }
             return new CanonicalArrangement<>(List.copyOf(out));
+        }
+
+        /**
+         * The entries of {@code held}, in the order this puts what a document writes for each.
+         *
+         * <p>For a surface that writes the same entries in words of its own. What it writes them in
+         * is its own; the order is the document's, so the two surfaces list one set of entries the
+         * same way round and neither takes the order its entries arrived in.
+         *
+         * <p>Refused where two entries are written as two things this order cannot tell apart, for
+         * the reason {@link #arrange} refuses them.
+         */
+        public <E> List<E> arrangeBy(Collection<? extends E> held,
+                                     Function<? super E, ? extends T> written) {
+            List<Map.Entry<T, E>> out = new ArrayList<>(held.size());
+            for (E each : held) {
+                out.add(Map.entry(Objects.requireNonNull(written.apply(each),
+                        "an entry a document writes is something"), each));
+            }
+            out.sort(Map.Entry.comparingByKey(by));
+            for (int i = 1; i < out.size(); i++) {
+                T before = out.get(i - 1).getKey();
+                T here = out.get(i).getKey();
+                if (by.compare(before, here) == 0 && !before.equals(here)) {
+                    throw new IllegalArgumentException("two entries this order cannot tell apart,"
+                            + " so which of them is written first is whichever it was handed"
+                            + " first: " + before + " and " + here);
+                }
+            }
+            return out.stream().map(Map.Entry::getValue).toList();
         }
     }
 }

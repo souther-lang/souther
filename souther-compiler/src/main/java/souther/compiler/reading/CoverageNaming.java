@@ -14,6 +14,7 @@ import souther.compiler.inputs.ComparedNumbers;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.types.ResolvedCase;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
 
@@ -150,9 +151,18 @@ final class CoverageNaming implements Naming<Outcome> {
         if (at == null) {
             return one(new Decision(new Condition.Arm(place.arm()), claim));
         }
-        List<String> names = match.cases().get(part).pattern().selectors().stream()
-                .map(selector -> selector.name().name()).toList();
-        return one(new Decision(new Condition.Case(at, String.join("|", names)), claim));
+        // The leaves the arm reaches and not the names it is written with. A case that is itself a
+        // sum stands for the leaves under it, and those are what a value at the position is; read by
+        // the written name, an arm for such a case admitted none of them.
+        List<String> names = new ArrayList<>();
+        for (ResolvedCase each : match.cases().get(part).pattern().cases()) {
+            if (each.atoms().isEmpty()) {
+                names.add(each.name().name());
+            } else {
+                each.atoms().forEach(atom -> names.add(atom.name()));
+            }
+        }
+        return one(new Decision(new Condition.Case(at, names), claim));
     }
 
     /**
@@ -183,7 +193,7 @@ final class CoverageNaming implements Naming<Outcome> {
                     case PathResolution.MayStandAt _ -> null;
                 };
                 yield read == null ? new Condition.Arm(place.arm())
-                        : new Condition.Case(read, holding ? "true" : "false");
+                        : new Condition.Case(read, List.of(holding ? "true" : "false"));
             }
             case Choice.Decides.ItWasBuilt _ -> new Condition.Arm(place.arm());
             case Choice.Decides.ItDeparted _ -> new Condition.Arm(place.arm());
@@ -254,21 +264,11 @@ final class CoverageNaming implements Naming<Outcome> {
      *
      * <p>Which decision it is is not which place a run is recorded at. Two forks on one flag are two
      * places and one decision, so what is compared is what the condition is about and never the claim
-     * beside it.
+     * beside it — and what the conditions are about is theirs to say ({@link Condition#excludes}).
      */
     private static boolean disagrees(List<Decision> holds, Decision added) {
         for (Decision already : holds) {
-            Condition each = already.constrains();
-            boolean otherWay = switch (added.constrains()) {
-                case Condition.Case one -> each instanceof Condition.Case other
-                        && other.at().equals(one.at()) && !other.name().equals(one.name());
-                case Condition.Side one -> each instanceof Condition.Side other
-                        && other.comparison().equals(one.comparison()) && other.held() != one.held();
-                case Condition.Arm one -> each instanceof Condition.Arm other
-                        && other.arm().fork().equals(one.arm().fork())
-                        && other.arm().part() != one.arm().part();
-            };
-            if (otherWay) {
+            if (added.constrains().excludes(already.constrains())) {
                 return true;
             }
         }

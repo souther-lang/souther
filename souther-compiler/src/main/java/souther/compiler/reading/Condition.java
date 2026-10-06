@@ -5,6 +5,9 @@ import souther.compiler.coverage.ArmOccurrence;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 
+import java.util.Collections;
+import java.util.List;
+
 /**
  * One decision of a body coming out one way, said in terms of the input it is about.
  *
@@ -16,15 +19,53 @@ import souther.compiler.inputs.TermPath;
 public sealed interface Condition {
 
     /**
-     * A case of a union the body matched on.
+     * Whether no run settles both this and {@code other}.
      *
-     * @param name which case, as the model spells it
+     * <p>Asked of the condition and answered by what it means, so that a reader holding two of them
+     * never compares how they are held. Two conditions that may both hold are no contradiction
+     * however differently they are written, and a path read as contradicting itself is a path the
+     * body has thrown away.
      */
-    record Case(TermPath at, String name) implements Condition {
+    boolean excludes(Condition other);
+
+    /**
+     * That the value at a position is one of a set of cases of its union.
+     *
+     * <p>A set and held as one: the cases are kept once each and in the one order a set of them is
+     * written in, so two arms admitting the same cases are the same condition whichever order they
+     * name them in.
+     *
+     * @param names which cases, as the model spells them: the leaves of the union, and so several
+     *              where the arm is written for several or for a case that is itself a union, since
+     *              what the arm admits is each value it can be
+     */
+    record Case(TermPath at, List<String> names) implements Condition {
+
+        public Case {
+            names = names.stream().distinct().sorted().toList();
+            if (names.isEmpty()) {
+                throw new IllegalArgumentException("an arm at " + at + " answers for no case");
+            }
+        }
+
+        /**
+         * Whether the value can be in both sets, which is where they share a case. A value is one
+         * case, so two sets with none in common are one way and another of the same decision.
+         */
+        @Override
+        public boolean excludes(Condition other) {
+            return other instanceof Case that && that.at.equals(at)
+                    && Collections.disjoint(that.names, names);
+        }
+
+        /** The cases as one word, which is how a document and a person are shown them. */
+        public String spelled() {
+            return String.join("|", names);
+        }
 
         @Override
         public String toString() {
-            return at + "=" + name;
+            return at + "=" + spelled();
         }
     }
 
@@ -48,6 +89,13 @@ public sealed interface Condition {
      * @param held       the way it came out
      */
     record Side(NumericTerm at, ConstructOccurrence comparison, boolean held) implements Condition {
+
+        /** The same comparison coming out the other way. */
+        @Override
+        public boolean excludes(Condition other) {
+            return other instanceof Side that && that.comparison.equals(comparison)
+                    && that.held != held;
+        }
 
         @Override
         public String toString() {
@@ -73,6 +121,13 @@ public sealed interface Condition {
      *            decisions — and the number that told them apart was the walk's and not theirs
      */
     record Arm(ArmOccurrence arm) implements Condition {
+
+        /** Another arm of the same fork. */
+        @Override
+        public boolean excludes(Condition other) {
+            return other instanceof Arm that && that.arm.fork().equals(arm.fork())
+                    && that.arm.part() != arm.part();
+        }
 
         @Override
         public String toString() {

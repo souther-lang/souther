@@ -1,0 +1,30 @@
+// A `match` on a name bound over several cases is a decision nothing can place.
+//
+// `b` is the value matched at `lead.reason`, as one of the two cases under BantFailure — which is no
+// one position, so the inner `match` is a fork about a subject the reading cannot name. It tells the
+// two apart; read as about nothing, the position would be said to be told apart as two groups of
+// three, which the inner arms refute. The outer arms are read, and what they say is part of the
+// answer and not the whole of it.
+//
+// told apart at lead.reason: unread
+module example.bound
+
+data NoBudget
+data NoNeed
+data BantFailure = NoBudget | NoNeed
+data DuplicateOf
+data Reason = BantFailure | DuplicateOf
+
+data Lead = { reason: Reason }
+data Ok = { n: Int }
+
+behavior judge : (lead: Lead) -> Ok
+    constructs Ok
+
+let judge (lead) =
+    match lead.reason with
+        | BantFailure as b ->
+            match b with
+                | NoBudget -> Ok { n = 1 }
+                | NoNeed -> Ok { n = 2 }
+        | DuplicateOf -> Ok { n = 3 }

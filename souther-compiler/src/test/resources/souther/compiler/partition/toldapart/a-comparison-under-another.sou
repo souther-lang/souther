@@ -1,0 +1,20 @@
+// A comparison made under another tells apart only the values the first let through.
+//
+// The second guard is made of values above zero and comes out the same way for all of them, which
+// the reading of the input finds and draws no line for. So the number is two classes and the body
+// tells both apart — and the second comparison, with no line to place it by, is read as one that
+// sends every value arriving at it the same way, and not as one this compiler could not read.
+//
+// told apart at n: 2 groups of 2
+module example.nested
+
+data Ok = { n: Int }
+
+behavior judge : (n: Int) -> Ok
+    constructs Ok
+
+let judge (n) = {
+    guard n > 0 else Ok { n = 0 }
+    guard n > -10 else Ok { n = 1 }
+    Ok { n = 2 }
+}
