@@ -35,7 +35,10 @@ import java.util.Deque;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
@@ -84,7 +87,22 @@ final class ContainersAddingUp {
     static TermRealizations.Realization to(Place answer, Type container,
                                            TermOrders orders, SearchRegion within,
                                            RuleReadingContext reading) {
-        return to(answer, container, orders, within, reading, null);
+        return to(answer, container, orders, within, reading, null, DemandsInside.NOTHING);
+    }
+
+    /**
+     * The same, with every element asked to hold {@code inside} beside the number.
+     *
+     * <p>Asked of the element's plan and of nothing after it. What an element holds at a position
+     * the caller fixed, and which case a position the caller narrowed is, are things the plan is
+     * made against — so an element that cannot hold them is a way down that does not plan, said
+     * the way every other one is, and never an element built first and turned away for what it
+     * holds.
+     */
+    static TermRealizations.Realization to(Place answer, Type container,
+                                           TermOrders orders, SearchRegion within,
+                                           RuleReadingContext reading, DemandsInside inside) {
+        return to(answer, container, orders, within, reading, null, inside);
     }
 
     /**
@@ -99,11 +117,13 @@ final class ContainersAddingUp {
      *
      * @param alsoHolding how many it is asked to hold beside the total, or null where nothing but
      *                    the total is asked for
+     * @param inside      what every element is asked to hold beside the number
      */
     static TermRealizations.Realization to(Place answer, Type container,
                                            TermOrders orders, SearchRegion within,
                                            RuleReadingContext reading,
-                                           HowManyIsAskedFor alsoHolding) {
+                                           HowManyIsAskedFor alsoHolding,
+                                           DemandsInside inside) {
         RuleReadingSource ruleSource = reading.source();
         // Which number is being built for, read off the answer that says which number it is of.
         // Named beside it, the two were free to be about two numbers and this would fill a
@@ -146,7 +166,7 @@ final class ContainersAddingUp {
         // asked of the plan and once per way down. A sum puts nothing under it until a case is
         // named, so what comes back is one way per case and the walk offers each of them.
         Ways ways = waysDown(holding.element(), target.writeRoot().element(), occurrences(target),
-                reading);
+                inside, reading);
         // Nothing to fill a container along, so there is no count and no shape of one to try. Said
         // before the counts are walked rather than as a condition on each figure below: a figure
         // reached where no container could have been built either way is one raising takes nothing
@@ -850,7 +870,7 @@ final class ContainersAddingUp {
                     new ValuesCarryingANumber(filling.fixed(),
                             FixtureTemplate.on(elements, Count.of(each),
                                     ruleSource.symbols().scope()::reach),
-                            reading),
+                            filling.beside(), filling.narrowed(), reading),
                     reading);
             if (one == null) {
                 return null;
@@ -867,8 +887,13 @@ final class ContainersAddingUp {
      * <p>Both, because the second is what the first was planned against. A narrowing is written into
      * the path — {@code items[*].kind@Card.amount} — so a plan and a path from another way down are
      * a plan with nowhere to put the value.
+     *
+     * @param beside   the values the caller fixed inside the element, which the plan was made
+     *                 against as well
+     * @param narrowed the positions inside the element the caller said which case of
      */
-    private record Filling(ConstructionPlan plan, TermPath fixed) {}
+    private record Filling(ConstructionPlan plan, TermPath fixed,
+                           Map<TermPath, FixtureTemplate> beside, Set<TermPath> narrowed) {}
 
     /**
      * The ways down, and what the planning gave up at.
@@ -936,13 +961,21 @@ final class ContainersAddingUp {
      * position's under whichever of the first's it was reached by. Nothing here orders the ways of
      * two positions against each other: what a caller does with them is try each, and the figure
      * above is what says how many.
+     *
+     * <p>Where the caller has said which case a position is, that case is the one way through it.
+     * The others are ways down to an element the caller did not ask for, and stated anyway they are
+     * plans the caller's narrowing refuses.
      */
-    private static Ways waysDown(Type element, TermPath at, TermPath demand,
+    private static Ways waysDown(Type element, TermPath at, TermPath demand, DemandsInside inside,
                                  RuleReadingContext reading) {
         List<Filling> found = new ArrayList<>();
         List<TermPath> nothingStandsAt = new ArrayList<>();
-        Asking asking = new Asking(element, at, reading);
-        asking.add(demand);
+        // Every position spelled under the cases the caller named, which is how the plan names the
+        // positions below a narrowing. Spelled without them, the number and the values would be
+        // fixed at positions the plan has none of, and the element would be built around them.
+        DemandsInside spelled = underTheCasesNamed(inside);
+        Asking asking = new Asking(element, at, spelled, reading);
+        asking.add(underTheCasesNamed(demand, inside.required()));
         for (ConstructionPlan.Result answer = asking.next(); answer != null;
                 answer = asking.next()) {
             TermPath fixed = asking.asked();
@@ -953,7 +986,8 @@ final class ContainersAddingUp {
                 // total it was built for, and nothing composes one until what is decomposed is the
                 // occurrences rather than the elements.
                 case ConstructionPlan.Result.Planned(ConstructionPlan plan) ->
-                        found.add(new Filling(plan, fixed));
+                        found.add(new Filling(plan, fixed, spelled.fixed(),
+                                spelled.required().refinements().keySet()));
                 // A narrowing to state, and the walk states each of them. Asked again rather than
                 // planned around: a second narrowing may stand under the first, and which one that
                 // is depends on the case this settled on.
@@ -964,22 +998,31 @@ final class ContainersAddingUp {
                     if (narrowings.isEmpty()) {
                         nothingStandsAt.add(where);
                     }
+                    Refinement asked = inside.required().at(where);
                     for (Refinement narrowing : narrowings) {
-                        asking.add(narrowed(fixed, where, narrowing));
+                        if (asked == null || asked.equals(narrowing)) {
+                            asking.add(narrowed(fixed, where, narrowing));
+                        }
                     }
                 }
                 case ConstructionPlan.Result.Beyond(Set<CompositionBudget> by) ->
                         asking.gaveUpAt(by);
                 case ConstructionPlan.Result.Refused(ConstructionPlan.ModelRefusal why) -> {
                     switch (why) {
-                        // Two narrowings at one position, which nothing here writes: every one of
-                        // them was stated by this walk, one at a time, at a position the plan
-                        // named.
-                        case ConstructionPlan.ModelRefusal.Conflict conflict ->
+                        // Two narrowings at one position. Where the caller asked nothing inside,
+                        // every narrowing here was stated by this walk, one at a time, at a
+                        // position the plan named — so there is no second one to meet. Where the
+                        // caller did, a value it fixed under one case of a position this walk
+                        // reached under another is a way down the caller's element does not take,
+                        // and there is nothing to plan along it.
+                        case ConstructionPlan.ModelRefusal.Conflict conflict -> {
+                            if (inside.isEmpty()) {
                                 throw new IllegalStateException("`" + conflict.at() + "` would have"
                                         + " to be both " + conflict.one().spelled() + " and "
                                         + conflict.other().spelled()
                                         + ", though one narrowing was stated");
+                            }
+                        }
                         // A collection on the way down holds nothing, so nothing stands inside it
                         // and there was never a way to try. Which is what the list beside this one
                         // already says: a position nothing stands under is a position nothing
@@ -1012,6 +1055,7 @@ final class ContainersAddingUp {
 
         private final Type element;
         private final TermPath at;
+        private final DemandsInside inside;
         private final RuleReadingContext reading;
         private final Deque<TermPath> left = new ArrayDeque<>();
         private final Set<CompositionBudget> stoppedBy =
@@ -1019,9 +1063,10 @@ final class ContainersAddingUp {
         private TermPath asked;
         private int asks;
 
-        Asking(Type element, TermPath at, RuleReadingContext reading) {
+        Asking(Type element, TermPath at, DemandsInside inside, RuleReadingContext reading) {
             this.element = element;
             this.at = at;
+            this.inside = inside;
             this.reading = reading;
         }
 
@@ -1049,10 +1094,15 @@ final class ContainersAddingUp {
             }
             asks++;
             asked = left.removeFirst();
+            // The number's position and every position the caller fixed, decided together, and the
+            // caller's narrowings with them: one element asked for all of it at once.
+            Set<TermPath> decided = new LinkedHashSet<>();
+            decided.add(asked);
+            decided.addAll(inside.fixed().keySet());
             return ConstructionPlan.of(element, at, reading.source().inners(),
                     reading.source().symbols(),
-                    reading.source().kinds(), reading.source().sums(), Set.of(asked),
-                    Requirements.NONE,
+                    reading.source().kinds(), reading.source().sums(), decided,
+                    inside.required(),
                     (_, building) -> Partitions.heldRange(building, reading, null));
         }
 
@@ -1070,6 +1120,43 @@ final class ContainersAddingUp {
         Set<CompositionBudget> stoppedBy() {
             return stoppedBy;
         }
+    }
+
+    /** {@code inside} with every position it fixes spelled under the cases it names. */
+    private static DemandsInside underTheCasesNamed(DemandsInside inside) {
+        if (inside.required().refinements().isEmpty()) {
+            return inside;
+        }
+        Map<TermPath, FixtureTemplate> fixed = new LinkedHashMap<>();
+        inside.fixed().forEach((path, value) ->
+                fixed.put(underTheCasesNamed(path, inside.required()), value));
+        return new DemandsInside(fixed, inside.required());
+    }
+
+    /**
+     * {@code path} with the case {@code required} names written in after every position it names
+     * one at, where the path does not already go on under a case there.
+     */
+    private static TermPath underTheCasesNamed(TermPath path, Requirements required) {
+        TermPath out = TermPath.of(path.head());
+        List<TermPath.Step> steps = path.steps();
+        for (int i = 0; i <= steps.size(); i++) {
+            Refinement named = required.at(out);
+            boolean refinedNext = i < steps.size()
+                    && steps.get(i) instanceof TermPath.Step.Refine;
+            if (named != null && !refinedNext) {
+                out = out.refine(named);
+            }
+            if (i == steps.size()) {
+                break;
+            }
+            out = switch (steps.get(i)) {
+                case TermPath.Step.Field(String name) -> out.then(name);
+                case TermPath.Step.Element _ -> out.element();
+                case TermPath.Step.Refine(Refinement already) -> out.refine(already);
+            };
+        }
+        return out;
     }
 
     /**

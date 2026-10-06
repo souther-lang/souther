@@ -7,9 +7,11 @@ import souther.compiler.diag.Region;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.FixtureReferenceOrigin;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.RuleOrigin;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.TypeReachName;
 import souther.compiler.types.ValueName;
@@ -20,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
+import java.util.function.UnaryOperator;
 
 /**
  * A value written the way a row writes it — {@code Amount(0)}, {@code None}, {@code Overseas} — held
@@ -347,6 +350,50 @@ public record FixtureTemplate(String text, Hir.Expr value) {
                 type.rendered() + " { ..." + base.text() + ", " + String.join(", ", written) + " }",
                 Hir.NewData.syntheticWithEveryFieldWritten(Hir.Name.reached(type, NOWHERE), inits,
                         List.of(spread), NOWHERE, NO_SOURCE));
+    }
+
+    /**
+     * {@code List.map(each -> edited, list)} — a list the model already states, with one edit made
+     * to every element of it.
+     *
+     * <p>What a spread is for a record, for a list. A position under {@code [*]} is a position of
+     * every element and of no element in particular ({@link TermPath.Step.Element}),
+     * so moving it is moving it in each of them, and the elements stay as many as the list had and
+     * everything else about them stays what the model put there.
+     *
+     * <p>The text is a row an author can paste, and is read as one: through the method the row's
+     * operand is compiled to. The tree is read by {@code FixtureReader}, which applies {@code edited}
+     * to each element of what it read {@code list} as, and evaluates nothing else — so {@code edited}
+     * is a fixture over {@code each} and nothing more, and the application says it was composed here
+     * ({@link ApplicationOrigin.ComposedFixture}), which is what that reader is asked about.
+     *
+     * <p>Null where {@code edit} is, which is an element this cannot be written for.
+     *
+     * @param list       the list being edited, which a row can name
+     * @param name       what an element is called while it is edited
+     * @param edit       the edit, written over the element it is handed
+     * @param references the run's minter, which says which binding the element is and which
+     *                   reference of {@code List.map} this is
+     */
+    public static FixtureTemplate elementWise(FixtureTemplate list, String name,
+                                              UnaryOperator<FixtureTemplate> edit,
+                                              FixtureReferences references) {
+        Hir.Binder each = references.binder(name, NOWHERE);
+        FixtureTemplate edited = edit.apply(
+                new FixtureTemplate(each.name(), Hir.Var.local(each, NOWHERE)));
+        if (edited == null) {
+            return null;
+        }
+        ReachName.OfLibrary map =
+                new ReachName.OfLibrary(ApplicationOrigin.ComposedFixture.ELEMENT_WISE);
+        Hir.Block block = new Hir.Block(List.of(each), edited.value(), RuleOrigin.unwritten(),
+                null, NOWHERE, NO_SOURCE);
+        return new FixtureTemplate(
+                map.rendered() + "(" + each.name() + " -> " + edited.text() + ", " + list.text()
+                        + ")",
+                Hir.Apply.synthetic(map.rendered(), map, references.next(),
+                        new ApplicationOrigin.ComposedFixture(), List.of(block, list.value()),
+                        NOWHERE, NO_SOURCE));
     }
 
     /** A record, field by field, in the order the fields were declared — which the fields are handed

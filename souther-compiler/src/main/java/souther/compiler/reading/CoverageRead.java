@@ -129,14 +129,26 @@ public final class CoverageRead {
      *                     and not a habit of whatever map was handed over. Written as any map, an
      *                     unordered one was as admissible, and the order a plan is asked in would
      *                     have come from wherever that map put its keys
+     * @param restOfTheBlock for each arm by which a run leaves a {@code guard} whose condition did
+     *                       not hold, the arm the rest of the block is — which is where a run that
+     *                       got past the guard went on. Both arms are arms of this read
      */
     public record Read(List<Interaction> interactions,
-                       java.util.SequencedMap<ArmProbe, PathAccess> arms) {
+                       java.util.SequencedMap<ArmProbe, PathAccess> arms,
+                       java.util.SequencedMap<ArmProbe, ArmProbe> restOfTheBlock) {
 
         public Read {
             interactions = List.copyOf(interactions);
             arms = java.util.Collections.unmodifiableSequencedMap(
                     new java.util.LinkedHashMap<>(arms));
+            restOfTheBlock = java.util.Collections.unmodifiableSequencedMap(
+                    new java.util.LinkedHashMap<>(restOfTheBlock));
+            for (java.util.Map.Entry<ArmProbe, ArmProbe> each : restOfTheBlock.entrySet()) {
+                if (!arms.containsKey(each.getKey()) || !arms.containsKey(each.getValue())) {
+                    throw new IllegalArgumentException("a guard's two arms are arms of the read"
+                            + " that says where its block goes on: " + each);
+                }
+            }
         }
 
         /** How arm {@code probe} is reached, by the number the plan gave it. */
@@ -176,7 +188,7 @@ public final class CoverageRead {
         Arms arms = new Arms(plan);
         new CoverageRead(reading, meetings, arms)
                 .walk(body, naming, new Reach.Ways(List.of(new WayIn(List.of()))), true);
-        return new Read(meetings.found(), arms.found(behavior));
+        return new Read(meetings.found(), arms.found(behavior), arms.restOfTheBlock(behavior));
     }
 
     /**

@@ -5,9 +5,15 @@ import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.SourceOutcome;
+import souther.compiler.types.SourceConstruct;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.SequencedMap;
 
 /**
  * How each arm of a body is reached, one answer per arm the plan numbered.
@@ -32,6 +38,10 @@ final class Arms {
     private final Map<ArmProbe, PathAccess> byArm =
             new LinkedHashMap<>();
 
+    /** The fork each arm was met under, as the node the walk met it at. Two splices of one helper
+     *  are two nodes, which is what makes them two forks. */
+    private final Map<ArmProbe, Core> forkOf = new LinkedHashMap<>();
+
     Arms(CoverageSites.Plan plan) {
         this.plan = plan;
     }
@@ -49,8 +59,37 @@ final class Arms {
         if (arms == null || part < 0 || part >= arms.length || arms[part] == null) {
             return;
         }
-        ControlClaim.of(arms[part]).ifPresent(arrivesAt ->
-                byArm.put(arms[part].probe().get(), reach.told(arrivesAt)));
+        ControlClaim.of(arms[part]).ifPresent(arrivesAt -> {
+            byArm.put(arms[part].probe().get(), reach.told(arrivesAt));
+            forkOf.put(arms[part].probe().get(), fork);
+        });
+    }
+
+    /**
+     * For each arm of {@code behavior} that leaves a {@code guard} because its condition did not
+     * hold, the arm of the same guard that is the rest of the block.
+     *
+     * <p>Paired by the node the walk met them at — compared as that object, since two splices of
+     * one helper are two guards and a run past one has not passed the other.
+     */
+    SequencedMap<ArmProbe, ArmProbe> restOfTheBlock(String behavior) {
+        Map<Core, ArmProbe> heldAt = new IdentityHashMap<>();
+        List<CoverageSites.ArmSite> sites = plan.arms(behavior);
+        for (CoverageSites.ArmSite arm : sites) {
+            if (arm.construct() == SourceConstruct.GUARD
+                    && arm.outcome() instanceof SourceOutcome.Held) {
+                heldAt.put(forkOf.get(arm.index()), arm.index());
+            }
+        }
+        SequencedMap<ArmProbe, ArmProbe> out = new LinkedHashMap<>();
+        for (CoverageSites.ArmSite arm : sites) {
+            ArmProbe goesOn = heldAt.get(forkOf.get(arm.index()));
+            if (arm.construct() == SourceConstruct.GUARD
+                    && arm.outcome() instanceof SourceOutcome.Failed && goesOn != null) {
+                out.put(arm.index(), goesOn);
+            }
+        }
+        return Collections.unmodifiableSequencedMap(out);
     }
 
     /**

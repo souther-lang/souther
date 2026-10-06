@@ -308,5 +308,5 @@ public sealed interface BindingOwner extends SettledAnswer {
 
     /** The passes that introduce a binding of their own. Named here rather than by each pass, so
      * that what may mint one is a closed list. */
-    enum Pass { DERIVER, NEWTYPE_DESUGAR, HELPER_PARAMS, INLINER, LOWER }
+    enum Pass { DERIVER, NEWTYPE_DESUGAR, HELPER_PARAMS, INLINER, LOWER, GENERATOR }
 }

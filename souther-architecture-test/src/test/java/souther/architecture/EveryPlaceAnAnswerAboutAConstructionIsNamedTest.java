@@ -261,6 +261,7 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
             READ_UNDER_WHAT_IS_IN_FORCE.spelt() + " -> Apply.read x1",
             READ_UNDER_WHAT_IS_IN_FORCE.spelt() + " -> NewData.read x1",
             WRITTEN_UNDER_THE_BINDINGS_IN_FORCE.spelt() + " -> Apply.synthetic(String) x2",
+            "souther/compiler/partition/FixtureTemplate#elementWise -> Apply.synthetic(String) x1",
             "souther/compiler/partition/FixtureTemplate#newtype -> Apply.synthetic(String) x1",
             "souther/compiler/partition/FixtureTemplate#record"
                     + " -> NewData.syntheticWithEveryFieldWritten x1",

@@ -20,6 +20,7 @@ import souther.compiler.observe.Position;
 import souther.compiler.observe.Verdict;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.ValueTypes;
+import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.BindingId;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.evaluate.EvaluationContext;
@@ -772,10 +773,10 @@ public final class FixtureReader {
         }
         return switch (v.denotes()) {
             case ValueName.OfType named -> named.type();
-            case ValueName.Local local -> {
-                Hir.Expr held = bindings.get(local.id());
-                yield held == null ? null : constructedCase(held, followed, worn);
-            }
+            // An element already read says nothing written about which case it is, and what it is
+            // as a value is not this question's to answer.
+            case ValueName.Local local -> bindings.get(local.id()) instanceof Bound.Written(
+                    Hir.Expr held) ? constructedCase(held, followed, worn) : null;
             case ValueName.Helper _ -> {
                 Hir.Expr body = followed.add(v.name()) ? valueBody(v.name()) : null;
                 yield body == null ? null : constructedCase(body, followed, worn);
@@ -995,6 +996,7 @@ public final class FixtureReader {
             // The three that go on at this same position, so what this frame is read under travels
             // with them: a name stands for a body, a `let` for its own body, and an application for
             // the value it answers with.
+            case Hir.Apply c when composedElementWise(c) -> elementWise(c, at, admission);
             case Hir.Apply c -> collectionOrNewtype(c, at, admission);
             case Hir.Var v -> named(v, at, admission);
             case Hir.LetIn let -> bound(let, at, admission);
@@ -1279,14 +1281,12 @@ public final class FixtureReader {
             case ValueName.OfType named
                     when symbols.declaredNode(named.type()) instanceof Hir.UnitData ->
                     unitInput(named.type(), at);
-            case ValueName.Local local -> {
-                Hir.Expr held = bindings.get(local.id());
-                if (held == null) {
-                    throw new FixtureException("`" + v.name()
-                            + "` is bound to no value a fixture can name");
-                }
-                yield expandedValue(local, held, at, admission);
-            }
+            case ValueName.Local local -> switch (bindings.get(local.id())) {
+                case Bound.Written(Hir.Expr held) -> expandedValue(local, held, at, admission);
+                case Bound.Read(Object read) -> read;
+                case null -> throw new FixtureException("`" + v.name()
+                        + "` is bound to no value a fixture can name");
+            };
             case ValueName.Helper helper -> namedValue(helper, at);
             // `Map.empty` / `Set.empty`: a library value, not a library call, so there is no method to
             // run and its value is known from the name alone. It is the empty collection, which a row
@@ -1353,13 +1353,30 @@ public final class FixtureReader {
      * local already has. That binding is what the spread then names, so a fixture reads one the way it
      * reads a value: the position says what type to read it as.
      */
-    private final Map<BindingId, Hir.Expr> bindings = new LinkedHashMap<>();
+    private final Map<BindingId, Bound> bindings = new LinkedHashMap<>();
+
+    /**
+     * What a name in force stands for while a fixture is read.
+     *
+     * <p>Two things, because a name is bound two ways here. A {@code let} binds what it was written
+     * as, which is read where the name is, at the position the name stands at. An element-wise edit
+     * binds an element of a list this has already read, and there is nothing written to read again:
+     * the element is a value already.
+     */
+    private sealed interface Bound {
+
+        /** What the binding was written as, read where the name is. */
+        record Written(Hir.Expr value) implements Bound {}
+
+        /** A value this reading has already read. */
+        record Read(Object value) implements Bound {}
+    }
 
     /** A {@code let} inside a fixture: its name stands for what it was bound to while the body is
      * built, and a binding of the same spelling that was already in force is put back afterwards. */
     private Object bound(Hir.LetIn let, Position at, Admission admission) {
         BindingId binding = let.binder().id();
-        bindings.put(binding, let.value());
+        bindings.put(binding, new Bound.Written(let.value()));
         try {
             return raw(let.body(), at, admission);
         } finally {
@@ -1419,6 +1436,55 @@ public final class FixtureReader {
         } finally {
             expanding.removeLast();
         }
+    }
+
+    /**
+     * Whether {@code c} is an edit the generator made to every element of a list:
+     * {@code List.map} applied to a block of one parameter and a list, in an application the
+     * generator says it composed ({@link ApplicationOrigin.ComposedFixture#ELEMENT_WISE}).
+     *
+     * <p>This reader does not evaluate {@code List.map}. A row an author writes that applies it is
+     * computed, and is read by running the method its operand is compiled to; so is a value the
+     * module states as one. What is read here is the one form the generator writes an edit of a list
+     * in, so both halves are asked: what is applied, by what it denotes rather than how it is spelt,
+     * and who applied it. Asked by the first alone, every {@code List.map} a fixture reached would
+     * be one this reader was evaluating.
+     */
+    private static boolean composedElementWise(Hir.Apply c) {
+        return c.application() instanceof ApplicationOrigin.ComposedFixture
+                && c.answered() != null
+                && ApplicationOrigin.ComposedFixture.ELEMENT_WISE.equals(c.answered().denotes())
+                && c.args().size() == 2
+                && c.args().get(0) instanceof Hir.Block block
+                && block.params().size() == 1;
+    }
+
+    /**
+     * The list {@code c} edits, read, with the edit applied to each of its elements.
+     *
+     * <p>The iteration is the only thing added here. Each element is bound under the block's
+     * parameter as the value it was read as, and the block's body is read the way any fixture is —
+     * so an edit the fixture notation cannot write is refused here as it would be anywhere else.
+     */
+    private Object elementWise(Hir.Apply c, Position at, Admission admission) {
+        Hir.Block block = (Hir.Block) c.args().get(0);
+        if (!(raw(c.args().get(1), at, admission) instanceof List<?> elements)) {
+            throw new FixtureException("`" + c.written() + "` edits a list, and what it was given"
+                    + " is not one");
+        }
+        BindingId each = block.params().get(0).id();
+        Position element = at.element();
+        Admission inside = below(admission);
+        List<Object> out = new ArrayList<>();
+        try {
+            for (Object read : elements) {
+                bindings.put(each, new Bound.Read(read));
+                out.add(raw(block.body(), element, inside));
+            }
+        } finally {
+            bindings.remove(each);
+        }
+        return out;
     }
 
     /**
@@ -1538,11 +1604,13 @@ public final class FixtureReader {
             Admission below = admission == Admission.UNHELD ? admission : Admission.HELD_BELOW;
             Object copied;
             if (ref.denotes() instanceof ValueName.Local local) {
-                Hir.Expr value = bindings.get(local.id());
-                if (value == null) {
-                    throw new FixtureException("`" + spread + "` is not a value a fixture can spread");
-                }
-                copied = expandedValue(local, value, spreadAt, below);
+                copied = switch (bindings.get(local.id())) {
+                    case Bound.Written(Hir.Expr value) ->
+                            expandedValue(local, value, spreadAt, below);
+                    case Bound.Read(Object read) -> read;
+                    case null -> throw new FixtureException(
+                            "`" + spread + "` is not a value a fixture can spread");
+                };
             } else if (ref.denotes() instanceof ValueName.Helper helper) {
                 copied = namedValue(helper, spreadAt);
             } else {

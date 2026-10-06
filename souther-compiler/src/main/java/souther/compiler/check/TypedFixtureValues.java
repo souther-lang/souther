@@ -4,8 +4,8 @@ import souther.compiler.ast.Hir;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
+import souther.compiler.types.WrittenTypeMeaning;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Every nullary value this module declares or imports whose body states a type one of this
+ * Every nullary value this module declares or imports that is declared at a type one of this
  * module's own behaviors declares a parameter at, keyed by that type — the candidates a
  * class-partitioning search may offer as a baseline for a parameter of that type, before any row
  * or fake ever names one.
@@ -93,7 +93,7 @@ public final class TypedFixtureValues {
      * build, in the order {@link HelperTable#reachable} reaches them — one of {@code module}'s own
      * {@code SpecBehavior}s' own declared input types, and no other.
      */
-    public static Map<TypeSymbol, List<ReachName.Declaration>> of(Hir.Module module,
+    public static Map<Type, List<ReachName.Declaration>> of(Hir.Module module,
             ClosedImports importedForEvidence, Set<ValueName.Helper> importedLeaves,
             Stdlib stdlib, Symbols symbols, SumCases sums, DeclarationKinds kinds,
             NewtypeInners fieldWraps, Map<ValueName.Behavior, Sig> behaviors) {
@@ -103,7 +103,7 @@ public final class TypedFixtureValues {
                 generated.add(spec.name());
             }
         }
-        Set<TypeSymbol> relevant = new LinkedHashSet<>();
+        Set<Type> relevant = new LinkedHashSet<>();
         for (Map.Entry<ValueName.Behavior, Sig> each : behaviors.entrySet()) {
             if (!each.getKey().module().equals(module.name())
                     || !generated.contains(each.getKey().name())) {
@@ -112,11 +112,10 @@ public final class TypedFixtureValues {
                 // divided there — Adequacy.Generated never generates a row against it directly.
                 continue;
             }
-            for (Type type : each.getValue().inputTypes()) {
-                if (type instanceof Type.Ref(TypeSymbol of)) {
-                    relevant.add(of);
-                }
-            }
+            // Every type a parameter is declared at, named or not. What a candidate is offered for
+            // is that a value of it is a value of the parameter, and a list of records is a type a
+            // parameter takes as much as the record is.
+            relevant.addAll(each.getValue().inputTypes());
         }
         if (relevant.isEmpty()) {
             return Map.of();
@@ -139,7 +138,7 @@ public final class TypedFixtureValues {
                                 FieldRead.Unreadable.MAKES_NOTHING_READABLE),
                         DeclarationNewtypes.asWritten(symbols)),
                 readableBySpelling, behaviors);
-        Map<TypeSymbol, List<ReachName.Declaration>> out = new LinkedHashMap<>();
+        Map<Type, List<ReachName.Declaration>> out = new LinkedHashMap<>();
         for (HelperEntry entry : table.reachable().values()) {
             // Own, or one of the leaves an import line here actually admits — never a further
             // definition only carried in importedForEvidence so a call past it could be read
@@ -150,13 +149,34 @@ public final class TypedFixtureValues {
             }
             Hir.FnDef definition = entry.definition();
             if (!definition.params().isEmpty()
-                    || !(definition.body() instanceof Hir.FnBody.Written written)
-                    || !(evidence.declaredTypeOf(written.expr()) instanceof Type.Ref(TypeSymbol of))
-                    || !relevant.contains(of)) {
+                    || !(definition.body() instanceof Hir.FnBody.Written written)) {
+                continue;
+            }
+            Type of = declaredType(definition, written, evidence);
+            if (of == null || !relevant.contains(of)) {
                 continue;
             }
             out.computeIfAbsent(of, _ -> new ArrayList<>()).add(entry.reachedAs());
         }
         return out;
+    }
+
+    /**
+     * What a nullary value is declared to be: the type written on its declaration where one is, and
+     * otherwise what its body states.
+     *
+     * <p>The written type first, because it is the declaration saying so. A body can state less than
+     * it: a list written out is a join of its elements, which no declaration states, so a value of
+     * {@code List<T>} reads as one only where the author wrote the type. A written type that names a
+     * member no case can be states nothing here — what is wrong with it is reported where it is
+     * written, and this runs over a module that need not have checked.
+     */
+    private static Type declaredType(Hir.FnDef definition, Hir.FnBody.Written written,
+                                     DeclaredTypeReading evidence) {
+        if (definition.declaredReturn() != null) {
+            return definition.declaredReturn().meaning() instanceof WrittenTypeMeaning.Settled(
+                    Type type) ? type : null;
+        }
+        return evidence.declaredTypeOf(written.expr());
     }
 }
