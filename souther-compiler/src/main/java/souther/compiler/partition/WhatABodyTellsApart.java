@@ -279,14 +279,18 @@ final class WhatABodyTellsApart {
         // Unread over anything read. What was read at the position is part of what the body tells
         // apart there, and a part is never said as the whole.
         boolean unplacedHere = unread[at] || ruleNoDecisionRead;
-        if (subjectUnknown || unplacedHere) {
-            return new BodyDistinction.Unread(groupsOf(axis.classes(), splits.get(at)),
-                    unplacedHere);
+        List<List<String>> groups = groupsOf(axis.classes(), splits.get(at));
+        // Unless what was read already tells every class apart, which nothing further can refine:
+        // whatever went unread, the partition is the finest there is.
+        boolean everyClassApart = !splits.get(at).isEmpty()
+                && groups.size() == axis.classes().size();
+        if ((subjectUnknown || unplacedHere) && !everyClassApart) {
+            return new BodyDistinction.Unread(groups, unplacedHere);
         }
         if (splits.get(at).isEmpty()) {
             return new BodyDistinction.Untouched();
         }
-        return new BodyDistinction.Drawn(groupsOf(axis.classes(), splits.get(at)));
+        return new BodyDistinction.Drawn(groups);
     }
 
     /** Every reading of a rule that drew a line on the position or composed its classes. */

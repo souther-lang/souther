@@ -1,0 +1,36 @@
+// A `match` no run reaches tells nothing apart.
+//
+// The inner arm for Yes is under the outer arm for No, so no run takes it, and the `match` on `r`
+// there is no decision the body makes. Read as one, it would say the body tells `r` apart when every
+// run treats its cases alike.
+//
+// told apart at f: 2 groups of 2
+// told apart at r: untouched
+// told apart at n: 2 groups of 2
+module example.unreached
+
+data Yes
+data No
+data Flag = Yes | No
+
+data Draft
+data Submitted
+data Request = Draft | Submitted
+
+data Ok = { n: Int }
+
+behavior judge : (f: Flag, r: Request, n: Int) -> Ok
+    constructs Ok
+
+let judge (f, r, n) = {
+    guard n > 10 else Ok { n = 0 }
+    match f with
+        | Yes -> Ok { n = 1 }
+        | No ->
+            match f with
+                | Yes ->
+                    match r with
+                        | Draft -> Ok { n = 2 }
+                        | Submitted -> Ok { n = 3 }
+                | No -> Ok { n = 4 }
+}

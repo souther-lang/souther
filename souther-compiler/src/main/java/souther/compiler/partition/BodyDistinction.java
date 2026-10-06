@@ -30,8 +30,9 @@ import java.util.Map;
  * <p><b>What cannot be read is {@link Unread}, never {@link Untouched} and never a partition.</b> A
  * decision the reading could not name a subject for — a value no position is, a name bound over
  * several cases, an attempted construction — tells something apart about some position, and which
- * one is not known; so no position's partition is complete beside it. A partition read in part is
- * not said as though it were the whole.
+ * one is not known; so no position's partition is complete beside it, unless what was read already
+ * tells every class apart, which nothing further can refine. A partition read in part is not said
+ * as though it were the whole.
  *
  * <p><b>And a rule the body wrote that no decision reads is said, not guessed at.</b> The predicate
  * handed to a {@code List.filter} divides a position into classes and the walk that finds the

@@ -1,0 +1,24 @@
+// A sum every case of which a `match` has an arm for is told apart in full.
+//
+// The match composes no class — the cases are classes because of the type — and tells both cases
+// apart.
+//
+// told apart at r: 2 groups of 2
+// told apart at n: 2 groups of 2
+module example.matched
+
+data Draft
+data Submitted
+data Request = Draft | Submitted
+
+data Ok = { n: Int }
+
+behavior judge : (r: Request, n: Int) -> Ok
+    constructs Ok
+
+let judge (r, n) = {
+    guard n > 10 else Ok { n = 0 }
+    match r with
+        | Draft -> Ok { n = 1 }
+        | Submitted -> Ok { n = 2 }
+}
