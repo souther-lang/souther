@@ -97,6 +97,7 @@ import souther.compiler.query.CombinationCriterion;
 import souther.compiler.query.DecisionEvidence;
 import souther.compiler.query.InteractionEvidence;
 import souther.compiler.query.ReplacementEvidence;
+import souther.compiler.query.ReplacementReportAnchor;
 import souther.compiler.query.Replacements;
 import souther.compiler.query.DecisionRuleReading;
 import souther.compiler.query.Adequacy;
@@ -2841,7 +2842,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 rewrites.noticed() + rewrites.unnoticed(), open));
         for (ReportedFinding f : behavior.reported()) {
             if (f.finding().about() instanceof About.ARewriteNoRowTellsApart(
-                    var _, var rewrite, var _, var _)) {
+                    var _, var rewrite, var _, var _, var _)) {
                 out.append(String.format("      %s %s%n", mark(f.finding()), switch (rewrite) {
                     case Replacement.OfAnArm _ ->
                             "no row would come out differently if an arm answered as its sibling";
@@ -6137,11 +6138,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // And a combination of two classes stands at neither of the positions it is of.
             case About.ARuleNoRowTakes _, About.ACombinationNoRowMakes _,
                     About.ACombinationOfTwoClassesNoRowIsIn _ -> false;
-            // A rewrite of an arm stands at the fork, which is what tells two of a body's
-            // rewrites apart where their siblings are; one of the whole body stands nowhere in it.
-            case About.ARewriteNoRowTellsApart(var _, var replacement, var _, var _) ->
-                    replacement instanceof Replacement.OfAnArm(var fork, var _, var _)
-                            && fork.isWritten();
+            // A rewrite of an arm shown at its fork stands there, which is what tells two of a
+            // body's rewrites apart where their siblings are; one of the whole body, and one of a
+            // fork this compilation holds no source of, are shown at the behavior and stand nowhere
+            // in it.
+            case About.ARewriteNoRowTellsApart(var _, var _, var reportAt, var _, var _) ->
+                    switch (reportAt) {
+                        case ReplacementReportAnchor.AtTheFork _ -> true;
+                        case ReplacementReportAnchor.AtTheBehavior _ -> false;
+                    };
             case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                     About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
                     About.APointOfABorder _, About.APointOfADeclaredBorder _,
@@ -6209,7 +6214,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // The behavior whose body it is a rewrite of, for the reason a rule's subject is the
             // behavior: which arm and sibling is a part number the author did not write, and is
             // told apart by `obligationId`.
-            case About.ARewriteNoRowTellsApart(var behavior, var _, var _, var _) ->
+            case About.ARewriteNoRowTellsApart(var behavior, var _, var _, var _, var _) ->
                     words(behavior);
             case About.ACaseNoRowExpects(var _, var missing) -> words(missing.name());
             case About.ACaseNothingWasSeenToProduce(var missing) -> words(missing.name());

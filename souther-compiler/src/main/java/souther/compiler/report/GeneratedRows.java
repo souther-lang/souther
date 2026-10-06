@@ -777,7 +777,8 @@ public final class GeneratedRows {
             case About.ARuleNoRowTakes(var behavior, var _) -> "a decision rule of " + behavior;
             // Which rewrite, as far as words about one go: which sibling an arm answered as is a
             // part number the author did not write.
-            case About.ARewriteNoRowTellsApart(var behavior, var replacement, var _, var _) ->
+            case About.ARewriteNoRowTellsApart(var behavior, var replacement, var _, var _,
+                    var _) ->
                     switch (replacement) {
                         case Replacement.OfAnArm _ ->
                                 "an arm of " + behavior + " answering as another arm of its fork";

@@ -601,18 +601,24 @@ public sealed interface About {
      *
      * @param behavior    whose body it is a rewrite of
      * @param replacement which rewrite
+     * @param reportAt    where it is shown, settled where the arm it rewrites was met
      * @param shownBy     the row the rewrite answers differently on: one the module writes, or one
      *                    this compiler composed and ran under both
      * @param lookFor     the rewrite as a search for a row telling it apart is put to it, which is
      *                    what a generation offering a row for this finding looks for
      */
     record ARewriteNoRowTellsApart(String behavior, Replacement replacement,
+                                   ReplacementReportAnchor reportAt,
                                    ReplacementEvidence.ShownBy shownBy, ReplacementOwed lookFor)
             implements OfAnObligation {
 
         public ARewriteNoRowTellsApart {
             Objects.requireNonNull(behavior, "a rewrite is of some behavior's body");
             Objects.requireNonNull(replacement, "a finding is about something");
+            Objects.requireNonNull(reportAt, "and is shown somewhere");
+            if (!reportAt.shows(replacement)) {
+                throw new IllegalArgumentException(replacement + " is not shown at " + reportAt);
+            }
             Objects.requireNonNull(shownBy, "a rewrite no row tells apart was shown to matter");
             Objects.requireNonNull(lookFor, "and is one a row telling it apart can be looked for");
             if (!lookFor.replacement().equals(replacement)) {

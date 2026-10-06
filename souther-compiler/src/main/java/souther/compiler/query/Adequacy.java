@@ -15,7 +15,6 @@ import souther.compiler.inputs.TermPath;
 
 
 import souther.compiler.coverage.ArmProbe;
-import souther.compiler.coverage.ArmReportAnchor;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.RunBodies;
@@ -4194,7 +4193,7 @@ public final class Adequacy {
                     case About.ARuleNoRowTakes(var _, var ruled) -> rules.add(ruled.rule());
                     // A rewrite no row tells apart is owed the row it answers differently on,
                     // looked for the way the measure looked for it.
-                    case About.ARewriteNoRowTellsApart(var _, var _, var _, var lookFor) ->
+                    case About.ARewriteNoRowTellsApart(var _, var _, var _, var _, var lookFor) ->
                             replacements.add(lookFor);
                     // A class is read off the measure below and not off its finding. A finding is
                     // a gap something established, and a behavior no row names has none — which is
@@ -4573,8 +4572,8 @@ public final class Adequacy {
                             case About.AnArmNoRowGoesThrough(var arm) -> atArm(arm, composed);
                             case About.ARuleNoRowTakes(var _, var ruled) ->
                                     atRule(ruled.rule(), rules);
-                            case About.ARewriteNoRowTellsApart(var _, var _, var _, var lookFor) ->
-                                    atRewrite(lookFor, composed);
+                            case About.ARewriteNoRowTellsApart(var _, var _, var _, var _,
+                                    var lookFor) -> atRewrite(lookFor, composed);
                             // Asked of the search that was made at the line rather than of the
                             // finding's own reading of it. A finding is made wherever the lines
                             // were read, and a reading made without composing has no search to
@@ -5789,13 +5788,14 @@ public final class Adequacy {
                     whereItIsWritten(db, owed.pointAt());
             // A row is shown where it is written, which is in this module's own source.
             case About.AnUnansweredRow(RowRef _, SourcePos at) -> Citation.of(at);
-            // A rewrite of an arm is shown where the fork is written, as the arm is; one of the
-            // body as a whole, and one of a fork nobody here wrote, at the behavior.
-            case About.ARewriteNoRowTellsApart(var _, Replacement.OfAnArm(var fork, var _, var _),
-                    var _, var _) when fork.isWritten() ->
-                    Sites.placeOf(db, new ArmReportAnchor.WhereItIsWritten(fork));
-            case About.ARewriteNoRowTellsApart _ ->
-                    whereItIsDeclared(db, module, finding.subject());
+            // A rewrite is shown where the reading that made it said, which is the fork for an arm
+            // written in a source this compilation holds and the behavior otherwise.
+            case About.ARewriteNoRowTellsApart(var _, var _, var reportAt, var _, var _) ->
+                    switch (reportAt) {
+                        case ReplacementReportAnchor.AtTheFork(var fork) -> Sites.placeOf(db, fork);
+                        case ReplacementReportAnchor.AtTheBehavior _ ->
+                                whereItIsDeclared(db, module, finding.subject());
+                    };
             // Everything else is about the behavior as a whole — what its rows do not reach, what
             // its rules do not divide, what nothing here could read of them. Shown at the behavior.
             case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
@@ -6702,7 +6702,8 @@ public final class Adequacy {
                         var lookFor)) {
                     out.add(Finding.by(new FindingSubject.OfABehavior(behavior), each,
                             new About.ARewriteNoRowTellsApart(behavior,
-                                    each.rewrite().replacement(), shownBy, lookFor)));
+                                    each.rewrite().replacement(), each.rewrite().reportAt(),
+                                    shownBy, lookFor)));
                 }
             }
         }
@@ -7413,12 +7414,17 @@ public final class Adequacy {
                                 new ExampleMessage.NoRowIsInThatCombinationOfClasses(
                                         twoClasses(combination), combination.behavior());
                         // The behavior, and the rewrite by which sentence it is: an arm's is
-                        // pointed at the fork, and which sibling it answered as is a part number
-                        // the author did not write.
-                        case About.ARewriteNoRowTellsApart(var behavior, var replacement, var _,
-                                var _) -> switch (replacement) {
-                            case Replacement.OfAnArm _ ->
-                                    new ExampleMessage.NoRowTellsTheArmFromItsSibling(behavior);
+                        // pointed at the fork where there is one here to point at, and which
+                        // sibling it answered as is a part number the author did not write.
+                        case About.ARewriteNoRowTellsApart(var behavior, var replacement,
+                                var reportAt, var _, var _) -> switch (replacement) {
+                            case Replacement.OfAnArm _ -> switch (reportAt) {
+                                case ReplacementReportAnchor.AtTheFork _ ->
+                                        new ExampleMessage.NoRowTellsTheArmFromItsSibling(behavior);
+                                case ReplacementReportAnchor.AtTheBehavior _ ->
+                                        new ExampleMessage.NoRowTellsAnArmOutOfSightFromItsSibling(
+                                                behavior);
+                            };
                             case Replacement.ByOneAnswer _ ->
                                     new ExampleMessage.NoRowTellsTheBodyFromOneAnswer(behavior);
                         };
@@ -7439,7 +7445,7 @@ public final class Adequacy {
                         built.hint(new ExampleMessage.WriteARowExpectingThatCase(missing.name()));
                 // The row the two answer differently on: one composed, written as it would be
                 // offered, or one the module writes, whose answer is what is left to write down.
-                case About.ARewriteNoRowTellsApart(var _, var _, var shownBy, var _) ->
+                case About.ARewriteNoRowTellsApart(var _, var _, var _, var shownBy, var _) ->
                         built.hint(switch (shownBy) {
                             case ReplacementEvidence.ShownBy.AComposedRow(var inputs) ->
                                     new ExampleMessage.WriteARowAtThatInput(
