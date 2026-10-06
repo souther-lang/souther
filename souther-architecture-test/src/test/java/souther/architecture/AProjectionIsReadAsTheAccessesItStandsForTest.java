@@ -402,6 +402,15 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "coverage/CoverageSites$Walk", "walk", "(" + core + "Z)V",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
+        // What carrying an arm's sibling costs, and whether the sibling reads its own arm's name.
+        row(out, c + "coverage/CoverageSites$Walk", "nodesIn", "(" + core + ")I",
+                Reading.THE_TREE_THAT_RUNS, RUNS);
+        row(out, c + "coverage/CoverageSites$Walk", "reads", "(" + core + "L" + c
+                + "types/BindingId;)Z", Reading.STRUCTURE, BINDINGS);
+        // Whether a body reads what it is given, which is whether a value standing for one answer
+        // could be a rewrite of it.
+        row(out, c + "query/ReplacementReading", "readsItsInput", "(Ljava/lang/String;"
+                + "Ljava/lang/String;" + core + ")Z", Reading.STRUCTURE, BINDINGS);
         row(out, c + "coverage/Methods", "collectCalls", "(" + core
                 + "Ljava/util/Map;Ljava/util/Set;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "flow/ValueArrivals", "fill", "(" + core + "L" + c + "flow/Naming;L" + c

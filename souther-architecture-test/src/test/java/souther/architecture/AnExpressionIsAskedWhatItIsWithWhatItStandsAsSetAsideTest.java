@@ -606,6 +606,14 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "core/GrowingFold$Piped", "at", "(" + core + "Ljava/util/Set;)" + core, 1,
                 "asked of an answering position answers() hands on, which has gone past a Widen"
                         + " to what it holds");
+        row(out, c + "coverage/CoverageSites$Walk", "reads",
+                "(" + core + "L" + c + "types/BindingId;)Z", 1,
+                "whether the node a walk stands at reads one binding: a Widen does not, and the"
+                        + " read under it is met one step down");
+        row(out, c + "query/ReplacementReading", "readsItsInput",
+                "(Ljava/lang/String;Ljava/lang/String;" + core + ")Z", 1,
+                "whether the node a walk stands at reads what the body is given: a Widen does not,"
+                        + " and the read under it is met one step down");
         row(out, c + "coverage/ComparisonCatalog", "occurrenceAt",
                 "(" + core + ")Ljava/util/Optional;", 1,
                 "whether the node a walk stands at is a comparison: a Widen is not, and the"
