@@ -134,11 +134,12 @@ public final class CoverageRead {
      *                     and not a habit of whatever map was handed over. Written as any map, an
      *                     unordered one was as admissible, and the order a plan is asked in would
      *                     have come from wherever that map put its keys
-     * @param decided      every condition a way out of a fork of the body is taken by, where some
-     *                     run takes that way, in the order the walk met them. What the body tells
-     *                     apart about its input, which is not the ways in: a {@code match} past an
-     *                     attempted construction is reached by a way in nothing states and is still
-     *                     a decision about the position it matches on, and an arm no run reaches is
+     * @param decided      every condition a way out of a fork, or a value meeting another, is
+     *                     settled by where some run settles it that way, in the order the walk met
+     *                     them. What the body tells apart about
+     *                     its input, which is not the ways in: a {@code match} past an attempted
+     *                     construction is reached by a way in nothing states and is still a
+     *                     decision about the position it matches on, and an arm no run reaches is
      *                     none
      */
     public record Read(List<Interaction> interactions,
@@ -189,27 +190,58 @@ public final class CoverageRead {
         Arms arms = new Arms(plan);
         CoverageRead walked = new CoverageRead(reading, meetings, arms);
         walked.walk(body, naming, new Reach.Ways(List.of(new WayIn(List.of()))), true);
-        return new Read(meetings.found(), arms.found(behavior), List.copyOf(walked.decided));
+        List<Interaction> found = meetings.found();
+        for (Interaction group : found) {
+            walked.decidesAt(group);
+        }
+        return new Read(found, arms.found(behavior), List.copyOf(walked.decided));
     }
 
     /**
-     * That a way out of a fork of the body is taken by the decisions of {@code ways}, where
-     * {@code into} is how a run comes to be on it.
+     * That a way out of a fork of the body is taken, where {@code into} is how a run comes to be on
+     * it and {@code own} is what the fork comes out that way by.
      *
-     * <p>Whether a run comes, and not whether its way is named. A way under a way in nothing
-     * states — past an attempted construction, inside a function value — is one runs take and this
-     * reading cannot say how, and the decision is one the body makes about its input. A way no run
-     * takes is no decision the body makes: an arm for a case the way to the fork has already ruled
-     * out tells apart cases that never arrive there, and counted, it would split what the body
-     * treats alike.
+     * <p>What some run does, and nothing else. A way no run takes is no decision the body makes: an
+     * arm for a case the way to the fork has already ruled out tells apart cases that never arrive
+     * there, and counted, it would split what the body treats alike. So where the ways in are named
+     * what is counted is the ways of {@code own} that survive them, which {@code into} already is.
+     *
+     * <p>Not whether the way in is named. A way under a way in nothing states — past an attempted
+     * construction, inside a function value — is one runs take and this reading cannot say how, and
+     * what the fork comes out by is a decision the body makes all the same. There the fork's own
+     * ways are what there is, since nothing above them is stated to hold them to.
      */
-    private void decides(Reach into, List<WayIn> ways) {
+    private void decides(Reach into, List<WayIn> own) {
         if (!into.someRunArrives()) {
             return;
         }
-        for (WayIn way : ways) {
+        for (WayIn way : into.ways().isEmpty() ? own : into.ways()) {
             for (Decision each : way.decisions()) {
                 decided.add(each.constrains());
+            }
+        }
+    }
+
+    /**
+     * What the values meeting in {@code group} are settled by, where a run that reaches the
+     * meeting can settle them that way.
+     *
+     * <p>A comparison whose truth is handed on as a value is a decision no fork is taken by, and the
+     * body tells its position apart all the same. Held to the way in to the meeting as a fork's ways
+     * are held to the way in to the fork: an outcome that way in rules out is one no run comes to.
+     * A meeting is found only where a value arrives and its ways in are named, so both are already
+     * settled here.
+     */
+    private void decidesAt(Interaction group) {
+        for (Decision each : group.reach()) {
+            decided.add(each.constrains());
+        }
+        for (Factor factor : group.factors()) {
+            for (Outcome outcome : factor.outcomes()) {
+                List<Decision> both = CoverageNaming.merge(group.reach(), outcome.holds());
+                if (both != null) {
+                    both.forEach(each -> decided.add(each.constrains()));
+                }
             }
         }
     }

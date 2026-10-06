@@ -3,6 +3,7 @@ package souther.compiler;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.partition.BodyDistinction;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -104,6 +105,39 @@ class APositionSaysHowFarTheBodyTellsItsClassesApartTest {
 
         assertFalse(human.contains(" classes and this behavior "),
                 () -> "the body tells apart what the position is divided into: " + human);
+    }
+
+    /**
+     * And what it tells apart there is read, and not left unread.
+     *
+     * <p>The comparison draws a line on the number and parts its values there, and both are the one
+     * rule the decision is a reading of. Left unread, every number a body compares would be one
+     * nothing is said about.
+     */
+    @Test
+    void aNumberTheBodyComparesIsReadAsToldApartByTheComparison() {
+        var compilation = compiled("""
+                module example.compared
+
+                data Ok = { n: Int }
+
+                behavior judge : (n: Int) -> Ok
+                    constructs Ok
+
+                let judge (n) = {
+                    guard n > 10 else Ok { n = 0 }
+                    Ok { n = 1 }
+                }
+
+                example judge
+                    | (5)  -> Ok { n = 0 }
+                """);
+        var partition = compilation.db()
+                .ask(new Adequacy.Coverage("example.compared")).value().get("judge");
+        PartitionEvidence.AxisCoverage n = partition.axes().getFirst();
+
+        assertInstanceOf(BodyDistinction.Drawn.class, n.toldApart(), () -> "at " + n);
+        assertEquals(2, ((BodyDistinction.Drawn) n.toldApart()).groups().size(), () -> "at " + n);
     }
 
     /**
@@ -351,6 +385,98 @@ class APositionSaysHowFarTheBodyTellsItsClassesApartTest {
 
         assertTrue(human.contains("r holds 2 classes and this behavior does not tell them apart"),
                 () -> "a match in a function no run reaches is no decision: " + human);
+    }
+
+    /**
+     * A condition is counted by the ways of it a run takes, and not by every way it has.
+     *
+     * <p>Inside the arm for {@code C} or {@code D} the inner condition is true for {@code C} and
+     * false for {@code D}; its ways through {@code A} and {@code B} are ruled out by the arm. Counted
+     * whole, they would tell {@code A} from {@code B}, which the body treats alike.
+     */
+    @Test
+    void aConditionIsCountedByTheWaysOfItARunTakes() {
+        String human = report("""
+                module example.someways
+
+                data A
+                data B
+                data C
+                data D
+                data Kind = A | B | C | D
+
+                data Ok = { n: Int }
+
+                behavior judge : (k: Kind, n: Int) -> Ok
+                    constructs Ok
+
+                let judge (k, n) = {
+                    guard n > 10 else Ok { n = 0 }
+                    match k with
+                        | A | B -> Ok { n = 1 }
+                        | C | D ->
+                            if (match k with
+                                    | A -> true
+                                    | C -> true
+                                    | B -> false
+                                    | D -> false)
+                            then Ok { n = 2 } else Ok { n = 3 }
+                }
+
+                example judge
+                    | (A, 5)  -> Ok { n = 0 }
+                    | (A, 50) -> Ok { n = 1 }
+                    | (C, 50) -> Ok { n = 2 }
+                """);
+
+        assertTrue(human.contains("k holds 4 classes and this behavior tells them apart as 3 groups"),
+                () -> "A and B go one way wherever a run takes them: " + human);
+    }
+
+    /**
+     * And a value meeting another is counted by the outcomes a run reaching the meeting can have.
+     *
+     * <p>The sum inside the arm for {@code C} or {@code D} is a meeting of two values, one of them
+     * settled by a {@code match} on {@code k}. That value's outcomes through {@code A} and
+     * {@code B} are ruled out by the arm, and counted they would tell the two apart.
+     */
+    @Test
+    void aMeetingIsCountedByTheOutcomesARunReachingItCanHave() {
+        String human = report("""
+                module example.meeting
+
+                data A
+                data B
+                data C
+                data D
+                data Kind = A | B | C | D
+
+                data Ok = { n: Int }
+
+                behavior judge : (k: Kind, n: Int) -> Ok
+                    constructs Ok
+
+                let judge (k, n) = {
+                    guard n > 10 else Ok { n = 0 }
+                    match k with
+                        | A | B -> Ok { n = 1 }
+                        | C | D ->
+                            Ok { n = (match k with
+                                        | A -> 1
+                                        | B -> 2
+                                        | C -> 3
+                                        | D -> 4)
+                                    + (if n > 20 then 10 else 0) }
+                }
+
+                example judge
+                    | (A, 5)  -> Ok { n = 0 }
+                    | (A, 50) -> Ok { n = 1 }
+                    | (C, 50) -> Ok { n = 13 }
+                """);
+
+        assertTrue(human.contains("k holds 4 classes and this behavior tells them apart as 3 groups"),
+                () -> "A and B go one way wherever a run takes them: " + human);
     }
 
     /**

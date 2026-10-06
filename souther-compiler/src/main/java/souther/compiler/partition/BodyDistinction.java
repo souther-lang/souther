@@ -2,12 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.check.RuleRef;
 import souther.compiler.reading.CoverageRead;
-import souther.compiler.reading.Decision;
-import souther.compiler.reading.Factor;
-import souther.compiler.reading.Interaction;
-import souther.compiler.reading.Outcome;
-import souther.compiler.reading.PathAccess;
-import souther.compiler.reading.WayIn;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
@@ -108,30 +102,10 @@ public sealed interface BodyDistinction {
      * into the pair space on the strength of something unread.
      */
     static Map<AxisId, BodyDistinction> of(CoverageRead.Read read, List<Axis> axes) {
-        // What every fork is taken by, and beside it what the values a meeting is over are settled
-        // by: a comparison whose truth is handed on as a value is a decision no fork is taken by,
-        // and the body tells its position apart all the same.
-        //
-        // A set, because the three readings name one decision as often as they meet it, and what
-        // it tells apart is the same however often it was met.
-        Set<souther.compiler.reading.Condition> said = new LinkedHashSet<>(read.decided());
-        for (Interaction group : read.interactions()) {
-            group.reach().forEach(each -> said.add(each.constrains()));
-            for (Factor factor : group.factors()) {
-                for (Outcome outcome : factor.outcomes()) {
-                    outcome.holds().forEach(each -> said.add(each.constrains()));
-                }
-            }
-        }
-        read.arms().forEach((_, access) -> {
-            if (access instanceof PathAccess.Ways(var ways, var _)) {
-                for (WayIn way : ways) {
-                    for (Decision each : way.decisions()) {
-                        said.add(each.constrains());
-                    }
-                }
-            }
-        });
+        // What the body decides on, which the reading of it says once and holds to what some run
+        // does ({@link CoverageRead.Read#decided}). Taken from the ways in to the arms or the
+        // meetings as well, a way no run takes would be read as a decision the body makes.
+        List<souther.compiler.reading.Condition> said = read.decided();
         // Which position each is about, asked once of each. Asked per position instead, every
         // condition is looked up again for every position the behavior has.
         List<List<souther.compiler.reading.Condition>> about = new ArrayList<>(axes.size());
@@ -170,23 +144,31 @@ public sealed interface BodyDistinction {
                 ModelOccurrence.statedAt(side.comparison()).ifPresent(comparisonsRead::add);
             }
         }
-        // What the body wrote that divided the position, each of which has to be one of the
-        // comparisons read above. A rule of the type is the model's distinction and not this
-        // behavior's, which is the whole question here, so it is not asked for.
+        // What the body wrote that divided the position, each of which has to be a rule one of the
+        // comparisons read above is a reading of. A rule of the type is the model's distinction and
+        // not this behavior's, which is the whole question here, so it is not asked for.
+        //
+        // A line is filed under the construct its rule is stated at, which is what a decision is
+        // filed under too, so the two meet there; and the line carries the rule as well, which is
+        // what a parting — the same comparison read for where it parts the values rather than
+        // where it cuts them — carries and all it carries.
+        Set<RuleRef> rulesRead = new LinkedHashSet<>();
         boolean ruleNoDecisionRead = false;
-        for (Cut cut : axis.cuts()) {
-            for (LineOrigin origin : cut.origins()) {
-                ruleNoDecisionRead |= unreadBy(origin, comparisonsRead);
+        for (RuleEvidenceOrigin origin : linesAndDivisions(axis)) {
+            if (!writtenInTheBody(origin.rule())) {
+                continue;
             }
-        }
-        for (RuleEvidenceOrigin origin : axis.divides()) {
-            ruleNoDecisionRead |= unreadBy(origin, comparisonsRead);
+            if (origin instanceof LineOrigin.ComparisonOrigin comparison
+                    && comparisonsRead.contains(comparison.read().states())) {
+                rulesRead.add(comparison.rule());
+            } else {
+                ruleNoDecisionRead = true;
+            }
         }
         for (Parting parting : axis.parted()) {
             for (AuthoredLine line : parting.alternatives()) {
-                // A parting is read by no condition, so a rule the body wrote that parted the
-                // position is one nothing here placed.
-                ruleNoDecisionRead |= writtenInTheBody(line.which().rule());
+                RuleRef rule = line.which().rule();
+                ruleNoDecisionRead |= writtenInTheBody(rule) && !rulesRead.contains(rule);
             }
         }
         if (unread || ruleNoDecisionRead) {
@@ -198,18 +180,13 @@ public sealed interface BodyDistinction {
         return new Drawn(groupsOf(axis.classes(), splits));
     }
 
-    /**
-     * Whether {@code origin} is a rule the body wrote that none of the comparisons read is.
-     *
-     * <p>Asked of the construct the rule is stated at, which is what a decision and a line drawn off
-     * the same comparison both file it under ({@link InteractionCells}).
-     */
-    private static boolean unreadBy(RuleEvidenceOrigin origin, Set<ModelOccurrence> read) {
-        if (!writtenInTheBody(origin.rule())) {
-            return false;
+    /** Every reading of a rule that drew a line on the position or composed its classes. */
+    private static List<RuleEvidenceOrigin> linesAndDivisions(Axis axis) {
+        List<RuleEvidenceOrigin> out = new ArrayList<>(axis.divides());
+        for (Cut cut : axis.cuts()) {
+            out.addAll(cut.origins());
         }
-        return !(origin instanceof LineOrigin.ComparisonOrigin comparison
-                && read.contains(comparison.read().states()));
+        return out;
     }
 
     /**

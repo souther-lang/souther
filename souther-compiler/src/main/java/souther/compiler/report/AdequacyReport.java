@@ -2229,7 +2229,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // Said in groups, because a body that asks whether a value is one of two cases out
                 // of four tells the four apart as two groups.
                 for (ReaderDisposition.Wider each : wider) {
-                    if (!each.axis().equals(axis)) {
+                    if (!each.axis().at().equals(axis.at())) {
                         continue;
                     }
                     out.append(each.groups() <= 1
