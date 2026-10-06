@@ -4,7 +4,11 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.ClosureGap;
+import souther.compiler.partition.Replacement;
+import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.types.SourceConstructOrigin;
+
+import java.util.Objects;
 
 /**
  * One thing that leaves a measurement weaker than it looks.
@@ -547,6 +551,35 @@ public sealed interface Weakening {
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
+        }
+    }
+
+    /**
+     * A rewrite of one behavior's body nothing here could decide about: whether a row tells it from
+     * the body is not known, and not that none does.
+     *
+     * <p>Named by the rewrite, because each is an obligation of its own and what left one open says
+     * nothing about the next.
+     */
+    record RewriteUndecided(String behavior, Replacement replacement,
+                            CanonicalSelection<ReplacementEvidence.Undecided.Why> why)
+            implements Weakening {
+
+        public RewriteUndecided {
+            Objects.requireNonNull(behavior, "a rewrite is of some behavior's body");
+            Objects.requireNonNull(replacement, "a rewrite left open is some rewrite");
+            if (why.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "a rewrite left open was left open for a reason");
+            }
+        }
+
+        /** A wider run could come to another answer where any of the ways it was left open is a
+         *  figure this compiler stopped at, or a run that did not come back. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return why.written().stream().anyMatch(ReplacementEvidence.Undecided.Why::anAllowance)
+                    ? RunSensitivity.MAY_CHANGE : RunSensitivity.UNAFFECTED;
         }
     }
 }

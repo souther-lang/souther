@@ -4,6 +4,7 @@ import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.ObligationIdentity;
+import souther.compiler.partition.ReplacementOwed;
 
 import java.util.List;
 import java.util.Objects;
@@ -52,16 +53,20 @@ import java.util.Objects;
  *                 worth looking for a row at, and that this module answers for. What is read of
  *                 them is that there are some: the rows at a line are the boundary search's to
  *                 compose
+ * @param replacements the rewrites of the body no row was seen to tell from it and none was seen
+ *                 to answer differently from it, where a row the rewrite answers differently on is
+ *                 what settles whether a row is owed at all
  */
 public record RowWork(List<ClassOfAPosition> classes, List<RowWork.Arm> arms,
                       List<ObligationIdentity.OfAFallbackPairCell> pairs,
                       List<ObligationIdentity.OfACombinationOfDecisions> meetings,
                       List<DecisionRule> rules,
-                      List<BorderObligationPointAssessment> points) {
+                      List<BorderObligationPointAssessment> points,
+                      List<ReplacementOwed> replacements) {
 
     /** Nothing at all, which is what a behavior no row is owed for comes to. */
     public static final RowWork NONE = new RowWork(List.of(), List.of(), List.of(),
-            List.of(), List.of(), List.of());
+            List.of(), List.of(), List.of(), List.of());
 
     public RowWork {
         classes = List.copyOf(classes);
@@ -70,6 +75,7 @@ public record RowWork(List<ClassOfAPosition> classes, List<RowWork.Arm> arms,
         meetings = List.copyOf(meetings);
         rules = List.copyOf(rules);
         points = List.copyOf(points);
+        replacements = List.copyOf(replacements);
     }
 
     /**
@@ -101,6 +107,6 @@ public record RowWork(List<ClassOfAPosition> classes, List<RowWork.Arm> arms,
      */
     public boolean isEmpty() {
         return classes.isEmpty() && arms.isEmpty() && pairs.isEmpty() && meetings.isEmpty()
-                && rules.isEmpty() && points.isEmpty();
+                && rules.isEmpty() && points.isEmpty() && replacements.isEmpty();
     }
 }

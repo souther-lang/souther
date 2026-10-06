@@ -40,7 +40,9 @@ import java.lang.constant.DirectMethodHandleDesc;
 import java.lang.constant.MethodHandleDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -269,6 +271,31 @@ final class CodegenContext {
         this.coverage = plan;
     }
 
+    /**
+     * The forks whose arms are written without their siblings: the ones a method they stood in could
+     * not hold with them. Asked by identity, for the reason the plan is.
+     */
+    private Set<Core> notCarrying =
+            Collections.newSetFromMap(new IdentityHashMap<>());
+
+    /** Every fork this emission wrote a sibling into, in the order it did. */
+    private final List<Core> carriedSoFar = new ArrayList<>();
+
+    void setNotCarrying(Set<Core> forks) {
+        this.notCarrying = forks;
+    }
+
+    /** How many forks this emission has written a sibling into, which is where a definition about
+     *  to be written starts counting its own. */
+    int carriedCount() {
+        return carriedSoFar.size();
+    }
+
+    /** The forks written with a sibling since {@code from}. */
+    List<Core> carriedSince(int from) {
+        return List.copyOf(carriedSoFar.subList(from, carriedSoFar.size()));
+    }
+
     boolean measuring() {
         return !coverage.hasNoProbes();
     }
@@ -374,7 +401,7 @@ final class CodegenContext {
      * and going on would leave an arm that ran reported as one no row reaches, which reads as a gap in
      * the model rather than as a fault in the measurement.
      */
-    int[] probesOf(souther.compiler.core.Core node) {
+    int[] probesOf(Core node) {
         int[] arms = coverage.probesOf(node);
         if (arms == null) {
             throw new IllegalStateException("no probe was planned for a "
@@ -382,6 +409,20 @@ final class CodegenContext {
                     + "; the plan was made from other nodes than these");
         }
         return arms;
+    }
+
+    /** The parts of the siblings the measuring classes carry in arm {@code part} of {@code node}:
+     *  none at a fork a method could not hold them in, and the plan's everywhere else. */
+    int[] carriedAt(Core node, int part) {
+        if (notCarrying.contains(node)) {
+            return new int[0];
+        }
+        int[] carried = coverage.carriedAt(node, part);
+        if (carried.length > 0
+                && (carriedSoFar.isEmpty() || carriedSoFar.getLast() != node)) {
+            carriedSoFar.add(node);
+        }
+        return carried;
     }
 
     /**

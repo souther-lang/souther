@@ -20,6 +20,7 @@ import souther.compiler.types.OccurrenceLineage;
 import souther.compiler.types.RegionSlot;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleCitations;
 import souther.compiler.check.RuleRef;
@@ -27,6 +28,7 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.ObligationIdentity;
+import souther.compiler.partition.Replacement;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.ClosureGap;
@@ -94,6 +96,8 @@ import souther.compiler.query.About;
 import souther.compiler.query.CombinationCriterion;
 import souther.compiler.query.DecisionEvidence;
 import souther.compiler.query.InteractionEvidence;
+import souther.compiler.query.ReplacementEvidence;
+import souther.compiler.query.Replacements;
 import souther.compiler.query.DecisionRuleReading;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.ArmDisposition;
@@ -783,6 +787,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // And the combinations of those decisions, asked the same way and for the same reason.
         Map<String, InteractionEvidence> meetings =
                 compilation.db().ask(new Adequacy.Interacts(name)).value();
+        // And whether the rows tell the rewrites of each body apart, asked the same way.
+        Map<String, ReplacementEvidence> rewrites =
+                compilation.db().ask(new Replacements.Measured(name)).value();
         // What each body declared, read where it was judged. Beside the measures and never inside
         // one: this report is where the two are put together.
         Map<String, ClaimAnnotations> claims =
@@ -835,7 +842,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             BehaviorEvidence evidence = new BehaviorEvidence(reading, signature, partition, read,
                     accounts == null ? null : accounts.get(behavior.name()), branch,
                     decisions == null ? null : decisions.get(behavior.name()),
-                    meetings == null ? null : meetings.get(behavior.name()));
+                    meetings == null ? null : meetings.get(behavior.name()),
+                    rewrites == null ? null : rewrites.get(behavior.name()));
             behaviors.add(new BehaviorReport(behavior.name(),
                     module.implementationOf(new ValueName.Behavior(module.name(), behavior.name())),
                     evidence,
@@ -1743,6 +1751,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     add(measures, new Subject.OfAMeasure(module.module(), behavior.name(),
                             MeasureWord.DECISION), behavior.evidence().decision().took());
                 }
+                // Whether the rows tell the rewrites of the body apart. A rewrite left open is one
+                // a row may already tell apart, and a verdict resting on the findings alone would
+                // call the model satisfied over a rewrite nothing could decide about.
+                if (behavior.evidence().replacement() != null) {
+                    add(measures, new Subject.OfAMeasure(module.module(), behavior.name(),
+                            MeasureWord.REPLACEMENT), behavior.evidence().replacement().measured());
+                }
                 if (behavior.partition() == null) {
                     continue;
                 }
@@ -1905,6 +1920,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 partition(out, behavior, module.declaredIn(), rendering, behavior.rulePlace());
                 branch(out, behavior, module.declaredIn(), rendering);
                 decision(out, behavior, module.declaredIn(), rendering);
+                replacement(out, behavior);
                 // Under the behavior it names, because a reason printed at the module's foot is
                 // read as belonging to whichever behavior came last. That was survivable while the
                 // only reasons naming one were rare; a position that could not be read is not.
@@ -2797,6 +2813,43 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return combination.inOrder().stream()
                 .map(each -> "`" + each.classId() + "` at " + each.at())
                 .collect(java.util.stream.Collectors.joining(" with "));
+    }
+
+    /**
+     * How many rewrites of the body some row tells apart, out of the rewrites put to the rows.
+     *
+     * <p>Beside the arms and never among them: a row goes through an arm whatever the arm answers,
+     * so the arms can be counted in full over rows none of which would notice one answering as its
+     * sibling. A rewrite left open is counted out of the number and said beside it, since nothing
+     * showed it to be a gap; one shown to be is said under the line, one to a line.
+     */
+    private void replacement(StringBuilder out, BehaviorReport behavior) {
+        ReplacementEvidence replacement = behavior.evidence().replacement();
+        if (replacement == null) {
+            return;
+        }
+        ReportMeasurement<ReplacementEvidence.Summary> measured =
+                ReportMeasurement.of(replacement.measured());
+        if (!measured.counted()) {
+            sayWhy(out, "replacement", measured.reason());
+            return;
+        }
+        ReplacementEvidence.Summary rewrites = measured.get();
+        String open = rewrites.undecided() == 0 ? ""
+                : String.format("   %d left open", rewrites.undecided());
+        out.append(String.format("    replacement %d/%d%s%n", rewrites.noticed(),
+                rewrites.noticed() + rewrites.unnoticed(), open));
+        for (ReportedFinding f : behavior.reported()) {
+            if (f.finding().about() instanceof About.ARewriteNoRowTellsApart(
+                    var _, var rewrite, var _, var _)) {
+                out.append(String.format("      %s %s%n", mark(f.finding()), switch (rewrite) {
+                    case Replacement.OfAnArm _ ->
+                            "no row would come out differently if an arm answered as its sibling";
+                    case Replacement.ByOneAnswer _ ->
+                            "no row would come out differently if the body answered one value";
+                }));
+            }
+        }
     }
 
     /**
@@ -4133,6 +4186,35 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     one.put("class", each.classId());
                 }
             }
+            // The behavior and which rewrite: an arm answering as one of its siblings, written
+            // with the fork the way an arm is and the sibling by its part, or the body answering
+            // one value, written as the first row that answered it — a rewrite per value, named
+            // by the row that sends a reader to the value, in the words a row is named by.
+            case ObligationIdentity.OfAReplacement(var behavior, var replacement) -> {
+                into.put("behavior", behavior);
+                switch (replacement) {
+                    case Replacement.OfAnArm(var fork, var part, var with) -> {
+                        WrittenOwner.Body body = WrittenOwner.theBodyThatWrote(fork.owner());
+                        into.put("rewrite", "arm_as_sibling");
+                        into.put("module", body.module());
+                        into.put("definition", body.definition());
+                        into.put("construct", fork.ordinal());
+                        into.put("lowered", fork.lowered());
+                        into.put("part", part);
+                        into.put("with", with);
+                    }
+                    case Replacement.ByOneAnswer(var _, var answeredBy) -> {
+                        into.put("rewrite", "one_answer");
+                        ObjectNode row = into.putObject("answeredBy");
+                        row.put("source", sources.written(answeredBy.source()));
+                        switch (answeredBy.identity()) {
+                            case RowIdentity.Named named -> row.put("name", named.name());
+                            case RowIdentity.Unnamed unnamed ->
+                                    row.put("ordinal", unnamed.ordinal());
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -4883,6 +4965,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 branch(b, behavior, sources);
                 decision(b, behavior, sources);
                 interaction(b, behavior);
+                replacement(b, behavior, sources);
                 findings(b, behavior, sources);
             }
         }
@@ -5581,6 +5664,41 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * The rewrites of this behavior's body, and whether a row tells each from the body as written.
+     *
+     * <p>One entry per rewrite, whatever the rows came to, so that a {@code rewrite_unnoticed}
+     * finding has the entry it names to join to. What each came to is the entry's own word; a
+     * rewrite left open says why beside it, since that is what a reader acts on and the measure's
+     * weakening says only that one was.
+     */
+    static void replacement(ObjectNode into, BehaviorReport behavior, DocumentSources sources) {
+        ReplacementEvidence replacement = behavior.evidence().replacement();
+        if (replacement == null) {
+            return;
+        }
+        ObjectNode out = into.putObject("replacement");
+        measured(out, replacement.measured(), (node, summary) -> {
+            ArrayNode all = node.putArray("obligations");
+            for (ReplacementEvidence.Rewrite each : summary.rewrites()) {
+                ObjectNode one = all.addObject();
+                obligationId(one.putObject("obligationId"),
+                        new ObligationIdentity.OfAReplacement(behavior.name(), each.replacement()),
+                        sources);
+                switch (each.outcome()) {
+                    case ReplacementEvidence.Noticed _ -> one.put("disposition", "noticed");
+                    case ReplacementEvidence.Unnoticed _ -> one.put("disposition", "unnoticed");
+                    // Every way it was left open, in the order the vocabulary declares them.
+                    case ReplacementEvidence.Undecided(var why) -> {
+                        one.put("disposition", "undecided");
+                        ArrayNode because = one.putArray("undecidedBecause");
+                        why.written().forEach(way -> because.add(word(way.name())));
+                    }
+                }
+            }
+        });
+    }
+
+    /**
      * What gave the offer no value, one entry per thing that gave none.
      *
      * <p>The structure and not the sentence. What a reader of the page is shown is words, and a
@@ -6013,6 +6131,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // And a combination of two classes stands at neither of the positions it is of.
             case About.ARuleNoRowTakes _, About.ACombinationNoRowMakes _,
                     About.ACombinationOfTwoClassesNoRowIsIn _ -> false;
+            // A rewrite of an arm stands at the fork, which is what tells two of a body's
+            // rewrites apart where their siblings are; one of the whole body stands nowhere in it.
+            case About.ARewriteNoRowTellsApart(var _, var replacement, var _, var _) ->
+                    replacement instanceof Replacement.OfAnArm(var fork, var _, var _)
+                            && fork.isWritten();
             case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                     About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
                     About.APointOfABorder _, About.APointOfADeclaredBorder _,
@@ -6077,6 +6200,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // show an author a comparison they did not write. Two rules of one behavior are shown
             // alike here and are told apart by `obligationId`, which is what that field is for.
             case About.ARuleNoRowTakes(var behavior, var _) -> words(behavior);
+            // The behavior whose body it is a rewrite of, for the reason a rule's subject is the
+            // behavior: which arm and sibling is a part number the author did not write, and is
+            // told apart by `obligationId`.
+            case About.ARewriteNoRowTellsApart(var behavior, var _, var _, var _) ->
+                    words(behavior);
             case About.ACaseNoRowExpects(var _, var missing) -> words(missing.name());
             case About.ACaseNothingWasSeenToProduce(var missing) -> words(missing.name());
             case About.AClassNoRowIsIn(var missing) ->
@@ -6749,6 +6877,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // policy and travels as the reason.
             case Weakening.DecisionReadingIncomplete _ -> WeakeningWord.DECISION_NOT_FULLY_READ;
             case Weakening.DecisionRuleReadShort _ -> WeakeningWord.DECISION_RULE_READ_SHORT;
+            case Weakening.RewriteUndecided _ -> WeakeningWord.REWRITE_UNDECIDED;
         };
     }
 

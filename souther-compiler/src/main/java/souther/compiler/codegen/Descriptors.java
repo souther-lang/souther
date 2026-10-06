@@ -125,6 +125,14 @@ final class Descriptors {
     static final MethodTypeDesc MTD_Probe_condition = MethodTypeDesc.of(ConstantDescs.CD_void,
             ConstantDescs.CD_boolean, ConstantDescs.CD_int);
     /**
+     * What a run of the measuring classes is asked to answer with at an arm that carries its
+     * siblings. Reached the way {@link #CD_Probe} is, and for the same reason.
+     */
+    static final ClassDesc CD_Intervention = ClassDesc.of("souther.compiler.coverage.Intervention");
+    /** {@code Intervention.replacementAt(int)}: the part to answer with at a site, or {@code -1}. */
+    static final MethodTypeDesc MTD_Intervention_replacementAt =
+            MethodTypeDesc.of(ConstantDescs.CD_int, ConstantDescs.CD_int);
+    /**
      * What an evaluation is allowed, called by classes generated for evaluating and by nothing that
      * ships. Reached the way {@link #CD_Probe} is, and for the same reason.
      */

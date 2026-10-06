@@ -1750,6 +1750,34 @@
           "taken" : true
         } ]
       },
+      "replacement" : {
+        "status" : "complete",
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "packBox",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.packing",
+            "definition" : "packBox",
+            "construct" : 3,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "packBox",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.packing",
+            "definition" : "packBox",
+            "construct" : 3,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 0
+          },
+          "disposition" : "noticed"
+        } ]
+      },
       "findings" : [ {
         "kind" : "partition_not_read",
         "disposition" : "reported",
@@ -2663,6 +2691,34 @@
             } ]
           },
           "taken" : true
+        } ]
+      },
+      "replacement" : {
+        "status" : "complete",
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "bookSlot",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.packing",
+            "definition" : "bookSlot",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "bookSlot",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.packing",
+            "definition" : "bookSlot",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 0
+          },
+          "disposition" : "noticed"
         } ]
       },
       "findings" : [ {

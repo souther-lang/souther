@@ -11,6 +11,7 @@ import souther.compiler.publish.PublishedRuleHandle;
 import souther.compiler.check.Requirements;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.StringOfferShortfall;
 import souther.compiler.publish.RuleHandleProse;
@@ -774,6 +775,15 @@ public final class GeneratedRows {
             // on, written the one way round that makes a comparison and its denial one column —
             // and printing that would show an author a comparison they did not write.
             case About.ARuleNoRowTakes(var behavior, var _) -> "a decision rule of " + behavior;
+            // Which rewrite, as far as words about one go: which sibling an arm answered as is a
+            // part number the author did not write.
+            case About.ARewriteNoRowTellsApart(var behavior, var replacement, var _, var _) ->
+                    switch (replacement) {
+                        case Replacement.OfAnArm _ ->
+                                "an arm of " + behavior + " answering as another arm of its fork";
+                        case Replacement.ByOneAnswer _ ->
+                                "the body of " + behavior + " answering one value";
+                    };
             // The behavior again, and for the same reason: what the combination is of is written
             // in the terms the account keys on, and a block printing those would hand an author
             // this compiler's spelling of their own body.

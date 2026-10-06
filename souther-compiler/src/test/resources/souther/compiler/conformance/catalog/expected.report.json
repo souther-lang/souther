@@ -2,7 +2,7 @@
   "schemaVersion" : 24,
   "compilerVersion" : "<version>",
   "status" : "partial",
-  "weakening" : [ "rule_unread", "decision_of_row_unreadable" ],
+  "weakening" : [ "rule_unread", "decision_of_row_unreadable", "rewrite_undecided" ],
   "adequacy" : "not_satisfied",
   "keptOpenBy" : [ ],
   "modules" : [ {
@@ -1202,6 +1202,34 @@
           "taken" : true
         } ]
       },
+      "replacement" : {
+        "status" : "complete",
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "discount",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.catalog",
+            "definition" : "discount",
+            "construct" : 2,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "discount",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.catalog",
+            "definition" : "discount",
+            "construct" : 2,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 0
+          },
+          "disposition" : "noticed"
+        } ]
+      },
       "findings" : [ {
         "kind" : "partition_not_derivable",
         "disposition" : "reported",
@@ -1408,6 +1436,10 @@
         "notRead" : [ ]
       },
       "branch" : {
+        "status" : "unavailable",
+        "reason" : "no_body"
+      },
+      "replacement" : {
         "status" : "unavailable",
         "reason" : "no_body"
       },
@@ -2297,6 +2329,46 @@
           "taken" : true
         } ]
       },
+      "replacement" : {
+        "status" : "complete",
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "apportion",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.splitting",
+            "definition" : "apportion",
+            "construct" : 5,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "apportion",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.splitting",
+            "definition" : "apportion",
+            "construct" : 3,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "apportion",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.splitting",
+            "definition" : "apportion",
+            "construct" : 5,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 0
+          },
+          "disposition" : "noticed"
+        } ]
+      },
       "findings" : [ {
         "kind" : "boundary_unmet",
         "disposition" : "refused",
@@ -3103,6 +3175,46 @@
           "requirement" : "required"
         } ]
       },
+      "replacement" : {
+        "status" : "complete",
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "apportionExactly",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.splitting",
+            "definition" : "apportionExactly",
+            "construct" : 6,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "apportionExactly",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.splitting",
+            "definition" : "apportionExactly",
+            "construct" : 5,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "apportionExactly",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.splitting",
+            "definition" : "apportionExactly",
+            "construct" : 3,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        } ]
+      },
       "findings" : [ {
         "kind" : "axis_class_uncovered",
         "disposition" : "refused",
@@ -3245,7 +3357,7 @@
   }, {
     "module" : "conformance.shipping",
     "status" : "partial",
-    "weakening" : [ "rule_unread", "decision_of_row_unreadable" ],
+    "weakening" : [ "rule_unread", "decision_of_row_unreadable", "rewrite_undecided" ],
     "incompleteness" : [ ],
     "declarations" : [ {
       "owners" : [ {
@@ -3793,6 +3905,10 @@
         "status" : "unavailable",
         "reason" : "no_body"
       },
+      "replacement" : {
+        "status" : "unavailable",
+        "reason" : "no_body"
+      },
       "findings" : [ {
         "kind" : "partition_not_derivable",
         "disposition" : "reported",
@@ -3986,7 +4102,7 @@
         "disposition" : "met"
       } ],
       "status" : "partial",
-      "weakening" : [ "rule_unread", "decision_of_row_unreadable" ],
+      "weakening" : [ "rule_unread", "decision_of_row_unreadable", "rewrite_undecided" ],
       "signature" : {
         "status" : "complete",
         "output" : {
@@ -5494,6 +5610,133 @@
           "taken" : true
         } ]
       },
+      "replacement" : {
+        "status" : "partial",
+        "weakening" : [ "rewrite_undecided" ],
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "出荷する",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.shipping",
+            "definition" : "出荷する",
+            "construct" : 10,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "出荷する",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.shipping",
+            "definition" : "急ぎか",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "出荷する",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.shipping",
+            "definition" : "急ぎか",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 0
+          },
+          "disposition" : "undecided",
+          "undecidedBecause" : [ "nothing_was_composed" ]
+        }, {
+          "obligationId" : {
+            "behavior" : "出荷する",
+            "rewrite" : "arm_as_sibling",
+            "module" : "souther.bool",
+            "definition" : "not",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "出荷する",
+            "rewrite" : "arm_as_sibling",
+            "module" : "souther.bool",
+            "definition" : "not",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 0
+          },
+          "disposition" : "undecided",
+          "undecidedBecause" : [ "nothing_was_composed" ]
+        }, {
+          "obligationId" : {
+            "behavior" : "出荷する",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.shipping",
+            "definition" : "出荷する",
+            "construct" : 5,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "出荷する",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.shipping",
+            "definition" : "高額割増",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "出荷する",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.shipping",
+            "definition" : "高額割増",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 0
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "出荷する",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.shipping",
+            "definition" : "出荷する",
+            "construct" : 5,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 0
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "出荷する",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.shipping",
+            "definition" : "出荷する",
+            "construct" : 10,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 0
+          },
+          "disposition" : "noticed"
+        } ]
+      },
       "findings" : [ {
         "kind" : "domain_point_uncovered",
         "disposition" : "refused",
@@ -6816,6 +7059,130 @@
             } ]
           },
           "made" : true
+        } ]
+      },
+      "replacement" : {
+        "status" : "complete",
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.shipping",
+            "definition" : "係数",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.shipping",
+            "definition" : "係数",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 2
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.shipping",
+            "definition" : "係数",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 0
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.shipping",
+            "definition" : "係数",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 2
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.shipping",
+            "definition" : "係数",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 2,
+            "with" : 0
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.shipping",
+            "definition" : "係数",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 2,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "rewrite" : "arm_as_sibling",
+            "module" : "souther.bool",
+            "definition" : "not",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "rewrite" : "arm_as_sibling",
+            "module" : "souther.bool",
+            "definition" : "not",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 0
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.shipping",
+            "definition" : "夜間割増",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.shipping",
+            "definition" : "夜間割増",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 0
+          },
+          "disposition" : "noticed"
         } ]
       },
       "findings" : [ {

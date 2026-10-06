@@ -1754,6 +1754,10 @@
           "requirement" : "required"
         } ]
       },
+      "replacement" : {
+        "status" : "unavailable",
+        "reason" : "no_rows"
+      },
       "findings" : [ {
         "kind" : "decision_rule_uncovered",
         "disposition" : "refused",
@@ -2957,6 +2961,10 @@
           "taken" : false,
           "requirement" : "required"
         } ]
+      },
+      "replacement" : {
+        "status" : "unavailable",
+        "reason" : "no_rows"
       },
       "findings" : [ {
         "kind" : "decision_rule_uncovered",

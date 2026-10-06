@@ -167,6 +167,12 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
                     parts = parts.union(behavior.evidence().decision().took().weakening());
                     apart.add(behavior.evidence().decision().took().weakening());
                 }
+                if (behavior.evidence().replacement() != null) {
+                    // Which rewrites of the body the rows tell apart. A rewrite nothing could
+                    // decide about is open in this part and in no other.
+                    parts = parts.union(behavior.evidence().replacement().measured().weakening());
+                    apart.add(behavior.evidence().replacement().measured().weakening());
+                }
                 if (behavior.evidence().account() != null) {
                     // This behavior's own account, which is what its weakening is over. A row owed
                     // to the declarations that drew a line is short or not short in the module's

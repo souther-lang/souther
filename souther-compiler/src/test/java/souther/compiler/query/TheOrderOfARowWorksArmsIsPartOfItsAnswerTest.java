@@ -62,6 +62,6 @@ class TheOrderOfARowWorksArmsIsPartOfItsAnswerTest {
 
     private static RowWork work(List<RowWork.Arm> arms) {
         return new RowWork(List.<ClassOfAPosition>of(), arms, List.of(), List.of(), List.of(),
-                List.of());
+                List.of(), List.of());
     }
 }

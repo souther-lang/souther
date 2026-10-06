@@ -34,7 +34,24 @@ public sealed interface ObligationIdentity
                 ObligationIdentity.OfARow, ObligationIdentity.OfAnOutputCase,
                 ObligationIdentity.OfADecisionRule,
                 ObligationIdentity.OfACombinationOfDecisions,
-                ObligationIdentity.OfAFallbackPairCell, WhereACaseOfAnInputIsOwed {
+                ObligationIdentity.OfAFallbackPairCell, ObligationIdentity.OfAReplacement,
+                WhereACaseOfAnInputIsOwed {
+
+    /**
+     * A rewrite of a behavior's body, which is what the replacement account is owed at: a row
+     * telling the rewrite from the body.
+     *
+     * <p>Per behavior, the way an arm's obligation is. A helper's arm is rewritten once in the
+     * source and asked about in every behavior that calls it, and a row of one of them does not
+     * tell the rewrite apart for another.
+     */
+    record OfAReplacement(String behavior, Replacement replacement) implements ObligationIdentity {
+
+        public OfAReplacement {
+            Objects.requireNonNull(behavior, "a rewrite of a body is some behavior's");
+            Objects.requireNonNull(replacement, "an obligation is told apart by something");
+        }
+    }
 
     /** A point of a line, which is what the border accounts are owed at. */
     record OfALine(BorderObligationPoint point) implements ObligationIdentity {

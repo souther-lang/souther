@@ -158,7 +158,8 @@ class TwoRunsOfOnePlanThatDisagreeAboutWhatTheyReadAreRefusedTest {
     void twoPlansOfOneValueAreOneQuestion() {
         GenerationPlan asked = planOver(List.of(A_CLASS), 1);
         GenerationPlan same = GenerationPlan.of(asked.subject(), asked.classesOwed(),
-                asked.armsOwed(), asked.pairsOwed(), asked.meetingsOwed());
+                asked.armsOwed(), asked.pairsOwed(), asked.meetingsOwed(),
+                asked.replacementsOwed(), asked.rewrites());
 
         assertNotSame(asked, same);
         assertEquals(asked, same);

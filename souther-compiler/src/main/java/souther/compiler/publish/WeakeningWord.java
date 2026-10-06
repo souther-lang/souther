@@ -245,5 +245,11 @@ public enum WeakeningWord {
      * <p>Apart from the word above, which is the rules not being in hand. What this takes away is
      * whether a rule read short is taken by a row or owed one, and it bears on that rule alone.
      */
-    DECISION_RULE_READ_SHORT
+    DECISION_RULE_READ_SHORT,
+
+    /**
+     * A rewrite of a body nothing here could decide about: whether a row tells it from the body is
+     * not known. Which of the ways that happens it was is the reason the rewrite's own entry gives.
+     */
+    REWRITE_UNDECIDED
 }

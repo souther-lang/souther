@@ -13,6 +13,9 @@ import souther.compiler.partition.InputClassifications;
 import souther.compiler.partition.MeasuredInput;
 import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.OrderedAffineBoundary;
+import souther.compiler.partition.ReplacementDisposition;
+import souther.compiler.partition.ReplacementOwed;
+import souther.compiler.observe.AnswerObservation;
 import souther.compiler.partition.RowToRun;
 import souther.compiler.partition.RulesTaken;
 import souther.compiler.partition.StandingAtAPoint;
@@ -676,6 +679,16 @@ public record Settlements(List<ObligationIdentity> requested,
                                     RowKey.of(behavior, filling.composed().rowFor(built.rowId())));
                         }
                     }
+                    // The rewrite and not where it was looked for: one rewrite is one row to write
+                    // however many places a run through its arm is recorded at.
+                    case GenerationObligation.Replacement(var target) -> {
+                        if (filling.composed().discharge().at(target)
+                                instanceof ReplacementDisposition.Witnessed(var row)) {
+                            out.put(new ObligationIdentity.OfAReplacement(behavior,
+                                            target.replacement()),
+                                    RowKey.of(behavior, filling.composed().rowFor(row)));
+                        }
+                    }
                 }
             }
             filling.rules().byRule().forEach((rule, row) ->
@@ -748,6 +761,10 @@ public record Settlements(List<ObligationIdentity> requested,
                     // unmade — so it is owed in its own right and not reached through the arms
                     // it claims.
                     case GenerationObligation.Meeting(var target) -> out.add(target);
+                    // A rewrite is owed a row telling it from the body, which no arm or class
+                    // being covered asks for.
+                    case GenerationObligation.Replacement(var target) -> out.add(
+                            new ObligationIdentity.OfAReplacement(behavior, target.replacement()));
                 }
             }
             // And every rule of this behavior's decision a row was asked for, which is not the
@@ -815,6 +832,47 @@ public record Settlements(List<ObligationIdentity> requested,
                 case ObligationIdentity.OfACombinationOfDecisions owed ->
                         makingTheDecisions(asRead, owed);
                 case ObligationIdentity.OfAFallbackPairCell owed -> inBothClasses(row, owed);
+                case ObligationIdentity.OfAReplacement owed -> tellingTheRewrite(asRead, owed);
+            };
+        }
+
+        /**
+         * Whether the rewrite answers the row differently from the body, which is whether writing
+         * down the row's answer tells the two apart.
+         *
+         * <p>Asked of the rewrite this run looked for, which carries where its arm is recorded and
+         * what one value it answers. A rewrite this run was not asked about is one there is nothing
+         * here to run, and a row is not said to settle it or to leave it.
+         */
+        private Settlement tellingTheRewrite(RowAsRead asRead,
+                                             ObligationIdentity.OfAReplacement owed) {
+            if (!behavior.equals(owed.behavior())) {
+                return new Settlement.DoesNotSettle();
+            }
+            ReplacementOwed asked = null;
+            for (GenerationObligation each : obligations) {
+                if (each instanceof GenerationObligation.Replacement(var target)
+                        && target.replacement().equals(owed.replacement())) {
+                    asked = target;
+                }
+            }
+            if (asked == null || asRead.toRun() == null) {
+                return new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);
+            }
+            AnswerObservation rewritten = switch (asked) {
+                case ReplacementOwed.OfAnArm arm ->
+                        trial.runReplacing(asRead.toRun(), arm.replacing()).orElse(null);
+                case ReplacementOwed.ByOneAnswer one ->
+                        new AnswerObservation.Answered(one.answer());
+            };
+            if (rewritten == null) {
+                return new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);
+            }
+            return switch (trial.change(asRead.answer(), rewritten)) {
+                case CHANGED -> new Settlement.Settles();
+                case SAME -> new Settlement.DoesNotSettle();
+                case COULD_NOT_TELL ->
+                        new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);
             };
         }
 

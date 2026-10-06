@@ -205,6 +205,12 @@ public final class Front {
          * compilation that wanted a behavior told apart more finely than its declarations are read
          * exactly is one this lets say so.
          *
+         * <p>A search for a row a rewrite of a body is told on may run thirty-two times, the body
+         * and the rewrite once each per candidate: what it looks through is the classes the
+         * behavior's positions divide into and a value moved off each, and a body rewritten to
+         * answer otherwise answers otherwise on most of them, so a search that has not found one by
+         * then has looked where a row would most likely be.
+         *
          * <p>Held here rather than beside the policy it makes, so that measuring a behavior cannot
          * reach it: what governs a measurement is handed to it, and a default it could pick up is a
          * default two measurements of one behavior can differ by.
@@ -212,7 +218,7 @@ public final class Front {
         static final souther.compiler.partition.AdequacyPolicy STANDARD =
                 new souther.compiler.partition.AdequacyPolicy(
                         new souther.compiler.partition.AdequacyPolicy.OfTheMeasures(20_000, 4096,
-                                PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS),
+                                PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS, 32),
                         new souther.compiler.partition.AdequacyPolicy.OfTheGeneration(200, 4096));
     }
 

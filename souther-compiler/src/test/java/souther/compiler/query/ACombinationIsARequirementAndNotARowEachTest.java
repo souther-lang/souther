@@ -68,6 +68,9 @@ class ACombinationIsARequirementAndNotARowEachTest {
                 // is absent from it — so a rule constrains the positions its own way turns on and
                 // says nothing about the rest, which is the whole of what a combination is about.
                 "ARuleNoRowTakes",
+                // A rewrite of the body no row would fail. Not a combination: what is owed is a row
+                // the rewrite answers differently on, wherever its positions sit.
+                "ARewriteNoRowTellsApart",
                 // A row owed an answer, which is owed at the row. What it is owed at is the thing
                 // somebody wrote, so it is no more about a combination than an arm is — and it is
                 // the one kind here that is read off the source rather than measured.
@@ -111,7 +114,10 @@ class ACombinationIsARequirementAndNotARowEachTest {
         assertEquals(
                 List.of("OfALine", "OfABorder", "OfAnArm", "OfARow", "OfAnOutputCase",
                         "OfADecisionRule",
-                        "OfACombinationOfDecisions", "OfAFallbackPairCell", "OfAClass",
+                        "OfACombinationOfDecisions", "OfAFallbackPairCell",
+                        // A rewrite of the body no row tells apart. Not a combination: it is the
+                        // body answering otherwise, whatever the positions do together.
+                        "OfAReplacement", "OfAClass",
                         "OfAnInputCase"),
                 every, "a thing a row can be offered for that this law says nothing about");
     }

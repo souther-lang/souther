@@ -11,6 +11,8 @@ import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.OrderedAffineBoundary;
+import souther.compiler.partition.Replacement;
+import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.WhereACaseOfAnInputIsOwed;
 import souther.compiler.types.TypeSymbol;
 
@@ -586,6 +588,42 @@ public sealed interface About {
         @Override
         public ObligationIdentity obligationIdentity() {
             return new ObligationIdentity.OfADecisionRule(behavior, ruled.rule());
+        }
+    }
+
+    /**
+     * A rewrite of a body no row tells from the body, where some row shows it answering differently.
+     *
+     * <p>About the rewrite and not about the arm it rewrites. Every row may go through that arm,
+     * which is what the arm's own account asks; what this says is that none of them would fail if
+     * the arm were written as its sibling, or if the body answered one value — and that a row with
+     * {@code shownBy}'s inputs would, once its answer is written down.
+     *
+     * @param behavior    whose body it is a rewrite of
+     * @param replacement which rewrite
+     * @param shownBy     the row the rewrite answers differently on: one the module writes, or one
+     *                    this compiler composed and ran under both
+     * @param lookFor     the rewrite as a search for a row telling it apart is put to it, which is
+     *                    what a generation offering a row for this finding looks for
+     */
+    record ARewriteNoRowTellsApart(String behavior, Replacement replacement,
+                                   ReplacementEvidence.ShownBy shownBy, ReplacementOwed lookFor)
+            implements OfAnObligation {
+
+        public ARewriteNoRowTellsApart {
+            Objects.requireNonNull(behavior, "a rewrite is of some behavior's body");
+            Objects.requireNonNull(replacement, "a finding is about something");
+            Objects.requireNonNull(shownBy, "a rewrite no row tells apart was shown to matter");
+            Objects.requireNonNull(lookFor, "and is one a row telling it apart can be looked for");
+            if (!lookFor.replacement().equals(replacement)) {
+                throw new IllegalArgumentException("a rewrite is looked for as itself: "
+                        + replacement + " and " + lookFor);
+            }
+        }
+
+        @Override
+        public ObligationIdentity obligationIdentity() {
+            return new ObligationIdentity.OfAReplacement(behavior, replacement);
         }
     }
 

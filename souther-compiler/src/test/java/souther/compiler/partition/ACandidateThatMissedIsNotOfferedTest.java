@@ -13,6 +13,7 @@ import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.Runs;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.observe.AnswerObservation;
 import souther.compiler.reading.Interaction;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.query.Adequacy;
@@ -75,8 +76,9 @@ class ACandidateThatMissedIsNotOfferedTest {
     /** A run that did nothing at all, which is a run that missed every combination. Of the
      *  model's own numbering: a run is a run of somewhere, and one of nowhere could be asked about
      *  any place at all and answer. */
-    private static Generator.Watched missed(Model model) {
-        return new Generator.Watched.Ran(Runs.nowhere(model.numbering()));
+    private static Generator.ObservedRun missed(Model model) {
+        return new Generator.ObservedRun(new Generator.Watched.Ran(Runs.nowhere(model.numbering())),
+                new AnswerObservation.NotAnswered());
     }
 
     /**
@@ -107,7 +109,8 @@ class ACandidateThatMissedIsNotOfferedTest {
         AlignedObservation everything = doing(model.numbering(), everyClaimOf(model));
 
         FillResult filled =
-                fill(model, _ -> new Generator.Watched.Ran(everything));
+                fill(model, _ -> new Generator.ObservedRun(new Generator.Watched.Ran(everything),
+                        new AnswerObservation.NotAnswered()));
 
         assertTrue(filled.unresolved().stream().noneMatch(each -> each.why().reason()
                         == Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS),

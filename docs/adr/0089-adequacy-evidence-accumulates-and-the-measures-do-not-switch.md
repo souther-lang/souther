@@ -1,6 +1,6 @@
 # ADR-0089: Adequacy evidence accumulates, and the measures do not switch
 
-Status: Accepted. Establishes the shape every adequacy measure is reported in.
+Status: Accepted. Establishes the shape every adequacy measure is reported in. Extended by ADR-0121.
 
 ## Context
 

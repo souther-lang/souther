@@ -643,6 +643,7 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
         obligationsOf(behavior.get("branch"), out);
         obligationsOf(behavior.get("decision"), out);
         obligationsOf(behavior.get("interaction"), out);
+        obligationsOf(behavior.get("replacement"), out);
         // What the rows themselves owe, which stands whether or not anything was measured.
         behavior.get("rowObligations").forEach(out::add);
         JsonNode signature = behavior.get("signature");

@@ -147,6 +147,14 @@ class AModuleHasOnePlanAndOneMakerOfItTest {
                     + " java.util.List<souther.compiler.coverage.CoverageSites$AnswerSite>",
             "method answers(java.lang.String) :"
                     + " java.util.List<souther.compiler.coverage.CoverageSites$AnswerSite>",
+            // Which siblings each numbered arm carries: asked of a node the way its probes are, and
+            // answered as a value a run can be told.
+            "method carriedAt(souther.compiler.core.Core,int) : int[]",
+            "method replacements() : souther.compiler.coverage.ArmReplacements",
+            // Where a body could answer other than one value, asked by its name and answered with
+            // the places of the arms on each way.
+            "method fromOneValue(java.lang.String) :"
+                    + " souther.compiler.coverage.ArmReplacements$Differs",
             // What a number means, which is the half of a plan that outlives the graph.
             "method numbering() : souther.compiler.coverage.SiteNumbering",
             "method identity() : souther.compiler.coverage.NumberingIdentity",

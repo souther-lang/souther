@@ -121,6 +121,7 @@ class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
         return switch (item) {
             case ObligationIdentity.OfAClass _ -> "class";
             case ObligationIdentity.OfAnArm _ -> "arm";
+            case ObligationIdentity.OfAReplacement _ -> "rewrite";
             case ObligationIdentity.OfALine _ -> "point";
             // Nor for a whole line held against the lines beside it: what would answer that is an
             // input two lines part company at, and rows here are composed at the points of one
