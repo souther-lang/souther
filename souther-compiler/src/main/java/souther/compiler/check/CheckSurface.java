@@ -3,7 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.ReachName;
-import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -64,10 +64,10 @@ public final class CheckSurface implements Assembly {
     /** Which method every value a fixture may call by name runs as, by the value's own declaration —
      *  {@link FixtureValueEntries#emitted}'s correspondence, mint and reuse alike. */
     private final Map<ValueName.Helper, String> fixtureValueMethods;
-    /** Every nullary value this module declares whose body states a type one of this module's own
-     *  behaviors declares a parameter at, keyed by that type — {@link TypedFixtureValues#of}'s
-     *  answer, read once here and never recomputed by a search reading it later. */
-    private final Map<TypeSymbol, List<ReachName.Declaration>> typedFixtureValues;
+    /** Every nullary value this module declares at a type one of this module's own behaviors
+     *  declares a parameter at, keyed by that type — {@link TypedFixtureValues#of}'s answer, read
+     *  once here and never recomputed by a search reading it later. */
+    private final Map<Type, List<ReachName.Declaration>> typedFixtureValues;
     /** Where each behavior gets its body, as the module was classified. Not in the tree: a tree
      *  read off the path has no {@code let} to say, so two surfaces whose trees are the same can
      *  still disagree about this. */
@@ -80,7 +80,7 @@ public final class CheckSurface implements Assembly {
                          List<Hir.Example> examples, FakeTables fakes,
                          List<Hir.FnDef> mintedDefs, Map<Hir.Expr, String> operandMethods,
                          Map<ValueName.Helper, String> fixtureValueMethods,
-                         Map<TypeSymbol, List<ReachName.Declaration>> typedFixtureValues,
+                         Map<Type, List<ReachName.Declaration>> typedFixtureValues,
                          BehaviorBodies bodies) {
         this.settling = settling;
         this.declarations = List.copyOf(declarations);
@@ -216,7 +216,7 @@ public final class CheckSurface implements Assembly {
         // fake names one: a search offering one as a baseline reads the same candidates
         // FixtureValueEntries mints entries for below, rather than finding one only later and
         // falling back to interpreting its body.
-        Map<TypeSymbol, List<ReachName.Declaration>> typedFixtureValues = TypedFixtureValues.of(
+        Map<Type, List<ReachName.Declaration>> typedFixtureValues = TypedFixtureValues.of(
                 written.module(), importedForEvidence, importedLeaves, stdlib, symbols, sums,
                 kinds, fieldWraps, signatures);
         // Every operand a row or a fake writes, walked once: RowFixtures.emitted mints a method for
@@ -335,11 +335,11 @@ public final class CheckSurface implements Assembly {
         return fixtureValueMethods;
     }
 
-    /** Every nullary value this module declares whose body states a type one of this module's own
-     *  behaviors declares a parameter at, keyed by that type — what a search may offer as a
-     *  baseline for a parameter of that type, before any row or fake ever names one ({@link
+    /** Every nullary value this module declares at a type one of this module's own behaviors
+     *  declares a parameter at, keyed by that type — what a search may offer as a baseline for a
+     *  parameter of that type, before any row or fake ever names one ({@link
      *  TypedFixtureValues#of}). */
-    public Map<TypeSymbol, List<ReachName.Declaration>> typedFixtureValues() {
+    public Map<Type, List<ReachName.Declaration>> typedFixtureValues() {
         return typedFixtureValues;
     }
 

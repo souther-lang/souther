@@ -456,8 +456,16 @@ final class TermRealizations {
      */
     sealed interface JointBuilder {
 
+        /**
+         * The values to write at the group's location, answering every number it asks.
+         *
+         * @param inside what the value is asked to hold at positions inside it, which only a way
+         *               that composes a value element by element can take
+         *               ({@link #composesWhatIsInside})
+         */
         Realization from(Type sourceType, SequencedMap<RealizationTarget, AskedAt> demands,
-                         Quantities measuring, SearchRegion within, RuleReadingContext reading);
+                         Quantities measuring, SearchRegion within, RuleReadingContext reading,
+                         DemandsInside inside);
 
         /**
          * One number, whose value is what every other reader of this file asks for.
@@ -473,10 +481,10 @@ final class TermRealizations {
             public Realization from(Type sourceType,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
-                                    RuleReadingContext reading) {
+                                    RuleReadingContext reading, DemandsInside inside) {
                 Map.Entry<RealizationTarget, AskedAt> one = demands.firstEntry();
                 return satisfying(sourceType, measuring.ordersOf(one.getKey().term()),
-                        one.getValue(), within, reading);
+                        one.getValue(), within, reading, inside);
             }
         }
 
@@ -496,7 +504,8 @@ final class TermRealizations {
             public Realization from(Type sourceType,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
-                                    RuleReadingContext reading) {
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
                 Map<TakenAs.TimePart, NumericSet> asked = new LinkedHashMap<>();
                 for (Map.Entry<RealizationTarget, TakenAs.TimePart> each : parts.entrySet()) {
                     asked.put(each.getValue(), demands.get(each.getKey()).walking());
@@ -522,7 +531,8 @@ final class TermRealizations {
             public Realization from(Type sourceType,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
-                                    RuleReadingContext reading) {
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
                 Map<TakenAs.DatePart, NumericSet> asked = new LinkedHashMap<>();
                 for (Map.Entry<RealizationTarget, TakenAs.DatePart> each : parts.entrySet()) {
                     asked.put(each.getValue(), demands.get(each.getKey()).walking());
@@ -565,7 +575,8 @@ final class TermRealizations {
             public Realization from(Type sourceType,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
-                                    RuleReadingContext reading) {
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
                 Carrier observed = rootOf(by.keySet(), measuring);
                 if (observed == null) {
                     return new Realization.None(
@@ -638,7 +649,8 @@ final class TermRealizations {
             public Realization from(Type sourceType,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
-                                    RuleReadingContext reading) {
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
                 TermOrders orders = measuring.ordersOf(itself.term());
                 AskedAt standsAt = demands.get(itself);
                 NumericSet stands = standsAt == null ? null : standsAt.walking();
@@ -711,7 +723,7 @@ final class TermRealizations {
             public Realization from(Type sourceType,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
-                                    RuleReadingContext reading) {
+                                    RuleReadingContext reading, DemandsInside inside) {
                 TermOrders counted = measuring.ordersOf(manyItHolds.term());
                 TermOrders adds = measuring.ordersOf(whatItComesTo.term());
                 AskedAt holdsAt = demands.get(manyItHolds);
@@ -736,7 +748,7 @@ final class TermRealizations {
                 return firstThatBuilds(walkIsOfTheWholeQuestion(demands.values()),
                         onTheOrder(total, adds, comesToAt.named(), within),
                         at -> ContainersAddingUp.to(at, sourceType, adds, within, reading,
-                                holding));
+                                holding, inside));
             }
         }
 
@@ -788,6 +800,24 @@ final class TermRealizations {
                                      Quantities measuring,
                                      SearchRegion within,
                                      RuleReadingContext reading) {
+        return allSatisfying(sourceType, demands, measuring, within, reading,
+                DemandsInside.NOTHING);
+    }
+
+    /**
+     * The same, with the value asked to hold {@code inside} at positions inside it as well.
+     *
+     * <p>Only for a group whose value is composed rather than read ({@link #composesWhatIsInside}).
+     * A value written as one number — a literal, a moment spelled in parts — has no positions
+     * inside it to hold anything, and a caller handing demands to one has asked for a value nothing
+     * here writes.
+     */
+    static Realization allSatisfying(Type sourceType,
+                                     SequencedMap<RealizationTarget, AskedAt> demands,
+                                     Quantities measuring,
+                                     SearchRegion within,
+                                     RuleReadingContext reading,
+                                     DemandsInside inside) {
         // What type the value is written at is the caller's answer and is settled before this is
         // asked. Read here as one more thing that could be missing, a location whose write path
         // this reading has no type for would come back as a group nothing solves — which is a
@@ -799,8 +829,50 @@ final class TermRealizations {
             case JointRealization.Missing(CompositionRepertoire notAllOf) ->
                     new Realization.Unexhausted(CompositionShortfall.writing(Set.of(notAllOf)), null);
             case JointRealization.Supported(JointBuilder builder) ->
-                    builder.from(sourceType, demands, measuring, within, reading);
+                    builder.from(sourceType, demands, measuring, within, reading, inside);
         };
+    }
+
+    /**
+     * Whether the value answering {@code group} is composed element by element, so that what its
+     * elements hold at positions inside them can be asked of it beside the numbers.
+     *
+     * <p>A container filled to a total is: each element is planned and built, and a position the
+     * caller fixed is one more thing the plan is made against. Every other way of writing a value
+     * for a group writes it as one number or reads it off a value it was handed, and nothing inside
+     * such a value is chosen for anything to be asked of.
+     */
+    static boolean composesWhatIsInside(Collection<RealizationTarget> group) {
+        if (!(jointRealizationOf(group) instanceof JointRealization.Supported(JointBuilder builder))) {
+            return false;
+        }
+        return switch (builder) {
+            case JointBuilder.HoldingThatManyAndAddingUpToThat _ -> true;
+            case JointBuilder.OneNumberOnItsOwn _ -> switch (group.iterator().next().term()) {
+                case NumericTerm.TakenOver over ->
+                        over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
+                case NumericTerm.TakenOf taken ->
+                        taken.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
+                case NumericTerm.ValueOf _ -> false;
+            };
+            case JointBuilder.AtThoseTimeParts _, JointBuilder.OnThoseDateParts _,
+                 JointBuilder.SolvingForTheirQuotients _,
+                 JointBuilder.ItsOwnValueAndWhatIsTakenOfIt _ -> false;
+        };
+    }
+
+    /**
+     * Refuses demands inside a value a way of writing one has no positions inside of to hold.
+     *
+     * <p>Asked of {@link #composesWhatIsInside} before anything here is reached, so a caller that
+     * gets this far with demands has handed them to the wrong builder — which is this compiler's
+     * mistake, and said loudly rather than by a value composed as though they were not there.
+     */
+    private static void nothingInside(DemandsInside inside) {
+        if (!inside.isEmpty()) {
+            throw new IllegalArgumentException("a value written as one number holds nothing inside"
+                    + " it to be asked for: " + inside);
+        }
     }
 
     /**
@@ -853,6 +925,13 @@ final class TermRealizations {
     static Realization satisfying(Type sourceType, TermOrders orders, AskedAt asked,
                                   SearchRegion within,
                                   RuleReadingContext reading) {
+        return satisfying(sourceType, orders, asked, within, reading, DemandsInside.NOTHING);
+    }
+
+    /** The same, with the value asked to hold {@code inside} at positions inside it as well. */
+    private static Realization satisfying(Type sourceType, TermOrders orders, AskedAt asked,
+                                          SearchRegion within,
+                                          RuleReadingContext reading, DemandsInside inside) {
         if (sourceType == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
@@ -867,11 +946,14 @@ final class TermRealizations {
             // written as a literal of another — which is how a date-time's second count reached a
             // row as an `Int`, and the decoder refused it with the report saying only that every
             // value tried had been refused.
-            case NumericTerm.ValueOf _ -> standing(sourceType, orders, asked, within, reading);
+            case NumericTerm.ValueOf _ -> {
+                nothingInside(inside);
+                yield standing(sourceType, orders, asked, within, reading);
+            }
             case NumericTerm.TakenOf taken -> taken(taken.takenAs(), taken.arguments(), sourceType,
-                    orders, asked, within, reading);
+                    orders, asked, within, reading, inside);
             case NumericTerm.TakenOver over -> overARun(over.takenAs(), sourceType, orders,
-                    asked, within, reading);
+                    asked, within, reading, inside);
         };
     }
 
@@ -929,9 +1011,13 @@ final class TermRealizations {
     private static Realization taken(TakenAs how, TakenArguments arguments, Type sourceType,
                                      TermOrders orders, AskedAt asked,
                                      SearchRegion within,
-                                     RuleReadingContext reading) {
+                                     RuleReadingContext reading, DemandsInside inside) {
         RuleReadingSource ruleSource = reading.source();
         NumericSet wanted = asked.walking();
+        // Only a total is composed element by element, so only it has anything inside to hold.
+        if (!(how instanceof TakenAs.TheSumOfWhatItHolds)) {
+            nothingInside(inside);
+        }
         return switch (how) {
             // A container has no order of its own and is built out of what it holds, so this arm
             // takes none. That is the arm's own answer and not an order standing in for nothing.
@@ -941,7 +1027,7 @@ final class TermRealizations {
             // of them holds — one question whether the number is added up out of the container
             // itself or out of a path inside its elements, and answered for both in one place.
             case TakenAs.TheSumOfWhatItHolds _ -> addingUp(asked, sourceType, orders,
-                    within, reading);
+                    within, reading, inside);
             // And this one writes on the order the value is written on. Written on the order the
             // answer is measured on, the thirteenth hour would be offered as the thirteenth second —
             // the same mistake the reading makes in the other direction, which is why the pair
@@ -1044,7 +1130,7 @@ final class TermRealizations {
      *  this number to be there. */
     private static Realization addingUp(AskedAt asked, Type sourceType, TermOrders orders,
                                         SearchRegion within,
-                                        RuleReadingContext reading) {
+                                        RuleReadingContext reading, DemandsInside inside) {
         if (orders.answered() == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
@@ -1058,7 +1144,8 @@ final class TermRealizations {
         // taken over a run would be asked about a carrier the run has and the number does not.
         return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                 onTheOrder(asked.walking(), orders, asked.named(), within),
-                total -> ContainersAddingUp.to(total, sourceType, orders, within, reading));
+                total -> ContainersAddingUp.to(total, sourceType, orders, within, reading,
+                        inside));
     }
 
     /**
@@ -1622,13 +1709,16 @@ final class TermRealizations {
     private static Realization overARun(TakenAs how, Type sourceType,
                                         TermOrders orders, AskedAt asked,
                                         SearchRegion within,
-                                        RuleReadingContext reading) {
+                                        RuleReadingContext reading, DemandsInside inside) {
         return switch (how) {
             case TakenAs.TheSumOfWhatItHolds _ -> addingUp(asked, sourceType, orders,
-                    within, reading);
+                    within, reading, inside);
             case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _,
-                    TakenAs.TheTruncatingQuotient _ -> new Realization.None(
-                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    TakenAs.TheTruncatingQuotient _ -> {
+                nothingInside(inside);
+                yield new Realization.None(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            }
         };
     }
 

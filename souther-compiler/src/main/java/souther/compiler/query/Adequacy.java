@@ -62,8 +62,15 @@ import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BodyDistinction;
 import souther.compiler.partition.CameToNothing;
+import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.ClassOfAPosition;
+import souther.compiler.partition.ComparisonHeld;
 import souther.compiler.partition.DomainPoint;
+import souther.compiler.partition.LevelRealizer;
+import souther.compiler.partition.MeasuredInput;
+import souther.compiler.partition.ReachingCuts;
+import souther.compiler.partition.Realization;
+import souther.compiler.types.ModelOccurrence;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.PointRole;
 import souther.compiler.inputs.AnInputRead;
@@ -4397,6 +4404,9 @@ public final class Adequacy {
                         // before the search so that a candidate is run in the environment the row
                         // it becomes goes out with.
                         supplying(db, name, behavior, subject),
+                        // And what gets a row past each comparison of the body, read off the
+                        // borders the search above already walked.
+                        heldBy(subject, edges, divided.reaching()),
                         db.ask(new Front.Adequacy()).value().generation());
             } catch (LinkageError _) {
                 // The generated classes would not link, so nothing can be built to find out
@@ -5147,16 +5157,12 @@ public final class Adequacy {
          * built the fixture entry a search's own name reads through at whatever either forgot.
          */
         static List<Generator.Baseline> named(Hir.SpecBehavior spec, Sig sig,
-                Map<TypeSymbol, List<ReachName.Declaration>> typedFixtureValues) {
+                Map<Type, List<ReachName.Declaration>> typedFixtureValues) {
             List<Hir.Param> takes = spec.params();
             List<Generator.Baseline> out = new ArrayList<>();
             for (int p = 0; p < takes.size() && p < sig.inputTypes().size(); p++) {
-                if (!(sig.inputTypes().get(p) instanceof souther.compiler.types.Type.Ref(
-                        TypeSymbol of))) {
-                    continue;
-                }
-                for (ReachName.Declaration value
-                        : typedFixtureValues.getOrDefault(of, List.of())) {
+                for (ReachName.Declaration value : typedFixtureValues.getOrDefault(
+                        sig.inputTypes().get(p), List.of())) {
                     Generator.Baseline origin = Generator.Baseline.stating(takes.get(p).name(),
                             new Generator.Baseline.Named(value));
                     if (!out.contains(origin)) {
@@ -5167,6 +5173,73 @@ public final class Adequacy {
             return out;
         }
 
+        /**
+         * What brings each comparison of this behavior's body out each way, worked out for a
+         * comparison and a way when a generation asks about them and kept for the next asking.
+         *
+         * <p>The place a point of the comparison's border is composed at, on the side the
+         * comparison comes out on and against the line where there is a point there: what a row
+         * needs to get the comparison to come out that way is to be on that side, and the point
+         * against the line is the one the border's own search composes first. Found the way that
+         * search finds it — the point's standing, under what the way to the comparison leaves, put
+         * to the realizer — so a row held to this is held to the same demand a row at the point is.
+         *
+         * <p>Empty where the border offers no such point or nothing was found there. Which is
+         * that this compiler has no demand to hand over, and never that the comparison does not
+         * come out that way.
+         */
+        private static ComparisonHeld.Of heldBy(MeasuredInput subject,
+                                                List<BorderAssessment> edges,
+                                                ReachingCuts reaching) {
+            Map<ControlPlace.Outcome, Optional<ComparisonHeld>> found = new LinkedHashMap<>();
+            return outcome -> found.computeIfAbsent(outcome,
+                    asked -> holding(subject, edges, reaching, asked));
+        }
+
+        /**
+         * What brings the comparison out the way {@code outcome} says, worked out once.
+         *
+         * <p>The side is which of the border's roles stand inside it: a point in {@link PointRole#ON}
+         * or {@link PointRole#IN} is one the comparison holds at, and one in {@link PointRole#OFF}
+         * or {@link PointRole#OUT} one it fails at.
+         */
+        private static Optional<ComparisonHeld> holding(MeasuredInput subject,
+                                                        List<BorderAssessment> edges,
+                                                        ReachingCuts reaching,
+                                                        ControlPlace.Outcome outcome) {
+            for (BorderAssessment edge : edges) {
+                Optional<ModelOccurrence> comparison = edge.border().origin().comparisonAt();
+                if (!edge.border().origin().recordedAt().contains(outcome.at())
+                        || comparison.isEmpty()) {
+                    continue;
+                }
+                if (!(souther.compiler.partition.Reachability.of(reaching.wayTo(comparison.get()),
+                        subject.quantities().region())
+                        instanceof souther.compiler.partition.Reachability.Reaching able)) {
+                    return Optional.empty();   // nothing takes the way to it
+                }
+                List<PointRole> onThatSide = outcome.held()
+                        ? List.of(PointRole.ON, PointRole.IN)
+                        : List.of(PointRole.OFF, PointRole.OUT);
+                for (PointRole wanted : onThatSide) {
+                    for (Map.Entry<DomainPoint, ItemAssessment> point : edge.items().entrySet()) {
+                        if (edge.border().roleOf(point.getKey()) != wanted
+                                || !(point.getValue() instanceof ItemAssessment.Owed owed)) {
+                            continue;
+                        }
+                        BorderQuantity quantity = subject.at(edge.border()).quantity();
+                        if (new LevelRealizer().realize(quantity.standingAt(owed.criterion()),
+                                able.region(), subject.witnessSearch())
+                                instanceof Realization.Found at) {
+                            return Optional.of(new ComparisonHeld(at.fixing(),
+                                    quantity.asksOfEachTerm(owed.criterion()), able));
+                        }
+                    }
+                }
+            }
+            return Optional.empty();
+        }
+
         private static souther.compiler.partition.FillResult rowsFor(
                 Hir.SpecBehavior spec, Sig sig, CoverageRead.Read met,
                 souther.compiler.partition.GenerationPlan asked,
@@ -5174,6 +5247,7 @@ public final class Adequacy {
                 Optional<SiteNumbering> numbering, RowReading observed,
                 FixturesAtTheBoundary building,
                 Generator.Trial trial, List<souther.compiler.partition.StandInAttempt> stood,
+                ComparisonHeld.Of holding,
                 souther.compiler.partition.AdequacyPolicy.OfTheGeneration budget) {
             if (observed.someRowsUnseen()) {
                 // Rows exist that nothing read. What they cover is unknown, so what is left uncovered
@@ -5215,7 +5289,7 @@ public final class Adequacy {
                 // The outcome alone, because these are the answers of a way that asks nothing of
                 // them: there is no demand here for anything to have fallen short of.
                 searched.add(Generator.fill(asked, existing, check, met,
-                        trial, baselines, each.outcome(), budget));
+                        trial, baselines, each.outcome(), holding, budget));
             }
             return souther.compiler.partition.FillResult.acrossRuns(searched);
         }

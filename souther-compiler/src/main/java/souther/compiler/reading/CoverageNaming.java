@@ -13,13 +13,13 @@ import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.ComparedNumbers;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ResolvedCase;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * The conditions along a path, said of the input positions they are about and of the places a run
@@ -106,16 +106,14 @@ final class CoverageNaming implements Naming<Outcome> {
             // it, so there is nothing here to say. The fork on it is named where the way in is.
             return null;
         }
-        ConstructOccurrence site = plan.comparisons().occurrenceAt(comparison)
-                .filter(plan::instruments).orElse(null);
         // The one reading of this comparison, which is the reading whatever admitted the way used.
         // Read again here, the decision would be said of a number the admission never saw.
         ComparedNumber drawn = numbers.of(comparison, reads);
-        if (site == null || drawn == null) {
+        if (drawn == null) {
             return null;
         }
         NumericTerm at = drawn.term();
-        ControlPlace.Outcome outcome = plan.outcomeOf(site, held).orElse(null);
+        ControlPlace.Outcome outcome = outcomeAt(plan, comparison, held).orElse(null);
         if (outcome == null) {
             return null;
         }
@@ -128,6 +126,20 @@ final class CoverageNaming implements Naming<Outcome> {
                 .map(claim -> one(new Decision(
                         new Condition.Side(at, outcome.comparison(), held), claim)))
                 .orElse(null);
+    }
+
+    /**
+     * The place {@code comparison} coming out {@code held} is recorded at, or empty where the plan
+     * records no run through it.
+     *
+     * <p>The one way from a comparison of the tree that runs to where a run is seen making it, for
+     * every naming of a body that says what a run would be seen doing.
+     */
+    static Optional<ControlPlace.Outcome> outcomeAt(CoverageSites.Plan plan,
+                                                    Core.Binary comparison, boolean held) {
+        return plan.comparisons().occurrenceAt(comparison)
+                .filter(plan::instruments)
+                .flatMap(site -> plan.outcomeOf(site, held));
     }
 
     /** Which case of the union this arm is, said of the position matched on where there is one, or

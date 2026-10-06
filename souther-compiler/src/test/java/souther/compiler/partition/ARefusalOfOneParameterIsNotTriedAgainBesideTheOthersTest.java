@@ -216,7 +216,7 @@ class ARefusalOfOneParameterIsNotTriedAgainBesideTheOthersTest {
         Sig sig = compilation.db().ask(new Bodies.Signatures(module)).value().get("decide");
         assertNotNull(sig, "the behavior has a signature");
         Type.Ref left = assertInstanceOf(Type.Ref.class, sig.inputTypes().get(0));
-        assertEquals(1, surface.typedFixtureValues().getOrDefault(left.name(), List.of()).size(),
+        assertEquals(1, surface.typedFixtureValues().getOrDefault(left, List.of()).size(),
                 "the module states one value of the first parameter, which rows are written against");
         Map<String, Adequacy.Filling> generated = Adequacy.generatedOf(compilation.db(), module);
         assertNotNull(generated, "the model compiles");

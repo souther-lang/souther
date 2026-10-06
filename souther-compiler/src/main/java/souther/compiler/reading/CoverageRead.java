@@ -142,16 +142,30 @@ public final class CoverageRead {
      *                     matches on. Whole ways and never the decisions on them one at a time,
      *                     since a decision tells apart only what arrives where it is made — a
      *                     comparison under another one is made of the values the first let through
+     * @param restOfTheBlock for each arm by which a run leaves a {@code guard} whose condition did
+     *                       not hold, the arm the rest of the block is — which is where a run that
+     *                       got past the guard went on — and the comparisons the guard decides by.
+     *                       Both arms are arms of this read
      */
     public record Read(List<Interaction> interactions,
                        java.util.SequencedMap<ArmProbe, PathAccess> arms,
-                       List<WayIn> taken) {
+                       List<WayIn> taken,
+                       java.util.SequencedMap<ArmProbe, TheRestOfTheBlock> restOfTheBlock) {
 
         public Read {
             interactions = List.copyOf(interactions);
             taken = List.copyOf(taken);
             arms = java.util.Collections.unmodifiableSequencedMap(
                     new java.util.LinkedHashMap<>(arms));
+            restOfTheBlock = java.util.Collections.unmodifiableSequencedMap(
+                    new java.util.LinkedHashMap<>(restOfTheBlock));
+            for (java.util.Map.Entry<ArmProbe, TheRestOfTheBlock> each
+                    : restOfTheBlock.entrySet()) {
+                if (!arms.containsKey(each.getKey()) || !arms.containsKey(each.getValue().arm())) {
+                    throw new IllegalArgumentException("a guard's two arms are arms of the read"
+                            + " that says where its block goes on: " + each);
+                }
+            }
         }
 
         /** How arm {@code probe} is reached, by the number the plan gave it. */
@@ -195,7 +209,8 @@ public final class CoverageRead {
         for (Interaction group : found) {
             walked.takesAt(group);
         }
-        return new Read(found, arms.found(behavior), List.copyOf(walked.taken));
+        return new Read(found, arms.found(behavior), List.copyOf(walked.taken),
+                arms.restOfTheBlock(behavior, body));
     }
 
     /**

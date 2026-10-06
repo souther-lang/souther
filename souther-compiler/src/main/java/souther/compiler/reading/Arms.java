@@ -5,9 +5,18 @@ import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.SourceOutcome;
+import souther.compiler.flow.ValueArrivals;
+import souther.compiler.flow.Ways;
+import souther.compiler.types.SourceConstruct;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.SequencedMap;
 
 /**
  * How each arm of a body is reached, one answer per arm the plan numbered.
@@ -32,6 +41,10 @@ final class Arms {
     private final Map<ArmProbe, PathAccess> byArm =
             new LinkedHashMap<>();
 
+    /** The fork each arm was met under, as the node the walk met it at. Two splices of one helper
+     *  are two nodes, which is what makes them two forks. */
+    private final Map<ArmProbe, Core> forkOf = new LinkedHashMap<>();
+
     Arms(CoverageSites.Plan plan) {
         this.plan = plan;
     }
@@ -49,8 +62,67 @@ final class Arms {
         if (arms == null || part < 0 || part >= arms.length || arms[part] == null) {
             return;
         }
-        ControlClaim.of(arms[part]).ifPresent(arrivesAt ->
-                byArm.put(arms[part].probe().get(), reach.told(arrivesAt)));
+        ControlClaim.of(arms[part]).ifPresent(arrivesAt -> {
+            byArm.put(arms[part].probe().get(), reach.told(arrivesAt));
+            forkOf.put(arms[part].probe().get(), fork);
+        });
+    }
+
+    /**
+     * For each arm of {@code behavior} that leaves a {@code guard} because its condition did not
+     * hold, the arm of the same guard that is the rest of the block and each way its condition lets
+     * a run go on there.
+     *
+     * <p>Paired by the node the walk met them at — compared as that object, since two splices of
+     * one helper are two guards and a run past one has not passed the other.
+     *
+     * <p>The ways are read off {@code body} by the walk that reads it, named for what a run would
+     * be seen doing ({@link WhatARunIsSeenDoing}), and asked of each guard's condition. Over the
+     * whole body and not the condition alone, because what a name in the condition stands for is
+     * what the body bound it to above. Not walked where the body has no guard.
+     */
+    SequencedMap<ArmProbe, TheRestOfTheBlock> restOfTheBlock(String behavior, Core body) {
+        Map<Core, ArmProbe> heldAt = new IdentityHashMap<>();
+        List<CoverageSites.ArmSite> sites = plan.arms(behavior);
+        for (CoverageSites.ArmSite arm : sites) {
+            if (arm.construct() == SourceConstruct.GUARD
+                    && arm.outcome() instanceof SourceOutcome.Held) {
+                heldAt.put(forkOf.get(arm.index()), arm.index());
+            }
+        }
+        SequencedMap<ArmProbe, TheRestOfTheBlock> out = new LinkedHashMap<>();
+        ValueArrivals<List<ControlClaim>> seen = null;
+        for (CoverageSites.ArmSite arm : sites) {
+            Core fork = forkOf.get(arm.index());
+            ArmProbe goesOn = heldAt.get(fork);
+            if (arm.construct() != SourceConstruct.GUARD
+                    || !(arm.outcome() instanceof SourceOutcome.Failed) || goesOn == null
+                    || !(fork instanceof Core.If guard)) {
+                continue;
+            }
+            if (seen == null) {
+                WhatARunIsSeenDoing naming = new WhatARunIsSeenDoing(plan);
+                seen = ValueArrivals.ofBody(body, naming, naming.eitherWay());
+            }
+            List<List<ControlClaim>> ways =
+                    seen.waysTo(guard.cond(), partOf(fork, goesOn) == 0)
+                            instanceof Ways.Known<List<ControlClaim>> known
+                            ? known.paths() : List.of();
+            out.put(arm.index(), new TheRestOfTheBlock(goesOn, ways));
+        }
+        return Collections.unmodifiableSequencedMap(out);
+    }
+
+    /** Which arm of {@code fork} the plan numbered {@code probe}. */
+    private int partOf(Core fork, ArmProbe probe) {
+        ControlPlace.Arm[] arms = plan.armsOf(fork);
+        for (int part = 0; part < arms.length; part++) {
+            if (arms[part] != null && arms[part].probe().equals(Optional.of(probe))) {
+                return part;
+            }
+        }
+        throw new IllegalStateException(
+                "arm " + probe + " was recorded under a fork the plan numbers no such arm of");
     }
 
     /**
