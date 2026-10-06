@@ -25,6 +25,7 @@ import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.AnswerChange;
@@ -1826,8 +1827,9 @@ public final class Generator {
                     List<Purpose> purposes = List.of(new Purpose.ForAReplacement(asked));
                     GeneratedRow seen = composed(axes, composes(axes.axes()),
                             HeldTogether.Asked.NOTHING, check, Map.of(),
-                            inputs -> looking.of(new GeneratedRow(purposes, inputs, answers),
-                                    null))
+                            atMost(MOST_REPAIRS, looking::composingStopped,
+                                    inputs -> looking.of(new GeneratedRow(purposes, inputs,
+                                            answers), null)))
                             instanceof RowComposed.Taken(List<FixtureTemplate> inputs)
                             ? new GeneratedRow(purposes, inputs, answers) : null;
                     for (int at = 0; at < axes.size() && seen == null; at++) {
@@ -2778,9 +2780,22 @@ public final class Generator {
          * One candidate, its values chosen again until a row holding every pin is one
          * {@link #accepts} takes. A row outside a pin is passed over the way one the caller passes
          * over is, since another choice of values may land inside it.
+         *
+         * <p>Every row composed after the candidate's first is a build of its own, counted against
+         * the same figure the candidates are. Choosing again walks every assignment of every
+         * parameter against every one of the others, which multiplies; uncounted, one candidate
+         * could cost more than every other candidate of the search together.
          */
         private Taken rechoosing(Candidate candidate, Map<String, Written> given) {
+            boolean[] first = {true};
             RowComposed came = composed(axes, candidate.where(), held, check, given, inputs -> {
+                if (!first[0]) {
+                    if (builds >= most) {
+                        return Acceptance.STOPPED;   // the rows past here are the work nobody did
+                    }
+                    builds++;
+                }
+                first[0] = false;
                 if (!pins.holds(axes, inputs, check)) {
                     return Acceptance.PASSED;
                 }
@@ -6409,8 +6424,8 @@ public final class Generator {
             // The values, and no name. What a row is about is what it was composed for, which is
             // the caller's question and not this one's: this is handed an assignment and does not
             // know whether it is a class, a combination the body decides together, or an edge.
-            // Named here from the assignment, every row said every position it happened to hold —
-            // which is what put three classes in the name of a row composed for one (issue #967).
+            // Named here from the assignment, a row would say every position it happened to hold,
+            // and a row composed for one class would carry three in its name.
             case RowComposed.Taken(List<FixtureTemplate> inputs) ->
                     Attempt.of(new GeneratedRow(List.of(new Purpose.Unstated()), inputs, answers));
             case RowComposed.Failed(Attempt why) -> why;
@@ -6435,6 +6450,24 @@ public final class Generator {
 
         /** The first row composed, which is what every search but a witness's wants. */
         RowTaking FIRST = _ -> Acceptance.TAKEN;
+    }
+
+    /**
+     * {@code taking}, handed at most {@code most} rows: the one after is refused as the work nobody
+     * did, and {@code reached} is told. A walk handing rows on until one is taken goes through every
+     * assignment of every parameter against every one of the others, so it is bounded by how many
+     * rows it composes and not only by what is done with each.
+     */
+    private static RowTaking atMost(int most, Runnable reached, RowTaking taking) {
+        int[] handed = {0};
+        return inputs -> {
+            if (handed[0] >= most) {
+                reached.run();
+                return Acceptance.STOPPED;
+            }
+            handed[0]++;
+            return taking.take(inputs);
+        };
     }
 
     /** What composing one candidate came to, for a caller that may pass rows over. */
@@ -6774,12 +6807,12 @@ public final class Generator {
             // everything it was given did so over less than there was — so a reader is told both
             // what happened and that a number of this compiler's is why it happened over so little.
             case Outcome.Limited(UnresolvedCombination.Reason why, String detail,
-                                 java.util.Set<CompositionBudget> by) ->
+                                 Set<CompositionBudget> by) ->
                     new RowComposed.Failed(Attempt.no(why, detail, new LinkedHashMap<>(),
                             CompositionShortfall.of(by)).localTo(p));
             // A value nothing planned, in the word for a reading no search could be made of, with
             // the figure that left the plan unable to reach what was asked for.
-            case Outcome.Unplanned(java.util.Set<CompositionBudget> by) ->
+            case Outcome.Unplanned(Set<CompositionBudget> by) ->
                     new RowComposed.Failed(Attempt.no(UnresolvedCombination.Reason
                             .NO_READING_OF_THE_LINE_COULD_BE_SEARCHED, null, new LinkedHashMap<>(),
                             CompositionShortfall.of(by)).localTo(p));
@@ -7472,7 +7505,7 @@ public final class Generator {
 
         Choices {
             missingUnderAFigure = Set.copyOf(missingUnderAFigure);
-            displacing = java.util.Collections.unmodifiableList(new ArrayList<>(displacing));
+            displacing = Collections.unmodifiableList(new ArrayList<>(displacing));
         }
 
         static Choices missing(ConstructionPlan plan, String at,
@@ -7551,13 +7584,13 @@ public final class Generator {
                 java.util.Collections.nCopies(paths.size(), List.<FixtureTemplate>of()));
         // And is not displaced either, for the same reason.
         List<Displacing> displacing =
-                new ArrayList<>(java.util.Collections.nCopies(paths.size(), (Displacing) null));
+                new ArrayList<>(Collections.nCopies(paths.size(), (Displacing) null));
         for (ConstructionPlan.Slot slot : plan.slots()) {
             if (paths.contains(slot.at())) {
                 continue;   // an axis decides here
             }
             RuleKey field = fieldUnder(slot.at());
-            souther.compiler.numeric.NumericDomain.Bounds here =
+            NumericDomain.Bounds here =
                     field == null ? null : left.at(field).bounds();
             List<FixtureTemplate> stands = Partitions.representativesHolding(slot.type(), reading,
                     here, field == null ? null : left.heldAt(field));
@@ -7581,11 +7614,11 @@ public final class Generator {
             displacing.add(new Displacing(slot.type(), here,
                     field == null ? null : left.heldAt(field)));
         }
-        return new Choices(plan, paths, values, reserves, null, java.util.Set.of(), displacing);
+        return new Choices(plan, paths, values, reserves, null, Set.of(), displacing);
     }
 
     /** What a position's value is displaced within: its type, and what its rules leave of it. */
-    private record Displacing(Type type, souther.compiler.numeric.NumericDomain.Bounds within,
+    private record Displacing(Type type, NumericDomain.Bounds within,
                               FieldDomains.Held held) {}
 
     /**
@@ -8110,7 +8143,7 @@ public final class Generator {
         // behind several of them.
         if (stopped) {
             return new Outcome.Stopped(CompositionShortfall.of(
-                    java.util.Set.of(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES)),
+                    Set.of(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES)),
                     new LinkedHashMap<>(), null);
         }
         return passed ? new Outcome.PassedOver()

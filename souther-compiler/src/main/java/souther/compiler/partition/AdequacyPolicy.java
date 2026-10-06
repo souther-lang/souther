@@ -166,7 +166,7 @@ public record AdequacyPolicy(OfTheMeasures measures, OfTheGeneration generation)
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(pairSpace, cellsPerGroup, behaviorDistinctions,
+            return Objects.hash(pairSpace, cellsPerGroup, behaviorDistinctions,
                     rewriteRuns);
         }
 

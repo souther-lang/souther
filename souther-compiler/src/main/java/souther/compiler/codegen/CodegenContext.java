@@ -1,6 +1,7 @@
 package souther.compiler.codegen;
 
 import souther.compiler.check.AtomSpace;
+import souther.compiler.core.Core;
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
@@ -269,13 +270,13 @@ final class CodegenContext {
      * The forks whose arms are written without their siblings: the ones a method they stood in could
      * not hold with them. Asked by identity, for the reason the plan is.
      */
-    private Set<souther.compiler.core.Core> notCarrying =
+    private Set<Core> notCarrying =
             Collections.newSetFromMap(new IdentityHashMap<>());
 
     /** Every fork this emission wrote a sibling into, in the order it did. */
-    private final List<souther.compiler.core.Core> carriedSoFar = new ArrayList<>();
+    private final List<Core> carriedSoFar = new ArrayList<>();
 
-    void setNotCarrying(Set<souther.compiler.core.Core> forks) {
+    void setNotCarrying(Set<Core> forks) {
         this.notCarrying = forks;
     }
 
@@ -286,7 +287,7 @@ final class CodegenContext {
     }
 
     /** The forks written with a sibling since {@code from}. */
-    List<souther.compiler.core.Core> carriedSince(int from) {
+    List<Core> carriedSince(int from) {
         return List.copyOf(carriedSoFar.subList(from, carriedSoFar.size()));
     }
 
@@ -395,7 +396,7 @@ final class CodegenContext {
      * and going on would leave an arm that ran reported as one no row reaches, which reads as a gap in
      * the model rather than as a fault in the measurement.
      */
-    int[] probesOf(souther.compiler.core.Core node) {
+    int[] probesOf(Core node) {
         int[] arms = coverage.probesOf(node);
         if (arms == null) {
             throw new IllegalStateException("no probe was planned for a "
@@ -407,7 +408,7 @@ final class CodegenContext {
 
     /** The parts of the siblings the measuring classes carry in arm {@code part} of {@code node}:
      *  none at a fork a method could not hold them in, and the plan's everywhere else. */
-    int[] carriedAt(souther.compiler.core.Core node, int part) {
+    int[] carriedAt(Core node, int part) {
         if (notCarrying.contains(node)) {
             return new int[0];
         }
@@ -427,7 +428,7 @@ final class CodegenContext {
      * is most of them.
      */
     java.util.Optional<souther.compiler.coverage.ComparisonEmissionSite> comparisonSiteOf(
-            souther.compiler.core.Core comparison) {
+            Core comparison) {
         // Which comparison the node is, then where a run through it is written down: the catalog
         // answers the first for every comparison the bodies hold, and the plan the second for the
         // ones it instruments. The emitter is walking the tree, so the node is how it gets in.

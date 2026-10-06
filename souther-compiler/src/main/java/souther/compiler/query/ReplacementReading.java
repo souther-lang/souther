@@ -20,12 +20,14 @@ import souther.compiler.observe.RowRef;
 import souther.compiler.partition.ReplacementOwed;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -70,7 +72,10 @@ public final class ReplacementReading {
             /** A row that states an answer could not be read, or neither held nor failed of the
              *  body as written, so whether it comes out differently under the rewrite is not
              *  known. */
-            A_STATEMENT_WAS_NOT_READ
+            A_STATEMENT_WAS_NOT_READ,
+            /** A row through the arm has no run under the rewrite that came back telling, so
+             *  whether it comes out differently is not known. */
+            A_RUN_DID_NOT_COME_BACK
         }
     }
 
@@ -97,8 +102,9 @@ public final class ReplacementReading {
 
     /**
      * Every rewrite of {@code behavior}'s body {@code plan} can put to a row, and what {@code rows}
-     * came to about each: the siblings of each arm in {@code reached}, in the order the plan numbered
-     * the arms, or, where there are none, the body answering each value a row came to.
+     * came to about each: the siblings of each arm a row stating its answer went through, by
+     * {@code wentThrough}, in the order the plan numbered the arms, or, where there are none, the
+     * body answering each value a row came to.
      *
      * <p>Only the arms a row reaches. What a rewrite of an arm asks is whether a row going through
      * it depends on what it answers, which is a question about the rows that go through it. The arms
@@ -115,9 +121,19 @@ public final class ReplacementReading {
      * a rewrite there is one no run could be asked for.
      */
     public static List<Account> of(String behavior, CoverageSites.Plan plan,
-                                   ArmReplacements carried, Set<ArmProbe> reached,
+                                   ArmReplacements carried,
+                                   Function<RowOutcome, Set<ArmProbe>> wentThrough,
                                    Predicate<ControlPlace.Arm> unreached,
                                    List<RowOutcome> rows, Comparing comparing) {
+        // The arms a row stating its answer went through. An arm no row reaches is owed a row under
+        // its own code, and one only a row waiting for its answer reaches is too; a rewrite of
+        // either is one no row could notice, and saying so would be the same gap said twice.
+        Set<ArmProbe> reached = new HashSet<>();
+        for (RowOutcome row : rows) {
+            if (row.expectation() != ExpectationState.OWED) {
+                reached.addAll(wentThrough.apply(row));
+            }
+        }
         List<Account> out = new ArrayList<>();
         Map<Replacement.OfAnArm, List<ArmProbe>> occurrences = new LinkedHashMap<>();
         for (CoverageSites.ArmSite site : plan.arms(behavior)) {
@@ -142,7 +158,7 @@ public final class ReplacementReading {
             }
         }
         occurrences.forEach((replaced, where) -> out.add(new Account(replaced,
-                armStanding(replaced, where, carried, rows))));
+                armStanding(replaced, where, carried, rows, wentThrough))));
         // One answer only where no arm is rewritten. A body the rows go through a fork of is asked
         // about the fork, arm by arm. And not where the body answers one value already: every way
         // to an answer that reads something, or that is another answer, closed by the rules.
@@ -152,8 +168,17 @@ public final class ReplacementReading {
         return List.copyOf(out);
     }
 
+    /**
+     * What the rows came to about one rewrite of an arm.
+     *
+     * <p>Every row that went through the arm and states something is asked, and one whose run
+     * under the rewrite is not in hand, or came back telling nothing, may be the row that tells it
+     * apart — so the rewrite is left open rather than called unnoticed on the strength of the rows
+     * that did come back.
+     */
     private static Standing armStanding(Replacement.OfAnArm replaced, List<ArmProbe> where,
-                                        ArmReplacements replacements, List<RowOutcome> rows) {
+                                        ArmReplacements replacements, List<RowOutcome> rows,
+                                        Function<RowOutcome, Set<ArmProbe>> wentThrough) {
         for (ArmReplacements.AtSite at : replacements.ofArm(replaced.fork(), replaced.part())) {
             if (at.siblings().get(replaced.with())
                     instanceof ArmReplacements.Sibling.NotCarried(var why, var _)) {
@@ -163,19 +188,29 @@ public final class ReplacementReading {
             }
         }
         RowIdentity shownBy = null;
+        boolean unknown = false;
         for (RowOutcome row : rows) {
-            for (ReplacedRun run : row.replaced()) {
-                if (!run.fork().equals(replaced.fork()) || run.part() != replaced.part()
-                        || run.with() != replaced.with()) {
-                    continue;
-                }
-                if (run.noticed() == ReplacedRun.Noticed.YES) {
-                    return new Standing.Noticed(row.identity());
-                }
-                if (shownBy == null && run.changed() == AnswerChange.CHANGED) {
-                    shownBy = row.identity();
-                }
+            if (row.expectation() == ExpectationState.OWED
+                    || where.stream().noneMatch(wentThrough.apply(row)::contains)) {
+                continue;
             }
+            ReplacedRun run = row.replaced().stream()
+                    .filter(each -> each.fork().equals(replaced.fork())
+                            && each.part() == replaced.part() && each.with() == replaced.with())
+                    .findFirst().orElse(null);
+            if (run == null || run.noticed() == ReplacedRun.Noticed.COULD_NOT_TELL) {
+                unknown = true;
+                continue;
+            }
+            if (run.noticed() == ReplacedRun.Noticed.YES) {
+                return new Standing.Noticed(row.identity());
+            }
+            if (shownBy == null && run.changed() == AnswerChange.CHANGED) {
+                shownBy = row.identity();
+            }
+        }
+        if (unknown) {
+            return new Standing.CannotBeAsked(Standing.Why.A_RUN_DID_NOT_COME_BACK);
         }
         ReplacementOwed lookFor = new ReplacementOwed.OfAnArm(replaced.fork(), replaced.part(),
                 replaced.with(), where,

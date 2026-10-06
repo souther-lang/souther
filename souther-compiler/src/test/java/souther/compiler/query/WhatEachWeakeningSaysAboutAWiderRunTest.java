@@ -285,7 +285,8 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         out.add(new Weakening.RewriteUndecided("b",
                 new Replacement.ByOneAnswer(new ObservedValue.Integer(0),
                         new RowRef("b", new SourceId("m.sou"), new RowIdentity.Unnamed(1))),
-                java.util.Set.of(ReplacementEvidence.Undecided.Why.RUNS_SPENT)));
+                new ReplacementEvidence.Undecided(ReplacementEvidence.Undecided.Why.RUNS_SPENT)
+                        .why()));
         return out;
     }
 

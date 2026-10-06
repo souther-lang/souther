@@ -90,6 +90,13 @@ import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.InputClassifications;
 import souther.compiler.partition.ObservedInputs;
+import souther.compiler.partition.BodyReading;
+import souther.compiler.partition.FillResult;
+import souther.compiler.partition.GenerationPlan;
+import souther.compiler.partition.GenerationReason;
+import souther.compiler.partition.Partitions;
+import souther.compiler.partition.ReplacementDisposition;
+import souther.compiler.partition.RewriteSearch;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -1167,7 +1174,7 @@ public final class Adequacy {
      * <p>The model's answer comes from the declarations and this elaboration's from what it holds,
      * and neither is a question about what a body says.
      */
-    static souther.compiler.partition.BodyReading bodyReading(
+    static BodyReading bodyReading(
             Db db, String module, Bodies.Elaborated checked, String behavior) {
         if (checked != null && checked.behaviorBodies().containsKey(behavior)) {
             return new souther.compiler.partition.BodyReading.Read(
@@ -4333,17 +4340,17 @@ public final class Adequacy {
             if (work == null) {
                 return Answer.absent();
             }
-            souther.compiler.partition.GenerationPlan asked =
-                    souther.compiler.partition.GenerationPlan.of(here.subject(), work.classes(),
+            GenerationPlan asked =
+                    GenerationPlan.of(here.subject(), work.classes(),
                             work.arms().stream().map(RowWork.Arm::target).toList(),
                             work.pairs(), work.meetings(), work.replacements(),
                             // A row for a rewrite here is one more row of the block, looked for
                             // under the figure the measure found it under.
-                            new souther.compiler.partition.RewriteSearch(
-                                    souther.compiler.partition.RewriteSearch.For.THE_BLOCK,
+                            new RewriteSearch(
+                                    RewriteSearch.For.THE_BLOCK,
                                     db.ask(new Front.Adequacy()).value().measures()
                                             .rewriteRuns()));
-            souther.compiler.partition.FillResult composed = here.searchedFor(asked);
+            FillResult composed = here.searchedFor(asked);
             // The rows the requirement search already stood in each rule, which is where a row for
             // a rule comes from. Not a second search: settling whether a rule is owed a row is
             // composing a value, running it and asking what rule the run took, and a value that
@@ -4373,8 +4380,8 @@ public final class Adequacy {
          */
         record Environment(Db db, String name, String behavior, CheckSurface prepared,
                            Hir.SpecBehavior spec, Sig sig,
-                           souther.compiler.partition.MeasuredInput subject,
-                           souther.compiler.partition.Partitions.Partitioning divided,
+                           MeasuredInput subject,
+                           Partitions.Partitioning divided,
                            List<BorderAssessment> edges, CoverageRead.Read meetings,
                            Optional<SiteNumbering> numbering, RowReading observed) {
 
@@ -4387,14 +4394,14 @@ public final class Adequacy {
                 // What a row is offered for is what the coverage found, so a coverage that did not
                 // answer leaves this nothing to offer from. Absence and not
                 // `PartitionEvidence.NONE`: that answer says the model holds nothing to cover, and
-                // read for this one it turned a compile that stopped into a module with no work in
-                // it (issue #996).
+                // read for this one it would turn a compile that stopped into a module with no
+                // work in it.
                 Answer<Map<String, PartitionEvidence>> coverage = db.ask(new Coverage(name));
                 if (!prepared.present() || !scope.present() || !sigs.present()
                         || !coverage.present()) {
                     return null;
                 }
-                souther.compiler.query.Bodies.Elaborated checked =
+                Bodies.Elaborated checked =
                         db.ask(new Bodies.Observable(name)).value();
                 // What the plan's numbers mean, which a module whose bodies were not read has none
                 // of. Taken off the value in hand rather than stood in for, so that such a module
@@ -4410,7 +4417,7 @@ public final class Adequacy {
                 // And what each behavior states about its answer, which draws lines of its own.
                 db.ask(new Bodies.StatedContracts(name));
                 Hir.SpecBehavior spec = specOf(prepared.value(), behavior);
-                souther.compiler.partition.Partitions.Partitioning divided =
+                Partitions.Partitioning divided =
                         db.ask(new Divided(name, behavior)).value();
                 if (spec == null || divided == null) {
                     return null;
@@ -4438,7 +4445,7 @@ public final class Adequacy {
                     // lines, which is a sentence about neither.
                     return null;
                 }
-                souther.compiler.partition.MeasuredInput subject = subjectOf(db, name, spec);
+                MeasuredInput subject = subjectOf(db, name, spec);
                 if (subject == null) {
                     return null;
                 }
@@ -4460,8 +4467,8 @@ public final class Adequacy {
             }
 
             /** What a search of this behavior for {@code asked} composed. */
-            souther.compiler.partition.FillResult searchedFor(
-                    souther.compiler.partition.GenerationPlan asked) {
+            FillResult searchedFor(
+                    GenerationPlan asked) {
                 try {
                     return rowsFor(spec, sig, meetings, asked,
                             baselines(spec, sig, prepared),
@@ -4488,9 +4495,9 @@ public final class Adequacy {
                     // findings would take them out of a list that is meant to hold every one —
                     // which is the same defect the list was written against, arriving as control
                     // flow rather than as a value.
-                    return souther.compiler.partition.FillResult.nothingWasLookedFor(asked,
+                    return FillResult.nothingWasLookedFor(asked,
                             Generator.UnresolvedCombination.Reason.LINKAGE_FAILED,
-                            List.of(new souther.compiler.partition.GenerationReason
+                            List.of(new GenerationReason
                                     .LinkageFailed(behavior)));
                 }
             }
@@ -4855,19 +4862,19 @@ public final class Adequacy {
          * alike everywhere.
          */
         private static GenerationOutcome atRewrite(ReplacementOwed lookFor,
-                                                   souther.compiler.partition.FillResult composed) {
-            souther.compiler.partition.ReplacementDisposition answer =
+                                                   FillResult composed) {
+            ReplacementDisposition answer =
                     composed.discharge().at(lookFor);
             if (answer == null) {
                 throw new IllegalStateException(
                         "a finding names a rewrite this run was not asked about: " + lookFor);
             }
             return switch (answer) {
-                case souther.compiler.partition.ReplacementDisposition.Witnessed(var row) ->
+                case ReplacementDisposition.Witnessed(var row) ->
                         new GenerationOutcome.Generated(List.of(composed.rowFor(row)));
-                case souther.compiler.partition.ReplacementDisposition.NoneFound(var ended) -> {
+                case ReplacementDisposition.NoneFound(var ended) -> {
                     List<CameToNothing> why = new ArrayList<>();
-                    for (souther.compiler.partition.ReplacementDisposition.Ended each : ended) {
+                    for (ReplacementDisposition.Ended each : ended) {
                         why.add(CameToNothing.metNothing(new Generator.UnresolvedCombination(
                                 List.of(), switch (each) {
                                     case EVERY_ROW_ANSWERED_ALIKE ->
@@ -5546,7 +5553,7 @@ public final class Adequacy {
 
             private static List<Hir.Expr> valuesOf(RowToRun row) {
                 return row.inputs().stream()
-                        .map(souther.compiler.partition.FixtureTemplate::value).toList();
+                        .map(FixtureTemplate::value).toList();
             }
         };
     }

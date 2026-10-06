@@ -96,7 +96,7 @@ class AMethodTheSiblingsWouldOverfillIsWrittenWithoutThemTest {
                 .rewrites();
         assertTrue(rewrites.stream().anyMatch(each -> each.outcome()
                         instanceof ReplacementEvidence.Undecided(var why)
-                        && why.contains(ReplacementEvidence.Undecided.Why.TOO_LARGE)),
+                        && why.written().contains(ReplacementEvidence.Undecided.Why.TOO_LARGE)),
                 () -> "a rewrite the method had no room for: " + rewrites);
     }
 }

@@ -15,6 +15,7 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationDisposition;
+import souther.compiler.query.ReplacementEvidence;
 
 import tools.jackson.databind.node.ObjectNode;
 
@@ -254,6 +255,26 @@ public final class PublicationOrders {
         out.add(ReadingGap.COULD_NOT_READ_ROW);
         return out;
     }
+
+    /**
+     * Why a rewrite of a body was left open, from what a wider run could go past to what it could
+     * not.
+     *
+     * <p>The figures first, since raising one is a thing a reader can do and the rest are not: the
+     * fork the classes could not carry, the runs one rewrite may take, the composing, and a run that
+     * did not come back. Then what the rows came to — a statement that could not be read — and last
+     * how a search that ran to its end ended.
+     */
+    public static final CanonicalSelection.Order<ReplacementEvidence.Undecided.Why>
+            REWRITE_UNDECIDED_REASONS = CanonicalSelection.Order.overValues(List.of(
+                    ReplacementEvidence.Undecided.Why.TOO_LARGE,
+                    ReplacementEvidence.Undecided.Why.RUNS_SPENT,
+                    ReplacementEvidence.Undecided.Why.A_COMPOSING_FIGURE_REACHED,
+                    ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK,
+                    ReplacementEvidence.Undecided.Why.A_STATEMENT_WAS_NOT_READ,
+                    ReplacementEvidence.Undecided.Why.NO_ROW_ANSWERED_DIFFERENTLY,
+                    ReplacementEvidence.Undecided.Why.NOTHING_WAS_COMPOSED,
+                    ReplacementEvidence.Undecided.Why.NOTHING_RAN));
 
     /**
      * What this compiler declined to do, from what bounds one value to what bounds a whole search.

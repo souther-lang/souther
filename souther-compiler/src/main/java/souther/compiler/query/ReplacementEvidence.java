@@ -1,13 +1,13 @@
 package souther.compiler.query;
 
 import souther.compiler.observe.MeasureReason;
+import souther.compiler.publish.CanonicalSelection;
+import souther.compiler.publish.PublicationOrders;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementOwed;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -161,22 +161,25 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
     }
 
     /** Nothing here could say whether a row tells the rewrite from the body, and why. */
-    public record Undecided(Set<Why> why) implements Outcome {
+    public record Undecided(CanonicalSelection<Why> why) implements Outcome {
 
         /**
          * Every way it was left open, and not the one that ranks first: a search that ran out of
          * runs and stopped composing besides was stopped by two figures, and a reader raising one
-         * of them is owed the other.
+         * of them is owed the other. In the order they are published in.
          */
         public Undecided {
             if (why.isEmpty()) {
                 throw new IllegalArgumentException("a rewrite left open was left open for a reason");
             }
-            why = Collections.unmodifiableSet(EnumSet.copyOf(why));
+        }
+
+        public Undecided(Set<Why> why) {
+            this(PublicationOrders.REWRITE_UNDECIDED_REASONS.keep(why));
         }
 
         public Undecided(Why why) {
-            this(EnumSet.of(why));
+            this(Set.of(why));
         }
 
         /** Why a rewrite was left open. */
@@ -246,7 +249,7 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
         Summary summary = new Summary(rewrites);
         List<Weakening> open = new ArrayList<>(rowsBehind.causes());
         for (Rewrite each : rewrites) {
-            if (each.outcome() instanceof Undecided(Set<Undecided.Why> why)) {
+            if (each.outcome() instanceof Undecided(CanonicalSelection<Undecided.Why> why)) {
                 open.add(new Weakening.RewriteUndecided(behavior, each.replacement(), why));
             }
         }

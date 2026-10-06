@@ -15,9 +15,7 @@ import souther.compiler.coverage.Intervention;
 import souther.compiler.coverage.NumberingIdentity;
 import souther.compiler.coverage.Probe;
 import souther.compiler.coverage.RunRecord;
-import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
-import souther.compiler.evaluate.StepLimitExceeded;
 import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.generated.ProbeImage;
@@ -25,7 +23,7 @@ import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.FieldTypes;
-import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.Limits;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -244,19 +242,14 @@ public final class RowTrial {
         }
 
         /**
-         * The answer, read. A budget running out while it is read leaves an answer that came back
-         * and could not be read, which is what it is: the run answered, and where it went is
-         * recorded whatever became of the reading.
+         * The answer, read whole. What is read here is compared with another run's answer and
+         * dropped, and kept by nothing that is memoised — so it is read in full rather than within
+         * {@link Limits#DEFAULT}, which would cut two answers differing past it short at the same
+         * place and leave nothing to say of either.
          */
         AnswerObservation read(Object answered) {
-            ObservedValue value;
-            try {
-                value = fixtures.observed(
-                        ExampleVerifier.projected(answered, out, module, kinds, sums));
-            } catch (StepLimitExceeded | DepthLimitExceeded e) {
-                value = new ObservedValue.Unknown("the budget ran out while the answer was read");
-            }
-            return new AnswerObservation.Answered(value);
+            return new AnswerObservation.Answered(fixtures.structured(
+                    ExampleVerifier.projected(answered, out, module, kinds, sums)));
         }
     }
 
@@ -333,8 +326,9 @@ public final class RowTrial {
      * nothing, and that is what it is said to have answered. What is not a run at all is the
      * implementation being out of reach.
      *
-     * <p>The answer is read inside the budget, as a written row's is: reading it walks what the run
-     * built, and that walk is counted the way the building was.
+     * <p>The answer is read once the budget is let go, as a written row's is: reading it walks what
+     * the run built, every node walked would be a counted step, and a run charged for being read
+     * could run out where it answered.
      *
      * <p>The budget is let go on every way out, a worker being something the next row would
      * otherwise start inside of.
@@ -342,9 +336,9 @@ public final class RowTrial {
     private static Optional<AnswerObservation> applied(Answerer.Applying applying,
                                                        List<Handed> over, EvaluationPolicy steps,
                                                        AnswerReading reading) {
+        Object answered;
         EvaluationContext.begin(steps.stepLimit(), steps.recursionDepthLimit());
         try {
-            Object answered;
             try {
                 answered = applying.to(over);
             } catch (ImplementationNotReached e) {
@@ -360,12 +354,17 @@ public final class RowTrial {
                 // output — and swallowed here it would come back as a candidate that ran and
                 // missed, which is a statement about the model. The seam says which failures it
                 // has ({@link Answerer.Applying#to}) and those are the ones read.
-                return Optional.of(new AnswerObservation.NotAnswered());
+                //
+                // Except that a run that went past what a run may spend did not stop of its own
+                // accord: given more it might answer, so it is said to have run out rather than to
+                // have answered nothing.
+                return Optional.of(RunLimits.reached(e)
+                        ? new AnswerObservation.RanOut() : new AnswerObservation.NotAnswered());
             }
-            return Optional.of(reading.read(answered));
         } finally {
             EvaluationContext.end();
         }
+        return Optional.of(reading.read(answered));
     }
 
     private RowTrial() {}

@@ -3,7 +3,6 @@ package souther.compiler.query;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.check.PathReachability;
 import souther.compiler.check.Sig;
-import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.generated.EvaluationArtifact;
@@ -11,6 +10,7 @@ import souther.compiler.generated.ProbeImage;
 import souther.compiler.observe.ArmObservation;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.observe.Comparisons;
+import souther.compiler.observe.Expectation;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.Position;
 import souther.compiler.observe.RowOutcome;
@@ -28,7 +28,6 @@ import souther.compiler.reach.Reachability;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -96,26 +95,22 @@ public final class Replacements {
                 if (sig == null) {
                     return List.of();
                 }
-                // The arms a row stating its answer went through. An arm no row reaches is owed a
-                // row under its own code, and one only a row waiting for its answer reaches is too;
-                // a rewrite of either is one no row could notice, and saying so would be the same
-                // gap said twice.
-                Set<ArmProbe> reached = new HashSet<>();
-                for (RowOutcome row : rows) {
-                    if (!Adequacy.awaitsItsAnswer(row)) {
-                        reached.addAll(Adequacy.armsSeenIn(row, numbering));
-                    }
-                }
                 Position at = Position.at(sig.outputType());
                 // What the model's own rules prove no run arrives at, with what the rows did taken
                 // in: a row through an arm shows the proof of it wrong, and a proof shown wrong
                 // closes no way.
                 PathReachability.Answers.AsRun arrives = arrived == null ? null
                         : arrived.get(behavior.name());
+                // Held to the plan the arms are places of before any of them is looked up: a
+                // reading of another plan answers that nothing arrives at a place it never walked,
+                // which here would prove a rewrite the same.
+                if (arrives != null) {
+                    arrives.answers().requireNumbering(checked.numberingIdentity());
+                }
                 Predicate<ControlPlace.Arm> unreached = arm -> arrives != null
                         && arrives.answers().at(arm) instanceof Reachability.Unreachable;
-                return ReplacementReading.of(behavior.name(), checked.plan(), inTheClasses, reached,
-                        unreached, rows,
+                return ReplacementReading.of(behavior.name(), checked.plan(), inTheClasses,
+                        row -> Adequacy.armsSeenIn(row, numbering), unreached, rows,
                         new ReplacementReading.Comparing() {
 
                             @Override
@@ -124,7 +119,7 @@ public final class Replacements {
                             }
 
                             @Override
-                            public boolean holds(souther.compiler.observe.Expectation.Asserts stated,
+                            public boolean holds(Expectation.Asserts stated,
                                                  ObservedValue answered) {
                                 return Comparisons.verdict(stated, answered, types, at)
                                         instanceof Verdict.Held;
@@ -286,6 +281,8 @@ public final class Replacements {
                             case TOO_LARGE -> ReplacementEvidence.Undecided.Why.TOO_LARGE;
                             case A_STATEMENT_WAS_NOT_READ ->
                                     ReplacementEvidence.Undecided.Why.A_STATEMENT_WAS_NOT_READ;
+                            case A_RUN_DID_NOT_COME_BACK ->
+                                    ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK;
                         });
                 case ReplacementReading.Standing.Open(var lookFor) -> searched == null
                         ? new ReplacementEvidence.Undecided(

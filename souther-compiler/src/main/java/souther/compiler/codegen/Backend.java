@@ -654,8 +654,8 @@ public final class Backend {
      * A refusal that names no limit is not this compiler's to answer for and goes on unchanged.
      *
      * <p>Unless the definition carried siblings of its arms. Those are this compiler's, written to
-     * measure the model, so a method too large with them in it is not yet the author's to be told
-     * about: it is written again without them ({@link CarriedPastTheMethod}).
+     * measure the model, so a class past a count the JVM sets with them in it is not yet the
+     * author's to be told about: it is written again without them ({@link CarriedPastTheMethod}).
      */
     private static void emitting(CodegenContext ctx, WrittenName written, Runnable emit) {
         int from = ctx.carriedCount();
@@ -668,14 +668,18 @@ public final class Backend {
 
     /**
      * What a refusal of the writer is, given which forks the definition carried siblings in since
-     * {@code from}: one to write again without them where the method was too long and it carried
-     * some, and {@code said} otherwise.
+     * {@code from}: one to write again without them where it went past a count and carried some,
+     * and {@code said} otherwise.
+     *
+     * <p>Any count, not only the length of a method. A sibling's body adds constants as well as
+     * instructions, and each emission here writes whole classes, so a pool that overflowed did so
+     * in a class these forks are in. A text too long for a constant is not among them: a sibling is
+     * another arm of the same fork, so its texts are the author's, already in the class without it.
      */
     private static RuntimeException refusedFor(CodegenContext ctx, int from,
                                                IllegalArgumentException e, RuntimeException said) {
         List<Core> carried = ctx.carriedSince(from);
-        return JvmLimits.exceeded(e) instanceof JvmLimits.Counted(var limit, var _, var _)
-                && limit == JvmLimits.Limit.CODE_SIZE && !carried.isEmpty()
+        return JvmLimits.exceeded(e) instanceof JvmLimits.Counted && !carried.isEmpty()
                 ? new CarriedPastTheMethod(carried, said) : said;
     }
 

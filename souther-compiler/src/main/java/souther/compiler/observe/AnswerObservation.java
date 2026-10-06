@@ -19,8 +19,16 @@ import java.util.Objects;
  */
 public sealed interface AnswerObservation {
 
-    /** No answer came back from the run. */
+    /** No answer came back from the run: it stopped without one, or nothing applied it. */
     record NotAnswered() implements AnswerObservation {}
+
+    /**
+     * The run went past what a run may spend — its steps, its depth, its stack or its time — before
+     * it answered. Apart from {@link NotAnswered} because it says nothing about the program: a run
+     * given more might answer, so whether it answers as another run does is not known, where a run
+     * that stopped is known to have answered nothing.
+     */
+    record RanOut() implements AnswerObservation {}
 
     /** The run answered, and this is the answer as the compiler owns it. */
     record Answered(ObservedValue value) implements AnswerObservation {

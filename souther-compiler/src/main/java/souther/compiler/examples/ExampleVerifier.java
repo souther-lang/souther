@@ -43,6 +43,7 @@ import souther.compiler.observe.Disposition;
 import souther.compiler.observe.Expectation;
 import souther.compiler.observe.ExpectationState;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
 import souther.compiler.observe.Mismatch;
 import souther.compiler.observe.RowStatement;
 import souther.compiler.observe.RowStatements;
@@ -71,8 +72,13 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -603,11 +609,11 @@ public final class ExampleVerifier {
             return new StandinObservation.Reason.TheObservationRanOut(
                     "the observation ran out of stack");
         }
-        if (cause instanceof java.util.concurrent.CancellationException) {
+        if (cause instanceof CancellationException) {
             // Said of an observation and not of a stand-in's entry: a contract check comes through
             // here as well, and naming one of the two callers would report the other's cancellation
             // as something it is not.
-            throw new java.util.concurrent.CancellationException(
+            throw new CancellationException(
                     "interrupted while making an observation");
         }
         if (cause instanceof RuntimeException re) {
@@ -780,7 +786,7 @@ public final class ExampleVerifier {
      * two sets that happen to read alike are not.
      */
     private final Map<PublishedClasses, Map<String, Agreement>> agreements =
-            new java.util.concurrent.ConcurrentHashMap<>();
+            new ConcurrentHashMap<>();
     /** The behaviors an answer could not be established for have already been reported about. A
      * behavior's rows may be written in more than one block, and what is reported is about neither
      * the block nor the row. It is per source, which is what a verifier is: a diagnostic is said
@@ -842,7 +848,7 @@ public final class ExampleVerifier {
         // Said once for the behavior in this source: not once for each of its rows, and not once for
         // each block they are written in. One answer and one module disagreeing is one fact, and a
         // behavior's rows may be written in as many blocks as they belong in.
-        java.util.Optional<Diagnostic> why = whyNothingWasHandedOver(target, ex.pos());
+        Optional<Diagnostic> why = whyNothingWasHandedOver(target, ex.pos());
         if (why.isPresent() && said.add(target.name())) {
             out.add(why.get());
         }
@@ -989,7 +995,7 @@ public final class ExampleVerifier {
                 case TheCompilesOwn _ -> null;
                 case Origin.Published published -> agreements
                         .computeIfAbsent(published.classes(),
-                                _ -> new java.util.concurrent.ConcurrentHashMap<>())
+                                _ -> new ConcurrentHashMap<>())
                         .computeIfAbsent(behavior, named -> DeclarationAgreement.of(module.name(),
                                 named, declared.get(), published.classes(),
                                 symbols.library()));
@@ -1013,13 +1019,13 @@ public final class ExampleVerifier {
      * second sentence here would say what an author has already been told, against a row rather
      * than against the line it is about.
      */
-    private java.util.Optional<Diagnostic> whyNothingWasHandedOver(ExampleTarget target,
+    private Optional<Diagnostic> whyNothingWasHandedOver(ExampleTarget target,
                                                                    SourcePos at) {
         return switch (target.handing()) {
             case Handing.MayApply _, Handing.NothingApplies _, Handing.NotMade _ ->
-                    java.util.Optional.empty();
+                    Optional.empty();
             case Handing.NotEstablished(Agreement why) ->
-                    java.util.Optional.of(cannotBeHeldTo(at, target.name(), why));
+                    Optional.of(cannotBeHeldTo(at, target.name(), why));
         };
     }
 
@@ -1226,21 +1232,10 @@ public final class ExampleVerifier {
     // --- one row ------------------------------------------------------------------------------
 
     /**
-     * One row's evaluation, and the state it builds up while it runs: its own diagnostics, and the
-     * helper it is currently inside.
-     *
-     * <p>A row that does not finish leaves its worker running — a pure computation reaches no interrupt
-     * point, so cancelling it is a request and not a stop. So nothing that worker can still write to is
-     * read by the rows after it: the evaluation has its own {@link FixtureReader}, so the state a
-     * fixture builds up (which values it is expanding, which helper it is in) belongs to this row, and
-     * the diagnostics it produces are its own list, handed to the caller only when it finishes. A late
-     * result is dropped rather than landing among another row's.
-     *
-     * <p>One reader for the whole row. The inputs, the expectation, each {@code with} and every fake
-     * table the row resolves are read through this one, so what a row spent is one row's whatever
-     * part of it was being read.
+     * One row evaluated again with arms of the body answering as siblings, under the row's own
+     * budget and with a state of its own, so nothing it does is read as the row's.
      */
-    private static final class ReplacedWork implements java.util.concurrent.Callable<RowState> {
+    private static final class ReplacedWork implements Callable<RowState> {
 
         private final ExampleVerifier verifier;
         private final ExampleTarget target;
@@ -1283,7 +1278,22 @@ public final class ExampleVerifier {
         }
     }
 
-    private static final class RowWork implements java.util.concurrent.Callable<List<Diagnostic>> {
+    /**
+     * One row's evaluation, and the state it builds up while it runs: its own diagnostics, and the
+     * helper it is currently inside.
+     *
+     * <p>A row that does not finish leaves its worker running — a pure computation reaches no interrupt
+     * point, so cancelling it is a request and not a stop. So nothing that worker can still write to is
+     * read by the rows after it: the evaluation has its own {@link FixtureReader}, so the state a
+     * fixture builds up (which values it is expanding, which helper it is in) belongs to this row, and
+     * the diagnostics it produces are its own list, handed to the caller only when it finishes. A late
+     * result is dropped rather than landing among another row's.
+     *
+     * <p>One reader for the whole row. The inputs, the expectation, each {@code with} and every fake
+     * table the row resolves are read through this one, so what a row spent is one row's whatever
+     * part of it was being read.
+     */
+    private static final class RowWork implements Callable<List<Diagnostic>> {
 
         private final ExampleVerifier verifier;
         /** This row's, and only this row's. */
@@ -1367,7 +1377,7 @@ public final class ExampleVerifier {
          * <p>Written only by the row's own worker, so reading it to write the next one is not a race
          * with another writer.
          */
-        volatile Reached reached = new Reached(Stage.NONE, null, new AnswerObservation.NotAnswered());
+        volatile Reached reached = new Reached(Stage.NONE, null, null);
         private Disposition disposition = Disposition.FAILED;
         private FailurePhase failurePhase = FailurePhase.NONE;
         private TypeSymbol expectedArm;
@@ -1415,13 +1425,12 @@ public final class ExampleVerifier {
 
         /** Records that the behavior was entered, and what entered it. */
         void entered(Applied applied) {
-            reached = new Reached(Stage.INVOKED, applied, new AnswerObservation.NotAnswered());
+            reached = new Reached(Stage.INVOKED, applied, null);
         }
 
-        /** Records that the behavior answered, and what with. */
-        void answered(ObservedValue answer) {
-            reached = new Reached(Stage.ANSWERED, reached.applied(),
-                    new AnswerObservation.Answered(answer));
+        /** Records that the behavior answered, and what with, as the run built it. */
+        void answered(Object answer) {
+            reached = new Reached(Stage.ANSWERED, reached.applied(), new Returned(answer));
         }
 
         /**
@@ -1431,8 +1440,7 @@ public final class ExampleVerifier {
          * applied it, and a row whose answerer came back saying it never got in applied nothing.
          */
         void neverEntered() {
-            reached = new Reached(Stage.FIXTURES_VALIDATED, null,
-                    new AnswerObservation.NotAnswered());
+            reached = new Reached(Stage.FIXTURES_VALIDATED, null, null);
         }
     }
 
@@ -1443,15 +1451,36 @@ public final class ExampleVerifier {
      * <p>Together, because a reader of a row still running is entitled to values that some moment of
      * the evaluation actually held: a row given up on while it compared its answer has one, and a
      * stage read apart from it could say the row answered while the answer beside it says it did
-     * not. {@code applied} is null where nothing entered.
+     * not. {@code applied} is null where nothing entered, and {@code returned} where nothing
+     * answered.
      */
-    record Reached(Stage stage, Applied applied, AnswerObservation answer) {
+    record Reached(Stage stage, Applied applied, Returned returned) {
 
         /** The same, having got as far as {@code next}. */
         Reached at(Stage next) {
-            return new Reached(next, applied, answer);
+            return new Reached(next, applied, returned);
+        }
+
+        /**
+         * What the behavior answered, read with {@code reading}, or that it answered nothing.
+         *
+         * <p>Read by whoever waited on the row, after it, and not by the row's worker. Reading a
+         * value walks it and every node walked is a counted step, so a reading inside the row would
+         * charge the row for questions it does not ask: a row that held within its budget could run
+         * out of it reading an answer only a measure wants.
+         */
+        AnswerObservation answer(Function<Object, ObservedValue> reading) {
+            return returned == null ? new AnswerObservation.NotAnswered()
+                    : new AnswerObservation.Answered(reading.apply(returned.value()));
         }
     }
+
+    /**
+     * What the behavior handed back, as the run built it and before anything read it. A record
+     * around it because an absent value is written as null, which is an answer, and a row that did
+     * not answer has none of these.
+     */
+    record Returned(Object value) {}
 
     /**
      * What the row states, as something that did not read the source can hold it.
@@ -1476,15 +1505,21 @@ public final class ExampleVerifier {
         return RowStatements.read(read, inputs, stated);
     }
 
-    /** What the row turned out to be, from the state its worker left. */
+    /**
+     * What the row turned out to be, from the state its worker left.
+     *
+     * <p>Its answer is read here, within {@link Limits#DEFAULT}, because what is built here is kept
+     * by a query answer. A comparison of the answer with another one is not made from this reading
+     * but from the value the run built (see {@link #replacedRun}).
+     */
     private RowOutcome outcomeOf(ExampleTarget target, Hir.ExampleRow row, RowState state,
                                  List<ReplacedRun> replaced) {
         Reached reached = state.reached;
         return new RowOutcome(row.pos(), target.name(), row.identity(), expectationOf(row),
                 reached.stage(), state.disposition, state.failurePhase, state.expectedArm,
-                state.resultArm, reached.answer(), state.inputCases, state.inputs,
-                state.statement, ran(reached, new Counting.Read(state.stepsSpent, state.recorded)),
-                replaced);
+                state.resultArm, reached.answer(newFixtureReader()::observed), state.inputCases,
+                state.inputs, state.statement,
+                ran(reached, new Counting.Read(state.stepsSpent, state.recorded)), replaced);
     }
 
     /**
@@ -1493,15 +1528,20 @@ public final class ExampleVerifier {
      *
      * <p>Only of a row that answered and whose run was recorded: the arms it went through are what
      * the recording says, and a replacement is asked of an answer there was. Each run is its own
-     * piece of work under its own deadline, after the row's, so that however these go the row's own
-     * outcome is what it was — a replacement that does not come back is one the row could not be
-     * held to, and says that.
+     * piece of work, after the row's, so that however these go the row's own outcome is what it was.
+     *
+     * <p>Each run has the row's budget of steps, which is what stops a replacement that would go
+     * round for ever, and the same answer on every machine. The deadline is behind that, for a run
+     * the steps do not stop; once one run of the row is given up on, the row's remaining
+     * replacements are not run, so a row costs at most one deadline past its own however many arms
+     * it went through. A replacement left unrun has no run here, which is what a reader of the row
+     * is told of one that did not come back.
      */
     private List<ReplacedRun> replacedRuns(ExampleTarget target, Sig sig, Set<TypeSymbol> outCases,
                                            Hir.ExampleRow row, RowState state) {
         if (!(probes instanceof ProbeImage.Instrumented(var _, ArmReplacements replacements))
                 || !(state.recorded instanceof RunRecord.Recorded(Observation seen))
-                || !(state.reached.answer() instanceof AnswerObservation.Answered)) {
+                || state.reached.returned() == null) {
             return List.of();
         }
         List<ReplacedRun> out = new ArrayList<>();
@@ -1516,42 +1556,58 @@ public final class ExampleVerifier {
                         || !asked.add(List.of(at.fork(), at.part(), with))) {
                     continue;
                 }
-                out.add(replacedRun(target, sig, outCases, row, state.reached.answer(),
+                Optional<ReplacedRun> ran = replacedRun(target, sig, outCases, row, state.reached,
                         state.disposition, at.fork(), at.part(), with,
-                        replacements.replacing(at.fork(), at.part(), with)));
+                        replacements.replacing(at.fork(), at.part(), with));
+                if (ran.isEmpty()) {
+                    return out;
+                }
+                out.add(ran.get());
             }
         }
         return out;
     }
 
-    /** One replaced run of {@code row}, under a deadline of its own. */
-    private ReplacedRun replacedRun(ExampleTarget target, Sig sig, Set<TypeSymbol> outCases,
-                                    Hir.ExampleRow row, AnswerObservation written,
-                                    Disposition asWritten, SourceConstructOrigin fork, int part,
-                                    int with, Map<Integer, Integer> replacing) {
+    /**
+     * One replaced run of {@code row}, under a deadline of its own, or nothing where the deadline
+     * gave up on it.
+     *
+     * <p>Whether the replacement changed the answer is asked of the two values the runs built, each
+     * read whole, here and after both runs. Read within {@link Limits#DEFAULT} instead, two answers
+     * differing only past what that keeps would be cut short at the same place, and nothing could
+     * be said of either; read inside a run, the reading would be counted against it.
+     */
+    private Optional<ReplacedRun> replacedRun(ExampleTarget target, Sig sig,
+                                              Set<TypeSymbol> outCases, Hir.ExampleRow row,
+                                              Reached written, Disposition asWritten,
+                                              SourceConstructOrigin fork, int part, int with,
+                                              Map<Integer, Integer> replacing) {
         ReplacedWork work = new ReplacedWork(this, target, sig, outCases, row, replacing);
         return switch (deadline.given(
                 new Deadline.Work.Replaced(target.name(), row.pos(), row.identity()), work)) {
-            case Deadline.Outcome.Finished(RowState state) -> new ReplacedRun(fork, part, with,
-                    state.reached.answer(),
-                    newFixtureReader().change(written, state.reached.answer(), sig.outputType()),
-                    noticed(asWritten, state.disposition));
+            case Deadline.Outcome.Finished(RowState state) -> {
+                FixtureReader reader = newFixtureReader();
+                yield Optional.of(new ReplacedRun(fork, part, with,
+                        state.reached.answer(reader::observed),
+                        reader.change(written.answer(reader::structured),
+                                state.reached.answer(reader::structured), sig.outputType()),
+                        noticed(asWritten, state.disposition)));
+            }
             case Deadline.Outcome.Overran(Runnable abandon) -> {
                 abandon.run();
-                yield new ReplacedRun(fork, part, with, new AnswerObservation.NotAnswered(),
-                        AnswerChange.COULD_NOT_TELL, ReplacedRun.Noticed.COULD_NOT_TELL);
+                yield Optional.empty();
             }
             case Deadline.Outcome.Threw(Throwable cause) -> {
-                if (cause instanceof java.util.concurrent.CancellationException) {
-                    throw new java.util.concurrent.CancellationException(
+                if (cause instanceof CancellationException) {
+                    throw new CancellationException(
                             "interrupted while evaluating an example of `" + target.name() + "`");
                 }
                 // A budget or the stack running out is the replaced program's to have done, and
                 // says nothing either way about whether the row would notice it.
-                if (overspending(cause) != null || cause instanceof StackExhaustedException
-                        || cause instanceof StackOverflowError) {
-                    yield new ReplacedRun(fork, part, with, new AnswerObservation.NotAnswered(),
-                            AnswerChange.COULD_NOT_TELL, ReplacedRun.Noticed.COULD_NOT_TELL);
+                if (RunLimits.reached(cause)) {
+                    yield Optional.of(new ReplacedRun(fork, part, with,
+                            new AnswerObservation.RanOut(), AnswerChange.COULD_NOT_TELL,
+                            ReplacedRun.Noticed.COULD_NOT_TELL));
                 }
                 if (cause instanceof RuntimeException re) {
                     throw re;
@@ -1661,7 +1717,8 @@ public final class ExampleVerifier {
                 RowStatement stated = evaluation.state.statement;
                 rows.add(new RowOutcome(row.pos(), target.name(),
                         row.identity(), expectationOf(row), reached.stage(), Disposition.INCOMPLETE,
-                        FailurePhase.TIMEOUT, null, null, reached.answer(), List.of(),
+                        FailurePhase.TIMEOUT, null, null,
+                        reached.answer(newFixtureReader()::observed), List.of(),
                         stated instanceof RowStatement.Stated values ? values.inputs() : List.of(),
                         stated, ran(reached, new Counting.Unread()), List.of()));
             }
@@ -1698,8 +1755,8 @@ public final class ExampleVerifier {
                 // Whoever is compiling asked to stop. Nothing is known about this row — no result was
                 // produced and no comparison was made — so this is not a failing example, and
                 // reporting it as one would put a diagnostic on a model that may be correct.
-                if (cause instanceof java.util.concurrent.CancellationException) {
-                    throw new java.util.concurrent.CancellationException(
+                if (cause instanceof CancellationException) {
+                    throw new CancellationException(
                             "interrupted while evaluating an example of `" + target.name() + "`");
                 }
                 if (cause instanceof RuntimeException re) {
@@ -1977,10 +2034,10 @@ public final class ExampleVerifier {
         // The answer is in hand, which is as far as a row gets before anything is done with it. A
         // measure reading what the behavior answered reads a row that got here, and the two things
         // done with an answer — holding it to the declaration, holding it to what the row states —
-        // are past it rather than folded into it. What it answered is kept as the compiler owns it,
-        // whatever the row states, so that a reader asking whether another run would have answered
-        // alike has the answer and not only its case.
-        state.answered(fixtures.observed(result));
+        // are past it rather than folded into it. What it answered is kept whatever the row states,
+        // so that a reader asking whether another run would have answered alike has the answer and
+        // not only its case — kept as built, and read after the row (Reached#answer).
+        state.answered(result);
         if (!keepsWhatIsDeclaredOfWhatItAnswered(fixtures, row, target, sig, args, result, out,
                 state)) {
             return;

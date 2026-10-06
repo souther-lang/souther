@@ -11,14 +11,15 @@ package souther.compiler.observe;
  */
 public enum AnswerChange {
 
-    /** The two answered differently: one answered and the other did not, or both answered values
-     *  that are not the same value. */
+    /** The two answered differently: one answered and the other stopped without answering, or both
+     *  answered values that are not the same value. */
     CHANGED,
 
     /** Both answered, and with the same value. */
     SAME,
 
-    /** Nothing here can say: an answer could not be read in full, or neither program answered. */
+    /** Nothing here can say: an answer could not be read in full, a run ran past what a run may
+     *  spend, or the first program did not answer. */
     COULD_NOT_TELL;
 
     /**
@@ -30,9 +31,12 @@ public enum AnswerChange {
     public static AnswerChange between(AnswerObservation was, AnswerObservation now,
                                        SameValue same) {
         return switch (was) {
-            case AnswerObservation.NotAnswered _ -> COULD_NOT_TELL;
+            case AnswerObservation.NotAnswered _, AnswerObservation.RanOut _ -> COULD_NOT_TELL;
             case AnswerObservation.Answered(ObservedValue before) -> switch (now) {
                 case AnswerObservation.NotAnswered _ -> CHANGED;
+                // A run that ran out is not one that answered otherwise: given more it might
+                // answer as the other did.
+                case AnswerObservation.RanOut _ -> COULD_NOT_TELL;
                 case AnswerObservation.Answered(ObservedValue after) ->
                         // Read in full everywhere inside, which is what a comparison of two values
                         // asks of each: a record read whole may hold a list cut short.
