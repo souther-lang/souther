@@ -2,10 +2,14 @@ package souther.compiler.execute;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Sig;
-import souther.compiler.coverage.Observation;
+import souther.compiler.coverage.RunRecord;
+import souther.compiler.observe.AnswerChange;
+import souther.compiler.observe.AnswerObservation;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -31,7 +35,6 @@ public interface RowTrials {
      * combination as untried as it was; a row that ran and reached nothing is a row that missed, and
      * the two must not come back as one value.
      */
-    @FunctionalInterface
     interface OfBehavior {
 
         /**
@@ -42,7 +45,39 @@ public interface RowTrials {
          *                instance per dependency, so a row of one that hands none is a row nothing
          *                applies
          */
-        Optional<Observation> run(List<Hir.Expr> inputs, List<AnsweredWith> answers);
+        Optional<Ran> run(List<Hir.Expr> inputs, List<AnsweredWith> answers);
+
+        /**
+         * What running {@code inputs} answered with the arms at {@code replacing}'s sites answering
+         * as the parts it maps them to, or empty where nothing could run them.
+         *
+         * <p>Nothing is recorded: the program run is not the one the module's places are of.
+         */
+        Optional<AnswerObservation> runReplacing(List<Hir.Expr> inputs,
+                                                 List<AnsweredWith> answers,
+                                                 Map<Integer, Integer> replacing);
+
+        /** Whether this behavior answering {@code now} answered differently from {@code was}. */
+        AnswerChange change(AnswerObservation was, AnswerObservation now);
+    }
+
+    /**
+     * What came of one row that something applied the behavior to.
+     *
+     * <p>Two things, because they are found out apart: where the run went is what the classes
+     * recorded, and what it answered is what came back. A run that aborted part way went where it
+     * went and answered nothing, and classes generated without the calls that record a run answer
+     * all the same.
+     *
+     * @param recorded where it went, or that nothing was recording
+     * @param answer   what it answered, or that it answered nothing
+     */
+    record Ran(RunRecord recorded, AnswerObservation answer) {
+
+        public Ran {
+            Objects.requireNonNull(recorded, "a run says what was recorded of it, or that nothing was");
+            Objects.requireNonNull(answer, "a run says what it answered, or that it answered nothing");
+        }
     }
 
     /**

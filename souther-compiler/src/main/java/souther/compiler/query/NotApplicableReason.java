@@ -25,4 +25,5 @@ public sealed interface NotApplicableReason extends MeasureReason
                 NoFeasibleInput,
                 OutputCaseEvidence.NotASum,
                 PartitionDerivation.NoSubject,
-                PartitionDerivation.NothingIsDivided {}
+                PartitionDerivation.NothingIsDivided,
+                ReplacementEvidence.NoBody {}

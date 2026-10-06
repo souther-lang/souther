@@ -116,6 +116,13 @@ public record Discharge(GenerationPlan plan, Map<GenerationObligation, Generatio
                 instanceof GenerationAnswer.Class(var _, var disposition) ? disposition : null;
     }
 
+    /** What became of the search for a row telling one rewrite from the body, or null where this
+     *  run was not asked about it. */
+    public ReplacementDisposition at(ReplacementOwed owed) {
+        return answers.get(new GenerationObligation.Replacement(owed))
+                instanceof GenerationAnswer.Replacement(var _, var disposition) ? disposition : null;
+    }
+
     /** What became of one arm, or null where this run was not asked about it. */
     public ArmDisposition at(Generator.ArmOwed owed) {
         return at(new GenerationObligation.Arm(owed));

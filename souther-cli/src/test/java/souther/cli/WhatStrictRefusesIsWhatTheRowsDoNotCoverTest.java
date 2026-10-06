@@ -351,7 +351,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, witness.adequacy(),
                 witness.human(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         assertTrue(witness.whatKeepsTheVerdictOpen().stream()
-                        .allMatch(each -> each.toString().contains("measure=DECISION")),
+                        .allMatch(WhatStrictRefusesIsWhatTheRowsDoNotCoverTest::readsTheRuns),
                 () -> "and the arms are not what holds it open: "
                         + witness.whatKeepsTheVerdictOpen());
     }
@@ -448,7 +448,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
             String human = report.human(SourceRendering.namedByIdentity(SourceLayouts.NONE));
             assertFalse(human.contains("the arms were not measured"), human);
             assertTrue(report.whatKeepsTheVerdictOpen().stream()
-                            .allMatch(each -> each.toString().contains("measure=DECISION")),
+                            .allMatch(WhatStrictRefusesIsWhatTheRowsDoNotCoverTest::readsTheRuns),
                     () -> "at " + level + ", nothing of the composition's own holds it open: "
                             + report.whatKeepsTheVerdictOpen());
         }
@@ -674,6 +674,16 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
                 | "in"  : (Amount(5)) -> Ok { n = Amount(5) }
                 | "top" : (Amount(10)) -> Ok { n = Amount(10) }
             """;
+
+    /**
+     * Whether what holds a verdict open is a measure read off where the rows went, which a level
+     * that does not record that leaves unmade: the rules a run took, and the rewrites a run was put
+     * through again. Neither is about the arms.
+     */
+    private static boolean readsTheRuns(Object opening) {
+        String said = opening.toString();
+        return said.contains("measure=DECISION") || said.contains("measure=REPLACEMENT");
+    }
 
     private static AdequacyReport reportOf(String source, Adequacy.Level level) {
         Compilation compilation = Compilation.ofSource(source, "Main");

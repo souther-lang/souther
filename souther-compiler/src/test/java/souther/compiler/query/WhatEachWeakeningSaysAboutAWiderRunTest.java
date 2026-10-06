@@ -19,8 +19,13 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Towards;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.RowIdentity;
+import souther.compiler.observe.RowRef;
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.source.SourceId;
 import souther.compiler.partition.Border;
+import souther.compiler.partition.Replacement;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.ClosureGap;
@@ -104,6 +109,9 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         table.put("DecisionReadingIncomplete", "answers/MAY_CHANGE");
         // A rule read short is short of words, which no figure gives it.
         table.put("DecisionRuleReadShort", "answers/UNAFFECTED");
+        // A rewrite left open asks why: a search stopped at how many rows a generation writes may
+        // go further where more are allowed, and nothing else that leaves one open is an allowance.
+        table.put("RewriteUndecided", "asks why it was left open/MAY_CHANGE");
         return table;
     }
 
@@ -218,6 +226,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
             // and rows all on one side are not allowances, and what a run watched is.
             case Weakening.ABorderNotHeldAgainstTheLinesBesideIt _ -> "asks what stood in the way";
             case Weakening.ModelReadingIncomplete _ -> "asks the gap";
+            case Weakening.RewriteUndecided _ -> "asks why it was left open";
             case Weakening.OutputCasesUnreadable _, Weakening.InputCasesUnreadable _,
                  Weakening.BodyNotInEvaluation _, Weakening.BoundaryNotDerived _,
                  Weakening.InputNotRead _, Weakening.PairSpaceTruncated _,
@@ -273,6 +282,11 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                         souther.compiler.partition.CompositionBudget
                                 .PATHS_OF_A_DECISION_READ)));
         out.add(new Weakening.DecisionRuleReadShort("b"));
+        out.add(new Weakening.RewriteUndecided("b",
+                new Replacement.ByOneAnswer(new ObservedValue.Integer(0),
+                        new RowRef("b", new SourceId("m.sou"), new RowIdentity.Unnamed(1))),
+                new ReplacementEvidence.Undecided(ReplacementEvidence.Undecided.Why.RUNS_SPENT)
+                        .why()));
         return out;
     }
 

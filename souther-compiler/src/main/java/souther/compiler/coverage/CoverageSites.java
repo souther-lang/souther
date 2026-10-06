@@ -3,6 +3,7 @@ package souther.compiler.coverage;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.SourceConstruct;
@@ -10,11 +11,13 @@ import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.Map;
+import java.util.SequencedMap;
 
 /**
  * The arms of a behavior's body that an {@code example} row can be in or not in.
@@ -114,6 +117,28 @@ public final class CoverageSites {
      * nothing ran, which no count can be told apart from a real one.
      */
     public static final int NO_SITE = -1;
+
+    /**
+     * How many nodes a fork's siblings may add to it, counted as every sibling carried in every
+     * other arm.
+     *
+     * <p>A bound on what measuring costs, not a rule of the language and not what keeps the classes
+     * within the JVM's limits — a class past those is written again without the siblings it carried
+     * ({@code Backend}). Carrying grows with the square of a fork's arms, and every measured build
+     * of the module writes and loads what is carried, so a fork over this carries none and says so
+     * of each sibling; one under it carries them all.
+     */
+    static final int MOST_NODES_A_FORK_CARRIES = 4000;
+
+    /**
+     * How many answers of one arm or body a proof that two programs are one reads before it gives
+     * up.
+     *
+     * <p>Giving up leaves the proof unmade, which is what every proof this does not attempt already
+     * is: the rewrite is asked about and looked for like any other. So this decides how much of the
+     * source is read to save a search, and never what the measure comes to.
+     */
+    static final int MOST_ANSWERS_A_PROOF_READS = 64;
 
     /**
      * What a row is owed for, which is not the same as where one runs.
@@ -355,6 +380,11 @@ public final class CoverageSites {
         private final Map<Integer, Citation> reachedAt;
         private final ComparisonCatalog comparisons;
         private final SiteNumbering numbering;
+        /** For each fork, per arm, the parts of the siblings the classes carry in that arm. */
+        private final IdentityHashMap<Core, int[][]> carried;
+        private final ArmReplacements replacements;
+        /** For each body, where it could answer other than one value. */
+        private final Map<String, ArmReplacements.Differs> oneValue;
 
         /**
          * Made where the bodies are walked, and nowhere a caller can reach.
@@ -377,7 +407,10 @@ public final class CoverageSites {
              Map<Integer, Citation> reachedAt,
              ComparisonCatalog comparisons,
              SiteNumbering numbering,
-             Methods methods) {
+             Methods methods,
+             IdentityHashMap<Core, int[][]> carried,
+             ArmReplacements replacements,
+             Map<String, ArmReplacements.Differs> oneValue) {
             // Half of what a numbering could get wrong is the key's own answer now: an occurrence
             // names a comparison and nothing else, so there is no number to put on an `&&` or on
             // arithmetic, which is what would have had the emitter copy half a `long` off the
@@ -412,6 +445,49 @@ public final class CoverageSites {
             this.comparisons = comparisons;
             this.numbering = numbering;
             this.methods = methods;
+            this.carried = carried;
+            this.replacements = replacements;
+            this.oneValue = Map.copyOf(oneValue);
+        }
+
+        /**
+         * The parts of the siblings the classes carry in arm {@code part} of {@code node}, in the
+         * order the emitter puts them; empty where they carry none.
+         *
+         * <p>What the emitter asks at each arm it puts a switch in front of. Asked of the plan and
+         * not worked out where the code is written, because a reader of a run is told the same thing
+         * by {@link #replacements}, and two answers to which siblings are there would be a run asking
+         * for one the classes do not have.
+         */
+        public int[] carriedAt(Core node, int part) {
+            int[][] arms = carried.get(node);
+            return arms == null || arms[part] == null ? new int[0] : arms[part].clone();
+        }
+
+        /** Which other arm's expression each numbered arm can be run with in its place. */
+        public ArmReplacements replacements() {
+            return replacements;
+        }
+
+        /**
+         * Where {@code body} could answer other than one value, as the source says: the ways to an
+         * answer that reads what the body is given, or that is not the one the others are. A body
+         * whose every such way the model's rules prove nothing goes down answers one value
+         * whatever it is given, which no row could tell from a rewrite answering that value.
+         *
+         * <p>Read as always where nothing was read of the body, which is what a proof of nothing
+         * is.
+         */
+        public ArmReplacements.Differs fromOneValue(String body) {
+            return oneValue.getOrDefault(body, ArmReplacements.Differs.ALWAYS);
+        }
+
+        Map<String, ArmReplacements.Differs> oneValue() {
+            return oneValue;
+        }
+
+        IdentityHashMap<Core, int[][]> carried() {
+            return carried;
         }
 
         /** Every place of this module, in the order they were numbered. */
@@ -496,7 +572,8 @@ public final class CoverageSites {
                 new LinkedHashMap<>(), new IdentityHashMap<>(),
                 java.util.Set.of(), new LinkedHashMap<>(),
                 ComparisonCatalog.of(ModuleBodies.none()),
-                SiteNumbering.of(NumberingIdentity.forThePlanOfNothing()), Methods.NONE);
+                SiteNumbering.of(NumberingIdentity.forThePlanOfNothing()), Methods.NONE,
+                new IdentityHashMap<>(), ArmReplacements.NONE, Map.of());
 
         /**
          * Whether one run of the behavior can pass {@code node} more than once.
@@ -742,9 +819,27 @@ public final class CoverageSites {
             }
             armsByNode.put(node, here);
         });
+        // The siblings with their ways read back as places, through the same issue as the arms
+        // above, so a way and an arm of the plan are one place and not two that agree.
+        SequencedMap<Integer, ArmReplacements.AtSite> bySite = new LinkedHashMap<>();
+        walk.replacements.forEach((site, draft) -> {
+            Map<Integer, ArmReplacements.Sibling> siblings = new LinkedHashMap<>();
+            draft.siblings().forEach((with, sibling) -> {
+                ArmReplacements.Differs differs = sibling.differs().placed(numbering, issued);
+                siblings.put(with, sibling.notCarried().isPresent()
+                        ? new ArmReplacements.Sibling.NotCarried(sibling.notCarried().get(),
+                                differs)
+                        : new ArmReplacements.Sibling.Carried(differs));
+            });
+            bySite.put(site, new ArmReplacements.AtSite(draft.fork(), draft.part(), siblings));
+        });
+        Map<String, ArmReplacements.Differs> oneValue = new LinkedHashMap<>();
+        walk.oneValue.forEach((body, differs) ->
+                oneValue.put(body, differs.placed(numbering, issued)));
         return new Plan(List.copyOf(sites), List.copyOf(guards), walk.byNode,
                 byComparison, armsByNode, walk.mayRepeat, Map.copyOf(walk.reachedAt),
-                comparisons, numbering, found.methods());
+                comparisons, numbering, found.methods(), walk.carried,
+                new ArmReplacements(bySite), oneValue);
     }
 
     /** The arm {@code raw} addresses, where an arm was numbered at all. */
@@ -811,6 +906,39 @@ public final class CoverageSites {
         }
     }
 
+    /**
+     * Where two programs could answer differently, as the walk has it: each way a list of the arms
+     * it goes through, before those arms are places.
+     */
+    private record DraftDiffers(boolean always, List<List<DraftArm>> ways) {
+
+        static final DraftDiffers ALWAYS = new DraftDiffers(true, List.of());
+
+        ArmReplacements.Differs placed(SiteNumbering numbering,
+                                       IdentityHashMap<DraftArm, ControlPlace.Arm> issued) {
+            if (always) {
+                return ArmReplacements.Differs.ALWAYS;
+            }
+            List<List<ControlPlace.Arm>> out = new ArrayList<>();
+            for (List<DraftArm> way : ways) {
+                out.add(way.stream().map(arm -> placeOf(arm, numbering, issued)).toList());
+            }
+            return new ArmReplacements.Differs(false, out);
+        }
+    }
+
+    /** One sibling as the walk has it: why it is not carried, where it is not, and where it parts
+     *  from the arm. */
+    private record DraftSibling(Optional<ArmReplacements.Sibling.Why> notCarried,
+                                DraftDiffers differs) {}
+
+    /** One numbered arm and its siblings as the walk has them. */
+    private record DraftAtSite(SourceConstructOrigin fork, int part,
+                               SequencedMap<Integer, DraftSibling> siblings) {}
+
+    /** One answer a body can come to, and the arms on the way to it. */
+    private record Leaf(Core answer, List<DraftArm> way) {}
+
     /** The two arms of one {@code if} as the walk has them. */
     private record DraftGuard(String behavior, SourceConstructOrigin origin, DecidedBy decided,
                               java.util.OptionalInt whereThen, java.util.OptionalInt whereElse,
@@ -828,6 +956,20 @@ public final class CoverageSites {
         private final IdentityHashMap<Core, int[]> byNode = new IdentityHashMap<>();
         private final Map<ConstructOccurrence, Integer> byComparison = new LinkedHashMap<>();
         private final IdentityHashMap<Core, DraftArm[]> armsByNode = new IdentityHashMap<>();
+        private final IdentityHashMap<Core, int[][]> carried = new IdentityHashMap<>();
+        private final SequencedMap<Integer, DraftAtSite> replacements = new LinkedHashMap<>();
+        /** The arms of each fork the walk has passed, which is what a way through a body down to
+         *  one of its answers goes through. */
+        private final IdentityHashMap<Core, List<Core>> forkBodies = new IdentityHashMap<>();
+        /** What each subtree does, built once and only for the subtrees two of which may be one,
+         *  under the binders of the body it is in. */
+        private final IdentityHashMap<Core, ExecutableIdentity> identities =
+                new IdentityHashMap<>();
+        /** For each body, where it could answer other than one value. */
+        private final Map<String, DraftDiffers> oneValue = new LinkedHashMap<>();
+        /** How many nodes each subtree an arm's size was asked of is, counted once: an arm holding
+         *  a chain of conditions holds every arm further down it. */
+        private final IdentityHashMap<Core, Integer> sizes = new IdentityHashMap<>();
         /** Which node each fork of these bodies is, so that the one place forks are recognised is
          *  the one place two of them being one can be refused. */
         private final Map<ConstructOccurrence, Core> forks = new LinkedHashMap<>();
@@ -896,7 +1038,132 @@ public final class CoverageSites {
             // handed out for a place, and this is what says which place that is in something a
             // second walk of the same body also arrives at.
             this.places = NodeAddresses.of(name, body);
+            this.identities.clear();
             walk(body, true);
+            oneValue.put(name, fromOneValue(body));
+        }
+
+        /**
+         * Where {@code body} could answer other than one value: the ways to an answer that is not
+         * the same on every run, and to an answer that is not the first one that is.
+         *
+         * <p>A body whose every other way the rules close answers that one value. Which value is
+         * not worked out here: a run of the body came to it, and that run is what says.
+         */
+        private DraftDiffers fromOneValue(Core body) {
+            List<Leaf> leaves = new ArrayList<>();
+            if (!leaves(body, List.of(), leaves)) {
+                return DraftDiffers.ALWAYS;
+            }
+            Leaf one = null;
+            for (Leaf leaf : leaves) {
+                if (sameOnEveryRun(leaf.answer())) {
+                    one = leaf;
+                    break;
+                }
+            }
+            if (one == null) {
+                return DraftDiffers.ALWAYS;
+            }
+            List<List<DraftArm>> ways = new ArrayList<>();
+            for (Leaf leaf : leaves) {
+                if (!sameOnEveryRun(leaf.answer()) || !sameAs(leaf.answer(), one.answer())) {
+                    if (leaf.way().isEmpty()) {
+                        return DraftDiffers.ALWAYS;
+                    }
+                    ways.add(leaf.way());
+                }
+            }
+            return new DraftDiffers(false, ways);
+        }
+
+        /**
+         * Where {@code arm} could answer otherwise than {@code sibling} does: the ways through the
+         * arm to an answer that is not the sibling's.
+         */
+        private DraftDiffers differs(Core arm, Core sibling) {
+            List<Leaf> leaves = new ArrayList<>();
+            if (!leaves(arm, List.of(), leaves)) {
+                return DraftDiffers.ALWAYS;
+            }
+            List<List<DraftArm>> ways = new ArrayList<>();
+            for (Leaf leaf : leaves) {
+                if (!sameAs(leaf.answer(), sibling)) {
+                    if (leaf.way().isEmpty()) {
+                        return DraftDiffers.ALWAYS;
+                    }
+                    ways.add(leaf.way());
+                }
+            }
+            return new DraftDiffers(false, ways);
+        }
+
+        /**
+         * Every answer {@code e} can come to, each with the arms on the way to it: down every arm
+         * of a fork this walk has passed, and down what a {@code let} answers with. Anything else
+         * is an answer of its own. False where there are more of them than
+         * {@link #MOST_ANSWERS_A_PROOF_READS}, which leaves the proof unmade rather than made over
+         * part of the answers.
+         */
+        private boolean leaves(Core e, List<DraftArm> way, List<Leaf> out) {
+            Core plain = Core.withoutStanding(e);
+            List<Core> bodies = forkBodies.get(plain);
+            DraftArm[] arms = armsByNode.get(plain);
+            if (bodies != null && arms != null && arms.length == bodies.size()) {
+                for (int i = 0; i < bodies.size(); i++) {
+                    List<DraftArm> further = new ArrayList<>(way);
+                    further.add(arms[i]);
+                    if (!leaves(bodies.get(i), further, out)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            if (plain instanceof Core.LetIn let) {
+                return leaves(let.body(), way, out);
+            }
+            out.add(new Leaf(e, List.copyOf(way)));
+            return out.size() <= MOST_ANSWERS_A_PROOF_READS;
+        }
+
+        /** Whether two subtrees do the same thing: one size, and then what each does. */
+        private boolean sameAs(Core a, Core b) {
+            return a == b || (nodesIn(a) == nodesIn(b) && identity(a).equals(identity(b)));
+        }
+
+        private ExecutableIdentity identity(Core e) {
+            return identities.computeIfAbsent(e,
+                    each -> ExecutableIdentity.of(each, Binders.of(module, places)));
+        }
+
+        /**
+         * Whether {@code e} comes to the same value on every run, however the body was entered and
+         * whatever its dependencies answer.
+         *
+         * <p>Asked of what each kind of node is, with no default: a value reaches a body from
+         * outside by more than a name — a dependency's answer arrives as a call, and a function
+         * value as an application — so what a node does with the run is a question for each kind,
+         * and a kind added later is a decision this has to make rather than one it makes by
+         * falling through. Narrow on purpose. A literal, and what is built or computed from
+         * literals alone, is the same on every run; everything that calls, applies, reads, binds
+         * or branches is not said to be, which leaves some answers that are always one value
+         * unproven and proves none that are not.
+         */
+        private static boolean sameOnEveryRun(Core e) {
+            return switch (e) {
+                case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
+                     Core.UnitValue _, Core.OptionNone _ -> true;
+                case Core.Neg _, Core.FieldAccess _, Core.Binary _, Core.ListLit _,
+                     Core.OptionSome _, Core.Tuple _, Core.TupleGet _, Core.Construct _,
+                     Core.Widen _ -> {
+                    boolean[] all = {true};
+                    Core.forEachChild(e, child -> all[0] = all[0] && sameOnEveryRun(child));
+                    yield all[0];
+                }
+                case Core.Read _, Core.Call _, Core.PreservedCall _, Core.Apply _,
+                     Core.MaterialisedValue _, Core.FieldProjection _, Core.Block _, Core.If _,
+                     Core.IfConstructed _, Core.LetIn _, Core.Match _, Core.Unreachable _ -> false;
+            };
         }
 
         /**
@@ -1008,6 +1275,107 @@ public final class CoverageSites {
                 }
             }
             armsByNode.put(fork, arms);
+        }
+
+        /**
+         * Which siblings each numbered arm of {@code fork} can be run with in its place, and which
+         * of them the classes carry.
+         *
+         * <p>A sibling whose expression is {@code unreachable} is not one: answering with it is
+         * every row through the arm stopping, which no rewrite worth asking about is. Nor is one
+         * that does what the arm does, read apart from where each is written: answering as it is
+         * answering as the arm, and nothing could tell the two apart. A sibling that
+         * reads the name its own arm gives the value cannot stand anywhere else. And a fork whose
+         * siblings, carried in every arm, would grow it by more than {@link #MOST_NODES_A_FORK_CARRIES}
+         * carries none of them.
+         *
+         * @param names what each arm calls the value it was entered with, null where it calls it
+         *              nothing
+         */
+        private void replacements(Core fork, SourceConstructOrigin origin, DraftArm[] arms,
+                                  List<Core> bodies, List<BindingId> names) {
+            // Kept for the forks around this one: an answer of theirs reached through this fork is
+            // one of these arms' answers.
+            forkBodies.put(fork, List.copyOf(bodies));
+            List<Integer> candidates = new ArrayList<>();
+            int size = 0;
+            for (int part = 0; part < bodies.size(); part++) {
+                if (!(Core.withoutStanding(bodies.get(part)) instanceof Core.Unreachable)) {
+                    candidates.add(part);
+                    size += nodesIn(bodies.get(part));
+                }
+            }
+            // A sibling that reads the name its own arm gives the value cannot stand anywhere
+            // else: that name stands for nothing there, so it is no program the body could be
+            // written as. Asked once of each sibling, since it is the sibling's and not the arm's.
+            boolean[] readsItsOwnName = new boolean[bodies.size()];
+            for (int sibling : candidates) {
+                BindingId own = names.get(sibling);
+                readsItsOwnName[sibling] = own != null && reads(bodies.get(sibling), own);
+            }
+            boolean tooLarge = (long) size * (arms.length - 1) > MOST_NODES_A_FORK_CARRIES;
+            int[][] carriedHere = new int[arms.length][];
+            for (int part = 0; part < arms.length; part++) {
+                // Only an arm a run is recorded in has a switch in front of it: nothing else is
+                // an arm a row is in, so nothing else is an arm a row could notice being replaced.
+                if (!arms[part].isMeasured()) {
+                    carriedHere[part] = new int[0];
+                    continue;
+                }
+                List<Integer> carriedParts = new ArrayList<>();
+                SequencedMap<Integer, DraftSibling> siblings = new LinkedHashMap<>();
+                List<Integer> asked = new ArrayList<>(List.of(part));
+                for (int sibling : candidates) {
+                    // Two siblings that do the same thing are one rewrite of the arm, asked once.
+                    if (readsItsOwnName[sibling] || asked.stream().anyMatch(other ->
+                            sameAs(bodies.get(other), bodies.get(sibling)))) {
+                        continue;
+                    }
+                    asked.add(sibling);
+                    // An arm whose every answer is what the sibling answers is the sibling under
+                    // another place, and answering as it is answering as itself: no row could tell
+                    // the two apart, so it is no rewrite to ask a row about.
+                    DraftDiffers differs = differs(bodies.get(part), bodies.get(sibling));
+                    if (!differs.always() && differs.ways().isEmpty()) {
+                        continue;
+                    }
+                    if (tooLarge) {
+                        siblings.put(sibling, new DraftSibling(
+                                Optional.of(ArmReplacements.Sibling.Why.TOO_LARGE), differs));
+                    } else {
+                        siblings.put(sibling, new DraftSibling(Optional.empty(), differs));
+                        carriedParts.add(sibling);
+                    }
+                }
+                carriedHere[part] = carriedParts.stream().mapToInt(Integer::intValue).toArray();
+                if (!siblings.isEmpty()) {
+                    replacements.put(arms[part].raw().getAsInt(),
+                            new DraftAtSite(origin, part, siblings));
+                }
+            }
+            carried.put(fork, carriedHere);
+        }
+
+        /** Whether {@code e} reads {@code binding} anywhere under it. */
+        private static boolean reads(Core e, BindingId binding) {
+            if (e instanceof Core.Read r && r.binding().equals(binding)) {
+                return true;
+            }
+            boolean[] found = {false};
+            Core.forEachChild(e, child -> found[0] = found[0] || reads(child, binding));
+            return found[0];
+        }
+
+        /** How many nodes {@code e} is, which is what carrying it once more costs. */
+        private int nodesIn(Core e) {
+            Integer known = sizes.get(e);
+            if (known != null) {
+                return known;
+            }
+            int[] count = {1};
+            Core.forEachChild(e, child -> count[0] += nodesIn(child));
+            sizes.put(e, count[0]);
+            return count[0];
         }
 
         /** The probe numbers of {@code arms}, in their order, {@link #NO_SITE} where an arm has
@@ -1185,6 +1553,8 @@ public final class CoverageSites {
                     walk(structural.take(new CoreStructure.Edge.IfElse(), iff.els()), inside);
                     byNode.put(iff, probesOf(then, els));
                     arms(iff, iff.occurrence(), new DraftArm[] {then, els});
+                    replacements(iff, iff.origin(), new DraftArm[] {then, els},
+                            List.of(iff.then(), iff.els()), Arrays.asList(null, null));
                     if (then.isMeasured() || els.isMeasured()) {
                         guards.add(new DraftGuard(behavior, iff.origin(), decided,
                                 then.raw(), els.raw(), iff.pos()));
@@ -1208,6 +1578,14 @@ public final class CoverageSites {
                     }
                     byNode.put(m, probesOf(arms));
                     arms(m, m.occurrence(), arms);
+                    List<Core> bodies = new ArrayList<>();
+                    List<BindingId> names = new ArrayList<>();
+                    for (Core.Case arm : m.cases()) {
+                        bodies.add(arm.body());
+                        names.add(arm.binding().binder() == null ? null
+                                : arm.binding().binder().binding());
+                    }
+                    replacements(m, m.origin(), arms, bodies, names);
                 }
                 case Core.IfConstructed ic -> {
                     // The construction the attempt tests. Taken as the one slot it is, and gone
@@ -1240,6 +1618,15 @@ public final class CoverageSites {
                     }
                     byNode.put(ic, probesOf(arms));
                     arms(ic, ic.occurrence(), arms);
+                    List<Core> bodies = new ArrayList<>();
+                    List<BindingId> names = new ArrayList<>();
+                    bodies.add(ic.then());
+                    names.add(ic.binder() == null ? null : ic.binder().binding());
+                    for (Core.ElseArm arm : ic.els()) {
+                        bodies.add(arm.body());
+                        names.add(null);
+                    }
+                    replacements(ic, ic.origin(), arms, bodies, names);
                 }
             }
             // That the walk went to every slot the node has. A node kind that grows a child stops

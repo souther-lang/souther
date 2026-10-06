@@ -119,7 +119,7 @@ public final class ExampleExecutions {
      * module's shapes say what a value of it is made of. So there is no order in which one module's
      * declarations are tried before another's, and nothing is gathered into a table beforehand.
      */
-    private static FieldTypes checkedFieldTypes(Db db) {
+    static FieldTypes checkedFieldTypes(Db db) {
         return FieldTypes.over(new CheckedDeclarations(Shapes.publishedDeclarations(db), declared -> {
             Map<TypeSymbol.AtModule, ValueShape> shapes =
                     db.ask(new Shapes.ValueShapes(declared.module())).value();

@@ -313,6 +313,9 @@ public sealed interface ObligationDisposition {
                      Weakening.DecisionReadingIncomplete _,
                      // And a rule of a decision read short, which is about what that rule is.
                      Weakening.DecisionRuleReadShort _,
+                     // And a rewrite of the body nothing decided about, which is whether the rows
+                     // depend on what the body says and not where a value stands.
+                     Weakening.RewriteUndecided _,
                      // And the readings nobody made, which is read beside these rather than among
                      // them ({@link #readingsTriedIn}): the reasons here are what a reading met,
                      // and there was no reading of those to meet anything.

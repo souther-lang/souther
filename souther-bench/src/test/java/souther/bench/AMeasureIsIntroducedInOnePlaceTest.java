@@ -131,6 +131,14 @@ class AMeasureIsIntroducedInOnePlaceTest {
             // happen — a row through an arm went through it whatever else stopped — and the
             // constructor refuses it, so this method is where the three are chosen between and the
             // arms of the account cannot be assembled from anything else.
+            // Which rewrites of a body the rows tell apart, said the way the arms are: one factory
+            // per reason there is no value, and one place that reads the rewrites and says whether
+            // one was left open.
+            Map.entry("souther.compiler.query.ReplacementEvidence#noBody()Lsouther/compiler/query/ReplacementEvidence;", 1),
+            Map.entry("souther.compiler.query.ReplacementEvidence#notAsked(Lsouther/compiler/query/ReplacementEvidence$NotAsked;)Lsouther/compiler/query/ReplacementEvidence;", 1),
+            Map.entry("souther.compiler.query.ReplacementEvidence#bodyNotInEvaluation(Ljava/lang/String;)Lsouther/compiler/query/ReplacementEvidence;", 1),
+            Map.entry("souther.compiler.query.ReplacementEvidence#unreadable(Lsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/ReplacementEvidence;", 1),
+            Map.entry("souther.compiler.query.ReplacementEvidence#measured(Ljava/lang/String;Ljava/util/List;Lsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/ReplacementEvidence;", 2),
             Map.entry("souther.compiler.query.ArmObligation#of(Ljava/util/List;Ljava/util/Set;Ljava/util/Set;Lsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/ArmObligation;", 3),
             // Which rules of a body's decision the rows took. Two places and each chooses between
             // states nothing else may: the gates say why no run could be placed at all — the build

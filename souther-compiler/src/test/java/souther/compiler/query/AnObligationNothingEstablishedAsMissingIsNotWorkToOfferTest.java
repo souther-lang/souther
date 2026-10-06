@@ -146,7 +146,8 @@ class AnObligationNothingEstablishedAsMissingIsNotWorkToOfferTest {
                             new souther.compiler.partition.AdequacyPolicy.OfTheMeasures(
                                     souther.compiler.partition.Budgets.measures().pairSpace(), 5,
                                     souther.compiler.regex.PatternPlan.Budget
-                                            .OF_BEHAVIOR_DISTINCTIONS),
+                                            .OF_BEHAVIOR_DISTINCTIONS,
+                                    souther.compiler.partition.Budgets.measures().rewriteRuns()),
                             souther.compiler.partition.Budgets.generation()));
             compilation.measure(Adequacy.Asked.fullReport());
             compilation.answerEverything();

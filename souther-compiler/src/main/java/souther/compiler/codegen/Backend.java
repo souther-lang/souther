@@ -52,8 +52,10 @@ import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -207,15 +209,62 @@ public final class Backend {
                                                SourceLayouts layouts,
                                                LinkageReader linkage,
                                                Instrumentation instrumentation) {
-        try {
-            return generating(module, symbols, published, kinds, kernels, typePackage, sigs,
-                    requirements, checked, compositions, shapes, checks, standingCalls,
-                    layouts, linkage, instrumentation);
-        } catch (IllegalArgumentException e) {
-            // Something the writer would not hold, from a member no definition here claimed — a
-            // synthesised class, a shared one. It belongs to the module, which is as near as anything
-            // gets to naming it.
-            throw asLimit(e, WrittenName.synthetic(module.name(), module.pos()));
+        // The forks whose siblings a method could not hold, found by writing it and gathered across
+        // as many writings as it takes: a method the JVM refuses only because of the siblings in it
+        // is written again without them, so measuring a model never makes it a model that does not
+        // compile. Which siblings went is what the classes carry, and the image says so.
+        Set<Core> notCarrying = Collections.newSetFromMap(new IdentityHashMap<>());
+        while (true) {
+            try {
+                return generating(module, symbols, published, kinds, kernels, typePackage, sigs,
+                        requirements, checked, compositions, shapes, checks, standingCalls,
+                        layouts, linkage, instrumentation, notCarrying);
+            } catch (CarriedPastTheMethod e) {
+                // Each writing leaves out more, so this ends: a definition that is still too large
+                // with nothing of its siblings in it is the model's to be told about.
+                if (!notCarrying.addAll(e.forks())) {
+                    throw e.limit();
+                }
+            } catch (IllegalArgumentException e) {
+                // Something the writer would not hold, from a member no definition here claimed — a
+                // synthesised class, a shared one. It belongs to the module, which is as near as
+                // anything gets to naming it.
+                throw asLimit(e, WrittenName.synthetic(module.name(), module.pos()));
+            }
+        }
+    }
+
+    /**
+     * A definition the writer refused for its size while it carried siblings of the arms in it.
+     *
+     * <p>Not yet the author's: the siblings are this compiler's, there to measure the model, and a
+     * method holding the model's own code without them may be one the JVM holds. So the module is
+     * written again without them, and only a definition too large without them is said as one.
+     *
+     * <p>It carries the forks the definition wrote siblings in, and what the author is told if the
+     * definition is too large without them.
+     */
+    private static final class CarriedPastTheMethod extends RuntimeException {
+
+        private static final long serialVersionUID = 1L;
+
+        /** Caught within the one emission that threw it and never written anywhere. */
+        private final transient List<Core> forks;
+
+        private final RuntimeException limit;
+
+        CarriedPastTheMethod(List<Core> forks, RuntimeException limit) {
+            super(limit.getMessage(), null, false, false);
+            this.forks = List.copyOf(forks);
+            this.limit = limit;
+        }
+
+        List<Core> forks() {
+            return forks;
+        }
+
+        RuntimeException limit() {
+            return limit;
         }
     }
 
@@ -233,7 +282,8 @@ public final class Backend {
                                                   Map<String, StandingSignature> standingCalls,
                                                   SourceLayouts layouts,
                                                   LinkageReader linkage,
-                                                  Instrumentation instrumentation) {
+                                                  Instrumentation instrumentation,
+                                                  Set<Core> notCarrying) {
         Map<String, List<GeneratedClass>> caseToSums = new HashMap<>();
         for (Hir.Def def : module.defs()) {
             if (def instanceof Hir.SumData sum) {
@@ -276,10 +326,23 @@ public final class Backend {
         // Said off what was asked for and not off what the plan came to hold. A module whose bodies
         // have no arm to number is a module a run leaves an empty account of, which is not the same
         // as one a run leaves no account of at all.
+        // And which siblings the classes carry, which is the plan's less the forks a method could not
+        // hold them in: what a run may ask for is what was written, and a reading of the runs is
+        // handed this image rather than the plan for that reason.
+        Set<Integer> leftOut = new HashSet<>();
+        for (Core fork : notCarrying) {
+            for (int site : coverage.probesOf(fork)) {
+                if (site != CoverageSites.NO_SITE) {
+                    leftOut.add(site);
+                }
+            }
+        }
         ProbeImage probes = instrumentation.measuresCoverage()
-                ? new ProbeImage.Instrumented(coverage.identity())
+                ? new ProbeImage.Instrumented(coverage.identity(),
+                        coverage.replacements().carryingNothingAt(leftOut))
                 : new ProbeImage.Uninstrumented();
         ctx.setCoveragePlan(coverage);
+        ctx.setNotCarrying(notCarrying);
         ctx.setCounting(instrumentation.counting());
         Backend b = new Backend(ctx, checked);
         // Before anything is written: a declaration wide enough that its generated method cannot hold
@@ -340,7 +403,7 @@ public final class Backend {
             // the union and its encoder belong to the behavior whose output they are, not to the
             // module, though the behavior did not write them
             Hir.BehaviorDef owner = b.behaviorNamed(module, union.behavior());
-            emitting(owner.written(), () -> {
+            emitting(ctx, owner.written(), () -> {
                 out.put(union, b.generateBehaviorResult(union, alternatives));
                 out.put(new GeneratedClass.Encoder(union),
                         b.codec.generateResultUnionEncoder(union, alternatives));
@@ -352,7 +415,7 @@ public final class Backend {
                 out.put(new GeneratedClass.BridgeCase(module.name(), member),
                         b.value.generateBridgeCase(member, unions)));
         for (Hir.Def def : module.defs()) {
-            emitting(def.written(), () -> {
+            emitting(ctx, def.written(), () -> {
                 switch (def) {
                     case Hir.Data data -> b.value.generateData(data, out);
                     case Hir.SumData sum -> b.value.generateSum(sum, out);
@@ -403,7 +466,7 @@ public final class Backend {
                         }
                     }
                 }
-                emitting(spec.written(), () ->
+                emitting(ctx, spec.written(), () ->
                         out.put(new GeneratedClass.BehaviorInterface(module.name(), spec.name()),
                                 b.generateRequiredBase(spec.name(), unitCases, dataConstructs,
                                         reqParams, b.successType(spec.ret()))));
@@ -425,7 +488,7 @@ public final class Backend {
         Map<String, SpecImplementation.Implemented> implementations =
                 SpecImplementation.implementationsOf(module);
         for (Hir.BehaviorDef bd : module.behaviors()) {
-            emitting(bd.written(), () -> {
+            emitting(ctx, bd.written(), () -> {
                 // The class a declared relation is checked by, emitted by the module that declares
                 // it whichever of the two places the check is called from. A crossing is in the
                 // caller's bytecode and calls this one, so the rule has one home and a caller has
@@ -543,14 +606,15 @@ public final class Backend {
             // belongs to all of them and so to the module. So does a text too long for a constant:
             // one writer refuses it as the method is written and another only as the class is, and
             // the definition it is said at may not turn on which JDK runs this.
+            int from = ctx.carriedCount();
             try {
                 out.put(new GeneratedClass.Helpers(module.name()), b.generateRecursiveHelpers(recHelpers));
             } catch (IllegalArgumentException e) {
                 JvmLimits.Exceeded exceeded = JvmLimits.exceeded(e);
                 Hir.FnDef helper = exceeded == null ? null : helperNamed(recHelpers, exceeded.method());
-                throw helper == null
+                throw refusedFor(ctx, from, e, helper == null
                         ? asLimit(e, WrittenName.synthetic(module.name(), module.pos()))
-                        : asLimit(e, helper.written());
+                        : asLimit(e, helper.written()));
             }
         }
         // Which definition is the entry of which value is what its role says. The name it is emitted
@@ -588,13 +652,35 @@ public final class Backend {
      * says names its own rule and the method it was writing, and the author has no way back from
      * either to what they wrote — so it is said here, where the definition being emitted is in hand.
      * A refusal that names no limit is not this compiler's to answer for and goes on unchanged.
+     *
+     * <p>Unless the definition carried siblings of its arms. Those are this compiler's, written to
+     * measure the model, so a class past a count the JVM sets with them in it is not yet the
+     * author's to be told about: it is written again without them ({@link CarriedPastTheMethod}).
      */
-    private static void emitting(WrittenName written, Runnable emit) {
+    private static void emitting(CodegenContext ctx, WrittenName written, Runnable emit) {
+        int from = ctx.carriedCount();
         try {
             emit.run();
         } catch (IllegalArgumentException e) {
-            throw asLimit(e, written);
+            throw refusedFor(ctx, from, e, asLimit(e, written));
         }
+    }
+
+    /**
+     * What a refusal of the writer is, given which forks the definition carried siblings in since
+     * {@code from}: one to write again without them where it went past a count and carried some,
+     * and {@code said} otherwise.
+     *
+     * <p>Any count, not only the length of a method. A sibling's body adds constants as well as
+     * instructions, and each emission here writes whole classes, so a pool that overflowed did so
+     * in a class these forks are in. A text too long for a constant is not among them: a sibling is
+     * another arm of the same fork, so its texts are the author's, already in the class without it.
+     */
+    private static RuntimeException refusedFor(CodegenContext ctx, int from,
+                                               IllegalArgumentException e, RuntimeException said) {
+        List<Core> carried = ctx.carriedSince(from);
+        return JvmLimits.exceeded(e) instanceof JvmLimits.Counted && !carried.isEmpty()
+                ? new CarriedPastTheMethod(carried, said) : said;
     }
 
     /**

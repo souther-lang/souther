@@ -16,6 +16,7 @@ import souther.compiler.query.NothingWasAsked;
 import souther.compiler.query.OutputCaseEvidence;
 import souther.compiler.query.PartitionDerivation;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.query.ReplacementEvidence;
 
 /**
  * What a person is told about a measure that has no number.
@@ -140,6 +141,9 @@ record ReasonProse(Introduction introduction, String said) {
             };
             case PartitionDerivation.NothingIsDivided _ ->
                     "the rules of this behavior divide no position";
+            case ReplacementEvidence.NoBody it -> switch (it) {
+                case NO_BODY -> "this behavior has no body";
+            };
         };
     }
 
@@ -181,6 +185,10 @@ record ReasonProse(Introduction introduction, String said) {
             case PartitionEvidence.PairSpace.NoRows it -> switch (it) {
                 case NO_ROWS -> "no row names this behavior";
             };
+            case ReplacementEvidence.NotAsked it -> switch (it) {
+                case NOT_ASKED -> "the build did not ask for the rows to be run under a rewrite";
+                case NO_ROWS -> "no row names this behavior";
+            };
         };
     }
 
@@ -194,6 +202,14 @@ record ReasonProse(Introduction introduction, String said) {
             };
             case Adequacy.BranchEvidence.Unreadable it -> switch (it) {
                 case UNREADABLE -> "the arms could not be read";
+            };
+            case ReplacementEvidence.BodyWasNotRead it -> switch (it) {
+                case BODY_WAS_NOT_READ ->
+                        "nothing read this behavior's body, so what it could be rewritten as is"
+                                + " unknown";
+            };
+            case ReplacementEvidence.Unreadable it -> switch (it) {
+                case UNREADABLE -> "the rows could not be run under a rewrite";
             };
             case Adequacy.RowReading.Unavailable it -> switch (it) {
                 case ROWS_UNAVAILABLE -> "nothing came back from the rows";

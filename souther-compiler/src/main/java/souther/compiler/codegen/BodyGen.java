@@ -28,6 +28,7 @@ import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
 import souther.compiler.core.GrowingFold;
 import souther.compiler.coverage.ComparisonEmissionSite;
+import souther.compiler.coverage.CoverageSites;
 
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.jvm.GeneratedClass;
@@ -37,6 +38,7 @@ import souther.compiler.types.ValueName;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.CodeBuilder;
 import java.lang.classfile.Label;
+import java.lang.classfile.instruction.SwitchCase;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
 import java.lang.constant.DynamicConstantDesc;
@@ -148,6 +150,15 @@ final class BodyGen {
         void armsAreCounted() {
             this.armsAreCounted = true;
         }
+
+        /**
+         * How many sibling expressions the emitter is inside, carried in another arm's place.
+         *
+         * <p>A carried copy carries nothing of its own. A run asks for one arm to be replaced at a
+         * time, so the forks inside a copy are only ever run as written — and a copy carrying its
+         * own siblings would be code that grows with every level of nesting for runs nobody makes.
+         */
+        private int carrying = 0;
 
         BodyGen(CodegenContext ctx, CodeBuilder code, Hir.Data data, ClassDesc cdName, int firstSlot) {
             this.ctx = ctx;
@@ -430,11 +441,10 @@ final class BodyGen {
                     genExpr(iff.cond());
                     Label elseL = code.newLabel();
                     code.ifeq(elseL);
-                    probe(iff, 0);
-                    emitTail(iff.then(), cdB, requiredNames, expected);
+                    Consumer<Core> tail = body -> emitTail(body, cdB, requiredNames, expected);
+                    arm(iff, 0, List.of(iff.then(), iff.els()), tail, true);
                     code.labelBinding(elseL);
-                    probe(iff, 1);
-                    emitTail(iff.els(), cdB, requiredNames, expected);
+                    arm(iff, 1, List.of(iff.then(), iff.els()), tail, true);
                 }
                 // Both branches stay in tail position, so a self-recursive helper guarded by an
                 // attempt loops exactly as one guarded by a plain condition does. Falling through to
@@ -442,8 +452,8 @@ final class BodyGen {
                 case Core.IfConstructed ic -> {
                     Attempt a = emitAttempt(ic);
                     bind(ic.binder(), a.slot(), ic.construct().type());
-                    probe(ic, 0);
-                    emitTail(ic.then(), cdB, requiredNames, expected);
+                    arm(ic, 0, armsOf(ic), body -> emitTail(body, cdB, requiredNames, expected),
+                            true);
                     code.labelBinding(a.elseLabel());
                     // Each departure is in tail position too, so it returns on its own and needs no
                     // jump past the ones emitted after it.
@@ -632,11 +642,64 @@ final class BodyGen {
         }
 
         /**
+         * Arm {@code part} of {@code fork}: its probe, and the expression a run answers with there —
+         * the arm's own, or a sibling's where the run asked for that sibling in its place.
+         *
+         * <p>The switch is in front of the arm's own expression and after its probe, so a run
+         * through the arm is recorded as one whichever expression it then answers with, and a run
+         * that asked for nothing goes through one call that answers {@code -1}. Each sibling is the
+         * same emission the sibling gets in its own place, through {@code emit}; nothing about how
+         * an arm's value reaches the code after the fork differs for the copy.
+         *
+         * @param bodies every arm's expression, by part
+         * @param tail   whether each expression ends the method itself, so that nothing jumps past
+         *               the ones emitted after it
+         */
+        private void arm(Core fork, int part, List<Core> bodies, Consumer<Core> emit,
+                         boolean tail) {
+            probe(fork, part);
+            int[] carried = carrying > 0 || !armsAreCounted || !ctx.measuring()
+                    || ctx.probesOf(fork)[part] == CoverageSites.NO_SITE
+                    ? new int[0] : ctx.carriedAt(fork, part);
+            if (carried.length == 0) {
+                emit.accept(bodies.get(part));
+                return;
+            }
+            code.loadConstant(ctx.probesOf(fork)[part]);
+            code.invokestatic(CD_Intervention, "replacementAt", MTD_Intervention_replacementAt);
+            Label own = code.newLabel();
+            Label after = tail ? null : code.newLabel();
+            List<SwitchCase> cases = new ArrayList<>();
+            for (int sibling : carried) {
+                cases.add(SwitchCase.of(sibling, code.newLabel()));
+            }
+            code.lookupswitch(own, cases);
+            carrying++;
+            try {
+                for (SwitchCase each : cases) {
+                    code.labelBinding(each.target());
+                    emit.accept(bodies.get(each.caseValue()));
+                    if (!tail) {
+                        code.goto_(after);
+                    }
+                }
+            } finally {
+                carrying--;
+            }
+            code.labelBinding(own);
+            emit.accept(bodies.get(part));
+            if (!tail) {
+                code.labelBinding(after);
+            }
+        }
+
+        /**
          * Records that this arm ran, where this generation is one that measures.
          *
          * <p>Nothing before it on the stack and nothing after: an {@code int} constant in, nothing out.
          * So it can go at the head of any arm without the arm's own emission having to know it is
-         * there, and a measuring build and a shipping build differ by these calls and by nothing else.
+         * there. A measuring build and a shipping build differ by these calls and by the switches
+         * {@link #arm} puts after them, and by nothing else.
          */
         private void probe(Core node, int arm) {
             if (!armsAreCounted || !ctx.measuring()) {
@@ -877,13 +940,30 @@ final class BodyGen {
             Label elseL = code.newLabel();
             Label end = code.newLabel();
             code.ifeq(elseL);
-            probe(iff, 0);
-            arm.accept(iff.then());
+            arm(iff, 0, List.of(iff.then(), iff.els()), arm, false);
             code.goto_(end);
             code.labelBinding(elseL);
-            probe(iff, 1);
-            arm.accept(iff.els());
+            arm(iff, 1, List.of(iff.then(), iff.els()), arm, false);
             code.labelBinding(end);
+        }
+
+        /** A match's arms by part. */
+        private static List<Core> armsOf(Core.Match m) {
+            List<Core> bodies = new ArrayList<>();
+            for (Core.Case each : m.cases()) {
+                bodies.add(each.body());
+            }
+            return bodies;
+        }
+
+        /** An attempt's arms by part: what follows it, and then each departure. */
+        private static List<Core> armsOf(Core.IfConstructed ic) {
+            List<Core> bodies = new ArrayList<>();
+            bodies.add(ic.then());
+            for (Core.ElseArm each : ic.els()) {
+                bodies.add(each.body());
+            }
+            return bodies;
         }
 
         /** An attempt outside tail position, what follows it and each departure emitted by
@@ -892,8 +972,7 @@ final class BodyGen {
             Attempt a = emitAttempt(ic);
             Label end = code.newLabel();
             bind(ic.binder(), a.slot(), ic.construct().type());
-            probe(ic, 0);
-            arm.accept(ic.then());
+            arm(ic, 0, armsOf(ic), arm, false);
             code.goto_(end);
 
             code.labelBinding(a.elseLabel());
@@ -915,8 +994,7 @@ final class BodyGen {
                 // after the arm, or a later arm reusing the name would resolve to this arm's slot.
 
                 emitCaseGuard(c, sSlot, st, nextCase);
-                probe(m, i);
-                arm.accept(c.body());
+                arm(m, i, armsOf(m), arm, false);
                 if (c.binder() != null) {
                 }
                 code.goto_(end);
@@ -942,8 +1020,7 @@ final class BodyGen {
                 // shadows before the next arm's dispatch.
 
                 emitCaseGuard(c, sSlot, st, nextCase);
-                probe(m, i);
-                emitTail(c.body(), cdB, requiredNames, expected);
+                arm(m, i, armsOf(m), body -> emitTail(body, cdB, requiredNames, expected), true);
                 if (c.binder() != null) {
                 }
                 code.labelBinding(nextCase);
@@ -1116,8 +1193,7 @@ final class BodyGen {
             List<Core.ElseArm> arms = ic.els();
             // The attempt's own arm is 0, so a departure's number is one past where it sits.
             if (arms.size() == 1 && arms.get(0).clause().isEmpty()) {
-                probe(ic, 1);
-                emit.accept(arms.get(0).body());
+                arm(ic, 1, armsOf(ic), emit, end == null);
                 return;
             }
             code.aload(a.resultSlot());
@@ -1151,8 +1227,7 @@ final class BodyGen {
                 code.invokevirtual(CD_String, "equals", MTD_equalsObject);
                 code.ifne(armL);
             }
-            probe(ic, fallthrough + 1);
-            emit.accept(arms.get(fallthrough).body());
+            arm(ic, fallthrough + 1, armsOf(ic), emit, end == null);
             for (int i = 0; i < arms.size(); i++) {
                 if (i == fallthrough) {
                     continue;
@@ -1161,8 +1236,7 @@ final class BodyGen {
                     code.goto_(end);
                 }
                 code.labelBinding(labels.get(i));
-                probe(ic, i + 1);
-                emit.accept(arms.get(i).body());
+                arm(ic, i + 1, armsOf(ic), emit, end == null);
             }
         }
 
