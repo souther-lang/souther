@@ -4522,7 +4522,7 @@ public final class Generator {
      * <p>Not the order a row is written in, which stays the declared one. A container that is to
      * hold the value at another parameter is composed knowing that value, so that parameter has to
      * have been composed first; nothing else about a parameter turns on another, so everything else
-     * keeps the order it had.
+     * is composed in the declared order.
      */
     private static List<Integer> compositionOrder(MeasuredInput subject, ContentsAsked contents) {
         int count = Math.min(subject.parameters().size(), subject.types().size());
@@ -4570,8 +4570,8 @@ public final class Generator {
      * a reason no value of this one changes, the walk stops there: nothing here would be different
      * with another value.
      *
-     * <p>Where no parameter after it is handed a value of it, the first value is the row's, as it
-     * always was: nothing after it turns on it.
+     * <p>Where no parameter after it is handed a value of it, the first value is the row's: nothing
+     * after it turns on it.
      *
      * @param composed each parameter's value, by its declared position, filled as the walk goes
      */
@@ -7110,11 +7110,12 @@ public final class Generator {
                             yield Acceptance.PASSED;
                         }
                         case RowComposed.Halted _ -> Acceptance.STOPPED;
-                        // A parameter after this one that is handed none of its values cannot be
-                        // composed with any other value either, and the walk here is stopped with
-                        // what that one said. One that is handed one may be, so the next is tried.
-                        case RowComposed.Failed _ -> {
-                            if (!awaited) {
+                        // A parameter after this one that came to nothing on its own classes
+                        // alone cannot be composed with any other value of this one either, and
+                        // the walk here is stopped with what that one said. One that is handed a
+                        // value may be, where it is one of this one's, so the next is tried.
+                        case RowComposed.Failed(Attempt why) -> {
+                            if (!awaited || why.localTo().isPresent()) {
                                 yield Acceptance.STOPPED;
                             }
                             cameToNothing[0] = after[0];
@@ -7193,6 +7194,11 @@ public final class Generator {
      * under one parameter and the choices under another do not multiply, and searching them together
      * would spend the bound on assignments that differ only in a parameter already settled. Two
      * parameters of eight either-or fields are two searches of 256, not one of 65,536.
+     *
+     * <p>What a condition on the way relates across parameters is a value one of them was composed
+     * as written into a container of another, and that is handed over ({@code handed}) rather than
+     * searched for together: the parameter it is read off is composed first, and its value is what
+     * the container holds.
      */
     private static Outcome valueFor(MeasuredInput subject, int p, List<Axis> axes,
                                     Set<TermPath> composedAt, LocationWrites decided,
@@ -8590,9 +8596,6 @@ public final class Generator {
      *                  before this
      */
     private record Handed(ContentsAsked asked, Map<TermPath, FixtureTemplate> elsewhere) {
-
-        /** Nothing handed, and nothing read. */
-        static final Handed NOTHING = new Handed(ContentsAsked.NONE, Map.of());
 
         Handed {
             elsewhere = Map.copyOf(elsewhere);
