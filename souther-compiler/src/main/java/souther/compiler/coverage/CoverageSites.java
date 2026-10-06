@@ -1324,13 +1324,25 @@ public final class CoverageSites {
          * <p>A node that is itself a comparison this plan numbers is recorded at the comparison's
          * place. The two are one value at one place, and a second number for it would be a place
          * the emitter writes twice.
+         *
+         * <p>Only the copies opened inside the last closure the node applies. A closure handed to
+         * an operation is applied inside that operation's copy, so a node can open both — and what
+         * it answers is the closure's answer, not the operation's: {@code List.map} answers a list,
+         * and the truth an element's closure answers is the application written in the closure.
          */
         private void answerOf(Core e, OccurrenceLineage mine, OccurrenceLineage outer) {
             if (!Type.BOOL.equals(e.type())) {
                 return;
             }
+            List<OccurrenceLineage.Expansion> copies = opened(mine, outer);
+            for (int at = copies.size() - 1; at >= 0; at--) {
+                if (copies.get(at).at() instanceof ExpansionSite.Supplied) {
+                    copies = copies.subList(at + 1, copies.size());
+                    break;
+                }
+            }
             List<ConstructOccurrence> applications = new ArrayList<>();
-            for (OccurrenceLineage.Expansion opened : opened(mine, outer)) {
+            for (OccurrenceLineage.Expansion opened : copies) {
                 if (opened.expanded() instanceof ValueName.Stdlib.Operation
                         && opened.at() instanceof ExpansionSite.Written written) {
                     applications.add(new ConstructOccurrence(written.origin(), opened.within()));
