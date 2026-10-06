@@ -11,7 +11,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.UnaryOperator;
 
 /**
  * Which expressions a fork's answer turns on, following only what the library says it does.
@@ -59,11 +58,15 @@ final class WhatAForkTests {
      * caller wanting to know who owns the atom composes it from the parts, where the composing is
      * written down. Which answers the atom can give is another question, and
      * {@link TruthOutcomes} answers it.
+     *
+     * <p><b>The names read as that answer reads them.</b> Both are handed what the names stand for
+     * ({@link WhatNamesStandFor}) and neither keeps an account of its own, so a closure handed the
+     * elements of a list written out is walked knowing they are written: a part of it that asks
+     * the same thing every time is not offered here, beside a part that varies or not.
      */
-    static List<Core> partsOfTheAnswer(Core atom,
-                                       UnaryOperator<Core> denotes) {
+    static List<Core> partsOfTheAnswer(Core atom, WhatNamesStandFor names) {
         List<Core> out = new ArrayList<>();
-        turnsOn(atom, AnswerAspect.TRUTH, denotes, new HashMap<>(), out);
+        turnsOn(atom, AnswerAspect.TRUTH, names, new HashMap<>(), out);
         return out;
     }
 
@@ -89,7 +92,7 @@ final class WhatAForkTests {
     }
 
     private static Follow turnsOn(Core standing, AnswerAspect aspect,
-                                  UnaryOperator<Core> denotes,
+                                  WhatNamesStandFor names,
                                   Map<Asked, Follow> met, List<Core> out) {
         // What an answer turns on does not turn on the type it stands as.
         Core e = Core.withoutStanding(standing);
@@ -109,13 +112,13 @@ final class WhatAForkTests {
         if (already != null) {
             return already;
         }
-        Follow answered = answering(standing, aspect, denotes, met, out);
+        Follow answered = answering(standing, aspect, names, met, out);
         met.put(asked, answered);
         return answered;
     }
 
     private static Follow answering(Core standing, AnswerAspect aspect,
-                                    UnaryOperator<Core> denotes,
+                                    WhatNamesStandFor names,
                                     Map<Asked, Follow> met, List<Core> out) {
         Core e = Core.withoutStanding(standing);
         // Whether it holds is decided by the parts of it that decide it, which is the same cut a
@@ -128,7 +131,7 @@ final class WhatAForkTests {
             if (parts.size() != 1 || parts.get(0) != e) {
                 Follow all = Follow.FIXED;
                 for (Core part : parts) {
-                    all = both(all, turnsOn(part, AnswerAspect.TRUTH, denotes, met, out));
+                    all = both(all, turnsOn(part, AnswerAspect.TRUTH, names, met, out));
                 }
                 return all;
             }
@@ -143,17 +146,17 @@ final class WhatAForkTests {
         // taken answers one that does, which is the arms asked the same question.
         switch (e) {
             case Core.If iff -> {
-                return both(turnsOn(iff.cond(), AnswerAspect.TRUTH, denotes, met, out),
-                        both(turnsOn(iff.then(), aspect, denotes, met, out),
-                                turnsOn(iff.els(), aspect, denotes, met, out)));
+                return both(turnsOn(iff.cond(), AnswerAspect.TRUTH, names, met, out),
+                        both(turnsOn(iff.then(), aspect, names, met, out),
+                                turnsOn(iff.els(), aspect, names, met, out)));
             }
             // What a match decides by is which case its subject is. That is the match's own
             // reader's to classify and not a part offered here, and an answer chosen by it varies
             // unless the subject is a value the source wrote out.
             case Core.Match match -> {
-                Follow all = writtenOut(match.scrutinee()) ? Follow.FIXED : Follow.VARIES;
+                Follow all = writtenOut(match.scrutinee(), names) ? Follow.FIXED : Follow.VARIES;
                 for (Core.Case arm : match.cases()) {
-                    all = both(all, turnsOn(arm.body(), aspect, denotes, met, out));
+                    all = both(all, turnsOn(arm.body(), aspect, names, met, out));
                 }
                 return all;
             }
@@ -161,40 +164,36 @@ final class WhatAForkTests {
         }
         // A value the source wrote out turns on nothing: it is an answer and not a question. Its
         // emptiness too, which is how many elements were written.
-        if (writtenOut(e)) {
+        if (writtenOut(e, names)) {
             return Follow.FIXED;
         }
         // What a binding answers is what its body answers, on either side. The emptiness side meets
         // one where a name stood for a helper's copy, whose parameters are bound around its body.
         if (e instanceof Core.LetIn let) {
-            return turnsOn(let.body(), aspect, denotes, met, out);
+            return turnsOn(let.body(), aspect, names, met, out);
         }
         // An operation whose answer is the same every time turns on nothing, whatever the library
         // says or does not say about it. Followed as a question instead, one the library says
-        // nothing about would be where the walk stopped, and offered as a part that varies — and
-        // a closure it is handed would be walked without knowing that what it is handed is
-        // written out, and a part of it offered that asks the same thing every time. Which
+        // nothing about would be where the walk stopped, and offered as a part that varies. Which
         // answers the application can give is {@link TruthOutcomes}' to say, over the tree where
         // the operation stands; an operation the tree that runs applies is the same every time
         // where it is handed nothing but values the source wrote out.
-        if (operationOf(e) != null && (argumentsOf(e).stream()
-                .allMatch(each -> TruthOutcomes.wholeValueWrittenOut(denotes.apply(each),
-                        denotes))
-                || TruthOutcomes.ofTheSide(e, aspect, denotes, null).isFixed())) {
+        if (operationOf(e) != null && (argumentsOf(e).stream().allMatch(names::writtenOut)
+                || TruthOutcomes.ofTheSide(e, aspect, names, null).isFixed())) {
             return Follow.FIXED;
         }
         // And beyond an operation the library says the answer turns on, what it turns on.
-        Core beyond = beyond(e, aspect, denotes);
+        Core beyond = beyond(e, aspect, names);
         Follow past = beyond == null ? Follow.STOPPED
                 : turnsOn(beyond, beyondIsAboutEmptiness(e, aspect)
-                        ? AnswerAspect.EMPTINESS : AnswerAspect.TRUTH, denotes, met, out);
+                        ? AnswerAspect.EMPTINESS : AnswerAspect.TRUTH, names, met, out);
         // A closure is half of what an operation walking a container answers by, and the container
         // is the other half. This walk follows the closure and not the container, so where the
         // closure answers the same whatever it is handed, which answer it is settles which half
         // decides: `List.all(_ -> true, xs)` is true whatever `xs` is, and `List.any(_ -> true, xs)`
         // is whether `xs` holds anything. The first was answered above, as an application the same
         // every time; here the container decides, and the application is what is offered.
-        if (past == Follow.FIXED && throughAClosure(e, aspect, denotes)) {
+        if (past == Follow.FIXED && throughAClosure(e, aspect, names)) {
             past = Follow.STOPPED;
         }
         if (past != Follow.STOPPED) {
@@ -232,13 +231,16 @@ final class WhatAForkTests {
      * Offered as a part, such a value is one nobody answers for and nobody can: it states nothing
      * and there is nothing about it to read, so a fork over a condition every other part of which
      * was read would come back unread on account of a constant.
+     *
+     * <p>And a name the reading of the input says stands for a value written out, which is what a
+     * closure handed the elements of a list written out reads its parameter as.
      */
-    private static boolean writtenOut(Core e) {
+    private static boolean writtenOut(Core e, WhatNamesStandFor names) {
         return switch (Core.withoutStanding(e)) {
             case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
                  Core.UnitValue _, Core.ListLit _, Core.Tuple _, Core.OptionSome _,
                  Core.OptionNone _, Core.Construct _ -> true;
-            default -> false;
+            default -> names.writtenOut(e);
         };
     }
 
@@ -262,7 +264,7 @@ final class WhatAForkTests {
      * other would read one model two ways depending on whether the author named a value.
      */
     private static Core beyond(Core e, AnswerAspect aspect,
-                               UnaryOperator<Core> denotes) {
+                               WhatNamesStandFor names) {
         ValueName operation = operationOf(e);
         if (operation == null) {
             return null;
@@ -270,16 +272,16 @@ final class WhatAForkTests {
         if (aspect == AnswerAspect.TRUTH
                 && DefaultBoundOperationFacts.get().meansTheSameAsASizeOfNought(operation) != null) {
             Core container = only(e);
-            return container == null ? null : denotes.apply(container);
+            return container == null ? null : names.denotes(container);
         }
         var turns = DefaultBoundOperationFacts.get()
                 .turnsOnWhetherAnArgumentHolds(operation, aspect);
-        return turns == null ? null : answerOf(argument(e, turns.argument()), denotes);
+        return turns == null ? null : answerOf(argument(e, turns.argument()), names);
     }
 
     /** Whether what the library says {@code e}'s answer turns on is a closure it was handed. */
     private static boolean throughAClosure(Core e, AnswerAspect aspect,
-                                           UnaryOperator<Core> denotes) {
+                                           WhatNamesStandFor names) {
         ValueName operation = operationOf(e);
         if (operation == null || beyondIsAboutEmptiness(e, aspect)) {
             return false;
@@ -288,7 +290,7 @@ final class WhatAForkTests {
                 .turnsOnWhetherAnArgumentHolds(operation, aspect);
         Core handed = turns == null ? null : argument(e, turns.argument());
         return handed != null
-                && Core.withoutStanding(denotes.apply(handed)) instanceof Core.Block;
+                && Core.withoutStanding(names.denotes(handed)) instanceof Core.Block;
     }
 
     /** Which library operation {@code e} applies, in either shape a representation gives one, or
@@ -331,8 +333,8 @@ final class WhatAForkTests {
      * rule inside it decides nothing — and one model would be read two ways depending on whether the
      * author bound the closure before handing it over.
      */
-    private static Core answerOf(Core e, UnaryOperator<Core> denotes) {
-        Core stands = denotes.apply(e);
+    private static Core answerOf(Core e, WhatNamesStandFor names) {
+        Core stands = names.denotes(e);
         return Core.withoutStanding(stands) instanceof Core.Block block ? block.body() : stands;
     }
 

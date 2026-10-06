@@ -58,6 +58,14 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
             behavior someWordWritten : (o: Order) -> Bool
             let someWordWritten (o) = List.any(s -> String.contains("x", s), [ "x" ])
 
+            behavior someWordWrittenBesideTheInput : (o: Order) -> Bool
+            let someWordWrittenBesideTheInput (o) =
+                List.any(s -> String.contains("x", s) && o.floor > 3, [ "x" ])
+
+            behavior someTruthWrittenBesideTheInput : (o: Order) -> Bool
+            let someTruthWrittenBesideTheInput (o) =
+                List.any(b -> b && o.floor > 3, [ true, false ])
+
             behavior emptyAsked : (o: Order) -> Bool
             let emptyAsked (o) = List.isEmpty(o.lines)
 
@@ -165,10 +173,28 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
                 "an operation applied to a word written out turns on nothing either");
     }
 
+    /**
+     * What a closure over a list written out is handed is a written value wherever the walk reads
+     * it, and not only where the whole closure is the same every time: beside a part that reads
+     * the input, a part reading only the element is no distinction, and the part reading the
+     * input is the one offered.
+     */
+    @Test
+    void aPartReadingOnlyAWrittenElementIsNoDistinctionBesideOneThatVaries() {
+        for (String behavior : List.of("someWordWrittenBesideTheInput",
+                "someTruthWrittenBesideTheInput")) {
+            List<Core> parts = partsOf(behavior);
+            assertEquals(1, parts.size(), () -> behavior + ": what reads the input: " + parts);
+            assertInstanceOf(Core.Binary.class, Core.withoutStanding(parts.getFirst()),
+                    () -> behavior + " offers the comparison against the input, and not what is"
+                            + " asked of the element: " + parts);
+        }
+    }
+
     private static List<Core> partsOf(String behavior) {
         Read read = readingOf(behavior);
-        return WhatAForkTests.partsOfTheAnswer(read.body(), one -> read.reads()
-                .denotes(one, read.rules().symbols(), read.rules().newtypes()).value());
+        return WhatAForkTests.partsOfTheAnswer(read.body(), WhatNamesStandFor.in(read.reads(),
+                read.rules().symbols(), read.rules().newtypes()));
     }
 
     /** Everything the body's single condition asks of a row, coming out {@code holding}. */

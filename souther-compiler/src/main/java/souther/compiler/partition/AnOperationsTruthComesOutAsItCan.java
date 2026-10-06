@@ -47,8 +47,7 @@ final class AnOperationsTruthComesOutAsItCan implements ComparisonWays {
         return Core.withoutStanding(e) instanceof Core.PreservedCall applied
                 && applied.type() == Type.Prim.BOOL
                 && TruthOutcomes.ofTheTruth(applied,
-                        one -> reads.denotes(one, symbols, newtypes).value(), symbols)
-                        .allows(want);
+                        WhatNamesStandFor.in(reads, symbols, newtypes), symbols).allows(want);
     }
 
     @Override

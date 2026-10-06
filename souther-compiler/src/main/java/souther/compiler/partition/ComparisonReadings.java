@@ -527,7 +527,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                       DeclarationNewtypes newtypes) {
         List<Core> left = new ArrayList<>();
         for (Core part : WhatAForkTests.partsOfTheAnswer(atom,
-                one -> reads.denotes(one, symbols, newtypes).value())) {
+                WhatNamesStandFor.in(reads, symbols, newtypes))) {
             if (comparisonAt(part) == null
                     && !(reads.pathOf(part, newtypes) instanceof PathResolution.At)) {
                 left.add(part);

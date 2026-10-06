@@ -9,6 +9,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
+import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -53,8 +54,23 @@ class AWalkOverWhatAnAnswerTurnsOnAsksEachQuestionOnceTest {
     void aClosureThatAnswersWithWhatItWasHandedToIsAskedOnce() {
         Core.PreservedCall call = anyOverAClosure();
         assertEquals(List.of(call),
-                WhatAForkTests.partsOfTheAnswer(call, e -> e == call ? e : call),
+                WhatAForkTests.partsOfTheAnswer(call, through(e -> e == call ? e : call)),
                 "a reading that leads back to the question it came from answers it once");
+    }
+
+    /** Names that stand for what {@code denotes} says, none of them for a written value. */
+    private static WhatNamesStandFor through(UnaryOperator<Core> denotes) {
+        return new WhatNamesStandFor() {
+            @Override
+            public Core denotes(Core e) {
+                return denotes.apply(e);
+            }
+
+            @Override
+            public boolean writtenOut(Core e) {
+                return false;
+            }
+        };
     }
 
     /**
@@ -66,7 +82,7 @@ class AWalkOverWhatAnAnswerTurnsOnAsksEachQuestionOnceTest {
     @Test
     void aClosureIsStillReadForWhatItDecides() {
         Core.PreservedCall call = anyOverAClosure();
-        assertEquals(List.of(call.args().get(0)), WhatAForkTests.partsOfTheAnswer(call, e -> e),
+        assertEquals(List.of(call.args().get(0)), WhatAForkTests.partsOfTheAnswer(call, through(e -> e)),
                 "what the answer turns on is reached");
     }
 }
