@@ -6,6 +6,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.SequencedMap;
@@ -35,8 +36,9 @@ import java.util.SequencedMap;
  * @param beside   the values the caller fixed at other positions the plan was made against, each
  *                 already a value of its position
  * @param narrowed the positions the caller said which case of, which the plan was made against
- *                 too — what stands there is the plan's to build, and a field filled from its
- *                 declaration alone would be whichever case that walk came to first
+ *                 too, spelled as the plan names them — under the case each is narrowed to. What
+ *                 stands there is the plan's to build, and a field filled from its declaration
+ *                 alone would be whichever case that walk came to first
  */
 record ValuesCarryingANumber(TermPath fixed, FixtureTemplate value,
                              Map<TermPath, FixtureTemplate> beside, Set<TermPath> narrowed,
@@ -59,13 +61,22 @@ record ValuesCarryingANumber(TermPath fixed, FixtureTemplate value,
         // number and not a value of the position, so the names its own type wears go on here — the
         // plan's `worn` is what a value already wearing those is still missing, which is what a
         // value chosen at a slot by a search is.
-        return slot.at().equals(fixed)
-                ? WornNames.under(TypeView.of(slot.type(), reading.source().inners(),
-                                reading.source().symbols(),
-                                reading.source().kinds(),
-                                reading.source().sums()).wrappers(),
-                        value, reading.source())
-                : null;
+        if (slot.at().equals(fixed)) {
+            return WornNames.under(TypeView.of(slot.type(), reading.source().inners(),
+                            reading.source().symbols(),
+                            reading.source().kinds(),
+                            reading.source().sums()).wrappers(),
+                    value, reading.source());
+        }
+        // A position narrowed to a case nothing is composed under. Which case it is is the value:
+        // a case that carries nothing is written by naming it, and that is what the caller asked
+        // for. Left to the declaration, the field is whichever case comes first. Where the case
+        // stands for no value, nothing is composed here rather than another case.
+        if (narrowed.contains(slot.at()) && slot.leaf() instanceof ConstructionPlan.Leaf.Open) {
+            List<FixtureTemplate> standing = Partitions.representativesOf(slot.type(), reading);
+            return standing.isEmpty() ? null : standing.getFirst();
+        }
+        return null;
     }
 
     @Override

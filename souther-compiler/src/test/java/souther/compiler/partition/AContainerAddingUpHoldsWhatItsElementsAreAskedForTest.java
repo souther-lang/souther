@@ -132,6 +132,26 @@ class AContainerAddingUpHoldsWhatItsElementsAreAskedForTest {
     }
 
     /**
+     * A position narrowed to a case that carries nothing holds that case.
+     *
+     * <p>Nothing is composed under {@code Company}, which is not nothing being asked: which case it
+     * is is the value. Filled from the declaration instead, the element held whichever case of the
+     * payer comes first.
+     */
+    @Test
+    void aPositionNarrowedToACaseThatCarriesNothingHoldsThatCase() {
+        RuleReadingSource rules = RuleReadings.ofSource(MODEL);
+        DemandsInside inside = new DemandsInside(Map.of(),
+                Requirements.NONE.and(ELEMENT.then("method"), toLeaf("Cash"))
+                        .and(ELEMENT.then("payer"), toLeaf("Company")));
+
+        assertEquals("[" + cash(1, "Company") + "]",
+                assertInstanceOf(TermRealizations.Realization.Built.class,
+                        realizing(rules, inside), "a cash entry paid by the company")
+                        .values().getFirst().text());
+    }
+
+    /**
      * And where what is asked inside cannot be one element, the container is one this composed
      * none of — said the way a total nothing composes is said, and never as two values written at
      * one place.
@@ -145,10 +165,31 @@ class AContainerAddingUpHoldsWhatItsElementsAreAskedForTest {
                         List.of(FixtureTemplate.string("x"))),
                 Requirements.NONE.and(ELEMENT.then("method"), toLeaf("Cash")));
 
+        TermRealizations.Realization.None none = assertInstanceOf(
+                TermRealizations.Realization.None.class, realizing(rules, inside),
+                "no element is both a card and cash");
+        assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, none.why());
+        assertEquals("what each element is asked to hold puts `ns[*].method` both at Cash and at"
+                        + " Card", none.detail(),
+                "said of what was asked, which contradicts itself before any way down is tried");
+    }
+
+    /**
+     * A value asked where each element holds its share of the total is that position asked two
+     * things, and neither is offered — never the value standing in for the share, which would build
+     * a container that does not come to the total.
+     */
+    @Test
+    void aValueAskedWhereTheShareIsWrittenIsNotTakenForTheShare() {
+        RuleReadingSource rules = RuleReadings.ofSource(MODEL);
+        DemandsInside inside = new DemandsInside(
+                Map.of(ELEMENT.then("method").then("amount"), List.of(FixtureTemplate.integer(0))),
+                Requirements.NONE.and(ELEMENT.then("method"), toLeaf("Cash")));
+
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                 assertInstanceOf(TermRealizations.Realization.None.class,
                         realizing(rules, inside),
-                        "no element is both a card and cash").why());
+                        "the share and the value cannot both stand at one position").why());
     }
 
     /** What filling the entries to a total of one came to, with {@code inside} asked of each. */

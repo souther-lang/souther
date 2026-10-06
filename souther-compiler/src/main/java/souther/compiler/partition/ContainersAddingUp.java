@@ -125,6 +125,17 @@ final class ContainersAddingUp {
                                            HowManyIsAskedFor alsoHolding,
                                            DemandsInside inside) {
         RuleReadingSource ruleSource = reading.source();
+        // What the caller asked inside an element contradicting itself is no way down that did not
+        // plan: it is every way down, settled before any of them is tried. Met inside the walk it
+        // was a refusal of one way that the walk had no account of.
+        Optional<Requirements.Merge.Conflict> contradicts = inside.contradiction();
+        if (contradicts.isPresent()) {
+            Requirements.Merge.Conflict conflict = contradicts.get();
+            return new TermRealizations.Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                    "what each element is asked to hold puts `" + conflict.at() + "` both at "
+                            + conflict.one().spelled() + " and at " + conflict.other().spelled());
+        }
         // Which number is being built for, read off the answer that says which number it is of.
         // Named beside it, the two were free to be about two numbers and this would fill a
         // container found under one path with elements counted on another's order.
@@ -161,6 +172,19 @@ final class ContainersAddingUp {
             // Nowhere for an element to stand. Which is the rules leaving the elements nothing, and
             // is said as a container this composed none of rather than as a total nothing reaches.
             return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        // A value asked at the position each element's share is written at, or around it, is that
+        // position asked two things: the share and the value. One element holds one of them there,
+        // and which would be whichever the composing read first, so neither is offered.
+        TermPath share = underTheCasesNamed(occurrences(target), inside.required());
+        for (TermPath asked : inside.among().keySet()) {
+            TermPath spelled = underTheCasesNamed(asked, inside.required());
+            if (spelled.isAtOrUnder(share) || share.isAtOrUnder(spelled)) {
+                return new TermRealizations.Realization.None(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                        "`" + asked + "` is asked for a value where each element holds its share"
+                                + " of the total");
+            }
         }
         // How a value of the element is built with the number written where the total reads it,
         // asked of the plan and once per way down. A sum puts nothing under it until a case is
@@ -997,8 +1021,7 @@ final class ContainersAddingUp {
                             break;
                         }
                         first = false;
-                        found.add(new Filling(plan, fixed, beside,
-                                spelled.required().refinements().keySet()));
+                        found.add(new Filling(plan, fixed, beside, narrowedAt(inside.required())));
                     }
                 }
                 // A narrowing to state, and the walk states each of them. Asked again rather than
@@ -1011,31 +1034,25 @@ final class ContainersAddingUp {
                     if (narrowings.isEmpty()) {
                         nothingStandsAt.add(where);
                     }
-                    Refinement asked = inside.required().at(where);
+                    // Never a position the caller narrowed: the plan is made against those, so
+                    // what it asks to have narrowed is only what the caller left open.
                     for (Refinement narrowing : narrowings) {
-                        if (asked == null || asked.equals(narrowing)) {
-                            asking.add(narrowed(fixed, where, narrowing));
-                        }
+                        asking.add(narrowed(fixed, where, narrowing));
                     }
                 }
                 case ConstructionPlan.Result.Beyond(Set<CompositionBudget> by) ->
                         asking.gaveUpAt(by);
                 case ConstructionPlan.Result.Refused(ConstructionPlan.ModelRefusal why) -> {
                     switch (why) {
-                        // Two narrowings at one position. Where the caller asked nothing inside,
-                        // every narrowing here was stated by this walk, one at a time, at a
-                        // position the plan named — so there is no second one to meet. Where the
-                        // caller did, a value it fixed under one case of a position this walk
-                        // reached under another is a way down the caller's element does not take,
-                        // and there is nothing to plan along it.
-                        case ConstructionPlan.ModelRefusal.Conflict conflict -> {
-                            if (inside.isEmpty()) {
+                        // Two narrowings at one position, which nothing here writes: every one of
+                        // them was stated by this walk, one at a time, at a position the plan
+                        // named and the caller left open, and what the caller asked was settled
+                        // to hold together before the walk began.
+                        case ConstructionPlan.ModelRefusal.Conflict conflict ->
                                 throw new IllegalStateException("`" + conflict.at() + "` would have"
                                         + " to be both " + conflict.one().spelled() + " and "
                                         + conflict.other().spelled()
                                         + ", though one narrowing was stated");
-                            }
-                        }
                         // A collection on the way down holds nothing, so nothing stands inside it
                         // and there was never a way to try. Which is what the list beside this one
                         // already says: a position nothing stands under is a position nothing
@@ -1198,6 +1215,22 @@ final class ContainersAddingUp {
                 return chosen;
             }
         };
+    }
+
+    /**
+     * Each position {@code required} names a case at, spelled the way the plan names it: under the
+     * case it is narrowed to, and under the cases of the positions above it.
+     *
+     * <p>The plan's spelling and no other. A position said without its case is a different path from
+     * the one the plan holds, and a reader matching the two by stripping the case would take a
+     * position narrowed to one case for the same position narrowed to another.
+     */
+    private static Set<TermPath> narrowedAt(Requirements required) {
+        Set<TermPath> out = new LinkedHashSet<>();
+        for (TermPath each : required.refinements().keySet()) {
+            out.add(underTheCasesNamed(each, required));
+        }
+        return out;
     }
 
     /**
