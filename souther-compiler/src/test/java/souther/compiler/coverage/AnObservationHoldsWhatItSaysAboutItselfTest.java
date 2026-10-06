@@ -44,9 +44,9 @@ class AnObservationHoldsWhatItSaysAboutItselfTest {
     void anArmsNumberIsNoComparisonARunEvaluated() {
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> new Observation(UNDER, Set.of(),
-                        Set.of(new ComparisonOutcome(1, true))));
+                        Set.of(new RecordedConditionOutcome(1, true))));
 
-        assertTrue(refused.getMessage().contains("recorded as a comparison"),
+        assertTrue(refused.getMessage().contains("recorded as a condition"),
                 refused.getMessage());
     }
 
@@ -55,10 +55,10 @@ class AnObservationHoldsWhatItSaysAboutItselfTest {
     @Test
     void andEachFamilyHoldsItsOwn() {
         Observation seen = new Observation(UNDER, Set.of(1),
-                Set.of(new ComparisonOutcome(0, true)));
+                Set.of(new RecordedConditionOutcome(0, true)));
 
         assertTrue(seen.arms().contains(1));
-        assertTrue(seen.comparisons().contains(new ComparisonOutcome(0, true)));
+        assertTrue(seen.outcomes().contains(new RecordedConditionOutcome(0, true)));
     }
 
     /**
@@ -71,9 +71,9 @@ class AnObservationHoldsWhatItSaysAboutItselfTest {
     @Test
     void bothWaysOutOfOneComparisonAreARunThatCameBackToIt() {
         Observation seen = new Observation(UNDER, Set.of(),
-                Set.of(new ComparisonOutcome(0, true), new ComparisonOutcome(0, false)));
+                Set.of(new RecordedConditionOutcome(0, true), new RecordedConditionOutcome(0, false)));
 
-        assertTrue(seen.comparisons().contains(new ComparisonOutcome(0, true)));
-        assertTrue(seen.comparisons().contains(new ComparisonOutcome(0, false)));
+        assertTrue(seen.outcomes().contains(new RecordedConditionOutcome(0, true)));
+        assertTrue(seen.outcomes().contains(new RecordedConditionOutcome(0, false)));
     }
 }

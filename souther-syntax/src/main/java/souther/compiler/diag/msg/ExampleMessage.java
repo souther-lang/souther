@@ -350,17 +350,18 @@ public sealed interface ExampleMessage extends Message {
     record WriteARowAtThatInput(String input) implements ExampleMessage, Supporting {}
 
     /**
-     * One condition of that rule: a comparison the author wrote, which the rule takes holding.
+     * One condition of that rule: a truth the author wrote — a comparison, or an application of
+     * one of the language's operations — which the rule takes holding.
      *
-     * <p>Carries nothing. Which comparison it is is where the label is put, so a reader reads the
-     * comparison they wrote rather than one this compiler spelled from the proposition its account
+     * <p>Carries nothing. Which construct it is is where the label is put, so a reader reads the
+     * code they wrote rather than a condition this compiler spelled from the proposition its account
      * keys on — {@code n > 100} in a body is held there as {@code n <= 100} denied.
      */
-    record TheRuleTakesThisComparisonHolding() implements ExampleMessage, Supporting {}
+    record TheRuleTakesThisConditionHolding() implements ExampleMessage, Supporting {}
 
     /** The same, where the rule takes it failing. Two entries and not one that selects a word: a
      *  wording that turns on a value is two messages. */
-    record TheRuleTakesThisComparisonFailing() implements ExampleMessage, Supporting {}
+    record TheRuleTakesThisConditionFailing() implements ExampleMessage, Supporting {}
 
     /** One condition of that rule: a fork of the body, and which of its arms the rule goes down. */
     record TheRuleGoesThroughThisArm(souther.compiler.diag.Localizable arm)

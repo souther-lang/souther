@@ -51,7 +51,7 @@ public final class Plans {
             }
         };
         return new CoverageSites.Plan(plan.sites(), plan.guards(), plan.byNode(),
-                plan.byComparison(), plan.armsByNode(), everywhere,
+                plan.byComparison(), plan.armsByNode(), plan.answersByNode(), everywhere,
                 plan.whereEachArmsForkIsWritten(), plan.comparisons(), plan.numbering(),
                 plan.methods());
     }
@@ -77,7 +77,7 @@ public final class Plans {
             arms.put(node, out);
         });
         return new CoverageSites.Plan(plan.sites(), plan.guards(), plan.byNode(),
-                plan.byComparison(), arms, plan.mayRepeat(),
+                plan.byComparison(), arms, plan.answersByNode(), plan.mayRepeat(),
                 plan.whereEachArmsForkIsWritten(), plan.comparisons(), plan.numbering(),
                 plan.methods());
     }

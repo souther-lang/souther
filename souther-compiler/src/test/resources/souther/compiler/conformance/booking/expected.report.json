@@ -3610,7 +3610,7 @@
           },
           "taken" : false,
           "requirement" : "unsettled",
-          "because" : "the_rule_the_row_took_could_not_be_told"
+          "because" : "a_composed_row_was_short_of_the_way"
         }, {
           "obligationId" : {
             "behavior" : "seat",
@@ -3626,7 +3626,7 @@
           },
           "taken" : false,
           "requirement" : "unsettled",
-          "because" : "the_rule_the_row_took_could_not_be_told"
+          "because" : "a_composed_row_was_short_of_the_way"
         }, {
           "obligationId" : {
             "behavior" : "seat",
@@ -3637,11 +3637,23 @@
             } ]
           },
           "taken" : false,
-          "requirement" : "unsettled",
-          "because" : "the_rule_the_row_took_could_not_be_told"
+          "requirement" : "required"
         } ]
       },
-      "findings" : [ ]
+      "findings" : [ {
+        "kind" : "decision_rule_uncovered",
+        "disposition" : "refused",
+        "subject" : "seat",
+        "obligationId" : {
+          "behavior" : "seat",
+          "conditions" : [ {
+            "kind" : "not_read",
+            "condition" : "condition 1 of `seat`",
+            "outcome" : "denied"
+          } ]
+        },
+        "code" : "E1935"
+      } ]
     } ]
   }, {
     "module" : "conformance.holds",
@@ -3824,7 +3836,7 @@
           },
           "taken" : false,
           "requirement" : "unsettled",
-          "because" : "the_rule_the_row_took_could_not_be_told"
+          "because" : "a_composed_row_was_short_of_the_way"
         }, {
           "obligationId" : {
             "behavior" : "originOf",
@@ -3835,8 +3847,7 @@
             } ]
           },
           "taken" : false,
-          "requirement" : "unsettled",
-          "because" : "the_rule_the_row_took_could_not_be_told"
+          "requirement" : "required"
         } ]
       },
       "findings" : [ {
@@ -3866,6 +3877,19 @@
           "ordinal" : 2,
           "lowered" : 0
         }
+      }, {
+        "kind" : "decision_rule_uncovered",
+        "disposition" : "refused",
+        "subject" : "originOf",
+        "obligationId" : {
+          "behavior" : "originOf",
+          "conditions" : [ {
+            "kind" : "not_read",
+            "condition" : "condition 0 of `originOf`",
+            "outcome" : "denied"
+          } ]
+        },
+        "code" : "E1935"
       } ]
     } ]
   } ],

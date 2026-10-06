@@ -253,7 +253,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                                         new WrittenOwner.Body("example.banding", "caller"),
                                         occurrence, SourceConstruct.CALL)))),
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
-                        List.of(WHERE.comparison(occurrence))),
+                        List.of(WHERE.outcome(occurrence))),
                 new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)));
     }
 

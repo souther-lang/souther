@@ -49,7 +49,7 @@ class OnlyWhatWritesTheCallAsksAPlaceForItsNumberTest {
     private static final Set<String> A_PLACE = Set.of(
             "souther/compiler/coverage/RunSite",
             "souther/compiler/coverage/ArmProbe",
-            "souther/compiler/coverage/ComparisonEmissionSite");
+            "souther/compiler/coverage/ConditionOutcomeSite");
 
     /** A method that may ask, how many times it does, and why it is one of the ones that does. */
     private record Licence(String who, int calls, String why) { }

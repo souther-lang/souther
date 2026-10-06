@@ -389,6 +389,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/GrowingFold", "rewrite", "(" + core + "L" + c
                 + "types/ValueName$Stdlib$Operation;)" + core, Reading.THE_TREE_THAT_RUNS, RUNS);
+        row(out, c + "coverage/AnswerEmissionIndex", "walk", "(" + core + "L" + c
+                + "coverage/CoverageSites$Plan;Ljava/util/Map;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "coverage/ArmEmissionIndex", "walk", "(" + core + "L" + c
                 + "coverage/CoverageSites$Plan;Ljava/util/Map;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "coverage/Arrivals", "claim", "(" + core + "L" + c
@@ -400,7 +402,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "coverage/CoverageSites$Plan;Ljava/util/Map;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "coverage/CoreStructure", "childrenOf", "(" + core + ")Ljava/util/List;",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
-        row(out, c + "coverage/CoverageSites$Walk", "walk", "(" + core + "Z)V",
+        row(out, c + "coverage/CoverageSites$Walk", "descend", "(" + core + "Z)V",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "coverage/Methods", "collectCalls", "(" + core
                 + "Ljava/util/Map;Ljava/util/Set;)V", Reading.THE_TREE_THAT_RUNS, RUNS);

@@ -1,7 +1,11 @@
 package souther.compiler.codegen;
 
 import souther.compiler.check.AtomSpace;
+import souther.compiler.core.Core;
 import souther.compiler.core.EnsuresEnforcement;
+import souther.compiler.coverage.ConditionOutcomeSite;
+import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.RunSite;
 import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
 import souther.compiler.core.KernelSignatures;
@@ -38,10 +42,12 @@ import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 import static souther.compiler.codegen.Descriptors.*;
@@ -385,13 +391,20 @@ final class CodegenContext {
      * other nodes; a comparison it does not hold is any comparison written outside a condition, which
      * is most of them.
      */
-    java.util.Optional<souther.compiler.coverage.ComparisonEmissionSite> comparisonSiteOf(
-            souther.compiler.core.Core comparison) {
+    Optional<ConditionOutcomeSite> comparisonSiteOf(Core comparison) {
         // Which comparison the node is, then where a run through it is written down: the catalog
         // answers the first for every comparison the bodies hold, and the plan the second for the
         // ones it instruments. The emitter is walking the tree, so the node is how it gets in.
         return coverage.comparisons().occurrenceAt(comparison)
                 .flatMap(coverage::emissionSiteOf);
+    }
+
+    /**
+     * Where the answer this node works out is recorded, or empty where it is not where an
+     * application the model states answers. Absent is ordinary, as for a comparison.
+     */
+    Optional<ConditionOutcomeSite> answerSiteOf(Core node) {
+        return coverage.answerSiteOf(node);
     }
 
     /** Records that one planned arm was emitted. */
@@ -409,13 +422,22 @@ final class CodegenContext {
      * silently, and every one of them is then reported as an arm no row goes through.
      */
     List<Integer> plannedButNotEmitted() {
+        // Every place the plan named: its sites, and where the applications it records answer. An
+        // answer at a comparison's node is at the comparison's place, so the places are a set.
+        Set<RunSite> planned = new LinkedHashSet<>();
+        for (CoverageSites.Site site : coverage.sites()) {
+            planned.add(site.index());
+        }
+        for (CoverageSites.AnswerSite answer : coverage.answers()) {
+            planned.add(answer.index());
+        }
         List<Integer> missing = new java.util.ArrayList<>();
-        for (souther.compiler.coverage.CoverageSites.Site site : coverage.sites()) {
+        for (RunSite place : planned) {
             // By the number, because what was emitted is what was written into the code: this is
             // the side of the boundary where a place is a constant in a call, and both families
             // are written the same way there.
-            if (!emittedSites.contains(site.index().raw())) {
-                missing.add(site.index().raw());
+            if (!emittedSites.contains(place.raw())) {
+                missing.add(place.raw());
             }
         }
         return missing;

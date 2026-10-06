@@ -20,7 +20,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.Place;
 import souther.compiler.partition.OrderedAffineBoundary;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.ComparisonEmissionSite;
+import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.observe.Classification;
@@ -1195,7 +1195,7 @@ final class Coverages {
             ItemAssessment.WritabilityProjection projection,
             List<souther.compiler.partition.OrderedAffineBoundary> elsewhere,
             souther.compiler.partition.WayToTheBorder way) {
-        List<ComparisonEmissionSite> site =
+        List<ConditionOutcomeSite> site =
                 line.border().origin().recordedAt();
         return new OneShapeOfBorder() {
 
@@ -1256,7 +1256,7 @@ final class Coverages {
         souther.compiler.partition.MeasuredInput.BorderReading line = input.at(border);
         souther.compiler.inputs.Quantities rules = input.quantities();
         BorderQuantity quantity = line.quantity();
-        List<ComparisonEmissionSite> site =
+        List<ConditionOutcomeSite> site =
                 border.origin().recordedAt();
         // Built here and gone when the search is. What a row has to be to arrive is a way of asking
         // about values rather than something that says what it is, so it is what the walk runs
@@ -1653,7 +1653,7 @@ final class Coverages {
     private static StandingAtAPoint.Met standingThere(
             Probe probe, souther.compiler.partition.MeasuredInput.BorderReading line,
             Criterion criterion,
-            List<ComparisonEmissionSite> site,
+            List<ConditionOutcomeSite> site,
             souther.compiler.partition.Generator.BoundaryAttempt.Built built) {
         souther.compiler.partition.ObservedInputs read =
                 probe.read(built.row().toRun()).asInputs();

@@ -8,6 +8,8 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 
+import java.util.Optional;
+
 /**
  * How the decision a body states writes down what got a run to an answer.
  *
@@ -172,13 +174,26 @@ final class DecisionNaming implements Naming<DecisionPath> {
     /**
      * Where a run through one condition is recorded, said in the model's words.
      *
-     * <p>The comparison's own construct of the model, which is what the tree the rules are read off
-     * and the tree that runs agree about. A condition of any other shape has none to be seen at, and
-     * says so rather than being left off the path.
+     * <p>The construct of the model that answers the truth, which is what the tree the rules are
+     * read off and the tree that runs agree about: a comparison, or an application of one of the
+     * language's operations. A condition with no such construct — a truth asked of a name the body
+     * was handed — has none to be seen at, and says so rather than being left off the path.
      */
     private static ShownBy shownBy(DecidedCondition answer, Condition condition, boolean held) {
-        return condition instanceof Condition.Compares one && one.states().isPresent()
-                ? new ShownBy.AtAComparison(one.states().orElseThrow(), held)
+        Optional<ModelOccurrence> answered = answeredAt(condition);
+        return answered.isPresent() ? new ShownBy.AtAnOutcome(answered.get(), held)
                 : new ShownBy.NothingIsRecorded(answer.condition());
+    }
+
+    /** The construct of the model {@code condition}'s truth is answered by, where it is one. */
+    private static Optional<ModelOccurrence> answeredAt(Condition condition) {
+        return switch (condition) {
+            case Condition.Compares one -> one.states();
+            case Condition.Truth truth
+                    when Core.withoutStanding(truth.value()) instanceof Core.PreservedCall applied
+                    && applied.occurrence().isWritten() ->
+                    ModelOccurrence.statedAt(applied.occurrence());
+            default -> Optional.empty();
+        };
     }
 }

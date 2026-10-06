@@ -10,9 +10,9 @@ package souther.compiler.coverage;
  * apart because they are answered by different things: the numbering hands out an address for the
  * arms it instruments, and a body has arms whether anything instruments them or not.
  *
- * <p><b>Beside {@link ComparisonEmissionSite} and not the same as one.</b> Both are numbers out of
+ * <p><b>Beside {@link ConditionOutcomeSite} and not the same as one.</b> Both are numbers out of
  * one counter, because what records a run is one set of numbers. A number written for an arm and a
- * number written for a comparison are told apart by nothing in the number, so they are told apart
+ * number written for a condition are told apart by nothing in the number, so they are told apart
  * by being different types — and which one a number was issued for is the numbering's answer,
  * given once where the number was handed out.
  *
@@ -24,7 +24,7 @@ package souther.compiler.coverage;
  *
  * <p><b>Made by the numbering and by nothing else.</b> There is no way here to pair a number with a
  * numbering that did not hand it out: {@link SiteNumbering#arm} is the only maker, and it refuses a
- * number that numbering never issued and one it issued to a comparison.
+ * number that numbering never issued and one it issued to a condition.
  */
 public final class ArmProbe implements RunSite {
 

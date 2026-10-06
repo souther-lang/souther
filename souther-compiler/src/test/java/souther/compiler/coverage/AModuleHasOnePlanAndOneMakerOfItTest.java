@@ -136,10 +136,17 @@ class AModuleHasOnePlanAndOneMakerOfItTest {
             "method comparisons() : souther.compiler.coverage.ComparisonCatalog",
             "method instruments(souther.compiler.types.ConstructOccurrence) : boolean",
             "method emissionSiteOf(souther.compiler.types.ConstructOccurrence) :"
-                    + " java.util.Optional<souther.compiler.coverage.ComparisonEmissionSite>",
+                    + " java.util.Optional<souther.compiler.coverage.ConditionOutcomeSite>",
             "method outcomeOf(souther.compiler.types.ConstructOccurrence,boolean) :"
                     + " java.util.Optional<"
                     + "souther.compiler.coverage.ControlPlace$Outcome>",
+            // Where the applications of the language's operations the model states answer. Values
+            // like the sites: an answer site says where its code is written and which application
+            // it is, and carries no way into the tree it was numbered in.
+            "method answers() :"
+                    + " java.util.List<souther.compiler.coverage.CoverageSites$AnswerSite>",
+            "method answers(java.lang.String) :"
+                    + " java.util.List<souther.compiler.coverage.CoverageSites$AnswerSite>",
             // What a number means, which is the half of a plan that outlives the graph.
             "method numbering() : souther.compiler.coverage.SiteNumbering",
             "method identity() : souther.compiler.coverage.NumberingIdentity",
@@ -148,6 +155,8 @@ class AModuleHasOnePlanAndOneMakerOfItTest {
             "method armsOf(souther.compiler.core.Core) :"
                     + " souther.compiler.coverage.ControlPlace$Arm[]",
             "method probesOf(souther.compiler.core.Core) : int[]",
+            "method answerSiteOf(souther.compiler.core.Core) :"
+                    + " java.util.Optional<souther.compiler.coverage.ConditionOutcomeSite>",
             // Where the fork of each place this plan reached is written.
             "method whereEachArmsForkIsWritten() :"
                     + " java.util.Map<java.lang.Integer, souther.compiler.diag.Citation>");

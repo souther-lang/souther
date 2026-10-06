@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * records, so their canonical constructors are public and a caller can put any comparison beside
  * any address. Downstream reads the pair as the plan's answer: a claim is made at the address and a
  * condition is written about the comparison, so a pair nothing issued together sends a run to be
- * recorded at one comparison and reported about another. {@link ComparisonEmissionSite} keeps its
+ * recorded at one comparison and reported about another. {@link ConditionOutcomeSite} keeps its
  * own constructor to its package for this reason; a record cannot, so the maker is counted here
  * instead.
  *
@@ -54,10 +54,10 @@ class WhoMakesAControlPlaceTest {
                             + " here for a caller to have assembled"),
             new Licence("souther.compiler.coverage.CoverageSites.Plan.outcomeOf"
                             + " -> ControlPlace$Outcome", 1,
-                    "the address is taken from this plan for the comparison being asked about, so"
-                            + " the two are the one answer. Handed in separately they would be two,"
-                            + " and a claim recorded at one comparison would carry a condition"
-                            + " written about another"));
+                    "the address is taken from this plan for the comparison or the application"
+                            + " being asked about, so the two are the one answer. Handed in"
+                            + " separately they would be two, and a claim recorded at one construct"
+                            + " would carry a condition written about another"));
 
     @Test
     void everyMakerOfAControlPlaceIsWrittenDownWithWhatSaysItsHalvesGoTogether() {

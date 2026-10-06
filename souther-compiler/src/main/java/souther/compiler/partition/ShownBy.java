@@ -22,16 +22,22 @@ import souther.compiler.types.ModelOccurrence;
 public sealed interface ShownBy {
 
     /**
-     * A comparison of the model coming out one way.
+     * A construct of the model answering a truth one way: a comparison, or an application of one
+     * of the language's operations.
      *
-     * @param comparison which comparison of the model
-     * @param held       the way the path took it
+     * <p>One shape for the two. What a run records of either is the truth it answered where it
+     * answered it, and which kind of construct gave that truth is the construct's to say — a
+     * reader of the place a run is seen at that asked would be telling two places apart that are
+     * recorded alike.
+     *
+     * @param construct which construct of the model
+     * @param held      the way the path took it
      */
-    record AtAComparison(ModelOccurrence comparison, boolean held) implements ShownBy {
+    record AtAnOutcome(ModelOccurrence construct, boolean held) implements ShownBy {
 
-        public AtAComparison {
-            if (comparison == null) {
-                throw new IllegalArgumentException("a comparison of the model is some construct");
+        public AtAnOutcome {
+            if (construct == null) {
+                throw new IllegalArgumentException("a truth of the model is some construct's");
             }
         }
     }
@@ -62,6 +68,9 @@ public sealed interface ShownBy {
      * <p>Named by the column, which is what tells two of them apart wherever anything does. What a
      * rule carrying one says is that a run through it cannot be recognised, which is this
      * compiler's shortfall rather than anything about the model.
+     *
+     * <p>A truth the body asks of a name it was handed, or of a value no construct of the model
+     * answers, is one of these: there is no construct for a run to have answered it at.
      */
     record NothingIsRecorded(DecisionCondition condition) implements ShownBy {
 

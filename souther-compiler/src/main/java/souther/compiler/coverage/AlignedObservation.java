@@ -1,5 +1,6 @@
 package souther.compiler.coverage;
 
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -34,19 +35,19 @@ public final class AlignedObservation {
 
     private final Set<ArmProbe> arms;
 
-    private final Set<SeenComparison> comparisons;
+    private final Set<SeenConditionOutcome> outcomes;
 
     AlignedObservation(NumberingIdentity numbering, Set<ArmProbe> arms,
-                       Set<SeenComparison> comparisons) {
+                       Set<SeenConditionOutcome> outcomes) {
         if (numbering == null) {
             throw new IllegalArgumentException(
                     "a run read as places is read as places of some numbering");
         }
         this.numbering = numbering;
         this.arms = Set.copyOf(arms);
-        this.comparisons = Set.copyOf(comparisons);
+        this.outcomes = Set.copyOf(outcomes);
         this.arms.forEach(each -> requireOurs(each.numbering(), each));
-        this.comparisons.forEach(each -> requireOurs(each.at().numbering(), each));
+        this.outcomes.forEach(each -> requireOurs(each.at().numbering(), each));
     }
 
     /** What this run is read under, which is what a place put to it has to be a place of. */
@@ -59,9 +60,9 @@ public final class AlignedObservation {
         return arms;
     }
 
-    /** The ways its comparisons came out, as places of this numbering. */
-    public Set<SeenComparison> comparisons() {
-        return comparisons;
+    /** The ways its conditions came out, as places of this numbering. */
+    public Set<SeenConditionOutcome> outcomes() {
+        return outcomes;
     }
 
     /** Whether the run was recorded at {@code probe}. */
@@ -70,16 +71,16 @@ public final class AlignedObservation {
         return arms.contains(probe);
     }
 
-    /** Whether the run had the comparison at {@code at} come out {@code held}. Not the same as the
-     *  comparison having been reached: one that came out the other way was reached and is not
+    /** Whether the run had the condition at {@code at} come out {@code held}. Not the same as the
+     *  condition having been reached: one that came out the other way was reached and is not
      *  this. */
-    public boolean saw(ComparisonEmissionSite at, boolean held) {
+    public boolean saw(ConditionOutcomeSite at, boolean held) {
         requireOurs(at.numbering(), at);
-        return comparisons.contains(new SeenComparison(at, held));
+        return outcomes.contains(new SeenConditionOutcome(at, held));
     }
 
-    /** Whether the run reached {@code at} at all, whichever way the comparison there came out. */
-    public boolean reached(ComparisonEmissionSite at) {
+    /** Whether the run reached {@code at} at all, whichever way the condition there came out. */
+    public boolean reached(ConditionOutcomeSite at) {
         return saw(at, true) || saw(at, false);
     }
 
@@ -98,16 +99,16 @@ public final class AlignedObservation {
                 || (other instanceof AlignedObservation that
                         && numbering.equals(that.numbering)
                         && arms.equals(that.arms)
-                        && comparisons.equals(that.comparisons));
+                        && outcomes.equals(that.outcomes));
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(numbering, arms, comparisons);
+        return Objects.hash(numbering, arms, outcomes);
     }
 
     @Override
     public String toString() {
-        return "a run of " + numbering + " at " + arms + " and " + comparisons;
+        return "a run of " + numbering + " at " + arms + " and " + outcomes;
     }
 }

@@ -992,10 +992,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static Citation whereItIsWritten(Compilation compilation, DecisionRuleReading read) {
         return switch (read) {
             case DecisionRuleReading.AComparisonCameOut(var comparison, var _) -> comparison.at();
+            case DecisionRuleReading.AnApplicationAnswered(var application, var _) ->
+                    application.at();
             case DecisionRuleReading.AForkTookAnArm(var arm) ->
                     Sites.placeOf(compilation.db(), arm.anchor());
             case DecisionRuleReading.AConditionIsNotShown _,
-                    DecisionRuleReading.AComparisonIsNotPlaced _,
+                    DecisionRuleReading.AnOutcomeIsNotPlaced _,
                     DecisionRuleReading.AForkIsNotPlaced _ -> null;
         };
     }
@@ -3112,6 +3114,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case DecisionRuleReading.AComparisonCameOut(var _, var held) ->
                     "the comparison at " + shown.at().said(rendering, declaredIn)
                             + (held ? " holds" : " does not hold");
+            case DecisionRuleReading.AnApplicationAnswered(var _, var held) ->
+                    "the operation applied at " + shown.at().said(rendering, declaredIn)
+                            + (held ? " answers true" : " answers false");
             case DecisionRuleReading.AForkTookAnArm(var arm) ->
                     "it goes through `" + ArmVocabulary.label(arm) + "` ("
                             + shown.at().said(rendering, declaredIn) + ")";
@@ -3120,7 +3125,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // line is written for each so that the rule is never described by fewer conditions
             // than it turns on.
             case DecisionRuleReading.AConditionIsNotShown _,
-                    DecisionRuleReading.AComparisonIsNotPlaced _,
+                    DecisionRuleReading.AnOutcomeIsNotPlaced _,
                     DecisionRuleReading.AForkIsNotPlaced _ ->
                     "one condition of it is one this compiler has nothing to send you to";
         };

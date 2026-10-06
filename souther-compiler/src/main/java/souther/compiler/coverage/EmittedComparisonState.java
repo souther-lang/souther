@@ -57,7 +57,7 @@ public sealed interface EmittedComparisonState {
      * called the materialisation, and the site is where a run through it is written down. Two facts
      * about one place, kept together so that a reader asking either has the other.
      */
-    record Observation(ConstructOccurrence occurrence, ComparisonEmissionSite site,
+    record Observation(ConstructOccurrence occurrence, ConditionOutcomeSite site,
                        ComparisonArrival arrival) {
 
         public Observation {

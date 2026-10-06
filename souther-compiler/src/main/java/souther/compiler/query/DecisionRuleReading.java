@@ -55,17 +55,32 @@ public sealed interface DecisionRuleReading {
     }
 
     /**
-     * A comparison of the model this run has no site for.
+     * An application of one of the language's operations the author wrote, answering one way.
+     *
+     * @param application where the code answering it stands, which is what a reader is sent to
+     * @param held        whether the path took it answering true
+     */
+    record AnApplicationAnswered(CoverageSites.AnswerSite application, boolean held)
+            implements DecisionRuleReading {
+
+        public AnApplicationAnswered {
+            Objects.requireNonNull(application, "an application of the model is some site");
+        }
+    }
+
+    /**
+     * A construct of the model answering a truth — a comparison or an application — that this run
+     * has no site for.
      *
      * <p>Beside {@link AConditionIsNotShown} for the reason {@link AForkIsNotPlaced} is: this is
      * the plan that numbered the places having nothing under the construct the reading named,
      * rather than the reading of the body falling short of saying what a condition means.
      */
-    record AComparisonIsNotPlaced(ModelOccurrence comparison, boolean held)
+    record AnOutcomeIsNotPlaced(ModelOccurrence construct, boolean held)
             implements DecisionRuleReading {
 
-        public AComparisonIsNotPlaced {
-            Objects.requireNonNull(comparison, "a comparison of the model is some construct");
+        public AnOutcomeIsNotPlaced {
+            Objects.requireNonNull(construct, "a truth of the model is some construct's");
         }
     }
 
@@ -128,8 +143,8 @@ public sealed interface DecisionRuleReading {
         List<DecisionRuleReading> out = new ArrayList<>();
         for (ShownBy each : ruled.shownBy()) {
             out.add(switch (each) {
-                case ShownBy.AtAComparison(var comparison, var held) ->
-                        comparisonOf(plan, behavior, comparison, held);
+                case ShownBy.AtAnOutcome(var construct, var held) ->
+                        outcomeOf(plan, behavior, construct, held);
                 case ShownBy.AtAnArm(var fork, var part) -> armOf(plan, behavior, fork, part);
                 case ShownBy.NothingIsRecorded(var condition) ->
                         new AConditionIsNotShown(condition);
@@ -138,15 +153,25 @@ public sealed interface DecisionRuleReading {
         return List.copyOf(out);
     }
 
-    /** The site of one comparison, or the fact that this run has no site for it. */
-    private static DecisionRuleReading comparisonOf(CoverageSites.Plan plan, String behavior,
-                                                    ModelOccurrence comparison, boolean held) {
+    /**
+     * The site of one construct answering a truth, or the fact that this run has no site for it.
+     *
+     * <p>Matched on the construct the source wrote, for the reason {@link #armOf} gives. A
+     * construct is a comparison or an application and never both, so it is found among one.
+     */
+    private static DecisionRuleReading outcomeOf(CoverageSites.Plan plan, String behavior,
+                                                 ModelOccurrence construct, boolean held) {
         for (CoverageSites.ComparisonSite site : plan.comparisons(behavior)) {
-            if (site.obligation().origin().equals(comparison.origin())) {
+            if (site.obligation().origin().equals(construct.origin())) {
                 return new AComparisonCameOut(site, held);
             }
         }
-        return new AComparisonIsNotPlaced(comparison, held);
+        for (CoverageSites.AnswerSite site : plan.answers(behavior)) {
+            if (site.application().origin().equals(construct.origin())) {
+                return new AnApplicationAnswered(site, held);
+            }
+        }
+        return new AnOutcomeIsNotPlaced(construct, held);
     }
 
     /**

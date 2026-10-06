@@ -14,7 +14,7 @@ import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.coverage.Runs;
-import souther.compiler.coverage.SeenComparison;
+import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -126,7 +126,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
     /** Everything the ways in name, and nothing at any arm. */
     private static AlignedObservation waysWithoutTheArms(Model model) {
         Set<ArmProbe> taken = new LinkedHashSet<>();
-        Set<SeenComparison> ways = new LinkedHashSet<>();
+        Set<SeenConditionOutcome> ways = new LinkedHashSet<>();
         collect(model.read(), taken, ways);
         taken.removeAll(model.read().arms().keySet());
         return Runs.of(model.numbering(), taken, ways);
@@ -135,13 +135,13 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
     /** The same, and the arms as well. */
     private static AlignedObservation everywhere(Model model, Set<ArmProbe> arms) {
         Set<ArmProbe> taken = new LinkedHashSet<>(arms);
-        Set<SeenComparison> ways = new LinkedHashSet<>();
+        Set<SeenConditionOutcome> ways = new LinkedHashSet<>();
         collect(model.read(), taken, ways);
         return Runs.of(model.numbering(), taken, ways);
     }
 
     private static void collect(CoverageRead.Read read, Set<ArmProbe> taken,
-                                Set<SeenComparison> ways) {
+                                Set<SeenConditionOutcome> ways) {
         for (PathAccess access : read.arms().values()) {
             if (!(access instanceof PathAccess.Ways found)) {
                 continue;
@@ -151,7 +151,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
                     switch (claim.at()) {
                         case ControlPlace.Arm arm -> taken.add(arm.probe().get());
                         case ControlPlace.Outcome point ->
-                                ways.add(new SeenComparison(point.at(), point.held()));
+                                ways.add(new SeenConditionOutcome(point.at(), point.held()));
                     }
                 }
             }

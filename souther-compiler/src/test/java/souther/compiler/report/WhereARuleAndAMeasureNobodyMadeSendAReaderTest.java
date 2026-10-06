@@ -30,9 +30,10 @@ class WhereARuleAndAMeasureNobodyMadeSendAReaderTest {
      * A fork on a value worked out from the input, which nothing classifies.
      *
      * <p>Every class of the position is derived and both arms are reached; what stops is the
-     * reading of the comparison inside, because it is about a value made from the position and
-     * nothing works out what it says about the values there. That is a rule this compiler could not
-     * read, and a rule is somewhere a reader can be sent.
+     * reading of the fork, because whether the dropped list holds anything is a value made from the
+     * position and nothing the library says of {@code List.drop} works out what it says about the
+     * values there. That is a rule this compiler could not read, and a rule is somewhere a reader
+     * can be sent.
      */
     private static final String A_RULE_NOTHING_READ = """
             module probe.ruleunread
@@ -41,23 +42,18 @@ class WhereARuleAndAMeasureNobodyMadeSendAReaderTest {
             data Manager
             data Rank = Ordinary | Manager
 
-            data Request = { rank: Rank }
+            data Request = { ranks: List<Rank> }
 
             data Reasoned
             data Unreasoned
 
-            let reasons (request: Request): List<Rank> =
-                match request.rank with
-                    | Ordinary -> [ Ordinary ]
-                    | Manager  -> []
-
             behavior decide : (request: Request) -> Reasoned | Unreasoned
             let decide (request) =
-                if List.isEmpty(reasons(request)) then Unreasoned else Reasoned
+                if List.isEmpty(List.drop(1, request.ranks)) then Unreasoned else Reasoned
 
             example decide
-                | "an ordinary rank has a reason" : (Request { rank = Ordinary }) -> Reasoned
-                | "a manager has none" : (Request { rank = Manager }) -> Unreasoned
+                | "two ranks have a reason" : (Request { ranks = [ Ordinary, Manager ] }) -> Reasoned
+                | "one rank has none" : (Request { ranks = [ Ordinary ] }) -> Unreasoned
             """;
 
     /**

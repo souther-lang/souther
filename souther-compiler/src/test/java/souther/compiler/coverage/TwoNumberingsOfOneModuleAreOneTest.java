@@ -135,7 +135,7 @@ class TwoNumberingsOfOneModuleAreOneTest {
         assertNotEquals(one, other, "so it is another numbering");
     }
 
-    /** And a number is an address of an arm or of a comparison, never of both. */
+    /** And a number is an address of an arm or of a condition, never of both. */
     @Test
     void eachNumberIsAnAddressOfOneOrTheOther() {
         NumberingIdentity numbering = numberingOf(MODEL);
@@ -144,7 +144,7 @@ class TwoNumberingsOfOneModuleAreOneTest {
             byFamily.merge(numbering.at(n).getClass().getSimpleName(), 1, Integer::sum);
         }
 
-        assertTrue(byFamily.containsKey("Arm") && byFamily.containsKey("Comparison"),
+        assertTrue(byFamily.containsKey("Arm") && byFamily.containsKey("ConditionOutcome"),
                 () -> "both families are handed numbers out of the one counter: " + byFamily);
     }
 

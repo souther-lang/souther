@@ -7471,8 +7471,12 @@ public final class Adequacy {
             switch (read) {
                 case DecisionRuleReading.AComparisonCameOut(var comparison, var held) ->
                         label(built, comparison.at(), held
-                                ? new ExampleMessage.TheRuleTakesThisComparisonHolding()
-                                : new ExampleMessage.TheRuleTakesThisComparisonFailing());
+                                ? new ExampleMessage.TheRuleTakesThisConditionHolding()
+                                : new ExampleMessage.TheRuleTakesThisConditionFailing());
+                case DecisionRuleReading.AnApplicationAnswered(var application, var held) ->
+                        label(built, application.at(), held
+                                ? new ExampleMessage.TheRuleTakesThisConditionHolding()
+                                : new ExampleMessage.TheRuleTakesThisConditionFailing());
                 case DecisionRuleReading.AForkTookAnArm(var arm) ->
                         label(built, Sites.placeOf(db, arm.anchor()),
                                 new ExampleMessage.TheRuleGoesThroughThisArm(phraseFor(arm)));
@@ -7481,7 +7485,7 @@ public final class Adequacy {
                 // an author acts on — and a note is written for each so that the rule is never
                 // described by fewer conditions than it turns on.
                 case DecisionRuleReading.AConditionIsNotShown _,
-                        DecisionRuleReading.AComparisonIsNotPlaced _,
+                        DecisionRuleReading.AnOutcomeIsNotPlaced _,
                         DecisionRuleReading.AForkIsNotPlaced _ ->
                         built.hint(new ExampleMessage.OneConditionOfTheRuleIsNotShown());
             }
