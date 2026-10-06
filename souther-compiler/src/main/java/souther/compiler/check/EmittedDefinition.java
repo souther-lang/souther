@@ -58,4 +58,16 @@ public record EmittedDefinition(Core body, List<Parameter> parameters, LoweringR
             }
         }
     }
+
+    /**
+     * Whether what this method compares and forks on is among the places of its module.
+     *
+     * <p>A value's method is: it is a body a run of every behavior that calls the value passes
+     * through. A helper is not, nor is an entry or a row's value. The plan numbers the places of
+     * exactly these bodies and the emitter records a run through exactly these, so both read it
+     * here; asked apart, one of them can number a place the other never writes.
+     */
+    public boolean placesAreCounted() {
+        return role instanceof LoweringRole.ValueHome;
+    }
 }

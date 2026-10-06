@@ -4365,7 +4365,7 @@ public final class Bodies {
         SequencedMap<String, Core> methods = new LinkedHashMap<>();
         for (Hir.FnDef fn : settled.fns()) {
             EmittedDefinition definition = module.emittedDefinitions().get(fn.name());
-            if (definition != null && definition.role() instanceof LoweringRole.ValueHome) {
+            if (definition != null && definition.placesAreCounted()) {
                 methods.put(fn.name(), definition.body());
                 // What a body is read with travels with the body. A behavior's check answers with
                 // the rules its calls were handed, and the expansion a value method was lowered
