@@ -155,6 +155,66 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
         assertEquals("Plain, 0, 1", rowsOf(A_FORK_ABOVE).get("kind=Plain"));
     }
 
+    /**
+     * A guard that lets the body go on where its comparison comes out false.
+     *
+     * <p>{@code amount = 0} makes {@code amount <= 0} hold and the guard refuse. What gets a row
+     * past is the comparison failing, which a repair that took every guard's comparison to be one
+     * that has to hold could not ask for.
+     */
+    @Test
+    void aRowIsHeldToTheWayTheGuardsComparisonHasToComeOut() {
+        Map<String, String> rows =
+                rowsOf(MODEL.replace("guard amount > 0", "guard Bool.not(amount <= 0)"));
+        assertEquals("Plain, 1", rows.get("kind=Plain"));
+        assertEquals("Plain, 0", rows.get("amount=x <= 0"), "the row about the refused class");
+    }
+
+    private static final String TWO_AMOUNTS = """
+            module example.settle
+
+            data Plain
+            data Express
+            data Kind = Plain | Express
+
+            data Done = { n: Int }
+            data Refused
+
+            behavior settle : (kind: Kind, a: Int, b: Int) -> Done | Refused
+                constructs Done
+
+            let settle (kind, a, b) = {
+                guard CONDITION else Refused
+                match kind with
+                    | Plain -> Done { n = a + b }
+                    | Express -> Done { n = a + b + 500 }
+            }
+            """;
+
+    /**
+     * Both sides of an {@code &&} at once. A row that stops at the first is not past the guard
+     * once the first holds — the second refuses it then — so what is asked for is the way whole.
+     *
+     * <p>The second side on a total, which no class of a position gives a row the way to: held to
+     * the first side alone, the search finds nothing past the guard however it walks the classes.
+     */
+    @Test
+    void aWayPastAGuardIsEveryComparisonItTakesAtOnce() {
+        String both = A_TOTAL
+                .replace("(kind: Kind, items: List<Item>)", "(kind: Kind, a: Int, items: List<Item>)")
+                .replace("let settle (kind, items)", "let settle (kind, a, items)")
+                .replace("guard total(items) > 0", "guard a > 0 && total(items) > 0");
+        assertEquals("Plain, 1, [Item { amount = Amount(1), payer = Self }]",
+                rowsOf(both).get("kind=Plain"));
+    }
+
+    /** Either side of an {@code ||}, and one is enough: the row is moved at one position. */
+    @Test
+    void aGuardWithTwoWaysPastIsPassedByOne() {
+        assertEquals("Plain, 1, 0",
+                rowsOf(TWO_AMOUNTS.replace("CONDITION", "a > 0 || b > 0")).get("kind=Plain"));
+    }
+
     /** What each row is for, by its label, and what it writes. */
     private static Map<String, String> rowsOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");

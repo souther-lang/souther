@@ -210,7 +210,7 @@ public final class CoverageRead {
             walked.takesAt(group);
         }
         return new Read(found, arms.found(behavior), List.copyOf(walked.taken),
-                arms.restOfTheBlock(behavior));
+                arms.restOfTheBlock(behavior, body));
     }
 
     /**

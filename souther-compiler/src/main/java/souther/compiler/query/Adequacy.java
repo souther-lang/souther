@@ -62,7 +62,6 @@ import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BodyDistinction;
 import souther.compiler.partition.CameToNothing;
-import souther.compiler.coverage.ComparisonEmissionSite;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.ComparisonHeld;
@@ -5175,36 +5174,42 @@ public final class Adequacy {
         }
 
         /**
-         * What holds each comparison of this behavior's body, worked out for a comparison when a
-         * generation asks about it and kept for the next asking.
+         * What brings each comparison of this behavior's body out each way, worked out for a
+         * comparison and a way when a generation asks about them and kept for the next asking.
          *
          * <p>The place a point of the comparison's border is composed at, on the side the
-         * comparison holds on and against the line where there is a point there: what a row needs
-         * to get past the comparison is to be on that side, and the point against the line is the
-         * one the border's own search composes first. Found the way that search finds it — the
-         * point's standing, under what the way to the comparison leaves, put to the realizer — so
-         * a row held to this is held to the same demand a row at the point is.
+         * comparison comes out on and against the line where there is a point there: what a row
+         * needs to get the comparison to come out that way is to be on that side, and the point
+         * against the line is the one the border's own search composes first. Found the way that
+         * search finds it — the point's standing, under what the way to the comparison leaves, put
+         * to the realizer — so a row held to this is held to the same demand a row at the point is.
          *
          * <p>Empty where the border offers no such point or nothing was found there. Which is
-         * that this compiler has no demand to hand over, and never that nothing gets past the
-         * comparison.
+         * that this compiler has no demand to hand over, and never that the comparison does not
+         * come out that way.
          */
         private static ComparisonHeld.Of heldBy(MeasuredInput subject,
                                                 List<BorderAssessment> edges,
                                                 ReachingCuts reaching) {
-            Map<ComparisonEmissionSite, Optional<ComparisonHeld>> found = new LinkedHashMap<>();
-            return site -> found.computeIfAbsent(site,
+            Map<ControlPlace.Outcome, Optional<ComparisonHeld>> found = new LinkedHashMap<>();
+            return outcome -> found.computeIfAbsent(outcome,
                     asked -> holding(subject, edges, reaching, asked));
         }
 
-        /** What holds the comparison recorded at {@code site}, worked out once. */
+        /**
+         * What brings the comparison out the way {@code outcome} says, worked out once.
+         *
+         * <p>The side is which of the border's roles stand inside it: a point in {@link PointRole#ON}
+         * or {@link PointRole#IN} is one the comparison holds at, and one in {@link PointRole#OFF}
+         * or {@link PointRole#OUT} one it fails at.
+         */
         private static Optional<ComparisonHeld> holding(MeasuredInput subject,
                                                         List<BorderAssessment> edges,
                                                         ReachingCuts reaching,
-                                                        ComparisonEmissionSite site) {
+                                                        ControlPlace.Outcome outcome) {
             for (BorderAssessment edge : edges) {
                 Optional<ModelOccurrence> comparison = edge.border().origin().comparisonAt();
-                if (!edge.border().origin().recordedAt().contains(site)
+                if (!edge.border().origin().recordedAt().contains(outcome.at())
                         || comparison.isEmpty()) {
                     continue;
                 }
@@ -5213,7 +5218,10 @@ public final class Adequacy {
                         instanceof souther.compiler.partition.Reachability.Reaching able)) {
                     return Optional.empty();   // nothing takes the way to it
                 }
-                for (PointRole wanted : List.of(PointRole.ON, PointRole.IN)) {
+                List<PointRole> onThatSide = outcome.held()
+                        ? List.of(PointRole.ON, PointRole.IN)
+                        : List.of(PointRole.OFF, PointRole.OUT);
+                for (PointRole wanted : onThatSide) {
                     for (Map.Entry<DomainPoint, ItemAssessment> point : edge.items().entrySet()) {
                         if (edge.border().roleOf(point.getKey()) != wanted
                                 || !(point.getValue() instanceof ItemAssessment.Owed owed)) {

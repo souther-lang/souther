@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.carrier.Lookup;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ArmProbe;
-import souther.compiler.coverage.ComparisonEmissionSite;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.check.RuleReadingContext;
@@ -2143,11 +2142,11 @@ public final class Generator {
      * the row that goes out. What a search came to, what it spent and what it left untried are the
      * search's and this does not touch them.
      *
-     * <p>What it holds the row to is what gets it past the guard the run stopped at: of the
-     * comparisons on the way into the rest of the block, the one the run did not come out the way
-     * the way asks, held the way a point of its border on the side it holds on is
+     * <p>What it holds the row to is what gets it past the guard the run stopped at: a way the
+     * guard's condition lets a run go on ({@link TheRestOfTheBlock#ways}), each comparison of it the
+     * run did not come out the way it asks held the way a point of its border on that side is
      * ({@link ComparisonHeld}). Held beside the pins and not in place of them, and the search is
-     * the class's own search again with one more demand — so what is chosen again is a value
+     * the class's own search again with those demands besides — so what is chosen again is a value
      * inside the classes the row already stands in, or a class of a position the row is not about,
      * and never the class the row is for. Where a pinned class is what fails the guard, no row
      * holds both and nothing is found: the row stopping there is the row about that class.
@@ -2157,10 +2156,10 @@ public final class Generator {
      * what the row says about it; it stays written the way it was, and a row that would move it is
      * not taken.
      *
-     * <p>Kept only where the new row was seen in the rest of the block. Each exchange holds the row
-     * to one more comparison and none twice, so there are no more of them than there are
-     * comparisons the body's guards make. What was held before is held after, so a row past the
-     * second guard is still past the first.
+     * <p>Kept only where the new row was seen in the rest of the block. Each guard is looked past
+     * once, and at each the ways tried are no more than the reading of the body holds for one value,
+     * so there are no more searches than that for every guard. What was held before is held after,
+     * so a row past the second guard is still past the first.
      *
      * @param read    the reading of the body, which says where a guard's rest of the block is and
      *                what holds on the way there
@@ -2188,20 +2187,26 @@ public final class Generator {
                 return found;   // nothing says how far it got, so nothing is further
             }
             GeneratedRow best = found;
-            List<ComparisonHeld> held = new ArrayList<>();
-            Set<ComparisonEmissionSite> asked = new LinkedHashSet<>();
+            List<ComparisonHeld> held = List.of();
+            Set<ArmProbe> tried = new LinkedHashSet<>();
             while (true) {
                 Optional<TheRestOfTheBlock> rest = restOfTheBlockShortOf(seen);
-                if (rest.isEmpty()) {
+                // Each guard once: a guard looked past already is one no way of was found for.
+                if (rest.isEmpty() || !tried.add(rest.get().arm())) {
                     return best;
                 }
-                Optional<ComparisonHeld> more = cameOutAgainst(seen, rest.get(), asked);
-                if (more.isEmpty()) {
-                    return best;
+                GeneratedRow further = null;
+                for (List<ComparisonHeld> way : waysOn(seen, rest.get())) {
+                    List<ComparisonHeld> both = new ArrayList<>(held);
+                    both.addAll(way);
+                    GeneratedRow row = search(axes, pins, purposes, found, against, origins, check,
+                            references, answers, List.copyOf(both), rest.get().arm());
+                    if (row != null) {
+                        further = row;
+                        held = List.copyOf(both);
+                        break;
+                    }
                 }
-                held.add(more.get());
-                GeneratedRow further = search(axes, pins, purposes, found, against, origins, check,
-                        references, answers, List.copyOf(held), rest.get().arm());
                 if (further == null
                         || !(watched(further) instanceof Watched.Ran(AlignedObservation now))) {
                     return best;
@@ -2243,32 +2248,47 @@ public final class Generator {
         }
 
         /**
-         * What holds a comparison of the guard {@code stopped} decides by that {@code seen} came out
-         * of only the way that does not hold, among those not {@code asked} about already — the
-         * first such one there is something to hold with, which it then counts as asked.
+         * For each way past the guard {@code stopped} there is something to hold with, what holds
+         * every part of it {@code seen} did not do — the ways that ask least of the row first.
          *
-         * <p>The guard's own comparisons and no others. A comparison some fork above the guard
-         * decided by came out whichever way the row's values took it, and that is the row's way
-         * through the body rather than what stopped it.
+         * <p>A way whole and not a comparison at a time. A way is what the guard's condition takes
+         * all at once — both sides of an {@code &&}, the second of an {@code ||} with the first
+         * failing — and held a comparison at a time, the row was sent past one part of a way into
+         * a guard that refused it on the next.
          *
-         * <p>Asked of the run, a place at a time. A guard whose condition did not hold is one whose
-         * comparisons came out against it, and the run is what recorded which way each came out; a
-         * comparison it came out of both ways is one a loop passed more than once, and holding it
-         * is not what the run was short of.
+         * <p>What the run already did is no demand: it was seen doing it, and the row it is
+         * composed again holds it as the row did, or holds it by the classes. A part of a way that
+         * is an arm, or a comparison no border offers a point on the side it comes out on, is one
+         * nothing here can hold a row to, and the way is not one this offers.
+         *
+         * <p>Fewest first, because what the row did is the best guess at what a row like it does:
+         * the way the row went through the guard's condition with one comparison turned round
+         * changes the row least.
          */
-        private Optional<ComparisonHeld> cameOutAgainst(AlignedObservation seen,
-                                                        TheRestOfTheBlock stopped,
-                                                        Set<ComparisonEmissionSite> asked) {
-            for (ComparisonEmissionSite site : stopped.decidedBy()) {
-                if (!seen.saw(site, false) || seen.saw(site, true) || !asked.add(site)) {
-                    continue;
+        private List<List<ComparisonHeld>> waysOn(AlignedObservation seen,
+                                                  TheRestOfTheBlock stopped) {
+            List<List<ComparisonHeld>> out = new ArrayList<>();
+            for (List<ControlClaim> way : stopped.ways()) {
+                List<ComparisonHeld> demands = new ArrayList<>();
+                for (ControlClaim each : way) {
+                    if (each.satisfiedBy(seen)) {
+                        continue;
+                    }
+                    Optional<ComparisonHeld> holds =
+                            each.at() instanceof ControlPlace.Outcome outcome
+                                    ? holding.at(outcome) : Optional.empty();
+                    if (holds.isEmpty()) {
+                        demands = null;
+                        break;
+                    }
+                    demands.add(holds.get());
                 }
-                Optional<ComparisonHeld> found = holding.at(site);
-                if (found.isPresent()) {
-                    return found;
+                if (demands != null && !demands.isEmpty() && !out.contains(demands)) {
+                    out.add(List.copyOf(demands));
                 }
             }
-            return Optional.empty();
+            out.sort(Comparator.comparingInt(List::size));
+            return out;
         }
 
         /** What running {@code row} came to, run once whoever asks. */
