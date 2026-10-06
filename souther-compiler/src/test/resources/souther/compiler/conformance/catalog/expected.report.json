@@ -1228,12 +1228,6 @@
             "with" : 0
           },
           "disposition" : "noticed"
-        }, {
-          "obligationId" : {
-            "behavior" : "discount",
-            "rewrite" : "one_answer"
-          },
-          "disposition" : "noticed"
         } ]
       },
       "findings" : [ {
@@ -2373,12 +2367,6 @@
             "with" : 0
           },
           "disposition" : "noticed"
-        }, {
-          "obligationId" : {
-            "behavior" : "apportion",
-            "rewrite" : "one_answer"
-          },
-          "disposition" : "noticed"
         } ]
       },
       "findings" : [ {
@@ -3223,12 +3211,6 @@
             "lowered" : 0,
             "part" : 0,
             "with" : 1
-          },
-          "disposition" : "noticed"
-        }, {
-          "obligationId" : {
-            "behavior" : "apportionExactly",
-            "rewrite" : "one_answer"
           },
           "disposition" : "noticed"
         } ]
@@ -5672,6 +5654,31 @@
           "obligationId" : {
             "behavior" : "出荷する",
             "rewrite" : "arm_as_sibling",
+            "module" : "souther.bool",
+            "definition" : "not",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "出荷する",
+            "rewrite" : "arm_as_sibling",
+            "module" : "souther.bool",
+            "definition" : "not",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 0
+          },
+          "disposition" : "undecided",
+          "undecidedBecause" : "nothing_was_composed"
+        }, {
+          "obligationId" : {
+            "behavior" : "出荷する",
+            "rewrite" : "arm_as_sibling",
             "module" : "conformance.shipping",
             "definition" : "出荷する",
             "construct" : 5,
@@ -5726,12 +5733,6 @@
             "lowered" : 0,
             "part" : 1,
             "with" : 0
-          },
-          "disposition" : "noticed"
-        }, {
-          "obligationId" : {
-            "behavior" : "出荷する",
-            "rewrite" : "one_answer"
           },
           "disposition" : "noticed"
         } ]
@@ -7130,6 +7131,30 @@
           "obligationId" : {
             "behavior" : "送料を出す",
             "rewrite" : "arm_as_sibling",
+            "module" : "souther.bool",
+            "definition" : "not",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "with" : 1
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "rewrite" : "arm_as_sibling",
+            "module" : "souther.bool",
+            "definition" : "not",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 0
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "rewrite" : "arm_as_sibling",
             "module" : "conformance.shipping",
             "definition" : "夜間割増",
             "construct" : 0,
@@ -7148,12 +7173,6 @@
             "lowered" : 0,
             "part" : 1,
             "with" : 0
-          },
-          "disposition" : "noticed"
-        }, {
-          "obligationId" : {
-            "behavior" : "送料を出す",
-            "rewrite" : "one_answer"
           },
           "disposition" : "noticed"
         } ]

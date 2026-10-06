@@ -82,7 +82,7 @@ public final class Replacements {
                     }
                 }
                 Position at = Position.at(sig.outputType());
-                return ReplacementReading.of(name, behavior.name(), checked.plan(), reached, rows,
+                return ReplacementReading.of(behavior.name(), checked.plan(), reached, rows,
                         new ReplacementReading.Comparing() {
 
                             @Override

@@ -128,10 +128,10 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
         String page = AdequacyReport.of(compilation)
                 .human(SourceRendering.namedByIdentity(compilation.texts()));
 
-        // Four: the arm answering what the item holds written as the arms answering nothing, which
-        // are one rewrite since the two do the same; each of those written as the first; and the
-        // body answering one value.
-        assertTrue(page.contains("replacement 0/4"), () -> "four rewrites, told apart by no row: "
+        // Three: the arm answering what the item holds written as the arms answering nothing, which
+        // are one rewrite since the two do the same, and each of those written as the first. Not
+        // the body answering one value, which is asked of a body with no arm to rewrite.
+        assertTrue(page.contains("replacement 0/3"), () -> "three rewrites, told apart by no row: "
                 + page);
         assertTrue(page.contains("! no row would fail if an arm answered as its sibling"),
                 () -> "and the arm under it: " + page);

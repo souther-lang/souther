@@ -14,7 +14,6 @@ import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowStatement;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementOwed;
-import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -94,14 +93,13 @@ public final class ReplacementReading {
     /**
      * Every rewrite of {@code behavior}'s body {@code plan} can put to a row, and what {@code rows}
      * came to about each: the siblings of each arm in {@code reached}, in the order the plan numbered
-     * the arms, and then the body answering one value.
+     * the arms, or, where there are none, the body answering one value.
      *
      * <p>Only the arms a row reaches. What a rewrite of an arm asks is whether a row going through
-     * it depends on what it answers, which is a question about the rows that go through it. And only
-     * the arms {@code module} writes: a fork of a library spliced into the body is somebody else's
-     * source, and a rewrite of it is no edit this module's author could make.
+     * it depends on what it answers, which is a question about the rows that go through it. The arms
+     * are the ones the branch measure counts, wherever the helper they are written in is declared.
      */
-    public static List<Account> of(String module, String behavior, CoverageSites.Plan plan,
+    public static List<Account> of(String behavior, CoverageSites.Plan plan,
                                    Set<ArmProbe> reached, List<RowOutcome> rows,
                                    Comparing comparing) {
         List<Account> out = new ArrayList<>();
@@ -113,8 +111,7 @@ public final class ReplacementReading {
             }
             ArmProbe probe = site.place().probe().get();
             ArmReplacements.AtSite at = plan.replacements().bySite().get(probe.raw());
-            if (at == null || !(at.fork().owner() instanceof WrittenOwner.Body body)
-                    || !body.module().equals(module)) {
+            if (at == null) {
                 continue;
             }
             new TreeMap<>(at.siblings()).forEach((with, sibling) -> {
@@ -125,7 +122,12 @@ public final class ReplacementReading {
         }
         occurrences.forEach((replaced, where) -> out.add(new Account(replaced,
                 armStanding(replaced, where, siblings.get(replaced), plan.replacements(), rows))));
-        out.add(new Account(new Replacement.ByOneAnswer(), oneAnswerStanding(rows, comparing)));
+        // One answer only where no arm is rewritten. A body the rows go through a fork of is asked
+        // about the fork, arm by arm; asked for one answer as well, a body whose other arms nothing
+        // can reach would be asked whether it is the constant it is, and no input would ever say.
+        if (occurrences.isEmpty()) {
+            out.add(new Account(new Replacement.ByOneAnswer(), oneAnswerStanding(rows, comparing)));
+        }
         return List.copyOf(out);
     }
 

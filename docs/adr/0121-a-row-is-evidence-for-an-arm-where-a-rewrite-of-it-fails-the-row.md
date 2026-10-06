@@ -32,13 +32,15 @@ ADR-0089 requires of every measure: it does not replace branch or class coverage
 no body is not measured by it.
 
 There are two rewrites and no others. An arm a row stating its answer goes through is rewritten as
-each sibling of its fork, run in the same environment. The whole body is rewritten as one value the
-rows were seen to answer. Both are edits of the source an author could make, so a finding reads
+each sibling of its fork, run in the same environment. A body with no such arm is rewritten as one
+value the rows were seen to answer. Only there: a body whose rows go through a fork is asked about
+the fork, and a body whose other arms its declarations prove nothing reaches is the constant it
+answers, which no input would ever tell apart from itself. Both are edits of the source an author could make, so a finding reads
 against what was written; neither moves an input. A sibling that does the same thing as the arm is
 no rewrite of it, two siblings that do the same thing are one rewrite, and a sibling reading the name
-its own arm gives a value is no program the body could be written as. Only forks the measured module
-writes are rewritten: a library's arm is no edit its author could make. An arm no row reaches is
-already owed under its own code and is not rewritten.
+its own arm gives a value is no program the body could be written as. The arms are the ones the
+branch measure counts, so a helper is rewritten wherever it is declared, as it is measured wherever
+it is declared. An arm no row reaches is already owed under its own code and is not rewritten.
 
 A rewrite is a gap only where some input is shown to be answered differently by it and by the body,
 and no row's statement fails of it. Rows that fail of it notice it. A rewrite nobody showed to differ

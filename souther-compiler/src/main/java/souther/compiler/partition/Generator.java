@@ -6936,9 +6936,15 @@ public final class Generator {
         // two of them was satisfied only where the lists happened to already hold a pair that does.
         // Asked again choosing one position at a time, each from what is left once the ones before it
         // are asserted, which is the only way `a < b` is met in general.
+        // Handed to the caller as every value the walk composes is: the caller is what composes the
+        // parameters after this one, so a value it was never handed is a row with nothing after it.
         Outcome conditioned = conditioned(subject, p, plan, decided, settled, composing);
-        if (conditioned instanceof Outcome.Built) {
-            return conditioned;
+        if (conditioned instanceof Outcome.Built(FixtureTemplate value)) {
+            return switch (taking.take(value)) {
+                case TAKEN -> conditioned;
+                case PASSED -> new Outcome.PassedOver();
+                case STOPPED -> new Outcome.Halted();
+            };
         }
         // A pass that stopped at its bound has not tried everything it had, and neither pass may be
         // reported as though it had: `ALL_CANDIDATES_REJECTED` is what a reader is told nothing else

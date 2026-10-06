@@ -1776,12 +1776,6 @@
             "with" : 0
           },
           "disposition" : "noticed"
-        }, {
-          "obligationId" : {
-            "behavior" : "packBox",
-            "rewrite" : "one_answer"
-          },
-          "disposition" : "noticed"
         } ]
       },
       "findings" : [ {
@@ -2723,12 +2717,6 @@
             "lowered" : 0,
             "part" : 1,
             "with" : 0
-          },
-          "disposition" : "noticed"
-        }, {
-          "obligationId" : {
-            "behavior" : "bookSlot",
-            "rewrite" : "one_answer"
           },
           "disposition" : "noticed"
         } ]
