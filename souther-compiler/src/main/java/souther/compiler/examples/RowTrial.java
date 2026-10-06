@@ -32,6 +32,7 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -236,6 +237,11 @@ public final class RowTrial {
      */
     private record AnswerReading(FixtureReader fixtures, Type out, String module,
                                  DeclarationKinds kinds, SumCases sums) {
+
+        AnswerReading {
+            Objects.requireNonNull(kinds, "an answer is projected by what each declaration is");
+            Objects.requireNonNull(sums, "and by the cases each sum has");
+        }
 
         /**
          * The answer, read. A budget running out while it is read leaves an answer that came back
