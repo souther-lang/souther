@@ -65,6 +65,21 @@ class AMembershipIsComposedIntoTheRowTest {
             behavior boxed : (box: Box, n: Digit) -> Bool
             let boxed (box, n) = List.contains(n, box.held)
 
+            data Single = { held: List<Digit> }
+                invariant List.length(held) <= 1
+
+            behavior both : (single: Single, n: Digit, m: Digit) -> Bool
+            let both (single, n, m) = List.contains(n, single.held) && List.contains(m, single.held)
+
+            behavior twice : (single: Single, n: Digit) -> Bool
+            let twice (single, n) = List.contains(n, single.held) && List.contains(n, single.held)
+
+            data Outer = { held: List<List<Digit>> }
+
+            behavior chained : (outer: Outer, box: Box, n: Digit) -> Bool
+            let chained (outer, box, n) =
+                List.contains(n, box.held) && List.contains(box.held, outer.held)
+
             data Crowd = { campaigns: Set<Name> }
                 invariant Set.size(campaigns) >= 1
 
@@ -136,6 +151,49 @@ class AMembershipIsComposedIntoTheRowTest {
     }
 
     /**
+     * Two values a list is to hold that are one value are one element: holding a value is a
+     * question about which values are in it, and a list holding one holds it however many times
+     * it was asked to.
+     */
+    @Test
+    void valuesToHoldThatAreOneValueAreOneElement() {
+        List<String> row = written(composedPast("both", true, Generator.CandidateCheck.ANY));
+        List<String> held = elementsOf(row.get(0), "held");
+        assertTrue(held.contains(row.get(1)) && held.contains(row.get(2)),
+                () -> "the list holds both: " + row);
+        List<String> again = written(composedPast("twice", true, Generator.CandidateCheck.ANY));
+        assertTrue(elementsOf(again.get(0), "held").contains(again.get(1)),
+                () -> "and one asked for twice is held: " + again);
+    }
+
+    /**
+     * A value passed over for one a parameter further along could not be composed under, where
+     * that one is handed it through a parameter between them.
+     *
+     * <p>The number is written into the box, and the box into the outer list. An outer list the
+     * rules refuse for the box the first number made is one another number may not make, so it is
+     * the number that is tried again — though the outer list reads only the box.
+     */
+    @Test
+    void aValueIsPassedOverForOneTheParameterItReachesThroughAnotherCameToNothingUnder() {
+        Generator.CandidateCheck outers = Generator.CandidateCheck.refusing(
+                (p, candidate) -> p == 0 && !digitsIn(candidate.text()).stream()
+                        .allMatch(each -> each >= 5)
+                        ? Optional.of("a digit under five") : Optional.empty());
+        List<String> row = written(composedPast("chained", true, outers));
+        assertTrue(digitOf(row.get(2)) >= 5, () -> "a number the outer list takes: " + row);
+    }
+
+    private static List<Integer> digitsIn(String written) {
+        Matcher found = Pattern.compile("\\d+").matcher(written);
+        List<Integer> out = new ArrayList<>();
+        while (found.find()) {
+            out.add(Integer.parseInt(found.group()));
+        }
+        return out;
+    }
+
+    /**
      * Where the element type has too few values to fill the container with none of them the one
      * kept out, that is a row nothing composes — and not a condition this compiler could not read.
      */
@@ -185,9 +243,8 @@ class AMembershipIsComposedIntoTheRowTest {
 
     private static Generator.BoundaryAttempt composedPast(String behavior, boolean holding,
                                                           Generator.CandidateCheck check) {
-        OnTheWay.TakenIn asked = assertInstanceOf(OnTheWay.TakenIn.class,
-                stated(behavior, holding));
-        List<OnTheWay.TakenIn> way = List.of(asked);
+        List<OnTheWay.TakenIn> way = stated(behavior, holding).stream()
+                .map(each -> assertInstanceOf(OnTheWay.TakenIn.class, each)).toList();
         SearchRegion region = new WayToTheBorder(List.copyOf(way))
                 .narrowing(domain(behavior).quantities(rules()).region());
         return Generator.probeFixing(subject(behavior), "past " + behavior, Map.of(),
@@ -195,7 +252,9 @@ class AMembershipIsComposedIntoTheRowTest {
                 new Reachability.Reaching(region, Requirements.NONE, way), check);
     }
 
-    private static OnTheWay stated(String behavior, boolean holding) {
+    /** What {@code behavior}'s body coming out {@code holding} asks of a row, one entry for each
+     *  thing it asks. */
+    private static List<OnTheWay> stated(String behavior, boolean holding) {
         Bodies.Elaborated checked =
                 COMPILATION.db().ask(new Bodies.Checked(module())).value();
         assertNotNull(checked, () -> "the model under test compiles: "
@@ -211,8 +270,8 @@ class AMembershipIsComposedIntoTheRowTest {
                         rules().symbols(), rules().newtypes(),
                         new ConditionNumbering(module(), behavior)),
                 inputs.reading(rules()), holding);
-        assertEquals(1, stated.size(), () -> "one condition: " + stated);
-        return stated.getFirst();
+        assertFalse(stated.isEmpty(), () -> "the body asks something of a row: " + behavior);
+        return stated;
     }
 
     private static final Compilation COMPILATION = compiled();

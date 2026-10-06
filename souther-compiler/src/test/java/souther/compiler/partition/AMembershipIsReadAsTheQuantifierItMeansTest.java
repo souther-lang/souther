@@ -8,16 +8,19 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Whether a container holds a value is read as the quantifier it means: holding it is some element
@@ -48,6 +51,11 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
 
             behavior listed : (lead: Lead) -> Bool
             let listed (lead) = List.contains(lead.picked, lead.names)
+
+            data Tally = { counts: List<Int> }
+
+            behavior someBig : (t: Tally) -> Bool
+            let someBig (t) = List.any(c -> c > 5, t.counts)
 
             behavior filtered : (lead: Lead, priority: Name) -> Bool
             let filtered (lead, priority) =
@@ -83,6 +91,42 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
         assertEquals("lead.names", some.container().toString());
         assertEquals(List.of(new RowDemand.SameAs(TermPath.of("lead").then("picked"))),
                 some.ofAnElement());
+    }
+
+    /**
+     * What a demand on a container's elements turns on is the container itself, and its size
+     * where that is asked: a number of the container moved — how many it holds — may take away the
+     * element that met it.
+     *
+     * <p>Held as the reader of a moved step reads it ({@code AnotherLineTheRowsAllow}): a moved
+     * number turns a demand on where it stands at or under one of the demand's positions.
+     */
+    @Test
+    void whatADemandOnTheElementsTurnsOnIsTheContainerItself() {
+        for (String behavior : List.of("direct", "someBig")) {
+            for (boolean holding : List.of(true, false)) {
+                RowDemand.OfACondition asked = asked(behavior, holding);
+                TermPath container = switch (asked) {
+                    case RowDemand.Exists some -> some.container();
+                    case RowDemand.ForAll every -> every.container();
+                    case RowDemand.Relational _ -> throw new AssertionError(
+                            "a demand on the elements: " + asked);
+                };
+                assertTrue(asked.positions().contains(container),
+                        () -> "the container itself: " + asked.positions());
+                Optional<RowDemand.Relational> size = switch (asked) {
+                    case RowDemand.Exists some -> some.holdingOne();
+                    case RowDemand.ForAll every -> every.holdingNone();
+                    case RowDemand.Relational _ -> Optional.empty();
+                };
+                assertTrue(size.isPresent(), () -> "the size is a number here: " + asked);
+                for (NumericTerm term : size.get().terms()) {
+                    assertTrue(asked.positions().stream()
+                                    .anyMatch(at -> term.subjectPath().isAtOrUnder(at)),
+                            () -> "a move of " + term + " turns it on: " + asked.positions());
+                }
+            }
+        }
     }
 
     /** A container built out of another asks nothing of the other. */

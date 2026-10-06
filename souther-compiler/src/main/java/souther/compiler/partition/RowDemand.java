@@ -55,6 +55,18 @@ public sealed interface RowDemand {
          * asking where a number is written asks the terms.
          */
         Set<TermPath> positions();
+
+        /**
+         * The positions among {@link #positions} whose value is only read: handed to a composer as
+         * what something else is to hold or be kept from, and written nowhere by a row held to
+         * this.
+         *
+         * <p>Apart from the rest because two readers ask two questions of the positions. Whether a
+         * row still meets this after a step moved something turns on all of them; which parameters
+         * holding a row to this composes is the rest — a set holding another parameter's value is
+         * composed and that parameter is not.
+         */
+        Set<TermPath> valuesRead();
     }
 
     /**
@@ -70,6 +82,9 @@ public sealed interface RowDemand {
 
         /** Every position whose value this turns on, given the element it is asked of. */
         Set<TermPath> positions(TermPath element);
+
+        /** The positions among those whose value is only read ({@link OfACondition#valuesRead}). */
+        Set<TermPath> valuesRead();
     }
 
     /**
@@ -97,6 +112,12 @@ public sealed interface RowDemand {
         public Set<TermPath> positions(TermPath element) {
             return positions();
         }
+
+        /** None: a row held to a relation writes every number it is over. */
+        @Override
+        public Set<TermPath> valuesRead() {
+            return Set.of();
+        }
     }
 
     /**
@@ -113,7 +134,12 @@ public sealed interface RowDemand {
 
         @Override
         public Set<TermPath> positions(TermPath element) {
-            return Set.of(element, value);
+            return elementAndValue(element, value);
+        }
+
+        @Override
+        public Set<TermPath> valuesRead() {
+            return Set.of(value);
         }
     }
 
@@ -126,8 +152,21 @@ public sealed interface RowDemand {
 
         @Override
         public Set<TermPath> positions(TermPath element) {
-            return Set.of(element, value);
+            return elementAndValue(element, value);
         }
+
+        @Override
+        public Set<TermPath> valuesRead() {
+            return Set.of(value);
+        }
+    }
+
+    /** {@code element} and then {@code value}, in that order whatever run it is. */
+    private static Set<TermPath> elementAndValue(TermPath element, TermPath value) {
+        Set<TermPath> out = new LinkedHashSet<>();
+        out.add(element);
+        out.add(value);
+        return Collections.unmodifiableSet(out);
     }
 
     /** The relations among {@code asked}, which are what a region places. */
@@ -148,11 +187,26 @@ public sealed interface RowDemand {
         return out;
     }
 
-    /** Every position {@code asked} of an element of {@code container} turns on. */
+    /**
+     * Every position a demand on the elements of {@code container} turns on: the container itself,
+     * and what each of {@code asked} turns on beside it.
+     *
+     * <p>The container and not only its element. Which elements there are is the container's value,
+     * so a step that moves how many it holds may take away the element that met what was asked,
+     * or bring in one that does not — whatever it did to the element's own numbers.
+     */
     private static Set<TermPath> positionsOf(TermPath container, List<OfAnElement> asked) {
         Set<TermPath> out = new LinkedHashSet<>();
+        out.add(container);
         asked.forEach(each -> out.addAll(each.positions(container.element())));
         return out;
+    }
+
+    /** The positions {@code asked} only reads the value at. */
+    private static Set<TermPath> valuesReadOf(List<OfAnElement> asked) {
+        Set<TermPath> out = new LinkedHashSet<>();
+        asked.forEach(each -> out.addAll(each.valuesRead()));
+        return Collections.unmodifiableSet(out);
     }
 
     /**
@@ -219,6 +273,11 @@ public sealed interface RowDemand {
         public Set<TermPath> positions() {
             return Collections.unmodifiableSet(positionsOf(container, ofAnElement));
         }
+
+        @Override
+        public Set<TermPath> valuesRead() {
+            return valuesReadOf(ofAnElement);
+        }
     }
 
     /**
@@ -269,9 +328,12 @@ public sealed interface RowDemand {
 
         @Override
         public Set<TermPath> positions() {
-            Set<TermPath> out = positionsOf(container, ofEachElement);
-            holdingNone.ifPresent(none -> out.addAll(none.positions()));
-            return Collections.unmodifiableSet(out);
+            return Collections.unmodifiableSet(positionsOf(container, ofEachElement));
+        }
+
+        @Override
+        public Set<TermPath> valuesRead() {
+            return valuesReadOf(ofEachElement);
         }
     }
 

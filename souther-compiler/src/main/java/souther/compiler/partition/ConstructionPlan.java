@@ -17,6 +17,7 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -427,10 +428,12 @@ final class ConstructionPlan {
         /** Nothing handed over, which is what a plan with no container asked of is made with. */
         static final ContentsComposed NONE = new ContentsComposed(Set.of(), Set.of(), Set.of());
 
+        // In the order they were handed over: the requirements of these positions are put
+        // together in it, and which of two disagreeing ones a refusal names follows from it.
         ContentsComposed {
-            holdingOne = Set.copyOf(holdingOne);
-            keepingOut = Set.copyOf(keepingOut);
-            read = Set.copyOf(read);
+            holdingOne = Collections.unmodifiableSet(new LinkedHashSet<>(holdingOne));
+            keepingOut = Collections.unmodifiableSet(new LinkedHashSet<>(keepingOut));
+            read = Collections.unmodifiableSet(new LinkedHashSet<>(read));
         }
 
         /** Whether values are handed to the container at {@code container}. */

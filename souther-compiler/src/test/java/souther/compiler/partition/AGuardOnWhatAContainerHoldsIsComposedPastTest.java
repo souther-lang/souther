@@ -85,6 +85,36 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
             }
             """;
 
+    /** The value the set is to hold is a field of a parameter the model states a value of, which
+     *  a row is written against. */
+    private static final String READ_OFF_A_STATED_VALUE = """
+            module example.settle
+
+            data Plain
+            data Express
+            data Kind = Plain | Express
+
+            data Request = { level: Int, note: Int }
+
+            data Other = { allowed: Set<Int> }
+
+            data Done = { n: Int }
+            data Refused
+
+            let usual = Request { level = 1, note = 1 }
+
+            behavior settle : (kind: Kind, other: Other, request: Request) -> Done | Refused
+                constructs Done
+
+            let settle (kind, other, request) = {
+                guard Set.contains(request.level, other.allowed) else Refused
+                if request.level > 5 then Done { n = 1 }
+                else match kind with
+                    | Plain -> Done { n = 2 }
+                    | Express -> Done { n = 3 }
+            }
+            """;
+
     private static final String SCORED = """
             module example.settle
 
@@ -122,6 +152,25 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
             assertFalse(holds(row.get(1), row.get(2)),
                     () -> "the row keeps the priority out: " + row);
         }
+    }
+
+    /**
+     * A container handed a field of a parameter written against a value the model states holds
+     * what the row writes at that field.
+     */
+    @Test
+    void aFieldTheRowMovesOffAStatedValueIsHeld() {
+        Rows rows = generatedOf(READ_OFF_A_STATED_VALUE);
+        int moved = 0;
+        for (List<String> each : rows.classes().values()) {
+            Matcher level = Pattern.compile("\\.\\.\\.usual, level = (-?\\d+)").matcher(each.get(2));
+            if (level.find()) {
+                moved++;
+                assertTrue(each.get(1).matches(".*allowed = \\[[^]]*\\b" + level.group(1) + "\\b.*"),
+                        () -> "the set holds the level the row writes: " + each);
+            }
+        }
+        assertTrue(moved > 0, () -> "some row moves the level off the stated value: " + rows);
     }
 
     /** A rule on each side of the membership is offered a row on that side. */

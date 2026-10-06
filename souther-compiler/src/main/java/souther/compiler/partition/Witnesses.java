@@ -376,10 +376,14 @@ final class Witnesses {
      * asked for, and what they may be is: a list may hold the same value again and a set may not,
      * and a caller padding one by hand would have to know which — the thing this reader is for.
      *
+     * <p><b>What it is to hold is values, and not elements.</b> Holding a value asks which values
+     * are in it, so two values handed over that are one value are one element whichever carrier it
+     * is — a list asked to hold {@code a} twice holds it once, and is not refused for room it does
+     * not need. What a list may say again is what fills it to the rules' floor beside them.
+     *
      * <p><b>How many is worked out here, where the values are in hand.</b> The fewest the rules
-     * allow, and never fewer than the values it holds — which for a set is how many of them differ,
-     * so two values handed over that are one value are one element. A container holding nothing
-     * asked of it and kept to the rules' floor may hold none at all.
+     * allow, and never fewer than the values it holds. A container holding nothing asked of it and
+     * kept to the rules' floor may hold none at all.
      *
      * <p>Null where the values cannot all stand together: one value both written in and kept out,
      * more than the rules leave room for, or a type with too few values to fill the rest with none
@@ -398,7 +402,7 @@ final class Witnesses {
             if (out.contains(each.text())) {
                 return null;
             }
-            if (written.add(each.text()) || list) {
+            if (written.add(each.text())) {
                 elements.add(each);
             }
         }
