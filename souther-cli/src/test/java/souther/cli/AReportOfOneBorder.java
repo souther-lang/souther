@@ -301,7 +301,7 @@ final class AReportOfOneBorder {
                                 .BorderObligationPointAssessment.across(read).stream()
                                 .filter(point -> point.belongsToBehaviorAccount("weigh"))
                                 .toList()),
-                        null, null, null),
+                        null, null, null, null),
                 new souther.compiler.query.RowSummary(List.of()),
                 souther.compiler.query.ClaimAnnotations.NONE, List.of(), java.util.Map.of(),
                 java.util.Map.of(), rulePlaces(lines), java.util.Map.of(), java.util.Map.of(),

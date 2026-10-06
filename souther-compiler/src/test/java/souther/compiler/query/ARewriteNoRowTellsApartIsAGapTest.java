@@ -99,17 +99,16 @@ class ARewriteNoRowTellsApartIsAGapTest {
                 "and it holds something out of pocket: " + shown.inputs());
     }
 
+    /** Two arms that do the same thing are one arm written twice, and neither is a rewrite of the
+     *  other: no row could tell them apart, so nothing is owed for it either way. */
     @Test
-    void siblingsThatAnswerAlikeAreNotAGap() {
+    void siblingsThatDoTheSameThingAreNoRewriteOfEachOther() {
         Map<Replacement, ReplacementEvidence.Outcome> rewrites = rewritesOf(ARM, "refund");
 
-        ReplacementEvidence.Outcome alike = rewrites.entrySet().stream()
-                .filter(each -> each.getKey() instanceof Replacement.OfAnArm(var _, var part,
-                        var with) && part == 1 && with == 2)
-                .map(Map.Entry::getValue).findFirst().orElseThrow();
-        assertInstanceOf(ReplacementEvidence.Undecided.class, alike,
-                "two arms answering one constant: no row could tell them apart, and that is not"
-                        + " a gap: " + alike);
+        assertTrue(rewrites.keySet().stream().noneMatch(each ->
+                        each instanceof Replacement.OfAnArm(var _, var part, var with)
+                                && (part == 1 && with == 2 || part == 2 && with == 1)),
+                "the two arms answering one constant are not rewrites of each other: " + rewrites);
     }
 
     @Test

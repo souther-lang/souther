@@ -350,6 +350,24 @@ public sealed interface ExampleMessage extends Message {
     record WriteARowAtThatInput(String input) implements ExampleMessage, Supporting {}
 
     /**
+     * No row of the behavior would fail if the arm pointed at answered as another arm of its fork.
+     *
+     * <p>The behavior and not the arms. Where the arm is, is where this is pointed; which sibling it
+     * was rewritten as is a part number, and a sentence spelling it would name something the author
+     * did not write.
+     */
+    @Code(DiagnosticCode.E1939)
+    record NoRowTellsTheArmFromItsSibling(String behavior) implements ExampleMessage, Reported {}
+
+    /** No row of the behavior would fail if its body answered one value whatever it was given. */
+    @Code(DiagnosticCode.E1939)
+    record NoRowTellsTheBodyFromOneAnswer(String behavior) implements ExampleMessage, Reported {}
+
+    /** What to do where a written row shows the rewrite answering differently: write down the
+     *  answer it gives. */
+    record WriteDownTheAnswerOfThatRow(String row) implements ExampleMessage, Supporting {}
+
+    /**
      * One condition of that rule: a comparison the author wrote, which the rule takes holding.
      *
      * <p>Carries nothing. Which comparison it is is where the label is put, so a reader reads the

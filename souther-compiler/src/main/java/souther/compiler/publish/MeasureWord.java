@@ -47,5 +47,9 @@ public enum MeasureWord {
 
     /** The rules the body's decision states, and which of them a row was seen taking. Beside the
      *  arms rather than among them: two rules can go through one arm. */
-    DECISION
+    DECISION,
+
+    /** The rewrites of the body, and which of them a row tells from the body. Beside the arms
+     *  rather than among them: a row goes through an arm whatever the arm answers. */
+    REPLACEMENT
 }

@@ -24,6 +24,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.query.ReadingReasons;
+import souther.compiler.query.ReplacementEvidence;
 import souther.compiler.query.RowDisposition;
 import souther.compiler.query.UnaskedReasons;
 import souther.compiler.query.WritabilityKnowledge;
@@ -452,6 +453,16 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "interaction", "properties", "coverage", "properties",
                             "reason"),
                     souther.compiler.query.InteractionEvidence.class),
+            // Why nobody put the rewrites of a body to the rows. Its own field beside the arms',
+            // because what this falls short of is a rewrite and not a place a run goes.
+            Vocabulary.of("replacement.reason",
+                    List.of("$defs", "replacement", "properties", "reason"),
+                    ReplacementEvidence.class),
+            // And why one rewrite was left open, which is the entry's own word.
+            new Vocabulary("replacement.obligations[].undecidedBecause",
+                    List.of("$defs", "replacement", "properties", "obligations", "items",
+                            "properties", "undecidedBecause"),
+                    ReplacementEvidence.Undecided.Why.class),
             // Whether a row is owed at one rule at all, which is a different question from whether
             // one took it. Spelled here and held against the answers a search may come to, so an
             // answer added to that vocabulary is one somebody gives a word rather than one a
@@ -1383,8 +1394,15 @@ class EverySchemaWordIsAccountedForTest {
         // keys an object has where its measure produced a value, so what has to be true of them is
         // that they name the states that did — not that a reader knows the words.
         held.add("/$defs/branch/if/properties/status");
+        held.add("/$defs/replacement/if/properties/status");
         held.add("/$defs/partition/properties/boundaries/items/properties/items/items/if"
                 + "/properties/status");
+        // Which rewrite an identity names and what the rows came to about it. Both are written by a
+        // switch over a sealed type's arms rather than off an enum's names, so an arm added there
+        // does not compile without its word, and the schema validation of the corpus documents is
+        // what holds the word to the enum here.
+        held.add("/$defs/replacementObligationId/properties/rewrite");
+        held.add("/$defs/replacement/properties/obligations/items/properties/disposition");
 
         List<String> unaccounted = paths.stream().filter(p -> !held.contains(p)).toList();
         assertEquals(List.of(), unaccounted,

@@ -1075,7 +1075,26 @@
           "taken" : true
         } ]
       },
-      "findings" : [ ]
+      "replacement" : {
+        "status" : "complete",
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "book",
+            "rewrite" : "one_answer"
+          },
+          "disposition" : "unnoticed"
+        } ]
+      },
+      "findings" : [ {
+        "kind" : "rewrite_unnoticed",
+        "disposition" : "refused",
+        "subject" : "book",
+        "obligationId" : {
+          "behavior" : "book",
+          "rewrite" : "one_answer"
+        },
+        "code" : "E1939"
+      } ]
     } ]
   }, {
     "module" : "conformance.vouchers",
@@ -2463,6 +2482,10 @@
           "requirement" : "required"
         } ]
       },
+      "replacement" : {
+        "status" : "unavailable",
+        "reason" : "no_rows"
+      },
       "findings" : [ {
         "kind" : "decision_rule_uncovered",
         "disposition" : "refused",
@@ -3641,6 +3664,10 @@
           "because" : "the_rule_the_row_took_could_not_be_told"
         } ]
       },
+      "replacement" : {
+        "status" : "unavailable",
+        "reason" : "no_rows"
+      },
       "findings" : [ ]
     } ]
   }, {
@@ -3693,6 +3720,11 @@
         "notRead" : [ ]
       },
       "branch" : {
+        "status" : "unavailable",
+        "reason" : "body_was_not_read",
+        "weakening" : [ "body_not_in_evaluation" ]
+      },
+      "replacement" : {
         "status" : "unavailable",
         "reason" : "body_was_not_read",
         "weakening" : [ "body_not_in_evaluation" ]
@@ -3838,6 +3870,10 @@
           "requirement" : "unsettled",
           "because" : "the_rule_the_row_took_could_not_be_told"
         } ]
+      },
+      "replacement" : {
+        "status" : "unavailable",
+        "reason" : "no_rows"
       },
       "findings" : [ {
         "kind" : "partition_not_read",

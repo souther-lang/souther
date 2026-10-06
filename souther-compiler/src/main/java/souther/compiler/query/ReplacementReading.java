@@ -14,12 +14,14 @@ import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowStatement;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementOwed;
+import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -45,8 +47,9 @@ public final class ReplacementReading {
         record Noticed(RowIdentity by) implements Standing {}
 
         /** A row's run of the rewrite answered differently from the body, and no row's statement
-         *  failed of it. */
-        record Unnoticed(RowIdentity shownBy) implements Standing {}
+         *  failed of it; {@code lookFor} is the rewrite as a search for a row telling it apart is
+         *  put to it. */
+        record Unnoticed(RowIdentity shownBy, ReplacementOwed lookFor) implements Standing {}
 
         /** No row's statement failed of the rewrite and no run showed it answering differently:
          *  what is left to ask is whether any input would. */
@@ -57,8 +60,6 @@ public final class ReplacementReading {
 
         /** Why a rewrite cannot be put to the rows. */
         enum Why {
-            /** The sibling reads the name its own arm gives the value. */
-            READS_ITS_OWN_NAME,
             /** Carrying the sibling would grow the fork past what the classes allow. */
             TOO_LARGE,
             /** No row answered with a value read in full, so there is no answer to hold one to. */
@@ -92,21 +93,28 @@ public final class ReplacementReading {
 
     /**
      * Every rewrite of {@code behavior}'s body {@code plan} can put to a row, and what {@code rows}
-     * came to about each: the arms' siblings in the order the plan numbered the arms, and then the
-     * body answering one value.
+     * came to about each: the siblings of each arm in {@code reached}, in the order the plan numbered
+     * the arms, and then the body answering one value.
+     *
+     * <p>Only the arms a row reaches. What a rewrite of an arm asks is whether a row going through
+     * it depends on what it answers, which is a question about the rows that go through it. And only
+     * the arms {@code module} writes: a fork of a library spliced into the body is somebody else's
+     * source, and a rewrite of it is no edit this module's author could make.
      */
-    public static List<Account> of(String behavior, CoverageSites.Plan plan,
-                                   List<RowOutcome> rows, Comparing comparing) {
+    public static List<Account> of(String module, String behavior, CoverageSites.Plan plan,
+                                   Set<ArmProbe> reached, List<RowOutcome> rows,
+                                   Comparing comparing) {
         List<Account> out = new ArrayList<>();
         Map<Replacement.OfAnArm, List<ArmProbe>> occurrences = new LinkedHashMap<>();
         Map<Replacement.OfAnArm, ArmReplacements.Sibling> siblings = new LinkedHashMap<>();
         for (CoverageSites.ArmSite site : plan.arms(behavior)) {
-            if (site.place().probe().isEmpty()) {
+            if (site.place().probe().isEmpty() || !reached.contains(site.place().probe().get())) {
                 continue;
             }
             ArmProbe probe = site.place().probe().get();
             ArmReplacements.AtSite at = plan.replacements().bySite().get(probe.raw());
-            if (at == null) {
+            if (at == null || !(at.fork().owner() instanceof WrittenOwner.Body body)
+                    || !body.module().equals(module)) {
                 continue;
             }
             new TreeMap<>(at.siblings()).forEach((with, sibling) -> {
@@ -126,7 +134,6 @@ public final class ReplacementReading {
                                         ArmReplacements replacements, List<RowOutcome> rows) {
         if (sibling instanceof ArmReplacements.Sibling.NotCarried(var why)) {
             return new Standing.CannotBeAsked(switch (why) {
-                case READS_ITS_OWN_NAME -> Standing.Why.READS_ITS_OWN_NAME;
                 case TOO_LARGE -> Standing.Why.TOO_LARGE;
             });
         }
@@ -145,12 +152,11 @@ public final class ReplacementReading {
                 }
             }
         }
-        if (shownBy != null) {
-            return new Standing.Unnoticed(shownBy);
-        }
-        return new Standing.Open(new ReplacementOwed.OfAnArm(replaced.fork(), replaced.part(),
+        ReplacementOwed lookFor = new ReplacementOwed.OfAnArm(replaced.fork(), replaced.part(),
                 replaced.with(), where,
-                replacements.replacing(replaced.fork(), replaced.part(), replaced.with())));
+                replacements.replacing(replaced.fork(), replaced.part(), replaced.with()));
+        return shownBy != null ? new Standing.Unnoticed(shownBy, lookFor)
+                : new Standing.Open(lookFor);
     }
 
     /**
@@ -210,7 +216,8 @@ public final class ReplacementReading {
             }
             for (int i = 0; i < answered.size(); i++) {
                 if (!comparing.same(values.get(i), always)) {
-                    return new Standing.Unnoticed(answered.get(i).identity());
+                    return new Standing.Unnoticed(answered.get(i).identity(),
+                            new ReplacementOwed.ByOneAnswer(always));
                 }
             }
             return new Standing.Open(new ReplacementOwed.ByOneAnswer(always));

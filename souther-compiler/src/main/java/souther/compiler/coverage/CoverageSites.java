@@ -1061,7 +1061,9 @@ public final class CoverageSites {
          * of them the classes carry.
          *
          * <p>A sibling whose expression is {@code unreachable} is not one: answering with it is
-         * every row through the arm stopping, which no rewrite worth asking about is. A sibling that
+         * every row through the arm stopping, which no rewrite worth asking about is. Nor is one
+         * that does what the arm does, read apart from where each is written: answering as it is
+         * answering as the arm, and nothing could tell the two apart. A sibling that
          * reads the name its own arm gives the value cannot stand anywhere else. And a fork whose
          * siblings, carried in every arm, would grow it by more than {@link #MOST_NODES_A_FORK_CARRIES}
          * carries none of them.
@@ -1079,20 +1081,28 @@ public final class CoverageSites {
                     size += nodesIn(bodies.get(part));
                 }
             }
+            // What each arm does, apart from where it is written. An arm whose sibling does the
+            // same thing is that sibling under another place, and answering as it is answering as
+            // itself: no row could tell the two apart, so it is no rewrite to ask a row about. Nor
+            // is a sibling that reads the name its own arm gives the value: standing anywhere else
+            // that name stands for nothing, so it is no program the body could be written as.
+            Binders binders = Binders.of(module, places);
+            List<ExecutableIdentity> does = new ArrayList<>();
+            for (Core body : bodies) {
+                does.add(ExecutableIdentity.of(body, binders));
+            }
             boolean tooLarge = (long) size * (arms.length - 1) > MOST_NODES_A_FORK_CARRIES;
             int[][] carriedHere = new int[arms.length][];
             for (int part = 0; part < arms.length; part++) {
                 List<Integer> carriedParts = new ArrayList<>();
                 Map<Integer, ArmReplacements.Sibling> siblings = new LinkedHashMap<>();
                 for (int sibling : candidates) {
-                    if (sibling == part) {
+                    BindingId own = names.get(sibling);
+                    if (sibling == part || does.get(sibling).equals(does.get(part))
+                            || own != null && reads(bodies.get(sibling), own)) {
                         continue;
                     }
-                    BindingId own = names.get(sibling);
-                    if (own != null && reads(bodies.get(sibling), own)) {
-                        siblings.put(sibling, new ArmReplacements.Sibling.NotCarried(
-                                ArmReplacements.Sibling.Why.READS_ITS_OWN_NAME));
-                    } else if (tooLarge) {
+                    if (tooLarge) {
                         siblings.put(sibling, new ArmReplacements.Sibling.NotCarried(
                                 ArmReplacements.Sibling.Why.TOO_LARGE));
                     } else {

@@ -95,21 +95,20 @@ class ARowIsRunAgainWithAnArmReplacedTest {
     }
 
     /**
-     * A sibling that reads what its own arm names is one that cannot stand anywhere else, and a row
-     * through an arm with no other sibling is run again for none.
+     * A row is run again for the arm it went through, and for each sibling that does something
+     * else: a sibling that answers what the arm answers is the arm written somewhere else, and no
+     * row could tell the two apart.
      */
     @Test
-    void aRowIsRunAgainOnlyForTheArmItWentThrough() {
+    void aRowIsRunAgainOnlyForTheArmItWentThroughAndASiblingThatDiffers() {
         Map<Integer, ReplacedRun> runs = replacedOf(rowNamed("an advance"));
 
-        assertEquals(List.of(0, 2), List.copyOf(runs.keySet()),
-                "the arm it went through is the second, and the other two stand in for it: " + runs);
+        assertEquals(List.of(0), List.copyOf(runs.keySet()),
+                "the arm it went through is the second; the first stands in for it, and the third"
+                        + " answers what the second does: " + runs);
         assertEquals(ReplacedRun.Noticed.YES, runs.get(0).noticed(),
                 "answering what the item holds is not answering nothing");
-        assertEquals(ReplacedRun.Noticed.NO, runs.get(2).noticed(),
-                "answering the same constant is");
         assertEquals(AnswerChange.CHANGED, runs.get(0).changed());
-        assertEquals(AnswerChange.SAME, runs.get(2).changed());
     }
 
     @Test

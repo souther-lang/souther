@@ -2,9 +2,12 @@ package souther.compiler.query;
 
 import souther.compiler.check.CheckSurface;
 import souther.compiler.check.Sig;
+import souther.compiler.coverage.ArmProbe;
+import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.observe.Comparisons;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.Position;
+import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.ValueTypes;
 import souther.compiler.observe.Verdict;
 import souther.compiler.partition.BodyReading;
@@ -16,10 +19,12 @@ import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.FixtureTemplate;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -57,15 +62,27 @@ public final class Replacements {
             // What being the same value is, read with every declaration a row's answer can be of —
             // the same reading a comparison with a row makes.
             ValueTypes types = ValueTypes.over(ExampleExecutions.checkedFieldTypes(db));
+            Optional<SiteNumbering> numbering =
+                    Optional.of(SiteNumbering.of(checked.numberingIdentity()));
             return Adequacy.answerEveryBehavior(prepared.value(), behavior -> {
                 Sig sig = sigs.value().get(behavior.name());
-                List<souther.compiler.observe.RowOutcome> rows =
+                List<RowOutcome> rows =
                         Adequacy.RowReadings.readingFor(byTarget, behavior.name()).rowsSeen();
                 if (sig == null) {
                     return List.of();
                 }
+                // The arms a row stating its answer went through. An arm no row reaches is owed a
+                // row under its own code, and one only a row waiting for its answer reaches is too;
+                // a rewrite of either is one no row could notice, and saying so would be the same
+                // gap said twice.
+                Set<ArmProbe> reached = new HashSet<>();
+                for (RowOutcome row : rows) {
+                    if (!Adequacy.awaitsItsAnswer(row)) {
+                        reached.addAll(Adequacy.armsSeenIn(row, numbering));
+                    }
+                }
                 Position at = Position.at(sig.outputType());
-                return ReplacementReading.of(behavior.name(), checked.plan(), rows,
+                return ReplacementReading.of(name, behavior.name(), checked.plan(), reached, rows,
                         new ReplacementReading.Comparing() {
 
                             @Override
@@ -224,27 +241,25 @@ public final class Replacements {
             return switch (standing) {
                 case ReplacementReading.Standing.Noticed(var by) ->
                         new ReplacementEvidence.Noticed(by);
-                case ReplacementReading.Standing.Unnoticed(var shownBy) ->
+                case ReplacementReading.Standing.Unnoticed(var shownBy, var lookFor) ->
                         new ReplacementEvidence.Unnoticed(
-                                new ReplacementEvidence.ShownBy.AWrittenRow(shownBy));
+                                new ReplacementEvidence.ShownBy.AWrittenRow(shownBy), lookFor);
                 case ReplacementReading.Standing.CannotBeAsked(var why) ->
                         new ReplacementEvidence.Undecided(switch (why) {
-                            case READS_ITS_OWN_NAME ->
-                                    ReplacementEvidence.Undecided.Why.READS_ITS_OWN_NAME;
                             case TOO_LARGE -> ReplacementEvidence.Undecided.Why.TOO_LARGE;
                             case NOTHING_ANSWERED ->
                                     ReplacementEvidence.Undecided.Why.NOTHING_ANSWERED;
                             case A_STATEMENT_WAS_NOT_READ ->
                                     ReplacementEvidence.Undecided.Why.A_STATEMENT_WAS_NOT_READ;
                         });
-                case ReplacementReading.Standing.Open _ -> searched == null
+                case ReplacementReading.Standing.Open(var lookFor) -> searched == null
                         ? new ReplacementEvidence.Undecided(
                                 ReplacementEvidence.Undecided.Why.NOTHING_RAN)
                         : switch (searched.disposition()) {
                             case ReplacementDisposition.Witnessed _ ->
                                     new ReplacementEvidence.Unnoticed(
                                             new ReplacementEvidence.ShownBy.AComposedRow(
-                                                    searched.inputs()));
+                                                    searched.inputs()), lookFor);
                             case ReplacementDisposition.NoneFound(var ended) ->
                                     new ReplacementEvidence.Undecided(whyNoneFound(ended));
                         };

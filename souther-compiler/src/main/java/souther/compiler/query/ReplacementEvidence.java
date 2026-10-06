@@ -3,6 +3,7 @@ package souther.compiler.query;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.partition.Replacement;
+import souther.compiler.partition.ReplacementOwed;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -125,10 +126,11 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
      * The rewrite answers some row differently from the body, and no row's statement fails of it.
      * A gap: writing down the answer of the row that shows it is a row that would.
      */
-    public record Unnoticed(ShownBy shownBy) implements Outcome {
+    public record Unnoticed(ShownBy shownBy, ReplacementOwed lookFor) implements Outcome {
 
         public Unnoticed {
             Objects.requireNonNull(shownBy, "a rewrite shown to matter was shown by some row");
+            Objects.requireNonNull(lookFor, "and is one a row telling it apart can be looked for");
         }
     }
 
@@ -161,9 +163,6 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
 
         /** Why a rewrite was left open. */
         public enum Why {
-            /** The sibling reads the name its own arm gives the value, so it stands nowhere
-             *  else. */
-            READS_ITS_OWN_NAME,
             /** Carrying the sibling would grow the fork past what the classes allow. */
             TOO_LARGE,
             /** No row answered with a value read in full. */

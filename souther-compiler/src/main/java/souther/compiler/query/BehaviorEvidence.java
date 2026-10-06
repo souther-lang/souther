@@ -56,6 +56,11 @@ import java.util.Set;
  *                         Beside {@code decision} for the reason that one is beside {@code branch}:
  *                         a rule is one way through the body and a combination is one meeting on
  *                         it, so a row through every way can leave a combination unmade
+ * @param replacement      the rewrites of its body and whether a row tells each from the body, or
+ *                         null where the compile did not get far enough to be asked. Beside
+ *                         {@code branch} and not part of it: a row goes through an arm whatever the
+ *                         arm answers, so every arm can be reached by rows none of which would
+ *                         notice the arm written as its sibling
  */
 public record BehaviorEvidence(Adequacy.RowReading reading,
                                Adequacy.SignatureEvidence signature,
@@ -64,7 +69,8 @@ public record BehaviorEvidence(Adequacy.RowReading reading,
                                Measure<java.util.List<BorderObligationPointAssessment>> account,
                                Adequacy.BranchEvidence branch,
                                DecisionEvidence decision,
-                               InteractionEvidence interaction) implements RuleCitations {
+                               InteractionEvidence interaction,
+                               ReplacementEvidence replacement) implements RuleCitations {
 
     /**
      * Which criterion this behavior's combinations are measured against, settled in one place.
@@ -142,6 +148,9 @@ public record BehaviorEvidence(Adequacy.RowReading reading,
         // whose rows ran unwatched, came back whole — the status, the verdict and the document each
         // read this map, and none of them was told.
         parts.put("interaction", interaction == null ? null : interaction.made());
+        // And whether the rows tell the rewrites of the body apart, which reaching every arm does
+        // not settle. A rewrite left open holds the verdict open the way an undecided arm does.
+        parts.put("replacement", replacement == null ? null : replacement.measured());
         return java.util.Collections.unmodifiableMap(parts);
     }
 

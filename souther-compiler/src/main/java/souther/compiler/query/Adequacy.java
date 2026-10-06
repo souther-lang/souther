@@ -8,12 +8,14 @@ import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Classification;
+import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.RowToRun;
 import souther.compiler.inputs.TermPath;
 
 
 import souther.compiler.coverage.ArmProbe;
+import souther.compiler.coverage.ArmReportAnchor;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.RunRecord;
@@ -2769,6 +2771,9 @@ public final class Adequacy {
             // A row stands here and the search that settled the rule composed it, so what became
             // of it is that search's answer and is read where the rows are ({@link #atRule}).
             case About.ARuleNoRowTakes _ -> null;
+            // A row the rewrite answers differently on is what tells it apart, and what composes
+            // one is the search the measure ran; what became of it is read where the rows are.
+            case About.ARewriteNoRowTellsApart _ -> null;
             // What the rows were seen doing rather than what they owe.
             case About.ACaseNothingWasSeenToProduce _ ->
                     new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
@@ -4176,6 +4181,10 @@ public final class Adequacy {
                     // arms it claims.
                     case About.ACombinationNoRowMakes(var combination) -> meetings.add(combination);
                     case About.ARuleNoRowTakes(var _, var ruled) -> rules.add(ruled.rule());
+                    // A rewrite no row tells apart is owed the row it answers differently on,
+                    // looked for the way the measure looked for it.
+                    case About.ARewriteNoRowTellsApart(var _, var _, var _, var lookFor) ->
+                            replacements.add(lookFor);
                     // A class is read off the measure below and not off its finding. A finding is
                     // a gap something established, and a behavior no row names has none — which is
                     // not the same as having nothing to write, and is the case this walk would
@@ -4547,6 +4556,8 @@ public final class Adequacy {
                             case About.AnArmNoRowGoesThrough(var arm) -> atArm(arm, composed);
                             case About.ARuleNoRowTakes(var _, var ruled) ->
                                     atRule(ruled.rule(), rules);
+                            case About.ARewriteNoRowTellsApart(var _, var _, var _, var lookFor) ->
+                                    atRewrite(lookFor, composed);
                             // Asked of the search that was made at the line rather than of the
                             // finding's own reading of it. A finding is made wherever the lines
                             // were read, and a reading made without composing has no search to
@@ -4828,6 +4839,44 @@ public final class Adequacy {
                         new GenerationOutcome.CannotGenerate(none.why());
                 case souther.compiler.partition.ArmDisposition.NoWayIn none ->
                         nothingReaches(none);
+            };
+        }
+
+        /**
+         * What the search for a row the rewrite answers differently on came to, in the words every
+         * other search's answer is written in: the row, or how the search ended. Rows composed and
+         * answered alike are candidates that were not witnesses, and never that the rewrite answers
+         * alike everywhere.
+         */
+        private static GenerationOutcome atRewrite(ReplacementOwed lookFor,
+                                                   souther.compiler.partition.FillResult composed) {
+            souther.compiler.partition.ReplacementDisposition answer =
+                    composed.discharge().at(lookFor);
+            if (answer == null) {
+                throw new IllegalStateException(
+                        "a finding names a rewrite this run was not asked about: " + lookFor);
+            }
+            return switch (answer) {
+                case souther.compiler.partition.ReplacementDisposition.Witnessed(var row) ->
+                        new GenerationOutcome.Generated(List.of(composed.rowFor(row)));
+                case souther.compiler.partition.ReplacementDisposition.NoneFound(var ended) -> {
+                    List<CameToNothing> why = new ArrayList<>();
+                    for (souther.compiler.partition.ReplacementDisposition.Ended each : ended) {
+                        why.add(CameToNothing.metNothing(new Generator.UnresolvedCombination(
+                                List.of(), switch (each) {
+                                    case EVERY_ROW_ANSWERED_ALIKE ->
+                                            Generator.UnresolvedCombination.Reason
+                                                    .NO_CERTIFIED_WITNESS;
+                                    case THE_SEARCH_STOPPED ->
+                                            Generator.UnresolvedCombination.Reason
+                                                    .THE_SEARCH_LEFT_SOMETHING_UNTRIED;
+                                    case NOTHING_WAS_COMPOSED, NOTHING_RAN ->
+                                            Generator.UnresolvedCombination.Reason
+                                                    .NOTHING_COMPOSES_ONE;
+                                })));
+                    }
+                    yield new GenerationOutcome.CannotGenerate(why);
+                }
             };
         }
 
@@ -5571,6 +5620,17 @@ public final class Adequacy {
          */
         PAIR_UNCOVERED(DiagnosticCode.E1937),
         /**
+         * A rewrite of a body no row tells from the body, where some row shows it answering
+         * differently.
+         *
+         * <p>Beside {@link #ARM_UNREACHED} and not among it. A row goes through an arm whatever the
+         * arm answers, so every arm can be reached by rows none of which would fail with the arm
+         * written as its sibling — and a body with no fork can be answered by rows that would not
+         * fail with the body written as one value. One code for both rewrites: what an author is
+         * told is the same, a row whose answer tells the rewrite apart.
+         */
+        REWRITE_UNNOTICED(DiagnosticCode.E1939),
+        /**
          * A point away from a border that no row is at — the {@code IN} or the {@code OUT} point.
          *
          * <p>Beside {@link #BOUNDARY_UNMET} rather than among its findings, and the difference is
@@ -5708,6 +5768,13 @@ public final class Adequacy {
                     whereItIsWritten(db, owed.pointAt());
             // A row is shown where it is written, which is in this module's own source.
             case About.AnUnansweredRow(RowRef _, SourcePos at) -> Citation.of(at);
+            // A rewrite of an arm is shown where the fork is written, as the arm is; one of the
+            // body as a whole, and one of a fork nobody here wrote, at the behavior.
+            case About.ARewriteNoRowTellsApart(var _, Replacement.OfAnArm(var fork, var _, var _),
+                    var _, var _) when fork.isWritten() ->
+                    Sites.placeOf(db, new ArmReportAnchor.WhereItIsWritten(fork));
+            case About.ARewriteNoRowTellsApart _ ->
+                    whereItIsDeclared(db, module, finding.subject());
             // Everything else is about the behavior as a whole — what its rows do not reach, what
             // its rules do not divide, what nothing here could read of them. Shown at the behavior.
             case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
@@ -5961,6 +6028,7 @@ public final class Adequacy {
                 case About.ARuleNoRowTakes _ -> Kind.DECISION_RULE_UNCOVERED;
                 case About.ACombinationNoRowMakes _ -> Kind.INTERACTION_UNCOVERED;
                 case About.ACombinationOfTwoClassesNoRowIsIn _ -> Kind.PAIR_UNCOVERED;
+                case About.ARewriteNoRowTellsApart _ -> Kind.REWRITE_UNNOTICED;
                 // The row and the arm whose rows are all owed answers are one thing to do, and it
                 // is not the thing an unreached arm is. A row goes through this arm, so publishing
                 // it as an arm nothing reaches would tell a consumer the opposite of what happened.
@@ -6537,6 +6605,8 @@ public final class Adequacy {
             Map<String, List<BorderAssessment>> readings = readingsOf(db, name);
             Map<String, BranchEvidence> branches = db.ask(new BranchCoverage(name)).value();
             Map<String, InteractionEvidence> meetings = db.ask(new Interacts(name)).value();
+            Map<String, ReplacementEvidence> replacements =
+                    db.ask(new Replacements.Measured(name)).value();
             // The account of what the rows owe, which this does not read the text a second time
             // for: a row an author left open is one entry there and one finding here, and the two
             // cannot come apart.
@@ -6574,9 +6644,45 @@ public final class Adequacy {
                 combinationFindings(db, name, behavior.name(), CombinationCriterion.of(
                         meetings == null ? null : meetings.get(behavior.name()),
                         partitions == null ? null : partitions.get(behavior.name())), out);
+                ReplacementEvidence rewrites =
+                        replacements == null ? null : replacements.get(behavior.name());
+                if (rewrites != null) {
+                    rewriteFindings(behavior.name(), rewrites, out);
+                }
             }
             declaredFindings(db, name, out);
             return Answer.of(List.copyOf(out));
+        }
+
+        /**
+         * The rewrites of one body no row tells apart, where some row shows each answering
+         * differently.
+         *
+         * <p>Weakened by what the rows behind them went without and by nothing else. A rewrite left
+         * open beside one of these says nothing about whether a row tells this one apart, and
+         * carried onto it would take a gap two rows have settled and leave it undecided.
+         */
+        private static void rewriteFindings(String behavior, ReplacementEvidence rewrites,
+                                            List<Finding> out) {
+            Optional<ReplacementEvidence.Summary> made = rewrites.measured().made();
+            if (made.isEmpty()) {
+                return;
+            }
+            List<Weakening> rowsBehind = new ArrayList<>();
+            for (Weakening each : rewrites.measured().weakening().causes()) {
+                if (!(each instanceof Weakening.RewriteUndecided)) {
+                    rowsBehind.add(each);
+                }
+            }
+            for (ReplacementEvidence.Rewrite each : made.get().rewrites()) {
+                if (each.outcome() instanceof ReplacementEvidence.Unnoticed(var shownBy,
+                        var lookFor)) {
+                    out.add(new Finding(new FindingSubject.OfABehavior(behavior),
+                            WeakeningSet.ofAll(rowsBehind),
+                            new About.ARewriteNoRowTellsApart(behavior, each.replacement(),
+                                    shownBy, lookFor)));
+                }
+            }
         }
 
 
@@ -7284,6 +7390,16 @@ public final class Adequacy {
                         case About.ACombinationOfTwoClassesNoRowIsIn(var combination) ->
                                 new ExampleMessage.NoRowIsInThatCombinationOfClasses(
                                         twoClasses(combination), combination.behavior());
+                        // The behavior, and the rewrite by which sentence it is: an arm's is
+                        // pointed at the fork, and which sibling it answered as is a part number
+                        // the author did not write.
+                        case About.ARewriteNoRowTellsApart(var behavior, var replacement, var _,
+                                var _) -> switch (replacement) {
+                            case Replacement.OfAnArm _ ->
+                                    new ExampleMessage.NoRowTellsTheArmFromItsSibling(behavior);
+                            case Replacement.ByOneAnswer _ ->
+                                    new ExampleMessage.NoRowTellsTheBodyFromOneAnswer(behavior);
+                        };
                         // Kinds no build is told about under any code. Listed rather than
                         // defaulted, so that one added later has to be answered here rather than
                         // arriving as a warning with no sentence.
@@ -7299,6 +7415,16 @@ public final class Adequacy {
             switch (said) {
                 case About.ACaseNoRowExpects(var _, var missing) ->
                         built.hint(new ExampleMessage.WriteARowExpectingThatCase(missing.name()));
+                // The row the two answer differently on: one composed, written as it would be
+                // offered, or one the module writes, whose answer is what is left to write down.
+                case About.ARewriteNoRowTellsApart(var _, var _, var shownBy, var _) ->
+                        built.hint(switch (shownBy) {
+                            case ReplacementEvidence.ShownBy.AComposedRow(var inputs) ->
+                                    new ExampleMessage.WriteARowAtThatInput(
+                                            "(" + String.join(", ", inputs) + ")");
+                            case ReplacementEvidence.ShownBy.AWrittenRow(var row) ->
+                                    new ExampleMessage.WriteDownTheAnswerOfThatRow(row.shown());
+                        });
                 // The input the two lines part company at, where one was worked out. Said as a hint
                 // rather than in the sentence: the sentence is about the two lines, and this is the
                 // one row that settles which of them the model draws.
@@ -7802,7 +7928,7 @@ public final class Adequacy {
      * <p>Not asked of {@link RowOutcome#expectedArm()} being absent either. A row that names no
      * case has none of those, and it states an answer all the same.
      */
-    private static boolean awaitsItsAnswer(RowOutcome row) {
+    static boolean awaitsItsAnswer(RowOutcome row) {
         return row.expectation() == ExpectationState.OWED;
     }
 
@@ -7818,7 +7944,7 @@ public final class Adequacy {
      * <p>That a row was left undecided is not lost by this: it is said where the row is reported,
      * of the row rather than of the arms.
      */
-    private static Set<ArmProbe> armsSeenIn(RowOutcome row, Optional<SiteNumbering> numbering) {
+    static Set<ArmProbe> armsSeenIn(RowOutcome row, Optional<SiteNumbering> numbering) {
         return switch (ObservedInputs.of(row, numbering).watched()) {
             case Generator.Watched.Ran(var account) -> account.arms();
             case Generator.Watched.NoAccount _ -> Set.of();

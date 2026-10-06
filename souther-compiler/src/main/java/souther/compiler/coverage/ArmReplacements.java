@@ -79,12 +79,6 @@ public record ArmReplacements(Map<Integer, AtSite> bySite) {
         /** Why a sibling is not carried. */
         enum Why {
             /**
-             * Its expression reads the name its own arm gives the value. Standing in another arm
-             * that name stands for nothing, so the rewrite is not one the language can run with
-             * this arm's value — and running it with another value is a different question.
-             */
-            READS_ITS_OWN_NAME,
-            /**
              * Carrying every sibling of the fork would make the code larger than this compiler lets
              * a fork grow by. A limit of the classes and not of the model.
              */

@@ -254,7 +254,8 @@
           "decision_not_fully_read",
           "decision_rule_read_short",
           "decision_of_row_unreadable",
-          "decision_run_not_watched"
+          "decision_run_not_watched",
+          "rewrite_undecided"
         ]
       }
     },
@@ -1693,6 +1694,9 @@
         "interaction": {
           "$ref": "#/$defs/interaction"
         },
+        "replacement": {
+          "$ref": "#/$defs/replacement"
+        },
         "findings": {
           "$ref": "#/$defs/findings"
         }
@@ -1726,7 +1730,8 @@
                     "interaction_uncovered",
                     "pair_uncovered",
                     "domain_point_uncovered",
-                    "boundary_not_told_from_another"
+                    "boundary_not_told_from_another",
+                    "rewrite_unnoticed"
                   ]
                 }
               },
@@ -1748,7 +1753,7 @@
             }
           },
           {
-            "description": "And the place is written for the kinds whose place is their own: an arm is shown at the fork it is one of, and a row waiting for its answer at the row or at the arm it stands at. The rest are cited at the declaration the entry already names, and a place written for them would be that declaration's said twice.",
+            "description": "And the place is written for the kinds whose place is their own: an arm is shown at the fork it is one of, a row waiting for its answer at the row or at the arm it stands at, and an arm rewritten as its sibling at the fork the two are arms of. The rest are cited at the declaration the entry already names, and a place written for them would be that declaration's said twice — which is where a body rewritten as one answer is shown.",
             "if": {
               "anyOf": [
                 {
@@ -1769,6 +1774,27 @@
                   },
                   "required": [
                     "kind"
+                  ]
+                },
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "rewrite_unnoticed"
+                    },
+                    "obligationId": {
+                      "properties": {
+                        "rewrite": {
+                          "const": "arm_as_sibling"
+                        }
+                      },
+                      "required": [
+                        "rewrite"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "obligationId"
                   ]
                 }
               ]
@@ -2089,10 +2115,33 @@
                                 }
                               },
                               "else": {
-                                "not": {
+                                "if": {
+                                  "properties": {
+                                    "kind": {
+                                      "const": "rewrite_unnoticed"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind"
+                                  ]
+                                },
+                                "then": {
+                                  "description": "A rewrite of the body, and not a place in it: what is owed is a row the rewrite answers differently on, wherever that row stands.",
                                   "required": [
                                     "obligationId"
-                                  ]
+                                  ],
+                                  "properties": {
+                                    "obligationId": {
+                                      "$ref": "#/$defs/replacementObligationId"
+                                    }
+                                  }
+                                },
+                                "else": {
+                                  "not": {
+                                    "required": [
+                                      "obligationId"
+                                    ]
+                                  }
                                 }
                               }
                             }
@@ -2108,7 +2157,7 @@
         ],
         "properties": {
           "kind": {
-            "description": "What the measure established. `output_case_unspecified` is a case of the output no row expects and `output_case_unverified` is one some row expects and nothing was seen to produce; `input_case_unspecified` is a case of an input no row applies the behavior to and `axis_class_uncovered` is a class of a derived position no row is in — the two read alike about one class and only one of them is refused over. `boundary_unmet` is a line some rule draws that no row sits on, `arm_unreached` an arm of the body no row goes through. `boundary_not_told_from_another` is a line every point of which a row does sit on, and which the rows still do not tell from a line weighing one of its positions one more or one less: rows at a border's points show a line that has not moved, and showing one of the lines beside it wrong takes a row that line answers differently at. The lines it is held against are the ones one step away, so a border nothing is said about has no one-step fault left in it, which is a fault domain stated rather than the geometry of the line pinned down. Its `subject` names both lines, the one the rule drew and the one the rows leave standing beside it. `unanswered_row` is a row written with its answer still owed, and an arm whose only rows are those — told apart from `arm_unreached` because a row does go through such an arm, and read off the source rather than measured, so nothing about how much of the model could be read takes it away. `partition_not_derivable`, `partition_not_read` and `partition_rules_not_reached` are positions the model divides no way, what a reading did not read, and positions the axes did measure whose rules the walk never reached. `partition_values_not_separated` is none of those: every rule about the position arrived and every one was read, and what the reading holds is one set per position standing for a relation two of them cannot state — so the values it reports may be wider than the rules leave the position, and a class made out of them may be one no value can be in. It carries no `reason` and no `ruleId`, because no rule is answerable for it and what would lift it is a reading that keeps the alternatives apart. A `partition_not_read` is one of two things and `ruleId` says which: with it, a rule this read and could not turn into a line, named because the reader that stopped knows which rule; without it, a position whose rules the reading never arrived at, where no rule is named because none was seen. `reason` is on both, and says which limit is in the way. `rule_unaccounted` is one question a rule raised that nothing answered — said whether or not an axis came back for the position it is about, since a rule this compiler could not read is exactly the one no axis is derived from, and named for the question rather than for a measure because which section a reader meets it under follows from what it asks.",
+            "description": "What the measure established. `output_case_unspecified` is a case of the output no row expects and `output_case_unverified` is one some row expects and nothing was seen to produce; `input_case_unspecified` is a case of an input no row applies the behavior to and `axis_class_uncovered` is a class of a derived position no row is in — the two read alike about one class and only one of them is refused over. `boundary_unmet` is a line some rule draws that no row sits on, `arm_unreached` an arm of the body no row goes through. `boundary_not_told_from_another` is a line every point of which a row does sit on, and which the rows still do not tell from a line weighing one of its positions one more or one less: rows at a border's points show a line that has not moved, and showing one of the lines beside it wrong takes a row that line answers differently at. The lines it is held against are the ones one step away, so a border nothing is said about has no one-step fault left in it, which is a fault domain stated rather than the geometry of the line pinned down. Its `subject` names both lines, the one the rule drew and the one the rows leave standing beside it. `unanswered_row` is a row written with its answer still owed, and an arm whose only rows are those — told apart from `arm_unreached` because a row does go through such an arm, and read off the source rather than measured, so nothing about how much of the model could be read takes it away. `partition_not_derivable`, `partition_not_read` and `partition_rules_not_reached` are positions the model divides no way, what a reading did not read, and positions the axes did measure whose rules the walk never reached. `partition_values_not_separated` is none of those: every rule about the position arrived and every one was read, and what the reading holds is one set per position standing for a relation two of them cannot state — so the values it reports may be wider than the rules leave the position, and a class made out of them may be one no value can be in. It carries no `reason` and no `ruleId`, because no rule is answerable for it and what would lift it is a reading that keeps the alternatives apart. A `partition_not_read` is one of two things and `ruleId` says which: with it, a rule this read and could not turn into a line, named because the reader that stopped knows which rule; without it, a position whose rules the reading never arrived at, where no rule is named because none was seen. `reason` is on both, and says which limit is in the way. `rule_unaccounted` is one question a rule raised that nothing answered — said whether or not an axis came back for the position it is about, since a rule this compiler could not read is exactly the one no axis is derived from, and named for the question rather than for a measure because which section a reader meets it under follows from what it asks. `rewrite_unnoticed` is a rewrite of the body — an arm rows go through answering as a sibling of it, or the body answering one value the rows observed — that some input is shown to be answered differently by and no row's statement fails of. Reaching an arm shows it ran and not that anything a row states depends on it, so this is said of what the rows do reach.",
             "enum": [
               "output_case_unspecified",
               "input_case_unspecified",
@@ -2126,7 +2175,8 @@
               "partition_not_read",
               "rule_unaccounted",
               "partition_rules_not_reached",
-              "partition_values_not_separated"
+              "partition_values_not_separated",
+              "rewrite_unnoticed"
             ]
           },
           "disposition": {
@@ -2169,6 +2219,9 @@
               },
               {
                 "$ref": "#/$defs/pairCellObligationId"
+              },
+              {
+                "$ref": "#/$defs/replacementObligationId"
               }
             ]
           },
@@ -2238,6 +2291,215 @@
               "outcome": {
                 "type": "string",
                 "description": "What the path came out as: `held` or `denied` for a comparison, a truth and a condition nothing read, and the case the subject was read as for a fork."
+              }
+            }
+          }
+        }
+      }
+    },
+    "replacementObligationId": {
+      "type": "object",
+      "description": "What tells one rewrite of a body from every other: the behavior and which rewrite. `arm_as_sibling` is an arm answering as another arm of the same fork, written with the fork's coordinates the way an arm is, `part` the arm rewritten and `with` the sibling it answers as. `one_answer` is the body answering one value the rows observed whatever it is given, which is one rewrite whatever that value is. A key within this document: it names an entry of `replacement.obligations`, and a consumer joins a `rewrite_unnoticed` finding to the rewrite it is about on it.",
+      "required": [
+        "behavior",
+        "rewrite"
+      ],
+      "additionalProperties": false,
+      "if": {
+        "properties": {
+          "rewrite": {
+            "const": "arm_as_sibling"
+          }
+        },
+        "required": [
+          "rewrite"
+        ]
+      },
+      "then": {
+        "required": [
+          "module",
+          "definition",
+          "construct",
+          "lowered",
+          "part",
+          "with"
+        ]
+      },
+      "else": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "module"
+              ]
+            },
+            {
+              "required": [
+                "definition"
+              ]
+            },
+            {
+              "required": [
+                "construct"
+              ]
+            },
+            {
+              "required": [
+                "lowered"
+              ]
+            },
+            {
+              "required": [
+                "part"
+              ]
+            },
+            {
+              "required": [
+                "with"
+              ]
+            }
+          ]
+        }
+      },
+      "properties": {
+        "behavior": {
+          "type": "string"
+        },
+        "rewrite": {
+          "enum": [
+            "arm_as_sibling",
+            "one_answer"
+          ]
+        },
+        "module": {
+          "type": "string"
+        },
+        "definition": {
+          "type": "string"
+        },
+        "construct": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lowered": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "part": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "with": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "replacement": {
+      "type": "object",
+      "description": "The rewrites of this behavior's body and whether a row tells each from the body as written. Beside `branch` and not among it: a row goes through an arm whatever the arm answers, so every arm can be reached by rows none of which would fail if it answered as its sibling. One entry per rewrite put to the rows, whatever they came to — a `rewrite_unnoticed` finding names one of these by its `obligationId`. Not in `required` of a behavior: a document written before this key existed is still a document of this version.",
+      "required": [
+        "status"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "$ref": "#/$defs/measureReason"
+        }
+      ],
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "complete",
+              "partial"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "obligations"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "obligations"
+          ]
+        }
+      },
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "weakening": {
+          "$ref": "#/$defs/weakening"
+        },
+        "reason": {
+          "description": "Why there is no number, present exactly where `status` is `unavailable`. `no_body` is a behavior with no body of its own to rewrite, which no row would change. `not_asked` is a build that did not ask for the rows to be run again under a rewrite, and `no_rows` a behavior no row names. `body_was_not_read` is the model saying a body is written here and the image this run was measured in not carrying it, and `unreadable` is rows that ran without the classes a rewrite is carried in.",
+          "enum": [
+            "no_body",
+            "not_asked",
+            "no_rows",
+            "body_was_not_read",
+            "unreadable"
+          ]
+        },
+        "obligations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "obligationId",
+              "disposition"
+            ],
+            "additionalProperties": false,
+            "if": {
+              "properties": {
+                "disposition": {
+                  "const": "undecided"
+                }
+              },
+              "required": [
+                "disposition"
+              ]
+            },
+            "then": {
+              "required": [
+                "undecidedBecause"
+              ]
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "undecidedBecause"
+                ]
+              }
+            },
+            "properties": {
+              "obligationId": {
+                "$ref": "#/$defs/replacementObligationId"
+              },
+              "disposition": {
+                "description": "What the rows came to about this rewrite. `noticed` is a row whose statement the rewritten body does not keep. `unnoticed` is a rewrite some input is shown to be answered differently by, which no row's statement fails of. `undecided` is neither shown: no such input was found, or the rewrite could not be put to the rows, and nothing here concludes the rewrite answers as the body does.",
+                "enum": [
+                  "noticed",
+                  "unnoticed",
+                  "undecided"
+                ]
+              },
+              "undecidedBecause": {
+                "description": "Why a rewrite was left open. `too_large` is a fork that carrying the sibling would grow past what a class may hold. `nothing_answered` is no row answering with a value read in full, and `a_statement_was_not_read` a row stating something this could not read. `no_row_answered_differently` is a search that composed rows and found the rewrite answering each as the body does — where it looked, and not everywhere; `the_search_stopped` is one that stopped with rows untried; `nothing_was_composed` one that composed no row to look at; `nothing_ran` is nothing able to run a row.",
+                "enum": [
+                  "too_large",
+                  "nothing_answered",
+                  "a_statement_was_not_read",
+                  "no_row_answered_differently",
+                  "the_search_stopped",
+                  "nothing_was_composed",
+                  "nothing_ran"
+                ]
               }
             }
           }
@@ -5574,9 +5836,10 @@
                 "branch",
                 "boundary",
                 "partition",
-                "decision"
+                "decision",
+                "replacement"
               ],
-              "description": "Which of the measurements a behavior has exactly one of. What the rows reach of a position is measured once per position and is named by that position instead (`axis_measure`). `boundary` answers two questions over one reading of the lines: whether a row stands at each point of a line, which shows the line has not moved, and whether any line one step from it answers alike at every row, which is what a one-step fault in its weights would look like. A reading short of either is short, and which of the two it was is the word the shortfall itself carries."
+              "description": "Which of the measurements a behavior has exactly one of. What the rows reach of a position is measured once per position and is named by that position instead (`axis_measure`). `replacement` is whether the rows tell each rewrite of the body from the body as written. `boundary` answers two questions over one reading of the lines: whether a row stands at each point of a line, which shows the line has not moved, and whether any line one step from it answers alike at every row, which is what a one-step fault in its weights would look like. A reading short of either is short, and which of the two it was is the word the shortfall itself carries."
             }
           }
         },
