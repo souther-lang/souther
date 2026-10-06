@@ -5,6 +5,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -163,11 +164,44 @@ public sealed interface NumericSet {
             return new NumericDomain.Bounds(run.lineBelow(null), run.lineAbove(null));
         }
 
-        /** None, which claims less than may be true: a value taken out inside the run is a hole no
-         *  pair of ends leaves out, and one taken out at an end is not told apart from it here. */
+        /** The run's ends moved past the values taken out at them, where those are all there are;
+         *  a value taken out inside the run is a hole no pair of ends leaves out. */
         @Override
         public NumericDomain.Bounds asOneRun() {
-            return null;
+            Trimmed ends = trimmed(run.lineBelow(null), run.lineAbove(null), excluded);
+            return ends.holes().isEmpty() ? new NumericDomain.Bounds(ends.low(), ends.high())
+                    : null;
+        }
+
+        /**
+         * The ends {@code low} and {@code high} leave with {@code taken} taken out: a value at an
+         * end the run keeps moves that end past it, and the rest are holes between them.
+         *
+         * <p>One reading, for the set's own ends and for the words a report names the class by. Read
+         * twice, a class could be named {@code 10 < x} while its ends said ten was in it.
+         */
+        static Trimmed trimmed(Endpoint low, Endpoint high, List<Place> taken) {
+            List<Place> holes = new ArrayList<>();
+            for (Place each : taken) {
+                Endpoint below = low == null ? null : low.without(each);
+                Endpoint above = high == null ? null : high.without(each);
+                if (below != null) {
+                    low = below;
+                } else if (above != null) {
+                    high = above;
+                } else {
+                    holes.add(each);
+                }
+            }
+            return new Trimmed(low, high, holes);
+        }
+
+        /** The ends a run is left with, and the values taken out between them. */
+        record Trimmed(Endpoint low, Endpoint high, List<Place> holes) {
+
+            Trimmed {
+                holes = List.copyOf(holes);
+            }
         }
 
         @Override
@@ -217,10 +251,11 @@ public sealed interface NumericSet {
      * carrying spreads it over.
      *
      * <p><b>One way only.</b> Ends given are the set; null is no claim that the set has holes.
-     * Answered by the shape and not worked out of the numbers, a run with a value taken out at an
-     * end it keeps gives none, although on the whole numbers it is the run past that value. That
-     * is the side that claims less: a reader handed nothing composes nothing out of these ends, and
-     * a reader handed ends that held a hole would walk it unbounded.
+     * Worked out of the ends and the values taken out, and not of what the order holds between
+     * them: on the whole numbers the run above two and a half without three is the run from four,
+     * and it gives none. That is the side that claims less — a reader handed nothing composes
+     * nothing out of these ends, and a reader handed ends that held a hole would walk it
+     * unbounded.
      */
     NumericDomain.Bounds asOneRun();
 

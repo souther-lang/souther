@@ -81,9 +81,14 @@ final class OrderedClasses {
                         admits, perWitness));
             }
         } else {
+            // Every value singled out is in one run. The runs divide what the position holds and
+            // a value is held to that where it was read, so one in no run is a reading this
+            // compiler got wrong — said here, and not left out of the classes with nothing said.
+            List<Place> placed = new ArrayList<>();
             for (Band run : runs) {
                 List<Place> taken = values.stream()
                         .filter(each -> run.holds(new Level.OnACarrier(carrier, each))).toList();
+                placed.addAll(taken);
                 for (Place value : taken) {
                     classes.add(theValue(value, orders, type, reading, ruleReading));
                 }
@@ -95,6 +100,11 @@ final class OrderedClasses {
                     classes.add(Intervals.classOf(run, taken, term, type, reading, ruleReading,
                             min, max));
                 }
+            }
+            if (placed.size() != values.size()) {
+                throw new IllegalStateException("a value singled out of " + term
+                        + " falls in none of the runs the lines leave it: " + values
+                        + " against " + placed);
             }
         }
         // Classes of the number the values and the runs are of, said where that is known.

@@ -83,22 +83,16 @@ final class Intervals {
          * as. A value taken out inside it is said beside the range, because no pair of ends says it.
          */
         String label(Carrier carrier, List<Place> taken) {
-            Interval said = this;
-            List<String> holes = new ArrayList<>();
-            for (Place each : taken) {
-                if (said.lo != null && said.loInclusive && each.sameAs(said.lo)) {
-                    said = new Interval(said.lo, false, said.hi, said.hiInclusive, said.of);
-                } else if (said.hi != null && said.hiInclusive && each.sameAs(said.hi)) {
-                    said = new Interval(said.lo, said.loInclusive, said.hi, false, said.of);
-                } else {
-                    holes.add(carrier.written(each));
-                }
-            }
-            String range = said.label(carrier);
-            if (holes.isEmpty()) {
+            NumericSet.InARunExcept.Trimmed left = NumericSet.InARunExcept.trimmed(
+                    lo == null ? null : new Endpoint(lo, loInclusive),
+                    hi == null ? null : new Endpoint(hi, hiInclusive), taken);
+            String range = new Interval(lo, left.low() == null || left.low().inclusive(),
+                    hi, left.high() == null || left.high().inclusive(), of).label(carrier);
+            if (left.holes().isEmpty()) {
                 return range;
             }
-            String away = "x /= " + String.join(", ", holes);
+            String away = "x /= " + String.join(", ",
+                    left.holes().stream().map(carrier::written).toList());
             return range.equals("any") ? away : range + " and " + away;
         }
 

@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.Carrier;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.OfferingRequest;
@@ -39,11 +40,18 @@ class AValueSingledOutBesideALineIsAClassOfItsOwnTest {
                 labels(classesOf("x == 3 || x >= 10")));
     }
 
-    /** A value at the end a run keeps moves the end past it, which is how the rest is said. */
+    /**
+     * A value at the end a run keeps moves the end past it, which is how the rest is said — and
+     * the ends the rest gives as one run are the same ones its name says.
+     */
     @Test
     void aValueAtTheEndOfARunLeavesTheRunPastIt() {
-        assertEquals(List.of("x < 10", "= 10", "10 < x"),
-                labels(classesOf("x == 10 || x >= 10")));
+        List<PartitionClass> classes = classesOf("x == 10 || x >= 10");
+        assertEquals(List.of("x < 10", "= 10", "10 < x"), labels(classes));
+        NumericDomain.Bounds ends = classes.get(2).recognises().numbers().asOneRun();
+        assertNotNull(ends, "a run less the value at its end is a run");
+        assertTrue(ends.min() != null && !ends.min().inclusive()
+                && ends.min().at().sameAs(Count.of(10)) && ends.max() == null, ends::toString);
     }
 
     @Test
