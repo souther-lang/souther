@@ -584,8 +584,12 @@ final class TermRealizations {
                 }
                 NumericDomain.Bounds lies = NumericDomain.Bounds.OPEN;
                 for (Map.Entry<RealizationTarget, BigDecimal> each : by.entrySet()) {
+                    // The quotients as ends that hold nothing else. The walk below counts the
+                    // numbers it admits, and a hole in the quotients is as many numbers of the
+                    // place as the divisor is wide — so a set with one is a population nothing here
+                    // solves a value out of, and not a set with nothing in it.
                     NumericDomain.Bounds quotients =
-                            quotientsAsked(demands.get(each.getKey()).walking());
+                            demands.get(each.getKey()).walking().asOneRun();
                     if (quotients == null) {
                         return new Realization.Unexhausted(CompositionShortfall.writing(Set.of(
                                 CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS)),
@@ -1381,27 +1385,6 @@ final class TermRealizations {
     }
 
     /**
-     * The quotients a set asks for, as ends, or null where the set is not a run of them.
-     *
-     * <p>Every number but the ones a rule singled out is an order with holes in it, and no pair of
-     * ends is that. Which is a population nothing here solves a value out of rather than a set
-     * with nothing in it, so a caller says that and does not read these ends as open.
-     *
-     * <p>A run with values taken out of it has ends, and they are its run's: the holes are inside
-     * them, and every number stepped between them is read back against the set before it is
-     * offered ({@link #readsBackIntoEveryOne}). A walk spent on the numbers of a hole is a walk a
-     * figure stopped, which is what it says.
-     */
-    private static NumericDomain.Bounds quotientsAsked(NumericSet wanted) {
-        return switch (wanted) {
-            case NumericSet.At one -> new NumericDomain.Bounds(
-                    Endpoint.inclusive(one.value()), Endpoint.inclusive(one.value()));
-            case NumericSet.InARun _, NumericSet.InARunExcept _ -> wanted.extent();
-            case NumericSet.AwayFrom _ -> null;
-        };
-    }
-
-    /**
      * The numbers of a place whose quotient by {@code by} lies between {@code quotients}.
      *
      * <p><b>Exactly that run.</b> Truncation is not a bijection: a run of numbers answers each
@@ -1437,8 +1420,8 @@ final class TermRealizations {
      * the one place the carrier names where the ends do not close.
      *
      * <p>Stepped where both ends are written down. The ends are exactly the run the demands leave
-     * ({@link #numbersWhoseQuotientLiesIn}), so every number stepped is inside what the demands
-     * leave, short of the holes a set has in it, and the figure that counts them counts the work — a wide divisor makes the run wide and the
+     * ({@link #numbersWhoseQuotientLiesIn}), so every number stepped is one the demands admit and
+     * the figure that counts them counts the work — a wide divisor makes the run wide and the
      * figure stops the walk in it, rather than leaving a walk that steps without spending.
      *
      * <p>Where an end is open there is nothing to step from, so the carrier names a place the way

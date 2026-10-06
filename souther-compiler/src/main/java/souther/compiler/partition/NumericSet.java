@@ -52,6 +52,11 @@ public sealed interface NumericSet {
         }
 
         @Override
+        public NumericDomain.Bounds asOneRun() {
+            return extent();
+        }
+
+        @Override
         public LevelRegion region(Carrier on) {
             return LevelRegion.point(new Level.OnACarrier(on, value));
         }
@@ -83,6 +88,11 @@ public sealed interface NumericSet {
         }
 
         @Override
+        public NumericDomain.Bounds asOneRun() {
+            return null;
+        }
+
+        @Override
         public LevelRegion region(Carrier on) {
             LevelRegion left = LevelRegion.EVERYTHING;
             for (Place value : values) {
@@ -103,6 +113,11 @@ public sealed interface NumericSet {
         @Override
         public NumericDomain.Bounds extent() {
             return new NumericDomain.Bounds(run.lineBelow(null), run.lineAbove(null));
+        }
+
+        @Override
+        public NumericDomain.Bounds asOneRun() {
+            return extent();
         }
 
         @Override
@@ -143,6 +158,13 @@ public sealed interface NumericSet {
             return new NumericDomain.Bounds(run.lineBelow(null), run.lineAbove(null));
         }
 
+        /** None: the values taken out are inside the run's ends, and no pair of ends leaves them
+         *  out. */
+        @Override
+        public NumericDomain.Bounds asOneRun() {
+            return null;
+        }
+
         @Override
         public LevelRegion region(Carrier on) {
             LevelRegion left = run.region();
@@ -177,6 +199,20 @@ public sealed interface NumericSet {
      * the shapes they knew.
      */
     NumericDomain.Bounds extent();
+
+    /**
+     * The ends between which every number is one of these, or null where no pair of ends says
+     * that.
+     *
+     * <p>Not {@link #extent()}, and the difference is what a walk's bound rests on. The extent says
+     * nothing lies outside it; this says nothing between the ends is left out. A walk whose figure
+     * counts the numbers it admits spends nothing on a number it steps over and turns down, so it
+     * is bounded only where it is handed ends that hold nothing to turn down — and where the ends
+     * are carried onto another number first, one hole in these becomes as many numbers as the
+     * carrying spreads it over. A run is its ends; a run with values taken out of it, and the order
+     * with values taken out of it, have holes no pair of ends can leave out.
+     */
+    NumericDomain.Bounds asOneRun();
 
     /**
      * These numbers as the runs of {@code on}'s order they make up.
