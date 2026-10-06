@@ -113,9 +113,10 @@ import java.util.Objects;
  *                       not only its application — a fixture applies the helpers it names first, so
  *                       a row that applied nothing can still have spent counted points
  * @param replaced       the row run again with an arm it went through answering as a sibling, once
- *                       per arm and sibling the classes carry. Empty for a row that did not answer:
- *                       a replacement changes what the body answers, and a row that got no answer
- *                       from the body as written has none to tell a different one from
+ *                       per arm and sibling the classes carry, whether or not the row answered: a
+ *                       row that stopped without an answer may hold of the rewrite, which tells the
+ *                       two apart as surely as an answer would. Empty for a row that never entered
+ *                       the behavior, since every arm is inside it
  */
 public record RowOutcome(SourcePos at,
                          String target,
@@ -178,9 +179,9 @@ public record RowOutcome(SourcePos at,
                     + " that did not says it got none: " + stage + " with " + answer);
         }
         replaced = List.copyOf(replaced);
-        if (!replaced.isEmpty() && !(answer instanceof AnswerObservation.Answered)) {
-            throw new IllegalArgumentException("a row that got no answer has none a replaced body"
-                    + " could differ from: " + replaced);
+        if (!replaced.isEmpty() && !stage.reached(Stage.INVOKED)) {
+            throw new IllegalArgumentException("a row that never entered the behavior went through"
+                    + " no arm of it to replace: " + stage + " with " + replaced);
         }
         // What the source put where the answer goes and what became of the answer are held to each
         // other. Asked of {@link #expectation}, which is what the row was read as, and never of

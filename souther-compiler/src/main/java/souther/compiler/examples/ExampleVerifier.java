@@ -1526,26 +1526,28 @@ public final class ExampleVerifier {
      * The row run again once per arm it went through and sibling the classes carry there, each with
      * that sibling answering in the arm's place.
      *
-     * <p>Only of a row that answered and whose run was recorded: the arms it went through are what
-     * the recording says, and a replacement is asked of an answer there was. Each run is its own
-     * piece of work, after the row's, so that however these go the row's own outcome is what it was.
+     * <p>Of every row whose run was recorded, whether or not it answered: the arms it went through
+     * are what the recording says, and a row that stopped without an answer may hold under the
+     * rewrite, which tells the two apart. Each run is its own piece of work, after the row's, so
+     * that however these go the row's own outcome is what it was.
      *
      * <p>Each run has the row's budget of steps, which is what stops a replacement that would go
      * round for ever, and the same answer on every machine. The deadline is behind that, for a run
      * the steps do not stop; once one run of the row is given up on, the row's remaining
      * replacements are not run, so a row costs at most one deadline past its own however many arms
-     * it went through. A replacement left unrun has no run here, which is what a reader of the row
-     * is told of one that did not come back.
+     * it went through. Each of them is still here, as a run that ran out of its time: every
+     * rewrite of every arm the row went through has a run in this list, so a reader never has to
+     * read anything off one being missing.
      */
     private List<ReplacedRun> replacedRuns(ExampleTarget target, Sig sig, Set<TypeSymbol> outCases,
                                            Hir.ExampleRow row, RowState state) {
         if (!(probes instanceof ProbeImage.Instrumented(var _, ArmReplacements replacements))
-                || !(state.recorded instanceof RunRecord.Recorded(Observation seen))
-                || state.reached.returned() == null) {
+                || !(state.recorded instanceof RunRecord.Recorded(Observation seen))) {
             return List.of();
         }
         List<ReplacedRun> out = new ArrayList<>();
         Set<List<Object>> asked = new HashSet<>();
+        boolean givenUp = false;
         for (int site : new TreeSet<>(seen.arms())) {
             ArmReplacements.AtSite at = replacements.bySite().get(site);
             if (at == null) {
@@ -1556,13 +1558,14 @@ public final class ExampleVerifier {
                         || !asked.add(List.of(at.fork(), at.part(), with))) {
                     continue;
                 }
-                Optional<ReplacedRun> ran = replacedRun(target, sig, outCases, row, state.reached,
-                        state.disposition, at.fork(), at.part(), with,
-                        replacements.replacing(at.fork(), at.part(), with));
-                if (ran.isEmpty()) {
-                    return out;
-                }
-                out.add(ran.get());
+                Optional<ReplacedRun> ran = givenUp ? Optional.empty()
+                        : replacedRun(target, sig, outCases, row, state.reached,
+                                state.disposition, at.fork(), at.part(), with,
+                                replacements.replacing(at.fork(), at.part(), with));
+                givenUp = ran.isEmpty();
+                out.add(ran.orElseGet(() -> new ReplacedRun(at.fork(), at.part(), with,
+                        new AnswerObservation.RanOut(), AnswerChange.COULD_NOT_TELL,
+                        ReplacedRun.Noticed.COULD_NOT_TELL)));
             }
         }
         return out;

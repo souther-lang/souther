@@ -122,9 +122,11 @@ public final class CoverageSites {
      * How many nodes a fork's siblings may add to it, counted as every sibling carried in every
      * other arm.
      *
-     * <p>A guard on the classes and not a rule of the language. A method the JVM refuses for its
-     * size refuses every arm of the module with it, and a fork that stays under this carries its
-     * siblings with room to spare; one over it carries none, and says so of each.
+     * <p>A bound on what measuring costs, not a rule of the language and not what keeps the classes
+     * within the JVM's limits — a class past those is written again without the siblings it carried
+     * ({@code Backend}). Carrying grows with the square of a fork's arms, and every measured build
+     * of the module writes and loads what is carried, so a fork over this carries none and says so
+     * of each sibling; one under it carries them all.
      */
     static final int MOST_NODES_A_FORK_CARRIES = 4000;
 

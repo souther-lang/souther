@@ -1800,11 +1800,17 @@ public final class Generator {
                     GeneratedRow seen = null;
                     for (ArmProbe probe : arm.occurrences()) {
                         for (WhereToLook place : whereToLookFor(probe, read, here, axes.axes())) {
+                            int stopsBefore = looking.stops();
                             switch (witnessFor(axes, place.at, check, trial, ran,
                                     List.of(new Purpose.ForAReplacement(asked)), looking::of,
                                     origins, references, answers)) {
                                 case Witness.Certified(GeneratedRow row, var _) -> seen = row;
-                                case Witness.Limited _ -> looking.composingStopped();
+                                // The composing's own figure, where the witness did not stop it.
+                                case Witness.Limited _ -> {
+                                    if (looking.stops() == stopsBefore) {
+                                        looking.composingStopped();
+                                    }
+                                }
                                 // A row nothing watched is not one a rewrite can be told on, and
                                 // the search asked for none; the rest found nothing and said why.
                                 case Witness.Unconfirmed _, Witness.Exhausted _,
@@ -1834,6 +1840,7 @@ public final class Generator {
                             ? new GeneratedRow(purposes, inputs, answers) : null;
                     for (int at = 0; at < axes.size() && seen == null; at++) {
                         for (int cls = 0; cls < axes.get(at).classes().size(); cls++) {
+                            int stopsBefore = looking.stops();
                             Searched searched = search(axes, Pins.of(axes, Map.of(at, cls)),
                                     List.of(new Purpose.ForAReplacement(asked)), origins,
                                     (_, _) -> true, check, references, answers, List.of(),
@@ -1842,8 +1849,11 @@ public final class Generator {
                                 seen = searched.row();
                                 break;
                             }
+                            // Cut short by the composing's own figure, and not by the witness
+                            // having stopped it: that one already says why it did.
                             if (searched.came().why().reason()
-                                    == UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED) {
+                                    == UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED
+                                    && looking.stops() == stopsBefore) {
                                 looking.composingStopped();
                             }
                         }
@@ -5718,6 +5728,8 @@ public final class Generator {
         private int runs;
         /** Whether any row was asked about and answered alike. */
         private boolean alike;
+        /** How many times this stopped a search. */
+        private int stops;
         /** The ways the search stopped with something left untried. */
         private final Set<ReplacementDisposition.Ended> stopped =
                 EnumSet.noneOf(ReplacementDisposition.Ended.class);
@@ -5737,22 +5749,19 @@ public final class Generator {
         Acceptance of(GeneratedRow row, ObservedRun written) {
             ObservedRun body = written != null ? written : run(row);
             if (body == null) {
-                stopped.add(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE);
-                return Acceptance.STOPPED;
+                return stop(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE);
             }
             AnswerObservation rewritten;
             switch (asked) {
                 case ReplacementOwed.OfAnArm arm -> {
                     if (runs >= mostRuns) {
-                        stopped.add(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE);
-                        return Acceptance.STOPPED;
+                        return stop(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE);
                     }
                     runs++;
                     Optional<AnswerObservation> answered =
                             trial.runReplacing(row.toRun(), arm.replacing());
                     if (answered.isEmpty()) {
-                        stopped.add(ReplacementDisposition.Ended.A_RUN_DID_NOT_COME_BACK);
-                        return Acceptance.STOPPED;
+                        return stop(ReplacementDisposition.Ended.A_RUN_DID_NOT_COME_BACK);
                     }
                     rewritten = answered.get();
                 }
@@ -5788,6 +5797,22 @@ public final class Generator {
             ObservedRun now = trial.run(row.toRun());
             ran.put(written, now);
             return now;
+        }
+
+        /** This stopping the search, and why. */
+        private Acceptance stop(ReplacementDisposition.Ended why) {
+            stopped.add(why);
+            stops++;
+            return Acceptance.STOPPED;
+        }
+
+        /**
+         * How many times this has stopped a search. A search cut short reads the same whether the
+         * cut was this or the composing's own figure, so a caller tells the two apart by whether
+         * this count moved while the search ran.
+         */
+        int stops() {
+            return stops;
         }
 
         /** Composing the rows the search looked through stopped at a figure of its own. */

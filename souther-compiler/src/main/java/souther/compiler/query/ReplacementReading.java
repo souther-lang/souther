@@ -171,10 +171,9 @@ public final class ReplacementReading {
     /**
      * What the rows came to about one rewrite of an arm.
      *
-     * <p>Every row that went through the arm and states something is asked, and one whose run
-     * under the rewrite is not in hand, or came back telling nothing, may be the row that tells it
-     * apart — so the rewrite is left open rather than called unnoticed on the strength of the rows
-     * that did come back.
+     * <p>Every row that went through the arm and states something is asked, and one that ran out —
+     * as written or under the rewrite — may be the row that tells it apart, so the rewrite is left
+     * undecided rather than called unnoticed on the strength of the rows that did come back.
      */
     private static Standing armStanding(Replacement.OfAnArm replaced, List<ArmProbe> where,
                                         ArmReplacements replacements, List<RowOutcome> rows,
@@ -194,11 +193,22 @@ public final class ReplacementReading {
                     || where.stream().noneMatch(wentThrough.apply(row)::contains)) {
                 continue;
             }
+            // A row that neither held nor failed of the body as written ran out or was given up
+            // on, and is not run again: there is no way it came out to compare another with.
+            if (row.disposition() != Disposition.HELD && row.disposition() != Disposition.FAILED) {
+                unknown = true;
+                continue;
+            }
+            // Every rewrite of every arm a decided row went through was run, or is said to have
+            // run out, so one missing is this reading and the run disagreeing about what was
+            // carried — not something to read a reason off.
             ReplacedRun run = row.replaced().stream()
                     .filter(each -> each.fork().equals(replaced.fork())
                             && each.part() == replaced.part() && each.with() == replaced.with())
-                    .findFirst().orElse(null);
-            if (run == null || run.noticed() == ReplacedRun.Noticed.COULD_NOT_TELL) {
+                    .findFirst().orElseThrow(() -> new IllegalStateException("row `"
+                            + row.identity().shown() + "` went through " + replaced
+                            + " and carries no run of it: " + row.replaced()));
+            if (run.noticed() == ReplacedRun.Noticed.COULD_NOT_TELL) {
                 unknown = true;
                 continue;
             }
