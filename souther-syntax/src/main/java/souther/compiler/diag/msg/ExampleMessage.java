@@ -360,6 +360,17 @@ public sealed interface ExampleMessage extends Message {
     @Code(DiagnosticCode.E1939)
     record NoRowTellsTheArmFromItsSibling(String behavior) implements ExampleMessage, Reported {}
 
+    /**
+     * No row of the behavior would come out differently if an arm it reaches in code this build
+     * holds no source of answered as another arm of its fork.
+     *
+     * <p>Pointed at the behavior, since there is no fork here to point at, so the sentence says
+     * which arm it is about rather than calling it this one.
+     */
+    @Code(DiagnosticCode.E1939)
+    record NoRowTellsAnArmOutOfSightFromItsSibling(String behavior)
+            implements ExampleMessage, Reported {}
+
     /** No row of the behavior would come out differently if its body answered one value whatever
      *  it was given. */
     @Code(DiagnosticCode.E1939)

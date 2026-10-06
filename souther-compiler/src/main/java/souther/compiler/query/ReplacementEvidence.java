@@ -107,12 +107,17 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
         }
     }
 
-    /** One rewrite and what the rows came to about it. */
-    public record Rewrite(Replacement replacement, Outcome outcome) {
+    /** One rewrite, where a report about it is shown, and what the rows came to about it. */
+    public record Rewrite(Replacement replacement, ReplacementReportAnchor reportAt,
+                          Outcome outcome) {
 
         public Rewrite {
             Objects.requireNonNull(replacement, "a rewrite is some rewrite");
+            Objects.requireNonNull(reportAt, "and is shown somewhere");
             Objects.requireNonNull(outcome, "a rewrite says what the rows came to about it");
+            if (!reportAt.shows(replacement)) {
+                throw new IllegalArgumentException(replacement + " is not shown at " + reportAt);
+            }
         }
     }
 

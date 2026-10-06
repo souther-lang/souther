@@ -79,14 +79,22 @@ public final class ReplacementReading {
         }
     }
 
-    /** One rewrite and what the rows came to about it. */
-    public record Account(Replacement replacement, Standing standing) {
+    /** One rewrite, where a report about it is shown, and what the rows came to about it. */
+    public record Account(Replacement replacement, ReplacementReportAnchor reportAt,
+                          Standing standing) {
 
         public Account {
             Objects.requireNonNull(replacement, "an account is of some rewrite");
+            Objects.requireNonNull(reportAt, "and is shown somewhere");
             Objects.requireNonNull(standing, "an account says what the rows came to");
+            if (!reportAt.shows(replacement)) {
+                throw new IllegalArgumentException(replacement + " is not shown at " + reportAt);
+            }
         }
     }
+
+    /** The places in the plan one rewrite of an arm stands at, and the one place it is shown. */
+    private record Occurrences(ReplacementReportAnchor reportAt, List<ArmProbe> probes) {}
 
     /**
      * What being the same answer means for the behavior: two values read in full, and a statement
@@ -135,12 +143,13 @@ public final class ReplacementReading {
             }
         }
         List<Account> out = new ArrayList<>();
-        Map<Replacement.OfAnArm, List<ArmProbe>> occurrences = new LinkedHashMap<>();
+        Map<Replacement.OfAnArm, Occurrences> occurrences = new LinkedHashMap<>();
         for (CoverageSites.ArmSite site : plan.arms(behavior)) {
             if (site.place().probe().isEmpty() || !reached.contains(site.place().probe().get())) {
                 continue;
             }
             ArmProbe probe = site.place().probe().get();
+            ReplacementReportAnchor reportAt = ReplacementReportAnchor.ofAnArm(site.anchor());
             List<ArmReplacements.AtSite> sites =
                     carried.ofArm(site.obligation().origin(), site.obligation().part());
             Set<Integer> withs = new TreeSet<>();
@@ -154,11 +163,20 @@ public final class ReplacementReading {
                         || at.siblings().get(with).differs().provenAway(unreached))) {
                     continue;
                 }
-                occurrences.computeIfAbsent(replaced, _ -> new ArrayList<>()).add(probe);
+                Occurrences at = occurrences.computeIfAbsent(replaced,
+                        _ -> new Occurrences(reportAt, new ArrayList<>()));
+                // One fork is in a source this compilation holds or it is not, whichever call
+                // reached it; two answers would be the plan disagreeing with itself about the fork.
+                if (!at.reportAt().equals(reportAt)) {
+                    throw new IllegalStateException(replaced + " is shown at " + at.reportAt()
+                            + " where one call reaches it and at " + reportAt + " where another"
+                            + " does");
+                }
+                at.probes().add(probe);
             }
         }
-        occurrences.forEach((replaced, where) -> out.add(new Account(replaced,
-                armStanding(replaced, where, carried, rows, wentThrough))));
+        occurrences.forEach((replaced, at) -> out.add(new Account(replaced, at.reportAt(),
+                armStanding(replaced, at.probes(), carried, rows, wentThrough))));
         // One answer only where no arm is rewritten. A body the rows go through a fork of is asked
         // about the fork, arm by arm. And not where the body answers one value already: every way
         // to an answer that reads something, or that is another answer, closed by the rules.
@@ -257,7 +275,7 @@ public final class ReplacementReading {
                 distinct.add(value);
                 Replacement.ByOneAnswer rewrite = new Replacement.ByOneAnswer(value,
                         RowRef.of(answered.get(i)));
-                out.add(new Account(rewrite,
+                out.add(new Account(rewrite, new ReplacementReportAnchor.AtTheBehavior(),
                         oneAnswerStanding(rewrite, rows, answered, values, comparing)));
             }
         }

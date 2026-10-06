@@ -256,7 +256,7 @@ public final class Replacements {
                 List<ReplacementEvidence.Rewrite> rewrites = new ArrayList<>();
                 for (ReplacementReading.Account each : accounts) {
                     rewrites.add(new ReplacementEvidence.Rewrite(each.replacement(),
-                            outcomeOf(each.standing(),
+                            each.reportAt(), outcomeOf(each.standing(),
                                     searched == null ? null : searched.get(each.replacement()))));
                 }
                 return ReplacementEvidence.measured(named, rewrites,
