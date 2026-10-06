@@ -49,6 +49,30 @@ class AnArmOfAValueIsReadWhereTheBehaviorCallsItTest {
 
             let zero = List.get(0, [ 0 ]) |> Option.withDefault(0)
 
+            partial let countdown (k: Int): Int = if k <= 0 then big else countdown(k - 1)
+
+            partial let ping (k: Int): Int = if k <= 0 then 0 else pong(k - 1)
+
+            partial let pong (k: Int): Int = if k <= 0 then big else ping(k - 1)
+
+            behavior helped : (n: N) -> R
+                constructs R
+            let helped (n) = R { out = countdown(n.v) }
+
+            behavior pingFirst : (n: N) -> R
+                constructs R
+            let pingFirst (n) = {
+                let c = n.v > 0
+                R { out = if c then (if c then ping(n.v) else pong(n.v)) else n.v }
+            }
+
+            behavior pongFirst : (n: N) -> R
+                constructs R
+            let pongFirst (n) = {
+                let c = n.v > 0
+                R { out = if c then (if c then pong(n.v) else ping(n.v)) else n.v }
+            }
+
             behavior nowhere : (n: N) -> R
                 constructs R
             let nowhere (n) = {
@@ -81,7 +105,8 @@ class AnArmOfAValueIsReadWhereTheBehaviorCallsItTest {
     @Test
     void everyArmThePlanOwesABehaviorIsRead() {
         Model model = Model.of();
-        for (String behavior : List.of("nowhere", "reachedFirst", "reachedLast", "through")) {
+        for (String behavior : List.of("nowhere", "reachedFirst", "reachedLast", "through",
+                "helped", "pingFirst", "pongFirst")) {
             assertEquals(model.plan.arms(behavior).stream().map(CoverageSites.ArmSite::index)
                             .toList(),
                     List.copyOf(model.reads.get(behavior).arms().keySet()),
@@ -94,6 +119,38 @@ class AnArmOfAValueIsReadWhereTheBehaviorCallsItTest {
         assertEquals(Set.of("big", "bigger", "guarded", "zero"), owners);
         assertEquals(5, model.checked.run("through").methods().size(),
                 "a run of `through` goes through every value it calls, `summed` holding no arm");
+    }
+
+    /**
+     * A helper that recurses is emitted as a method and counts no places of its own, and a run goes
+     * through it all the same: the value it calls is owed by the behavior that calls the helper.
+     */
+    @Test
+    void aValueCalledFromAHelperThatRecursesIsOwedByTheBehaviorThatCallsTheHelper() {
+        Model model = Model.of();
+        assertEquals(2, model.armsOf("helped", "big").size(),
+                "`helped` owes both arms of `big`, which `countdown` calls");
+        assertEquals(Set.of("big"), model.plan.arms("helped").stream()
+                .map(CoverageSites.ArmSite::body).collect(Collectors.toSet()));
+    }
+
+    /**
+     * Two helpers that call each other are entered by the calls from outside them, whichever of
+     * the two each call is of. `pong` calls `big`; one behavior reaches the pair through `ping`
+     * and calls `pong` where no run gets, the other the other way round.
+     */
+    @Test
+    void helpersThatCallEachOtherAreReachedWhereAnyCallIntoThemIs() {
+        Model model = Model.of();
+        for (String behavior : List.of("pingFirst", "pongFirst")) {
+            List<ArmProbe> inBig = model.armsOf(behavior, "big");
+            assertEquals(2, inBig.size(), "`" + behavior + "` owes the arms of `big`");
+            for (ArmProbe arm : inBig) {
+                assertInstanceOf(PathAccess.Unsupported.class,
+                        model.reads.get(behavior).armAt(arm),
+                        "`big` is reached from `" + behavior + "` through the call a run gets to");
+            }
+        }
     }
 
     @Test

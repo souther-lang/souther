@@ -4375,10 +4375,20 @@ public final class Bodies {
         // compares and forks on is among the places of this module however many behaviors call it.
         // Held apart from the behaviors: it declares no rows and states no answer, and the places of
         // a behavior are its own and those of the methods it calls.
+        //
+        // A helper emitted as a method of its own is a body a run passes through too, and its
+        // places are not counted. It is held for what it calls: a value's method run from inside it
+        // is a body the run passes through as much as one the behavior calls itself.
         SequencedMap<String, Core> methods = new LinkedHashMap<>();
+        SequencedMap<String, Core> passages = new LinkedHashMap<>();
         for (Hir.FnDef fn : settled.fns()) {
             EmittedDefinition definition = module.emittedDefinitions().get(fn.name());
-            if (definition != null && definition.placesAreCounted()) {
+            EmittedDefinition.OnARun onARun =
+                    definition == null ? EmittedDefinition.OnARun.APART : definition.onARun();
+            if (onARun == EmittedDefinition.OnARun.PASSED_THROUGH) {
+                passages.put(fn.name(), definition.body());
+            }
+            if (onARun == EmittedDefinition.OnARun.PLACES_COUNTED) {
                 methods.put(fn.name(), definition.body());
                 // What a body is read with travels with the body. A behavior's check answers with
                 // the rules its calls were handed, and the expansion a value method was lowered
@@ -4420,7 +4430,7 @@ public final class Bodies {
         // its trees are both in hand for the first and only time, and everything below takes
         // the pair rather than two things to put together again.
         ModuleBodies of =
-                new ModuleBodies(name, bodies, methods);
+                new ModuleBodies(name, bodies, methods, passages);
         // Where the places of these bodies are, walked here and once. What it is an answer
         // about is the module this check holds, so this is where there is a module to walk;
         // and the claims below name arms of it, so they are addresses of the plan this answer

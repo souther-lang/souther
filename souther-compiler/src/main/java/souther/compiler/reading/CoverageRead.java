@@ -117,6 +117,10 @@ public final class CoverageRead {
     /** The body being walked, which the arms met in it are arms of. */
     private Core body;
 
+    /** The cycle of calls the body being walked is on, as {@link RunBodies#cycleOf} names it;
+     *  null while the behavior's own body is. */
+    private Core cycle;
+
     /** The meetings this walk is read for, and the owner of everything finding a meeting takes. */
     private final Meetings meetings;
 
@@ -126,10 +130,10 @@ public final class CoverageRead {
     /** Every way a run of the body is known to take, in the order the walk met them. */
     private final Set<WayIn> taken = new LinkedHashSet<>();
 
-    /** How each method is entered, joined over every call of it walked so far. */
+    /** How each cycle of calls is entered, joined over every call into it walked so far. */
     private final Map<Core, Entered> entered = new IdentityHashMap<>();
 
-    /** The bodies walked, after which nothing more may enter them. */
+    /** The cycles of calls walked, after which nothing more may enter them. */
     private final Set<Core> read = Collections.newSetFromMap(new IdentityHashMap<>());
 
     private CoverageRead(RunBodies run, Function<Core, ValueArrivals<Outcome>> readingOf,
@@ -251,16 +255,18 @@ public final class CoverageRead {
                         new NumberWays(numbers, numbers.reading().quantities(), reads, symbols,
                                 source.newtypes())),
                 meetings, arms);
-        walked.walkBody(run.entry(), naming, new Reach.Ways(List.of(new WayIn(List.of()))), true);
-        // Each method after every body that calls it, so it is entered every way it is before it
-        // is read. One entering after its method was read is refused where it is made.
+        walked.walkBody(run.entry(), null, naming,
+                new Reach.Ways(List.of(new WayIn(List.of()))), true);
+        // Each method after every body that calls into it, so it is entered every way it is
+        // before it is read. One entering after its method was read is refused where it is made.
         for (Core method : run.methods()) {
-            Entered into = walked.entered.get(method);
+            Core cycle = run.cycleOf(method);
+            Entered into = walked.entered.get(cycle);
             if (into == null) {
                 throw new IllegalStateException("the reading of `" + behavior + "` met no call of"
                         + " a method the run goes through; every call is one this walk goes to");
             }
-            walked.walkBody(method, naming, into.reach(), into.observed());
+            walked.walkBody(method, cycle, naming, into.reach(), into.observed());
         }
         List<Interaction> found = meetings.found();
         for (Interaction group : found) {
@@ -270,12 +276,18 @@ public final class CoverageRead {
                 arms.restOfTheBlock(behavior));
     }
 
-    /** One body, read for what it arrives at and then walked under {@code reach}. */
-    private void walkBody(Core root, CoverageNaming naming, Reach reach, boolean observed) {
+    /**
+     * One body, read for what it arrives at and then walked under {@code reach}.
+     *
+     * @param onCycle the cycle of calls {@code root} is on, null for the behavior's own body
+     */
+    private void walkBody(Core root, Core onCycle, CoverageNaming naming, Reach reach,
+                          boolean observed) {
         body = root;
+        cycle = onCycle;
         reading = readingOf.apply(root);
-        if (root != null) {
-            read.add(root);
+        if (onCycle != null) {
+            read.add(onCycle);
         }
         walk(root, naming, reach, observed);
     }
@@ -285,13 +297,20 @@ public final class CoverageRead {
      *
      * <p>The way into the call is the way into the method, carried across rather than started
      * afresh: an arm in a value called only where some condition held is reached only there.
+     *
+     * <p>A call from a method to one on the same cycle of calls opens no way in. A run there came
+     * into the cycle from outside it, by a call already joined into the way the cycle is entered.
      */
     private void enters(Core method, Reach reach, boolean observed) {
-        if (read.contains(method)) {
+        Core into = run.cycleOf(method);
+        if (into == cycle) {
+            return;
+        }
+        if (read.contains(into)) {
             throw new IllegalStateException("a call of a method was met after the method was"
                     + " read; every caller of a method is read before it");
         }
-        entered.merge(method, new Entered(reach, observed), Entered::and);
+        entered.merge(into, new Entered(reach, observed), Entered::and);
     }
 
     /**

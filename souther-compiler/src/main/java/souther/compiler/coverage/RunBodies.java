@@ -2,14 +2,12 @@ package souther.compiler.coverage;
 
 import souther.compiler.core.Core;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.SequencedMap;
-import java.util.Set;
 
 /**
  * The bodies one run of a behavior goes through, with the plan that numbered their places.
@@ -27,25 +25,32 @@ public final class RunBodies {
 
     /** The run of a behavior whose bodies did not come out: nothing in it and nothing numbered. */
     public static final RunBodies NONE =
-            new RunBodies(null, Map.of(), Methods.NONE, CoverageSites.Plan.NONE);
+            new RunBodies(null, List.of(), Methods.NONE, CoverageSites.Plan.NONE);
 
     private final Core entry;
 
-    /** Each method the run calls by the value's name, callers first. */
-    private final SequencedMap<String, Core> methods;
+    /** The methods the run goes through, a cycle of calls together, callers before callees. */
+    private final List<List<Core>> groups;
 
-    private final Set<Core> owed;
+    /** The first method of the group each method is in, which stands for the group. */
+    private final Map<Core, Core> groupOf;
 
     private final Methods graph;
 
     private final CoverageSites.Plan plan;
 
-    RunBodies(Core entry, Map<String, Core> methods, Methods graph, CoverageSites.Plan plan) {
+    RunBodies(Core entry, List<List<Core>> groups, Methods graph, CoverageSites.Plan plan) {
         this.entry = entry;
-        this.methods = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(methods));
-        Set<Core> owed = Collections.newSetFromMap(new IdentityHashMap<>());
-        owed.addAll(methods.values());
-        this.owed = Collections.unmodifiableSet(owed);
+        List<List<Core>> held = new ArrayList<>();
+        Map<Core, Core> groupOf = new IdentityHashMap<>();
+        for (List<Core> group : groups) {
+            held.add(List.copyOf(group));
+            for (Core member : group) {
+                groupOf.put(member, group.getFirst());
+            }
+        }
+        this.groups = List.copyOf(held);
+        this.groupOf = Collections.unmodifiableMap(groupOf);
         this.graph = graph;
         this.plan = plan;
     }
@@ -58,22 +63,31 @@ public final class RunBodies {
      */
     public static RunBodies of(ModuleBodies bodies, CoverageSites.Plan plan, String behavior) {
         Methods graph = plan.methods();
-        boolean same = graph.entries().get(behavior) == bodies.bodies().get(behavior)
-                && graph.bodies().size() == bodies.methods().size();
-        for (Map.Entry<String, Core> method : bodies.methods().entrySet()) {
-            same &= graph.bodies().get(method.getKey()) == method.getValue();
-        }
-        if (!same) {
+        if (graph.entries().get(behavior) != bodies.bodies().get(behavior)
+                || !sameTrees(graph.bodies(), bodies.methods())
+                || !sameTrees(graph.passages(), bodies.passages())) {
             throw new IllegalArgumentException("the plan beside the bodies of `" + behavior
                     + "` is not a plan of them");
         }
         return graph.run(behavior, plan);
     }
 
+    private static boolean sameTrees(Map<String, Core> held, Map<String, Core> given) {
+        if (held.size() != given.size()) {
+            return false;
+        }
+        for (Map.Entry<String, Core> each : given.entrySet()) {
+            if (held.get(each.getKey()) != each.getValue()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** The same bodies, read against {@code other}: a plan of the same trees that answers some
      *  question about them otherwise. */
     RunBodies under(CoverageSites.Plan other) {
-        return new RunBodies(entry, methods, graph, other);
+        return new RunBodies(entry, groups, graph, other);
     }
 
     /**
@@ -84,10 +98,28 @@ public final class RunBodies {
         return entry;
     }
 
-    /** The bodies of the methods the run calls, directly or through another, each after every
-     *  method that calls it. */
+    /**
+     * The methods the run goes through, directly or through another — values' and the helpers'
+     * emitted as methods — each after every method that calls into it from outside a cycle of
+     * calls it is on, and the methods of one cycle next to each other.
+     */
     public List<Core> methods() {
-        return List.copyOf(methods.values());
+        List<Core> out = new ArrayList<>();
+        groups.forEach(out::addAll);
+        return List.copyOf(out);
+    }
+
+    /**
+     * The method standing for the cycle of calls {@code method} is on: itself, where it is on
+     * none. Two methods with one answer are entered together — a run calling one from the other
+     * came into the cycle from outside it first.
+     */
+    public Core cycleOf(Core method) {
+        Core first = groupOf.get(method);
+        if (first == null) {
+            throw new IllegalArgumentException("a method no body of this run calls");
+        }
+        return first;
     }
 
     /** The plan that numbered the places of these bodies. */
@@ -106,8 +138,9 @@ public final class RunBodies {
         if (name == null) {
             return Optional.empty();
         }
-        Core body = graph.bodies().get(name);
-        if (!owed.contains(body)) {
+        Core body = graph.bodies().containsKey(name) ? graph.bodies().get(name)
+                : graph.passages().get(name);
+        if (!groupOf.containsKey(body)) {
             throw new IllegalArgumentException("a call runs the method of `" + name
                     + "`, which no body of this run calls");
         }
