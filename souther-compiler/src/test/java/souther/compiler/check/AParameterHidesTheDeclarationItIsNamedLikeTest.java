@@ -12,7 +12,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -52,7 +51,8 @@ class AParameterHidesTheDeclarationItIsNamedLikeTest {
     private static HelperTable tableOf(String source) {
         Ast.Module parsed = CstFrontend.parse(source);
         Hir.Module resolved = Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get()));
-        return HelperTable.of(resolved, Map.of(), InliningPolicy.FULL, DefaultStdlib.get());
+        return HelperTable.of(resolved, ClosedImports.none(InliningPolicy.FULL),
+                InliningPolicy.FULL, DefaultStdlib.get());
     }
 
     /** How {@code demo} reaches a helper of its own, which is bare. */

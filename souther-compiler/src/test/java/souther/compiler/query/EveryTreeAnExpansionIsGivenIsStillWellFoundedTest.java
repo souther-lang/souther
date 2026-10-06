@@ -2,7 +2,9 @@ package souther.compiler.query;
 
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.ClosedImports;
 import souther.compiler.check.HelperInliner;
+import souther.compiler.check.InliningPolicy;
 import souther.compiler.check.ValueCycles;
 import souther.compiler.diag.CompileException;
 import souther.compiler.meta.ModulePath;
@@ -117,9 +119,10 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
         return out;
     }
 
-    private static Map<String, Hir.FnDef> publishedTo(Db db, String name) {
-        Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
-        return imported.present() ? imported.value() : Map.of();
+    private static ClosedImports publishedTo(Db db, String name) {
+        Answer<ClosedImports> imported =
+                db.ask(new Bodies.ImportedDefinitions(name, InliningPolicy.FULL));
+        return imported.present() ? imported.value() : ClosedImports.none(InliningPolicy.FULL);
     }
 
     @Test
@@ -127,7 +130,7 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
         Db db = dbOf();
         Map<String, String> aValueOf = Map.of("m.a", "step", "m.b", "markup");
         aValueOf.forEach((name, value) -> {
-            Map<String, Hir.FnDef> published = publishedTo(db, name);
+            ClosedImports published = publishedTo(db, name);
             treesOf(db, name).forEach((stage, tree) -> {
                 // a value is still there to be asked about, so a stage that dropped the ones this
                 // module was written around is not passing by having nothing left to walk
@@ -171,6 +174,7 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
         assertTrue(resolved.present(), "resolution answers; the refusal comes later");
 
         assertThrows(CompileException.class,
-                () -> ValueCycles.rejectIn(resolved.value(), Map.of(), DefaultStdlib.get()));
+                () -> ValueCycles.rejectIn(resolved.value(), ClosedImports.none(InliningPolicy.FULL),
+                        DefaultStdlib.get()));
     }
 }

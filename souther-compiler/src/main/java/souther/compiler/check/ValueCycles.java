@@ -49,7 +49,7 @@ public final class ValueCycles {
      * <p>Building the edges it needs rather than taking an expansion table: what it reads is the
      * module's own definitions and what each of them calls, which is settled by nothing.
      */
-    public static void rejectIn(Hir.Module m, Map<String, Hir.FnDef> published,
+    public static void rejectIn(Hir.Module m, ClosedImports published,
                                 Stdlib stdlib) {
         HelperTable table = HelperTable.of(m, published, InliningPolicy.FULL, stdlib);
         // What the module declared, which is what a value cycle is about: a value written in terms of

@@ -145,7 +145,7 @@ public final class CheckSurface implements Assembly {
                                         Map<ValueName.Behavior, Sig> signatures,
                                         FakeTables declared,
                                         BehaviorBodies bodies,
-                                        Map<String, Hir.FnDef> importedForEvidence,
+                                        ClosedImports importedForEvidence,
                                         Set<ValueName.Helper> importedLeaves,
                                         Stdlib stdlib,
                                         Symbols symbols,

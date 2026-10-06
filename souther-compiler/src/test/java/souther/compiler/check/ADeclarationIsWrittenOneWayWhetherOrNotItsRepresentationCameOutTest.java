@@ -7,7 +7,6 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.frontend.CstFrontend;
 
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -127,8 +126,9 @@ class ADeclarationIsWrittenOneWayWhetherOrNotItsRepresentationCameOutTest {
 
     private InvariantSettled settle() {
         return InvariantSettled.settle(
-                Expandable.check(resolved(), Map.of(), DefaultStdlib.get()), scope,
-                ScopedDeclarations.kindsOf(scope), Map.of());
+                Expandable.check(resolved(), ClosedImports.none(InliningPolicy.FULL),
+                        DefaultStdlib.get()), scope,
+                ScopedDeclarations.kindsOf(scope), ClosedImports.none(InliningPolicy.FULL));
     }
 
     private static Hir.Module resolved() {

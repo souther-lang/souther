@@ -4,7 +4,6 @@ import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 
-import java.util.Map;
 
 /**
  * A resolved module where a body of it may be expanded — which is where no value of it is defined in
@@ -50,7 +49,7 @@ public final class Expandable {
      * @throws CompileException where a value of the module is defined in terms of itself, which is
      *     the refusal itself and not a report about the answer being absent
      */
-    public static Expandable check(Hir.Module module, Map<String, Hir.FnDef> imported,
+    public static Expandable check(Hir.Module module, ClosedImports imported,
                                    Stdlib stdlib) {
         ValueCycles.rejectIn(module, imported, stdlib);
         return new Expandable(module);

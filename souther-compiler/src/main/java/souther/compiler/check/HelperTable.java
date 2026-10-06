@@ -134,11 +134,20 @@ public final class HelperTable {
      * on recorded ({@link Hir.FnDef#takenOnAs}); an imported definition is reached under the module
      * that declares it, which the declaration says; a library operation is reached under the alias
      * the library publishes it by, which the library says.
+     *
+     * <p>{@code imported} has to have been closed under {@code policy}. Its bodies were expanded
+     * where they were written, so a table of another policy would hold them in a representation
+     * none of this module's own bodies is in, and nothing reading an expanded tree could tell which
+     * parts were which.
      */
     public static HelperTable of(String module, Map<String, Hir.FnDef> declared,
                                  Map<String, Hir.FnDef> takenOn,
-                                 Map<String, Hir.FnDef> imported, InliningPolicy policy,
+                                 ClosedImports imported, InliningPolicy policy,
                                  Stdlib stdlib) {
+        if (imported.policy() != policy) {
+            throw new IllegalArgumentException("a table of `" + module + "` expanding under "
+                    + policy + " was handed definitions closed under " + imported.policy());
+        }
         // In the order they are written, so a module with two helpers to complain about complains
         // about the earlier one first.
         Map<DefinitionName, HelperEntry> own = new LinkedHashMap<>();
@@ -160,7 +169,7 @@ public final class HelperTable {
                 reached.put(entry.reachedAs(), entry);
             });
         }
-        for (Hir.FnDef fn : imported.values()) {
+        for (Hir.FnDef fn : imported.definitions().values()) {
             HelperEntry entry = HelperEntry.reached(takenOnAs(fn), fn);
             reached.put(entry.reachedAs(), entry);
         }
@@ -189,8 +198,15 @@ public final class HelperTable {
         return reference;
     }
 
+    /** The same, for a module that imports nothing. */
+    public static HelperTable of(String module, Map<String, Hir.FnDef> declared,
+                                 Map<String, Hir.FnDef> takenOn, InliningPolicy policy,
+                                 Stdlib stdlib) {
+        return of(module, declared, takenOn, ClosedImports.none(policy), policy, stdlib);
+    }
+
     /** The same, reading the two components off the module rather than being handed them. */
-    public static HelperTable of(Hir.Module module, Map<String, Hir.FnDef> imported,
+    public static HelperTable of(Hir.Module module, ClosedImports imported,
                                  InliningPolicy policy, Stdlib stdlib) {
         return of(module.name(), HelperInliner.helpersOf(module),
                 HelperInliner.takenOnBy(module), imported, policy, stdlib);

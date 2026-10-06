@@ -121,7 +121,7 @@ class TheCallGraphReadsASugarFromTheLibraryThatDeclaresItTest {
      */
     @Test
     void theFoldSugarRewritesToSomethingAModuleWouldHaveToEmit() {
-        HelperTable table = HelperTable.of("probe", Map.of(), Map.of(), Map.of(),
+        HelperTable table = HelperTable.of("probe", Map.of(), Map.of(),
                 InliningPolicy.FULL, DefaultStdlib.get());
         HelperGraph graph = HelperGraph.of(table);
         Stdlib.Rewrite fold =

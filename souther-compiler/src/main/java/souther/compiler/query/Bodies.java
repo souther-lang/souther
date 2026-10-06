@@ -26,6 +26,7 @@ import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.AssumedContract;
 import souther.compiler.check.ClausesForDischarge;
+import souther.compiler.check.ClosedImports;
 import souther.compiler.check.StatedContract;
 import souther.compiler.check.ContractDischarge;
 import souther.compiler.check.DataChecker;
@@ -941,8 +942,10 @@ public final class Bodies {
                     || !helpers.present()) {
                 return Answer.absent();
             }
-            Answer<Map<String, Hir.FnDef>> imported = db.ask(new ImportedDefinitions(name));
-            Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
+            Answer<ClosedImports> imported =
+                    db.ask(new ImportedDefinitions(name, InliningPolicy.DISCHARGE));
+            ClosedImports published = imported.present()
+                    ? imported.value() : ClosedImports.none(InliningPolicy.DISCHARGE);
             Map<String, StatedContract> out = new LinkedHashMap<>();
             try {
                 ClausesForDischarge declaring =
@@ -1765,11 +1768,12 @@ public final class Bodies {
             if (!settled.present()) {
                 return Answer.absent();
             }
-            Answer<Map<String, Hir.FnDef>> imported = db.ask(new ImportedDefinitions(name));
+            Answer<ClosedImports> imported =
+                    db.ask(new ImportedDefinitions(name, InliningPolicy.FULL));
             if (!imported.present()) {
                 return Answer.absent();
             }
-            Map<String, Hir.FnDef> helpers = new LinkedHashMap<>(imported.value());
+            Map<String, Hir.FnDef> helpers = new LinkedHashMap<>(imported.value().definitions());
             // What this module declared. A recursion it emits without having declared one is not
             // here: it is reached under the name of the module that wrote it, which is a name this
             // table already answers with that declaration, and which of them this module emits is
@@ -1794,24 +1798,25 @@ public final class Bodies {
      * each closed against the table its own declaring module expands its own body against, exactly
      * {@link ImportedDefinitions}'s {@code bodiesOf}/{@code carriedClosure} step and no other.
      * {@code check.DeclaredTypeReading.declaredTypeOf} reads a call as deep as this closure goes —
-     * as deep as {@link ImportedDefinitions} itself would have read it for the same name.
+     * as deep as {@link ImportedDefinitions} itself would have read it for the same name, and under
+     * the policy the reader's own table expands in, for {@link ImportedDefinitions}'s reason.
      */
-    public static Map<String, Hir.FnDef> publishedByQualifiedName(Db db, String module) {
+    public static ClosedImports publishedByQualifiedName(Db db, String module,
+                                                         InliningPolicy policy) {
         Map<String, List<PublishedHelper>> byModule = new LinkedHashMap<>();
         leaves(db, module).values().forEach(leave -> byModule
                 .computeIfAbsent(leave.module(), k -> new ArrayList<>()).add(leave));
         Map<String, Hir.FnDef> out = new LinkedHashMap<>();
         for (Map.Entry<String, List<PublishedHelper>> declaring : byModule.entrySet()) {
             Answer<Hir.Module> from = db.ask(new Settled(declaring.getKey()));
-            Answer<Expanding.Of> against =
-                    db.ask(new Expanding(declaring.getKey(), InliningPolicy.FULL));
+            Answer<Expanding.Of> against = db.ask(new Expanding(declaring.getKey(), policy));
             if (!from.present() || !against.present()) {
                 continue;
             }
             carriedClosure(from.value(), bodiesOf(from.value(), declaring.getValue()),
                     against.value()).forEach(out::putIfAbsent);
         }
-        return out;
+        return new ClosedImports(policy, out);
     }
 
     /**
@@ -1861,15 +1866,23 @@ public final class Bodies {
      * What a module imports is written down and is not something desugaring or settling decides, so
      * reading it there is what leaves every later stage free to read this — {@link Shapes.Derived}
      * among them, which settles the invariants and would ask through itself for any answer below it.
+     *
+     * <p>Keyed by the policy because a body is closed before any reader sees it, and closed under a
+     * policy: under {@link InliningPolicy#FULL} a call to {@code List.drop} is already the body of
+     * {@code List.drop} when it arrives, and a reader expanding under {@link
+     * InliningPolicy#DISCHARGE} cannot put the operation back. So each reader asks for the closing
+     * its own table expands under, and the module that declares a definition closes it against
+     * that same policy's table, all the way up the imports.
      */
-    public record ImportedDefinitions(String name) implements Key<Map<String, Hir.FnDef>> {
+    public record ImportedDefinitions(String name, InliningPolicy policy)
+            implements Key<ClosedImports> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, Hir.FnDef>> compute(Db db) {
+        public Answer<ClosedImports> compute(Db db) {
             // A module in a cycle takes a published body from a module that takes one from it. This is
             // where that would be asked, so this is where it stops; the cycle itself is reported by
             // Names.InCycle.
@@ -1921,8 +1934,7 @@ public final class Bodies {
                 // there and nothing about which relation each is in, so handing one over is handing
                 // over the question of what it means — and the answer taken here would be this
                 // module's guess about another module's declarations.
-                Answer<Expanding.Of> against =
-                        db.ask(new Expanding(module, InliningPolicy.FULL));
+                Answer<Expanding.Of> against = db.ask(new Expanding(module, policy));
                 if (!from.present() || !against.present()) {
                     continue;
                 }
@@ -1935,7 +1947,7 @@ public final class Bodies {
                 // entry rather than a second copy of the method.
                 carriedClosure(from.value(), roots, against.value()).forEach(out::putIfAbsent);
             }
-            return Answer.of(out);
+            return Answer.of(new ClosedImports(policy, out));
         }
     }
 
@@ -2181,7 +2193,8 @@ public final class Bodies {
      * <p>Keyed by the policy as well as the module, because the two policies are two tables: the
      * discharge representation leaves the language's own operations standing, so it does not have
      * them to call and does not find them recursive. One answer shared by both would put the fold
-     * that {@code List.map} is into the tree the discharge rules read.
+     * that {@code List.map} is into the tree the discharge rules read. What the imports publish is
+     * asked under the same policy for the same reason: a published body arrives already expanded.
      */
     public record Expanding(String name, InliningPolicy policy) implements Key<Expanding.Of> {
 
@@ -2199,7 +2212,7 @@ public final class Bodies {
         @Override
         public Answer<Expanding.Of> compute(Db db) {
             Answer<Hir.Module> settled = db.ask(new Settled(name));
-            Answer<Map<String, Hir.FnDef>> imported = db.ask(new ImportedDefinitions(name));
+            Answer<ClosedImports> imported = db.ask(new ImportedDefinitions(name, policy));
             if (!settled.present() || !imported.present()) {
                 return Answer.absent();
             }
@@ -3067,12 +3080,13 @@ public final class Bodies {
             // A value another module declares is called and not expanded, so what it constructs is
             // not in any body here. What it constructs is read off the definition the module was
             // handed for it, which carries its construction as the declaring module made it.
-            Answer<Map<String, Hir.FnDef>> handed = db.ask(new ImportedDefinitions(name));
+            Answer<ClosedImports> handed =
+                    db.ask(new ImportedDefinitions(name, InliningPolicy.FULL));
             if (!handed.present()) {
                 return Answer.absent();
             }
             Set<String> elsewhere = new LinkedHashSet<>();
-            handed.value().forEach((at, definition) -> {
+            handed.value().definitions().forEach((at, definition) -> {
                 if (definition.params().isEmpty() && definition.body() != null
                         && definition.declaredIn() != null && !definition.declaredIn().equals(name)) {
                     bodies.putIfAbsent(at, definition.writtenBody());
@@ -3446,12 +3460,13 @@ public final class Bodies {
 
         @Override
         public Answer<Preserved.SettledValues> compute(Db db) {
-            Answer<Map<String, Hir.FnDef>> published = db.ask(new ImportedDefinitions(name));
+            Answer<ClosedImports> published =
+                    db.ask(new ImportedDefinitions(name, InliningPolicy.FULL));
             if (!published.present()) {
                 return Answer.absent();
             }
             Set<String> declaring = new LinkedHashSet<>();
-            for (Hir.FnDef definition : published.value().values()) {
+            for (Hir.FnDef definition : published.value().definitions().values()) {
                 if (definition.declaredIn() != null && !definition.declaredIn().equals(name)) {
                     declaring.add(definition.declaredIn());
                 }
@@ -3535,7 +3550,8 @@ public final class Bodies {
             Answer<Map<ValueName.Behavior, ReqSig>> reqSigs = db.ask(new ReqSigs(name));
             Answer<Map<String, StandingSignature>> sigs = db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
             Answer<Map<ValueName.Behavior, ReqSig>> calleeSigs = db.ask(new CalleeSigs(name));
-            Answer<Map<String, Hir.FnDef>> published = db.ask(new ImportedDefinitions(name));
+            Answer<ClosedImports> published =
+                    db.ask(new ImportedDefinitions(name, InliningPolicy.FULL));
             Answer<Preserved.SettledValues> elsewhere = db.ask(new ValuesDeclaredElsewhere(name));
             // Which of this module's declarations no value satisfies, asked for rather than worked
             // out here. What the check reads is that fact; the clauses it was read from are not

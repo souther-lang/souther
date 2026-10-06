@@ -61,7 +61,8 @@ class OneModuleIsExpandedAgainstOneTableTest {
      * it — which is how {@link HelperInliner#forModule} is handed the two. */
     private static HelperTable asTheCheckBuildsIt(Db db, String module) {
         return HelperTable.of(db.ask(new Bodies.Settled(module)).value(),
-                db.ask(new Bodies.ImportedDefinitions(module)).value(), InliningPolicy.FULL, DefaultStdlib.get());
+                db.ask(new Bodies.ImportedDefinitions(module, InliningPolicy.FULL)).value(),
+                InliningPolicy.FULL, DefaultStdlib.get());
     }
 
     /** The table every query expands against, which the backend reads through. */

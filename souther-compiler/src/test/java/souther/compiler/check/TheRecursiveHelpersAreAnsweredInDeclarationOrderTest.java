@@ -46,7 +46,7 @@ class TheRecursiveHelpersAreAnsweredInDeclarationOrderTest {
         Ast.Module parsed = CstFrontend.parse(source);
         Hir.Module resolved = Resolve.module(parsed, SyntaxSymbols.of(parsed, DefaultStdlib.get()));
         return HelperTable.of(resolved.name(), HelperInliner.helpersOf(resolved),
-                Map.of(), Map.of(), InliningPolicy.FULL, DefaultStdlib.get());
+                Map.of(), InliningPolicy.FULL, DefaultStdlib.get());
     }
 
     /** The module's own declarations, in the order the answer holds them. The shipped prelude has
