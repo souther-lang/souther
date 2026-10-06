@@ -20,6 +20,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.PathAccess;
+import souther.compiler.reading.TheRestOfTheBlock;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
@@ -2190,17 +2191,17 @@ public final class Generator {
             List<ComparisonHeld> held = new ArrayList<>();
             Set<ComparisonEmissionSite> asked = new LinkedHashSet<>();
             while (true) {
-                Optional<ArmProbe> rest = restOfTheBlockShortOf(seen);
+                Optional<TheRestOfTheBlock> rest = restOfTheBlockShortOf(seen);
                 if (rest.isEmpty()) {
                     return best;
                 }
-                Optional<ComparisonHeld> more = cameOutAgainst(seen, asked);
+                Optional<ComparisonHeld> more = cameOutAgainst(seen, rest.get(), asked);
                 if (more.isEmpty()) {
                     return best;
                 }
                 held.add(more.get());
                 GeneratedRow further = search(axes, pins, purposes, found, against, origins, check,
-                        references, answers, List.copyOf(held), rest.get());
+                        references, answers, List.copyOf(held), rest.get().arm());
                 if (further == null
                         || !(watched(further) instanceof Watched.Ran(AlignedObservation now))) {
                     return best;
@@ -2242,9 +2243,13 @@ public final class Generator {
         }
 
         /**
-         * What holds a comparison {@code seen} came out of only the way that does not hold, among
-         * those not {@code asked} about already — the first such one there is something to hold
-         * with, which it then counts as asked.
+         * What holds a comparison of the guard {@code stopped} decides by that {@code seen} came out
+         * of only the way that does not hold, among those not {@code asked} about already — the
+         * first such one there is something to hold with, which it then counts as asked.
+         *
+         * <p>The guard's own comparisons and no others. A comparison some fork above the guard
+         * decided by came out whichever way the row's values took it, and that is the row's way
+         * through the body rather than what stopped it.
          *
          * <p>Asked of the run, a place at a time. A guard whose condition did not hold is one whose
          * comparisons came out against it, and the run is what recorded which way each came out; a
@@ -2252,8 +2257,9 @@ public final class Generator {
          * is not what the run was short of.
          */
         private Optional<ComparisonHeld> cameOutAgainst(AlignedObservation seen,
+                                                        TheRestOfTheBlock stopped,
                                                         Set<ComparisonEmissionSite> asked) {
-            for (ComparisonEmissionSite site : holding.sites()) {
+            for (ComparisonEmissionSite site : stopped.decidedBy()) {
                 if (!seen.saw(site, false) || seen.saw(site, true) || !asked.add(site)) {
                     continue;
                 }
@@ -2275,9 +2281,10 @@ public final class Generator {
          * Where the rest of the block is, for the guard {@code seen} left by its refusal, or empty
          * where it left none that way. A refusal ends the run, so there is at most one.
          */
-        private Optional<ArmProbe> restOfTheBlockShortOf(AlignedObservation seen) {
-            for (Map.Entry<ArmProbe, ArmProbe> refused : read.restOfTheBlock().entrySet()) {
-                if (seen.lit(refused.getKey()) && !seen.lit(refused.getValue())) {
+        private Optional<TheRestOfTheBlock> restOfTheBlockShortOf(AlignedObservation seen) {
+            for (Map.Entry<ArmProbe, TheRestOfTheBlock> refused
+                    : read.restOfTheBlock().entrySet()) {
+                if (seen.lit(refused.getKey()) && !seen.lit(refused.getValue().arm())) {
                     return Optional.of(refused.getValue());
                 }
             }
@@ -2479,7 +2486,7 @@ public final class Generator {
 
         @Override
         public Taken take(Candidate candidate) {
-            Map<String, FixtureTemplate> given = candidate.from().writtenAgainst(axes,
+            Map<String, Written> given = candidate.from().writtenAgainst(axes,
                     candidate.delta(), candidate.where(), references);
             known.written(candidate, given);
             if (!candidate.from().composes() && given.isEmpty()) {
@@ -2562,8 +2569,8 @@ public final class Generator {
          * is written under, for the assignment {@code where} reached from {@code delta}. Nothing for
          * the composition, which writes no parameter that way.
          */
-        Map<String, FixtureTemplate> writtenAgainst(MeasuredInput.MeasuredAxes axes, Delta delta,
-                                                    int[] where, FixtureReferences references) {
+        Map<String, Written> writtenAgainst(MeasuredInput.MeasuredAxes axes, Delta delta,
+                                            int[] where, FixtureReferences references) {
             return switch (origin) {
                 case Origin.Stated stated ->
                         against(axes, delta, where, stated.baseline(), references);
@@ -2686,7 +2693,7 @@ public final class Generator {
         }
 
         /** Takes in which of the parameters it states the candidate's origin could not write. */
-        void written(Candidate candidate, Map<String, FixtureTemplate> given) {
+        void written(Candidate candidate, Map<String, Written> given) {
             ResolvedOrigin origin = candidate.from();
             for (int p = 0; p < parameters.size(); p++) {
                 if (origin.states(parameters.get(p)) && !given.containsKey(parameters.get(p))) {
@@ -3367,12 +3374,12 @@ public final class Generator {
      * rest of the row — each of them leaves that parameter composed from its classes, which is a
      * row that says the same thing in more words.
      */
-    private static Map<String, FixtureTemplate> against(MeasuredInput.MeasuredAxes axes,
-                                                        Delta delta, int[] where,
-                                                        Baseline baseline,
-                                                        FixtureReferences references) {
+    private static Map<String, Written> against(MeasuredInput.MeasuredAxes axes,
+                                                Delta delta, int[] where,
+                                                Baseline baseline,
+                                                FixtureReferences references) {
         MeasuredInput subject = axes.subject();
-        Map<String, FixtureTemplate> out = new LinkedHashMap<>();
+        Map<String, Written> out = new LinkedHashMap<>();
         for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
             String parameter = subject.parameters().get(p);
             Baseline.Named at = baseline.at().get(parameter);
@@ -3381,7 +3388,7 @@ public final class Generator {
             }
             FixtureTemplate named = FixtureTemplate.named(at.reachedAs(), references.next());
             List<Integer> moved = delta.under(axes.axes(), parameter);
-            FixtureTemplate written = moved.isEmpty() ? named
+            Written written = moved.isEmpty() ? new Written(List.of(named), false)
                     : withPositionsMoved(subject, p, axes.axes(), moved, where, named,
                             references);
             // Left out where the baseline cannot be written for this assignment, which leaves that
@@ -3410,13 +3417,21 @@ public final class Generator {
      * a spread over the sum does not choose. Such a parameter keeps what the classes composed for
      * it, which says the same thing and says it in full.
      *
+     * <p><b>Every value of each class, and not its first.</b> A class stands for its values through
+     * as many as it offers, because the first can be refused beside the rest of the value where
+     * another of the class's own is not — so the baseline is written with each choice of them, the
+     * first values first, and the build takes the first the model does not refuse. Written with
+     * the first alone, a row the baseline could be written for came back as one this origin had
+     * no way to write. How many choices are written is {@link #MAX_TUPLES}, the figure the walk
+     * over the values of one parameter is held to, and where it stopped short the answer says so.
+     *
      * @param moved which axes under this parameter the row does not stand where the origin does,
      *              read off the one difference the search ordered itself by
      */
-    private static FixtureTemplate withPositionsMoved(MeasuredInput subject, int p, List<Axis> axes,
-                                                      List<Integer> moved, int[] where,
-                                                      FixtureTemplate baseline,
-                                                      FixtureReferences references) {
+    private static Written withPositionsMoved(MeasuredInput subject, int p, List<Axis> axes,
+                                              List<Integer> moved, int[] where,
+                                              FixtureTemplate baseline,
+                                              FixtureReferences references) {
         Moves moves = new Moves();
         LocationWrites writing = new LocationWrites();
         for (int i : moved) {
@@ -3437,15 +3452,58 @@ public final class Generator {
             // A place two of the moved axes are at. The baseline can be written for one of them or
             // for the other, so it writes neither and says the parameter cannot be written — which
             // is what every other thing it cannot do here answers with.
-            FixtureTemplate written = values.written().get(0);
-            if (writing.write(axis.path(), List.of(written))
+            if (writing.write(axis.path(), values.written())
                     == LocationWrites.Written.CONFLICTING
-                    || !moves.put(axis.path().steps(), written)) {
+                    || !moves.put(axis.path().steps(), values.written())) {
                 return null;
             }
         }
-        return moves.over(subject, subject.types().get(p), baseline, subject.parameters().get(p),
-                references);
+        List<Moves> leaves = moves.leaves();
+        int[] at = new int[leaves.size()];
+        List<FixtureTemplate> ways = new ArrayList<>();
+        while (true) {
+            if (ways.size() == MAX_TUPLES) {
+                return new Written(ways, true);   // a choice is left that was not written
+            }
+            for (int i = 0; i < leaves.size(); i++) {
+                leaves.get(i).choose(at[i]);
+            }
+            FixtureTemplate way = moves.over(subject, subject.types().get(p), baseline,
+                    subject.parameters().get(p), references);
+            // What cannot be written is the shape of the moves and not the values chosen, so no
+            // other choice writes it either.
+            if (way == null) {
+                return null;
+            }
+            ways.add(way);
+            // The last place moved on first, which leaves the first the slowest, the way the
+            // assignments a walk over the classes produces are ordered.
+            int i = leaves.size() - 1;
+            while (i >= 0 && ++at[i] == leaves.get(i).among.size()) {
+                at[i] = 0;
+                i--;
+            }
+            if (i < 0) {
+                return new Written(ways, false);
+            }
+        }
+    }
+
+    /**
+     * The ways one parameter is written against the value the model states, in the order to try
+     * them, and whether there were ways left that were not written.
+     *
+     * <p>The second because a build that tried every way it was handed and had all of them refused
+     * has said something about this origin only where it was handed every way there was.
+     */
+    private record Written(List<FixtureTemplate> ways, boolean cut) {
+
+        Written {
+            ways = List.copyOf(ways);
+            if (ways.isEmpty()) {
+                throw new IllegalArgumentException("a parameter written is written some way");
+            }
+        }
     }
 
     /**
@@ -3458,8 +3516,12 @@ public final class Generator {
      */
     private static final class Moves {
 
-        /** The value a path ending here moves this place to, or null where none ends here. */
-        private FixtureTemplate value;
+        /** The values a path ending here may move this place to, any of which stands for the class
+         *  it moves to, or null where no path ends here. */
+        private List<FixtureTemplate> among;
+
+        /** Which of {@link #among} the way being written moves this place to. */
+        private FixtureTemplate chosen;
 
         /** The moves under each field of the record at this place, in the order they were put. */
         private final SequencedMap<String, Moves> fields = new LinkedHashMap<>();
@@ -3467,11 +3529,11 @@ public final class Generator {
         /** The moves under every element of the list at this place, or null where there are none. */
         private Moves elements;
 
-        /** Puts {@code value} where {@code steps} lead, or answers false where that cannot be. */
-        boolean put(List<TermPath.Step> steps, FixtureTemplate value) {
+        /** Puts {@code among} where {@code steps} lead, or answers false where that cannot be. */
+        boolean put(List<TermPath.Step> steps, List<FixtureTemplate> among) {
             Moves at = this;
             for (TermPath.Step step : steps) {
-                if (at.value != null) {
+                if (at.among != null) {
                     return false;   // a place already moved whole has nothing further to move
                 }
                 at = switch (step) {
@@ -3489,11 +3551,30 @@ public final class Generator {
                     return false;
                 }
             }
-            if (at.value != null || !at.fields.isEmpty() || at.elements != null) {
+            if (at.among != null || !at.fields.isEmpty() || at.elements != null) {
                 return false;
             }
-            at.value = value;
+            at.among = List.copyOf(among);
+            at.chosen = at.among.getFirst();
             return true;
+        }
+
+        /** The places a path ends at, in the order the tree holds them. */
+        List<Moves> leaves() {
+            List<Moves> out = new ArrayList<>();
+            if (among != null) {
+                out.add(this);
+            }
+            fields.values().forEach(each -> out.addAll(each.leaves()));
+            if (elements != null) {
+                out.addAll(elements.leaves());
+            }
+            return out;
+        }
+
+        /** Moves this place to the {@code index}th of its values in the way written next. */
+        void choose(int index) {
+            chosen = among.get(index);
         }
 
         /**
@@ -3505,14 +3586,14 @@ public final class Generator {
          */
         FixtureTemplate over(MeasuredInput subject, Type type, FixtureTemplate base, String name,
                              FixtureReferences references) {
-            if (value != null) {
+            if (among != null) {
                 return null;   // the whole parameter moved is not a move of the baseline
             }
             if (elements != null) {
                 // A list that wears no name, since what a row writes under a name is the name round
                 // a value — the same question fieldsOf asks of a record, asked where a position's
                 // reading is made.
-                if (!fields.isEmpty() || elements.value != null
+                if (!fields.isEmpty() || elements.among != null
                         || TypeOps.outermost(type, subject.rules().inners()) != null
                         || !(TypeView.shapeOf(type, subject.rules().inners(), subject.symbols(),
                                 subject.rules().kinds(), subject.rules().sums())
@@ -3538,10 +3619,10 @@ public final class Generator {
             SequencedMap<String, FixtureTemplate> moved = new LinkedHashMap<>();
             for (Map.Entry<String, Moves> field : fields.entrySet()) {
                 Moves under = field.getValue();
-                if (under.value == null) {
+                if (under.among == null) {
                     return null;   // a field of a field, which this does not write
                 }
-                moved.put(field.getKey(), under.value);
+                moved.put(field.getKey(), under.chosen);
             }
             // Written out rather than spread where the row moves every field the value has. The
             // spread is what says the row is that value with something changed, and a spread whose
@@ -3549,10 +3630,10 @@ public final class Generator {
             // the same row in more words, and a reader comparing it against what the file states
             // finds every field different.
             //
-            // The values are the ones this candidate was built and run with. Composing the
-            // parameter again from its classes would be a different row wearing this one's answer:
-            // a rule relating two positions can refuse what the classes name while the model's own
-            // value builds, which is why the value the model states is where this search starts.
+            // The values are the ones this way chose. Composing the parameter again from its
+            // classes would be a different row wearing this one's answer: a rule relating two
+            // positions can refuse what the classes name while the model's own value builds, which
+            // is why the value the model states is where this search starts.
             List<String> declared = fieldsOf(subject, built);
             if (declared != null && moved.keySet().containsAll(declared)) {
                 SequencedMap<String, FixtureTemplate> whole = new LinkedHashMap<>();
@@ -5488,7 +5569,7 @@ public final class Generator {
 
             @Override
             public Taken take(Candidate candidate) {
-                Map<String, FixtureTemplate> given = candidate.from().writtenAgainst(axes,
+                Map<String, Written> given = candidate.from().writtenAgainst(axes,
                         candidate.delta(), candidate.where(), references);
                 known.written(candidate, given);
                 if (!candidate.from().composes() && given.isEmpty()) {
@@ -5735,7 +5816,7 @@ public final class Generator {
      */
     private static DemandsInside inside(MeasuredInput.MeasuredAxes axes, int[] where,
                                         TermPath location, Requirements alsoRequired) {
-        Map<TermPath, FixtureTemplate> fixed = new LinkedHashMap<>();
+        Map<TermPath, List<FixtureTemplate>> among = new LinkedHashMap<>();
         Requirements required = strictlyUnder(alsoRequired, Set.of(location), true);
         for (int i = 0; i < axes.size(); i++) {
             TermPath path = axes.get(i).path();
@@ -5743,12 +5824,13 @@ public final class Generator {
                 continue;
             }
             PartitionClass cls = axes.get(i).classes().get(where[i]);
-            // A class with a value of its own hands over that value, which is what stands there
-            // whichever case it is — a case that carries nothing is named by writing it. A class
-            // that only says which case a position is hands over the case, and what stands under
-            // it is built under it.
+            // A class with values of its own hands over all of them, which is what stands for the
+            // class whichever case it is — a case that carries nothing is named by writing it —
+            // and any of which may be the one the rest of the value can stand beside. A class that
+            // only says which case a position is hands over the case, and what stands under it is
+            // built under it.
             if (cls.representatives() instanceof RepresentativeSource.Values values) {
-                fixed.put(path, values.written().get(0));
+                among.put(path, values.written());
                 continue;
             }
             if (required.merge(strictlyUnder(axes.get(i).requiring(cls), Set.of(location), true))
@@ -5756,7 +5838,7 @@ public final class Generator {
                 required = both;
             }
         }
-        return new DemandsInside(fixed, required);
+        return new DemandsInside(among, required);
     }
 
     /** Whether {@code path} names a position inside {@code location} and not the location. */
@@ -5820,7 +5902,7 @@ public final class Generator {
      */
     private static Attempt build(MeasuredInput.MeasuredAxes axes, int[] where,
                                  HeldTogether held,
-                                 CandidateCheck check, Map<String, FixtureTemplate> given,
+                                 CandidateCheck check, Map<String, Written> given,
                                  List<StoodInAnswer> answers) {
         MeasuredInput subject = axes.subject();
         LocationWrites decided = new LocationWrites();
@@ -6009,16 +6091,36 @@ public final class Generator {
         }
         List<FixtureTemplate> inputs = new ArrayList<>();
         for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
-            FixtureTemplate written = given.get(subject.parameters().get(p));
+            Written written = given.get(subject.parameters().get(p));
             if (written != null) {
                 // Written as the caller says, and put through the same check a composed value goes
-                // through: how a row is written never decides whether the model allows it.
-                Optional<String> refused = check.refuse(p, written);
-                if (refused.isPresent()) {
-                    return new Attempt(null, UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
-                            subject.parameters().get(p), refused).localTo(p);
+                // through: how a row is written never decides whether the model allows it. The first
+                // way the model does not refuse, since each is the same value with a class's own
+                // values chosen differently.
+                FixtureTemplate stands = null;
+                Optional<String> refused = Optional.empty();
+                for (FixtureTemplate way : written.ways()) {
+                    refused = check.refuse(p, way);
+                    if (refused.isEmpty()) {
+                        stands = way;
+                        break;
+                    }
                 }
-                inputs.add(written);
+                if (stands == null) {
+                    // Every way handed over was refused, which says the origin cannot be written
+                    // for this assignment only where every way there was was handed over.
+                    return written.cut()
+                            ? Attempt.no(UnresolvedCombination.Reason.wordFor(
+                                            Set.of(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES)),
+                                    subject.parameters().get(p), new LinkedHashMap<>(),
+                                    CompositionShortfall.of(Set.of(
+                                            CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES)))
+                                    .localTo(p)
+                            : new Attempt(null,
+                                    UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
+                                    subject.parameters().get(p), refused).localTo(p);
+                }
+                inputs.add(stands);
                 continue;
             }
             // Held to where the comparisons' numbers were chosen to stand, the way a row at a point

@@ -985,9 +985,22 @@ final class ContainersAddingUp {
                 // element of the outer one. So a value built along it comes to a multiple of the
                 // total it was built for, and nothing composes one until what is decomposed is the
                 // occurrences rather than the elements.
-                case ConstructionPlan.Result.Planned(ConstructionPlan plan) ->
-                        found.add(new Filling(plan, fixed, spelled.fixed(),
+                // And one element of it per choice among the values the caller asked the positions
+                // inside it for: a class stands for its values through any of them, and which of
+                // them a container that comes to the total can hold is what the caller finds out
+                // by building it. Each choice is another way an element is built, so it is
+                // counted where the ways are.
+                case ConstructionPlan.Result.Planned(ConstructionPlan plan) -> {
+                    boolean first = true;
+                    for (Map<TermPath, FixtureTemplate> beside : eachChoice(spelled.among())) {
+                        if (!first && !asking.another()) {
+                            break;
+                        }
+                        first = false;
+                        found.add(new Filling(plan, fixed, beside,
                                 spelled.required().refinements().keySet()));
+                    }
+                }
                 // A narrowing to state, and the walk states each of them. Asked again rather than
                 // planned around: a second narrowing may stand under the first, and which one that
                 // is depends on the case this settled on.
@@ -1094,11 +1107,11 @@ final class ContainersAddingUp {
             }
             asks++;
             asked = left.removeFirst();
-            // The number's position and every position the caller fixed, decided together, and the
-            // caller's narrowings with them: one element asked for all of it at once.
+            // The number's position and every position the caller asked for, decided together, and
+            // the caller's narrowings with them: one element asked for all of it at once.
             Set<TermPath> decided = new LinkedHashSet<>();
             decided.add(asked);
-            decided.addAll(inside.fixed().keySet());
+            decided.addAll(inside.among().keySet());
             return ConstructionPlan.of(element, at, reading.source().inners(),
                     reading.source().symbols(),
                     reading.source().kinds(), reading.source().sums(), decided,
@@ -1109,6 +1122,20 @@ final class ContainersAddingUp {
         /** The way the last answer is about. */
         TermPath asked() {
             return asked;
+        }
+
+        /**
+         * One more way an element is built along the last answer, where the figure leaves room for
+         * it; false, with the figure said, where it does not.
+         */
+        boolean another() {
+            CompositionBudget tried = CompositionBudget.WAYS_DOWN_TO_A_TOTAL_TRIED;
+            if (asks == tried.maximum()) {
+                stoppedBy.add(tried);
+                return false;
+            }
+            asks++;
+            return true;
         }
 
         /** What the planning of one way gave up at, which is this compiler's as the figure here is. */
@@ -1122,15 +1149,55 @@ final class ContainersAddingUp {
         }
     }
 
-    /** {@code inside} with every position it fixes spelled under the cases it names. */
+    /** {@code inside} with every position it asks for spelled under the cases it names. */
     private static DemandsInside underTheCasesNamed(DemandsInside inside) {
         if (inside.required().refinements().isEmpty()) {
             return inside;
         }
-        Map<TermPath, FixtureTemplate> fixed = new LinkedHashMap<>();
-        inside.fixed().forEach((path, value) ->
-                fixed.put(underTheCasesNamed(path, inside.required()), value));
-        return new DemandsInside(fixed, inside.required());
+        Map<TermPath, List<FixtureTemplate>> among = new LinkedHashMap<>();
+        inside.among().forEach((path, values) ->
+                among.put(underTheCasesNamed(path, inside.required()), values));
+        return new DemandsInside(among, inside.required());
+    }
+
+    /**
+     * One value apiece for the positions of {@code among}, every way there is to choose them: the
+     * first value of each first, and the first position the slowest to move, so the choice nearest
+     * what was asked comes first and two runs of one model choose in one order.
+     */
+    private static Iterable<Map<TermPath, FixtureTemplate>> eachChoice(
+            Map<TermPath, List<FixtureTemplate>> among) {
+        List<TermPath> positions = List.copyOf(among.keySet());
+        return () -> new Iterator<>() {
+
+            private final int[] at = new int[positions.size()];
+
+            private boolean done;
+
+            @Override
+            public boolean hasNext() {
+                return !done;
+            }
+
+            @Override
+            public Map<TermPath, FixtureTemplate> next() {
+                if (done) {
+                    throw new NoSuchElementException();
+                }
+                Map<TermPath, FixtureTemplate> chosen = new LinkedHashMap<>();
+                for (int i = 0; i < positions.size(); i++) {
+                    chosen.put(positions.get(i), among.get(positions.get(i)).get(at[i]));
+                }
+                // Moved on from the last position back, which is what leaves the first the slowest.
+                int i = positions.size() - 1;
+                while (i >= 0 && ++at[i] == among.get(positions.get(i)).size()) {
+                    at[i] = 0;
+                    i--;
+                }
+                done = i < 0;
+                return chosen;
+            }
+        };
     }
 
     /**

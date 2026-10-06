@@ -108,6 +108,18 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "stops asking about ways down to the number, which is the one place they are"
                             + " asked about, and hands the figure over with whatever the planning"
                             + " gave up at"),
+            Map.entry("souther.compiler.partition.ContainersAddingUp$Asking#another()Z",
+                    "stops building an element along a way with another choice of the values"
+                            + " asked inside it, under the figure the ways down are counted by,"
+                            + " and hands it over the same way"),
+            Map.entry("souther.compiler.partition.Generator#build("
+                            + "Lsouther/compiler/partition/MeasuredInput$MeasuredAxes;[I"
+                            + "Lsouther/compiler/partition/Generator$HeldTogether;"
+                            + "Lsouther/compiler/partition/Generator$CandidateCheck;"
+                            + "Ljava/util/Map;Ljava/util/List;)"
+                            + "Lsouther/compiler/partition/Generator$Attempt;",
+                    "says a baseline whose every written way was refused was written fewer ways"
+                            + " than it had, under the figure the ways were cut at"),
             Map.entry("souther.compiler.partition.LevelRealizer#<clinit>()V",
                     "the places a pair is tried at and the places of its line looked at to find"
                             + " them, the steps, the progression — and the re-reads,"

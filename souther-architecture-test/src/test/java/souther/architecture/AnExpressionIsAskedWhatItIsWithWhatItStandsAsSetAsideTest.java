@@ -646,6 +646,13 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                         + "inputs/InputReads;L" + c + "partition/LiveFlow;ZLjava/util/List;L" + c
                         + "partition/RuleReachNumbering;Ljava/util/Set;L" + c
                         + "partition/PredicateReadings$Builds;)V", 1, GOES_ON_INTO_IT);
+        row(out, c + "reading/Arms", "decidedBy", "(" + core + ")Ljava/util/List;", 1,
+                "whether the fork a guard's arms were met at is an if: the node is the fork the"
+                        + " plan numbered those arms under, which is the if itself and never a"
+                        + " value standing as one");
+        row(out, c + "reading/Arms", "recordedIn", "(" + core + "Ljava/util/List;)V", 1,
+                "whether the node the walk stands at is a comparison: a Widen is not, and the"
+                        + " comparison under it is met one step down");
         row(out, c + "reading/CoverageRead", "walk",
                 "(" + core + "L" + c + "reading/CoverageNaming;L" + c + "reading/Reach;Z)V", 1,
                 GOES_ON_INTO_IT);

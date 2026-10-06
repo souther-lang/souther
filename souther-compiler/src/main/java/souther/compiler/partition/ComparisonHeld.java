@@ -5,7 +5,6 @@ import souther.compiler.numeric.Place;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -48,27 +47,14 @@ public record ComparisonHeld(Map<RealizationTarget, Place> fixing, NumbersAskedF
      * reading of the way in, a comparison of a number no reading can enumerate a way to — the total
      * of a list — would be one nothing could name.
      */
+    @FunctionalInterface
     public interface Of {
-
-        /** Where each comparison this can say something about is recorded, in a steady order. */
-        List<ComparisonEmissionSite> sites();
 
         /** What holds the comparison recorded at {@code site}, or empty where nothing was found
          *  that does. */
         Optional<ComparisonHeld> at(ComparisonEmissionSite site);
 
         /** Nothing holds any comparison — what a caller with no borders to read uses. */
-        Of NOTHING = new Of() {
-
-            @Override
-            public List<ComparisonEmissionSite> sites() {
-                return List.of();
-            }
-
-            @Override
-            public Optional<ComparisonHeld> at(ComparisonEmissionSite site) {
-                return Optional.empty();
-            }
-        };
+        Of NOTHING = _ -> Optional.empty();
     }
 }

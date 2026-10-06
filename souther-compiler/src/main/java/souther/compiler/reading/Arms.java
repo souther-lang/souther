@@ -2,12 +2,14 @@ package souther.compiler.reading;
 
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ArmProbe;
+import souther.compiler.coverage.ComparisonEmissionSite;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.SourceOutcome;
 import souther.compiler.types.SourceConstruct;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -67,12 +69,13 @@ final class Arms {
 
     /**
      * For each arm of {@code behavior} that leaves a {@code guard} because its condition did not
-     * hold, the arm of the same guard that is the rest of the block.
+     * hold, the arm of the same guard that is the rest of the block and the comparisons its
+     * condition decides by.
      *
      * <p>Paired by the node the walk met them at — compared as that object, since two splices of
      * one helper are two guards and a run past one has not passed the other.
      */
-    SequencedMap<ArmProbe, ArmProbe> restOfTheBlock(String behavior) {
+    SequencedMap<ArmProbe, TheRestOfTheBlock> restOfTheBlock(String behavior) {
         Map<Core, ArmProbe> heldAt = new IdentityHashMap<>();
         List<CoverageSites.ArmSite> sites = plan.arms(behavior);
         for (CoverageSites.ArmSite arm : sites) {
@@ -81,15 +84,38 @@ final class Arms {
                 heldAt.put(forkOf.get(arm.index()), arm.index());
             }
         }
-        SequencedMap<ArmProbe, ArmProbe> out = new LinkedHashMap<>();
+        SequencedMap<ArmProbe, TheRestOfTheBlock> out = new LinkedHashMap<>();
         for (CoverageSites.ArmSite arm : sites) {
-            ArmProbe goesOn = heldAt.get(forkOf.get(arm.index()));
+            Core fork = forkOf.get(arm.index());
+            ArmProbe goesOn = heldAt.get(fork);
             if (arm.construct() == SourceConstruct.GUARD
                     && arm.outcome() instanceof SourceOutcome.Failed && goesOn != null) {
-                out.put(arm.index(), goesOn);
+                out.put(arm.index(), new TheRestOfTheBlock(goesOn, decidedBy(fork)));
             }
         }
         return Collections.unmodifiableSequencedMap(out);
+    }
+
+    /**
+     * Where each comparison of {@code fork}'s condition is recorded, in the order the condition is
+     * written. None for a fork whose condition is no comparison of the plan's — a construction
+     * decides one of those, and no number of the row is what decides it.
+     */
+    private List<ComparisonEmissionSite> decidedBy(Core fork) {
+        List<ComparisonEmissionSite> out = new ArrayList<>();
+        if (fork instanceof Core.If iff) {
+            recordedIn(iff.cond(), out);
+        }
+        return out;
+    }
+
+    private void recordedIn(Core node, List<ComparisonEmissionSite> out) {
+        if (node instanceof Core.Binary) {
+            plan.comparisons().occurrenceAt(node).flatMap(plan::emissionSiteOf)
+                    .filter(each -> !out.contains(each))
+                    .ifPresent(out::add);
+        }
+        Core.forEachChild(node, child -> recordedIn(child, out));
     }
 
     /**

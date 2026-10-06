@@ -88,7 +88,7 @@ class AContainerAddingUpHoldsWhatItsElementsAreAskedForTest {
     void everyElementHoldsTheCaseAndTheValueAskedFor() {
         RuleReadingSource rules = RuleReadings.ofSource(MODEL);
         DemandsInside inside = new DemandsInside(
-                Map.of(ELEMENT.then("payer"), company(rules.symbols())),
+                Map.of(ELEMENT.then("payer"), List.of(company(rules.symbols()))),
                 Requirements.NONE.and(ELEMENT.then("method"), toLeaf("Cash")));
 
         assertEquals(List.of(
@@ -106,6 +106,32 @@ class AContainerAddingUpHoldsWhatItsElementsAreAskedForTest {
     }
 
     /**
+     * A position asked for any of several values is composed with each of them, the first first.
+     *
+     * <p>A class stands for its values through any of them: the first can be refused beside the
+     * rest of a row — by a rule relating two fields of an element, which nothing here reads —
+     * where another of the class's own builds. So a container is offered holding each, and which
+     * of them stands is what the caller's own check of the row says. Offered holding the first
+     * alone, a total the class can meet through its second value came back as a container nothing
+     * composes.
+     */
+    @Test
+    void aPositionAskedForSeveralValuesIsComposedWithEachOfThem() {
+        RuleReadingSource rules = RuleReadings.ofSource(MODEL);
+        DemandsInside inside = new DemandsInside(
+                Map.of(ELEMENT.then("payer"),
+                        List.of(unit(rules.symbols(), "Self"), unit(rules.symbols(), "Company"))),
+                Requirements.NONE.and(ELEMENT.then("method"), toLeaf("Cash")));
+
+        List<String> offered = assertInstanceOf(TermRealizations.Realization.Built.class,
+                realizing(rules, inside), "a container is composed with either payer")
+                .values().stream().map(FixtureTemplate::text).toList();
+        assertEquals(List.of("[" + cash(1, "Self") + "]", "[" + cash(1, "Company") + "]"),
+                offered.subList(0, 2),
+                "one element holding the total, with each payer in turn and the first first");
+    }
+
+    /**
      * And where what is asked inside cannot be one element, the container is one this composed
      * none of — said the way a total nothing composes is said, and never as two values written at
      * one place.
@@ -116,7 +142,7 @@ class AContainerAddingUpHoldsWhatItsElementsAreAskedForTest {
         // A value of the card's issuer fixed under an element the caller has said is cash.
         DemandsInside inside = new DemandsInside(
                 Map.of(ELEMENT.then("method").refine(toLeaf("Card")).then("issuer"),
-                        FixtureTemplate.string("x")),
+                        List.of(FixtureTemplate.string("x"))),
                 Requirements.NONE.and(ELEMENT.then("method"), toLeaf("Cash")));
 
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
@@ -143,14 +169,24 @@ class AContainerAddingUpHoldsWhatItsElementsAreAskedForTest {
 
     /** An entry of the case and payer asked for, holding {@code amount}. */
     private static String cash(int amount) {
+        return cash(amount, "Company");
+    }
+
+    /** A cash entry paid by {@code payer}, holding {@code amount}. */
+    private static String cash(int amount, String payer) {
         return "Entry { method = Cash { amount = Amount(" + amount + "), note = Note(\"x\") }"
-                + ", payer = Company }";
+                + ", payer = " + payer + " }";
     }
 
     /** The unit case {@code Company}, as the model writes it. */
     private static FixtureTemplate company(Symbols symbols) {
+        return unit(symbols, "Company");
+    }
+
+    /** The unit case {@code name}, as the model writes it. */
+    private static FixtureTemplate unit(Symbols symbols, String name) {
         return FixtureTemplate.unitCase(assertInstanceOf(TypeReachName.Written.class,
-                symbols.scope().reach(declared("Company")), "the model can name its own case"));
+                symbols.scope().reach(declared(name)), "the model can name its own case"));
     }
 
     /** The narrowing to one leaf of a sum. */

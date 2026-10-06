@@ -441,6 +441,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "inputs/InputReading;" + reads + "L" + c + "partition/LiveFlow;ZLjava/util/List;L"
                 + c + "partition/RuleReachNumbering;Ljava/util/Set;L" + c
                 + "partition/PredicateReadings$Builds;)V", Reading.STRUCTURE, CHOICES_AND_CALLS);
+        row(out, c + "reading/Arms", "recordedIn", "(" + core + "Ljava/util/List;)V",
+                Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "reading/CoverageRead", "descend", "(" + core + "L" + c
                 + "reading/CoverageNaming;L" + c + "reading/Reach;Z)V",
                 Reading.THE_TREE_THAT_RUNS, RUNS);

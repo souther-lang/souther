@@ -118,6 +118,43 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
                 rowsOf(A_TOTAL).get("items[*].payer=Company"));
     }
 
+    /**
+     * A fork above the guard, which the row goes through the false way and goes on from.
+     *
+     * <p>Its comparison comes out the false way in the run as the guard's does, and it is not what
+     * stopped the row: the row went on past it. Held to it, the row would be sent the other way
+     * round a fork that let it go on, and the guard that refused it would be what nothing was held
+     * to.
+     */
+    private static final String A_FORK_ABOVE = """
+            module example.settle
+
+            data Plain
+            data Express
+            data Kind = Plain | Express
+
+            data Done = { n: Int }
+            data Refused
+
+            behavior settle : (kind: Kind, earlier: Int, amount: Int) -> Done | Refused
+                constructs Done
+
+            let settle (kind, earlier, amount) = {
+                let bonus = if earlier > 0 then 100 else 0
+                guard amount > 0 else Refused
+                match kind with
+                    | Plain -> Done { n = amount + bonus }
+                    | Express -> Done { n = amount + bonus + 500 }
+            }
+            """;
+
+    /** The row about {@code kind} is held to the guard's comparison, and goes the same way round
+     *  the fork above it as it did. */
+    @Test
+    void aRowIsHeldToTheGuardThatStoppedItAndNotToAForkAboveIt() {
+        assertEquals("Plain, 0, 1", rowsOf(A_FORK_ABOVE).get("kind=Plain"));
+    }
+
     /** What each row is for, by its label, and what it writes. */
     private static Map<String, String> rowsOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");

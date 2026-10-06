@@ -131,11 +131,12 @@ public final class CoverageRead {
      *                     have come from wherever that map put its keys
      * @param restOfTheBlock for each arm by which a run leaves a {@code guard} whose condition did
      *                       not hold, the arm the rest of the block is — which is where a run that
-     *                       got past the guard went on. Both arms are arms of this read
+     *                       got past the guard went on — and the comparisons the guard decides by.
+     *                       Both arms are arms of this read
      */
     public record Read(List<Interaction> interactions,
                        java.util.SequencedMap<ArmProbe, PathAccess> arms,
-                       java.util.SequencedMap<ArmProbe, ArmProbe> restOfTheBlock) {
+                       java.util.SequencedMap<ArmProbe, TheRestOfTheBlock> restOfTheBlock) {
 
         public Read {
             interactions = List.copyOf(interactions);
@@ -143,8 +144,9 @@ public final class CoverageRead {
                     new java.util.LinkedHashMap<>(arms));
             restOfTheBlock = java.util.Collections.unmodifiableSequencedMap(
                     new java.util.LinkedHashMap<>(restOfTheBlock));
-            for (java.util.Map.Entry<ArmProbe, ArmProbe> each : restOfTheBlock.entrySet()) {
-                if (!arms.containsKey(each.getKey()) || !arms.containsKey(each.getValue())) {
+            for (java.util.Map.Entry<ArmProbe, TheRestOfTheBlock> each
+                    : restOfTheBlock.entrySet()) {
+                if (!arms.containsKey(each.getKey()) || !arms.containsKey(each.getValue().arm())) {
                     throw new IllegalArgumentException("a guard's two arms are arms of the read"
                             + " that says where its block goes on: " + each);
                 }

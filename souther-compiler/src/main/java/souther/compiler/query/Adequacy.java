@@ -5192,28 +5192,9 @@ public final class Adequacy {
         private static ComparisonHeld.Of heldBy(MeasuredInput subject,
                                                 List<BorderAssessment> edges,
                                                 ReachingCuts reaching) {
-            List<ComparisonEmissionSite> sites = new ArrayList<>();
-            for (BorderAssessment edge : edges) {
-                for (ComparisonEmissionSite each : edge.border().origin().recordedAt()) {
-                    if (!sites.contains(each)) {
-                        sites.add(each);
-                    }
-                }
-            }
             Map<ComparisonEmissionSite, Optional<ComparisonHeld>> found = new LinkedHashMap<>();
-            return new ComparisonHeld.Of() {
-
-                @Override
-                public List<ComparisonEmissionSite> sites() {
-                    return List.copyOf(sites);
-                }
-
-                @Override
-                public Optional<ComparisonHeld> at(ComparisonEmissionSite site) {
-                    return found.computeIfAbsent(site,
-                            asked -> holding(subject, edges, reaching, asked));
-                }
-            };
+            return site -> found.computeIfAbsent(site,
+                    asked -> holding(subject, edges, reaching, asked));
         }
 
         /** What holds the comparison recorded at {@code site}, worked out once. */
