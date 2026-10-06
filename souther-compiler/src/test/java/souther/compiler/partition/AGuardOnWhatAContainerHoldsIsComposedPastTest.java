@@ -205,8 +205,11 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
      * A container handed a field of a stated value the row names without moving it has nothing to
      * hold, which is this compiler not having that value — and not the model leaving no row.
      *
-     * <p>The row stays the author's value as it was composed, and nothing about the behavior is
-     * said to be impossible or refused by the model's rules on the strength of it.
+     * <p>Both ways round, as far as a reader can see either. Nothing about the behavior is said to
+     * be impossible or refused by the model's rules on the strength of it; and the row is not
+     * offered as one past the guard: it stays the author's value as it was composed, with the set
+     * holding nothing, which is a row that stops at the guard. Why the row went no further is not
+     * said anywhere a reader looks, which is so of every row repair could not take further.
      */
     @Test
     void aFieldOnlyNamedIsNoValueThisHasAndNoProofOfAnything() {
@@ -215,6 +218,9 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
         assertNotNull(row, () -> "a row is offered for the kind: " + rows);
         assertEquals("usual", row.get(2),
                 () -> "the request is the stated value, not composed afresh: " + row);
+        assertEquals(List.of(), elementsOf(row.get(1), "allowed"),
+                () -> "and the set holds nothing handed to it, so the row stops at the guard: "
+                        + row);
         assertEquals(List.of(), rows.said().stream()
                         .filter(word -> word == Generator.UnresolvedCombination.Reason
                                 .THE_RULES_LEAVE_NOTHING_THERE
@@ -222,6 +228,16 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
                                 .ALL_CANDIDATES_REJECTED)
                         .toList(),
                 () -> "nothing is said to be left no row or refused by the model: " + rows);
+    }
+
+    /** The elements written in the collection at {@code field} of a record written as {@code
+     *  record}. */
+    private static List<String> elementsOf(String record, String field) {
+        Matcher found = Pattern.compile(field + " = \\[([^]]*)]").matcher(record);
+        assertTrue(found.find(), () -> field + " is written in " + record);
+        String inside = found.group(1).trim();
+        return inside.isEmpty() ? List.of()
+                : Arrays.stream(inside.split(",")).map(String::trim).toList();
     }
 
     /**
