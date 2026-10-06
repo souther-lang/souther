@@ -2172,6 +2172,8 @@ public final class Generator {
                            ComparisonHeld.Of holding) {
 
         /**
+         * {@code found}, or a row for the same requirement that got further into the body.
+         *
          * @param against the parameters {@code found} writes as the value the model states
          */
         GeneratedRow past(MeasuredInput.MeasuredAxes axes, Pins pins, List<Purpose> purposes,
@@ -2435,8 +2437,12 @@ public final class Generator {
         /** What every row of this behavior stands its dependencies in with. */
         private final List<StoodInAnswer> answers;
 
-        /** The comparisons every candidate is held to beside the pins. */
-        private final List<ComparisonHeld> held;
+        /**
+         * The comparisons every candidate is held to beside the pins, put together once. What they
+         * ask is the same of every candidate, and putting them together places the positions the
+         * way to them bounds, which is a search of its own.
+         */
+        private final HeldTogether held;
 
         /** What a row that holds every pin has to be besides, to be the one this takes. */
         private final Predicate<GeneratedRow> accepts;
@@ -2460,7 +2466,8 @@ public final class Generator {
             this.most = most;
             this.references = references;
             this.answers = answers;
-            this.held = held;
+            this.held = held.isEmpty() ? HeldTogether.Asked.NOTHING
+                    : heldTogether(axes.subject(), held);
             this.accepts = accepts;
             this.known = new ParameterProjections(axes);
         }
@@ -5489,7 +5496,8 @@ public final class Generator {
                     return Taken.AND_MORE;
                 }
                 where = candidate.where();
-                last = build(axes, candidate.where(), List.of(), check, given, answers);
+                last = build(axes, candidate.where(), HeldTogether.Asked.NOTHING, check, given,
+                        answers);
                 known.built(candidate, last);
                 met = met.and(last.met());
                 if (last.row() == null) {
@@ -5811,19 +5819,17 @@ public final class Generator {
      * positions inside it, so the location is written once.
      */
     private static Attempt build(MeasuredInput.MeasuredAxes axes, int[] where,
-                                 List<ComparisonHeld> held,
+                                 HeldTogether held,
                                  CandidateCheck check, Map<String, FixtureTemplate> given,
                                  List<StoodInAnswer> answers) {
         MeasuredInput subject = axes.subject();
         LocationWrites decided = new LocationWrites();
-        HeldTogether.Asked holding = HeldTogether.Asked.NOTHING;
-        if (!held.isEmpty()) {
-            switch (heldTogether(subject, held)) {
-                case HeldTogether.Refused(Attempt why) -> {
-                    return why;
-                }
-                case HeldTogether.Asked asked -> holding = asked;
+        HeldTogether.Asked holding;
+        switch (held) {
+            case HeldTogether.Refused(Attempt why) -> {
+                return why;
             }
+            case HeldTogether.Asked asked -> holding = asked;
         }
         // The numbers this row stands at: the ones its classes admit, and the ones the comparisons
         // ask for. A number asked by both is asked at the comparison's place, which has to be one

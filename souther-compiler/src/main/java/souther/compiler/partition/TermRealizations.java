@@ -457,6 +457,8 @@ final class TermRealizations {
     sealed interface JointBuilder {
 
         /**
+         * The values to write at the group's location, answering every number it asks.
+         *
          * @param inside what the value is asked to hold at positions inside it, which only a way
          *               that composes a value element by element can take
          *               ({@link #composesWhatIsInside})
