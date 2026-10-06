@@ -722,15 +722,15 @@ public final class ValueArrivals<P> {
 
         /** One way, where it is not one this already holds and there is still room for it. */
         void add(Arrival<P> way) {
-            if (beyond || ways.contains(way)) {
+            // Asked and kept in one look: a way is hashed from everything it consulted, and two
+            // looks pay that twice for every candidate.
+            if (beyond || !ways.add(way)) {
                 return;
             }
-            if (ways.size() >= naming.mostArrivals()) {
+            if (ways.size() > naming.mostArrivals()) {
                 beyond = true;
                 ways.clear();
-                return;
             }
-            ways.addLast(way);
         }
 
         /** Each arrival held to what already holds along the way to it. */
