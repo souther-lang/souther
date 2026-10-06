@@ -1889,7 +1889,8 @@ public final class Adequacy {
                     checked == null || !checked.behaviorBodies().containsKey(spec.name())
                             || met == null || met.get(spec.name()) == null
                             ? BodyDistinction.withoutABody(subject.axes().axes())
-                            : BodyDistinction.of(met.get(spec.name()), subject.axes().axes());
+                            : BodyDistinction.of(met.get(spec.name()), subject.axes().axes(),
+                                    subject.partitioning().rulesWithoutALine());
             return Coverages.of(subject, seen,
                     db.ask(new Front.Adequacy()).value().measures(), toldApart);
         }

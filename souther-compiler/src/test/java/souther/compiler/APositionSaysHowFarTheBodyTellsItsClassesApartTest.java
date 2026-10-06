@@ -141,6 +141,120 @@ class APositionSaysHowFarTheBodyTellsItsClassesApartTest {
     }
 
     /**
+     * A comparison made under another tells apart only the values the first let through.
+     *
+     * <p>The second guard is made of values above zero and comes out the same way for all of them,
+     * which the reading of the input finds and draws no line for. So the number is two classes and
+     * the body tells both apart — and the second comparison, with no line to place it by, is read as
+     * what it is: one that sends every value arriving at it the same way, and not one this compiler
+     * could not read.
+     */
+    @Test
+    void aComparisonUnderAnotherTellsApartOnlyWhatTheFirstLetThrough() {
+        assertEquals(2, groupsAt("n", toldApartIn("""
+                module example.nested
+
+                data Ok = { n: Int }
+
+                behavior judge : (n: Int) -> Ok
+                    constructs Ok
+
+                let judge (n) = {
+                    guard n > 0 else Ok { n = 0 }
+                    guard n > -10 else Ok { n = 1 }
+                    Ok { n = 2 }
+                }
+
+                example judge
+                    | (5) -> Ok { n = 2 }
+                """, "example.nested"), 2));
+    }
+
+    /**
+     * What a way says about a position is what all of its decisions admit there together.
+     *
+     * <p>Inside the arm for {@code A} or {@code B}, the arm for {@code B} or {@code C} is taken by
+     * {@code B} alone, and the one for {@code A} or {@code D} by {@code A} alone. {@code C} and
+     * {@code D} both go the outer way round and are never told apart; read one decision at a time,
+     * the inner arms would split them.
+     */
+    @Test
+    void whatAWaySaysIsWhatAllOfItsDecisionsAdmitTogether() {
+        assertEquals(3, groupsAt("k", toldApartIn("""
+                module example.together
+
+                data A
+                data B
+                data C
+                data D
+                data Kind = A | B | C | D
+
+                data Ok = { n: Int }
+
+                behavior judge : (k: Kind) -> Ok
+                    constructs Ok
+
+                let judge (k) =
+                    match k with
+                        | A | B ->
+                            match k with
+                                | B | C -> Ok { n = 1 }
+                                | A | D -> Ok { n = 2 }
+                        | C | D -> Ok { n = 3 }
+
+                example judge
+                    | (A) -> Ok { n = 2 }
+                """, "example.together"), 4));
+    }
+
+    /**
+     * A decision past an attempted construction is made of the values the way to the attempt let
+     * through.
+     *
+     * <p>No way in to the inner {@code match} is named, since which way the attempt goes is nothing
+     * a class says. What the outer arm let through is known there all the same — only {@code C} or
+     * {@code D} arrives — so the inner arms for {@code A} and {@code B} are taken by no run and the
+     * body tells {@code A} from {@code B} nowhere. Read without what the outer arm settled, they
+     * would split the two.
+     */
+    @Test
+    void aDecisionPastAnAttemptIsMadeOfWhatTheWayToItLetThrough() {
+        assertEquals(3, groupsAt("k", toldApartIn("""
+                module example.pastattempt
+
+                data A
+                data B
+                data C
+                data D
+                data Kind = A | B | C | D
+
+                data Note = String
+                    invariant String.length(value) >= 1
+                data NoNote
+
+                data Ok = { n: Int }
+
+                behavior judge : (k: Kind, text: String) -> Ok | NoNote
+                    constructs Ok, Note
+
+                let judge (k, text) =
+                    match k with
+                        | A | B -> Ok { n = 1 }
+                        | C | D -> {
+                            guard Note(text) as note else NoNote
+                            match k with
+                                | A -> Ok { n = 2 }
+                                | B -> Ok { n = 3 }
+                                | C -> Ok { n = 4 }
+                                | D -> Ok { n = 5 }
+                        }
+
+                example judge
+                    | (A, "a") -> Ok { n = 1 }
+                """, "example.pastattempt"), 4));
+    }
+
+    /**
      * A sum every case of which a {@code match} has an arm for is told apart in full.
      *
      * <p>The match composes no class — the cases are classes because of the type — and tells both
@@ -788,6 +902,26 @@ class APositionSaysHowFarTheBodyTellsItsClassesApartTest {
                 () -> "the comparison divides the elements in two: " + elements);
         assertFalse(human.contains("xs[*] holds"),
                 () -> "what the predicate tells apart is not read as nothing: " + human);
+    }
+
+    /** What the body of {@code module}'s {@code judge} tells apart at each of its positions. */
+    private static List<PartitionEvidence.AxisCoverage> toldApartIn(String model, String module) {
+        return compiled(model).db().ask(new Adequacy.Coverage(module)).value().get("judge")
+                .axes();
+    }
+
+    /**
+     * How many groups the body tells the classes at {@code name} apart as, having checked that the
+     * position holds {@code classes} of them and that what it tells apart was read.
+     */
+    private static int groupsAt(String name, List<PartitionEvidence.AxisCoverage> axes,
+                                int classes) {
+        PartitionEvidence.AxisCoverage at = axes.stream()
+                .filter(each -> each.name().equals(name)).findFirst()
+                .orElseThrow(() -> new AssertionError("no position " + name + " in " + axes));
+        assertEquals(classes, at.classes().size(), () -> "the classes at " + name + ": " + at);
+        assertInstanceOf(BodyDistinction.Drawn.class, at.toldApart(), () -> "at " + at);
+        return ((BodyDistinction.Drawn) at.toldApart()).groups().size();
     }
 
     private static Compilation compiled(String model) {

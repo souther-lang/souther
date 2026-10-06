@@ -1,12 +1,9 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.RuleRef;
+import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.reading.CoverageRead;
-import souther.compiler.types.ModelOccurrence;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -22,14 +19,14 @@ import java.util.Set;
  *
  * <p>A partition of the classes and not a count of them. A body that takes {@code A}, {@code B},
  * {@code C} and {@code D} and asks only whether a value is one of the first two tells the four apart
- * as two groups. So what is held is the groups: two classes are in one group where nothing the body
- * decides on goes one way for one of them and the other way for the other.
+ * as two groups. So what is held is the groups: two classes are in one group where no way a run of
+ * the body takes admits one of them and not the other.
  *
- * <p><b>Read off the decisions, through the lookup a cell is made by.</b> A decision names the
- * position it turns on — a {@code match} on a case, a comparison a fork is taken by — and which
- * classes it leaves is what {@link InteractionCells} already reads a condition into. A {@code match}
- * arm, a {@code guard} and a comparison are all a condition, and each splits the classes into the
- * ones it admits and the rest.
+ * <p><b>Read off the ways runs take, through the lookup a cell is made by.</b> A way is the
+ * decisions a run settles to get somewhere — a {@code match} on a case, a comparison a fork is
+ * taken by — and which classes they leave together is what {@link InteractionCells} reads a
+ * condition into. A decision tells apart only the values that arrive where it is made, so it is read
+ * with the way it is on and never on its own ({@link WhatABodyTellsApart}).
  *
  * <p><b>And a rule the body wrote that no decision reads is said, not guessed at.</b> The predicate
  * handed to a {@code List.filter} divides a position into classes and the walk that finds the
@@ -43,14 +40,16 @@ import java.util.Set;
  */
 public sealed interface BodyDistinction {
 
-    /** Nothing the body decides on or writes is about the position, so every class goes one way. */
+    /** No way a run of the body takes says anything about the position, so every class goes one
+     *  way. */
     record Untouched() implements BodyDistinction {}
 
     /**
-     * Something the body decides on is about the position, and all of it was read into classes.
+     * Some way a run takes is about the position, and all of what is said there was read into
+     * classes.
      *
-     * @param groups the classes, each in the group of those nothing the body decides on tells it
-     *               apart from, in the order of the first class of each
+     * @param groups the classes, each in the group of those no way a run takes tells it apart from,
+     *               in the order of the first class of each
      */
     record Drawn(List<Set<String>> groups) implements BodyDistinction {
 
@@ -95,129 +94,15 @@ public sealed interface BodyDistinction {
     }
 
     /**
-     * What the body read as {@code read} tells apart at each of {@code axes}.
+     * What the body read as {@code read} tells apart at each of {@code axes}, where
+     * {@code noLine} is what the reading of the input found about the rules it drew no line for.
      *
-     * <p>A condition this compiler cannot name a position for is about none of them: what it says
-     * is unknown rather than about everything, and reading it as everything would put a position
-     * into the pair space on the strength of something unread.
+     * <p>Read off the ways runs take and nothing else ({@link CoverageRead.Read#taken}). Taken from
+     * the ways in to the arms or the meetings as well, a way no run takes would be read as a
+     * decision the body makes.
      */
-    static Map<AxisId, BodyDistinction> of(CoverageRead.Read read, List<Axis> axes) {
-        // What the body decides on, which the reading of it says once and holds to what some run
-        // does ({@link CoverageRead.Read#decided}). Taken from the ways in to the arms or the
-        // meetings as well, a way no run takes would be read as a decision the body makes.
-        List<souther.compiler.reading.Condition> said = read.decided();
-        // Which position each is about, asked once of each. Asked per position instead, every
-        // condition is looked up again for every position the behavior has.
-        List<List<souther.compiler.reading.Condition>> about = new ArrayList<>(axes.size());
-        for (int at = 0; at < axes.size(); at++) {
-            about.add(new ArrayList<>());
-        }
-        for (souther.compiler.reading.Condition each : said) {
-            int at = InteractionCells.positionOf(each, axes);
-            if (at >= 0) {
-                about.get(at).add(each);
-            }
-        }
-        Map<AxisId, BodyDistinction> out = new LinkedHashMap<>();
-        for (int at = 0; at < axes.size(); at++) {
-            out.put(axes.get(at).id(), at(at, about.get(at), axes));
-        }
-        return Map.copyOf(out);
-    }
-
-    /** What the conditions {@code said}, each about it, tell apart at the {@code at}th of
-     *  {@code axes}. */
-    private static BodyDistinction at(int at, List<souther.compiler.reading.Condition> said,
-                                      List<Axis> axes) {
-        Axis axis = axes.get(at);
-        List<boolean[]> splits = new ArrayList<>();
-        Set<ModelOccurrence> comparisonsRead = new LinkedHashSet<>();
-        boolean unread = false;
-        for (souther.compiler.reading.Condition each : said) {
-            InteractionCells.Cell admitted = InteractionCells.admittedBy(each, axes);
-            if (admitted == null) {
-                unread = true;
-                continue;
-            }
-            splits.add(admitted.allowed()[at]);
-            if (each instanceof souther.compiler.reading.Condition.Side side) {
-                ModelOccurrence.statedAt(side.comparison()).ifPresent(comparisonsRead::add);
-            }
-        }
-        // What the body wrote that divided the position, each of which has to be a rule one of the
-        // comparisons read above is a reading of. A rule of the type is the model's distinction and
-        // not this behavior's, which is the whole question here, so it is not asked for.
-        //
-        // A line is filed under the construct its rule is stated at, which is what a decision is
-        // filed under too, so the two meet there; and the line carries the rule as well, which is
-        // what a parting — the same comparison read for where it parts the values rather than
-        // where it cuts them — carries and all it carries.
-        Set<RuleRef> rulesRead = new LinkedHashSet<>();
-        boolean ruleNoDecisionRead = false;
-        for (RuleEvidenceOrigin origin : linesAndDivisions(axis)) {
-            if (!writtenInTheBody(origin.rule())) {
-                continue;
-            }
-            if (origin instanceof LineOrigin.ComparisonOrigin comparison
-                    && comparisonsRead.contains(comparison.read().states())) {
-                rulesRead.add(comparison.rule());
-            } else {
-                ruleNoDecisionRead = true;
-            }
-        }
-        for (Parting parting : axis.parted()) {
-            for (AuthoredLine line : parting.alternatives()) {
-                RuleRef rule = line.which().rule();
-                ruleNoDecisionRead |= writtenInTheBody(rule) && !rulesRead.contains(rule);
-            }
-        }
-        if (unread || ruleNoDecisionRead) {
-            return new Unread();
-        }
-        if (splits.isEmpty()) {
-            return new Untouched();
-        }
-        return new Drawn(groupsOf(axis.classes(), splits));
-    }
-
-    /** Every reading of a rule that drew a line on the position or composed its classes. */
-    private static List<RuleEvidenceOrigin> linesAndDivisions(Axis axis) {
-        List<RuleEvidenceOrigin> out = new ArrayList<>(axis.divides());
-        for (Cut cut : axis.cuts()) {
-            out.addAll(cut.origins());
-        }
-        return out;
-    }
-
-    /**
-     * Whether {@code rule} was written in the body, as against named by the author.
-     *
-     * <p>A rule the author named — an invariant, an {@code ensures} — says what the type or the
-     * answer holds and is no statement about what this behavior tells apart; one written in a body
-     * is.
-     */
-    private static boolean writtenInTheBody(RuleRef rule) {
-        return rule instanceof RuleRef.Written;
-    }
-
-    /**
-     * The classes in groups, two in one group where every split admits both or neither.
-     *
-     * <p>The coarsest partition finer than every split, which is what telling apart composes to:
-     * two classes the body tells apart anywhere are in different groups, however many conditions
-     * say nothing about them.
-     */
-    private static List<Set<String>> groupsOf(List<PartitionClass> classes,
-                                             List<boolean[]> splits) {
-        Map<List<Boolean>, Set<String>> bySignature = new LinkedHashMap<>();
-        for (int c = 0; c < classes.size(); c++) {
-            List<Boolean> signature = new ArrayList<>(splits.size());
-            for (boolean[] split : splits) {
-                signature.add(split[c]);
-            }
-            bySignature.computeIfAbsent(signature, _ -> new LinkedHashSet<>())
-                    .add(classes.get(c).id());
-        }
-        return List.copyOf(bySignature.values());
+    static Map<AxisId, BodyDistinction> of(CoverageRead.Read read, List<Axis> axes,
+                                           List<RuleWithoutALine> noLine) {
+        return WhatABodyTellsApart.of(read, axes, noLine);
     }
 }

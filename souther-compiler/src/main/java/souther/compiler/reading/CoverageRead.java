@@ -106,8 +106,8 @@ public final class CoverageRead {
     /** How each arm the plan numbered is reached. */
     private final Arms arms;
 
-    /** What every fork of the body is taken by, in the order the walk met them. */
-    private final Set<Condition> decided = new LinkedHashSet<>();
+    /** Every way a run of the body is known to take, in the order the walk met them. */
+    private final Set<WayIn> taken = new LinkedHashSet<>();
 
     private CoverageRead(ValueArrivals<Outcome> reading, Meetings meetings, Arms arms) {
         this.reading = reading;
@@ -134,21 +134,22 @@ public final class CoverageRead {
      *                     and not a habit of whatever map was handed over. Written as any map, an
      *                     unordered one was as admissible, and the order a plan is asked in would
      *                     have come from wherever that map put its keys
-     * @param decided      every condition a way out of a fork, or a value meeting another, is
-     *                     settled by where some run settles it that way, in the order the walk met
-     *                     them. What the body tells apart about
-     *                     its input, which is not the ways in: a {@code match} past an attempted
-     *                     construction is reached by a way in nothing states and is still a
-     *                     decision about the position it matches on, and an arm no run reaches is
-     *                     none
+     * @param taken        every way some run of the body takes out of a fork, or settles a value
+     *                     meeting another by, each as everything known to hold on it, in the order
+     *                     the walk met them. What the body tells apart about its input, which is not
+     *                     the ways in: a {@code match} past an attempted construction is reached by
+     *                     a way in nothing states and is still a decision about the position it
+     *                     matches on. Whole ways and never the decisions on them one at a time,
+     *                     since a decision tells apart only what arrives where it is made — a
+     *                     comparison under another one is made of the values the first let through
      */
     public record Read(List<Interaction> interactions,
                        java.util.SequencedMap<ArmProbe, PathAccess> arms,
-                       List<Condition> decided) {
+                       List<WayIn> taken) {
 
         public Read {
             interactions = List.copyOf(interactions);
-            decided = List.copyOf(decided);
+            taken = List.copyOf(taken);
             arms = java.util.Collections.unmodifiableSequencedMap(
                     new java.util.LinkedHashMap<>(arms));
         }
@@ -192,55 +193,42 @@ public final class CoverageRead {
         walked.walk(body, naming, new Reach.Ways(List.of(new WayIn(List.of()))), true);
         List<Interaction> found = meetings.found();
         for (Interaction group : found) {
-            walked.decidesAt(group);
+            walked.takesAt(group);
         }
-        return new Read(found, arms.found(behavior), List.copyOf(walked.decided));
+        return new Read(found, arms.found(behavior), List.copyOf(walked.taken));
     }
 
     /**
-     * That a way out of a fork of the body is taken, where {@code into} is how a run comes to be on
-     * it and {@code own} is what the fork comes out that way by.
+     * That a run takes a way out of a fork, where {@code into} is how it comes to be on it.
      *
-     * <p>What some run does, and nothing else. A way no run takes is no decision the body makes: an
-     * arm for a case the way to the fork has already ruled out tells apart cases that never arrive
-     * there, and counted, it would split what the body treats alike. So where the ways in are named
-     * what is counted is the ways of {@code own} that survive them, which {@code into} already is.
-     *
-     * <p>Not whether the way in is named. A way under a way in nothing states — past an attempted
-     * construction, inside a function value — is one runs take and this reading cannot say how, and
-     * what the fork comes out by is a decision the body makes all the same. There the fork's own
-     * ways are what there is, since nothing above them is stated to hold them to.
+     * <p>As much as is known to hold there, which is the way the fork came out held to every way
+     * the fork was reached by. A decision tells apart only what arrives where it is made, so it is
+     * kept with what let a run get there; kept on its own it would split values that never reach
+     * it. And a way no run takes is none: an arm for a case the way to the fork has already ruled
+     * out tells apart cases that never arrive there.
      */
-    private void decides(Reach into, List<WayIn> own) {
-        if (!into.someRunArrives()) {
-            return;
-        }
-        for (WayIn way : into.ways().isEmpty() ? own : into.ways()) {
-            for (Decision each : way.decisions()) {
-                decided.add(each.constrains());
-            }
+    private void takes(Reach into) {
+        if (into.someRunArrives()) {
+            taken.addAll(into.known());
         }
     }
 
     /**
-     * What the values meeting in {@code group} are settled by, where a run that reaches the
-     * meeting can settle them that way.
+     * That a run reaching the meeting of {@code group} settles each value there each way the way in
+     * to it leaves possible.
      *
      * <p>A comparison whose truth is handed on as a value is a decision no fork is taken by, and the
      * body tells its position apart all the same. Held to the way in to the meeting as a fork's ways
-     * are held to the way in to the fork: an outcome that way in rules out is one no run comes to.
-     * A meeting is found only where a value arrives and its ways in are named, so both are already
-     * settled here.
+     * are held to the way in to the fork. A meeting is found only where a value arrives and its ways
+     * in are named, so both are already settled here.
      */
-    private void decidesAt(Interaction group) {
-        for (Decision each : group.reach()) {
-            decided.add(each.constrains());
-        }
+    private void takesAt(Interaction group) {
+        taken.add(new WayIn(group.reach()));
         for (Factor factor : group.factors()) {
             for (Outcome outcome : factor.outcomes()) {
                 List<Decision> both = CoverageNaming.merge(group.reach(), outcome.holds());
                 if (both != null) {
-                    both.forEach(each -> decided.add(each.constrains()));
+                    taken.add(new WayIn(both));
                 }
             }
         }
@@ -322,7 +310,7 @@ public final class CoverageRead {
                             ? unnamed(reach, PathAccess.Unsupported.Why.NO_WAY_IN_CAN_BE_NAMED)
                             : under(reach, new Reach.Ways(List.of(new WayIn(went.holds()))));
                     if (went != null) {
-                        decides(into, List.of(new WayIn(went.holds())));
+                        takes(into);
                     }
                     arms.at(match, part, into);
                     Core.Case arm = match.cases().get(part);
@@ -436,7 +424,7 @@ public final class CoverageRead {
         }
         List<WayIn> left = waysOf(through.paths());
         Reach into = under(reach, new Reach.Ways(left));
-        decides(into, left);
+        takes(into);
         return into.ways().size() > MOST_WAYS_IN
                 ? new Reach.Unnameable(PathAccess.Unsupported.Why.MORE_WAYS_IN_THAN_ARE_READ)
                 : into;
@@ -453,7 +441,7 @@ public final class CoverageRead {
     private Reach waysInTo(Core.If iff, int part, CoverageNaming naming, Reach reach) {
         Reach own = waysInFor(iff, part, naming);
         Reach into = under(reach, own);
-        decides(into, own.ways());
+        takes(into);
         if (into.ways().size() <= MOST_WAYS_IN) {
             return into;
         }
@@ -530,21 +518,26 @@ public final class CoverageRead {
         if (step instanceof Reach.Nothing) {
             return step;
         }
-        if (above instanceof Reach.Nothing || above instanceof Reach.Unnameable) {
+        if (above instanceof Reach.Nothing) {
             return above;
         }
-        if (step instanceof Reach.Unnameable) {
-            return step;
-        }
-        List<WayIn> held = new ArrayList<>();
-        for (WayIn reach : above.ways()) {
-            for (WayIn way : step.ways()) {
-                List<Decision> merged = CoverageNaming.merge(reach.decisions(), way.decisions());
-                if (merged != null) {
-                    held.add(new WayIn(merged));
-                }
+        // A way in nothing states, above or here, and no way in is stated below it. What is known
+        // goes on all the same: the step nothing states is taken to rule out nothing, and what was
+        // named on either side of it still holds wherever a run is — which is what a reading of
+        // what the body decides is held to, and what no row is steered by.
+        if (above instanceof Reach.Unnameable || step instanceof Reach.Unnameable) {
+            PathAccess.Unsupported.Why why = above instanceof Reach.Unnameable it ? it.why()
+                    : ((Reach.Unnameable) step).why();
+            List<WayIn> known = both(above.known(), step.known());
+            if (known.isEmpty()) {
+                return new Reach.Nothing(PathAccess.Unreachable.Why.CONTRADICTS_WHAT_ALREADY_HELD);
             }
+            // Past the bound nothing is known rather than some of it, which leaves what a run
+            // here decided read against more than it was decided in, and never less.
+            return known.size() > MOST_WAYS_IN ? new Reach.Unnameable(why)
+                    : new Reach.Unnameable(why, known);
         }
+        List<WayIn> held = both(above.ways(), step.ways());
         if (held.isEmpty()) {
             return new Reach.Nothing(PathAccess.Unreachable.Why.CONTRADICTS_WHAT_ALREADY_HELD);
         }
@@ -555,6 +548,21 @@ public final class CoverageRead {
             return new Reach.Coarse(held, why);
         }
         return new Reach.Ways(held);
+    }
+
+    /** Every way of {@code above} with every way of {@code step}, leaving out the ones that settle
+     *  one decision both ways. */
+    private static List<WayIn> both(List<WayIn> above, List<WayIn> step) {
+        List<WayIn> held = new ArrayList<>();
+        for (WayIn reach : above) {
+            for (WayIn way : step) {
+                List<Decision> merged = CoverageNaming.merge(reach.decisions(), way.decisions());
+                if (merged != null) {
+                    held.add(new WayIn(merged));
+                }
+            }
+        }
+        return held;
     }
 
     /** The ways, as the conjunctions they are. */
