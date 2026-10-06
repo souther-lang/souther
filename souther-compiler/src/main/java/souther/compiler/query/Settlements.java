@@ -6,6 +6,7 @@ import souther.compiler.numeric.Place;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.ClassOfAPosition;
+import souther.compiler.partition.Criterion;
 import souther.compiler.partition.GenerationObligation;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.Generator;
@@ -503,7 +504,8 @@ public record Settlements(List<ObligationIdentity> requested,
                 }
                 ObligationIdentity.OfALine item = new ObligationIdentity.OfALine(point.point());
                 point.met().forEach((_, at) -> reads.computeIfAbsent(item, _ -> new ArrayList<>())
-                        .add(new AtAPoint(at.border(), at.owedAt(point.at()).criterion())));
+                        .add(new AtAPoint(subject.at(at.border()),
+                                at.owedAt(point.at()).criterion())));
             }
             // And this behavior's readings of the lines the declarations own, which its own rules
             // are owed none of. Read the same way and for the same reason.
@@ -512,7 +514,7 @@ public record Settlements(List<ObligationIdentity> requested,
                     if (at.at(point.point()) instanceof ItemAssessment.Owed owed) {
                         reads.computeIfAbsent(new ObligationIdentity.OfALine(point),
                                 _ -> new ArrayList<>())
-                                .add(new AtAPoint(at.border(), owed.criterion()));
+                                .add(new AtAPoint(subject.at(at.border()), owed.criterion()));
                     }
                 }
             });
@@ -1118,9 +1120,9 @@ public record Settlements(List<ObligationIdentity> requested,
             // met: a row standing on the line anywhere the behavior reads it is a row at the point.
             Settlement answer = new Settlement.DoesNotSettle();
             for (AtAPoint one : here) {
-                Settlement said = switch (StandingAtAPoint.met(subject.at(one.line()),
+                Settlement said = switch (StandingAtAPoint.met(one.line(),
                         List.of(observed), one.criterion(),
-                        one.line().origin().recordedAt())) {
+                        one.line().border().origin().recordedAt())) {
                     case StandingAtAPoint.Met.Reached _ -> new Settlement.Settles();
                     case StandingAtAPoint.Met.NotAtPoint _ -> new Settlement.DoesNotSettle();
                     case StandingAtAPoint.Met.NotWatched _ ->
@@ -1142,10 +1144,15 @@ public record Settlements(List<ObligationIdentity> requested,
 
     }
 
-    /** One position's reading of one line, as a row is put to it: the border this behavior met and
-     *  what a row there has to do. */
-    private record AtAPoint(souther.compiler.partition.Border line,
-                            souther.compiler.partition.Criterion criterion) {}
+    /**
+     * One position's reading of one line, as a row is put to it: the measurement's own reading of
+     * the border this behavior met, and what a row there has to do.
+     *
+     * <p>The reading and not the border. Which line of the measurement a border is does not turn
+     * on the row, so it is looked up once where the points are gathered; looked up at every row,
+     * every row a search weighs paid for a walk over every line the behavior has.
+     */
+    private record AtAPoint(MeasuredInput.BorderReading line, Criterion criterion) {}
 
     /**
      * The row a search composed for one line, and the input it composed it at.
