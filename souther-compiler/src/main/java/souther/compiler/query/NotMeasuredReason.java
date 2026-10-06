@@ -26,4 +26,5 @@ public sealed interface NotMeasuredReason extends MeasureReason
                 NothingWasAsked,
                 OutputCaseEvidence.NoRows,
                 PartitionEvidence.AxisCoverage.NoRows,
-                PartitionEvidence.PairSpace.NoRows {}
+                PartitionEvidence.PairSpace.NoRows,
+                ReplacementEvidence.NotAsked {}

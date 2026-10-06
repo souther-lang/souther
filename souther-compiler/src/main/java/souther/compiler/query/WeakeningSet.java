@@ -168,7 +168,8 @@ public final class WeakeningSet {
                  Weakening.PairSpaceTruncated _, Weakening.ProofContradicted _,
                  Weakening.ArmsUnsettled _, Weakening.DecisionOfRowUnreadable _,
                  Weakening.DecisionRunNotWatched _, Weakening.MeetingsNotWalked _,
-                 Weakening.DecisionReadingIncomplete _, Weakening.DecisionRuleReadShort _ -> one;
+                 Weakening.DecisionReadingIncomplete _, Weakening.DecisionRuleReadShort _,
+                 Weakening.RewriteUndecided _ -> one;
         };
     }
 
@@ -190,7 +191,8 @@ public final class WeakeningSet {
                  Weakening.PairSpaceTruncated _, Weakening.ProofContradicted _,
                  Weakening.ArmsUnsettled _, Weakening.DecisionOfRowUnreadable _,
                  Weakening.DecisionRunNotWatched _, Weakening.MeetingsNotWalked _,
-                 Weakening.DecisionReadingIncomplete _, Weakening.DecisionRuleReadShort _ -> had;
+                 Weakening.DecisionReadingIncomplete _, Weakening.DecisionRuleReadShort _,
+                 Weakening.RewriteUndecided _ -> had;
         };
     }
 

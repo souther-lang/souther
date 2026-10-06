@@ -1165,7 +1165,7 @@ public final class Adequacy {
      * <p>The model's answer comes from the declarations and this elaboration's from what it holds,
      * and neither is a question about what a body says.
      */
-    private static souther.compiler.partition.BodyReading bodyReading(
+    static souther.compiler.partition.BodyReading bodyReading(
             Db db, String module, Bodies.Elaborated checked, String behavior) {
         if (checked != null && checked.behaviorBodies().containsKey(behavior)) {
             return new souther.compiler.partition.BodyReading.Read(
@@ -3743,7 +3743,7 @@ public final class Adequacy {
          * find at all. Both arrive here as the fact they are rather than as a word for how far the
          * measurement got.
          */
-        private static WeakeningSet rowsBehind(RowReading observed) {
+        static WeakeningSet rowsBehind(RowReading observed) {
             Set<Weakening> out = new LinkedHashSet<>();
             // Both kinds are already here. A row that stopped is a reason of its own, written where
             // it stopped; this used to walk the dispositions beside them and say it a second time,
@@ -4304,65 +4304,11 @@ public final class Adequacy {
          */
         @Override
         public Answer<Filling> compute(Db db) {
-            Answer<CheckSurface> prepared =
-                    db.ask(new Shapes.CheckSurface(name));
-            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
-            Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
-            // What a row is offered for is what the coverage found, so a coverage that did not
-            // answer leaves this nothing to offer from. Absence and not `PartitionEvidence.NONE`:
-            // that answer says the model holds nothing to cover, and read for this one it turned a
-            // compile that stopped into a module with no work in it (issue #996).
-            Answer<Map<String, PartitionEvidence>> coverage = db.ask(new Coverage(name));
-            if (!prepared.present() || !scope.present() || !sigs.present() || !coverage.present()) {
-                return Answer.absent();
-            }
-            souther.compiler.query.Bodies.Elaborated checked =
-                    db.ask(new Bodies.Observable(name)).value();
-            // What the plan's numbers mean, which a module whose bodies were not read has none of.
-            // Taken off the value in hand rather than stood in for, so that such a module says it
-            // has none.
-            Optional<SiteNumbering> numbering =
-                    checked == null ? Optional.empty()
-                            : Optional.of(SiteNumbering.of(checked.numberingIdentity()));
-            Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
-            Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
-            // What the guards above each place leave, asked once for the module and read by
-            // every measure below — the same reason the reading of the input is.
-            db.ask(new PathReached(name));
-
-            // And what each behavior states about its answer, which draws lines of its own.
-            db.ask(new Bodies.StatedContracts(name));
-
             // The whole account. A generation is a surface with a reader: what it offers rows for
             // is everything the model is owed, and a rule of a decision is one of those.
             List<Finding> findings = accountOf(db, name);
-
-            Hir.SpecBehavior spec = specOf(prepared.value(), behavior);
-            souther.compiler.partition.Partitions.Partitioning divided =
-                    db.ask(new Divided(name, behavior)).value();
-            if (spec == null || divided == null) {
-                return Answer.absent();
-            }
-            // What this generation composes against, taken from the one classification of what a
-            // measure of this behavior works from rather than looked up here. A generation that
-            // read the signatures and the readings itself would be deciding a second time what a
-            // missing entry means.
-            if (!(BoundaryForMeasurement.of(sigs.value(), readInputs, spec)
-                    instanceof BoundaryForMeasurement.Derived(
-                            Sig sig, InputForMeasurement.Local(Hir.SpecBehavior _,
-                                    InputDomain _)))) {
-                return Answer.absent();
-            }
-            // Asked whatever the level is. Somebody asking for the rows is what a generation is,
-            // and the rows at an edge are what a composed value settles — so this pays for the
-            // composing because it is what was asked for, not because a dial was turned up.
-            List<BorderAssessment> edges = db.ask(new BoundarySearch(name, behavior)).value();
-            if (edges == null) {
-                // A search that did not answer leaves this nothing to offer from, which is the
-                // reading the coverage above already gets. Read as no lines, the findings would be
-                // walked against a behavior said to have none — and the first one about a line
-                // would come back as the search and the finding being about different lines, which
-                // is a sentence about neither.
+            Environment here = Environment.of(db, name, behavior);
+            if (here == null) {
                 return Answer.absent();
             }
             // This behavior's own, grouped here because that is what a generation is asked for.
@@ -4370,10 +4316,6 @@ public final class Adequacy {
             // by behavior would be reading the grouping as the answer.
             List<Finding> owed = findings == null ? List.of()
                     : findings.stream().filter(each -> each.subject().isBehavior(behavior)).toList();
-            souther.compiler.partition.MeasuredInput subject = subjectOf(db, name, spec);
-            if (subject == null) {
-                return Answer.absent();
-            }
             // What this run is asked for, settled before the search and before anything that can
             // stop it. Every way out of the generation below holds this same list, and the offer an
             // editor makes in front of it is made on the same criterion: what a row would be
@@ -4383,62 +4325,18 @@ public final class Adequacy {
                 return Answer.absent();
             }
             souther.compiler.partition.GenerationPlan asked =
-                    souther.compiler.partition.GenerationPlan.of(subject, work.classes(),
+                    souther.compiler.partition.GenerationPlan.of(here.subject(), work.classes(),
                             work.arms().stream().map(RowWork.Arm::target).toList(),
                             work.pairs(), work.meetings(), work.replacements());
-            // The meetings of this body, read once for the module. A behavior with no entry is one
-            // whose body was not lowered, which is nothing to search in rather than a search that
-            // found nothing — and is the same condition the guards above answer for.
-            Map<String, CoverageRead.Read> met = db.ask(new Meets(name)).value();
-            CoverageRead.Read meetings = met == null ? null : met.get(behavior);
-            if (meetings == null) {
-                return Answer.absent();
-            }
-            // What this behavior's rows came to, and what the classes they ran against recorded.
-            // Read once and handed on: what a generation may make of the arms is a fact about the
-            // run it is working from, which the reading carries.
-            RowReading observed = RowReadings.readingFor(byTarget, behavior);
-            souther.compiler.partition.FillResult composed;
-            try {
-                composed = rowsFor(spec, sig, meetings, asked,
-                        baselines(spec, sig, prepared.value()),
-                        numbering,
-                        observed,
-                        constructing(db, name),
-                        runningRowsOf(trialling(db, name), behavior, sig, numbering,
-                                RequiredDependencies.of(db, name, behavior)),
-                        // What every row this composes stands the dependencies in with, settled
-                        // before the search so that a candidate is run in the environment the row
-                        // it becomes goes out with.
-                        supplying(db, name, behavior, subject),
-                        // And what gets a row past each comparison of the body, read off the
-                        // borders the search above already walked.
-                        heldBy(subject, edges, divided.reaching()),
-                        db.ask(new Front.Adequacy()).value().generation());
-            } catch (LinkageError _) {
-                // The generated classes would not link, so nothing can be built to find out
-                // what a model admits. Saying so is not the same as saying the combinations are
-                // impossible, so none of them is reported as one.
-                //
-                // Caught around the search and not around the answer. A finding's answer is
-                // owed whatever the search did, and a failure that skipped the walk over the
-                // findings would take them out of a list that is meant to hold every one —
-                // which is the same defect the list was written against, arriving as control
-                // flow rather than as a value.
-                composed = souther.compiler.partition.FillResult.nothingWasLookedFor(asked,
-                        Generator.UnresolvedCombination.Reason.LINKAGE_FAILED,
-                        List.of(new souther.compiler.partition.GenerationReason
-                                .LinkageFailed(behavior)));
-            }
+            souther.compiler.partition.FillResult composed = here.searchedFor(asked);
             // The rows the requirement search already stood in each rule, which is where a row for
             // a rule comes from. Not a second search: settling whether a rule is owed a row is
             // composing a value, running it and asking what rule the run took, and a value that
             // came back certified is a row an author can be handed.
-            RowsForRules rules = rowsForRules(db, name, behavior, work.rules(),
-                    RowReadings.readingFor(byTarget, behavior),
+            RowsForRules rules = rowsForRules(db, name, behavior, work.rules(), here.observed(),
                     db.ask(new Front.Adequacy()).value().generation(), composed.rows().size());
-            return Answer.of(new Filling(composed, offeredHere(behavior, edges), rules,
-                    dispositions(owed, rules, edges,
+            return Answer.of(new Filling(composed, offeredHere(behavior, here.edges()), rules,
+                    dispositions(owed, rules, here.edges(),
                             // This behavior's readings and no others. What a finding of this
                             // behavior is about is a line its own rules drew, and such a line is
                             // read only in the body that wrote it — so a wider account walks
@@ -4446,6 +4344,141 @@ public final class Adequacy {
                             // pays for the searches of the rest.
                             accountFor(db, name, new GenerationScope.Behavior(behavior)),
                             composed)));
+        }
+
+        /**
+         * What a search of one behavior composes against, read once and handed to every search of
+         * it: what it takes, where its rows are read at, which lines its rules draw, how its body
+         * meets, and what its rows came to.
+         *
+         * <p>Apart from what a search is asked for. A generation offering rows for what the account
+         * owes and a search for a row a rewrite of the body is told by are put to the same behavior
+         * in the same environment, and an environment built by each would be two answers to what a
+         * candidate of it is.
+         */
+        record Environment(Db db, String name, String behavior, CheckSurface prepared,
+                           Hir.SpecBehavior spec, Sig sig,
+                           souther.compiler.partition.MeasuredInput subject,
+                           souther.compiler.partition.Partitions.Partitioning divided,
+                           List<BorderAssessment> edges, CoverageRead.Read meetings,
+                           Optional<SiteNumbering> numbering, RowReading observed) {
+
+            /** The environment of {@code behavior}, or null where the module did not get far
+             *  enough to have one. */
+            static Environment of(Db db, String name, String behavior) {
+                Answer<CheckSurface> prepared = db.ask(new Shapes.CheckSurface(name));
+                Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
+                Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
+                // What a row is offered for is what the coverage found, so a coverage that did not
+                // answer leaves this nothing to offer from. Absence and not
+                // `PartitionEvidence.NONE`: that answer says the model holds nothing to cover, and
+                // read for this one it turned a compile that stopped into a module with no work in
+                // it (issue #996).
+                Answer<Map<String, PartitionEvidence>> coverage = db.ask(new Coverage(name));
+                if (!prepared.present() || !scope.present() || !sigs.present()
+                        || !coverage.present()) {
+                    return null;
+                }
+                souther.compiler.query.Bodies.Elaborated checked =
+                        db.ask(new Bodies.Observable(name)).value();
+                // What the plan's numbers mean, which a module whose bodies were not read has none
+                // of. Taken off the value in hand rather than stood in for, so that such a module
+                // says it has none.
+                Optional<SiteNumbering> numbering =
+                        checked == null ? Optional.empty()
+                                : Optional.of(SiteNumbering.of(checked.numberingIdentity()));
+                Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
+                Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
+                // What the guards above each place leave, asked once for the module and read by
+                // every measure below — the same reason the reading of the input is.
+                db.ask(new PathReached(name));
+                // And what each behavior states about its answer, which draws lines of its own.
+                db.ask(new Bodies.StatedContracts(name));
+                Hir.SpecBehavior spec = specOf(prepared.value(), behavior);
+                souther.compiler.partition.Partitions.Partitioning divided =
+                        db.ask(new Divided(name, behavior)).value();
+                if (spec == null || divided == null) {
+                    return null;
+                }
+                // What this generation composes against, taken from the one classification of
+                // what a measure of this behavior works from rather than looked up here. A
+                // generation that read the signatures and the readings itself would be deciding a
+                // second time what a missing entry means.
+                if (!(BoundaryForMeasurement.of(sigs.value(), readInputs, spec)
+                        instanceof BoundaryForMeasurement.Derived(
+                                Sig sig, InputForMeasurement.Local(Hir.SpecBehavior _,
+                                        InputDomain _)))) {
+                    return null;
+                }
+                // Asked whatever the level is. Somebody asking for the rows is what a generation
+                // is, and the rows at an edge are what a composed value settles — so this pays for
+                // the composing because it is what was asked for, not because a dial was turned
+                // up.
+                List<BorderAssessment> edges = db.ask(new BoundarySearch(name, behavior)).value();
+                if (edges == null) {
+                    // A search that did not answer leaves this nothing to offer from, which is the
+                    // reading the coverage above already gets. Read as no lines, the findings would
+                    // be walked against a behavior said to have none — and the first one about a
+                    // line would come back as the search and the finding being about different
+                    // lines, which is a sentence about neither.
+                    return null;
+                }
+                souther.compiler.partition.MeasuredInput subject = subjectOf(db, name, spec);
+                if (subject == null) {
+                    return null;
+                }
+                // The meetings of this body, read once for the module. A behavior with no entry is
+                // one whose body was not lowered, which is nothing to search in rather than a
+                // search that found nothing — and is the same condition the guards above answer
+                // for.
+                Map<String, CoverageRead.Read> met = db.ask(new Meets(name)).value();
+                CoverageRead.Read meetings = met == null ? null : met.get(behavior);
+                if (meetings == null) {
+                    return null;
+                }
+                // What this behavior's rows came to, and what the classes they ran against
+                // recorded. Read once and handed on: what a generation may make of the arms is a
+                // fact about the run it is working from, which the reading carries.
+                return new Environment(db, name, behavior, prepared.value(), spec, sig, subject,
+                        divided, edges, meetings, numbering,
+                        RowReadings.readingFor(byTarget, behavior));
+            }
+
+            /** What a search of this behavior for {@code asked} composed. */
+            souther.compiler.partition.FillResult searchedFor(
+                    souther.compiler.partition.GenerationPlan asked) {
+                try {
+                    return rowsFor(spec, sig, meetings, asked,
+                            baselines(spec, sig, prepared),
+                            numbering,
+                            observed,
+                            constructing(db, name),
+                            runningRowsOf(trialling(db, name), behavior, sig, numbering,
+                                    RequiredDependencies.of(db, name, behavior)),
+                            // What every row this composes stands the dependencies in with, settled
+                            // before the search so that a candidate is run in the environment the
+                            // row it becomes goes out with.
+                            supplying(db, name, behavior, subject),
+                            // And what gets a row past each comparison of the body, read off the
+                            // borders the search above already walked.
+                            heldBy(subject, edges, divided.reaching()),
+                            db.ask(new Front.Adequacy()).value().generation());
+                } catch (LinkageError _) {
+                    // The generated classes would not link, so nothing can be built to find out
+                    // what a model admits. Saying so is not the same as saying the combinations
+                    // are impossible, so none of them is reported as one.
+                    //
+                    // Caught around the search and not around the answer. A finding's answer is
+                    // owed whatever the search did, and a failure that skipped the walk over the
+                    // findings would take them out of a list that is meant to hold every one —
+                    // which is the same defect the list was written against, arriving as control
+                    // flow rather than as a value.
+                    return souther.compiler.partition.FillResult.nothingWasLookedFor(asked,
+                            Generator.UnresolvedCombination.Reason.LINKAGE_FAILED,
+                            List.of(new souther.compiler.partition.GenerationReason
+                                    .LinkageFailed(behavior)));
+                }
+            }
         }
 
         /**

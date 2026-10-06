@@ -4,6 +4,7 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.ClosureGap;
+import souther.compiler.partition.Replacement;
 import souther.compiler.types.SourceConstructOrigin;
 
 /**
@@ -547,6 +548,31 @@ public sealed interface Weakening {
         @Override
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
+        }
+    }
+
+    /**
+     * A rewrite of one behavior's body nothing here could decide about: whether a row tells it from
+     * the body is not known, and not that none does.
+     *
+     * <p>Named by the rewrite, because each is an obligation of its own and what left one open says
+     * nothing about the next.
+     */
+    record RewriteUndecided(String behavior, Replacement replacement,
+                            ReplacementEvidence.Undecided.Why why) implements Weakening {
+
+        public RewriteUndecided {
+            java.util.Objects.requireNonNull(behavior, "a rewrite is of some behavior's body");
+            java.util.Objects.requireNonNull(replacement, "a rewrite left open is some rewrite");
+            java.util.Objects.requireNonNull(why, "a rewrite left open was left open for a reason");
+        }
+
+        /** A search stopped at how many rows a generation writes may go further where more are
+         *  allowed; nothing else that leaves a rewrite open is an allowance. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return why == ReplacementEvidence.Undecided.Why.THE_SEARCH_STOPPED
+                    ? RunSensitivity.MAY_CHANGE : RunSensitivity.UNAFFECTED;
         }
     }
 }

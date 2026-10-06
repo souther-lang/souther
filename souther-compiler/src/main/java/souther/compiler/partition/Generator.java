@@ -1815,7 +1815,16 @@ public final class Generator {
                     yield seen;
                 }
                 case ReplacementOwed.ByOneAnswer _ -> {
-                    GeneratedRow seen = null;
+                    // Where the composition stands before anything is asked of it first: a body
+                    // answering one value is told apart by any row it answers differently, and a
+                    // behavior whose positions nothing divides has no class to look in.
+                    List<Purpose> purposes = List.of(new Purpose.ForAReplacement(asked));
+                    GeneratedRow seen = composed(axes, composes(axes.axes()),
+                            HeldTogether.Asked.NOTHING, check, Map.of(),
+                            inputs -> looking.of(new GeneratedRow(purposes, inputs, answers),
+                                    null))
+                            instanceof RowComposed.Taken(List<FixtureTemplate> inputs)
+                            ? new GeneratedRow(purposes, inputs, answers) : null;
                     for (int at = 0; at < axes.size() && seen == null; at++) {
                         for (int cls = 0; cls < axes.get(at).classes().size(); cls++) {
                             Searched searched = search(axes, Pins.of(axes, Map.of(at, cls)),
@@ -6915,7 +6924,7 @@ public final class Generator {
         }
         // One for every pass below, so what one of them found refused is known to the others.
         Composing composing = new Composing(p, plan, subject.ruleReading(), check);
-        Outcome product = walk(choices, composing, taking);
+        Outcome product = walk(choices, composing, taking, subject.ruleReading());
         // A value taken is the answer, and so is every value composed being passed over or the
         // caller stopping: what the pass below is for is values the walk could not compose, and
         // these were composed.
@@ -7445,15 +7454,46 @@ public final class Generator {
     private record Choices(ConstructionPlan plan, List<TermPath> at,
                            List<List<FixtureTemplate>> values,
                            List<List<FixtureTemplate>> reserves, String missingAt,
-                           Set<CompositionBudget> missingUnderAFigure) {
+                           Set<CompositionBudget> missingUnderAFigure,
+                           List<Displacing> displacing) {
 
         Choices {
             missingUnderAFigure = Set.copyOf(missingUnderAFigure);
+            displacing = java.util.Collections.unmodifiableList(new ArrayList<>(displacing));
         }
 
         static Choices missing(ConstructionPlan plan, String at,
                                java.util.Set<CompositionBudget> under) {
-            return new Choices(plan, List.of(), List.of(), List.of(), at, under);
+            return new Choices(plan, List.of(), List.of(), List.of(), at, under, List.of());
+        }
+
+        /**
+         * The same positions, each offering beside what it holds back the value its rules leave
+         * next to the first — or, at a position an axis decides, what the axis decided.
+         *
+         * <p>Worked out only when asked. Nothing refused a value here: every value the positions
+         * offered was composed and passed over, so what is wanted is a different value and not a
+         * value the rules allow more readily. Asked of every search, this would be a reading of
+         * every position's rules for the one search that wants it.
+         */
+        List<List<FixtureTemplate>> displaced(RuleReadingContext reading) {
+            List<List<FixtureTemplate>> out = new ArrayList<>();
+            for (int i = 0; i < values.size(); i++) {
+                Displacing slot = displacing.get(i);
+                if (slot == null) {
+                    out.add(values.get(i));
+                    continue;
+                }
+                List<FixtureTemplate> here = new ArrayList<>(values.get(i));
+                for (FixtureTemplate each : Partitions.displacedRepresentativesOf(slot.type(),
+                        reading, slot.within(), slot.held())) {
+                    if (here.stream().noneMatch(had -> had.text().equals(each.text()))) {
+                        here.add(each);
+                    }
+                }
+                out.add(List.copyOf(here));
+            }
+            return List.copyOf(out);
         }
 
         boolean anythingHeldBack() {
@@ -7496,6 +7536,9 @@ public final class Generator {
         // A position the caller fixed holds nothing back: it was given the value it is to take.
         List<List<FixtureTemplate>> reserves = new ArrayList<>(
                 java.util.Collections.nCopies(paths.size(), List.<FixtureTemplate>of()));
+        // And is not displaced either, for the same reason.
+        List<Displacing> displacing =
+                new ArrayList<>(java.util.Collections.nCopies(paths.size(), (Displacing) null));
         for (ConstructionPlan.Slot slot : plan.slots()) {
             if (paths.contains(slot.at())) {
                 continue;   // an axis decides here
@@ -7522,9 +7565,15 @@ public final class Generator {
             paths.add(slot.at());
             values.add(stands);
             reserves.add(Partitions.inReserve(slot.type(), reading, here));
+            displacing.add(new Displacing(slot.type(), here,
+                    field == null ? null : left.heldAt(field)));
         }
-        return new Choices(plan, paths, values, reserves, null, java.util.Set.of());
+        return new Choices(plan, paths, values, reserves, null, java.util.Set.of(), displacing);
     }
+
+    /** What a position's value is displaced within: its type, and what its rules leave of it. */
+    private record Displacing(Type type, souther.compiler.numeric.NumericDomain.Bounds within,
+                              FieldDomains.Held held) {}
 
     /**
      * A row stands at no class of this axis.
@@ -7901,7 +7950,22 @@ public final class Generator {
      * wider set of choices is a longer walk to every assignment in it, and a widening meant for one
      * position would otherwise take rows away from the rest.
      */
-    private static Outcome walk(Choices choices, Composing composing, ValueTaking taking) {
+    private static Outcome walk(Choices choices, Composing composing, ValueTaking taking,
+                                RuleReadingContext reading) {
+        Outcome walked = ordinarily(choices, composing, taking);
+        // And where every value composed was passed over, once more with each position displaced
+        // to the value its rules leave next to its first. What was looked for is a different value,
+        // and the ordinary offer is one value at a position whose rules leave it a whole range.
+        if (!(walked instanceof Outcome.PassedOver)) {
+            return walked;
+        }
+        Outcome displaced = over(choices.at(), choices.displaced(reading), composing, taking);
+        return displaced instanceof Outcome.Unresolved(UnresolvedCombination.Reason why, String _)
+                && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED ? walked : displaced;
+    }
+
+    /** The ordinary passes: what the positions offer, and then what they held back as well. */
+    private static Outcome ordinarily(Choices choices, Composing composing, ValueTaking taking) {
         Outcome tried = over(choices.at(), choices.values(), composing, taking);
         // Only where the ordinary assignments ran out. A search that stopped at the bound has not
         // tried them all, and starting a wider one in front of the ones it never reached would spend
