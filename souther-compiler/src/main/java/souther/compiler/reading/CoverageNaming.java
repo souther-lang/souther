@@ -254,21 +254,11 @@ final class CoverageNaming implements Naming<Outcome> {
      *
      * <p>Which decision it is is not which place a run is recorded at. Two forks on one flag are two
      * places and one decision, so what is compared is what the condition is about and never the claim
-     * beside it.
+     * beside it — and what the conditions are about is theirs to say ({@link Condition#excludes}).
      */
     private static boolean disagrees(List<Decision> holds, Decision added) {
         for (Decision already : holds) {
-            Condition each = already.constrains();
-            boolean otherWay = switch (added.constrains()) {
-                case Condition.Case one -> each instanceof Condition.Case other
-                        && other.at().equals(one.at()) && !other.names().equals(one.names());
-                case Condition.Side one -> each instanceof Condition.Side other
-                        && other.comparison().equals(one.comparison()) && other.held() != one.held();
-                case Condition.Arm one -> each instanceof Condition.Arm other
-                        && other.arm().fork().equals(one.arm().fork())
-                        && other.arm().part() != one.arm().part();
-            };
-            if (otherWay) {
+            if (added.constrains().excludes(already.constrains())) {
                 return true;
             }
         }

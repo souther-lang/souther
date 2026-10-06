@@ -206,6 +206,154 @@ class APositionSaysHowFarTheBodyTellsItsClassesApartTest {
     }
 
     /**
+     * But a {@code match} no run reaches tells nothing apart.
+     *
+     * <p>The inner arm for {@code Yes} is under the outer arm for {@code No}, so no run takes it, and
+     * the {@code match} on {@code r} there is no decision the body makes. Read as one, it would say
+     * the body tells {@code r} apart when every run treats its cases alike.
+     */
+    @Test
+    void aMatchNoRunReachesTellsNothingApart() {
+        String human = report("""
+                module example.unreached
+
+                data Yes
+                data No
+                data Flag = Yes | No
+
+                data Draft
+                data Submitted
+                data Request = Draft | Submitted
+
+                data Ok = { n: Int }
+
+                behavior judge : (f: Flag, r: Request, n: Int) -> Ok
+                    constructs Ok
+
+                let judge (f, r, n) = {
+                    guard n > 10 else Ok { n = 0 }
+                    match f with
+                        | Yes -> Ok { n = 1 }
+                        | No ->
+                            match f with
+                                | Yes ->
+                                    match r with
+                                        | Draft -> Ok { n = 2 }
+                                        | Submitted -> Ok { n = 3 }
+                                | No -> Ok { n = 4 }
+                }
+
+                example judge
+                    | (Yes, Draft, 5)  -> Ok { n = 0 }
+                    | (Yes, Draft, 50) -> Ok { n = 1 }
+                    | (No, Draft, 50)  -> Ok { n = 4 }
+                """);
+
+        assertTrue(human.contains("r holds 2 classes and this behavior does not tell them apart"),
+                () -> "a match no run reaches is no decision the body makes: " + human);
+    }
+
+    /**
+     * Nor does one past an attempted construction, where no run reaches the attempt.
+     *
+     * <p>Past an attempt no way in is stated, which is no reason to forget that no run got to the
+     * attempt in the first place: a way in nothing states is still held to what holds above it.
+     */
+    @Test
+    void aMatchPastAnAttemptNoRunReachesTellsNothingApart() {
+        String human = report("""
+                module example.unreachedattempt
+
+                data Yes
+                data No
+                data Flag = Yes | No
+
+                data Draft
+                data Submitted
+                data Request = Draft | Submitted
+
+                data Note = String
+                    invariant String.length(value) >= 1
+                data NoNote
+
+                data Ok = { n: Int }
+
+                behavior judge : (f: Flag, r: Request, text: String, n: Int) -> Ok | NoNote
+                    constructs Ok, Note
+
+                let judge (f, r, text, n) = {
+                    guard n > 10 else Ok { n = 0 }
+                    match f with
+                        | Yes -> Ok { n = 1 }
+                        | No ->
+                            match f with
+                                | Yes -> {
+                                    guard Note(text) as note else NoNote
+                                    match r with
+                                        | Draft -> Ok { n = 2 }
+                                        | Submitted -> Ok { n = 3 }
+                                }
+                                | No -> Ok { n = 4 }
+                }
+
+                example judge
+                    | (Yes, Draft, "a", 5)  -> Ok { n = 0 }
+                    | (Yes, Draft, "a", 50) -> Ok { n = 1 }
+                    | (No, Draft, "a", 50)  -> Ok { n = 4 }
+                """);
+
+        assertTrue(human.contains("r holds 2 classes and this behavior does not tell them apart"),
+                () -> "a match past an attempt no run reaches is no decision: " + human);
+    }
+
+    /**
+     * Nor one inside a function value, where no run reaches the function.
+     *
+     * <p>The body of a block runs where something calls it, which no way in states, and it is still
+     * held to what holds where the block is made.
+     */
+    @Test
+    void aMatchInsideAFunctionNoRunReachesTellsNothingApart() {
+        String human = report("""
+                module example.unreachedblock
+
+                data Yes
+                data No
+                data Flag = Yes | No
+
+                data Draft
+                data Submitted
+                data Request = Draft | Submitted
+
+                data Ok = { n: Int }
+
+                behavior judge : (f: Flag, r: Request, xs: List<Int>, n: Int) -> Ok
+                    constructs Ok
+
+                let judge (f, r, xs, n) = {
+                    guard n > 10 else Ok { n = 0 }
+                    match f with
+                        | Yes -> Ok { n = 1 }
+                        | No ->
+                            match f with
+                                | Yes -> Ok { n = List.length(List.filter(x ->
+                                    match r with
+                                        | Draft -> true
+                                        | Submitted -> false, xs)) }
+                                | No -> Ok { n = 4 }
+                }
+
+                example judge
+                    | (Yes, Draft, [1], 5)  -> Ok { n = 0 }
+                    | (Yes, Draft, [1], 50) -> Ok { n = 1 }
+                    | (No, Draft, [1], 50)  -> Ok { n = 4 }
+                """);
+
+        assertTrue(human.contains("r holds 2 classes and this behavior does not tell them apart"),
+                () -> "a match in a function no run reaches is no decision: " + human);
+    }
+
+    /**
      * An arm written for several cases leaves them in one group.
      *
      * <p>Four cases and two arms, each for two of them. The body tells the four apart as two groups,

@@ -83,6 +83,21 @@ sealed interface Reach {
     List<WayIn> ways();
 
     /**
+     * Whether some run gets here.
+     *
+     * <p>Not whether the ways here are named. A place under a way in nothing states is one runs
+     * reach and this reading cannot say how; a place nothing reaches is one no run gets to, which
+     * is a proof about the body. A reader asking what the body does there asks this, and an empty
+     * list of ways answers it for neither.
+     */
+    default boolean someRunArrives() {
+        return switch (this) {
+            case Ways _, Coarse _, Unnameable _ -> true;
+            case Nothing _ -> false;
+        };
+    }
+
+    /**
      * What a place reached this way is told, which is never the coarse ways themselves.
      *
      * <p>The place's own claim is asked for whatever this came to, because only the reading that
