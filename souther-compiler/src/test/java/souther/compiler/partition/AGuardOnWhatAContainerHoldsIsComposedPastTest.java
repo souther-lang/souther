@@ -115,6 +115,34 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
             }
             """;
 
+    /** The same, with nothing in the body dividing the field, so no row moves it. */
+    private static final String ONLY_NAMED = """
+            module example.settle
+
+            data Plain
+            data Express
+            data Kind = Plain | Express
+
+            data Request = { level: Int, note: Int }
+
+            data Other = { allowed: Set<Int> }
+
+            data Done = { n: Int }
+            data Refused
+
+            let usual = Request { level = 1, note = 1 }
+
+            behavior settle : (kind: Kind, other: Other, request: Request) -> Done | Refused
+                constructs Done
+
+            let settle (kind, other, request) = {
+                guard Set.contains(request.level, other.allowed) else Refused
+                match kind with
+                    | Plain -> Done { n = 2 }
+                    | Express -> Done { n = 3 }
+            }
+            """;
+
     private static final String SCORED = """
             module example.settle
 
@@ -173,6 +201,29 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
         assertTrue(moved > 0, () -> "some row moves the level off the stated value: " + rows);
     }
 
+    /**
+     * A container handed a field of a stated value the row names without moving it has nothing to
+     * hold, which is this compiler not having that value — and not the model leaving no row.
+     *
+     * <p>The row stays the author's value as it was composed, and nothing about the behavior is
+     * said to be impossible or refused by the model's rules on the strength of it.
+     */
+    @Test
+    void aFieldOnlyNamedIsNoValueThisHasAndNoProofOfAnything() {
+        Rows rows = generatedOf(ONLY_NAMED);
+        List<String> row = rows.classes().get("kind=Plain");
+        assertNotNull(row, () -> "a row is offered for the kind: " + rows);
+        assertEquals("usual", row.get(2),
+                () -> "the request is the stated value, not composed afresh: " + row);
+        assertEquals(List.of(), rows.said().stream()
+                        .filter(word -> word == Generator.UnresolvedCombination.Reason
+                                .THE_RULES_LEAVE_NOTHING_THERE
+                                || word == Generator.UnresolvedCombination.Reason
+                                .ALL_CANDIDATES_REJECTED)
+                        .toList(),
+                () -> "nothing is said to be left no row or refused by the model: " + rows);
+    }
+
     /** A rule on each side of the membership is offered a row on that side. */
     @Test
     void eachSideOfTheMembershipIsOfferedARowThatTakesIt() {
@@ -185,9 +236,10 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
         }
     }
 
-    /** What one module's behavior was offered: a row per class, and one per side of the
-     *  membership a rule turns on. */
-    private record Rows(Map<String, List<String>> classes, Map<Boolean, List<String>> rules) {}
+    /** What one module's behavior was offered: a row per class, one per side of the membership a
+     *  rule turns on, and the word for each search that came to nothing. */
+    private record Rows(Map<String, List<String>> classes, Map<Boolean, List<String>> rules,
+                        List<Generator.UnresolvedCombination.Reason> said) {}
 
     /** What each model was offered, compiled once however many tests ask about it. */
     private static final Map<String, Rows> GENERATED = new ConcurrentHashMap<>();
@@ -218,7 +270,8 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
                 .filter(each -> each instanceof DecidedCondition.Unread)
                 .forEach(each -> rules.put(((DecidedCondition.Unread) each).held(),
                         written(row))));
-        return new Rows(classes, rules);
+        return new Rows(classes, rules, filling.composed().unresolved().stream()
+                .map(each -> each.why().reason()).toList());
     }
 
     private static List<String> written(Generator.GeneratedRow row) {
