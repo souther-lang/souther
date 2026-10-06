@@ -124,20 +124,19 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
             if (!cut.demand().terms().contains(term)) {
                 continue;
             }
-            switch (cut.demand()) {
-                case RowDemand.Relational(var relation) ->
-                        asked = asked.meet(askedBy(relation, on, ANYTHING));
+            asked = asked.meet(switch (cut.demand()) {
+                case RowDemand.Relational(var relation) -> askedBy(relation, on, ANYTHING);
                 // What an element meets, which the region was not narrowed by. So what it leaves
                 // the term is read off a region that is, one relation of it at a time — the
                 // element a row writes is the one these numbers are chosen for.
                 case RowDemand.Exists(var ofAnElement, var _) ->
-                        asked = asked.meet(ofTheElement(ofAnElement, term, within, on));
+                        ofTheElement(ofAnElement, term, within, on);
                 // The container holding none is the other way of meeting it, and not a second thing
                 // it asks: met here beside the elements, a size another cut holds at one or more
                 // would be left no number by a way that was not the one placed.
                 case RowDemand.ForAll(var ofEachElement, var _) ->
-                        asked = asked.meet(ofTheElement(ofEachElement, term, within, on));
-            }
+                        ofTheElement(ofEachElement, term, within, on);
+            });
         }
         return asked;
     }
