@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -139,7 +140,15 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
      *  membership a rule turns on. */
     private record Rows(Map<String, List<String>> classes, Map<Boolean, List<String>> rules) {}
 
+    /** What each model was offered, compiled once however many tests ask about it. */
+    private static final Map<String, Rows> GENERATED = new ConcurrentHashMap<>();
+
     private static Rows generatedOf(String source) {
+        return GENERATED.computeIfAbsent(source,
+                AGuardOnWhatAContainerHoldsIsComposedPastTest::generated);
+    }
+
+    private static Rows generated(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
