@@ -748,6 +748,13 @@ public sealed interface AnotherLineTheRowsAllow {
                             return false;
                         }
                     }
+                    // Which of two values stands at a position, and a step moves numbers: what
+                    // stands there is what the row had.
+                    case OnTheWay.TakenIn(var _, RowDemand.ATruth truth) -> {
+                        if (movesAnyOf(truth.positions())) {
+                            return false;
+                        }
+                    }
                 }
             }
             return true;

@@ -3639,8 +3639,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static String whatTheAnswerSideLeftOut(DemandGap gap) {
         return switch (gap) {
             case DemandGap.Unstated(var _, var why) -> switch (why) {
-                case DemandGap.WhyNotStated.ATruthOfAPlaceInsideTheAnswer _ ->
-                        "a truth read off a place inside what a dependency answers";
                 case DemandGap.WhyNotStated.AFormOverMoreThanOneAnswer _ ->
                         "a comparison over more than one answer, which nothing here composes"
                                 + " values to together";

@@ -121,6 +121,47 @@ public sealed interface RowDemand {
     }
 
     /**
+     * That the value at a {@code Bool} position is {@code held}.
+     *
+     * <p>A value to write and not a relation to place. A {@code Bool} is two values on no order, so
+     * no region measures it and no carrier holds it; what passing the condition asks of a row is
+     * which of the two stands there, and a composer meets that by writing it. So {@code a.flag},
+     * {@code a.flag == true} and {@code a.flag /= false} coming out the way that gives them are
+     * one demand, and the same three the other way round are the other.
+     *
+     * <p>Not a region's, so nothing narrowed by the way says a row past it holds this. What the way
+     * asks in this vocabulary is {@link TruthsAsked}, which every composer handed the way writes
+     * beside the numbers it places; two of these asking one position for both values are a way no
+     * row takes ({@link Reachability.NothingReaches}).
+     *
+     * @param at   the position the truth is read at
+     * @param held which of the two values a row passing the condition holds there
+     */
+    record ATruth(TermPath at, boolean held) implements OfACondition {
+
+        public ATruth {
+            Objects.requireNonNull(at, "the position a truth is read at");
+        }
+
+        /** None: a {@code Bool} is no number. */
+        @Override
+        public Set<NumericTerm> terms() {
+            return Set.of();
+        }
+
+        @Override
+        public Set<TermPath> positions() {
+            return Set.of(at);
+        }
+
+        /** None: a row held to this writes the value it asks for. */
+        @Override
+        public Set<TermPath> valuesRead() {
+            return Set.of();
+        }
+    }
+
+    /**
      * That the element is equal to the value at {@code value}.
      *
      * <p>The element is not named here: it is always the element of the container the demand

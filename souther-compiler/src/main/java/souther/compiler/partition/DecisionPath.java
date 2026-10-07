@@ -185,21 +185,13 @@ final class DecisionPath {
                             ? new Asked.Stated(
                                     new AnswerDemand.ACase(at.answered(), anchor, at.steps(), to))
                             : OF_THE_INPUT;
-            // A truth of the answer itself and not of a place inside one. A `Bool` divides a
-            // position into two values and puts nothing under it, so what a demand about a field
-            // of an answer would ask is something nothing here composes against — stated all the
-            // same, it would sit among the demands a value is built to meet while nothing built
-            // one to meet it, and the way would read as one whose demands were all stated.
-            case DecidedCondition.Stood(var condition, var held) -> {
-                if (!(condition.of() instanceof DecisionSubject.AnAnswer at)) {
-                    yield OF_THE_INPUT;
-                }
-                yield at.steps().isEmpty()
-                        ? new Asked.Stated(
-                                new AnswerDemand.ATruth(at.answered(), anchor, at.steps(), held))
-                        : new Asked.NotStated(
-                                new DemandGap.WhyNotStated.ATruthOfAPlaceInsideTheAnswer());
-            }
+            // A truth of the answer itself, or of a place inside one: the value the answer is, or
+            // the value written at that place where the answer is composed.
+            case DecidedCondition.Stood(var condition, var held) ->
+                    condition.of() instanceof DecisionSubject.AnAnswer at
+                            ? new Asked.Stated(new AnswerDemand.ATruth(at.answered(), anchor,
+                                    at.steps(), held))
+                            : OF_THE_INPUT;
             case DecidedCondition.Compared(var condition, var held) -> switch (condition) {
                 case DecisionCondition.AComparison it -> compared(it, held, anchor);
                 // A place on a carrier's own order, which is a value and not a form. What this

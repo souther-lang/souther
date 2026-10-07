@@ -184,6 +184,10 @@ final class DemandReading {
         if (denied.isPresent()) {
             return ofATruth(denied.get().part(), reads, read, denied.get().positive(), behavior);
         }
+        TermPath truth = truthAt(e, reads, read);
+        if (truth != null) {
+            return List.of(new Read.Demands(new RowDemand.ATruth(truth, holding)));
+        }
         List<Read> quantified = ofAQuantifier(e, reads, read, holding, behavior);
         if (quantified != null) {
             return quantified;
@@ -271,6 +275,10 @@ final class DemandReading {
                 // A quantifier inside a quantifier asks of an element's own elements, which is
                 // nothing a single relation of the outer element says.
                 case Read.Demands(RowDemand.Exists _), Read.Demands(RowDemand.ForAll _) ->
+                        out.add(new Read.Unread(new OnTheWay.Why.NoWordsForTheShape()));
+                // A truth of the element is a value written into one element, which nothing that
+                // composes a container's elements writes.
+                case Read.Demands(RowDemand.ATruth _) ->
                         out.add(new Read.Unread(new OnTheWay.Why.NoWordsForTheShape()));
             }
         }
@@ -438,6 +446,10 @@ final class DemandReading {
      */
     static Read ofAComparison(StatedComparison comparison, InputReads reads, InputReading read,
                               boolean holding) {
+        RowDemand.ATruth truth = truthCompared(comparison, reads, read, holding);
+        if (truth != null) {
+            return new Read.Demands(truth);
+        }
         return switch (AffineReading.read(comparison, read.domain(), reads, read.rules())) {
             case AffineReading.OfAComparison.Cuts(var affine) -> {
                 // What the comparison states, in the words a domain is told things in. Taken the
@@ -485,6 +497,52 @@ final class DemandReading {
                         : new Read.Unread(new OnTheWay.Why.ComparisonNotRepresentedAsACut());
             }
         };
+    }
+
+    /**
+     * The position {@code e} reads a {@code Bool} at, or null where it reads none.
+     *
+     * <p>A truth read straight off the input, which is a value a row writes there. Anything else
+     * of type {@code Bool} — what an operation answers, a comparison — is not a position, and is
+     * read as what it means or declined.
+     */
+    private static TermPath truthAt(Core e, InputReads reads, InputReading read) {
+        return Core.withoutStanding(e).type() == Type.Prim.BOOL
+                && reads.pathOf(e, read.rules().newtypes()) instanceof PathResolution.At(
+                        TermPath at)
+                ? at : null;
+    }
+
+    /**
+     * What {@code comparison} asks of a row where it holds a {@code Bool} position against a
+     * truth the source settles, or null where it does not.
+     *
+     * <p>Read before any order is asked for, because a {@code Bool} stands on none: the comparison
+     * is the position holding one of two values, which is what reading the position as a truth
+     * asks ({@link #truthAt}). Read there and not here, {@code a.flag} and {@code a.flag == true}
+     * would be two conditions, one a row is composed against and one declined.
+     */
+    private static RowDemand.ATruth truthCompared(StatedComparison comparison, InputReads reads,
+                                                  InputReading read, boolean holding) {
+        Rel states = comparison.claim().statedRelation();
+        Rel met = holding ? states : states.denied();
+        if (met != Rel.EQ && met != Rel.NE) {
+            return null;
+        }
+        TermPath at = truthAt(comparison.left(), reads, read);
+        Core other = comparison.right();
+        if (at == null) {
+            at = truthAt(comparison.right(), reads, read);
+            other = comparison.left();
+        }
+        if (at == null) {
+            return null;
+        }
+        Optional<Boolean> written = BooleanMeaning.folded(other, read.rules().symbols());
+        if (written.isEmpty()) {
+            return null;
+        }
+        return new RowDemand.ATruth(at, written.get() == (met == Rel.EQ));
     }
 
     /**

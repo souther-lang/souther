@@ -4595,6 +4595,16 @@ public final class Generator {
             }
             heldBack.put(at, edge.met());
         }
+        // And the value the way asks of each Bool position it read, which no edge offers and no
+        // region placed. Written beside the numbers, so a location holding one of them and asked
+        // for something else as well is refused where every two asks of one location are.
+        TermPath twice = reaching.truths().writtenInto(decided);
+        if (twice != null) {
+            return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
+                    UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                    "`" + twice + "` would have to hold two values at once"),
+                    where.unrepresented());
+        }
         // What the way asks containers to hold that no region placed, and the order that lets every
         // container be composed after the parameters it is handed a value of.
         // The order is one for every way of writing them under the cases, since which parameter a
@@ -4619,7 +4629,7 @@ public final class Generator {
         List<ParameterCameToNothing> cameToNothing = new ArrayList<>();
         ContentsAsked.UnderTheCases.Walked walked = under.tryEach((contents, taken) -> {
             Reachability.Reaching thisWay = new Reachability.Reaching(reaching.region(), taken,
-                    reaching.boundedOnTheWay());
+                    reaching.truths(), reaching.boundedOnTheWay());
             ParameterCameToNothing one = new InOrder(subject, order, composed, standing, decided,
                     settled, thisWay, check, contents).from(0, Map.of());
             if (one == null) {
@@ -4859,7 +4869,9 @@ public final class Generator {
             FoundOut found = new FoundOut();
             CandidateCheck certified = certifying(check, subject, p, standing, found);
             Map<TermPath, List<FixtureTemplate>> here = new LinkedHashMap<>();
-            for (RealizationTarget target : standing.keySet()) {
+            // Every location the row has been asked to write, and not only the ones a number
+            // stands at: a truth the way asks for is written and stands at no place.
+            for (Map.Entry<TermPath, List<FixtureTemplate>> each : decided.all().entrySet()) {
                 // A position the way also narrows is not fixed at a value here. What has to hold of
                 // it is one thing said two ways — a place the item asks for, and a case the way
                 // says the value turned out to be — and one location is decided once: the narrowing
@@ -4867,9 +4879,9 @@ public final class Generator {
                 // is accepted ({@link #certifying}). Handed over as both, it is a position with two
                 // accounts, which is what {@link ConstructionPlan} refuses and what it is right to
                 // refuse.
-                if (target.writeRoot().head().equals(head)
-                        && reaching.requirements().at(target.writeRoot()) == null) {
-                    here.put(target.writeRoot(), decided.at(target.writeRoot()));
+                if (each.getKey().head().equals(head)
+                        && reaching.requirements().at(each.getKey()) == null) {
+                    here.put(each.getKey(), each.getValue());
                 }
             }
             boolean awaited = order.awaited(next);
@@ -5066,6 +5078,9 @@ public final class Generator {
                         none instanceof Placed.AtNone(ReachabilityGap.ProvedImpossible _)
                                 && noElementCanMeet(constraints(ofEachElement), subject));
             }
+            // Passed over before it is asked: it places no number ({@link #placesNoNumber}).
+            case RowDemand.ATruth truth -> throw new IllegalArgumentException(
+                    "a truth is written where the row is composed and placed nowhere: " + truth);
         };
     }
 
@@ -5103,13 +5118,14 @@ public final class Generator {
         return relations.stream().map(RowDemand.Relational::constraint).toList();
     }
 
-    /** Whether {@code demand} asks an element nothing but to be, or not to be, another position's
-     *  value — which places no number. */
+    /** Whether {@code demand} asks nothing a number stands for: an element to be, or not to be,
+     *  another position's value, or a position to hold one of two values. */
     private static boolean placesNoNumber(RowDemand.OfACondition demand) {
         return switch (demand) {
             case RowDemand.Relational _ -> false;
             case RowDemand.Exists exists -> exists.relations().isEmpty();
             case RowDemand.ForAll every -> every.relations().isEmpty();
+            case RowDemand.ATruth _ -> true;
         };
     }
 
@@ -7450,6 +7466,21 @@ public final class Generator {
                                 + "` would have to hold two values at once")));
             }
         }
+        // And the value the way to the comparisons asks of each Bool position it read, beside what
+        // the classes wrote. A class of the position holding the other value is a row that would
+        // have to be both, which is no combination the model has — said as that, the way a class
+        // and a comparison leaving a number nowhere between them are.
+        TruthsAsked truths = holding.reaching() == null ? TruthsAsked.NONE
+                : holding.reaching().truths();
+        TermPath twice = truths.writtenInto(decided);
+        if (twice != null) {
+            return RowComposed.Failed.ofTheRow(new Attempt(null,
+                    UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH, twice.toString(),
+                    Optional.of("`" + twice + "` is asked by the way to hold "
+                            + truths.at().get(twice) + " and is written another value")));
+        }
+        Set<TermPath> writtenAt = new LinkedHashSet<>(together.keySet());
+        writtenAt.addAll(truths.at().keySet());
         // The order is one for every way of writing the containers under the cases, since which
         // parameter a container is handed a value of does not turn on the case it is written
         // under.
@@ -7474,7 +7505,7 @@ public final class Generator {
         List<RowComposed.Failed> cameToNothing = new ArrayList<>();
         ContentsAsked.UnderTheCases.Walked walked = under.tryEach((contents, taken) -> {
             RowComposed came = inputsFrom(new RowBeingComposed(axes, given, check, holding,
-                    contents, together.keySet(), decided, taken, taking, order), 0,
+                    contents, writtenAt, decided, taken, taking, order), 0,
                     new FixtureTemplate[order.parameters().size()], Map.of());
             return switch (came) {
                 case RowComposed.Taken _, RowComposed.Halted _ -> {
@@ -8610,8 +8641,8 @@ public final class Generator {
             RuleKey field = fieldUnder(slot.at());
             NumericDomain.Bounds here =
                     field == null ? null : left.at(field).bounds();
-            List<FixtureTemplate> stands = Partitions.representativesHolding(slot.type(), reading,
-                    here, field == null ? null : left.heldAt(field));
+            List<FixtureTemplate> stands = subject.representativesHolding(slot.type(), here,
+                    field == null ? null : left.heldAt(field));
             if (stands.isEmpty()) {
                 // Nothing could be written at all: a position of a type nothing stands for. Which is
                 // not the same as a value that was written and refused, and reporting it as one sends

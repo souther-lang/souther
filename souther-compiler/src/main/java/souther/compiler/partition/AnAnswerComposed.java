@@ -99,7 +99,7 @@ public final class AnAnswerComposed {
         if (truth != null) {
             // A truth asked of the answer itself, which is two values and holds no position — so
             // there is nothing to narrow and nothing to place, and the value is the answer. A truth
-            // asked of a place inside one is not this, and is a demand nothing here states.
+            // asked of a place inside one is not this, and is written where the value is composed.
             return demands.size() == 1
                     ? Attempt.of(new Outcome.Composed(FixtureTemplate.bool(truth)))
                     : Attempt.of(new Outcome.NothingComposed(
@@ -121,6 +121,24 @@ public final class AnAnswerComposed {
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
             }
             required = both;
+        }
+        // Which value each Bool place inside the answer is asked to hold, which the value is
+        // composed holding. Both values asked of one place is the way asking for no value, said
+        // for the reason two cases asked of one place are above.
+        List<RowDemand.ATruth> asked = new ArrayList<>();
+        for (AnswerDemand each : demands) {
+            if (each instanceof AnswerDemand.ATruth(var _, var _, var steps, var held)
+                    && !steps.isEmpty()) {
+                asked.add(new RowDemand.ATruth(path(at, steps), held));
+            }
+        }
+        TruthsAsked truths;
+        switch (TruthsAsked.of(asked)) {
+            case TruthsAsked.Merge.Merged(var merged) -> truths = merged;
+            case TruthsAsked.Merge.Conflict _ -> {
+                return Attempt.of(new Outcome.NothingComposed(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
+            }
         }
         SearchRegion region = subject.quantities().region();
         List<Taken> cuts = new ArrayList<>();
@@ -157,7 +175,7 @@ public final class AnAnswerComposed {
             return Attempt.nothing(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                     unaccounted);
         }
-        return composed(subject, cuts, new Reachability.Reaching(region, required,
+        return composed(subject, cuts, new Reachability.Reaching(region, required, truths,
                 cuts.stream().map(Taken::cut).toList()));
     }
 

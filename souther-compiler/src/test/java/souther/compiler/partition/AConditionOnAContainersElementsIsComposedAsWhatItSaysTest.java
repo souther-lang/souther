@@ -162,7 +162,8 @@ class AConditionOnAContainersElementsIsComposedAsWhatItSaysTest {
                 NumbersAskedFor.of(LevelRegion.point(new Level.OnACarrier(
                         domain("decide").quantities(rules()).ordersOf(gate.term()).answered(),
                         Count.of(1)))),
-                new Reachability.Reaching(region, Requirements.NONE, List.copyOf(way)),
+                new Reachability.Reaching(region, Requirements.NONE, TruthsAsked.NONE,
+                        List.copyOf(way)),
                 Generator.CandidateCheck.ANY);
     }
 

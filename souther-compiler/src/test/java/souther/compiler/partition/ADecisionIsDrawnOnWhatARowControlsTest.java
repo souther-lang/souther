@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.inputs.TermPath;
+
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -87,6 +89,61 @@ class ADecisionIsDrawnOnWhatARowControlsTest {
                 "the two values the body asks about are two columns");
         assertEquals(3, rules.size(),
                 "and the way through `f` denied and `f` held is no way: " + rules);
+    }
+
+    /**
+     * A truth of an input position is one column however it was spelled, and what each rule says
+     * of it is the value the position holds.
+     *
+     * <p>The side the condition holds on is the rule that reads nothing after it, so what that
+     * rule says of {@code f} is which value of {@code f} the spelling holds at: {@code f == false}
+     * holding is {@code f} not holding.
+     */
+    @Test
+    void aTruthOfAnInputIsOneColumnHoweverItIsSpelled() {
+        DecisionCondition f = new DecisionCondition.ATruth(
+                new DecisionSubject.AnInput(TermPath.of("f")));
+        DecisionCondition g = new DecisionCondition.ATruth(
+                new DecisionSubject.AnInput(TermPath.of("g")));
+        for (String spelling : List.of("f", "f == true", "true == f", "f /= false",
+                "Bool.not(f == false)", "Bool.not(f)", "f == false", "f /= true")) {
+            boolean holdsAt = !List.of("Bool.not(f)", "f == false", "f /= true").contains(spelling);
+            List<DecisionRule> rules = DecisionReadings.readToTheEnd(TYPES + """
+
+                    behavior spelled : (f: Bool, g: Bool) -> Verdict
+                    let spelled (f, g) = if %s then Accepted else if g then Accepted else Rejected
+                    """.formatted(spelling), "spelled");
+
+            assertEquals(Set.of(f, g), columnsIn(rules),
+                    () -> spelling + " is the truth of f: " + columnsIn(rules));
+            DecisionRule taken = rules.stream().filter(rule -> rule.consulted().size() == 1)
+                    .findFirst().orElseThrow(() -> new AssertionError(spelling + ": " + rules));
+            assertEquals(new DecidedCondition.Stood((DecisionCondition.ATruth) f, holdsAt),
+                    taken.consulted().get(f),
+                    () -> spelling + " holds where f is " + holdsAt + ": " + rules);
+        }
+    }
+
+    /**
+     * And asked twice in two spellings it is still one column, so the way through it held and
+     * denied is no way.
+     */
+    @Test
+    void oneValueAskedAboutTwiceInTwoSpellingsIsOneColumn() {
+        List<DecisionRule> rules = DecisionReadings.readToTheEnd(TYPES + """
+
+                behavior twice : (f: Bool, g: Bool) -> Verdict
+                let twice (f, g) =
+                    if f then Accepted
+                    else if f == true then Rejected
+                    else if g then Accepted
+                    else Rejected
+                """, "twice");
+
+        assertEquals(List.of("f", "g"), truthsOf(rules),
+                "the two values the body asks about are two columns");
+        assertEquals(3, rules.size(),
+                "and the way through `f` denied and `f == true` held is no way: " + rules);
     }
 
     /** A comparison over an answer is the proposition it states, however it was written. */

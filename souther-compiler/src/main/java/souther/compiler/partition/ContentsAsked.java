@@ -50,7 +50,7 @@ record ContentsAsked(List<Asked> asked) {
         List<Asked> out = new ArrayList<>();
         for (OnTheWay.TakenIn each : way) {
             switch (each.demand()) {
-                case RowDemand.Relational _ -> { }
+                case RowDemand.Relational _, RowDemand.ATruth _ -> { }
                 case RowDemand.Exists exists -> {
                     for (RowDemand.OfAnElement one : exists.ofAnElement()) {
                         if (one instanceof RowDemand.SameAs(TermPath value)) {

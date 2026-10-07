@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.DeclarationReadings;
+import souther.compiler.check.FieldDomains;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
@@ -9,11 +10,14 @@ import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.PositionId;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 
 /**
@@ -77,6 +81,22 @@ public final class MeasuredInput {
      * impossible.
      */
     private final NameReach reach;
+    /**
+     * What has been offered at a position, by its type and what the rules leave it.
+     *
+     * <p>Kept because every point a search looks for a row at composes the row again, and each
+     * position it does not fix is offered the same values at every one of them: what stands for a
+     * type within a range is the reading's answer and nothing a point brings. So the answer is the
+     * input's, worked out once for it.
+     *
+     * <p>No part of what makes two of these one, for the reason {@link #machines} is not: it is
+     * derived from what is compared and from the reading, and two of these that compare equal would
+     * fill it alike.
+     */
+    private final Map<Offered, List<FixtureTemplate>> offered = new ConcurrentHashMap<>();
+
+    /** A position as what it is offered turns on. */
+    private record Offered(Type type, NumericDomain.Bounds within, FieldDomains.Held held) {}
 
     private MeasuredInput(String behavior, BehaviorInputs written, Quantities quantities,
                           Partitions.Partitioning divided, DeclarationReadings machines,
@@ -252,6 +272,27 @@ public final class MeasuredInput {
      */
     public WitnessSearch witnessSearch() {
         return Partitions.witnessSearch(divided.measurements(), reach);
+    }
+
+    /**
+     * The values that stand for {@code type} at a position the rules leave {@code within} and
+     * {@code held} — {@link Partitions#representativesHolding}, read once for this input.
+     *
+     * <p>Looked up and then filled rather than filled where it is missing: what is offered for one
+     * type reads the types inside it, and a map filled while it is being filled is not one a
+     * reading may count on.
+     */
+    List<FixtureTemplate> representativesHolding(Type type, NumericDomain.Bounds within,
+                                                 FieldDomains.Held held) {
+        Offered at = new Offered(type, within, held);
+        List<FixtureTemplate> already = offered.get(at);
+        if (already != null) {
+            return already;
+        }
+        List<FixtureTemplate> made =
+                Partitions.representativesHolding(type, ruleReading(), within, held);
+        List<FixtureTemplate> raced = offered.putIfAbsent(at, made);
+        return raced != null ? raced : made;
     }
 
     /** Every measure of its positions, in the order the rules name the numbers. */
