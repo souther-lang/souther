@@ -1510,6 +1510,12 @@ public final class Adequacy {
             // unreachable there while another call takes that arm: the arm is the author's, and
             // telling them to take it out because one call never goes there is telling them to
             // take out what another call needs. Said once however many calls left it dead.
+            // Nothing proven unreachable anywhere is nothing to say, which is most modules: asked
+            // first, so the places below are gone through only where there is a proof to weigh.
+            if (arrives.value().values().stream()
+                    .allMatch(asRun -> asRun.answers().provesNothingUnreached())) {
+                return Answer.of(true, List.of());
+            }
             // Every place each arm stands is the plan's: what the reading found about some of them
             // is not a list of all of them, and a place it said nothing about is not dead.
             Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Observable(name));

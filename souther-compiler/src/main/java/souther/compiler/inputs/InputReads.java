@@ -351,7 +351,14 @@ public final class InputReads {
      */
     public Optional<Boolean> whetherEveryRowTakes(Core.Case arm, Core scrutinee, Symbols symbols,
                                                   DeclarationNewtypes newtypes) {
-        Set<TypeSymbol> written = casesWritten(scrutinee, symbols, newtypes);
+        return whetherEveryRowTakes(arm, casesWritten(scrutinee, symbols, newtypes));
+    }
+
+    /**
+     * The same, of the cases the scrutinee was already read to be ({@link #casesWritten}) — which
+     * is one question per {@code match} however many arms are asked about it.
+     */
+    public static Optional<Boolean> whetherEveryRowTakes(Core.Case arm, Set<TypeSymbol> written) {
         if (written == null) {
             return Optional.empty();
         }

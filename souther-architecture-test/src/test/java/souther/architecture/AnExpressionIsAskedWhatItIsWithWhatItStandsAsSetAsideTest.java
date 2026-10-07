@@ -635,7 +635,7 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "partition/ComparisonAssessment", "readsAnswer",
                 "(" + core + "L" + c + "types/BindingId;)Z", 1, COUNTS_THROUGH_IT);
         row(out, c + "partition/ComparisonReadings", "statedAt",
-                "(" + core + "L" + c + "partition/WhatNamesStandFor;)L" + c
+                "(" + core + "Ljava/util/function/Supplier;)L" + c
                         + "partition/ComparisonReadings$StatedAt;", 1,
                 "whether the node the walk stands at is a construct a source wrote that states a"
                         + " comparison: a Widen is not, and the construct under it is met one step"

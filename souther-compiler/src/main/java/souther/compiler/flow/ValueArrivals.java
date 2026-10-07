@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * The ways an expression arrives at a value, read off the body it is written in.
@@ -772,11 +773,12 @@ public final class ValueArrivals<P> {
             return new Paths.Held<>(List.of());
         }
         Gathered out = new Gathered();
+        Predicate<Core.Case> mayTake = comparisons.mayTake(match);
         for (int part = 0; part < match.cases().size(); part++) {
             Core.Case arm = match.cases().get(part);
             // An arm no value of the scrutinee takes is no way of the body, as a side of a
             // condition nothing brings out is none.
-            if (!comparisons.mayTake(match, arm)) {
+            if (!mayTake.test(arm)) {
                 untaken.add(arm);
                 continue;
             }

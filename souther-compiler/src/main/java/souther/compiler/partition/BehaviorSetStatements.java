@@ -596,10 +596,10 @@ public final class BehaviorSetStatements {
             // part unsaid — a model reported as fully read over a condition half of which nobody
             // took in.
             List<Unread> unread = new ArrayList<>();
-            for (Denotation atom : each.leftHere()) {
-                List<Denotation> parts = ComparisonReadings.leftUnread(atom, read, reading);
+            for (ComparisonReadings.Atom atom : each.leftHere()) {
+                List<Denotation> parts = ComparisonReadings.leftUnread(atom, read);
                 if (!parts.isEmpty()) {
-                    unread.add(new Unread(atom, parts));
+                    unread.add(new Unread(atom.at(), parts));
                 }
             }
             if (unread.isEmpty()) {

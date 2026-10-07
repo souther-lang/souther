@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * What the model's own rules say arrives at each place in a behavior's body.
@@ -826,13 +827,13 @@ public final class PathReachability {
         // arm none of its cases takes is one nothing arrives at, whatever the rules leave.
         TermPath path = positionOf(match.scrutinee(), reads);
         if (path == null) {
-            for (int i = 0; i < match.cases().size() && i < arms.length; i++) {
+            Set<TypeSymbol> written =
+                    reads.casesWritten(match.scrutinee(), symbols, newtypes);
+            for (int i = 0; written != null && i < match.cases().size() && i < arms.length; i++) {
                 Core.Case arm = match.cases().get(i);
-                if (reads.whetherEveryRowTakes(arm, match.scrutinee(), symbols, newtypes)
-                        .equals(Optional.of(false))) {
+                if (InputReads.whetherEveryRowTakes(arm, written).equals(Optional.of(false))) {
                     out.put(arms[i], new Reachability.Unreachable(Proof.noCaseTheValueCanBeIsTaken(
-                            List.copyOf(reads.casesWritten(match.scrutinee(), symbols, newtypes)),
-                            arm.caseTypes())));
+                            List.copyOf(written), arm.caseTypes())));
                 }
             }
             return;
