@@ -7120,7 +7120,7 @@ public final class Generator {
      * makes of each row.
      *
      * @param contents what the containers are handed, written under the cases this row is being
-     *                 tried as ({@link ContentsAsked#ways})
+     *                 tried as ({@link ContentsAsked.UnderTheCases#tryEach})
      * @param order    the order the parameters are composed in, and what each turns on
      */
     private record RowBeingComposed(MeasuredInput.MeasuredAxes axes, Map<String, Written> given,
