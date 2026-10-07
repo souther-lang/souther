@@ -8,6 +8,8 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -40,10 +42,23 @@ class WhatDropsALineIsWhatReachesItsComparisonTest {
         return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
-    /** How many lines this report dropped for nothing arriving at them. */
+    /**
+     * How many lines this report dropped for nothing arriving at them.
+     *
+     * <p>Counted by the comparison and not by the sentence. A line over two positions is said at
+     * each of them, and it is one line.
+     */
     private static long droppedForNothingArriving(String source) {
-        return reportOf(source).lines().filter(each -> each.contains(NOTHING_ARRIVES)).count();
+        return reportOf(source).lines().filter(each -> each.contains(NOTHING_ARRIVES))
+                .map(each -> {
+                    Matcher at = COMPARISON.matcher(each);
+                    return at.find() ? at.group() : each;
+                })
+                .distinct().count();
     }
+
+    /** Where a sentence about a comparison says the comparison is. */
+    private static final Pattern COMPARISON = Pattern.compile("comparison@\\d+:\\d+");
 
     private static final String AMOUNT = """
             module d
@@ -177,6 +192,80 @@ class WhatDropsALineIsWhatReachesItsComparisonTest {
                 let below (n) =
                     if n /= 5 then (if n == 5 then "never" else "other") else "five"
                 """));
+    }
+
+    /**
+     * A line naming a value is asked whether a row stands at it, whatever the value is a value of.
+     *
+     * <p>The question is one equation against everything that holds of a row there, so the same
+     * hole answers it on a multiple of the position, on a position whose order fills — where values
+     * come as near five as anyone likes and none is five — and on a sum of two positions the way
+     * held apart from the value. Asked of how far the quantity runs, each of them runs straight
+     * through the hole.
+     */
+    @Test
+    void aLineNamingAValueIsAskedWhetherARowStandsAtItWhateverItIsAValueOf() {
+        assertEquals(1, droppedForNothingArriving("""
+                module d
+
+                behavior below : (n: Int) -> String
+                let below (n) =
+                    if n /= 5 then (if 2 * n == 10 then "never" else "other") else "five"
+                """), "on a multiple of the position");
+        assertEquals(1, droppedForNothingArriving("""
+                module d
+
+                behavior below : (x: Decimal) -> String
+                let below (x) =
+                    if x /= 5m then (if x == 5m then "never" else "other") else "five"
+                """), "on an order that fills");
+        assertEquals(1, droppedForNothingArriving("""
+                module d
+
+                behavior below : (a: Int, b: Int) -> String
+                let below (a, b) =
+                    if a + b /= 10 then (if a + b == 10 then "never" else "other") else "ten"
+                """), "on a sum of two positions");
+    }
+
+    /**
+     * And a hole takes no line away from a rule that orders the values around it.
+     *
+     * <p>Under {@code n /= 5}, {@code n >= 5} still parts four from six: rows on both sides arrive
+     * and go different ways. The control for the hole above, which takes away the line of a rule
+     * naming the value and nothing else.
+     */
+    @Test
+    void aHoleAtTheLineOfAnOrderingLeavesItDividing() {
+        assertEquals(0, droppedForNothingArriving("""
+                module d
+
+                behavior below : (n: Int) -> String
+                let below (n) =
+                    if n /= 5 then (if n >= 5 then "above" else "below") else "five"
+                """));
+    }
+
+    /**
+     * The declarations are asked the same question, so a value they hold a position apart from is
+     * a value no line naming it is drawn at.
+     *
+     * <p>Where the comparison is read and nothing is on the way, the region is what the
+     * declarations leave, and a {@code Level} is never five. Asked how far the values run, the line
+     * at five was inside them.
+     */
+    @Test
+    void aValueTheDeclarationsHoldAPositionApartFromIsNoLine() {
+        String report = reportOf("""
+                module d
+
+                data Level = Int invariant value /= 5
+                behavior f : (x: Level) -> String
+                let f (x) = if x.value == 5 then "never" else "other"
+                """);
+
+        assertTrue(report.contains("draws its line outside"),
+                () -> "no Level is five, so the equality draws no line: " + report);
     }
 
     /**

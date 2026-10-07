@@ -185,30 +185,6 @@ public interface LevelSpace {
         };
     }
 
-    /**
-     * Whether {@code level} is a value the quantity takes and nothing else it takes comes
-     * arbitrarily near it — so that a set of its values comes as far as the level exactly where the
-     * set holds it.
-     *
-     * <p>True of every value of an order that steps, and of an enumeration's cases. False where the
-     * values fill up to the level on either side, which is where a set the level was taken out of
-     * still comes as far as it: a {@code Decimal} held apart from five has values as near five as
-     * anyone cares to name. False too where the exact arithmetic could not tell, which leaves a
-     * reader asking how far a set extends rather than what it holds — the wider of the two answers.
-     */
-    default boolean standsAlone(Level level) {
-        if (!Boolean.TRUE.equals(attainable(level).orNull())) {
-            return false;
-        }
-        for (Towards towards : Towards.values()) {
-            Optional<Level> beside = neighbour(level, towards).orNull();
-            if ((beside == null || beside.isEmpty()) &&!Boolean.FALSE.equals(anythingBeyond(level, towards).orNull())) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     /** Everything one way of a level, which is what the three questions above are asked about. */
     private static LevelInterval runFrom(Level from, Towards towards, boolean itself) {
         Bound at = Bound.at(from, itself);

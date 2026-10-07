@@ -144,6 +144,34 @@ class AFixedValueIsPartOfTheRegionEveryQuestionIsAnsweredAgainstTest {
                 "x - 5 /= 0 taken in and x given 5 is refused");
     }
 
+    /**
+     * A hole is refused by whatever puts the position at it, and a rule pinning the position there
+     * puts it there as surely as a fixing does.
+     *
+     * <p>What a line naming a value asks of a region: whether a row stands at the value. The line is
+     * taken in as an equation, so the region holding the position apart from that value has to
+     * answer the equation empty — or a hole the way leaves is one more thing a line naming its value
+     * is drawn through.
+     */
+    @Test
+    void aRulePinningAPositionAtAPlaceItIsHeldApartFromLeavesNothing() {
+        Count five = Count.of(BigDecimal.valueOf(5));
+        LinearForm<NumericTerm> atFive =
+                LinearForm.<NumericTerm>atomMinusConstant(term("x"), ExactRatio.of(5));
+
+        assertTrue(region().apartFrom(term("x"), five).assuming(atFive, Rel.EQ).taken()
+                        .emptiness().isPresent(),
+                "x held apart from 5 and x - 5 = 0 is refused");
+        assertTrue(region().assuming(atFive, Rel.NE).taken().assuming(atFive, Rel.EQ).taken()
+                        .emptiness().isPresent(),
+                "x - 5 /= 0 and x - 5 = 0 is refused");
+        assertFalse(region().apartFrom(term("x"), five)
+                        .assuming(LinearForm.<NumericTerm>atomMinusConstant(term("x"),
+                                ExactRatio.of(6)), Rel.EQ).taken()
+                        .emptiness().isPresent(),
+                "x held apart from 5 holds x = 6");
+    }
+
     /** And a fixing beside the hole is not. */
     @Test
     void andAFixingBesideTheHoleIsNot() {

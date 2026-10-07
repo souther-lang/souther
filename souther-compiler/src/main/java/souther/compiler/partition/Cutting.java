@@ -23,7 +23,6 @@ import souther.compiler.reach.ComparisonArrival;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Supplier;
 
 /**
  * What one comparison cuts, and where — the one place that decides it.
@@ -248,35 +247,27 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
-     * Whether the quantity runs as far as this line, which is what makes it a line the rule draws.
+     * Whether the rows {@code region} holds reach this line, which is what makes it a line the rule
+     * draws.
      *
-     * <p>Asked where the comparison is read and again at every position filing moves the line to
-     * ({@link #movedTo}). The move takes the quantity somewhere the rules may leave it less room: a
-     * case whose invariant stops short of the line is a quantity the line does not reach, however
-     * far the name it was written at runs. One question at both places, so the reading and the
-     * filing cannot come to disagree about one line.
+     * <p>One question wherever a line is asked about, and the region is what differs: what the
+     * rules leave where the comparison is read and at every position filing moves the line to
+     * ({@link #movedTo}), and what also arrives at the comparison where a body is walked to it. The
+     * move takes the quantity somewhere the rules may leave it less room: a case whose invariant
+     * stops short of the line is a quantity the line does not reach, however far the name it was
+     * written at runs. Asked one way at all of them, the reading, the filing and the walk cannot
+     * come to disagree about one line.
      *
-     * @param parts              where the rule parts the quantity's values, as the caller already
-     *                           holds it
+     * <p>Two questions, and {@link Border#reaches} says which a rule asks ({@link Border.Values}).
+     * How far the quantity runs inside the region is a question about its extent, and the region's
+     * projection answers it. Whether a row stands at a value is a question about one equation, and
+     * it is asked as one: the line taken in beside everything else the region holds and the region
+     * asked whether anything is left. Read off the projection instead, a value the way holds the
+     * quantity apart from would be inside the ends of everything around it — the ends of
+     * everything but five are the ends of everything.
+     *
      * @param drawnByAnInvariant whether a clause of a value's own declarations drew the line, which
      *                           has no far side for anything to stand on
-     */
-    boolean reached(Supplier<ExactAnswer<Seam>> parts, boolean drawnByAnInvariant) {
-        return Border.reaches(at, parts, claim, drawnByAnInvariant, Border.Values.within(within));
-    }
-
-    /**
-     * The same question, of the rows {@code region} holds rather than of what the rules leave the
-     * quantity — which is what a line is asked where something narrower than the declarations
-     * arrives at it.
-     *
-     * <p>How far the quantity runs inside the region answers a rule that orders the values around
-     * its line ({@link Border.Values}). A rule that names a value is asked more: whether a row
-     * stands at it, because a region may hold the position apart from that one value and a range
-     * has no word for it — the ends of everything but five are the ends of everything. Asked of the
-     * region where the level stands alone on its order and the quantity is one position's own
-     * value, which is a place a row can be given; elsewhere how far the quantity runs is all there
-     * is to ask.
      */
     boolean reachedIn(SearchRegion region, boolean drawnByAnInvariant) {
         NumericDomain.FormProjection runs = region.projectionOf(of.direction());
@@ -294,7 +285,17 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
 
             @Override
             public boolean holdAt(Level level) {
-                return extent.extendTo(level) && standsIn(region, level);
+                // Whether a row stands at the value is asked of a value the quantity takes. One
+                // it never takes is the order's answer and not the rows': `2 * a == 9` names
+                // nothing an integer is twice, under any rules, and the line is the order's to
+                // place (`Places.AT_NO_VALUE`). Asked of a region, that is a region holding no
+                // row at a value no row could ever hold.
+                if (!Boolean.TRUE.equals(of.levels().attainable(level).orNull())) {
+                    return extent.extendTo(level);
+                }
+                // An equation this region cannot carry is no proof that nothing stands there.
+                return atTheLevel(region, level)
+                        .map(there -> there.emptiness().isEmpty()).orElse(true);
             }
         });
     }
@@ -337,26 +338,35 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 ? narrower : region;
     }
 
-    /** Whether {@code region} leaves a row standing at {@code level} of this quantity, where it can
-     *  be asked; true where it cannot, which is the answer that drops nothing. */
-    private boolean standsIn(SearchRegion region, Level level) {
-        NumericTerm.FromOnePosition itself = itself(of.direction());
-        if (itself == null || !of.levels().standsAlone(level)) {
-            return true;
+    /**
+     * {@code region} with this quantity taken to stand at {@code level}: the line as an equation,
+     * in whichever vocabulary the level is in.
+     *
+     * <p>A number is a level of the form the rule wrote, so the equation is the form less it — over
+     * one position or several, weighed or not. A level that is no number is a place on an order
+     * that counts nothing, which only one position's own value stands on, and the equation is that
+     * position at that place.
+     *
+     * <p>Empty where the equation cannot be said: the form less the level past what the exact
+     * arithmetic holds, or a region with no way to carry it.
+     */
+    private Optional<SearchRegion> atTheLevel(SearchRegion region, Level level) {
+        LinearForm<NumericTerm> direction = of.direction();
+        ExactRatio number = level.asANumber();
+        if (number != null) {
+            LinearForm<NumericTerm> form = direction.minus(LinearForm.constant(number)).orNull();
+            return form != null
+                    && region.assuming(form, Rel.EQ)
+                            instanceof SearchRegion.Assumption.Taken(SearchRegion there)
+                    ? Optional.of(there) : Optional.empty();
         }
-        Optional<Place> place = level.asAPlaceOrNothing().orNull();
-        return place == null || place.isEmpty()
-                || region.given(itself, place.get()).emptiness().isEmpty();
-    }
-
-    /** The position this quantity is the value of, or null where it is anything else. */
-    private static NumericTerm.FromOnePosition itself(LinearForm<NumericTerm> direction) {
         if (direction.coefs().size() != 1 || direction.constant().signum() != 0) {
-            return null;
+            return Optional.empty();
         }
         Map.Entry<NumericTerm, ExactRatio> only = direction.coefs().entrySet().iterator().next();
-        return only.getValue().equals(ExactRatio.ONE)
-                && only.getKey() instanceof NumericTerm.ValueOf position ? position : null;
+        NumericTerm.FromOnePosition position = only.getKey().atOnePosition();
+        return position == null || !only.getValue().equals(ExactRatio.ONE) ? Optional.empty()
+                : Optional.of(region.assuming(position, level.asAPlace(), Rel.EQ));
     }
 
     /**

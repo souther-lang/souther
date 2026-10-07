@@ -114,7 +114,7 @@ public final class LinesWhereTheyFall {
                 // partial filing to write: what a name stands at is one list and this maps it.
                 case WhereTheNameStands.FiledAt filed -> filed.all().forEach(to -> {
                     Cutting moved = lineAt(each.line(), stated.at(), to, read.quantities());
-                    if (reaches(moved, each.by())) {
+                    if (reaches(moved, each.by(), read.quantities())) {
                         out.add(measuredAt(stated, to));
                     } else {
                         outside(to, each.by(), noLine);
@@ -159,8 +159,8 @@ public final class LinesWhereTheyFall {
      * Whether the quantity a line was moved to runs as far as it — the question the reading asked
      * of the quantity the rule was written about, asked of this one.
      */
-    private static boolean reaches(Cutting moved, LineOrigin by) {
-        return moved.reached(moved::seam, Border.drawnByAnInvariant(by));
+    private static boolean reaches(Cutting moved, LineOrigin by, Quantities quantities) {
+        return moved.reachedIn(quantities.region(), Border.drawnByAnInvariant(by));
     }
 
     /**
@@ -266,7 +266,7 @@ public final class LinesWhereTheyFall {
         // own rules can stop it short of a line the name it was written at runs past.
         for (NumericTerm to : moves.at().all()) {
             Cutting moved = lineAt(line.cuts(), moves.name(), to, quantities);
-            if (reaches(moved, line.by())) {
+            if (reaches(moved, line.by(), quantities)) {
                 out.add(new LineDrawn(moved, line.by()));
             } else {
                 outside(to, line.by(), noLine);

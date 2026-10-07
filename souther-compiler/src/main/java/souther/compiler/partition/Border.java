@@ -769,9 +769,10 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * <p><b>Two questions, because the two kinds of rule ask different ones.</b> A rule that orders
      * the values around its line divides them wherever they run either side of it, so a value taken
      * out at the line leaves it dividing: under {@code x /= 10}, {@code x >= 10} still parts nine
-     * from eleven. A rule that names a value parts that value from the rest, so it draws a line
-     * where a value stands there — and not where the values merely run past it, which they do
-     * around a hole.
+     * from eleven. That is a question about extent. A rule that names a value parts that value from
+     * the rest, so it draws a line exactly where a value stands there — and not where the values
+     * merely run past it, which they do around a hole, nor where they come arbitrarily near it on an
+     * order that fills. That is a question about one value, whatever order it is on.
      */
     interface Values {
 
@@ -779,13 +780,17 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
          *  from either side of a strict end. */
         boolean extendTo(Level level);
 
-        /** Whether a value stands at {@code level}, or comes arbitrarily near it where the order
-         *  fills up to it. */
+        /** Whether a value stands at {@code level} — that one value, and nothing near it. */
         boolean holdAt(Level level);
 
         /**
-         * The values of a range of the quantity itself, which has no holes: both questions are how
-         * far it runs. A null range is one nothing bounds, and runs as far as every level.
+         * The values a range of the quantity leaves, as far as a range can say: how far it runs.
+         *
+         * <p>Whether a value stands at a level is more than a range holds, so it is answered as
+         * though every value inside one stood — which over-states it, the direction that drops no
+         * line. For a reader holding a range and nothing it was read from; a region answers both
+         * questions ({@link Cutting#reachedIn}). A null range is one nothing bounds, and runs as far
+         * as every level.
          */
         static Values within(NumericDomain.Bounds range) {
             return new Values() {
