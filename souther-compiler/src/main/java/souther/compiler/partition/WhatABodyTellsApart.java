@@ -3,7 +3,15 @@ package souther.compiler.partition;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.Requirements;
+import souther.compiler.inputs.SearchRegion;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Rel;
 import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.reading.CoverageRead;
@@ -123,14 +131,21 @@ final class WhatABodyTellsApart {
          * case is not at this position at all, so a way admitting nothing here says only that its
          * rows are not this case.
          *
-         * @param underEach what the condition admits at the position under each case measured
-         *                  here, with what a row is taken to be to stand there
+         * @param underEach what the condition says under each case, with what a row is taken to be
+         *                  to stand there
          */
         record UnderTheCases(List<UnderACase> underEach) implements Placed {}
 
-        /** What the condition admits at the position under one case, and what a row is taken to
-         *  be to stand there. */
-        record UnderACase(About about, Requirements taken) {}
+        /**
+         * What the condition says under one case.
+         *
+         * @param about      what it admits at the position measured there, or null where no axis
+         *                   measures it
+         * @param taken      what a row is taken to be for the name to stand there
+         * @param neverHolds whether the rules of the case leave the condition no value to come out
+         *                   the way the decision went, so that no row of the case takes it
+         */
+        record UnderACase(About about, Requirements taken, boolean neverHolds) {}
     }
 
     private Placed placedOf(souther.compiler.reading.Condition condition) {
@@ -152,12 +167,60 @@ final class WhatABodyTellsApart {
             case ConditionPlacement.UnderTheCases(var underEach) -> {
                 List<Placed.UnderACase> out = new ArrayList<>();
                 for (ConditionPlacement.UnderACase one : underEach) {
-                    out.add(new Placed.UnderACase(about(each, one.axis(), one.at()),
-                            one.taken()));
+                    out.add(new Placed.UnderACase(
+                            one.measured() ? about(each, one.axis(), one.at()) : null,
+                            one.taken(), neverHolds(each, one.at())));
                 }
                 yield new Placed.UnderTheCases(List.copyOf(out));
             }
         };
+    }
+
+    /**
+     * Whether the rules leave {@code each} no value to come out the way it went once the name it is
+     * about stands at {@code at}.
+     *
+     * <p>Asked of the region the rules leave, with the number taken where the name stands under the
+     * case — which is what puts the case's own rules on it. Only on a proof: a region that cannot
+     * show the comparison is closed there says nothing either way, and the case stays one the row
+     * may be. A fork on a case of the value says nothing here; what the case's position admits of it
+     * is what its classes say.
+     */
+    private boolean neverHolds(souther.compiler.reading.Condition each, TermPath at) {
+        if (!(each instanceof souther.compiler.reading.Condition.Side side)
+                || side.line().isEmpty()
+                || !(side.at() instanceof NumericTerm.FromOnePosition named)) {
+            return false;
+        }
+        Quantities quantities = measured.subject().quantities();
+        NumericTerm there = quantities.namedAt(named, at);
+        NumericTerm.FromOnePosition standing = there == null ? null : there.atOnePosition();
+        if (standing == null) {
+            return false;
+        }
+        souther.compiler.reading.Condition.Side.Line line = side.line().get();
+        SearchRegion closed = holding(quantities.region(), standing, line.at(),
+                line.holding(side.held()));
+        return closed != null && closed.emptiness().isPresent();
+    }
+
+    /**
+     * {@code region} with {@code term rel at} taken in, in the vocabulary a region is told such a
+     * thing in: a number as the form with the line moved into it, and a place on an order that
+     * counts nothing as an end of the run or a hole in it. Null where the region cannot carry it,
+     * which leaves nothing proved.
+     */
+    private static SearchRegion holding(SearchRegion region, NumericTerm.FromOnePosition term,
+                                        Place at, Rel rel) {
+        if (at instanceof Count count) {
+            LinearForm<NumericTerm> form =
+                    LinearForm.atomMinusConstant(term, ExactRatio.of(count.at()));
+            return region.assuming(form, rel) instanceof SearchRegion.Assumption.Taken(var taken)
+                    ? taken : null;
+        }
+        return TakenConstraint.Ordered.isABound(rel)
+                ? new TakenConstraint.Ordered(term, at, rel).narrowing(region)
+                : new TakenConstraint.AwayFrom(term, at).narrowing(region);
     }
 
     /**
@@ -238,67 +301,249 @@ final class WhatABodyTellsApart {
 
     /** One way: what all of its decisions admit together at each position, if a value can take it. */
     private void take(WayIn way) {
-        boolean[][] here = new boolean[axes.size()][];
-        boolean[] unreadHere = new boolean[axes.size()];
+        // What the way says at the positions it stands at whatever case a row is: a condition
+        // about the position itself puts a row taking the way there.
+        Admitted direct = new Admitted(axes.size());
         boolean subjectUnknownHere = false;
-        List<Set<ModelOccurrence>> statedHere = new ArrayList<>();
-        for (int at = 0; at < axes.size(); at++) {
-            statedHere.add(new LinkedHashSet<>());
-        }
-        // Whether a condition about the position itself is on the way, so that a row taking the way
-        // stands there. A condition about a name the cases share says nothing of that: a row under
-        // another case takes the way without being at this position.
-        boolean[] standsHere = new boolean[axes.size()];
-        // The conditions about a name the cases share, put to the classes once the positions the
-        // way stands at are known: which case a row taking the way can be is what they say.
-        List<Decision> underTheCases = new ArrayList<>();
+        List<Placed.UnderTheCases> underTheCases = new ArrayList<>();
+        List<souther.compiler.reading.Condition> saidUnderTheCases = new ArrayList<>();
         for (Decision decision : way.decisions()) {
             souther.compiler.reading.Condition each = decision.constrains();
             switch (placedOf(each)) {
                 case Placed.About it -> {
-                    standsHere[it.at()] = true;
-                    admit(it, each, here, unreadHere, statedHere);
+                    direct.stands[it.at()] = true;
+                    direct.admit(it, each);
                 }
-                case Placed.UnderTheCases _ -> underTheCases.add(decision);
+                case Placed.UnderTheCases it -> {
+                    underTheCases.add(it);
+                    saidUnderTheCases.add(each);
+                }
                 case Placed.AboutNoPosition _ -> { }
                 case Placed.SubjectUnknown _ -> subjectUnknownHere = true;
             }
         }
-        // Each under the cases a row taking the way can be. The position under a case stands only
-        // where the row is that case, so a case the way's own positions rule out is not one its
-        // rows are: a fork on a shared name reached once the value turned out to be an `A` is about
-        // `A`'s position and says nothing of `B`'s.
-        for (Decision decision : underTheCases) {
-            souther.compiler.reading.Condition each = decision.constrains();
-            for (Placed.UnderACase one : ((Placed.UnderTheCases) placedOf(each)).underEach()) {
-                if (canBe(one.taken(), here, standsHere)) {
-                    admit(one.about(), each, here, unreadHere, statedHere);
-                }
-            }
-        }
         for (int at = 0; at < axes.size(); at++) {
-            if (here[at] == null || anyOf(here[at])) {
-                continue;
-            }
-            // No class of the position takes this way. Where the way puts a row at the position,
-            // no value takes it and nothing on it is anything a run decides; where only a name the
-            // cases share was asked about, the rows taking it are under another case, and the way
-            // says nothing about this position.
-            if (standsHere[at]) {
+            // No class of a position the way stands at takes it, so no value does and nothing on it
+            // is anything a run decides.
+            if (direct.stands[at] && direct.here[at] != null && !anyOf(direct.here[at])) {
                 return;
             }
-            here[at] = null;
+        }
+        // The conditions about names the cases share, read as the cases a row taking the way can
+        // be. A row is one case of a sum for every condition on its way, so the conditions are read
+        // together as one choice of case and never one at a time: a fork on the flag reached past a
+        // comparison only a `Small` can pass tells `Small`'s flag apart and says nothing of
+        // `Large`'s. Conditions about sums nothing relates are chosen apart, since a case of one
+        // says nothing of the other.
+        Admitted taken = direct;
+        for (List<Integer> together : relatedByTheirSums(underTheCases)) {
+            List<Admitted> ways = waysUnderTheCases(together, underTheCases, saidUnderTheCases,
+                    direct);
+            // No case leaves a row that takes the way, so none does.
+            if (ways.isEmpty()) {
+                return;
+            }
+            taken = taken.joinedWith(ways, measuredBy(together, underTheCases));
         }
         // Only for a way some value takes. A decision nothing could place is still one no run makes
         // where the rest of its way admits no class.
         subjectUnknown |= subjectUnknownHere;
         for (int at = 0; at < axes.size(); at++) {
-            if (here[at] != null) {
-                splits.get(at).add(here[at]);
-                comparisonsRead.get(at).addAll(statedHere.get(at));
+            if (taken.here[at] != null) {
+                splits.get(at).add(taken.here[at]);
+                comparisonsRead.get(at).addAll(taken.stated.get(at));
             }
-            unread[at] |= unreadHere[at];
+            unread[at] |= taken.unread[at];
         }
+    }
+
+    /**
+     * The conditions under the cases, in groups whose cases go together: two conditions are in one
+     * group where some case either can be under requires something of a sum the other's do too.
+     * Each group as indices into {@code underTheCases}, in the order the way met them.
+     */
+    private static List<List<Integer>> relatedByTheirSums(List<Placed.UnderTheCases> underTheCases) {
+        int[] group = new int[underTheCases.size()];
+        List<Set<TermPath>> sums = new ArrayList<>();
+        for (int i = 0; i < underTheCases.size(); i++) {
+            group[i] = i;
+            Set<TermPath> asked = new LinkedHashSet<>();
+            for (Placed.UnderACase one : underTheCases.get(i).underEach()) {
+                asked.addAll(one.taken().refinements().keySet());
+            }
+            sums.add(asked);
+        }
+        for (int i = 0; i < group.length; i++) {
+            for (int j = 0; j < i; j++) {
+                if (!Collections.disjoint(sums.get(i), sums.get(j))) {
+                    int from = group[i];
+                    int to = group[j];
+                    for (int k = 0; k < group.length; k++) {
+                        if (group[k] == from) {
+                            group[k] = to;
+                        }
+                    }
+                }
+            }
+        }
+        Map<Integer, List<Integer>> out = new LinkedHashMap<>();
+        for (int i = 0; i < group.length; i++) {
+            out.computeIfAbsent(group[i], _ -> new ArrayList<>()).add(i);
+        }
+        return List.copyOf(out.values());
+    }
+
+    /** The positions the conditions {@code together} are measured at under some case. */
+    private static Set<Integer> measuredBy(List<Integer> together,
+                                           List<Placed.UnderTheCases> underTheCases) {
+        Set<Integer> out = new LinkedHashSet<>();
+        for (int index : together) {
+            for (Placed.UnderACase one : underTheCases.get(index).underEach()) {
+                if (one.about() != null) {
+                    out.add(one.about().at());
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Each choice of case the conditions {@code together} leave a row taking the way, with what
+     * the way admits under it.
+     *
+     * <p>A choice stays only where every condition can come out its way under it: its cases go
+     * together ({@link Requirements#merge}), they go with the positions the way stands at, the
+     * rules of each case leave the condition a value, and the position measured under each admits a
+     * class. Which order the conditions are read in leaves the same choices, since each test is
+     * one every choice has to pass whatever was read before it.
+     */
+    private List<Admitted> waysUnderTheCases(List<Integer> together,
+                                             List<Placed.UnderTheCases> underTheCases,
+                                             List<souther.compiler.reading.Condition> said,
+                                             Admitted direct) {
+        List<Admitted> ways = List.of(direct);
+        for (int index : together) {
+            List<Admitted> next = new ArrayList<>();
+            for (Admitted way : ways) {
+                for (Placed.UnderACase one : underTheCases.get(index).underEach()) {
+                    Admitted chosen = way.under(one, said.get(index));
+                    if (chosen != null) {
+                        next.add(chosen);
+                    }
+                }
+            }
+            ways = next;
+        }
+        return ways;
+    }
+
+    /**
+     * What a way admits at each position under one choice of case: the classes left, what was said
+     * there this reading does not put to classes, the comparisons that said it, which positions a
+     * row taking it stands at, and what the row is taken to be.
+     */
+    private final class Admitted {
+
+        private final boolean[][] here;
+        private final boolean[] unread;
+        private final List<Set<ModelOccurrence>> stated;
+        private final boolean[] stands;
+        private final Requirements taken;
+
+        Admitted(int size) {
+            this(new boolean[size][], new boolean[size], new ArrayList<>(), new boolean[size],
+                    Requirements.NONE);
+            for (int at = 0; at < size; at++) {
+                stated.add(new LinkedHashSet<>());
+            }
+        }
+
+        private Admitted(boolean[][] here, boolean[] unread, List<Set<ModelOccurrence>> stated,
+                         boolean[] stands, Requirements taken) {
+            this.here = here;
+            this.unread = unread;
+            this.stated = stated;
+            this.stands = stands;
+            this.taken = taken;
+        }
+
+        /** What {@code one}, said by {@code each}, admits, met into what is admitted so far. */
+        void admit(Placed.About one, souther.compiler.reading.Condition each) {
+            WhatABodyTellsApart.admit(one, each, here, unread, stated);
+        }
+
+        /**
+         * The same way with the row taken to be the case {@code one} is under, or null where no row
+         * of that case takes it.
+         */
+        Admitted under(Placed.UnderACase one, souther.compiler.reading.Condition each) {
+            if (one.neverHolds() || !canBe(one.taken(), here, stands)
+                    || !(taken.merge(one.taken())
+                            instanceof Requirements.Merge.Merged(Requirements both))) {
+                return null;
+            }
+            Admitted out = new Admitted(copied(here), unread.clone(), copiedSets(stated),
+                    stands.clone(), both);
+            if (one.about() != null) {
+                int at = one.about().at();
+                out.stands[at] = true;
+                out.admit(one.about(), each);
+                // No class of the case's position takes the way, so no row of the case does.
+                if (out.here[at] != null && !anyOf(out.here[at])) {
+                    return null;
+                }
+            }
+            return out;
+        }
+
+        /**
+         * This, with what the choices of case {@code ways} admit at the positions {@code touched}
+         * they are measured at: a position is admitted in the classes some choice standing there
+         * admits it in. Every other position is as this has it, since the choices say nothing of
+         * it a case of theirs decides.
+         */
+        Admitted joinedWith(List<Admitted> ways, Set<Integer> touched) {
+            Admitted out = new Admitted(copied(here), unread.clone(), copiedSets(stated),
+                    stands.clone(), taken);
+            for (int at : touched) {
+                boolean[] some = null;
+                for (Admitted way : ways) {
+                    if (!way.stands[at]) {
+                        continue;
+                    }
+                    if (way.here[at] != null) {
+                        if (some == null) {
+                            some = new boolean[way.here[at].length];
+                        }
+                        for (int c = 0; c < some.length; c++) {
+                            some[c] |= way.here[at][c];
+                        }
+                    }
+                    out.unread[at] |= way.unread[at];
+                    out.stated.get(at).addAll(way.stated.get(at));
+                }
+                if (some != null) {
+                    out.here[at] = some;
+                }
+            }
+            return out;
+        }
+    }
+
+    private static boolean[][] copied(boolean[][] here) {
+        boolean[][] out = new boolean[here.length][];
+        for (int at = 0; at < here.length; at++) {
+            out[at] = here[at] == null ? null : here[at].clone();
+        }
+        return out;
+    }
+
+    private static List<Set<ModelOccurrence>> copiedSets(List<Set<ModelOccurrence>> stated) {
+        List<Set<ModelOccurrence>> out = new ArrayList<>();
+        for (Set<ModelOccurrence> each : stated) {
+            out.add(new LinkedHashSet<>(each));
+        }
+        return out;
     }
 
     /** What {@code one}, said by {@code each}, admits, met into what the way admits so far. */

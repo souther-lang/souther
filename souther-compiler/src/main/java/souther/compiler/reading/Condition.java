@@ -1,12 +1,17 @@
 package souther.compiler.reading;
 
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.coverage.ArmOccurrence;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Rel;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
 /**
  * One decision of a body coming out one way, said in terms of the input it is about.
@@ -89,8 +94,33 @@ public sealed interface Condition {
      *                 <p>The occurrence and not the number it is instrumented under — the number is
      *                 how a run is recorded and is no part of what this decision is
      * @param held     the way it came out
+     * @param line     what the comparison places on the number, where the other side is a value
+     *                 the number's order writes; empty where it is another position or a value
+     *                 this compiler does not place. Read off the same comparison as {@code at},
+     *                 so it says nothing {@code statedAt} does not already decide
      */
-    record Side(NumericTerm at, ConstructOccurrence statedAt, boolean held) implements Condition {
+    record Side(NumericTerm at, ConstructOccurrence statedAt, boolean held, Optional<Line> line)
+            implements Condition {
+
+        public Side {
+            Objects.requireNonNull(line, "a comparison places a line or says it places none");
+        }
+
+        /**
+         * Where a comparison's line falls on the number it compares, and what it claims there.
+         *
+         * <p>What a reader needs to ask whether coming out one way is open to a value at all —
+         * under one case of a sum, a number the cases share may be held where the comparison
+         * never comes out the way a decision went.
+         */
+        public record Line(Place at, ComparisonClaim claim) {
+
+            /** The relation a value stands in to the line where the comparison comes out
+             *  {@code held}. */
+            public Rel holding(boolean held) {
+                return held ? claim.statedRelation() : claim.denied().statedRelation();
+            }
+        }
 
         /** The same comparison coming out the other way. */
         @Override

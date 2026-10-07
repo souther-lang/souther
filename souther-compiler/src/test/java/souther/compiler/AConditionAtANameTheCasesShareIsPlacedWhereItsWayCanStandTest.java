@@ -55,6 +55,23 @@ class AConditionAtANameTheCasesShareIsPlacedWhereItsWayCanStandTest {
 
             behavior counted : (r: Req) -> String
             let counted (r) = if r.q.count > 3 then "many" else "few"
+
+            data Sized = { flag: Flag, amount: Int }
+                invariant amount >= 0 && amount <= 1000
+            data Small = { ...Sized }
+                invariant amount <= 10
+            data Large = { ...Sized }
+                invariant amount >= 100
+            data Kind = Small | Large
+            data Order = { kind: Kind }
+
+            behavior smallOnes : (o: Order) -> String
+            let smallOnes (o) =
+                if o.kind.amount <= 10 then
+                    match o.kind.flag with
+                        | Yes -> "small yes"
+                        | No -> "small no"
+                else "large"
             """;
 
     @Test
@@ -71,6 +88,19 @@ class AConditionAtANameTheCasesShareIsPlacedWhereItsWayCanStandTest {
         assertEquals(2, groups(told.get("r.q@A.flag")), () -> told.toString());
         assertInstanceOf(BodyDistinction.Untouched.class, told.get("r.q@B.flag"),
                 () -> "no way through a B reaches the fork: " + told);
+    }
+
+    /**
+     * One way is one case of the sum for every condition on it. The fork is reached past a
+     * comparison only a {@code Small} can pass, so the rows reaching it are {@code Small}s, and
+     * what a {@code Large}'s flag holds is nothing the body asks.
+     */
+    @Test
+    void aWayIsOneCaseForEveryConditionOnIt() {
+        Map<String, BodyDistinction> told = toldApart("smallOnes");
+        assertEquals(2, groups(told.get("o.kind@Small.flag")), () -> told.toString());
+        assertInstanceOf(BodyDistinction.Untouched.class, told.get("o.kind@Large.flag"),
+                () -> "no Large passes the comparison the fork is behind: " + told);
     }
 
     /** A comparison of the shared number divides it under each case, and is read there. */

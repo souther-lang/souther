@@ -33,11 +33,13 @@ sealed interface ConditionPlacement {
     record AtAPosition(int axis) implements ConditionPlacement {}
 
     /**
-     * About a name the cases of a sum share, which stands at the position under each case measured
-     * here.
+     * About a name the cases of a sum share, which stands at a position under each case.
      *
-     * @param underEach one per case whose position is measured, in the order the model declares
-     *                  the cases
+     * <p>Every case, and not only the ones measured here. A case whose position no axis measures
+     * is still a case the row can be, and what the condition asks may be something no value of
+     * that case holds — which says which case a row taking the way is, whatever is measured.
+     *
+     * @param underEach one per case, in the order the model declares the cases
      */
     record UnderTheCases(List<UnderACase> underEach) implements ConditionPlacement {
 
@@ -53,12 +55,17 @@ sealed interface ConditionPlacement {
     /**
      * Where a name stands under one case.
      *
-     * @param axis  the position measured there
-     * @param at    where the name stands under the case, which is the position {@code axis}
-     *              measures or the place a number of it is taken
+     * @param axis  the axis measuring what the condition is about there, or -1 where none does
+     * @param at    where the name stands under the case
      * @param taken what the row is taken to be for the name to stand there
      */
-    record UnderACase(int axis, TermPath at, Requirements taken) {}
+    record UnderACase(int axis, TermPath at, Requirements taken) {
+
+        /** Whether an axis measures what the condition is about under this case. */
+        boolean measured() {
+            return axis >= 0;
+        }
+    }
 
     /** About nothing measured here. */
     record AtNoPosition() implements ConditionPlacement {}
@@ -95,7 +102,7 @@ sealed interface ConditionPlacement {
 
     /**
      * {@code condition}, about a name that stands where {@code under} says, placed at each of those
-     * positions measured here.
+     * positions.
      *
      * <p>Every case or nothing said: a case whose reading stopped holds the name at a position
      * whose rules were never read, so which of the measured positions the condition is about is
@@ -108,12 +115,10 @@ sealed interface ConditionPlacement {
         }
         List<UnderACase> out = new ArrayList<>();
         for (WhereANameIsWritten.Place place : under.places()) {
-            int axis = measuring(condition, place.position(), axes);
-            if (axis >= 0) {
-                out.add(new UnderACase(axis, place.position(), place.taken()));
-            }
+            out.add(new UnderACase(measuring(condition, place.position(), axes), place.position(),
+                    place.taken()));
         }
-        return out.isEmpty() ? new AtNoPosition() : new UnderTheCases(out);
+        return new UnderTheCases(out);
     }
 
     /**
