@@ -7,6 +7,7 @@ import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -194,7 +195,8 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
     private static List<Core> partsOf(String behavior) {
         Read read = readingOf(behavior);
         return WhatAForkTests.partsOfTheAnswer(read.body(),
-                WhatNamesStandFor.in(read.reads(), read.read()));
+                WhatNamesStandFor.in(read.reads(), read.read())).stream()
+                .map(Denotation::value).toList();
     }
 
     /** Everything the body's single condition asks of a row, coming out {@code holding}. */
