@@ -9,6 +9,7 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.NormalReturn;
 import souther.compiler.coverage.NumberingIdentity;
+import souther.compiler.coverage.UnreachableReasons;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;

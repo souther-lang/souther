@@ -42,6 +42,13 @@ public final class CasesLeft {
     private final List<Refinement> atoms;
 
     private CasesLeft(List<Refinement> atoms) {
+        // One atom is already each once, in order and of one kind, and it is what nearly every
+        // caller hands over: a reading asks whether the case a root was opened under holds for
+        // every number it reads. The walk below is for putting several together.
+        if (atoms.size() == 1) {
+            this.atoms = List.of(atoms.getFirst());
+            return;
+        }
         List<Refinement> once = atoms.stream().distinct().sorted(CasesLeft::compareAtoms)
                 .toList();
         if (once.isEmpty()) {

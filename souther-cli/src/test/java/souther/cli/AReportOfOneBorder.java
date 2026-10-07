@@ -23,6 +23,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.partition.Border;
+import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.check.ComparisonClaim;
@@ -240,7 +241,7 @@ final class AReportOfOneBorder {
                 new Measurement.Complete<>(List.of()),
                 PartitionEvidence.PairSpace.NONE,
                 List.of(), List.of(), List.of(), List.of(), List.of(),
-                List.of());
+                List.of(), WhereNothingIsAnswered.NONE);
     }
 
     /**
@@ -259,7 +260,7 @@ final class AReportOfOneBorder {
                                                 souther.compiler.inputs.TermPath.of("t")))))),
                 PartitionEvidence.PairSpace.NONE,
                 List.of(), List.of(), List.of(), List.of(), List.of(),
-                List.of());
+                List.of(), WhereNothingIsAnswered.NONE);
     }
 
     /** The border measure made in full, over the one border. */

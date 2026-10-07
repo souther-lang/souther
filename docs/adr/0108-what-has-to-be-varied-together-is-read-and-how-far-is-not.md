@@ -56,8 +56,13 @@ the decisions in there are made and thrown away with the run.
 
 Which is a different question from what the pair space asks for, and the two answers do not have to
 agree. A class the rules admit stays owed a row however the body describes it: a model's own claim
-that a case cannot arise must not take away the row that would show the claim wrong. So the same
-`unreachable` arm is not an outcome of the value and is still a class a row is offered at.
+that a case cannot arise must not take away the obligation that would show the claim wrong. So the
+same `unreachable` arm is not an outcome of the value and is still a class the count is owed a row
+at. What it is not is a class a row is offered at, where every row there reaches an `unreachable`:
+such a row is refused (E1911), so the obligation is held open as undecided on the premise the body
+states — neither met nor a gap — and the generator offers nothing there. Every row and not some:
+where the body answers at the class for some value of another position, a row holding that value
+meets it, and it is owed and offered like any other.
 
 A group is a path to the meeting as much as it is the outcomes at it. An operator standing in an
 arm is reached only by a row that takes that arm, and a row that varies the factors while going the
@@ -100,10 +105,13 @@ that, so a reading that took the word would say about one parameter what is true
 reading that owns the question answers it, and this carries two environments down for that reason —
 one saying which position a name points at, one saying what the value at a name was settled by.
 
-This is read for the generator and nothing else. No measure changes: the pairs are still counted and
-still reported the way ADR-0091 says, the two axes are allowed to disagree, and a behavior with no
-body still has the pairs and now has nothing else. What the reading changes is which rows
-`--generate` composes, and a row deleted comes back the next time it is run.
+The groups are read for the generator and nothing else. No count changes: the pairs are still
+counted and still reported the way ADR-0091 says, the two axes are allowed to disagree, and a
+behavior with no body still has the pairs and now has nothing else. What the groups change is which
+rows `--generate` composes, and a row deleted comes back the next time it is run. The same walk also
+reads which parts of the body answer nothing, and that reading does reach what is measured — not
+the count, but whether an obligation at classes every row of which reaches an `unreachable` is a
+gap: it is undecided instead, which a strict build does not refuse over.
 
 Under-reading is the safe direction and is where a group nothing formed leaves things — an
 obligation nobody is asked for, which is where the product over the positions already was. A group

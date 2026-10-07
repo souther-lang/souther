@@ -14,6 +14,7 @@ import souther.compiler.coverage.Runs;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.observe.AnswerObservation;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.reading.Interaction;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.query.Adequacy;
@@ -45,6 +46,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * rather than a branch nothing reaches.
  */
 class ACandidateThatMissedIsNotOfferedTest {
+
+    /** What a run that went to the end came back with. Which value is no part of what is asked
+     *  here; that there was one is, since a run that stopped without one is no witness. */
+    private static final AnswerObservation ANSWERED =
+            new AnswerObservation.Answered(new ObservedValue.Integer(0));
 
     private static final String SHIPPING = """
             module example.shipping
@@ -78,7 +84,7 @@ class ACandidateThatMissedIsNotOfferedTest {
      *  any place at all and answer. */
     private static Generator.ObservedRun missed(Model model) {
         return new Generator.ObservedRun(new Generator.Watched.Ran(Runs.nowhere(model.numbering())),
-                new AnswerObservation.NotAnswered());
+                ANSWERED);
     }
 
     /**
@@ -110,7 +116,7 @@ class ACandidateThatMissedIsNotOfferedTest {
 
         FillResult filled =
                 fill(model, _ -> new Generator.ObservedRun(new Generator.Watched.Ran(everything),
-                        new AnswerObservation.NotAnswered()));
+                        ANSWERED));
 
         assertTrue(filled.unresolved().stream().noneMatch(each -> each.why().reason()
                         == Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS),

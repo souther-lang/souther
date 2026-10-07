@@ -184,9 +184,13 @@
             {
               "const": "nothing_showed_it",
               "description": "The same point again, where nothing was stopped and nothing arrived: no showing was made, so there is no limit to raise and nothing to name. Told apart from the two above because a reader sent after what stopped it would be looking for something nobody met."
+            },
+            {
+              "const": "every_row_reaches_an_unreachable",
+              "description": "An obligation — a case of an input, a class of a position or a combination of two classes — every row of which reaches an `unreachable` the body states, and nothing proves the inputs there do not arise. The obligation is still counted and is not a gap: a row there is refused (E1911), so none can be written, and it is not met either. One entry per part of the body that states it, however many obligations rest on it; `about` is the behavior whose body that is."
             }
           ],
-          "description": "What kind of thing this is, in two vocabularies. A measure that went without something writes the word `weakening` already has for it, where one word covers more than one thing this compiler can meet — a pattern too large to build and a rule about a value made from another are both `rule_unread` — so this says which kind it was and not which of them. The four beside them are the ways a verdict stays open that no weakening covers. Two entries alike are two things rather than one said twice, whichever vocabulary they are in."
+          "description": "What kind of thing this is, in two vocabularies. A measure that went without something writes the word `weakening` already has for it, where one word covers more than one thing this compiler can meet — a pattern too large to build and a rule about a value made from another are both `rule_unread` — so this says which kind it was and not which of them. The five beside them are the ways a verdict stays open that no weakening covers. Two entries alike are two things rather than one said twice, whichever vocabulary they are in."
         },
         "reason": {
           "$ref": "#/$defs/notMeasuredReason"
@@ -3918,7 +3922,8 @@
                   "no_certified_witness",
                   "no_candidate_was_offered",
                   "not_all_candidates_could_be_offered",
-                  "no_reading_of_the_line_could_be_searched"
+                  "no_reading_of_the_line_could_be_searched",
+                  "every_row_there_reaches_an_unreachable"
                 ]
               },
               "synthesisShortfallCauses": {

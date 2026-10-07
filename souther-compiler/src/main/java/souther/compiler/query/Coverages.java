@@ -31,6 +31,7 @@ import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BodyDistinction;
 import souther.compiler.partition.Border;
+import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.ReachingCuts;
 import souther.compiler.partition.Demand;
@@ -265,7 +266,8 @@ final class Coverages {
     static PartitionEvidence of(souther.compiler.partition.MeasuredInput subject,
                                 souther.compiler.query.Adequacy.RowReading observed,
                                 souther.compiler.partition.AdequacyPolicy.OfTheMeasures budget,
-                                Map<AxisId, BodyDistinction> toldApart) {
+                                Map<AxisId, BodyDistinction> toldApart,
+                                WhereNothingIsAnswered answersNothing) {
         List<RowOutcome> rows = observed.rowsSeen();
         Partitions.Partitioning partitioning = subject.partitioning();
 
@@ -301,7 +303,7 @@ final class Coverages {
                 // measured is the separate answer `undivided` beside them carries, and a position
                 // no axis came back for still has whatever was written about it.
                 partitioning.notSeparated(), unansweredIn(partitioning),
-                readings.whyUnclassified());
+                readings.whyUnclassified(), answersNothing);
     }
 
     /**

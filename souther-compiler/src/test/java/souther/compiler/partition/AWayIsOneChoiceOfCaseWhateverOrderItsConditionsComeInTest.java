@@ -70,7 +70,8 @@ class AWayIsOneChoiceOfCaseWhateverOrderItsConditionsComeInTest {
             turned.add(new WayIn(lastFirst(way)));
         }
         Map<AxisId, BodyDistinction> turnedRound = BodyDistinction.of(new CoverageRead.Read(
-                read.interactions(), read.arms(), turned, read.restOfTheBlock()), subject);
+                read.interactions(), read.arms(), turned, read.restOfTheBlock(),
+                read.answersNothing()), subject);
 
         assertEquals(asWritten, turnedRound);
         AxisId large = subject.axes().axes().stream()
