@@ -4595,6 +4595,13 @@ public final class Generator {
             }
             heldBack.put(at, edge.met());
         }
+        RowDemand.ATruth twice = written(decided, truthsOn(reaching.boundedOnTheWay()));
+        if (twice != null) {
+            return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
+                    UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                    "`" + twice.at() + "` would have to hold two values at once"),
+                    where.unrepresented());
+        }
         // What the way asks containers to hold that no region placed, and the order that lets every
         // container be composed after the parameters it is handed a value of.
         // The order is one for every way of writing them under the cases, since which parameter a
@@ -4857,7 +4864,9 @@ public final class Generator {
             FoundOut found = new FoundOut();
             CandidateCheck certified = certifying(check, subject, p, standing, found);
             Map<TermPath, List<FixtureTemplate>> here = new LinkedHashMap<>();
-            for (RealizationTarget target : standing.keySet()) {
+            // Every location the row has been asked to write, and not only the ones a number
+            // stands at: a truth the way asks for is written and stands at no place.
+            for (Map.Entry<TermPath, List<FixtureTemplate>> each : decided.all().entrySet()) {
                 // A position the way also narrows is not fixed at a value here. What has to hold of
                 // it is one thing said two ways — a place the item asks for, and a case the way
                 // says the value turned out to be — and one location is decided once: the narrowing
@@ -4865,9 +4874,9 @@ public final class Generator {
                 // is accepted ({@link #certifying}). Handed over as both, it is a position with two
                 // accounts, which is what {@link ConstructionPlan} refuses and what it is right to
                 // refuse.
-                if (target.writeRoot().head().equals(head)
-                        && reaching.requirements().at(target.writeRoot()) == null) {
-                    here.put(target.writeRoot(), decided.at(target.writeRoot()));
+                if (each.getKey().head().equals(head)
+                        && reaching.requirements().at(each.getKey()) == null) {
+                    here.put(each.getKey(), each.getValue());
                 }
             }
             boolean awaited = order.awaited(next);
@@ -5064,6 +5073,9 @@ public final class Generator {
                         none instanceof Placed.AtNone(ReachabilityGap.ProvedImpossible _)
                                 && noElementCanMeet(constraints(ofEachElement), subject));
             }
+            // Passed over before it is asked: it places no number ({@link #placesNoNumber}).
+            case RowDemand.ATruth truth -> throw new IllegalArgumentException(
+                    "a truth is written where the row is composed and placed nowhere: " + truth);
         };
     }
 
@@ -5101,14 +5113,44 @@ public final class Generator {
         return relations.stream().map(RowDemand.Relational::constraint).toList();
     }
 
-    /** Whether {@code demand} asks an element nothing but to be, or not to be, another position's
-     *  value — which places no number. */
+    /** Whether {@code demand} asks nothing a number stands for: an element to be, or not to be,
+     *  another position's value, or a position to hold one of two values. */
     private static boolean placesNoNumber(RowDemand.OfACondition demand) {
         return switch (demand) {
             case RowDemand.Relational _ -> false;
             case RowDemand.Exists exists -> exists.relations().isEmpty();
             case RowDemand.ForAll every -> every.relations().isEmpty();
+            case RowDemand.ATruth _ -> true;
         };
+    }
+
+    /** The truths {@code way} asks of a row, in the order it asked them. */
+    private static List<RowDemand.ATruth> truthsOn(List<OnTheWay.TakenIn> way) {
+        List<RowDemand.ATruth> out = new ArrayList<>();
+        for (OnTheWay.TakenIn each : way) {
+            if (each.demand() instanceof RowDemand.ATruth truth) {
+                out.add(truth);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * Each of {@code truths} written at its position — or the first asked of a position where
+     * something else is to be written already, or null where none is.
+     *
+     * <p>Written as the value it is, since no region placed it and no edge offers one. So the row
+     * is composed with the truth fixed the way a point's numbers are fixed, and one location asked
+     * for two values is refused by the one reader that answers that ({@link LocationWrites}).
+     */
+    private static RowDemand.ATruth written(LocationWrites decided, List<RowDemand.ATruth> truths) {
+        for (RowDemand.ATruth each : truths) {
+            if (decided.write(each.at(), List.of(FixtureTemplate.bool(each.held())))
+                    == LocationWrites.Written.CONFLICTING) {
+                return each;
+            }
+        }
+        return null;
     }
 
     /**

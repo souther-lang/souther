@@ -42,22 +42,23 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
     /**
      * Two forks on a truth this reading has no words for, one inside the other.
      *
-     * <p>A {@code Bool} that is not a comparison is where {@link Condition} stops, so each of these
-     * is declined for the one reason — which is what makes the pair the thing under test. Innermost
-     * is a fork on a comparison, so the account of what stands on the way to the arm under it holds
-     * one of each: two conditions this reading has no words for, and one it took in.
+     * <p>What a string operation answers is a truth no position holds and no comparison means, so
+     * each of these is declined for the one reason — which is what makes the pair the thing under
+     * test. Innermost is a fork on a comparison, so the account of what stands on the way to the
+     * arm under it holds one of each: two conditions this reading has no words for, and one it took
+     * in.
      */
     private static String model(String beforeTheBody) {
         return """
                 module example.way
 
-                behavior twoUnread : (a: Bool, b: Bool, n: Int) -> Bool
+                behavior twoUnread : (a: String, b: String, n: Int) -> Bool
                 """
                 + beforeTheBody
                 + """
                 let twoUnread (a, b, n) =
-                    if a then
-                        if b then
+                    if String.startsWith("w-", a) then
+                        if String.startsWith("w-", b) then
                             if n > 3 then n > 0 else n < 0
                         else
                             n < 0
@@ -155,9 +156,9 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
         String source = """
                 module example.twice
 
-                behavior oneCondition : (a: Bool, n: Int) -> Bool
+                behavior oneCondition : (a: String, n: Int) -> Bool
                 let oneCondition (a, n) =
-                    if a && n > 3 then n > 0 else n < 0
+                    if String.startsWith("w-", a) && n > 3 then n > 0 else n < 0
                 """;
         Compilation compilation = compiledFrom(source);
         List<OnTheWay.Declined> named = new ArrayList<>();
