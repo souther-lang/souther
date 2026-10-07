@@ -112,8 +112,6 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         // A rewrite left open asks why: a search stopped at how many rows a generation writes may
         // go further where more are allowed, and nothing else that leaves one open is an allowance.
         table.put("RewriteUndecided", "asks why it was left open/MAY_CHANGE");
-        // A premise of the body is proved by the model saying more, and by no figure of this one.
-        table.put("PremiseUnproven", "answers/UNAFFECTED");
         return table;
     }
 
@@ -238,7 +236,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                  Weakening.DecisionOfRowUnreadable _, Weakening.DecisionRunNotWatched _,
                  Weakening.MeetingsNotWalked _,
                  Weakening.DecisionReadingIncomplete _,
-                 Weakening.DecisionRuleReadShort _, Weakening.PremiseUnproven _ -> "answers";
+                 Weakening.DecisionRuleReadShort _ -> "answers";
         };
     }
 
@@ -289,7 +287,6 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                         new RowRef("b", new SourceId("m.sou"), new RowIdentity.Unnamed(1))),
                 new ReplacementEvidence.Undecided(ReplacementEvidence.Undecided.Why.RUNS_SPENT)
                         .why()));
-        out.add(new Weakening.PremiseUnproven("b", List.of("never asked")));
         return out;
     }
 
