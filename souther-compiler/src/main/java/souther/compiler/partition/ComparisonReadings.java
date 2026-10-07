@@ -225,7 +225,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     /**
      * What is the same at every comparison of one body: whose body it is, what the plan numbered,
      * the module's names, the reading of the input, what the input's rules leave each quantity, and
-     * what the paths leave arriving at each comparison.
+     * what the paths leave arriving at each comparison — and which comparisons are the decision
+     * table's, over what a dependency of this body answered.
      *
      * <p>Where the reading belongs, and it is not in the environment the walk carries. That
      * environment is a function of the program point — a binding met, an arm entered — and the
@@ -234,7 +235,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      */
     private record Body(String behavior, InputReading read,
                         souther.compiler.coverage.Arrivals answering, Templates templates,
-                        List<TruthMet> truths, List<ForkDecided> decided) {
+                        List<TruthMet> truths, List<ForkDecided> decided,
+                        WhatAnAnswerTakesUp dependencies) {
 
         Symbols symbols() {
             return read.symbols();
@@ -259,7 +261,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * tree could make on its own.
      */
     static ComparisonReadings of(String behavior, AnalysisBody analysis, InputReading read,
-                                 InputReads reads, InputReads insideATemplate) {
+                                 InputReads reads, InputReads insideATemplate,
+                                 WhatAnAnswerTakesUp dependencies) {
         Core body = analysis.core();
         List<Reading> readings = new ArrayList<>();
         List<ForkMet> forks = new ArrayList<>();
@@ -276,7 +279,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         walk(body, new Body(behavior, read,
                         souther.compiler.coverage.Arrivals.inTheTree(body,
                                 analysis.templates()::bodyOf),
-                        templates, truths, decided),
+                        templates, truths, decided, dependencies),
                 reads,
                 LiveFlow.of(body), List.of(), true, readings, forks, numbering);
         // What each value the body builds states, read once. A value means the same wherever it is
@@ -289,7 +292,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 walk(template, new Body(behavior, read,
                                 souther.compiler.coverage.Arrivals.inTheTree(template,
                                         analysis.templates()::bodyOf),
-                        templates, truths, decided),
+                        templates, truths, decided, dependencies),
                         insideATemplate, LiveFlow.of(template), entry.assumed(), entry.live(),
                         readings, forks, numbering);
             }
@@ -381,7 +384,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     .<BoundaryPolicy.Standing>map(BoundaryPolicy.Standing.Refused::new)
                     .orElseGet(() -> new BoundaryPolicy.Standing.Admitted(
                             ComparisonAssessment.of(in.behavior(), stated.statement(), where,
-                                    in.read(), reads, null, in.answering(), false)));
+                                    in.read(), reads, null, in.dependencies(), in.answering(),
+                                    false)));
             out.add(new Reading(stands, stated.statement(), where, reads, assumed, standing));
         }
         switch (e) {

@@ -1,11 +1,13 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Location;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.StatedComparison;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
@@ -33,6 +35,10 @@ import java.util.Map;
  * drawn on it, and one this answers names at least one answer, which no term of the input is. So a
  * comparison is read once, and a column of the table and a border on the same comparison cannot
  * come from two readings that disagree.
+ *
+ * <p>And a {@code Bool} answer held against a truth the source settles is that answer's truth:
+ * {@code known(name) == false} holding is {@code known(name)} not holding, and one column, which is
+ * what {@link souther.compiler.inputs.InputTruth} makes of the same spelling over a position.
  */
 record DecisionComparison(InputDomain inputs, RuleReadingSource rules, DecisionSubjects subjects) {
 
@@ -44,8 +50,44 @@ record DecisionComparison(InputDomain inputs, RuleReadingSource rules, DecisionS
      * read, and answering it here would be a second reading of it.
      */
     DecidedCondition of(Comparison comparison, InputReads reads, boolean held) {
+        DecidedCondition truth = truthOfAnAnswer(comparison.stated(), reads, held);
+        if (truth != null) {
+            return truth;
+        }
+        LinearForm<DecisionAtom> whole = overAnAnswer(comparison.stated(), reads);
+        return whole == null ? null : stated(whole, comparison.stated().claim(), held);
+    }
+
+    /**
+     * Whether {@code comparison} is a column here: a proposition over what a dependency answered.
+     *
+     * <p>The question a reading of the input asks before it says it could not read the comparison.
+     * Such a comparison is about a value a row stands in rather than writes, and this reading names
+     * it; answered by the reading of the input on its own, the column the table holds would be
+     * reported beside it as a rule nobody read.
+     */
+    boolean readsOverAnAnswer(StatedComparison comparison, InputReads reads) {
+        return truthOfAnAnswer(comparison, reads, true) != null
+                || overAnAnswer(comparison, reads) != null;
+    }
+
+    /**
+     * {@code comparison} coming out {@code held} as the truth of a {@code Bool} answer, or null where
+     * it does not hold one against a truth the source settles.
+     */
+    private DecidedCondition truthOfAnAnswer(StatedComparison comparison, InputReads reads,
+                                             boolean held) {
+        return BooleanMeaning.againstATruth(comparison, held, rules.symbols(),
+                        side -> subjects.isTheTruthOfAnAnswer(side, reads))
+                .map(against -> (DecidedCondition) subjects.truthOf(against.side(),
+                        against.held(), reads))
+                .orElse(null);
+    }
+
+    /** The quantity {@code comparison} states, or null where it is not one over an answer. */
+    private LinearForm<DecisionAtom> overAnAnswer(StatedComparison comparison, InputReads reads) {
         LinearForm<DecisionAtom> left = null;
-        for (Core side : List.of(comparison.stated().left(), comparison.stated().right())) {
+        for (Core side : List.of(comparison.left(), comparison.right())) {
             if (!(AffineForms.outcome(side, reads, reading())
                     instanceof AffineForms.Outcome.Composed<DecisionAtom, InputReads>(
                             LinearForm<DecisionAtom> form))) {
@@ -63,7 +105,7 @@ record DecisionComparison(InputDomain inputs, RuleReadingSource rules, DecisionS
                             .noneMatch(DecisionAtom.OfAnAnswer.class::isInstance)) {
                 return null;
             }
-            return stated(whole, comparison.stated().claim(), held);
+            return whole;
         }
         throw new IllegalStateException("a comparison has two sides");
     }

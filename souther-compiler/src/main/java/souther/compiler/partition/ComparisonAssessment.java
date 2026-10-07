@@ -44,12 +44,12 @@ import java.util.SequencedMap;
  * geometry and not a coverage question standing against an answer: carried as both, one decision
  * had two representations again, and the second had no reader once it could never go unanswered.
  *
- * <p><b>Six ways a comparison leaves the positions nothing, and they are six.</b> Read to the end
- * and cutting nothing, naming no position at all, reading the answer, cutting where the quantity
- * does not run, cutting where the rows that arrive stop short, and not read — each is a different
- * sentence to whoever is told it, and only the last is about a limit of this compiler. Held as one,
- * a tautology was owed a row where the relation changes and a rule this could not read was
- * described as naming no position.
+ * <p><b>Seven ways a comparison leaves the positions nothing, and they are seven.</b> Read to the
+ * end and cutting nothing, naming no position at all, reading the answer, reading what a dependency
+ * answered, cutting where the quantity does not run, cutting where the rows that arrive stop short,
+ * and not read — each is a different sentence to whoever is told it, and only the last is about a
+ * limit of this compiler. Held as one, a tautology was owed a row where the relation changes and a
+ * rule this could not read was described as naming no position.
  */
 sealed interface ComparisonAssessment {
 
@@ -119,6 +119,16 @@ sealed interface ComparisonAssessment {
 
     /** The comparison reads what the behavior answers. */
     record AnswerDependent() implements ComparisonAssessment {}
+
+    /**
+     * The comparison is a proposition over what a dependency answered, which the decision table
+     * holds as a column ({@link WhatAnAnswerTakesUp}).
+     *
+     * <p>Not a reading that stopped. A row stands the dependency in rather than writing what it
+     * answers, so there is no line on the input space for the comparison to be — and what it
+     * distinguishes is still owed rows, on the side that reads it.
+     */
+    record OnADependencysAnswer() implements ComparisonAssessment {}
 
     /** The comparison names no position of the behavior's input. */
     record NoInput() implements ComparisonAssessment {}
@@ -244,6 +254,8 @@ sealed interface ComparisonAssessment {
      *
      * <p>The one way in. {@code answer} is the binding a clause calls what the behavior answers, or
      * null where the comparison is written in a body and there is nothing to be the answer.
+     * {@code dependencies} is what the decision table takes up of a body that stands dependencies
+     * in, which a clause stands none of.
      *
      * <p><b>The arithmetic answers before anything else is asked.</b> Which positions a rule is
      * about is what the quantity it cuts is over: every atom of a form is a number of a location
@@ -257,7 +269,7 @@ sealed interface ComparisonAssessment {
      */
     static ComparisonAssessment of(String behavior, StatedComparison comparison, Citation at,
                                    InputReading read, InputReads reads,
-                                   BindingId answer,
+                                   BindingId answer, WhatAnAnswerTakesUp dependencies,
                                    souther.compiler.coverage.Arrivals answering,
                                    boolean drawnByAnInvariant) {
         Quantities quantities = read.quantities();
@@ -278,6 +290,12 @@ sealed interface ComparisonAssessment {
             case Cutting.Read.CutsNothing over -> over.read().isEmpty()
                     ? aboutNoPosition(comparison, reads, read.newtypes())
                     : new CutsNothing(AffineReading.filedAt(over.read()));
+            // Where the reading stopped and the comparison is over what a dependency answered, it is
+            // the decision table's. A number of an answer is no number of the input, so this reading
+            // stops at it however the comparison was written, and the stop is about whose subject
+            // the comparison is rather than about a form this compiler does not read.
+            case Cutting.Read.Stopped _ when dependencies.comparison(comparison, reads) ->
+                    new OnADependencysAnswer();
             // And where the reading stopped, its own answer for having stopped — decided where it
             // stopped rather than worked out again from the comparison afterwards. Here the walk
             // over the expression is the only account of what the rule is about, which is what it
@@ -528,7 +546,7 @@ sealed interface ComparisonAssessment {
             case NoFeasibleInput none -> none.cutting().over();
             case Unread unread -> List.copyOf(unread.why().keySet());
             case CutsNothing cuts -> cuts.filedAt();
-            case AtAPosition _, AnswerDependent _, NoInput _ -> List.of();
+            case AtAPosition _, AnswerDependent _, OnADependencysAnswer _, NoInput _ -> List.of();
         };
     }
 
@@ -593,6 +611,9 @@ sealed interface ComparisonAssessment {
             // the one at fault.
             case NoFeasibleInput _, AtAPosition _, NoInput _, AnswerDependent _ ->
                     new java.util.LinkedHashMap<>();
+            // Read by the decision table, which owes the rows it distinguishes. Left here as a
+            // place, it would be a rule that reading named reported as one nobody read.
+            case OnADependencysAnswer _ -> new java.util.LinkedHashMap<>();
         };
     }
 
@@ -613,7 +634,8 @@ sealed interface ComparisonAssessment {
         return switch (this) {
             case AtAPosition at -> at.places() == Places.ACROSS_THE_VALUE;
             case AcrossPositions over -> over.places() == Places.ACROSS_THE_VALUE;
-            case AnswerDependent _, NoInput _, CutsNothing _, OutsideTheDomain _,
+            case AnswerDependent _, OnADependencysAnswer _, NoInput _, CutsNothing _,
+                 OutsideTheDomain _,
                  NothingArrivesAtItsLine _, NoFeasibleInput _, Unread _ -> false;
         };
     }

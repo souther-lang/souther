@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.carrier.Membership;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.core.Core;
 import souther.compiler.flow.Arrival;
@@ -203,11 +202,7 @@ public record DecisionReading(String behavior, List<Ruled> found, Enumeration en
     private static DecisionMeanings meanings(InputReading read,
                                              Set<ValueName.Behavior> dependencies) {
         ConditionMeanings states = new ConditionMeanings(read);
-        DecisionSubjects subjects =
-                new DecisionSubjects(read.domain(), read.rules().symbols(),
-                        read.rules().declarations(), read.rules().newtypes(),
-                        Membership.built(add -> dependencies.forEach(add::add)));
-        return new DecisionMeanings(states, subjects,
-                new DecisionComparison(read.domain(), read.rules(), subjects));
+        WhatAnAnswerTakesUp answers = WhatAnAnswerTakesUp.of(read, dependencies);
+        return new DecisionMeanings(states, answers.subjects(), answers.comparisons());
     }
 }

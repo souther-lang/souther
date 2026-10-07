@@ -17,15 +17,15 @@ import souther.compiler.values.Allowance;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Ways a test with no measurement pipeline beside it reads thresholds or assembles a partition on
  * its own.
  *
  * <p>Each of these is a caller supplying a default or an assembled parameter and delegating whole
- * to the one production computation — {@link GuardThresholds#of(String, AnalysisBody, Core,
- * CoverageSites.Plan, InputReading, ElementBindings, PathReachability.Answers,
- * RuleReachNumbering)}, {@link EnsuresThresholds#of(StatedContract, InputReading)}
+ * to the one production computation — {@link GuardThresholds#of},
+ * {@link EnsuresThresholds#of(StatedContract, InputReading)}
  * and {@link Partitions#withEvidence}. None of these fixtures reads a comparison or a clause a
  * second way; they only fill in what a caller with a narrower question does not need to say.
  */
@@ -42,7 +42,7 @@ final class ThresholdFixtures {
                 : GuardThresholds.of(behavior, states, emitted, plan, inputs.reading(source),
                         ElementBindings.of(states, source.newtypes()),
                         PathReachability.Answers.NONE,
-                        new RuleReachNumbering(source.symbols().module(), behavior));
+                        new RuleReachNumbering(source.symbols().module(), behavior), Set.of());
     }
 
     /** The lines one behavior's clauses draw, reading the input's rules here. */

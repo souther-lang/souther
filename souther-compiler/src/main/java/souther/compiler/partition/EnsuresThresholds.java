@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The values a behavior's own {@code ensures} compares its inputs against.
@@ -208,10 +209,12 @@ public final class EnsuresThresholds {
         // draw one line and raise one question, and neither is worked out beside the other.
         // No arrival either: a clause stands in no body, it is checked whenever the behavior
         // answers, so there is nothing on the way to it and what arrives is the declarations'
-        // whole domain — which is what an arrival that restricts nothing reads as.
+        // whole domain — which is what an arrival that restricts nothing reads as. And no
+        // dependency: a clause is written against the declaration, and no row stands anything in
+        // for it.
         ComparisonAssessment assessed = ComparisonAssessment.of(out.behavior(), comparison.stated(),
                 Citation.of(e.pos()), read,
-                reads, rule.value(),
+                reads, rule.value(), WhatAnAnswerTakesUp.of(read, Set.of()),
                 answering, false);
         // What the positions this names are left with, where the reading of lines drew none. Asked
         // of the assessment and not worked out per arm here: the same table stood in the guard

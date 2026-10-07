@@ -43,7 +43,8 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between) 
                     ? new ComparisonGeometry(List.of(),
                             List.of(new LineDrawn(over.cutting(), originOf.apply(over.cutting()))))
                     : NONE;
-            case ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _,
+            case ComparisonAssessment.AnswerDependent _,
+                 ComparisonAssessment.OnADependencysAnswer _, ComparisonAssessment.NoInput _,
                  ComparisonAssessment.CutsNothing _, ComparisonAssessment.OutsideTheDomain _,
                  ComparisonAssessment.NothingArrivesAtItsLine _,
                  ComparisonAssessment.NoFeasibleInput _, ComparisonAssessment.Unread _ -> NONE;

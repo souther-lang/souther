@@ -17,6 +17,7 @@ import souther.compiler.values.Allowance;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -98,7 +99,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
                 inputs.reading(rules), inputs.parameterReads(),
                 checked.elementBindings().get("pick"),
                 Allowance.of(new PatternPlan.Budget(1000, 1000, 1_000_000_000L)), guards.forks(),
-                new RuleReachNumbering(module, "pick"));
+                new RuleReachNumbering(module, "pick"), Set.of());
         return new Both(guards, sets.forks());
     }
 
@@ -484,7 +485,7 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
                 checked.analysisBodies().get("pick"), stated, inputs.reading(rules),
                 inputs.parameterReads(), checked.elementBindings().get("pick"),
                 Allowance.of(new PatternPlan.Budget(1000, 1000, 1_000_000_000L)), guards.forks(),
-                new RuleReachNumbering(module, "pick")).forks();
+                new RuleReachNumbering(module, "pick"), Set.of()).forks();
 
         assertEquals(List.of("probe.forks/pick"), forks.stream()
                 .map(each -> each.rule().writtenIn().module() + "/"
