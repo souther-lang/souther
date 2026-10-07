@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import java.util.Objects;
+
 /**
  * What a line is drawn at: a quantity, and where on it the rule cuts.
  *
@@ -26,6 +28,27 @@ public record BoundaryTarget(BorderQuantity of, QuantityCut cut) {
         if (of == null || cut == null) {
             throw new IllegalArgumentException("a line is a quantity cut somewhere");
         }
+    }
+
+    /**
+     * The same quantity cut at the same place, with the place compared as a place.
+     *
+     * <p>A level keeps the spelling its rule was written in, and {@code 0} and {@code 0.00} are two
+     * spellings of one level ({@link Level}). Compared as the records are, one line read at one
+     * position under two readings that spelled it differently is two targets, and so two lines a
+     * row is owed at and two entries a document cannot order. The spelling stays held, for whatever
+     * reads the cut as it was written; it is not part of which place this is.
+     */
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof BoundaryTarget that
+                && of.equals(that.of)
+                && cut.canonical().equals(that.cut.canonical());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(of, cut.canonical());
     }
 
     /** A line on {@code of} at the level {@code at}. */

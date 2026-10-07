@@ -10,6 +10,9 @@ import souther.compiler.check.InvariantStatementId;
 import souther.compiler.check.PartId;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleRef;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermOrdersFixtures;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Towards;
@@ -75,6 +78,27 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
                 "and a number the quantity counts to is on no carrier at all");
         assertEquals(at("0").key(), onWhole.key(),
                 "which the key does not tell apart, being about the place alone");
+    }
+
+    /**
+     * A line at one place is one target however its level was spelled, and is named one way.
+     *
+     * <p>The two together, because they have to agree: readings folded into one line by their
+     * target are written under one label, and a label that followed the spelling would name the
+     * folded line after whichever reading arrived first.
+     */
+    @Test
+    void twoSpellingsOfOneLevelAreOneTargetNamedOneWay() {
+        NumericTerm.ValueOf cost = new NumericTerm.ValueOf(TermPath.of("cost"));
+        BorderQuantity quantity = new BorderQuantity.OfACoordinate("b", cost,
+                TermOrdersFixtures.itself(cost, DECIMALS));
+        BoundaryTarget unspelled = BoundaryTarget.at(quantity, at("0"));
+        BoundaryTarget spelled = BoundaryTarget.at(quantity, at("0.00"));
+
+        assertNotEquals(unspelled.cut(), spelled.cut(), "each keeps the level as it was written");
+        assertEquals(unspelled, spelled, "and they are one place");
+        assertEquals(unspelled.hashCode(), spelled.hashCode(), "found under one key");
+        assertEquals(unspelled.label(), spelled.label(), "and named one way");
     }
 
     /** One demand asked at two readings, each spelling its level its own way. */

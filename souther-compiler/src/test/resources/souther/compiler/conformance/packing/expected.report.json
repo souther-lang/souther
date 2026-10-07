@@ -1066,6 +1066,58 @@
               "at" : "0"
             }
           },
+          "lineId" : {
+            "target" : {
+              "behavior" : "packBox",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "straws"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "0"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.packing",
+                  "declaredOn" : "Straws",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
           "axis" : "packBox/straws",
           "origin" : "invariant Straws #1",
           "kind" : "at_value",
@@ -1138,6 +1190,58 @@
                 "kind" : "whole"
               },
               "at" : "20"
+            }
+          },
+          "lineId" : {
+            "target" : {
+              "behavior" : "packBox",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "straws"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "20"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.packing",
+                  "declaredOn" : "Straws",
+                  "clause" : 0
+                },
+                "part" : 1,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
             }
           },
           "axis" : "packBox/straws",
@@ -1214,6 +1318,58 @@
               "at" : "0"
             }
           },
+          "lineId" : {
+            "target" : {
+              "behavior" : "packBox",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "bars"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "0"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.packing",
+                  "declaredOn" : "Bars",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
           "axis" : "packBox/bars",
           "origin" : "invariant Bars #1",
           "kind" : "at_value",
@@ -1288,6 +1444,58 @@
               "at" : "20"
             }
           },
+          "lineId" : {
+            "target" : {
+              "behavior" : "packBox",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "bars"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "20"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.packing",
+                  "declaredOn" : "Bars",
+                  "clause" : 0
+                },
+                "part" : 1,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
           "axis" : "packBox/bars",
           "origin" : "invariant Bars #1",
           "kind" : "at_value",
@@ -1354,6 +1562,66 @@
             "level" : {
               "kind" : "a_count",
               "at" : "4800"
+            }
+          },
+          "lineId" : {
+            "target" : {
+              "behavior" : "packBox",
+              "quantity" : {
+                "shape" : "over_a_form",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "bars"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "600"
+                }, {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "straws"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "300"
+                } ]
+              },
+              "level" : {
+                "kind" : "a_count",
+                "at" : "4800"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.packing",
+                  "definition" : "packBox",
+                  "behavior" : "packBox",
+                  "ordinal" : 7,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
             }
           },
           "axis" : "packBox/600 * bars + 300 * straws",
@@ -2009,6 +2277,58 @@
               "at" : "0"
             }
           },
+          "lineId" : {
+            "target" : {
+              "behavior" : "bookSlot",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "from"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "0"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.packing",
+                  "declaredOn" : "Hour",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
           "axis" : "bookSlot/from",
           "origin" : "invariant Hour #1",
           "kind" : "at_value",
@@ -2081,6 +2401,58 @@
                 "kind" : "whole"
               },
               "at" : "24"
+            }
+          },
+          "lineId" : {
+            "target" : {
+              "behavior" : "bookSlot",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "from"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "24"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.packing",
+                  "declaredOn" : "Hour",
+                  "clause" : 0
+                },
+                "part" : 1,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
             }
           },
           "axis" : "bookSlot/from",
@@ -2157,6 +2529,58 @@
               "at" : "0"
             }
           },
+          "lineId" : {
+            "target" : {
+              "behavior" : "bookSlot",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "until"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "0"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.packing",
+                  "declaredOn" : "Hour",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
           "axis" : "bookSlot/until",
           "origin" : "invariant Hour #1",
           "kind" : "at_value",
@@ -2231,6 +2655,58 @@
               "at" : "24"
             }
           },
+          "lineId" : {
+            "target" : {
+              "behavior" : "bookSlot",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "until"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "24"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.packing",
+                  "declaredOn" : "Hour",
+                  "clause" : 0
+                },
+                "part" : 1,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
           "axis" : "bookSlot/until",
           "origin" : "invariant Hour #1",
           "kind" : "at_value",
@@ -2297,6 +2773,66 @@
             "level" : {
               "kind" : "a_count",
               "at" : "8"
+            }
+          },
+          "lineId" : {
+            "target" : {
+              "behavior" : "bookSlot",
+              "quantity" : {
+                "shape" : "between_positions",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "from"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "-1"
+                }, {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "until"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "a_count",
+                "at" : "8"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.packing",
+                  "definition" : "bookSlot",
+                  "behavior" : "bookSlot",
+                  "ordinal" : 2,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
             }
           },
           "axis" : "bookSlot/until",

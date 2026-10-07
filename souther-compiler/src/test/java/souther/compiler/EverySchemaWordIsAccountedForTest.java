@@ -638,6 +638,9 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "partition", "properties", "boundaries", "items", "properties",
                             "kind"),
                     souther.compiler.partition.BoundaryTarget.Shape.class),
+            new Vocabulary("quantityId.shape",
+                    List.of("$defs", "quantityId", "properties", "shape"),
+                    souther.compiler.partition.BoundaryTarget.Shape.class),
             // `no_arm_witnesses_it` was what a guard's line came back as where the arms could not
             // separate the rows that reached its comparison from the rows that did not. The
             // comparison is observed where it runs now, so nothing produces the word — and reports of
@@ -1411,31 +1414,6 @@ class EverySchemaWordIsAccountedForTest {
     }
 
     /**
-     * A key added since is optional, which is what keeps an older document a document of this version.
-     *
-     * <p>The schema says so in its own description: a change that removes or renames anything raises
-     * the number, and something added does not, so a report written before a key existed is still one
-     * of this version. Requiring an added key breaks that in the file that states it — every earlier
-     * document is refused by the schema it was written against.
-     *
-     * <p>Held as the keys a boundary written before {@code kind} carried, which is the shape the
-     * defect took. A key added later and required would fail here rather than on somebody's stored
-     * report, and the word test beside this one cannot see it: the words were right, and the document
-     * carrying none of them was the one refused.
-     */
-    @Test
-    void aBoundaryWrittenBeforeAKeyExistedIsStillOfThisVersion() {
-        Set<String> required = new LinkedHashSet<>();
-        for (JsonNode each : nodeAt(schema(),
-                List.of("$defs", "partition", "properties", "boundaries", "items", "required"))) {
-            required.add(each.asString());
-        }
-
-        assertEquals(Set.of("axis", "origin", "value", "items"),
-                required, "a boundary object written before `kind` existed carries these and no more");
-    }
-
-    /**
      * A report that carries an incompleteness says it in a word the schema allows.
      *
      * <p>The end of the same defect, from the other side. What the schema promised and what the
@@ -1549,10 +1527,8 @@ class EverySchemaWordIsAccountedForTest {
             }
         }
         if (node.has("$ref")) {
-            String ref = node.get("$ref").asString();
-            assertTrue(ref.startsWith("#/"), "a reference this cannot follow: " + ref);
             out.addAll(wordsOf(schema,
-                    nodeAt(schema, List.of(ref.substring(2).split("/")))));
+                    SchemaReference.resolve(schema, node.get("$ref").asString())));
         }
         return out;
     }

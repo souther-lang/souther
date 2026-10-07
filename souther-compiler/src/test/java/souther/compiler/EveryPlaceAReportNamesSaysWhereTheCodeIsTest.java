@@ -340,9 +340,8 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
     /**
      * The document answers whichever it is, everywhere it points.
      *
-     * <p>Absence is what a report written before the key existed carries, so an emitter that wrote it
-     * only where the answer was interesting would put "the code is here" and "nobody asked yet" under
-     * one silence.
+     * <p>An emitter that wrote it only where the answer was interesting would put "the code is here"
+     * and "nobody asked" under one silence, which is why the schema requires it.
      */
     @Test
     void everyPositionTheDocumentWritesAnswersTheQuestion() {

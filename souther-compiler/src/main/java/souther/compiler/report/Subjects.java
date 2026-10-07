@@ -1,6 +1,8 @@
 package souther.compiler.report;
 
 import souther.compiler.observe.Target;
+import souther.compiler.partition.Border;
+import souther.compiler.partition.BoundaryLine;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.query.Weakening;
 
@@ -46,19 +48,18 @@ final class Subjects {
             // be read are two facts, and the position among them is what says so.
             case Weakening.InputCasesUnreadable it ->
                     new Subject.AtAnInput(it.behavior(), it.at());
-            case Weakening.BorderValueUnreadable it -> new Subject.AtABorder(it.border());
+            case Weakening.BorderValueUnreadable it -> atThe(it.border());
             // The border, as the reading of it is. What the readings were stopped against is the
             // figure this compiler walks to and is what the walk met; one border is one place to
             // go back to however many rows stopped the walk there.
-            case Weakening.BorderReadingsNotExhausted it -> new Subject.AtABorder(it.border());
+            case Weakening.BorderReadingsNotExhausted it -> atThe(it.border());
             // The border, and not the lines beside it. Which lines those are is the same at every
             // run; what a reader acts on is which border was not held against them.
-            case Weakening.ABorderNotHeldAgainstTheLinesBesideIt it ->
-                    new Subject.AtABorder(it.border());
+            case Weakening.ABorderNotHeldAgainstTheLinesBesideIt it -> atThe(it.border());
             // The border, and not the point within it: which point could not be worked out is
             // carried in the words a report writes about the border's own items, not in a second
             // place to send a reader.
-            case Weakening.ItemsPlaceNotWorkedOut it -> new Subject.AtABorder(it.border());
+            case Weakening.ItemsPlaceNotWorkedOut it -> atThe(it.border());
             case Weakening.ModelReadingIncomplete it -> of(it.cause());
             // Named by the behavior, which is what this answer is of.
             case Weakening.BodyNotInEvaluation it ->
@@ -141,5 +142,17 @@ final class Subjects {
             case ClosureGap.LineNotDerived it ->
                     new Subject.AtAPosition(it.behavior(), it.at());
         };
+    }
+
+    /**
+     * The line a border is an assessment of, which is where a reader is sent for anything a measure
+     * of it went without.
+     *
+     * <p>One way from a border to its subject, for the four facts that are about one. Each of them
+     * taking the line apart for itself is four answers to which parts of a border say which line it
+     * is, and the one that left out where it was read would be two entries a document cannot order.
+     */
+    private static Subject atThe(Border border) {
+        return new Subject.AtABorder(BoundaryLine.of(border));
     }
 }

@@ -349,19 +349,15 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * hand, is settled by the model, while who can move it is a fact about the reading's
      * surroundings and is no part of which border this is.
      *
-     * <p>The quantity is compared as the value it is, and the place on it as a place. What a rule
-     * wrote a form's coefficients as is the rule's own text and is the same at every reading of it,
-     * so nothing here folds two spellings of one form.
+     * <p>Where it was drawn is asked of the target, which says which place it is
+     * ({@link BoundaryTarget#equals}) — the quantity as the value it is and the place on it as a
+     * place, so two readings that spelled one level {@code 0} and {@code 0.00} are at one place.
+     * Taken apart here instead, this would be a second answer to which place a line is at. What a
+     * rule wrote a form's coefficients as is the rule's own text and is the same at every reading of
+     * it, so nothing here folds two spellings of one form.
      */
     public boolean sameReadingAs(Border other) {
-        if (other == null || !origin.equals(other.origin)
-                || !cut.of().equals(other.cut.of())
-                // The place, and not how the rule happened to write the number: a level keeps the
-                // spelling it was written in, so two readings of one line at one place can hold
-                // `0` and `0.00` — which is the mistake this whole comparison is here to stop
-                // being made about a border, and it would have been made about the border's own
-                // place by asking the records.
-                || !cut.cut().canonical().equals(other.cut.cut().canonical())) {
+        if (other == null || !origin.equals(other.origin) || !cut.equals(other.cut)) {
             return false;
         }
         if (!answers.keySet().equals(other.answers.keySet())) {

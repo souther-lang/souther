@@ -26,6 +26,14 @@ more, and both existed only because develop had been made to claim a number it w
    git push
    ```
 
+   Setting a version that is not a snapshot records the adequacy report's schema as this release
+   ships it: the script stages it under
+   `souther-compiler/src/test/resources/souther/compiler/schema/released/<version>/`, and the commit
+   above carries it. The `schemaVersion` it writes is frozen from then on, if it was not already. A
+   copy is never rewritten, and every release adds its own, so the tests hold each frozen version to
+   accepting what every release of it accepted, and refuse a release that has no copy or ships a
+   schema other than its copy.
+
 4. Tag that commit and push the tag:
 
    ```sh
