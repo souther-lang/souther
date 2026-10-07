@@ -2,6 +2,7 @@ package souther.compiler.numeric;
 
 import souther.compiler.numeric.DifferenceBounds.Apart;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -51,6 +52,34 @@ import java.util.function.Function;
  * relation can still narrow — and that, rather than the rounds having settled, is what a reading of
  * one position at a time rests on. Asserted where the state is made and held to as a property
  * elsewhere.
+ *
+ * <p><b>Rules that name no position in common are closed apart, and what they leave together is the
+ * product of what each part leaves.</b> The parts are the connected pieces of the rules taken as
+ * edges over every position each of them weighs — a sum over three positions joins all three, and
+ * not only two of them pairwise ({@link ClosureQuestion#independentRules}). This is a property of the
+ * closure as it is defined, and parting the rules is where it is used:
+ *
+ * <ul>
+ *   <li>A path of differences runs along rules, so the difference closure never leaves a part.</li>
+ *   <li>A round narrows only the positions of the rule it reduces, so each part's box moves by its
+ *       own rules; once a part stops moving it stays where it stopped for every round another part
+ *       still takes, and the whole has stopped when the last of them has.</li>
+ *   <li>A query does read a premise from another part ({@link FormReach}): for a form {@code F} and
+ *       a premise {@code P <= b} naming none of its positions, what it bounds {@code F} by is
+ *       {@code F - P + b}, which the ends bound by the most {@code F} comes to and the most
+ *       {@code b - P} comes to apart. Where the ends of {@code P}'s part leave {@code P <= b} a value,
+ *       the second is at or above nought and the premise bounds {@code F} no tighter than its own ends
+ *       do. Where they leave it none, that part holds nothing in the same round and the whole is
+ *       empty either way: a premise over several positions is a form the rules leave nothing
+ *       ({@link #theRulesLeaveAFormNothing}), and one over a single position is a bound the
+ *       differences already put in the box, whose ends have then crossed before any round. A
+ *       sum the exact arithmetic cannot hold drops a route, which only ever leaves an answer wider,
+ *       so no route across parts proves what the parts do not.</li>
+ * </ul>
+ *
+ * <p>So a reader that changes how a premise is read across parts, or lets a round narrow a position
+ * the reduced rule does not weigh, has to hold the product to the closure in one run again — which is
+ * what the theorem test of this does.
  *
  * <p><b>What emptiness means here, in one direction.</b> Where this says nothing is left, nothing is.
  * Two routes reach that word and each is sound on its own: every step that narrows is implied by the
@@ -119,6 +148,58 @@ public final class ClosedState<A> {
     public static <A> ClosedState<A> of(List<AffineConstraint<A>> constraints,
                                         Function<A, Granularity> spacing,
                                         CanonicalOrder<A> order) {
+        List<List<AffineConstraint<A>>> independent = ClosureQuestion.independentRules(constraints);
+        List<ClosedState<A>> closed = new ArrayList<>(independent.size());
+        for (List<AffineConstraint<A>> rules : independent) {
+            closed.add(closedTogether(rules, spacing, order));
+        }
+        return product(closed);
+    }
+
+    /**
+     * What closures of rules no two of which name one position leave, as the closure of all their
+     * rules — see the class comment for why the two are one.
+     *
+     * <p>Nothing is left where any of them leaves nothing. Otherwise each position is where its own
+     * closure put it and each difference is its own closure's
+     * ({@link DifferenceBounds#product}); the rounds ran out where they ran out for one of them, and
+     * every bound was composed where every one of them composed its own.
+     */
+    static <A> ClosedState<A> product(List<ClosedState<A>> closures) {
+        if (closures.size() == 1) {
+            return closures.getFirst();
+        }
+        List<DifferenceBounds<A>> each = new ArrayList<>(closures.size());
+        closures.forEach(closure -> each.add(closure.differences));
+        DifferenceBounds<A> differences = DifferenceBounds.product(each);
+        Map<A, ExactCut> least = new LinkedHashMap<>();
+        Map<A, ExactCut> most = new LinkedHashMap<>();
+        Status status = Status.STABLE;
+        boolean everyBoundWasComposed = true;
+        for (ClosedState<A> closure : closures) {
+            if (closure.holdsNothing) {
+                return empty(differences);
+            }
+            least.putAll(closure.box.atLeast());
+            most.putAll(closure.box.atMost());
+            if (closure.status == Status.BUDGET_EXHAUSTED) {
+                status = Status.BUDGET_EXHAUSTED;
+            }
+            everyBoundWasComposed &= closure.everyBoundWasComposed;
+        }
+        return settled(new Box<>(least, most), differences, status, everyBoundWasComposed);
+    }
+
+    /**
+     * What {@code constraints} leave, every rule read against every other in one run of the rounds.
+     *
+     * <p>The closure as it is defined, whether or not the rules are independent of each other.
+     * {@link #of} is this over each independent part and the product of those; this is the one a
+     * test holds that product to.
+     */
+    static <A> ClosedState<A> closedTogether(List<AffineConstraint<A>> constraints,
+                                             Function<A, Granularity> spacing,
+                                             CanonicalOrder<A> order) {
         DifferenceBounds<A> differences = DifferenceBounds.over(constraints, order);
         if (differences.holdsNothing()) {
             return empty(differences);
@@ -168,9 +249,13 @@ public final class ClosedState<A> {
      * the rules weigh, which are the only positions a closure asks about, they are the spacing and
      * the order the question was stated with, so this is the closure {@link #of(List, Function,
      * CanonicalOrder)} works out from those.
+     *
+     * <p>Closed in one run and not parted first. The questions a closure is kept for are parted
+     * already ({@link ClosureQuestion#independent}), and a question that is not is closed to the
+     * same state either way.
      */
     static <A> ClosedState<A> of(ClosureQuestion<A> question) {
-        return of(question.rules(), question::spacingOf, question.order());
+        return closedTogether(question.rules(), question::spacingOf, question.order());
     }
 
     /**

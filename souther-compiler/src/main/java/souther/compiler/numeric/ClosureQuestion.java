@@ -3,6 +3,7 @@ package souther.compiler.numeric;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -89,6 +90,87 @@ final class ClosureQuestion<A> {
         }
         return new ClosureQuestion<>(List.copyOf(rules), Map.copyOf(spaced),
                 placing.apply(Collections.unmodifiableSet(weighed)));
+    }
+
+    /**
+     * The questions {@code rules} put, one for each part of them that names no position another part
+     * names.
+     *
+     * <p>Each of these is a closure on its own, and what the rules leave together is the product of
+     * what these leave ({@link ClosedState#product}) — see {@link ClosedState} for why. So two sets
+     * of rules that share a part share the question that part puts, whatever else each of them holds.
+     *
+     * @param placing as for {@link #of(List, Function, Function)}, asked once for each part
+     */
+    static <A> List<ClosureQuestion<A>> independent(List<AffineConstraint<A>> rules,
+                                                    Function<A, Granularity> spacing,
+                                                    Function<Set<A>, Map<A, Integer>> placing) {
+        List<List<AffineConstraint<A>>> parts = independentRules(rules);
+        List<ClosureQuestion<A>> out = new ArrayList<>(parts.size());
+        for (List<AffineConstraint<A>> part : parts) {
+            out.add(of(part, spacing, placing));
+        }
+        return out;
+    }
+
+    /**
+     * {@code rules} parted where no position joins them: two rules are in one part where a chain of
+     * rules, each weighing a position the next one weighs, runs from one to the other.
+     *
+     * <p>A rule is one edge over every position it weighs, so a sum over three positions holds all
+     * three in one part. The parts come in the order of the first rule of each, and the rules of a
+     * part in the order they were handed over, so the closure of a part reads its rules in the order
+     * the closure of all of them would have.
+     *
+     * <p>No order of positions is asked for. Which parts there are is settled by which positions
+     * each rule weighs, so it does not depend on the order a rule's positions are taken in — see
+     * {@link #joining} — and asking an order to walk them would be a comparison made every time the
+     * rules are asked, which is what keeping the places of a set of positions is there to save.
+     */
+    static <A> List<List<AffineConstraint<A>>> independentRules(List<AffineConstraint<A>> rules) {
+        Map<A, Integer> firstNamedBy = new HashMap<>();
+        int[] joinedTo = new int[rules.size()];
+        for (int at = 0; at < rules.size(); at++) {
+            joinedTo[at] = at;
+            joining(rules.get(at), at, firstNamedBy, joinedTo);
+        }
+        Map<Integer, List<AffineConstraint<A>>> parts = new LinkedHashMap<>();
+        for (int at = 0; at < rules.size(); at++) {
+            parts.computeIfAbsent(rootOf(joinedTo, at), _ -> new ArrayList<>()).add(rules.get(at));
+        }
+        List<List<AffineConstraint<A>>> out = new ArrayList<>(parts.size());
+        parts.values().forEach(part -> out.add(List.copyOf(part)));
+        return out;
+    }
+
+    /**
+     * The {@code at}-th rule joined to the part of every rule before it that weighs one of its
+     * positions.
+     *
+     * <p>Its positions are taken as the form holds them. Each one joins two parts into one, and
+     * which joins are made is the set of positions and not the order: joining is the union of two
+     * sets, and two parts end up one exactly where some position is weighed by a rule of each,
+     * whichever position was taken first.
+     */
+    private static <A> void joining(AffineConstraint<A> rule, int at, Map<A, Integer> firstNamedBy,
+                                    int[] joinedTo) {
+        for (A position : rule.form().coefs().keySet()) {
+            Integer had = firstNamedBy.putIfAbsent(position, at);
+            if (had != null) {
+                int one = rootOf(joinedTo, had);
+                int other = rootOf(joinedTo, at);
+                joinedTo[Math.max(one, other)] = Math.min(one, other);
+            }
+        }
+    }
+
+    /** The first rule of the part {@code rule} has been joined to so far. */
+    private static int rootOf(int[] joinedTo, int rule) {
+        int at = rule;
+        while (joinedTo[at] != at) {
+            at = joinedTo[at];
+        }
+        return at;
     }
 
     /**
