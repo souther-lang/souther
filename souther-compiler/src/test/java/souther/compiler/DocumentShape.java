@@ -409,9 +409,7 @@ public final class DocumentShape {
         private JsonNode resolved(JsonNode said) {
             JsonNode at = said;
             while (at.has("$ref")) {
-                String name = at.get("$ref").asString();
-                at = schema.get("$defs").get(name.substring(name.lastIndexOf('/') + 1));
-                assertNotNull(at, () -> "the schema refers to " + name + " and does not define it");
+                at = SchemaReference.resolve(schema, at.get("$ref").asString());
             }
             return at;
         }

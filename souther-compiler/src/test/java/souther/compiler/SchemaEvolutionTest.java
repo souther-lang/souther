@@ -243,6 +243,37 @@ class SchemaEvolutionTest {
                         }"""));
     }
 
+    /**
+     * A reference to a part inside a definition keeps the definition holding it as it shipped.
+     *
+     * <p>{@code #/$defs/w/items} points into {@code w}, and is no definition of its own: read as
+     * one, the {@code not} that reaches it was taken to reach nothing.
+     */
+    @Test
+    void aReferenceIntoADefinitionKeepsTheDefinitionAsItShipped() {
+        assertEquals(List.of("/$defs/w: changed where a part accepting more can make the whole"
+                        + " accept less"),
+                narrowings("""
+                        {
+                          "not": { "$ref": "#/$defs/w/items" },
+                          "$defs": { "w": { "type": "array", "items": { "enum": ["x"] } } }
+                        }""", """
+                        {
+                          "not": { "$ref": "#/$defs/w/items" },
+                          "$defs": { "w": { "type": "array", "items": { "enum": ["x", "y"] } } }
+                        }"""));
+    }
+
+    /** A reference into no definition is one this cannot say anything about, and says so. */
+    @Test
+    void aReferenceIntoNoDefinitionIsNamed() {
+        String both = """
+                { "properties": { "a": { "type": "string" }, "b": { "$ref": "#/properties/a" } } }""";
+        assertEquals(List.of("#/properties/a: a reference this does not follow",
+                        "#/properties/a: a reference this does not follow"),
+                narrowings(both, both));
+    }
+
     /** A key added to an object that admits others takes the key out of what held it before. */
     @Test
     void aKeyAddedToAnOpenObjectIsANarrowing() {

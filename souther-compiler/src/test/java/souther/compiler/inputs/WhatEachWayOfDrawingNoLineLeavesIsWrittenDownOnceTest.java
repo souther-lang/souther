@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.SchemaReference;
+
 import souther.compiler.check.Clause;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleCitation;
@@ -538,9 +540,11 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
 
     /** The words the schema allows at one of its definitions, following what it is written as. */
     private static java.util.Set<String> words(JsonNode schema, String def) {
+        return wordsOf(schema, SchemaReference.resolve(schema, "#/$defs/" + def));
+    }
+
+    private static java.util.Set<String> wordsOf(JsonNode schema, JsonNode node) {
         java.util.Set<String> out = new java.util.LinkedHashSet<>();
-        JsonNode node = schema.get("$defs").get(def);
-        assertNotNull(node, "the schema has no " + def);
         if (node.has("enum")) {
             node.get("enum").forEach(each -> out.add(each.asString()));
         }
@@ -548,7 +552,8 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // it. Read only through `anyOf`, such a surface came back with no words at all and the
         // vocabularies were held equal by both of them being empty.
         if (node.has("$ref")) {
-            out.addAll(words(schema, node.get("$ref").asString().substring("#/$defs/".length())));
+            out.addAll(wordsOf(schema,
+                    SchemaReference.resolve(schema, node.get("$ref").asString())));
         }
         if (node.has("anyOf")) {
             for (JsonNode each : node.get("anyOf")) {
@@ -559,8 +564,8 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                     each.get("enum").forEach(word -> out.add(word.asString()));
                 }
                 if (each.has("$ref")) {
-                    out.addAll(words(schema,
-                            each.get("$ref").asString().substring("#/$defs/".length())));
+                    out.addAll(wordsOf(schema,
+                            SchemaReference.resolve(schema, each.get("$ref").asString())));
                 }
             }
         }

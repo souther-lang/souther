@@ -1527,10 +1527,8 @@ class EverySchemaWordIsAccountedForTest {
             }
         }
         if (node.has("$ref")) {
-            String ref = node.get("$ref").asString();
-            assertTrue(ref.startsWith("#/"), "a reference this cannot follow: " + ref);
             out.addAll(wordsOf(schema,
-                    nodeAt(schema, List.of(ref.substring(2).split("/")))));
+                    SchemaReference.resolve(schema, node.get("$ref").asString())));
         }
         return out;
     }

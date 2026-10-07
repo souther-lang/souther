@@ -40,16 +40,23 @@ public final class SchemaEvolution {
     private static final Set<String> NAMING = Set.of(
             "properties", "$defs", "patternProperties", "dependentSchemas", "dependentRequired");
 
-    private static final String DEFINITION = "#/$defs/";
-
     private SchemaEvolution() {
     }
 
     /** Each place {@code current} accepts less than {@code shipped} did, by its path from the root. */
     public static List<String> narrowings(JsonNode shipped, JsonNode current) {
-        Set<String> asShipped = definitionsReachedWhereNothingMayGrow(shipped);
-        asShipped.addAll(definitionsReachedWhereNothingMayGrow(current));
         List<String> out = new ArrayList<>();
+        List<Reference> found = new ArrayList<>();
+        references(shipped, true, found, "");
+        references(current, true, found, "");
+        // A reference into no definition reaches a part this cannot say stays as it shipped, so
+        // whatever is changed there is a narrowing as far as this can tell.
+        for (Reference each : found) {
+            if (each.definition() == null) {
+                out.add(each.written() + ": a reference this does not follow");
+            }
+        }
+        Set<String> asShipped = definitionsReachedWhereNothingMayGrow(found);
         compare(shipped, current, "", true, out);
         JsonNode shippedDefinitions = shipped.path("$defs");
         JsonNode currentDefinitions = current.path("$defs");
@@ -196,13 +203,15 @@ public final class SchemaEvolution {
     /**
      * Every definition some {@code $ref} reaches from a place nothing may grow, directly or through
      * another such definition.
+     *
+     * <p>The whole definition a reference points into, where it points at a part inside one: what
+     * this keeps as it shipped is a definition, and keeping a part of one would need this to say
+     * which other parts the part depends on.
      */
-    private static Set<String> definitionsReachedWhereNothingMayGrow(JsonNode schema) {
-        List<Reference> found = new ArrayList<>();
-        references(schema, true, found, "");
+    private static Set<String> definitionsReachedWhereNothingMayGrow(List<Reference> found) {
         Set<String> out = new HashSet<>();
         for (Reference each : found) {
-            if (!each.mayGrow()) {
+            if (!each.mayGrow() && each.definition() != null) {
                 out.add(each.definition());
             }
         }
@@ -210,7 +219,8 @@ public final class SchemaEvolution {
         while (grew) {
             grew = false;
             for (Reference each : found) {
-                if (each.from() != null && out.contains(each.from()) && out.add(each.definition())) {
+                if (each.from() != null && each.definition() != null && out.contains(each.from())
+                        && out.add(each.definition())) {
                     grew = true;
                 }
             }
@@ -218,9 +228,12 @@ public final class SchemaEvolution {
         return out;
     }
 
-    /** One {@code $ref}: the definition it names, whether it stands where a part may grow, and the
-     *  definition it is written inside, or null for one outside every definition. */
-    private record Reference(String definition, boolean mayGrow, String from) {}
+    /**
+     * One {@code $ref}: as written, the definition it points into or null where it points into
+     * none, whether it stands where a part may grow, and the definition it is written inside or
+     * null for one outside every definition.
+     */
+    private record Reference(String written, String definition, boolean mayGrow, String from) {}
 
     private static void references(JsonNode node, boolean mayGrow, List<Reference> out,
                                    String from) {
@@ -231,9 +244,10 @@ public final class SchemaEvolution {
         if (!node.isObject()) {
             return;
         }
-        if (node.has("$ref") && node.get("$ref").asString().startsWith(DEFINITION)) {
-            out.add(new Reference(node.get("$ref").asString().substring(DEFINITION.length()),
-                    mayGrow, from.isEmpty() ? null : from));
+        if (node.has("$ref")) {
+            String written = node.get("$ref").asString();
+            out.add(new Reference(written, SchemaReference.definition(written), mayGrow,
+                    from.isEmpty() ? null : from));
         }
         for (String key : node.propertyNames()) {
             JsonNode value = node.get(key);
