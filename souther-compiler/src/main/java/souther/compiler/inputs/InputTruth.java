@@ -5,7 +5,6 @@ import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.numeric.Rel;
 import souther.compiler.types.Type;
 
 import java.util.Objects;
@@ -121,24 +120,10 @@ public record InputTruth(TermPath at, boolean held) {
     public static InputTruth compared(StatedComparison comparison, boolean holding,
                                       InputReads reads, Symbols symbols,
                                       DeclarationNewtypes newtypes) {
-        Rel states = comparison.claim().statedRelation();
-        Rel met = holding ? states : states.denied();
-        if (met != Rel.EQ && met != Rel.NE) {
-            return null;
-        }
-        TermPath at = positionOf(comparison.left(), reads, newtypes);
-        Core other = comparison.right();
-        if (at == null) {
-            at = positionOf(comparison.right(), reads, newtypes);
-            other = comparison.left();
-        }
-        if (at == null) {
-            return null;
-        }
-        Optional<Boolean> written = BooleanMeaning.folded(other, symbols);
-        if (written.isEmpty()) {
-            return null;
-        }
-        return new InputTruth(at, written.get() == (met == Rel.EQ));
+        return BooleanMeaning.againstATruth(comparison, holding, symbols,
+                        side -> positionOf(side, reads, newtypes) != null)
+                .map(against -> new InputTruth(positionOf(against.side(), reads, newtypes),
+                        against.held()))
+                .orElse(null);
     }
 }

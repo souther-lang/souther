@@ -1,8 +1,10 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.numeric.Rel;
 
 import java.util.Optional;
+import java.util.function.Predicate;
 
 /**
  * A value the body asks the truth of, in the words a comparison is read in — for a reader outside
@@ -51,6 +53,48 @@ public final class BooleanMeaning {
     public static Optional<Boolean> folded(Core e, Symbols symbols) {
         return CoreConstantEval.against(symbols, Denotations.none()).eval(e)
                 .filter(Boolean.class::isInstance).map(Boolean.class::cast);
+    }
+
+    /**
+     * A side of a comparison held against a truth the source settles, and which of its two values
+     * the comparison coming out the way asked says it holds.
+     *
+     * @param side the side that is not the settled truth
+     * @param held whether {@code side} holds
+     */
+    public record AgainstATruth(Core side, boolean held) {}
+
+    /**
+     * What {@code comparison}, coming out {@code holding}, says of a side of it held against a truth
+     * the source settles, or empty where it holds none: {@code x == false} holding is {@code x} not
+     * holding, and {@code x /= false} holding is {@code x} holding.
+     *
+     * <p>Which side is asked about is the asker's, by {@code subject}: a position of the input to
+     * one reader, what a dependency answered to another. The relation and the folding are this
+     * reading's, so the two read one spelling one way.
+     *
+     * @param subject whether a side is one the asker reads a truth of. The left side is asked first
+     */
+    public static Optional<AgainstATruth> againstATruth(StatedComparison comparison,
+                                                         boolean holding, Symbols symbols,
+                                                         Predicate<Core> subject) {
+        Rel states = comparison.claim().statedRelation();
+        Rel met = holding ? states : states.denied();
+        if (met != Rel.EQ && met != Rel.NE) {
+            return Optional.empty();
+        }
+        Core side = comparison.left();
+        Core other = comparison.right();
+        if (!subject.test(side)) {
+            side = comparison.right();
+            other = comparison.left();
+            if (!subject.test(side)) {
+                return Optional.empty();
+            }
+        }
+        boolean equal = met == Rel.EQ;
+        Core of = side;
+        return folded(other, symbols).map(written -> new AgainstATruth(of, written == equal));
     }
 
     /**

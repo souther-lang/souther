@@ -10,9 +10,11 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -102,6 +104,36 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
         }
         Collections.reverse(steps);
         return new DecisionSubject.AnAnswer(answered, steps);
+    }
+
+    /**
+     * {@code truth} coming out {@code holding} as the truth of a subject a row controls, or null
+     * where it is the truth of none.
+     *
+     * <p>Through what {@link InputTruth#asked} reads through — a {@code let}, a name, a denial — and
+     * so the one way through them for a truth here as for a truth of a position. Read without it,
+     * {@code Bool.not(known(name))} was no column, while the reading of the input, which looks
+     * through the denial, found {@code known(name)} under it and handed it over: a condition both
+     * readings let go.
+     */
+    DecidedCondition.Stood truthOf(Core truth, boolean holding, InputReads reads) {
+        InputTruth.Asked asked = InputTruth.asked(truth, holding, reads, symbols, newtypes);
+        DecisionSubject subject = of(asked.value(), asked.reads());
+        return subject == null ? null : new DecidedCondition.Stood(
+                new DecisionCondition.ATruth(subject), asked.holding());
+    }
+
+    /**
+     * Whether {@code e} is a {@code Bool} whose truth, read as {@link #truthOf} reads it, is that of
+     * what a dependency answered.
+     *
+     * <p>Only a truth. An answer that is a value inside a condition — compared, or handed to an
+     * operation — is not what the condition decides.
+     */
+    boolean isTheTruthOfAnAnswer(Core e, InputReads reads) {
+        DecidedCondition.Stood truth = Core.withoutStanding(e).type() == Type.Prim.BOOL
+                ? truthOf(e, true, reads) : null;
+        return truth != null && truth.condition().of() instanceof DecisionSubject.AnAnswer;
     }
 
     /**

@@ -198,11 +198,7 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
      */
     private DecidedCondition ofASubject(Condition condition, boolean held) {
         return switch (condition) {
-            case Condition.Truth truth -> {
-                DecisionSubject subject = subjects.of(truth.value(), truth.reads());
-                yield subject == null ? null
-                        : new DecidedCondition.Stood(new DecisionCondition.ATruth(subject), held);
-            }
+            case Condition.Truth truth -> subjects.truthOf(truth.value(), held, truth.reads());
             case Condition.Compares compares ->
                     comparisons.of(compares.comparison(), compares.reads(), held);
             case Condition.Joined _ -> null;

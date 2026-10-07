@@ -54,10 +54,17 @@ record WhatAnAnswerTakesUp(DecisionSubjects subjects, DecisionComparison compari
     }
 
     /**
-     * Whether {@code part} of a condition, read under {@code reads}, is what a dependency answered
-     * — whose truth is the column, however much of the input the call was asked about.
+     * Whether {@code part} of a condition, read under {@code reads}, is the truth of what a
+     * dependency answered — which is the column, however much of the input the call was asked
+     * about.
+     *
+     * <p>Read the way the table reads a truth ({@link DecisionSubjects#truthOf}), so what is handed
+     * over is what the table names: a part handed over on a reading of its own would be one both
+     * sides let go. And only a truth: an answer that is a value inside what a part decides is not
+     * what the part decides, and handing the part over for it would take an unread operation
+     * around the answer with it.
      */
     boolean part(Core part, InputReads reads) {
-        return subjects.of(part, reads) instanceof DecisionSubject.AnAnswer;
+        return subjects.isTheTruthOfAnAnswer(part, reads);
     }
 }

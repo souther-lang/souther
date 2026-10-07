@@ -2,13 +2,14 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.inputs.StandingQuestion;
+import souther.compiler.diag.SourceLayouts;
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Weakening;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.AdequacyReport.AdequacyStatus;
-import souther.compiler.report.AdequacyUncertainty;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -32,6 +33,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * language, is no subject a row controls, and a condition over one is as unread as it was.
  */
 class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private static final String WITHDRAW = """
             module probe.g2
@@ -67,13 +70,13 @@ class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
                 | "unknown" : ("b") with known = false -> DENIED
             """;
 
-    /** A comparison of an answer against the input is no rule of the input's, and every row the
+    /** A comparison of an answer with the input is no rule of the input's, and every row the
      *  table asks for is written. */
     @Test
     void aComparisonOfAnAnswerWithTheInputIsTheTables() {
         AdequacyReport report = measured(WITHDRAW);
 
-        assertEquals(Set.of(), unreadAt(report));
+        assertEquals(Set.of(), notReadAt(report));
         assertEquals(AdequacyStatus.SATISFIED, report.adequacy(),
                 () -> "what keeps it open: " + report.whatKeepsTheVerdictOpen());
     }
@@ -82,15 +85,47 @@ class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
     @Test
     void aTruthOfAnAnswerIsTheTables() {
         for (String spelled : new String[] {"known(name)", "known(name) == false",
+                "Bool.not(known(name))", "Bool.not(known(name)) == true",
                 "{ let k = known(name)\n    k }"}) {
-            boolean denied = spelled.contains("false");
+            boolean denied = spelled.contains("false") || spelled.contains("not");
             AdequacyReport report = measured(GREET.replace("CONDITION", spelled)
                     .replace("HELD", denied ? "0" : "1").replace("DENIED", denied ? "1" : "0"));
 
-            assertEquals(Set.of(), unreadAt(report), spelled);
+            assertEquals(Set.of(), notReadAt(report), spelled);
             assertEquals(AdequacyStatus.SATISFIED, report.adequacy(),
                     () -> spelled + ": " + report.whatKeepsTheVerdictOpen());
         }
+    }
+
+    /**
+     * And a dependency asked about what another one answered, through the name an arm gave it:
+     * the question is the table's whatever it was asked about.
+     */
+    @Test
+    void anAnswerAskedAboutAnotherAnswerIsTheTables() {
+        AdequacyReport report = measured("""
+                module probe.v
+                data User = { hash: String }
+                data Credentials = { name: String, password: String }
+                behavior findUser : (name: String) -> User | NoUser
+                behavior verifyPassword : (password: String, hash: String) -> Bool
+                behavior login : (c: Credentials) -> Int
+                    depends on findUser, verifyPassword
+                let login (c, findUser, verifyPassword) =
+                    match findUser(c.name) with
+                        | NoUser -> 0
+                        | User as found ->
+                            if verifyPassword(c.password, found.hash) then 1 else 2
+                example login
+                    | "none" : (Credentials { name = "x", password = "p" })
+                        with findUser = NoUser, verifyPassword = false -> 0
+                    | "ok" : (Credentials { name = "x", password = "p" })
+                        with findUser = User { hash = "h" }, verifyPassword = true -> 1
+                    | "bad" : (Credentials { name = "x", password = "p" })
+                        with findUser = User { hash = "h" }, verifyPassword = false -> 2
+                """);
+
+        assertEquals(Set.of(), notReadAt(report));
     }
 
     /** Taken part by part: beside an answer, an operation of the language is unread where it was. */
@@ -109,7 +144,7 @@ class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
                     | "no zero" : ("a", [1]) with known = true -> 0
                 """);
 
-        assertEquals(Set.of("xs"), unreadAt(report),
+        assertEquals(Set.of("xs"), notReadAt(report),
                 "the containment is unread at the list, and the answer is filed nowhere");
     }
 
@@ -130,7 +165,34 @@ class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
                     | "unknown" : (false) -> 0
                 """);
 
-        assertEquals(Set.of("flag"), unreadAt(report));
+        assertEquals(Set.of("flag"), notReadAt(report));
+    }
+
+    /**
+     * The name an arm gives a value the body built is not read through to that value.
+     *
+     * <p>What was built is every case it could be, and read without the arm {@code b.k} would be
+     * the choice between them — a rule about {@code flag} the body never wrote. What the name is
+     * read through to is an answer, which holds nothing a reader could look inside.
+     */
+    @Test
+    void aNameForABuiltValueIsNotReadThroughToIt() {
+        AdequacyReport report = measured("""
+                module probe.c
+                data A = { n: Int }
+                data B = { k: Int }
+                data S = A | B
+                behavior use : (flag: Bool) -> Int
+                let use (flag) =
+                    match (if flag then A { n = 1 } else B { k = 2 }) with
+                        | A as a -> if a.n > 0 then 1 else 2
+                        | B as b -> if b.k > 0 then 3 else 4
+                example use
+                    | "a" : (true) -> 1
+                    | "b" : (false) -> 3
+                """);
+
+        assertEquals(Set.of(), notReadAt(report));
     }
 
     private static AdequacyReport measured(String source) {
@@ -140,15 +202,16 @@ class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
         return AdequacyReport.of(compilation);
     }
 
-    /** Where the rules nothing could read are filed, among what keeps the verdict open. */
-    private static Set<String> unreadAt(AdequacyReport report) {
+    /** The positions the report says a rule went unread about, over every behavior. */
+    private static Set<String> notReadAt(AdequacyReport report) {
+        JsonNode root = JSON.readTree(report.json(SourceRendering.namedByIdentity(
+                SourceLayouts.NONE)));
         Set<String> out = new LinkedHashSet<>();
-        for (AdequacyUncertainty each : report.whatKeepsTheVerdictOpen()) {
-            if (each instanceof AdequacyUncertainty.ByWeakening(var cause)
-                    && cause instanceof Weakening.ModelReadingIncomplete incomplete
-                    && incomplete.cause() instanceof ClosureGap.QuestionUnanswered asked
-                    && asked.question() instanceof StandingQuestion.NothingClassifiesIt rule) {
-                out.add(rule.at().toString());
+        for (JsonNode module : root.path("modules")) {
+            for (JsonNode behavior : module.path("behaviors")) {
+                for (JsonNode unread : behavior.path("partition").path("notRead")) {
+                    out.add(unread.path("position").asString());
+                }
             }
         }
         return out;

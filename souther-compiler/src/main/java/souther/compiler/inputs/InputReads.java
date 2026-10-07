@@ -8,7 +8,6 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
-import souther.compiler.types.TypeSymbol;
 
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -309,16 +308,26 @@ public final class InputReads {
     }
 
     /**
-     * The same, where the scrutinee stands at no position and for no values written out: the name
-     * stands for the value that was matched, which is the scrutinee.
+     * The same, where the scrutinee is what a call answered: the name stands for the value that was
+     * matched, which is that answer.
      *
      * <p>Which value a name is and what is known of the case it was taken as are two facts. Nothing
-     * here narrows a value a call answered — there is no position to narrow and no set to filter —
-     * but {@code Amount as current} over {@code read(1)} is still the value {@code read(1)} answered,
-     * and a reader asking what {@code current} is goes on to the call. Given no meaning, the name was
-     * a value nothing could say anything about, and a comparison over it was one this compiler
-     * named a column for when it was written as the call and read nothing of when it was written
-     * through the name.
+     * here narrows what a call answered — there is no position to narrow and no set to filter — but
+     * {@code Amount as current} over {@code read(1)} is still the value {@code read(1)} answered, and
+     * a reader asking what {@code current} is goes on to the call. Given no meaning, the name was a
+     * value nothing could say anything about, and a comparison over it was one this compiler named a
+     * column for when it was written as the call and read nothing of when it was written through the
+     * name.
+     *
+     * <p><b>Only an answer, because only there is the narrowing nothing to lose.</b> What a call
+     * answers is a value this reading holds nothing inside of, so the name read through to it is read
+     * as the call — what the arm took it as adds nothing a reader could have looked at. A value the
+     * body
+     * built is one this reading looks inside, and read through without the arm it is every case it
+     * could be: {@code B as b} over {@code if flag then A {..} else B {..}} would be the choice on
+     * {@code flag}, and over a written {@code A} a construction asked for a field it has none of.
+     * Which is why the scrutinee is followed through its names first ({@link #standing}): what
+     * decides is the value they stand for and not how the {@code match} spelled it.
      *
      * <p>Only the name of the matched value ({@link Core.ArmBinding.Selected}). What stands under
      * an optional's present carrier is not the value that was matched, and a name for it read as
@@ -327,24 +336,28 @@ public final class InputReads {
      * <p>And only where the scrutinee is at no position. One that stands at a position the arm does
      * not narrow, or at one of several, names a place, and a name read through to it would stand at
      * the place as it is — wider than the case the arm took.
-     *
-     * <p>And not where the scrutinee is a value written as another case. That arm is one no value
-     * reaches, as an arm admitting none of a written set is ({@link #admitting}), and its name read
-     * through to the value would be {@code B as b} standing for an {@code A} — a field of {@code B}
-     * asked of a construction that has none.
      */
     private InputReads denotingWhatWasMatched(Core scrutinee, Core.Case arm, Symbols symbols,
                                               DeclarationNewtypes newtypes) {
         if (!(arm.binding() instanceof Core.ArmBinding.Selected selected)
-                || !(forkedOn(scrutinee, newtypes) instanceof PathResolution.NotAPosition)) {
-            return this;
-        }
-        TypeSymbol written = caseWritten(standing(
-                new Denotation(scrutinee, this), symbols, newtypes, new HashSet<>()).value());
-        if (written != null && !arm.caseTypes().contains(written)) {
+                || !(forkedOn(scrutinee, newtypes) instanceof PathResolution.NotAPosition)
+                || !answered(standing(new Denotation(scrutinee, this), symbols, newtypes,
+                        new HashSet<>()).value())) {
             return this;
         }
         return and(selected.binder(), scrutinee);
+    }
+
+    /**
+     * Whether {@code e} is what a call answered: one the body reaches outside itself, or an
+     * operation of the language the tree keeps standing. Either way a value nothing in this tree
+     * builds.
+     */
+    private static boolean answered(Core e) {
+        return switch (Core.withoutStanding(e)) {
+            case Core.Call _, Core.PreservedCall _ -> true;
+            case null, default -> false;
+        };
     }
 
     /**

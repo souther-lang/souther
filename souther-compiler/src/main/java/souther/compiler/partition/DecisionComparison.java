@@ -18,11 +18,9 @@ import souther.compiler.inputs.PathResolution;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
-import souther.compiler.types.Type;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * A comparison over what a dependency answered, as the proposition it states.
@@ -79,29 +77,11 @@ record DecisionComparison(InputDomain inputs, RuleReadingSource rules, DecisionS
      */
     private DecidedCondition truthOfAnAnswer(StatedComparison comparison, InputReads reads,
                                              boolean held) {
-        Rel states = comparison.claim().statedRelation();
-        Rel met = held ? states : states.denied();
-        if (met != Rel.EQ && met != Rel.NE) {
-            return null;
-        }
-        DecisionSubject.AnAnswer answer = boolAnswer(comparison.left(), reads);
-        Core other = comparison.right();
-        if (answer == null) {
-            answer = boolAnswer(comparison.right(), reads);
-            other = comparison.left();
-        }
-        if (answer == null) {
-            return null;
-        }
-        Optional<Boolean> written = BooleanMeaning.folded(other, rules.symbols());
-        return written.isEmpty() ? null : new DecidedCondition.Stood(
-                new DecisionCondition.ATruth(answer), written.get() == (met == Rel.EQ));
-    }
-
-    /** What a dependency answered, where {@code e} is a {@code Bool} that is one. */
-    private DecisionSubject.AnAnswer boolAnswer(Core e, InputReads reads) {
-        return Core.withoutStanding(e).type() == Type.Prim.BOOL
-                && subjects.of(e, reads) instanceof DecisionSubject.AnAnswer answer ? answer : null;
+        return BooleanMeaning.againstATruth(comparison, held, rules.symbols(),
+                        side -> subjects.isTheTruthOfAnAnswer(side, reads))
+                .map(against -> (DecidedCondition) subjects.truthOf(against.side(),
+                        against.held(), reads))
+                .orElse(null);
     }
 
     /** The quantity {@code comparison} states, or null where it is not one over an answer. */

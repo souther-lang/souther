@@ -363,9 +363,10 @@ class ADecisionIsDrawnOnWhatARowControlsTest {
     void aTruthOfAnAnswerIsOneColumnHoweverItIsSpelled() {
         DecisionCondition trusts = new DecisionCondition.ATruth(answerAbout("trusts"));
         for (String spelling : List.of("trusts(c)", "trusts(c) == true", "false /= trusts(c)",
-                "trusts(c) == false", "trusts(c) /= true")) {
-            boolean holdsAt =
-                    !List.of("trusts(c) == false", "trusts(c) /= true").contains(spelling);
+                "trusts(c) == false", "trusts(c) /= true", "Bool.not(trusts(c))",
+                "Bool.not(trusts(c)) == true")) {
+            boolean holdsAt = !List.of("trusts(c) == false", "trusts(c) /= true",
+                    "Bool.not(trusts(c))", "Bool.not(trusts(c)) == true").contains(spelling);
             List<DecisionRule> rules = DecisionReadings.readToTheEnd(TYPES + """
 
                     behavior trusts : (c: Customer) -> Bool
