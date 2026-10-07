@@ -118,15 +118,14 @@ public sealed interface BodyDistinction {
 
     /**
      * What the body read as {@code read} tells apart at each position {@code subject} measures,
-     * with what the reading of the input found about the rules it drew no line for and where the
-     * names the cases of a sum share stand.
+     * with what the reading of the input found about the rules it drew no line for.
      *
      * <p>Read off the ways runs take and nothing else ({@link CoverageRead.Read#taken}). Taken from
      * the ways in to the arms or the meetings as well, a way no run takes would be read as a
      * decision the body makes.
      */
     static Map<AxisId, BodyDistinction> of(CoverageRead.Read read, MeasuredInput subject) {
-        return WhatABodyTellsApart.of(read, subject.axes().axes(),
-                subject.partitioning().rulesWithoutALine(), subject.reach());
+        return WhatABodyTellsApart.of(read, subject.axes(),
+                subject.partitioning().rulesWithoutALine());
     }
 }

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -49,7 +50,7 @@ class ARequirementAtANameTheCasesShareMovesUnderTheCaseTest {
         Requirements asked = atTheName(ONE);
         assertEquals(Map.of(FLAG, CasesLeft.of(ONE)), asked.refinements());
         assertEquals(List.of(FLAG), asked.atANameTheCasesShare());
-        assertEquals(UNDER_BOTH, asked.crossings());
+        assertEquals(Set.copyOf(UNDER_BOTH), Set.copyOf(asked.crossings()));
     }
 
     /** Whichever side chooses the case, and whether by merging or by adding it. */
@@ -83,7 +84,7 @@ class ARequirementAtANameTheCasesShareMovesUnderTheCaseTest {
                 new NameReach.Crossing(LEAD, "flag", ONE, inner.then("flag")),
                 new NameReach.Crossing(inner, "flag", OTHER, inner.refine(OTHER).then("flag")));
         Requirements asked = Requirements.of(FLAG.refine(ONE), twice);
-        assertEquals(twice, asked.crossings(), "both are still to cross");
+        assertEquals(Set.copyOf(twice), Set.copyOf(asked.crossings()), "both are still to cross");
 
         Requirements outer = merged(asked.merge(theCase(ONE)));
         assertEquals(List.of(inner.then("flag")), outer.atANameTheCasesShare(),
@@ -92,6 +93,36 @@ class ARequirementAtANameTheCasesShareMovesUnderTheCaseTest {
         assertEquals(CasesLeft.of(ONE), both.at(inner.refine(OTHER).then("flag")));
         assertNull(both.at(inner.then("flag")));
         assertEquals(List.of(), both.crossings());
+    }
+
+    /**
+     * Two requirements put together are one conjunction whichever way round and however grouped —
+     * also where neither has chosen a case, and the crossings each brought are all still to cross.
+     */
+    @Test
+    void puttingThemTogetherIsTheSameValueInEveryOrder() {
+        TermPath side = TermPath.of("side");
+        Requirements a = atTheName(ONE);
+        Requirements b = Requirements.of(side.then("mark").refine(OTHER), List.of(
+                new NameReach.Crossing(side, "mark", OTHER, side.refine(OTHER).then("mark")),
+                new NameReach.Crossing(side, "mark", ONE, side.refine(ONE).then("mark"))));
+        Requirements c = LEAD.refine(OTHER).then("count").refine(ONE).requirements();
+
+        Requirements ab = merged(a.merge(b));
+        assertEquals(2, ab.atANameTheCasesShare().size(), () -> "neither has a case: " + ab);
+        assertEquals(ab, merged(b.merge(a)));
+        assertEquals(merged(ab.merge(c)), merged(a.merge(merged(b.merge(c)))));
+        assertEquals(merged(ab.merge(c)), merged(merged(c.merge(b)).merge(a)));
+        assertEquals(List.of(side.then("mark")), merged(ab.merge(c)).atANameTheCasesShare(),
+                "c chose the lead's case, and the side's is still to choose");
+    }
+
+    /** The crossings are a set, whatever order they are handed in. */
+    @Test
+    void theCrossingsAreHeldInOneOrder() {
+        Map<TermPath, CasesLeft> atTheFlag = Map.of(FLAG, CasesLeft.of(ONE));
+        assertEquals(new Requirements(atTheFlag, UNDER_BOTH),
+                new Requirements(atTheFlag, UNDER_BOTH.reversed()));
     }
 
     /** A requirement whose case is chosen is the one at the position, and never the name's. */

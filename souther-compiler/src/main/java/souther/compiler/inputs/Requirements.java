@@ -1,7 +1,9 @@
 package souther.compiler.inputs;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -42,11 +44,25 @@ import java.util.Set;
  * here still has to cross are kept, so a requirement whose names have all moved is the requirement
  * written at the positions, with nothing beside it.
  *
+ * <p><b>A set of crossings, held in one order.</b> This is a conjunction, so two of them put
+ * together either way round are one value, and so are three put together in either grouping.
+ * The positions are a map and compare as one; the crossings are kept in an order of their own —
+ * the sum's position, outer before inner, then the name, the case and where it stands — so that
+ * neither which side brought a crossing nor which was merged first is part of what this is.
+ *
  * @param crossings where the names among {@code refinements} stand once the sum above each is a
  *                  case of it
  */
 public record Requirements(Map<TermPath, CasesLeft> refinements,
                            List<NameReach.Crossing> crossings) {
+
+    /** The one order crossings are held in, which ties no two that are not equal. */
+    private static final Comparator<NameReach.Crossing> CROSSING_ORDER =
+            Comparator.comparing(NameReach.Crossing::at, TermPath.structuralOrder())
+                    .thenComparing(NameReach.Crossing::field)
+                    .thenComparing((one, other) -> CasesLeft.compare(CasesLeft.of(one.branch()),
+                            CasesLeft.of(other.branch())))
+                    .thenComparing(NameReach.Crossing::to, TermPath.structuralOrder());
 
     /** Nothing has to be true: a position under no refinement, or a class that selects none. */
     public static final Requirements NONE = new Requirements(Map.of(), List.of());
@@ -73,8 +89,8 @@ public record Requirements(Map<TermPath, CasesLeft> refinements,
      * What has to be true for {@code path} to exist, where every name it steps through stands where
      * {@code crossings} say once the sum above it is a case.
      *
-     * <p>{@link TermPath#requirements} for a path that steps through a name the cases share. The path
-     * itself writes the name, and whatever already settles a case moves it: a path under a
+     * <p>{@link TermPath#requirements} for a path that steps through a name the cases share. The
+     * path itself writes the name, and whatever already settles a case moves it: a path under a
      * narrowing to {@code A} reads the name where {@code A} holds it.
      */
     public static Requirements of(TermPath path, List<NameReach.Crossing> crossings) {
@@ -86,7 +102,8 @@ public record Requirements(Map<TermPath, CasesLeft> refinements,
         };
     }
 
-    /** The crossings some name among {@code refinements} still stands above, in the order given. */
+    /** The crossings some name among {@code refinements} still stands above, each once and in
+     *  {@link #CROSSING_ORDER}. */
     private static List<NameReach.Crossing> stillToCross(Map<TermPath, CasesLeft> refinements,
                                                          List<NameReach.Crossing> crossings) {
         if (crossings.isEmpty()) {
@@ -109,12 +126,13 @@ public record Requirements(Map<TermPath, CasesLeft> refinements,
                 }
             }
         }
-        List<NameReach.Crossing> out = new ArrayList<>();
-        for (NameReach.Crossing each : crossings) {
-            if (kept.contains(each) && !out.contains(each)) {
-                out.add(each);
-            }
-        }
+        return canonical(kept);
+    }
+
+    /** {@code crossings} each once and in {@link #CROSSING_ORDER}. */
+    private static List<NameReach.Crossing> canonical(Collection<NameReach.Crossing> crossings) {
+        List<NameReach.Crossing> out = new ArrayList<>(new LinkedHashSet<>(crossings));
+        out.sort(CROSSING_ORDER);
         return List.copyOf(out);
     }
 
@@ -169,10 +187,12 @@ public record Requirements(Map<TermPath, CasesLeft> refinements,
 
     /**
      * The names something is required of that stand under the cases of a sum nothing here has
-     * chosen a case of, in the order they are held in.
+     * chosen a case of, outer before inner.
      *
      * <p>What a writer still has to choose a case for: a row is one case of every sum, and until
-     * that is said a requirement at one of these is about no position the row writes.
+     * that is said a requirement at one of these is about no position the row writes. In the order
+     * of the paths and not the order they were merged in, since the writer tries the cases in this
+     * order and the first that composes is the row.
      */
     public List<TermPath> atANameTheCasesShare() {
         List<TermPath> out = new ArrayList<>();
@@ -184,6 +204,7 @@ public record Requirements(Map<TermPath, CasesLeft> refinements,
                 }
             }
         }
+        out.sort(TermPath.structuralOrder());
         return List.copyOf(out);
     }
 
@@ -228,21 +249,24 @@ public record Requirements(Map<TermPath, CasesLeft> refinements,
      * {@code refinements} with every name a chosen case decides moved under that case, or the
      * position where what moved meets something it cannot be.
      *
-     * <p>Run until nothing moves, because a name under two sums is moved by the outer one before the
-     * inner one can see it. Bounded by the crossings: each move takes a name one crossing down, and
-     * no name is above the same crossing twice.
+     * <p>Run until nothing moves, because a name under two sums is moved by the outer one before
+     * the inner one can see it. Bounded by the crossings: each move takes a name one crossing
+     * down, and no name is above the same crossing twice.
      */
     private static Merge moved(Map<TermPath, CasesLeft> refinements,
                                List<NameReach.Crossing> crossings) {
         if (crossings.isEmpty()) {
             return new Merge.Merged(new Requirements(refinements, crossings));
         }
+        // Outer before inner and in one order whichever side brought them, so that where a moved
+        // requirement is found to conflict does not turn on which was merged first.
+        List<NameReach.Crossing> ordered = canonical(crossings);
         Map<TermPath, CasesLeft> out = new LinkedHashMap<>(refinements);
         int moves = 0;
         boolean moving = true;
         while (moving) {
             moving = false;
-            for (NameReach.Crossing each : crossings) {
+            for (NameReach.Crossing each : ordered) {
                 if (!decides(out, each)) {
                     continue;
                 }
@@ -251,7 +275,7 @@ public record Requirements(Map<TermPath, CasesLeft> refinements,
                     if (to == null) {
                         continue;
                     }
-                    if (++moves > crossings.size() * Math.max(1, refinements.size())) {
+                    if (++moves > ordered.size() * Math.max(1, refinements.size())) {
                         throw new IllegalStateException("a requirement was moved past every"
                                 + " crossing it could take: " + name);
                     }
@@ -264,7 +288,7 @@ public record Requirements(Map<TermPath, CasesLeft> refinements,
                 }
             }
         }
-        return new Merge.Merged(new Requirements(out, crossings));
+        return new Merge.Merged(new Requirements(out, ordered));
     }
 
     /** {@code cases} met at {@code at} in {@code into}, or the conflict where they share none. */

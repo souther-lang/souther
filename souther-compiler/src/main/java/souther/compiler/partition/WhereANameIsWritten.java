@@ -80,9 +80,19 @@ record WhereANameIsWritten(List<Place> places, boolean someNotWorkedOut) {
     static WhereANameIsWritten ofAName(InputDomain inputs, TermPath name) {
         WhereANameIsWritten under = of(inputs.reach(), name.position(), name.requirements(),
                 place -> inputs.at(place) != null);
-        return under.someNotWorkedOut() || under.places().isEmpty()
-                || under.places().stream().anyMatch(each -> each.position().equals(
-                        name.position())) ? null : under;
+        return under.someNotWorkedOut() || under.places().isEmpty() || !under.moves(name)
+                ? null : under;
+    }
+
+    /**
+     * Whether what was asked about {@code name} was asked of a name that stands elsewhere than
+     * where it is written — under the cases, or under a case whose reading stopped.
+     *
+     * <p>No place is the name itself: a name standing at its own path is a position, and is
+     * answered by the one place it is.
+     */
+    boolean moves(TermPath name) {
+        return places.stream().noneMatch(each -> each.position().equals(name.position()));
     }
 
     /**

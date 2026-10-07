@@ -269,8 +269,8 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
      * narrower: what the declaration puts at the position says whether reaching the arm narrows it,
      * or comes out one way for every row because the declaration already decided.
      *
-     * <p><b>At a name the cases of a sum share, asked under each case.</b> The value there stands at
-     * one position under each case the row can be ({@link WhereANameIsWritten}), and what the
+     * <p><b>At a name the cases of a sum share, asked under each case.</b> The value there stands
+     * at one position under each case the row can be ({@link WhereANameIsWritten}), and what the
      * declarations leave it may differ from one case to the next. The arm narrows the name where it
      * narrows the value under some case, to the cases it leaves under any of them; it is settled
      * only where it is settled the same way under every case. A case whose reading stopped before

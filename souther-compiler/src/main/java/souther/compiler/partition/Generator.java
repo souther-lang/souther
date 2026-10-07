@@ -1433,7 +1433,7 @@ public final class Generator {
         // cause. The one above is a budget that ran out with the arm still owed; this is a group
         // the offer never opened, and raising the budget does not reach it.
         InteractionCells.Offered offered =
-                InteractionCells.of(read.interactions(), axes.axes(), budget.cellsPerGroup());
+                InteractionCells.of(read.interactions(), axes, budget.cellsPerGroup());
         // The combinations worth looking in, built once. A group builds a cell where it is asked
         // for one, so a walk per arm builds every cell of it again for an answer that does not
         // depend on which arm is asking.
@@ -1458,7 +1458,7 @@ public final class Generator {
                 // says so. Nothing is composed a second time for what a run was seen doing.
                 continue;
             }
-            for (WhereToLook place : whereToLookFor(probe, read, cells, axes.axes())) {
+            for (WhereToLook place : whereToLookFor(probe, read, cells, axes)) {
                 if (composed.size() >= budget.rowLimit()) {
                     cutOff.add(probe);
                     break;
@@ -1807,7 +1807,7 @@ public final class Generator {
                             placesFor(new LinkedHashSet<>(arm.occurrences()), offered);
                     GeneratedRow seen = null;
                     for (ArmProbe probe : arm.occurrences()) {
-                        for (WhereToLook place : whereToLookFor(probe, read, here, axes.axes())) {
+                        for (WhereToLook place : whereToLookFor(probe, read, here, axes)) {
                             int stopsBefore = looking.stops();
                             switch (witnessFor(axes, place.at, check, trial, ran,
                                     List.of(new Purpose.ForAReplacement(asked)), looking::of,
@@ -2050,7 +2050,7 @@ public final class Generator {
     private static List<WhereToLook>whereToLookFor(
             ArmProbe probe, souther.compiler.reading.CoverageRead.Read read,
             List<WhereToLook>cells,
-            List<Axis> axes) {
+            MeasuredInput.MeasuredAxes axes) {
         List<WhereToLook>out = new ArrayList<>();
         for (WhereToLook place : cells) {
             if (place.claims.contains(probe)) {

@@ -1258,7 +1258,7 @@ public final class Adequacy {
                 }
                 souther.compiler.partition.InteractionRequirements asked =
                         souther.compiler.partition.InteractionRequirements.of(behavior,
-                                read.interactions(), subject.axes().axes(), cells);
+                                read.interactions(), subject.axes(), cells);
                 out.put(behavior, whatTheRowsMade(behavior, asked,
                         RowReadings.readingFor(byTarget, behavior), numbering));
             });

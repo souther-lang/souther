@@ -3,8 +3,9 @@ package souther.compiler.partition;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
-import souther.compiler.inputs.NameReach;
+import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.RuleWithoutALine;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.Decision;
 import souther.compiler.reading.WayIn;
@@ -49,18 +50,20 @@ final class WhatABodyTellsApart {
     /** Whether some way a run takes holds a decision the reading could name no subject for, which
      *  leaves what is told apart unknown at every position. */
     private boolean subjectUnknown;
+    /** The positions measured, with the reading they were measured in — which says where a
+     *  condition stands among them ({@link ConditionPlacement}). */
+    private final MeasuredInput.MeasuredAxes measured;
     private final List<Axis> axes;
     /** The rules the reading of the input read to the end and found no line in, with why. */
     private final List<RuleWithoutALine> noLine;
-    /** Where the names the cases of a sum share stand under each case. */
-    private final NameReach reach;
     /** Which position each condition is about and what it admits there, asked once of each. */
     private final Map<souther.compiler.reading.Condition, Placed> placed = new HashMap<>();
 
-    private WhatABodyTellsApart(List<Axis> axes, List<RuleWithoutALine> noLine, NameReach reach) {
-        this.axes = axes;
+    private WhatABodyTellsApart(MeasuredInput.MeasuredAxes measured,
+                                List<RuleWithoutALine> noLine) {
+        this.measured = measured;
+        this.axes = measured.axes();
         this.noLine = noLine;
-        this.reach = reach;
         this.unread = new boolean[axes.size()];
         for (int at = 0; at < axes.size(); at++) {
             splits.add(new ArrayList<>());
@@ -69,13 +72,14 @@ final class WhatABodyTellsApart {
     }
 
     /**
-     * What the body read as {@code read} tells apart at each of {@code axes}, where {@code noLine}
-     * is what the reading of the input found about the rules it drew no line for and {@code reach}
-     * is where the names the cases of a sum share stand.
+     * What the body read as {@code read} tells apart at each position {@code measured}, where
+     * {@code noLine} is what the reading of the input found about the rules it drew no line for.
      */
-    static Map<AxisId, BodyDistinction> of(CoverageRead.Read read, List<Axis> axes,
-                                           List<RuleWithoutALine> noLine, NameReach reach) {
-        WhatABodyTellsApart reading = new WhatABodyTellsApart(axes, noLine, reach);
+    static Map<AxisId, BodyDistinction> of(CoverageRead.Read read,
+                                           MeasuredInput.MeasuredAxes measured,
+                                           List<RuleWithoutALine> noLine) {
+        WhatABodyTellsApart reading = new WhatABodyTellsApart(measured, noLine);
+        List<Axis> axes = measured.axes();
         for (WayIn way : read.taken()) {
             reading.take(way);
         }
@@ -89,10 +93,10 @@ final class WhatABodyTellsApart {
     /**
      * What one condition says about the positions measured here.
      *
-     * <p>Three answers, and the two that place nothing are not one. A condition about something
-     * this run measures no position of says nothing about any of them; a condition whose subject
-     * the reading could not name may be about any of them, and what it tells apart is not known.
-     * Read as one, a decision nothing could place would be a decision about nothing.
+     * <p>The two that place nothing are not one. A condition about something this run measures no
+     * position of says nothing about any of them; a condition whose subject the reading could not
+     * name may be about any of them, and what it tells apart is not known. Read as one, a decision
+     * nothing could place would be a decision about nothing.
      */
     private sealed interface Placed {
 
@@ -119,55 +123,51 @@ final class WhatABodyTellsApart {
          * case is not at this position at all, so a way admitting nothing here says only that its
          * rows are not this case.
          *
-         * @param underEach what the condition admits at the position under each case measured here
+         * @param underEach what the condition admits at the position under each case measured
+         *                  here, with what a row is taken to be to stand there
          */
-        record UnderTheCases(List<About> underEach) implements Placed {}
+        record UnderTheCases(List<UnderACase> underEach) implements Placed {}
+
+        /** What the condition admits at the position under one case, and what a row is taken to
+         *  be to stand there. */
+        record UnderACase(About about, Requirements taken) {}
     }
 
     private Placed placedOf(souther.compiler.reading.Condition condition) {
-        // Not computeIfAbsent: a condition at a name the cases share is placed by placing the same
-        // condition at each position the name stands at, which asks this again.
-        Placed had = placed.get(condition);
-        if (had == null) {
-            had = placing(condition);
-            placed.put(condition, had);
-        }
-        return had;
+        return placed.computeIfAbsent(condition, this::placing);
     }
 
+    /** Where {@code each} stands, which is {@link ConditionPlacement}'s answer, and what it admits
+     *  there. */
     private Placed placing(souther.compiler.reading.Condition each) {
-        // A fork the reading could not name a subject for: a value no position is, a name bound
-        // over several cases, an attempted construction. Which way it goes may turn on any
-        // position's value — whether a construction holds its rules can refuse a case of what it
-        // is built from — and the condition says nothing of which.
-        if (each instanceof souther.compiler.reading.Condition.Arm) {
-            return new Placed.SubjectUnknown();
-        }
-        // A case of a name the cases share is the same case of the position the name stands at
-        // under each of them. Asked before the position, since the longest position a name the
-        // cases share is under is the sum's, which is not what the condition is about.
-        if (each instanceof souther.compiler.reading.Condition.Case one) {
-            WhereANameIsWritten under = WhereANameIsWritten.of(reach, one.at(),
-                    one.at().requirements(), _ -> true);
-            if (!under.someNotWorkedOut() && !under.places().isEmpty()
-                    && under.places().stream().noneMatch(place ->
-                            place.position().equals(one.at()))) {
-                List<Placed.About> underEach = new ArrayList<>();
-                for (WhereANameIsWritten.Place place : under.places()) {
-                    if (placedOf(new souther.compiler.reading.Condition.Case(
-                            place.position(), one.names())) instanceof Placed.About it) {
-                        underEach.add(it);
-                    }
+        return switch (ConditionPlacement.of(each, measured)) {
+            // A fork the reading could not name a subject for: a value no position is, a name bound
+            // over several cases, an attempted construction. Which way it goes may turn on any
+            // position's value — whether a construction holds its rules can refuse a case of what
+            // it is built from — and the condition says nothing of which.
+            case ConditionPlacement.Unnamed _ -> new Placed.SubjectUnknown();
+            case ConditionPlacement.AtNoPosition _ -> new Placed.AboutNoPosition();
+            case ConditionPlacement.AtAPosition(int at) ->
+                    about(each, at, InteractionCells.standingOf(each));
+            case ConditionPlacement.UnderTheCases(var underEach) -> {
+                List<Placed.UnderACase> out = new ArrayList<>();
+                for (ConditionPlacement.UnderACase one : underEach) {
+                    out.add(new Placed.UnderACase(about(each, one.axis(), one.at()),
+                            one.taken()));
                 }
-                return underEach.isEmpty() ? new Placed.AboutNoPosition()
-                        : new Placed.UnderTheCases(List.copyOf(underEach));
+                yield new Placed.UnderTheCases(List.copyOf(out));
             }
-        }
-        int at = InteractionCells.positionOf(each, axes);
-        if (at < 0) {
-            return new Placed.AboutNoPosition();
-        }
-        InteractionCells.Cell cell = InteractionCells.admittedBy(each, axes);
+        };
+    }
+
+    /**
+     * What {@code each} admits at the {@code at}th position.
+     *
+     * @param standing where a case of a value is asked ({@link InteractionCells#admittedAt})
+     */
+    private Placed.About about(souther.compiler.reading.Condition each, int at,
+                               TermPath standing) {
+        InteractionCells.Cell cell = InteractionCells.admittedAt(each, axes, at, standing);
         if (cell != null) {
             List<Boolean> admitted = new ArrayList<>();
             for (boolean one : cell.allowed()[at]) {
@@ -249,44 +249,30 @@ final class WhatABodyTellsApart {
         // stands there. A condition about a name the cases share says nothing of that: a row under
         // another case takes the way without being at this position.
         boolean[] standsHere = new boolean[axes.size()];
+        // The conditions about a name the cases share, put to the classes once the positions the
+        // way stands at are known: which case a row taking the way can be is what they say.
+        List<Decision> underTheCases = new ArrayList<>();
         for (Decision decision : way.decisions()) {
             souther.compiler.reading.Condition each = decision.constrains();
-            List<Placed.About> about;
             switch (placedOf(each)) {
                 case Placed.About it -> {
-                    about = List.of(it);
                     standsHere[it.at()] = true;
+                    admit(it, each, here, unreadHere, statedHere);
                 }
-                case Placed.UnderTheCases it -> about = it.underEach();
-                case Placed.AboutNoPosition _ -> {
-                    continue;
-                }
-                case Placed.SubjectUnknown _ -> {
-                    subjectUnknownHere = true;
-                    continue;
-                }
+                case Placed.UnderTheCases _ -> underTheCases.add(decision);
+                case Placed.AboutNoPosition _ -> { }
+                case Placed.SubjectUnknown _ -> subjectUnknownHere = true;
             }
-            for (Placed.About one : about) {
-                if (one.admitted() == null) {
-                    unreadHere[one.at()] = true;
-                    continue;
-                }
-                // A position with no classes has nothing for the condition to tell apart, and
-                // nothing it admits says whether a value takes the way: that is asked of a position
-                // a value at it is in some class of.
-                if (one.admitted().isEmpty()) {
-                    continue;
-                }
-                if (here[one.at()] == null) {
-                    here[one.at()] = new boolean[one.admitted().size()];
-                    Arrays.fill(here[one.at()], true);
-                }
-                for (int c = 0; c < here[one.at()].length; c++) {
-                    here[one.at()][c] &= one.admitted().get(c);
-                }
-                if (each instanceof souther.compiler.reading.Condition.Side side) {
-                    ModelOccurrence.statedAt(side.statedAt())
-                            .ifPresent(statedHere.get(one.at())::add);
+        }
+        // Each under the cases a row taking the way can be. The position under a case stands only
+        // where the row is that case, so a case the way's own positions rule out is not one its
+        // rows are: a fork on a shared name reached once the value turned out to be an `A` is about
+        // `A`'s position and says nothing of `B`'s.
+        for (Decision decision : underTheCases) {
+            souther.compiler.reading.Condition each = decision.constrains();
+            for (Placed.UnderACase one : ((Placed.UnderTheCases) placedOf(each)).underEach()) {
+                if (canBe(one.taken(), here, standsHere)) {
+                    admit(one.about(), each, here, unreadHere, statedHere);
                 }
             }
         }
@@ -313,6 +299,65 @@ final class WhatABodyTellsApart {
             }
             unread[at] |= unreadHere[at];
         }
+    }
+
+    /** What {@code one}, said by {@code each}, admits, met into what the way admits so far. */
+    private static void admit(Placed.About one, souther.compiler.reading.Condition each,
+                              boolean[][] here, boolean[] unreadHere,
+                              List<Set<ModelOccurrence>> statedHere) {
+        if (one.admitted() == null) {
+            unreadHere[one.at()] = true;
+            return;
+        }
+        // A position with no classes has nothing for the condition to tell apart, and nothing it
+        // admits says whether a value takes the way: that is asked of a position a value at it is
+        // in some class of.
+        if (one.admitted().isEmpty()) {
+            return;
+        }
+        if (here[one.at()] == null) {
+            here[one.at()] = new boolean[one.admitted().size()];
+            Arrays.fill(here[one.at()], true);
+        }
+        for (int c = 0; c < here[one.at()].length; c++) {
+            here[one.at()][c] &= one.admitted().get(c);
+        }
+        if (each instanceof souther.compiler.reading.Condition.Side side) {
+            ModelOccurrence.statedAt(side.statedAt()).ifPresent(statedHere.get(one.at())::add);
+        }
+    }
+
+    /**
+     * Whether a row taken to be {@code taken} can take a way that stands at the positions
+     * {@code standsHere} marks, in the classes {@code here} leaves them.
+     *
+     * <p>Asked of each position on its own, as what the way leaves there is: a position stands only
+     * where what its path requires holds, and a class of it only where what the class selects holds
+     * too — which {@link Requirements#merge} answers, as it does for every reader putting two such
+     * requirements together.
+     */
+    private boolean canBe(Requirements taken, boolean[][] here, boolean[] standsHere) {
+        for (int at = 0; at < axes.size(); at++) {
+            if (!standsHere[at]) {
+                continue;
+            }
+            Axis axis = axes.get(at);
+            if (here[at] == null) {
+                if (!taken.compatibleWith(axis.requirements())) {
+                    return false;
+                }
+                continue;
+            }
+            boolean some = false;
+            for (int c = 0; c < here[at].length && !some; c++) {
+                some = here[at][c]
+                        && taken.compatibleWith(axis.requiring(axis.classes().get(c)));
+            }
+            if (!some) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean anyOf(boolean[] admitted) {

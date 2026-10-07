@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.reading.CoverageRead;
@@ -81,8 +82,11 @@ class ARuleNamingOneValueAdmitsItsClassOrTheRestTest {
         compilation.answerEverything();
         CoverageRead.Read read =
                 compilation.db().ask(new Adequacy.Meets("probe")).value().get("pick");
-        List<Axis> axes =
-                compilation.db().ask(new Adequacy.Divided("probe", "pick")).value().axes();
+        MeasuredInput.MeasuredAxes measured = MeasuredInput.of("pick",
+                compilation.db().ask(new Adequacy.Inputs("probe")).value().get("pick")
+                        .reading(RuleReadings.of(compilation, "probe")),
+                compilation.db().ask(new Adequacy.Divided("probe", "pick")).value()).axes();
+        List<Axis> axes = measured.axes();
         assertNotNull(read, () -> "the model compiles: " + compilation.errors());
         Map<Boolean, List<String>> out = new LinkedHashMap<>();
         for (souther.compiler.reading.Condition.Side side : sides(read)) {
@@ -90,7 +94,7 @@ class ARuleNamingOneValueAdmitsItsClassOrTheRestTest {
             if (!namesOneValue(side, axes.get(axis))) {
                 continue;
             }
-            InteractionCells.Cell cell = InteractionCells.admittedBy(side, axes);
+            InteractionCells.Cell cell = InteractionCells.admittedBy(side, measured);
             if (cell == null) {
                 out.put(side.held(), PLACED_NOTHING);
                 continue;
