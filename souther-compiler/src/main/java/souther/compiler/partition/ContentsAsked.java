@@ -9,8 +9,10 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Which containers of a row are to hold the value at another position, and which are to hold
@@ -70,96 +72,128 @@ record ContentsAsked(List<Asked> asked) {
     }
 
     /**
-     * Every way of writing what is asked under cases a row that is already {@code trying} can be,
-     * in the order the model declares the cases.
+     * What is asked, to be written under the cases a row that is already {@code trying} can be.
      *
      * <p><b>The place a container or a value is named is where a row writes it, except at a name
-     * every case of a sum spreads.</b> There the row writes one of the cases, and the container
-     * stands under whichever it is — so a container asked for at the sum's own name is no position
-     * of the row at all, and composed there it would be composed nowhere. Each way says where under
-     * the cases every container and value of it stands, which is a position the plan of the
-     * parameter holds; what the case it stands under requires travels with the path.
-     *
-     * <p><b>Every case and not one of them,</b> for the reason a number at such a name is written
-     * every way ({@code Generator.waysToWrite}): which case the row is decides which rules hold of
-     * the value, so it is not settled here. And all of them under cases the row can be at once:
-     * two names of one sum are written under one case, and a way that put them under two would be
-     * a value that is both.
-     *
-     * <p>A case whose reading stopped before putting the name anywhere is no place to write it, and
-     * is not a way.
+     * every case of a sum spreads</b> — worked out the one way every writer works it out
+     * ({@link WhereANameIsWritten}). A container is a place a composer builds, so a place reached
+     * is one to write at; what is left open is a case whose reading stopped.
      */
-    List<ContentsAsked> ways(NameReach reach, Requirements trying) {
+    UnderTheCases underTheCases(NameReach reach, Requirements trying) {
         Set<TermPath> named = new LinkedHashSet<>();
         for (Asked each : asked) {
             named.add(each.container());
             named.add(each.value());
         }
         List<TermPath> paths = List.copyOf(named);
-        List<List<NameReach.CaseStanding>> standings = new ArrayList<>();
+        List<WhereANameIsWritten> written = new ArrayList<>();
+        boolean notWorkedOut = false;
         for (TermPath each : paths) {
-            standings.add(standingsOf(reach, each, Requirements.NONE, 0));
+            WhereANameIsWritten one = WhereANameIsWritten.of(reach, each, trying, _ -> true);
+            written.add(one);
+            notWorkedOut |= one.someNotWorkedOut();
         }
-        List<ContentsAsked> out = new ArrayList<>();
-        written(paths, standings, 0, trying, new LinkedHashMap<>(), out);
-        return List.copyOf(out);
-    }
-
-    /** The ways from the {@code next}-th named path on, under what the ones before it took. */
-    private void written(List<TermPath> paths, List<List<NameReach.CaseStanding>> standings,
-                         int next, Requirements trying, Map<TermPath, TermPath> at,
-                         List<ContentsAsked> out) {
-        if (next == paths.size()) {
-            List<Asked> under = new ArrayList<>();
-            for (Asked each : asked) {
-                under.add(new Asked(at.get(each.container()), at.get(each.value()),
-                        each.holding()));
-            }
-            out.add(new ContentsAsked(under));
-            return;
-        }
-        for (NameReach.CaseStanding standing : standings.get(next)) {
-            if (trying.merge(standing.assuming()) instanceof Requirements.Merge.Merged(
-                    Requirements taken)
-                    && taken.merge(standing.position().requirements())
-                            instanceof Requirements.Merge.Merged(Requirements both)) {
-                at.put(paths.get(next), standing.position());
-                written(paths, standings, next + 1, both, at, out);
-                at.remove(paths.get(next));
-            }
-        }
+        return new UnderTheCases(this, paths, written, trying, notWorkedOut);
     }
 
     /**
-     * Where the name at {@code path} stands under the cases it crosses, with what each case
-     * requires — or the path itself, requiring nothing, where nothing crosses.
+     * What is asked, with where under the cases each container and value of it may be written.
      *
-     * <p>Followed one crossing at a time, since a name under two sums is moved by the outer one
-     * before the inner one can see it ({@link NameReach#standingOf}); bounded by the crossings the
-     * walk recorded, because each step takes one of them.
+     * <p>Tried a way at a time, and never laid out whole: the ways multiply by the cases of every
+     * sum the names cross, each is a row composed whole, and the first that composes is the one a
+     * row is written as. So they are handed to whoever composes them as they are reached, in the
+     * order the model declares the cases, and the walk is held to a figure
+     * ({@link CompositionBudget#WAYS_UNDER_THE_CASES_TRIED}).
+     *
+     * <p>Only ways a row can be at once: two names of one sum are written under one case, and a way
+     * that put them under two would be a value that is both.
+     *
+     * @param named            every container and value asked, each once
+     * @param written          where each of {@code named} may be written
+     * @param trying           what the row already is
+     * @param someNotWorkedOut whether some way of writing one of them reached a case whose reading
+     *                         stopped, so that what every tried way came to is not every way there
+     *                         is
      */
-    private static List<NameReach.CaseStanding> standingsOf(NameReach reach, TermPath path,
-                                                            Requirements assuming, int crossed) {
-        if (crossed > reach.crossings().size()) {
-            throw new IllegalStateException(
-                    "a name was followed past every crossing this reading recorded: " + path);
+    record UnderTheCases(ContentsAsked asked, List<TermPath> named,
+                         List<WhereANameIsWritten> written, Requirements trying,
+                         boolean someNotWorkedOut) {
+
+        UnderTheCases {
+            named = List.copyOf(named);
+            written = List.copyOf(written);
         }
-        List<NameReach.CaseStanding> under = switch (reach.standingOf(path)) {
-            case NameReach.Standing.AtThePathItself _ -> null;
-            case NameReach.Standing.UnderTheCases(var standings) -> standings;
-            case NameReach.Standing.CasesIncomplete(var standings, var _) -> standings;
-        };
-        if (under == null) {
-            return List.of(new NameReach.CaseStanding(assuming, path));
+
+        /** How far handing the ways over went. */
+        enum Walked {
+            /** One of them composed, and none after it was handed over. */
+            COMPOSED,
+            /** Every way there was was handed over and none composed. */
+            EVERY_WAY_TRIED,
+            /** The figure was reached with ways still to hand over. */
+            STOPPED_AT_THE_FIGURE
         }
-        List<NameReach.CaseStanding> out = new ArrayList<>();
-        for (NameReach.CaseStanding each : under) {
-            if (assuming.merge(each.assuming()) instanceof Requirements.Merge.Merged(
-                    Requirements both)) {
-                out.addAll(standingsOf(reach, each.position(), both, crossed + 1));
+
+        /**
+         * Hands each way to {@code composes}, until it answers that one composed or the figure is
+         * reached.
+         */
+        Walked tryEach(Predicate<ContentsAsked> composes) {
+            int[] left = {CompositionBudget.WAYS_UNDER_THE_CASES_TRIED.maximum()};
+            return from(0, trying, new LinkedHashMap<>(), composes, left);
+        }
+
+        private Walked from(int next, Requirements taken, Map<TermPath, TermPath> at,
+                            Predicate<ContentsAsked> composes, int[] left) {
+            if (next == named.size()) {
+                if (left[0] == 0) {
+                    return Walked.STOPPED_AT_THE_FIGURE;
+                }
+                left[0]--;
+                List<Asked> under = new ArrayList<>();
+                for (Asked each : asked.asked()) {
+                    under.add(new Asked(at.get(each.container()), at.get(each.value()),
+                            each.holding()));
+                }
+                return composes.test(new ContentsAsked(under)) ? Walked.COMPOSED
+                        : Walked.EVERY_WAY_TRIED;
             }
+            for (WhereANameIsWritten.Place place : written.get(next).places()) {
+                if (!(taken.merge(place.taken())
+                        instanceof Requirements.Merge.Merged(Requirements both))) {
+                    continue;
+                }
+                at.put(named.get(next), place.position());
+                Walked walked = from(next + 1, both, at, composes, left);
+                at.remove(named.get(next));
+                if (walked != Walked.EVERY_WAY_TRIED) {
+                    return walked;
+                }
+            }
+            return Walked.EVERY_WAY_TRIED;
         }
-        return out;
+
+        /**
+         * Which of {@code cameToNothing} — what each way tried came to, in the order they were
+         * tried — a reader is told, or empty where none of them is it.
+         *
+         * <p><b>Whether it is a proof does not turn on the order the ways were tried in.</b> A proof
+         * only where every
+         * way there was came to one: the rules leaving one case of a sum nothing say nothing about
+         * the case beside it, and a way this did not get to the end of, or a case whose reading
+         * stopped, may have what the others lacked. Short of that it is the first way that came to
+         * something other than a proof — this compiler falling short, which is what a reader may
+         * conclude nothing about the model from. Empty where every way tried proved nothing composes
+         * and some way was never tried, and where no way was tried at all: what is said then is the
+         * caller's, since only it knows the words for it.
+         */
+        <F> Optional<F> said(List<F> cameToNothing, Predicate<F> proves) {
+            if (!someNotWorkedOut && !cameToNothing.isEmpty()
+                    && cameToNothing.stream().allMatch(proves)) {
+                return Optional.of(cameToNothing.getFirst());
+            }
+            return cameToNothing.stream().filter(each -> !proves.test(each)).findFirst();
+        }
     }
 
     /**

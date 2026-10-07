@@ -15,7 +15,6 @@ import souther.compiler.check.Shape;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.Carrier;
-import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.reading.CoverageRead;
@@ -694,6 +693,7 @@ public final class Generator {
                              PLACES_A_PAIR_IS_LOOKED_AT -> NOTHING_COMPOSES_ONE;
                         case PAIRINGS_BUILT_AT_ONCE, ELEMENTS_A_TOTAL_IS_SPREAD_OVER,
                              SHAPES_OF_A_TOTAL_OFFERED, WAYS_DOWN_TO_A_TOTAL_TRIED,
+                             WAYS_UNDER_THE_CASES_TRIED,
                              STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
                              VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                              LEVELS_A_SIDE_IS_ASKED_AT,
@@ -4454,32 +4454,55 @@ public final class Generator {
         }
         // What the way asks containers to hold that no region placed, and the order that lets every
         // container be composed after the parameters it is handed a value of.
-        // Every way of writing them under the cases the row can be, the first that composes taken:
-        // a container a name every case of a sum spreads is composed under one of the cases.
-        List<ContentsAsked> ways = ContentsAsked.of(reaching.boundedOnTheWay())
-                .ways(subject.reach(), reaching.requirements());
-        if (ways.isEmpty()) {
-            return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
-                    UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, NO_CASE_HOLDS_THEM),
-                    where.unrepresented());
+        // The order is one for every way of writing them under the cases, since which parameter a
+        // container is handed a value of does not turn on the case it is written under.
+        ContentsAsked asked = ContentsAsked.of(reaching.boundedOnTheWay());
+        CompositionOrder order;
+        switch (CompositionOrder.of(parametersOf(subject), asked)) {
+            case CompositionOrder.Result.Ordered(CompositionOrder ordered) -> order = ordered;
+            case CompositionOrder.Result.Circular circular -> {
+                return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
+                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                        circularly(circular)), where.unrepresented());
+            }
         }
-        FixtureTemplate[] composed = null;
+        // Every way of writing them under the cases the row can be, one at a time, the first that
+        // composes taken: a container a name every case of a sum spreads is composed under one of
+        // the cases. What the rest came to is said over every one of them, the same whichever was
+        // tried first.
+        ContentsAsked.UnderTheCases under =
+                asked.underTheCases(subject.reach(), reaching.requirements());
+        FixtureTemplate[] composed = new FixtureTemplate[order.parameters().size()];
+        List<ParameterCameToNothing> cameToNothing = new ArrayList<>();
+        ContentsAsked.UnderTheCases.Walked walked = under.tryEach(contents -> {
+            ParameterCameToNothing one = new InOrder(subject, order, composed, standing, decided,
+                    settled, reaching, check, contents).from(0, Map.of());
+            if (one == null) {
+                return true;
+            }
+            cameToNothing.add(one);
+            return false;
+        });
         ParameterCameToNothing failed = null;
-        for (ContentsAsked contents : ways) {
-            CompositionOrder order;
-            switch (CompositionOrder.of(parametersOf(subject), contents)) {
-                case CompositionOrder.Result.Ordered(CompositionOrder ordered) -> order = ordered;
-                case CompositionOrder.Result.Circular circular -> {
+        switch (walked) {
+            case COMPOSED -> { }
+            case STOPPED_AT_THE_FIGURE -> {
+                return BoundaryAttempt.Stopped.at(label,
+                        Set.of(CompositionBudget.WAYS_UNDER_THE_CASES_TRIED),
+                        where.unrepresented());
+            }
+            case EVERY_WAY_TRIED -> {
+                Optional<ParameterCameToNothing> said = under.said(cameToNothing,
+                        each -> each.tried() instanceof Outcome.Unresolved(var reason, var _)
+                                && reason.provesInfeasible());
+                if (said.isEmpty()) {
                     return new BoundaryAttempt.Unresolved(new UnresolvedCombination(
                             List.of(label), UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                            circularly(circular)), where.unrepresented());
+                            cameToNothing.isEmpty() && !under.someNotWorkedOut()
+                                    ? NO_CASE_HOLDS_THEM : A_CASE_WAS_NOT_READ),
+                            where.unrepresented());
                 }
-            }
-            composed = new FixtureTemplate[order.parameters().size()];
-            failed = new InOrder(subject, order, composed, standing, decided, settled, reaching,
-                    check, contents).from(0, Map.of());
-            if (failed == null) {
-                break;
+                failed = said.get();
             }
         }
         if (failed != null) {
@@ -4617,6 +4640,12 @@ public final class Generator {
     /** What is said of a row no case of which holds every container and value it is asked of. */
     private static final String NO_CASE_HOLDS_THEM = "no case the row can be holds every"
             + " container and value the way asks to be written into one";
+
+    /** What is said of a row every way tried of which came to nothing, beside a case whose reading
+     *  stopped before it put a container or a value anywhere. */
+    private static final String A_CASE_WAS_NOT_READ = "every way of writing the containers the"
+            + " way hands values to came to nothing, and a case of a sum they stand under was not"
+            + " read";
 
     /** What is said of a row whose parameters are each to hold a value of another of them. */
     private static String circularly(CompositionOrder.Result.Circular circular) {
@@ -5221,80 +5250,22 @@ public final class Generator {
             }
             return new WaysToWrite(List.copyOf(to), false);
         }
-        boolean notWorkedOut = followed(subject, looking, at, at.position(), trying, 0, to);
-        return new WaysToWrite(List.copyOf(to), notWorkedOut);
-    }
-
-    /**
-     * The places a row that is already {@code trying} may write {@code term} at from {@code here}
-     * on, added to {@code to}, and whether some way of this row from here ended at a place nothing
-     * worked out.
-     *
-     * <p><b>A name that crosses is followed until it reaches a place the reading answered for.</b>
-     * The sorting moves a name one crossing at a time and says so ({@link NameReach#standingOf}), so
-     * a name under two sums comes back as a name under one — and a writer that stopped at the first
-     * answer would refuse every position two sums down, which the reading has and can state a set
-     * for. Each step is one case taken, and the place reached states all of them.
-     *
-     * <p><b>Only into the cases the row can be.</b> What the path to a place requires is put
-     * together with what the row already is at every step, and a case the two do not hold together
-     * at is not followed: nothing below it is a way of this row, a place there whose holding nothing
-     * worked out included.
-     *
-     * <p>Bounded by the crossings the walk recorded, because each step takes one of them and no
-     * step takes one twice. Running past that is this compiler disagreeing with its own reading
-     * rather than a search that could be allowed more.
-     */
-    private static boolean followed(MeasuredInput subject, WitnessSearch looking,
-                                    NumericTerm.FromOnePosition term, TermPath here,
-                                    Requirements trying, int crossed, List<Way> to) {
-        if (crossed > subject.reach().crossings().size()) {
-            throw new IllegalStateException(
-                    "a name was followed past every crossing this reading recorded: " + term);
+        // Where the number is written, worked out the one way every writer works out where a name
+        // is written ({@link WhereANameIsWritten}). A place the reading answered for is one whose
+        // values were worked out; anywhere else a value written would be offered at a position
+        // whose rules this compiler never read, which is the row this declines to compose however
+        // it was reached. The first place is the one the number is read at, and after a crossing it
+        // is the position under the cases taken to get there.
+        WhereANameIsWritten written = WhereANameIsWritten.of(subject.reach(), at.position(),
+                trying, here -> looking.admitted().at(here)
+                        instanceof AdmittedValues.Admitted.Values);
+        for (WhereANameIsWritten.Place place : written.places()) {
+            to.add(new Way(place.position().equals(at.position())
+                    ? new RealizationTarget.AtOnePosition(at)
+                    : new RealizationTarget.AtOnePositionElsewhere(at, place.position()),
+                    place.taken()));
         }
-        if (!(trying.merge(here.requirements())
-                instanceof Requirements.Merge.Merged(Requirements taken))) {
-            return false;
-        }
-        return switch (looking.admitted().at(here)) {
-            // The reading answered for this place, so it is where the row writes. The first time
-            // round that is the place the number is read at, and after a crossing it is the
-            // position under the cases taken to get here.
-            case AdmittedValues.Admitted.Values _ -> {
-                to.add(new Way(here.equals(term.position())
-                        ? new RealizationTarget.AtOnePosition(term)
-                        : new RealizationTarget.AtOnePositionElsewhere(term, here), taken));
-                yield false;
-            }
-            // Nothing worked out what this place holds. A value written here would be offered at a
-            // position whose rules this compiler never read, which is the row this declines to
-            // compose however it was reached.
-            case AdmittedValues.Admitted.NotWorkedOut _ -> true;
-            case AdmittedValues.Admitted.StandsUnderTheCases _ -> {
-                boolean notWorkedOut = false;
-                for (NameReach.CaseStanding standing : casesUnder(subject, here)) {
-                    notWorkedOut |= followed(subject, looking, term, standing.position(), taken,
-                            crossed + 1, to);
-                }
-                yield notWorkedOut;
-            }
-        };
-    }
-
-    /**
-     * Where the name at {@code here} stands under each case of the sum it crosses.
-     *
-     * <p>Asked of the same sorting the state above came from, since that is where the cases are.
-     */
-    private static List<NameReach.CaseStanding> casesUnder(MeasuredInput subject, TermPath here) {
-        if (!(subject.reach().standingOf(here)
-                instanceof NameReach.Standing.UnderTheCases(List<NameReach.CaseStanding> under))) {
-            // The state above was read off this same sorting, so anything else here is this
-            // compiler holding two answers about one name.
-            throw new IllegalStateException(
-                    "a name the search was told stands under the cases stands at none: " + here);
-        }
-        return under;
+        return new WaysToWrite(List.copyOf(to), written.someNotWorkedOut());
     }
 
     /**
@@ -7078,41 +7049,69 @@ public final class Generator {
                                 + "` would have to hold two values at once")));
             }
         }
+        // The order is one for every way of writing the containers under the cases, since which
+        // parameter a container is handed a value of does not turn on the case it is written
+        // under.
+        CompositionOrder order;
+        switch (CompositionOrder.of(parametersOf(subject), holding.contents())) {
+            case CompositionOrder.Result.Ordered(CompositionOrder ordered) -> order = ordered;
+            case CompositionOrder.Result.Circular circular -> {
+                return RowComposed.Failed.ofTheRow(new Attempt(null,
+                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, null,
+                        Optional.of(circularly(circular))));
+            }
+        }
         // Every way of writing what the containers are handed under the cases this row can be,
-        // tried in turn: a way whose rows were all passed over or came to nothing may be followed
-        // by one under another case that does not.
-        List<ContentsAsked> ways = holding.contents().ways(subject.reach(), required);
-        if (ways.isEmpty()) {
-            return RowComposed.Failed.ofTheRow(new Attempt(null,
-                    UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, null,
-                    Optional.of(NO_CASE_HOLDS_THEM)));
-        }
-        RowComposed came = null;
-        boolean passedOver = false;
-        for (ContentsAsked contents : ways) {
-            CompositionOrder order;
-            switch (CompositionOrder.of(parametersOf(subject), contents)) {
-                case CompositionOrder.Result.Ordered(CompositionOrder ordered) -> order = ordered;
-                case CompositionOrder.Result.Circular circular -> {
-                    return RowComposed.Failed.ofTheRow(new Attempt(null,
-                            UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, null,
-                            Optional.of(circularly(circular))));
-                }
-            }
-            came = inputsFrom(new RowBeingComposed(axes, given, check, holding, contents,
-                    together.keySet(), decided, required, taking, order), 0,
+        // one at a time: a way whose rows were all passed over or came to nothing may be followed
+        // by one under another case that does not. What they came to is said over every one of
+        // them, the same whichever was tried first.
+        Requirements rowIs = required;
+        ContentsAsked.UnderTheCases under =
+                holding.contents().underTheCases(subject.reach(), rowIs);
+        RowComposed[] stoppedWith = {null};
+        boolean[] passedOver = {false};
+        List<RowComposed.Failed> cameToNothing = new ArrayList<>();
+        ContentsAsked.UnderTheCases.Walked walked = under.tryEach(contents -> {
+            RowComposed came = inputsFrom(new RowBeingComposed(axes, given, check, holding,
+                    contents, together.keySet(), decided, rowIs, taking, order), 0,
                     new FixtureTemplate[order.parameters().size()], Map.of());
-            switch (came) {
+            return switch (came) {
                 case RowComposed.Taken _, RowComposed.Halted _ -> {
-                    return came;
+                    stoppedWith[0] = came;
+                    yield true;
                 }
-                case RowComposed.PassedOver _ -> passedOver = true;
-                case RowComposed.Failed _ -> { }
-            }
-        }
-        // Every way passed over or came to nothing: passed over where some row was, which is the
-        // caller's answer and not a failure, and otherwise what the last of them came to.
-        return passedOver ? new RowComposed.PassedOver() : came;
+                case RowComposed.PassedOver _ -> {
+                    passedOver[0] = true;
+                    yield false;
+                }
+                case RowComposed.Failed failed -> {
+                    cameToNothing.add(failed);
+                    yield false;
+                }
+            };
+        });
+        // Passed over where some row was, which is the caller's answer and not a failure, and
+        // otherwise what the ways came to: the figure where it stopped them, and what is said over
+        // every way where they all came to nothing.
+        return switch (walked) {
+            case COMPOSED -> stoppedWith[0];
+            case STOPPED_AT_THE_FIGURE -> passedOver[0] ? new RowComposed.PassedOver()
+                    : RowComposed.Failed.ofTheRow(Attempt.no(
+                            UnresolvedCombination.Reason.wordFor(
+                                    Set.of(CompositionBudget.WAYS_UNDER_THE_CASES_TRIED)),
+                            null, new LinkedHashMap<>(), CompositionShortfall.of(
+                                    Set.of(CompositionBudget.WAYS_UNDER_THE_CASES_TRIED))));
+            case EVERY_WAY_TRIED -> passedOver[0] ? new RowComposed.PassedOver()
+                    : under.<RowComposed>said(List.copyOf(cameToNothing), each ->
+                            each instanceof RowComposed.Failed(Attempt why, var _)
+                                    && why.reason() != null
+                                    && why.reason().provesInfeasible())
+                            .orElseGet(() -> RowComposed.Failed.ofTheRow(new Attempt(null,
+                                    UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, null,
+                                    Optional.of(cameToNothing.isEmpty()
+                                            && !under.someNotWorkedOut()
+                                            ? NO_CASE_HOLDS_THEM : A_CASE_WAS_NOT_READ))));
+        };
     }
 
     /**
