@@ -10,8 +10,10 @@ import java.util.Set;
  *
  * <p>The one way a rule of one value reaches a position of another, and it exists because the
  * language has one: a field every case of a sum spreads is readable on a value of the sum, so a
- * clause written up there is about the field a row writes down here. Nothing else crosses — what a
- * case declares of its own is not readable above it, and a clause of the sum has no name for it.
+ * clause written up there is about the field a row writes down here. And a field every case of a
+ * case that is itself a sum spreads is readable on a value of that case, which a fork can leave the
+ * value at the position — so it crosses into those cases, at the same name. Nothing else crosses:
+ * what a case declares of its own is not readable above it, and nothing above it has a name for it.
  *
  * <p><b>Both directions, from one place.</b> A reading of a position asks what the value above
  * calls it; a reading that says the rules of the value above in the words of the case asks where a
@@ -24,7 +26,8 @@ import java.util.Set;
  *
  * @param sum   where the sum stands, which is where the narrowing was taken
  * @param branch which case the value turned out to be
- * @param names the names the cases share, which are the only ones that cross
+ * @param names the names a value of the sum, or of a case of it holding this one, reads, which are
+ *              the only ones that cross
  */
 record SharedNames(TermPath sum, Refinement branch, Set<String> names) {
 

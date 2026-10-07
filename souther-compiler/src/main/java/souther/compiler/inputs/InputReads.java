@@ -698,9 +698,10 @@ public final class InputReads {
                 new HashSet<>()).value()) instanceof Core.Str written ? written.value() : null;
     }
 
-    /** Where an element handed to {@code binding} stands ({@link InputPath#elementAt}). */
+    /** Where an element handed to {@code binding} stands ({@link InputPath#elementAt}), at a
+     *  position and never at a narrowing of one to several cases ({@link PathResolution#heldAt}). */
     public PathResolution elementAt(BindingId binding, DeclarationNewtypes newtypes) {
-        return InputPath.elementAt(binding, names, newtypes);
+        return InputPath.elementAt(binding, names, newtypes).heldAt();
     }
 
     /** Where {@code e}'s value came from. Not where it is: a value made from a position is not that

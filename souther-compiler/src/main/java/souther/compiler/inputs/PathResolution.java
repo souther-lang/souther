@@ -67,9 +67,6 @@ public sealed interface PathResolution {
      * beside it. A block handed to two walks has one parameter and two containers, so a name inside
      * it stands at one position of the input on one run and another on the next — the model is
      * perfectly clear and what cannot be worked out is which of them a reader should be sent to.
-     * A name every case spreads, read on a value left several of the cases, is the other way here:
-     * it stands at that name under whichever case the value is, which a run says and a reading of
-     * the body does not.
      *
      * <p><b>These are the positions it may stand at and not every place it may be.</b> A block
      * handed to a walk over the input and to a walk over a list written in the body stands at a
@@ -136,14 +133,16 @@ public sealed interface PathResolution {
     }
 
     /**
-     * The same answer, with a place narrowed to several cases read as the position those are cases
-     * of ({@link TermPath#position}).
+     * The same answer, with every narrowing to several cases on the way to the place taken out
+     * ({@link TermPath#position}).
      *
      * <p>Where a value stands, as against how a fork reads it. A name an arm bound over
-     * {@code Station} or {@code Hospital} stands for the value at the sum's position: what it is
-     * compared with, what it is counted as and which position the body names are all that
-     * position. That the arm left it two of the cases is what the way says, and a fork on the
-     * name is the one reader that asks it ({@link InputReads#forkedOn}).
+     * {@code Station} or {@code Hospital} stands for the value at the sum's position, and a field
+     * every one of those cases spreads read off it is that field's name at the sum: what it is
+     * compared with, what it is counted as and which position the body names are those, and the
+     * name is crossed into the cases the way every name read at a sum is. That the arm left the
+     * value two of the cases is what the way says, and a fork on the name is the one reader that
+     * asks it ({@link InputReads#forkedOn}).
      */
     default PathResolution heldAt() {
         return this instanceof At(var at) && !at.position().equals(at)
@@ -167,19 +166,7 @@ public sealed interface PathResolution {
      */
     default PathResolution deeper(UnaryOperator<TermPath> step) {
         return switch (this) {
-            case At(var at) -> {
-                TermPath moved = step.apply(at);
-                // A step into a value left several cases goes into whichever of them it is, which
-                // is a place under each case and none under the set: a name every case spreads is
-                // held at the cases and not at a narrowing to some of them. So the step is taken
-                // under each case, and the value may stand at any of those.
-                if (moved.equals(at) || at.position().equals(at)) {
-                    yield new At(moved);
-                }
-                yield new MayStandAt(at.narrowing().atoms().stream()
-                        .map(each -> step.apply(at.narrowedFrom().refine(each)))
-                        .distinct().toList());
-            }
+            case At(var at) -> new At(step.apply(at));
             case NotAPosition _ -> this;
             // Still may, and still at each of them: a step taken at a place a value may stand is a
             // place a step of it may stand. Two of them the step takes to one place are one place

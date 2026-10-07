@@ -253,16 +253,25 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /**
-     * The position this is a reading of: this path, or the position it narrows where its last step
-     * leaves several cases.
+     * Where the value this path reads stands: this path with every narrowing to several cases taken
+     * out.
      *
      * <p>A position is held at each case of a sum and at the sum, and at no set of its cases: a
-     * value left {@code Station} or {@code Hospital} is the value at the sum's position, narrowed.
-     * So a reader asking whether the input holds a position here, or which position a fork here is
-     * about, asks it of this.
+     * value left {@code Station} or {@code Hospital} is the value at the sum's position, narrowed,
+     * and its {@code code} is the name {@code code} read at the sum — the name the cases holding it
+     * stand at, one under each ({@link NameReach#standingOf}). That the value was left those cases
+     * is what the way to it says, and no part of which value it is. So a reader asking where a
+     * value stands, or which position a fork on it is about, asks it of this; a narrowing to one
+     * case is kept, since the case's position is a position of its own.
      */
     public TermPath position() {
-        return narrowsWhatItReaches() && narrowing().only() == null ? narrowedFrom() : this;
+        List<Step> kept = new ArrayList<>();
+        for (Step step : steps) {
+            if (!(step instanceof Step.Refine refine && refine.cases().only() == null)) {
+                kept.add(step);
+            }
+        }
+        return kept.size() == steps.size() ? this : new TermPath(head, kept);
     }
 
     private List<Step> requireNarrowing() {

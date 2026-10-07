@@ -3,7 +3,9 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.RuleKey;
 import souther.compiler.core.Core;
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.DecidedCondition;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
@@ -14,6 +16,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.DecisionEvidence;
+import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
 import java.util.Set;
@@ -242,9 +245,48 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
         assertTrue(rated.contains("r.level") && rated.stream().noneMatch(each -> each.contains("{")),
                 () -> "the value compared is the position's: " + rated);
         Set<String> counted = underTheField(named("busy"), "f.unit");
-        assertTrue(counted.containsAll(Set.of("f.unit@Desk.count", "f.unit@Ward.count"))
+        assertTrue(counted.contains("f.unit.count")
                         && counted.stream().noneMatch(each -> each.contains("{")),
-                () -> "the shared name stands under each case: " + counted);
+                () -> "the shared name is named at the sum, as a name every case spreads is: "
+                        + counted);
+    }
+
+    /**
+     * A name the cases of a case spread stands under those cases, the way a name every case of the
+     * sum spreads does.
+     *
+     * <p>{@code Desk} and {@code Ward} spread {@code Counts}, and {@code Renkei} beside them does
+     * not, so {@code count} is readable on a {@code Staffed} and not on a {@code Unit}. A value an
+     * arm left a {@code Staffed} reads it, and the name stands at the position under each of the two
+     * cases — and nowhere a name only {@code Ward} declares would: sharing is what the declarations
+     * spread, and {@code beds} is spread by nobody.
+     */
+    @Test
+    void aNameTheCasesOfACaseShareStandsUnderThoseCases() {
+        Compilation c = Compilation.ofSource(MODEL, "Main");
+        c.answerEverything();
+        InputDomain inputs = c.db().ask(new Adequacy.Inputs(c.modules().get(0))).value()
+                .get("busy");
+        assertEquals(List.of("f.unit@Desk.count", "f.unit@Ward.count"),
+                inputs.positionsNamed(TermPath.of("f"), new RuleKey(List.of("unit", "count")))
+                        .stream().map(TermPath::toString).toList());
+        assertEquals(List.of(), inputs.positionsNamed(TermPath.of("f"),
+                new RuleKey(List.of("unit", "beds"))));
+    }
+
+    /**
+     * And a comparison of it draws its line at each of those positions, as one of a name every case
+     * spreads does.
+     */
+    @Test
+    void aComparisonOfThatNameDrawsItsLineUnderEachCase() {
+        Compilation c = Compilation.ofSource(MODEL, "Main");
+        c.measure(Adequacy.Asked.fullReport());
+        c.answerEverything();
+        String human = AdequacyReport.of(c).human(SourceRendering.namedByIdentity(c.texts()));
+        assertTrue(human.contains("read as busy/f.unit@Desk.count: = 4")
+                        && human.contains("read as busy/f.unit@Ward.count: = 4"),
+                human);
     }
 
     /**
