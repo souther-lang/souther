@@ -34,6 +34,15 @@ public interface ComparisonWays {
     boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy);
 
     /**
+     * Whether some value of what {@code match} is on is a case {@code arm} takes.
+     *
+     * <p>The same question a condition is asked one way at a time, asked of an arm: a way nothing
+     * stands behind is not a way of the body. A helper handed a case written at the call matches
+     * that case, and its other arms are no way a row goes, however the helper is written.
+     */
+    boolean mayTake(Core.Match match, Core.Case arm);
+
+    /**
      * The same, in a child of the node being read, {@code step} being the way into it.
      *
      * <p>Scoped like the naming and for the same reason: what a name reads is not a fact about the
@@ -56,6 +65,13 @@ public interface ComparisonWays {
         @Override
         public boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy) {
             return Witnessed.comesOut(e, want, settledBy);
+        }
+
+        // Which case a value is, where a name stands for it, is a reading of the input's names,
+        // and the text alone has none: every arm may be taken.
+        @Override
+        public boolean mayTake(Core.Match match, Core.Case arm) {
+            return true;
         }
 
         @Override

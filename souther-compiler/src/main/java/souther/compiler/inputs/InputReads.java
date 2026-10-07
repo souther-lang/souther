@@ -8,10 +8,13 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -331,6 +334,62 @@ public final class InputReads {
         return Core.withoutStanding(standing.value()) instanceof Core.Read name
                 && standing.at().meaningOf(name, symbols, newtypes) instanceof ReadMeaning.OneOf one
                 ? one : null;
+    }
+
+    /**
+     * Whether every row takes {@code arm} of a {@code match} on {@code scrutinee} — true where every
+     * case the scrutinee can be is one the arm takes, false where none is, and empty where which
+     * arm is taken turns on the row.
+     *
+     * <p>Known only where every value the scrutinee can stand for is a case written in the source.
+     * A helper handed a case written at the call matches what it was handed, and which of its arms
+     * that takes is settled before any row is written: there is no position under the
+     * {@code match} for a row to put a case at, and none is needed.
+     *
+     * <p>One answer for every reader of an arm, the ways a body is walked and what reaching the arm
+     * states alike, so an arm no row takes is neither walked nor a narrowing nobody can read.
+     */
+    public Optional<Boolean> whetherEveryRowTakes(Core.Case arm, Core scrutinee, Symbols symbols,
+                                                  DeclarationNewtypes newtypes) {
+        Set<TypeSymbol> written = casesWritten(scrutinee, symbols, newtypes);
+        if (written == null) {
+            return Optional.empty();
+        }
+        if (arm.caseTypes().containsAll(written)) {
+            return Optional.of(true);
+        }
+        return written.stream().noneMatch(arm.caseTypes()::contains)
+                ? Optional.of(false) : Optional.empty();
+    }
+
+    /**
+     * The cases {@code e} can be here, where every value it can stand for is written as one — or
+     * null where any of them is not.
+     *
+     * <p>The value a name stands for, followed as far as it goes ({@link #standing}), and where that
+     * is a name standing for one of several written values ({@link ReadMeaning.OneOf}), each of
+     * them.
+     */
+    public Set<TypeSymbol> casesWritten(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
+        Denotation stands = standing(new Denotation(e, this), symbols, newtypes, new HashSet<>());
+        TypeSymbol one = caseWritten(stands.value());
+        if (one != null) {
+            return Set.of(one);
+        }
+        if (!(Core.withoutStanding(stands.value()) instanceof Core.Read name
+                && stands.at().meaningOf(name, symbols, newtypes) instanceof ReadMeaning.OneOf many)) {
+            return null;
+        }
+        Set<TypeSymbol> out = new LinkedHashSet<>();
+        for (Denotation each : many.alternatives()) {
+            TypeSymbol written = caseWritten(
+                    standing(each, symbols, newtypes, new HashSet<>()).value());
+            if (written == null) {
+                return null;
+            }
+            out.add(written);
+        }
+        return out;
     }
 
     /** Which case {@code e} is written as, or null where it is not written as one. */

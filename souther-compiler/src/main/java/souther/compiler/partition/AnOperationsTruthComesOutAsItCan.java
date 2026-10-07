@@ -56,6 +56,12 @@ final class AnOperationsTruthComesOutAsItCan implements ComparisonWays {
     }
 
     @Override
+    public boolean mayTake(Core.Match match, Core.Case arm) {
+        return reads.whetherEveryRowTakes(arm, match.scrutinee(), read.rules().symbols(),
+                read.rules().newtypes()).orElse(true);
+    }
+
+    @Override
     public ComparisonWays entering(ScopeStep step) {
         InputReads inside = reads.entering(step, read.rules().symbols(), read.rules().newtypes());
         return inside == reads ? this : new AnOperationsTruthComesOutAsItCan(inside, read);

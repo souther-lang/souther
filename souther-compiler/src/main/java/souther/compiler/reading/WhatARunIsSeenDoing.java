@@ -58,6 +58,12 @@ final class WhatARunIsSeenDoing implements Naming<List<ControlClaim>> {
                 return ComparisonWays.OF_THE_TREE.comesOut(e, want, settledBy);
             }
 
+            // Each way that may be there, and an arm a run takes is seen being taken.
+            @Override
+            public boolean mayTake(Core.Match match, Core.Case arm) {
+                return true;
+            }
+
             @Override
             public ComparisonWays entering(ScopeStep step) {
                 return this;

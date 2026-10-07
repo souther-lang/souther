@@ -70,6 +70,10 @@ public sealed interface PathAccess {
             /** The reading of the condition says it never comes out the way this place is under. */
             THE_CONDITION_NEVER_COMES_OUT_THAT_WAY,
 
+            /** The reading of what the {@code match} is on says it is never a case this arm
+             *  takes. */
+            THE_SCRUTINEE_IS_NEVER_THAT_CASE,
+
             /** Every way here settles a decision that the way to it settled the other way, which is
              *  read off the decisions themselves and not off anything this could not name. */
             CONTRADICTS_WHAT_ALREADY_HELD

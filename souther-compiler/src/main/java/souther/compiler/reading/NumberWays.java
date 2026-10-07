@@ -71,6 +71,11 @@ final class NumberWays implements ComparisonWays {
     }
 
     @Override
+    public boolean mayTake(Core.Match match, Core.Case arm) {
+        return reads.whetherEveryRowTakes(arm, match.scrutinee(), symbols, newtypes).orElse(true);
+    }
+
+    @Override
     public boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy) {
         ComparedNumber said =
                 Core.withoutStanding(e) instanceof Core.Binary binary

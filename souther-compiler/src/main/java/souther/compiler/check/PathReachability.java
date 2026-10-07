@@ -822,9 +822,19 @@ public final class PathReachability {
             return;
         }
         // Not a position of this input, or not one this reading reached: either way nothing here
-        // has rules about it to carry.
+        // has rules about it to carry. What it may still be is a value the source wrote, and an
+        // arm none of its cases takes is one nothing arrives at, whatever the rules leave.
         TermPath path = positionOf(match.scrutinee(), reads);
         if (path == null) {
+            for (int i = 0; i < match.cases().size() && i < arms.length; i++) {
+                Core.Case arm = match.cases().get(i);
+                if (reads.whetherEveryRowTakes(arm, match.scrutinee(), symbols, newtypes)
+                        .equals(Optional.of(false))) {
+                    out.put(arms[i], new Reachability.Unreachable(Proof.noCaseTheValueCanBeIsTaken(
+                            List.copyOf(reads.casesWritten(match.scrutinee(), symbols, newtypes)),
+                            arm.caseTypes())));
+                }
+            }
             return;
         }
         // The reading this walk was given, which is the one held here. Which location the name

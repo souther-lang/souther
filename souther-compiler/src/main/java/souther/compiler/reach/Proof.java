@@ -22,7 +22,8 @@ import java.util.List;
  * fall into whichever branch a switch happened to end with.
  */
 public sealed interface Proof
-        permits ConditionsThatCannotAllHold, OutsideInputDomain, EveryCaseRefused {
+        permits ConditionsThatCannotAllHold, OutsideInputDomain, EveryCaseRefused,
+        NoCaseTheValueCanBeIsTaken {
 
     /**
      * The sentences a proof can come to, one per arm.
@@ -70,6 +71,19 @@ public sealed interface Proof
          * @param cases    the cases the arm names, every one of them refused there
          */
         T everyCaseRefused(String position, List<TypeSymbol> cases);
+
+        /**
+         * What the arm matches on is a value the source wrote, and none of the cases it can be is
+         * one the arm takes.
+         *
+         * <p>About what the {@code match} is handed and not about any position: a helper handed a
+         * case at its call takes the arm for that case and no other, whatever the rules of the input
+         * leave.
+         *
+         * @param canBe the cases the value matched on can be
+         * @param cases the cases the arm names
+         */
+        T noCaseTheValueCanBeIsTaken(List<TypeSymbol> canBe, List<TypeSymbol> cases);
     }
 
     /** What this proof comes to, in {@code words}. */
@@ -91,6 +105,30 @@ public sealed interface Proof
     /** Every case the position could hold was refused; see {@link Words#everyCaseRefused}. */
     static Proof everyCaseRefused(String position, List<TypeSymbol> cases) {
         return new EveryCaseRefused(position, cases);
+    }
+
+    /** The value matched on is never a case the arm takes; see
+     *  {@link Words#noCaseTheValueCanBeIsTaken}. */
+    static Proof noCaseTheValueCanBeIsTaken(List<TypeSymbol> canBe, List<TypeSymbol> cases) {
+        return new NoCaseTheValueCanBeIsTaken(canBe, cases);
+    }
+}
+
+record NoCaseTheValueCanBeIsTaken(List<TypeSymbol> canBe, List<TypeSymbol> cases)
+        implements Proof {
+
+    NoCaseTheValueCanBeIsTaken {
+        canBe = List.copyOf(canBe);
+        cases = List.copyOf(cases);
+        if (canBe.isEmpty() || cases.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "a value never a case an arm takes, with no case either way");
+        }
+    }
+
+    @Override
+    public <T> T said(Words<T> words) {
+        return words.noCaseTheValueCanBeIsTaken(canBe, cases);
     }
 }
 

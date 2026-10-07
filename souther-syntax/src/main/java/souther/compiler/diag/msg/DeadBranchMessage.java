@@ -42,6 +42,10 @@ public sealed interface DeadBranchMessage extends Message {
     record EveryCaseItIsWrittenForIsRefused(String position, String cases)
             implements DeadBranchMessage, Supporting {}
 
+    /** The value matched on is one the source wrote, and never a case the arm names. */
+    record TheValueMatchedOnIsNeverItsCase(String canBe, String cases)
+            implements DeadBranchMessage, Supporting {}
+
     /** What to do about it. */
     record TakeItOutOrLetSomethingReachIt() implements DeadBranchMessage, Supporting {}
 }
