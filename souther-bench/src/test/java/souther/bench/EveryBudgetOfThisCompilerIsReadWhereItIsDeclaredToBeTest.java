@@ -119,6 +119,20 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Generator$RowComposed;",
                     "says a baseline whose every written way was refused was written fewer ways"
                             + " than it had, under the figure the ways were cut at"),
+            // The runs looking for a row that goes further than one already found: one counter
+            // holds the figure, and the exchange says it beside the row for each way whose search
+            // was refused a run. The row found goes out whatever this comes to.
+            Map.entry("souther.compiler.partition.Generator$GoingOn$Runs#<init>()V",
+                    "the runs one row's exchange may make, which is where the count starts"),
+            Map.entry("souther.compiler.partition.Generator$GoingOn#past("
+                            + "Lsouther/compiler/partition/MeasuredInput$MeasuredAxes;"
+                            + "Lsouther/compiler/partition/Generator$Pins;Ljava/util/List;"
+                            + "Lsouther/compiler/partition/Generator$Searched;"
+                            + "Lsouther/compiler/partition/Generator$CandidateCheck;"
+                            + "Lsouther/compiler/partition/FixtureReferences;Ljava/util/List;)"
+                            + "Lsouther/compiler/partition/Generator$Composed;",
+                    "says a way past a guard whose search was refused a run was cut short under the"
+                            + " figure, beside the row that goes out"),
             // The ways under the cases of a sum a container is written: one walk hands them over,
             // and says the figure where it stopped, which both roads a row is composed on carry
             // with what the ways tried came to — rows passed over included.

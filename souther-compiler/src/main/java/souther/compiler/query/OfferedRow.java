@@ -2,10 +2,12 @@ package souther.compiler.query;
 
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.Generator;
+import souther.compiler.partition.RepairShortfall;
 import souther.compiler.partition.RowToRun;
 import souther.compiler.partition.StoodInAnswer;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 /**
@@ -44,14 +46,21 @@ import java.util.List;
  *                 not only the ones its decision turns on
  * @param namedFor the classes, arms and rules this row was composed for, in the order they were
  *                 taken
+ * @param stops    what looking for a row that goes further came to, for each search that composed
+ *                 this row and took it no further than a guard — each once, in the order they
+ *                 arrived, and each saying which requirement it was looked for
+ *                 ({@link RepairShortfall#soughtFor}). A row two searches arrive at stops where it
+ *                 stops for both of them, and what each found out is about its own requirement,
+ *                 so neither is the other's to drop and neither is read as the other's
  */
 public record OfferedRow(RowKey key, List<FixtureTemplate> inputs, List<StoodInAnswer> answers,
-                         List<Generator.Purpose> namedFor) {
+                         List<Generator.Purpose> namedFor, List<RepairShortfall> stops) {
 
     public OfferedRow {
         inputs = List.copyOf(inputs);
         answers = List.copyOf(answers);
         namedFor = List.copyOf(namedFor);
+        stops = List.copyOf(new LinkedHashSet<>(stops));
         for (Generator.Purpose purpose : namedFor) {
             // A combination of two classes is one of these too, where the pair space is what the
             // behavior is held to: the search composed the row for it and the row's own values are
@@ -77,13 +86,30 @@ public record OfferedRow(RowKey key, List<FixtureTemplate> inputs, List<StoodInA
         return new RowToRun(inputs, answers);
     }
 
-    /** The row with {@code more} added to what it may be named after. */
-    OfferedRow and(List<Generator.Purpose> more) {
-        if (more.isEmpty()) {
+    /** A row of these values offered for nothing yet, which is what the first road to it makes. */
+    static OfferedRow of(RowKey key, Generator.GeneratedRow row) {
+        return new OfferedRow(key, row.inputs(), row.answers(), List.of(), List.of());
+    }
+
+    /**
+     * The row with what {@code row} was composed for added to what it may be named after, and
+     * where it stops at a guard, what looking past it came to ({@code stop}, or null where there
+     * is nothing to say).
+     *
+     * <p>One join for both. A road that brought the purposes here and left what its search found
+     * out behind would offer the row as the answer to that requirement with nothing said about
+     * where it stops.
+     */
+    OfferedRow and(Generator.GeneratedRow row, RepairShortfall stop) {
+        if (row.purposes().isEmpty() && stop == null) {
             return this;
         }
         List<Generator.Purpose> both = new ArrayList<>(namedFor);
-        both.addAll(more);
-        return new OfferedRow(key, inputs, answers, both);
+        both.addAll(row.purposes());
+        List<RepairShortfall> all = new ArrayList<>(stops);
+        if (stop != null) {
+            all.add(stop);
+        }
+        return new OfferedRow(key, inputs, answers, both, all);
     }
 }

@@ -205,11 +205,10 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
      * A container handed a field of a stated value the row names without moving it has nothing to
      * hold, which is this compiler not having that value — and not the model leaving no row.
      *
-     * <p>Both ways round, as far as a reader can see either. Nothing about the behavior is said to
-     * be impossible or refused by the model's rules on the strength of it; and the row is not
-     * offered as one past the guard: it stays the author's value as it was composed, with the set
-     * holding nothing, which is a row that stops at the guard. Why the row went no further is not
-     * said anywhere a reader looks, which is so of every row repair could not take further.
+     * <p>Both ways round. Nothing about the behavior is said to be impossible or refused by the
+     * model's rules on the strength of it; and the row is not offered as one past the guard: it
+     * stays the author's value as it was composed, with the set holding nothing, which is a row
+     * that stops at the guard. Why it stops there is said beside it, which the next test holds.
      */
     @Test
     void aFieldOnlyNamedIsNoValueThisHasAndNoProofOfAnything() {
@@ -228,6 +227,31 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
                                 .ALL_CANDIDATES_REJECTED)
                         .toList(),
                 () -> "nothing is said to be left no row or refused by the model: " + rows);
+    }
+
+    /**
+     * And the row carries why it stops at the guard: the one way past it was looked for, and what
+     * that came to is this compiler composing nothing — never the model's word that the rules
+     * leave nothing there.
+     *
+     * <p>What tells the two apart from outside. A row that dropped the membership demand would let
+     * the stated value through unrepaired and leave every row and every note as they are; what
+     * changes is this, which then says nothing was looked for or says something else was met.
+     */
+    @Test
+    void aFieldOnlyNamedIsSaidBesideTheRowAsNothingComposingOne() {
+        RepairShortfall stop = generatedOf(ONLY_NAMED).stops().get("kind=Plain");
+        assertTrue(stop != null && stop.came() instanceof RepairShortfall.AtTheGuard.NoWayPast,
+                () -> "the row stops at the guard with every way past it looked at: " + stop);
+        List<Generator.UnresolvedCombination.Reason> said = new ArrayList<>();
+        for (RepairShortfall.WayPast way
+                : ((RepairShortfall.AtTheGuard.NoWayPast) stop.came()).ways()) {
+            assertTrue(way instanceof RepairShortfall.WayPast.Searched,
+                    () -> "each way was looked for to the end: " + way);
+            said.add(((RepairShortfall.WayPast.Searched) way).came().why().reason());
+        }
+        assertEquals(List.of(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE), said,
+                () -> "the way past the guard came to this compiler composing nothing: " + stop);
     }
 
     /** The elements written in the collection at {@code field} of a record written as {@code
@@ -341,9 +365,11 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
     }
 
     /** What one module's behavior was offered: a row per class, one per side of the membership a
-     *  rule turns on, and the word for each search that came to nothing. */
+     *  rule turns on, the word for each search that came to nothing, and why each class's row
+     *  stops where it does where it stops at a guard. */
     private record Rows(Map<String, List<String>> classes, Map<Boolean, List<String>> rules,
-                        List<Generator.UnresolvedCombination.Reason> said) {}
+                        List<Generator.UnresolvedCombination.Reason> said,
+                        Map<String, RepairShortfall> stops) {}
 
     /** What each model was offered, compiled once however many tests ask about it. */
     private static final Map<String, Rows> GENERATED = new ConcurrentHashMap<>();
@@ -362,10 +388,14 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
         assertNotNull(all, "the model under test compiles");
         Adequacy.Filling filling = all.get("settle");
         Map<String, List<String>> classes = new LinkedHashMap<>();
-        for (Generator.GeneratedRow row : filling.composed().rows()) {
-            for (Generator.Purpose purpose : row.purposes()) {
+        Map<String, RepairShortfall> stops = new LinkedHashMap<>();
+        for (FillResult.Offer offer : filling.composed().offers()) {
+            for (Generator.Purpose purpose : offer.row().purposes()) {
                 if (purpose instanceof Generator.Purpose.ForAClass forAClass) {
-                    classes.put(forAClass.label(), written(row));
+                    classes.put(forAClass.label(), written(offer.row()));
+                    if (offer.stop() != null) {
+                        stops.put(forAClass.label(), offer.stop());
+                    }
                 }
             }
         }
@@ -375,7 +405,7 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
                 .forEach(each -> rules.put(((DecidedCondition.Unread) each).held(),
                         written(row))));
         return new Rows(classes, rules, filling.composed().unresolved().stream()
-                .map(each -> each.why().reason()).toList());
+                .map(each -> each.why().reason()).toList(), stops);
     }
 
     private static List<String> written(Generator.GeneratedRow row) {

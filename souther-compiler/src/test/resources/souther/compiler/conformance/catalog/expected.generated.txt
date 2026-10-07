@@ -7,6 +7,7 @@ example apportion
 example apportionExactly
 // fills among=0 <= x < 1
 // fills else
+// stops at the guard at splitting.sou:47:5 looking for `among=0 <= x < 1`, and no row was found that goes past it — way 1 past it: `among` is asked to stand where its class leaves it no room
     | (Amount(0), Amount(0)) -> <?>
     | (Amount(0), Amount(1)) -> <?>
 // nothing offers a row for `else` in `apportion`: a row is steered into an arm by the decisions that hold on the way there, and the ways to this one could not all be written down — some of them would say a row arrives where it may not
@@ -16,6 +17,7 @@ example apportionExactly
 example 出荷する
 // fills 指示.重量=30000 < x
 // fills 指示.集荷時刻=12 <= x <= 23
+// stops at the guard at shipping.sou:88:5 looking for `指示.重量=30000 < x` with `指示.集荷時刻=12 <= x <= 23`, and no row was found that goes past it — way 1 past it: a row going this way would write afresh a value the module states, which the row keeps as written, so it was not looked for
     | (出荷指示 { ...基準の指示, 重量 = Weight(30001), 集荷時刻 = Time("12:00:00") }) -> <?>
     | (
         出荷指示 {

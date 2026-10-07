@@ -224,7 +224,29 @@ public enum CompositionBudget {
      * this compiler gave nothing up on, and a figure named there is a number an author raises to be
      * told the same thing.
      */
-    NUMBERS_OF_A_SET_TRIED(8);
+    NUMBERS_OF_A_SET_TRIED(8),
+
+    /**
+     * How many runs one row's exchange for a row that gets further into the body may make.
+     *
+     * <p>Counted in runs: whether a row got further is what only the behavior says, so every row
+     * the exchange looks at costs a run, while a candidate the model refuses costs only its
+     * composing. The run of the row being exchanged counts too — it is work done to decide between
+     * rows, and a row run once costs nothing the second time.
+     *
+     * <p>Over the whole exchange and not each guard or each way past one. What it bounds is what a
+     * row costs beyond being found, and a share per guard would be a bound that grows with the
+     * body.
+     *
+     * <p><b>It stops no search for the row, so it has no word.</b> The row the search found holds
+     * every pin and goes out whatever this comes to. What reaching it stops is a search for a way
+     * past the guard the row stops at, at the first row it would have to run, and that is carried
+     * beside the row ({@link RepairShortfall.WayPast.CutShort}) — a way a run was refused on is said
+     * as one nobody finished looking for, never as one that holds no row. Reaching it ends nothing
+     * by itself: a row run already costs nothing to look at again, so a search with none left goes
+     * on as far as rows run before take it.
+     */
+    RUNS_REPAIRING_A_ROW(16);
 
     private final int maximum;
 
@@ -275,7 +297,7 @@ public enum CompositionBudget {
                  LEVELS_A_SIDE_IS_ASKED_AT, TIMES_THE_RULES_ARE_ASKED_AGAIN,
                  VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT, VALUES_A_POINT_IS_TRIED_WITH,
                  PATHS_OF_A_DECISION_READ, DEPTH_A_CONSTRUCTION_PLAN_DESCENDS,
-                 NUMBERS_OF_A_SET_TRIED -> null;
+                 NUMBERS_OF_A_SET_TRIED, RUNS_REPAIRING_A_ROW -> null;
         };
     }
 }

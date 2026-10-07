@@ -5,6 +5,7 @@ import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
+import souther.compiler.flow.Ways;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleKey;
@@ -717,7 +718,10 @@ public final class Generator {
                              PLACES_A_POSITION_ON_THE_WAY_IS_LOOKED_AT,
                              VALUES_A_POINT_IS_TRIED_WITH,
                              DEPTH_A_CONSTRUCTION_PLAN_DESCENDS,
-                             PATHS_OF_A_DECISION_READ -> throw new IllegalArgumentException(
+                             PATHS_OF_A_DECISION_READ,
+                             // What it stops is the looking for a way past a guard, beside a row
+                             // already found, and what it stopped is carried beside that row.
+                             RUNS_REPAIRING_A_ROW -> throw new IllegalArgumentException(
                                 "no search comes back from this budget, so it has no word: " + each);
                     };
                     if (word != null && word != here) {
@@ -911,8 +915,10 @@ public final class Generator {
          *  one type spell the same way. */
         String classId();
 
-        /** A row composed for this class. */
-        record Built(AxisId at, String classId, GeneratedRow row) implements ClassAttempt {}
+        /** A row composed for this class, and what looking for one that goes further came to where
+         *  it stops at a guard — or null where there is nothing to say about one. */
+        record Built(AxisId at, String classId, GeneratedRow row, RepairShortfall repair)
+                implements ClassAttempt {}
 
         /** No row came of it, and what the search came to. Never a statement that none exists. */
         record Unresolved(AxisId at, String classId, CameToNothing came)
@@ -1345,7 +1351,7 @@ public final class Generator {
         // The rows this run composes, each numbered where it is composed. The number is an
         // identity and nothing reads it as a place: what says two obligations were answered by one
         // line is that both entries name the same one.
-        SequencedMap<RowId, ComposedRow> composed = new LinkedHashMap<>();
+        SequencedMap<RowId, FilledRow> composed = new LinkedHashMap<>();
         List<ClassAttempt> attempts = new ArrayList<>();
         // Which row answered which class. A row is a line in the file and the same line can answer
         // several things, so what says a class was answered is the entry naming the row rather than
@@ -1394,7 +1400,7 @@ public final class Generator {
                     // composed one apiece — each is offered for its own class, and merging them
                     // would take one of the two classes its answer.
                     answeredAt.put(new ClassOfAPosition(attempt.at(), attempt.classId()),
-                            compose(composed, made.row()));
+                            compose(composed, made.row(), made.repair()));
                 }
                 case ClassAttempt.Unresolved none -> unresolved.add(none.came());
             }
@@ -1751,8 +1757,8 @@ public final class Generator {
             // the same values and hand a person the same work twice — which is what the offering
             // would then have to take back out.
             RowId already = null;
-            for (Map.Entry<RowId, ComposedRow> each : composed.entrySet()) {
-                if (pins.holds(axes, each.getValue().inputs(), check)) {
+            for (Map.Entry<RowId, FilledRow> each : composed.entrySet()) {
+                if (pins.holds(axes, each.getValue().line().inputs(), check)) {
                     already = each.getKey();
                     break;
                 }
@@ -1768,7 +1774,8 @@ public final class Generator {
                 pairAnswers.put(asked, new ClassDisposition.Unresolved(made.came()));
                 unresolved.add(made.came());
             } else {
-                pairAnswers.put(asked, new ClassDisposition.Built(compose(composed, made.row())));
+                pairAnswers.put(asked, new ClassDisposition.Built(
+                        compose(composed, made.row(), made.repair())));
             }
         }
         // And the rewrites of the body no row was seen to tell from it, each looked for as a row the
@@ -1861,7 +1868,7 @@ public final class Generator {
                 }
             };
             replacementAnswers.put(asked, found != null
-                    ? new ReplacementDisposition.Witnessed(compose(composed, found))
+                    ? new ReplacementDisposition.Witnessed(compose(composed, found, null))
                     : new ReplacementDisposition.NoneFound(looking.ended()));
         }
         // The searches' own maps, closed back into one answer per obligation in the plan's order. A
@@ -2118,9 +2125,9 @@ public final class Generator {
      * ways in agree. Written down twice, an author is handed the same line twice and told it
      * answers two different things.
      */
-    private static RowId keep(SequencedMap<RowId, ComposedRow> composed, GeneratedRow row) {
+    private static RowId keep(SequencedMap<RowId, FilledRow> composed, GeneratedRow row) {
         List<String> written = new ComposedRow(row.inputs(), row.answers()).writtenAs();
-        for (Map.Entry<RowId, ComposedRow> already : composed.entrySet()) {
+        for (Map.Entry<RowId, FilledRow> already : composed.entrySet()) {
             // Whatever the row beside it was composed for, and not the arms alone. One set of
             // values is one line in the file: a class's row and an arm's row of the same values are
             // one row that fills the class and goes through the arm, and written down twice the
@@ -2129,11 +2136,14 @@ public final class Generator {
             // By what the rows are written as, which is what "the same line" means and is a string
             // to compare. A template also carries the expression it stands for, and holding two
             // rows to that walks two trees for an answer the text already gave.
-            if (already.getValue().writtenAs().equals(written)) {
+            // The line already here keeps what came of looking past it. The rows kept this way
+            // are an arm's and a meeting's, taken where the run went and never exchanged for one
+            // that goes further, so they bring nothing of the kind.
+            if (already.getValue().line().writtenAs().equals(written)) {
                 return already.getKey();
             }
         }
-        return compose(composed, row);
+        return compose(composed, row, null);
     }
 
     /**
@@ -2143,10 +2153,14 @@ public final class Generator {
      * that two entries name one line, and an identity that meant "the nth row offered" would move
      * with whatever the offer was ordered by — which is the arrangement a row's own account of what
      * it was composed for came apart under.
+     *
+     * <p>With what looking for a row that goes further came to, under the same number, or null
+     * where there is nothing to say ({@link FilledRow}).
      */
-    private static RowId compose(SequencedMap<RowId, ComposedRow> composed, GeneratedRow row) {
+    private static RowId compose(SequencedMap<RowId, FilledRow> composed, GeneratedRow row,
+                                 RepairShortfall repair) {
         RowId id = new RowId(composed.size());
-        composed.put(id, new ComposedRow(row.inputs(), row.answers()));
+        composed.put(id, new FilledRow(new ComposedRow(row.inputs(), row.answers()), repair));
         return id;
     }
 
@@ -2185,22 +2199,6 @@ public final class Generator {
      * its own, not a constant inside a loop.
      */
     private static final int MOST_REPAIRS = 64;
-
-    /**
-     * How many runs one row's exchange for a row that gets further into the body may make.
-     *
-     * <p>Counted in runs, for the reason {@link #MOST_RUNS_PER_INTERPRETATION} is: whether a row got
-     * further is what only the behavior says, so every row this looks at costs a run, while a
-     * candidate the model refuses costs only its composing, which {@link #MOST_REPAIRS} bounds. The
-     * run of the row being exchanged counts too — it is work done to decide between rows, and a row
-     * run once costs nothing the second time.
-     *
-     * <p>Over the whole exchange and not each guard or each way past one. What it bounds is what
-     * a row costs beyond being found, and a share per guard would be a bound that grows with the
-     * body. Running out costs nothing but the preference: the row the class search took, or the
-     * furthest found before, is the row.
-     */
-    private static final int MOST_RUNS_REPAIRING_A_ROW = 16;
 
     /**
      * The classes a row is composed for, in the order a search settles them.
@@ -2294,11 +2292,30 @@ public final class Generator {
                 origins, check, references, answers, goingOn);
         return made.row() == null
                 ? new ClassAttempt.Unresolved(axis.id(), classId, made.came())
-                : new ClassAttempt.Built(axis.id(), classId, made.row());
+                : new ClassAttempt.Built(axis.id(), classId, made.row(), made.repair());
     }
 
-    /** What a search for one requirement came back with: the row, or what the search came to. */
-    private record Composed(GeneratedRow row, CameToNothing came) {}
+    /**
+     * What a search for one requirement came back with: the row, or what the search came to.
+     *
+     * @param row    the row, or null where the search took none
+     * @param repair what looking for a row that goes further than {@code row} came to, or null
+     *               where there is nothing to say about one: no row, a row not stopped at a guard,
+     *               or a row nothing says how far it got
+     * @param came   what the search came to, or null where it took a row
+     */
+    private record Composed(GeneratedRow row, RepairShortfall repair, CameToNothing came) {
+
+        /** A row, and nothing to say about a guard. */
+        static Composed going(GeneratedRow row) {
+            return new Composed(row, null, null);
+        }
+
+        /** A row stopped at a guard, and what looking past it came to. */
+        static Composed stopping(GeneratedRow row, RepairShortfall repair) {
+            return new Composed(row, repair, null);
+        }
+    }
 
     /**
      * A row a search found, run, and exchanged for one that gets further into the body where a
@@ -2327,8 +2344,19 @@ public final class Generator {
      *
      * <p>Kept only where the new row was seen in the rest of the block. Each guard is looked past
      * once, and what deciding between rows costs is runs, so that is what is counted
-     * ({@link #MOST_RUNS_REPAIRING_A_ROW}); where they run out, the row furthest in so far goes out.
-     * What was held before is held after, so a row past the second guard is still past the first.
+     * ({@link CompositionBudget#RUNS_REPAIRING_A_ROW}), and counted where a row not run before is
+     * run: looking at a row run already costs nothing, so running out ends nothing by itself, and
+     * a way is given up only where its own search wanted a run and had none. What was held before
+     * is held after, so a row past the second guard is still past the first.
+     *
+     * <p><b>And where the row goes out stopped at a guard, what the looking came to goes with
+     * it</b> ({@link RepairShortfall}): which guard, for which requirement, and what the guard came
+     * to — no way past it at all, ways this reading could not write down, or every way written,
+     * each searched and composing nothing, searched until a run was refused, or one nothing here
+     * can hold a row to. Each in its own words, so a way the model lets no row down and a way this
+     * compiler could not compose a row for are not read as one answer. A row not stopped at a
+     * guard, or one nothing says how far it got, carries nothing: there is no guard to say it
+     * stopped at.
      *
      * @param read    the reading of the body, which says where a guard's rest of the block is and
      *                what holds on the way there
@@ -2340,17 +2368,20 @@ public final class Generator {
     private record GoingOn(CoverageRead.Read read, Trial trial, Map<List<String>, ObservedRun> ran,
                            HeldOutcome.Of holding) {
 
-        /** The row {@code found} took, or a row for the same requirement that got further in. */
-        GeneratedRow past(MeasuredInput.MeasuredAxes axes, Pins pins, List<Purpose> purposes,
-                          Searched found, CandidateCheck check,
-                          FixtureReferences references, List<StoodInAnswer> answers) {
+        /** The row {@code found} took, or a row for the same requirement that got further in —
+         *  with what looking further came to, where the row goes out stopped at a guard. */
+        Composed past(MeasuredInput.MeasuredAxes axes, Pins pins, List<Purpose> purposes,
+                      Searched found, CandidateCheck check,
+                      FixtureReferences references, List<StoodInAnswer> answers) {
             // Not run at all where the body has no guard for a run to stop at. Nothing could be
             // exchanged, and a run is what every other search of this run is bounded in.
             Runs runs = new Runs();
             if (read.restOfTheBlock().isEmpty()
                     || !(watched(found.row(), runs).orElse(null)
                             instanceof Watched.Ran(AlignedObservation seen))) {
-                return found.row();   // nothing says how far it got, so nothing is further
+                // Nothing says how far it got, so nothing is further and no guard is one it
+                // stopped at.
+                return Composed.going(found.row());
             }
             Candidate from = found.from();
             Set<String> against = found.against();
@@ -2364,19 +2395,54 @@ public final class Generator {
             Set<ArmProbe> tried = new LinkedHashSet<>();
             while (true) {
                 Optional<TheRestOfTheBlock> rest = restOfTheBlockShortOf(seen);
-                // Each guard once: a guard looked past already is one no way of was found for.
-                if (rest.isEmpty() || !tried.add(rest.get().arm())) {
-                    return best;
+                if (rest.isEmpty()) {
+                    return Composed.going(best);   // not stopped at a guard
                 }
-                GeneratedRow further = null;
+                // Each guard once: looking past one a second time is where going round starts.
+                if (!tried.add(rest.get().arm())) {
+                    return Composed.stopping(best, new RepairShortfall(purposes,
+                            rest.get().refused(),
+                            new RepairShortfall.AtTheGuard.BackAtAGuardLookedPast()));
+                }
+                // What the reading said of the ways past, which is three answers: none of them is
+                // a list's emptiness standing for the other two.
+                List<List<ControlClaim>> written = switch (rest.get().ways()) {
+                    case Ways.Unknown<List<ControlClaim>> _ -> null;
+                    case Ways.Known<List<ControlClaim>>(List<List<ControlClaim>> paths) -> paths;
+                };
+                if (written == null || written.isEmpty()) {
+                    return Composed.stopping(best, new RepairShortfall(purposes,
+                            rest.get().refused(), written == null
+                                    ? new RepairShortfall.AtTheGuard.WaysNotRead()
+                                    : new RepairShortfall.AtTheGuard.NoWayGoesPast()));
+                }
                 ArmProbe goneOn = rest.get().arm();
-                for (List<HeldOutcome> way : waysOn(seen, rest.get(), against)) {
+                List<WayPastTheGuard> ways = waysOn(seen, written, against);
+                RepairShortfall.WayPast[] came = new RepairShortfall.WayPast[ways.size()];
+                // Two ways that ask the row for the same things are one search, and what it came
+                // to is what both of them came to.
+                Map<List<HeldOutcome>, RepairShortfall.WayPast> asked = new HashMap<>();
+                GeneratedRow further = null;
+                // Every way is looked for, runs left or not. Looking at a row run already costs
+                // nothing, so a search with none left can still be answered by rows run before;
+                // what says a way was given up is a run refused inside its own search.
+                for (int at : fewestFirst(ways)) {
+                    List<HeldOutcome> way = ((WayPastTheGuard.Holding) ways.get(at)).demands();
+                    RepairShortfall.WayPast already = asked.get(way);
+                    if (already != null) {
+                        came[at] = already;
+                        continue;
+                    }
                     List<HeldOutcome> both = new ArrayList<>(held);
                     both.addAll(way);
+                    runs.stopped = false;
                     Searched searched = search(axes, pins, purposes, List.of(from.from()), keeping,
                             check, references, answers, List.copyOf(both),
                             row -> switch (watched(row, runs).orElse(null)) {
-                                case null -> Acceptance.STOPPED;
+                                case null -> {
+                                    runs.stopped = true;
+                                    yield Acceptance.STOPPED;
+                                }
                                 case Watched.Ran(AlignedObservation run) when run.lit(goneOn) ->
                                         Acceptance.TAKEN;
                                 default -> Acceptance.PASSED;
@@ -2386,13 +2452,28 @@ public final class Generator {
                         held = List.copyOf(both);
                         break;
                     }
-                    if (runs.left == 0) {
-                        return best;
-                    }
+                    RepairShortfall.WayPast its = runs.stopped
+                            ? new RepairShortfall.WayPast.CutShort(searched.came(),
+                                    CompositionBudget.RUNS_REPAIRING_A_ROW)
+                            : new RepairShortfall.WayPast.Searched(searched.came());
+                    came[at] = its;
+                    asked.put(way, its);
                 }
-                if (further == null || !(watched(further, runs).orElse(null)
+                if (further == null) {
+                    List<RepairShortfall.WayPast> each = new ArrayList<>();
+                    for (int at = 0; at < ways.size(); at++) {
+                        each.add(ways.get(at)
+                                instanceof WayPastTheGuard.Barred(RepairShortfall.Barrier why)
+                                ? new RepairShortfall.WayPast.NotSearchable(why) : came[at]);
+                    }
+                    return Composed.stopping(best, new RepairShortfall(purposes,
+                            rest.get().refused(), new RepairShortfall.AtTheGuard.NoWayPast(each)));
+                }
+                // Taken only where it was seen going on, and a row run once is not run again.
+                if (!(watched(further, runs).orElse(null)
                         instanceof Watched.Ran(AlignedObservation now))) {
-                    return best;
+                    throw new IllegalStateException("a row taken for going past a guard is one"
+                            + " that was seen doing so: " + further);
                 }
                 best = further;
                 seen = now;
@@ -2401,12 +2482,61 @@ public final class Generator {
 
         /** The runs one row's repair may still make. */
         private static final class Runs {
-            private int left = MOST_RUNS_REPAIRING_A_ROW;
+
+            private int left = CompositionBudget.RUNS_REPAIRING_A_ROW.maximum();
+
+            /**
+             * Whether the search under way was refused a run for a row it had not seen run, which
+             * is the one thing that says a way was given up — and never read off {@link #left},
+             * which says what is left and not that anything was wanted.
+             */
+            private boolean stopped;
         }
 
         /**
-         * For each way past the guard {@code stopped} there is something to hold with, what holds
-         * every part of it {@code seen} did not do — the ways that ask least of the row first.
+         * One way past a guard, as what holding a row to it asks or why nothing can.
+         *
+         * <p>Every way the reading wrote down is one of these, so none of them leaves the account
+         * of what looking past the guard came to by being left out of the list.
+         */
+        private sealed interface WayPastTheGuard {
+
+            /** What holds every part of the way the row did not do. */
+            record Holding(List<HeldOutcome> demands) implements WayPastTheGuard {
+
+                public Holding {
+                    demands = List.copyOf(demands);
+                }
+            }
+
+            /** Nothing here can hold a row to it, and why. */
+            record Barred(RepairShortfall.Barrier why) implements WayPastTheGuard {}
+        }
+
+        /**
+         * The ways a row can be held to, by where they stand among {@code ways}, the ways that ask
+         * least of the row first.
+         *
+         * <p>Fewest first, because what the row did is the best guess at what a row like it does:
+         * the way the row went through the guard's condition with one comparison turned round
+         * changes the row least. Which is the order they are looked for in and nothing more; what
+         * each came to is said in the order the reading wrote them.
+         */
+        private static List<Integer> fewestFirst(List<WayPastTheGuard> ways) {
+            List<Integer> out = new ArrayList<>();
+            for (int at = 0; at < ways.size(); at++) {
+                if (ways.get(at) instanceof WayPastTheGuard.Holding) {
+                    out.add(at);
+                }
+            }
+            out.sort(Comparator.comparingInt(
+                    at -> ((WayPastTheGuard.Holding) ways.get(at)).demands().size()));
+            return out;
+        }
+
+        /**
+         * Each of {@code written}, the ways past a guard the reading wrote down, as what holds every
+         * part of it {@code seen} did not do, or why nothing here can.
          *
          * <p>A way whole and not a comparison at a time. A way is what the guard's condition takes
          * all at once — both sides of an {@code &&}, the second of an {@code ||} with the first
@@ -2416,41 +2546,47 @@ public final class Generator {
          * <p>What the run already did is no demand: it was seen doing it, and the row it is
          * composed again holds it as the row did, or holds it by the classes. A part of a way that
          * is an arm, or a comparison no border offers a point on the side it comes out on, is one
-         * nothing here can hold a row to, and the way is not one this offers. Nor is one whose
-         * comparison stands a term at a parameter the row writes as the value the model states
-         * ({@code against}): holding it would compose that parameter afresh, and the value the
-         * author chose is the row's.
+         * nothing here can hold a row to. Nor is one whose comparison stands a term at a parameter
+         * the row writes as the value the model states ({@code against}): holding it would compose
+         * that parameter afresh, and the value the author chose is the row's.
          *
-         * <p>Fewest first, because what the row did is the best guess at what a row like it does:
-         * the way the row went through the guard's condition with one comparison turned round
-         * changes the row least.
+         * <p>In the order the reading wrote them, one apiece.
          */
-        private List<List<HeldOutcome>> waysOn(AlignedObservation seen,
-                                                  TheRestOfTheBlock stopped,
-                                                  Set<String> against) {
-            List<List<HeldOutcome>> out = new ArrayList<>();
-            for (List<ControlClaim> way : stopped.ways()) {
-                List<HeldOutcome> demands = new ArrayList<>();
-                for (ControlClaim each : way) {
-                    if (each.satisfiedBy(seen)) {
-                        continue;
-                    }
-                    Optional<HeldOutcome> holds =
-                            each.at() instanceof ControlPlace.Outcome outcome
-                                    ? holding.at(outcome) : Optional.empty();
-                    if (holds.isEmpty() || holds.get().demands().stream()
-                            .anyMatch(demand -> writesAnyOf(demand, against))) {
-                        demands = null;
-                        break;
-                    }
-                    demands.add(holds.get());
-                }
-                if (demands != null && !demands.isEmpty() && !out.contains(demands)) {
-                    out.add(List.copyOf(demands));
-                }
+        private List<WayPastTheGuard> waysOn(AlignedObservation seen,
+                                             List<List<ControlClaim>> written,
+                                             Set<String> against) {
+            List<WayPastTheGuard> out = new ArrayList<>();
+            for (List<ControlClaim> way : written) {
+                out.add(wayOn(seen, way, against));
             }
-            out.sort(Comparator.comparingInt(List::size));
             return out;
+        }
+
+        /** One of them. */
+        private WayPastTheGuard wayOn(AlignedObservation seen, List<ControlClaim> way,
+                                      Set<String> against) {
+            List<HeldOutcome> demands = new ArrayList<>();
+            for (ControlClaim each : way) {
+                if (each.satisfiedBy(seen)) {
+                    continue;
+                }
+                Optional<HeldOutcome> holds = each.at() instanceof ControlPlace.Outcome outcome
+                        ? holding.at(outcome) : Optional.empty();
+                if (holds.isEmpty()) {
+                    return new WayPastTheGuard.Barred(
+                            RepairShortfall.Barrier.NOTHING_HOLDS_A_ROW_TO_IT);
+                }
+                if (holds.get().demands().stream()
+                        .anyMatch(demand -> writesAnyOf(demand, against))) {
+                    return new WayPastTheGuard.Barred(
+                            RepairShortfall.Barrier.IT_WOULD_REWRITE_A_STATED_VALUE);
+                }
+                demands.add(holds.get());
+            }
+            return demands.isEmpty()
+                    ? new WayPastTheGuard.Barred(
+                            RepairShortfall.Barrier.THE_ROW_ALREADY_DOES_ALL_OF_IT)
+                    : new WayPastTheGuard.Holding(demands);
         }
 
         /** Whether holding the row to {@code demand} composes a parameter in {@code against}. */
@@ -2518,9 +2654,8 @@ public final class Generator {
                                    List<StoodInAnswer> answers, GoingOn goingOn) {
         Searched searched = search(axes, pins, purposes, origins, (_, _) -> true, check,
                 references, answers, List.of(), _ -> Acceptance.TAKEN);
-        return searched.row() == null ? new Composed(null, searched.came())
-                : new Composed(goingOn.past(axes, pins, purposes, searched, check, references,
-                        answers), null);
+        return searched.row() == null ? new Composed(null, null, searched.came())
+                : goingOn.past(axes, pins, purposes, searched, check, references, answers);
     }
 
     /**
