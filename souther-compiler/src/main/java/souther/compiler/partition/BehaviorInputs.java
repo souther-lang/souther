@@ -323,8 +323,8 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
         return switch (step) {
             case TermPath.Step.Field named -> shape instanceof Shape.Product product
                     ? product.fields().get(named.name()) : null;
-            case TermPath.Step.Element _ -> shape instanceof Shape.Sequence sequence
-                    ? sequence.element() : null;
+            case TermPath.Step.Element _ -> shape instanceof Shape.Container container
+                    ? container.element() : null;
             // What a sum's case holds is the value the sum held, and what an optional holds is at
             // no name of its own — so both narrow the type at this position and nothing is
             // descended into. A value is written as one case, so a position left several of them
@@ -411,11 +411,12 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                 // Every element the row wrote, and no choice among them. Which of them a rule is
                 // about is not something the coordinate says, so what stands here is all of them
                 // and what a class comes to over them is the caller's to decide. A list holding
-                // none is a step taken: the walk arrived and the row wrote nothing there.
+                // none is a step taken: the walk arrived and the row wrote nothing there. A map's
+                // element is its values, as it is wherever a walk is handed one.
                 case TermPath.Step.Element _ -> {
-                    Type element = view.shape() instanceof Shape.Sequence sequence
-                            ? sequence.element() : null;
-                    if (element == null || !(here instanceof ObservedValue.Sequence written)) {
+                    Type element = view.shape() instanceof Shape.Container container
+                            ? container.element() : null;
+                    if (element == null || !(here instanceof ObservedValue.Held written)) {
                         return false;
                     }
                     // Keyed by the step, which is this path with the step taken. Two positions

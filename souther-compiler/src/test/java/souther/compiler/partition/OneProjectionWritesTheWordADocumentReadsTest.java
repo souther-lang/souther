@@ -63,7 +63,6 @@ class OneProjectionWritesTheWordADocumentReadsTest {
                         souther.compiler.types.TypeSymbols.declared(
                                 new souther.compiler.types.TypeKey("g", "Chain")),
                         souther.compiler.inputs.TermPath.of("c")),
-                new BlockReason.UnsupportedTraversal(BlockReason.Traversal.MAPPING_CONTENT),
                 new BlockReason.UnreadComparisonForm(),
                 new BlockReason.UnreadComparisonDomain(),
                 new BlockReason.ComparisonBetweenPositions());
@@ -71,9 +70,5 @@ class OneProjectionWritesTheWordADocumentReadsTest {
         for (BlockReason each : all) {
             assertFalse(ReportedReason.of(each) == null, each + " has a word");
         }
-        assertEquals(1, all.stream().map(ReportedReason::of).distinct().toList().stream()
-                        .filter(word -> word == UndividedPosition.Reason.UNSUPPORTED_TRAVERSAL)
-                        .count(),
-                "the three traversals are one word, which is the coarsening this projection is for");
     }
 }

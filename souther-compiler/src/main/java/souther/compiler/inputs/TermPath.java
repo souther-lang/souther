@@ -73,12 +73,18 @@ public record TermPath(String head, List<Step> steps) {
         }
 
         /**
-         * Inside the sequence the path has reached so far.
+         * Inside the container the path has reached so far: what a list or a set holds, or a map's
+         * values.
          *
          * <p>Which element is not something a path can say, and not something it is short of
          * saying: a list holds as many as it holds, and they are one position because one rule is
          * written about them. What a class here means, and how many elements a row has to put in
          * one, are settled where the class and the row are and not here.
+         *
+         * <p>A map's values and not its keys. The values are what a walk over a map hands on as
+         * the element, and a key is a value of another type standing beside each of them, so the
+         * two are not one position. Every reader below that says "sequence" means a container
+         * in this sense.
          */
         record Element() implements Step {
 

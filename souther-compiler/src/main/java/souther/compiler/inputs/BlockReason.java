@@ -359,14 +359,14 @@ public sealed interface BlockReason {
      */
     sealed interface AboutThePosition extends ReadingStopReason {
 
-        /** The same switch over the five ways a reading never got to a position's rules. */
+        /** The same switch over the four ways a reading never got to a position's rules. */
         @Override
         default RunSensitivity runSensitivity() {
             return switch (this) {
                 // A type nothing could interpret, a path returning to a declaration it has been
-                // through, and a place this does not reach into. None of them is a figure anything
-                // was compared against.
-                case TypeUnresolved _, RecursiveExpansion _, UnsupportedTraversal _,
+                // through, and rules nothing reached. None of them is a figure anything was
+                // compared against.
+                case TypeUnresolved _, RecursiveExpansion _,
                      ValueRulesNotReached _ -> RunSensitivity.UNAFFECTED;
                 // And the one figure among them: a reading that stopped at the depth it could
                 // afford, which a run allowed to read further need not stop at.
@@ -546,17 +546,6 @@ public sealed interface BlockReason {
             }
         }
     }
-
-    /**
-     * The shape at the position holds values this cannot reach into, and which reaching is missing
-     * is which of {@link Traversal} it is.
-     *
-     * <p>Held apart rather than made one word, because what would lift each is a different piece of
-     * work: choosing among however many elements a sequence holds, choosing whether an optional
-     * holds one, and deciding what part of a mapping a rule is even about. Reporting them alike
-     * would let one of them being implemented read as all three.
-     */
-    record UnsupportedTraversal(Traversal traversal) implements AboutThePosition {}
 
     /**
      * A comparison naming the position is written in a form no reader here takes apart: the
@@ -1007,24 +996,5 @@ public sealed interface BlockReason {
      * the classes.
      */
     record ClassesNotComposed() implements ReadToEndWithoutLine {}
-
-    /**
-     * What a derivation would have to be able to reach into.
-     *
-     * <p>What it can reach into is not here. The elements of a {@code List} or a {@code Set} were,
-     * and are positions of the input now; so was the value an {@code Option} holds, which is a
-     * branch of the position under the narrowing that it holds one. A word for a reaching that is
-     * made says a reader can still meet it, and the next one to read this would take its presence
-     * for evidence that a sequence, or an optional, is where the walk stops.
-     */
-    enum Traversal {
-
-        /**
-         * What a {@code Map} holds. One case and not two, because which of a key and a value a rule
-         * would be about has not been decided — and a distinction invented here would be a promise
-         * about a semantics nobody has written.
-         */
-        MAPPING_CONTENT
-    }
 
 }

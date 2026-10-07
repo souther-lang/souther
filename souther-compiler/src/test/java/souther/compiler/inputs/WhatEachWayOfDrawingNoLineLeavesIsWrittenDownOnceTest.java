@@ -203,7 +203,6 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         table.put("TypeUnresolved", "TYPE_UNRESOLVED/UNAFFECTED");
         table.put("RecursiveExpansion",
                 "RETURNS_TO_A_DECLARATION_ALREADY_READ/UNAFFECTED");
-        table.put("UnsupportedTraversal", "UNSUPPORTED_TRAVERSAL/UNAFFECTED");
         table.put("ValueRulesNotReached", "RULES_NOT_READ_AT_ALL/UNAFFECTED");
         // The two rows this pair is for. One word out there and two reasons in here: a document
         // promises a reader the hole under the position and not which figure this compiler stopped
@@ -458,7 +457,6 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                         souther.compiler.types.TypeSymbols.declared(
                                 new souther.compiler.types.TypeKey("g", "Chain")),
                         TermPath.of("c")),
-                new BlockReason.UnsupportedTraversal(BlockReason.Traversal.MAPPING_CONTENT),
                 new BlockReason.ValueRulesNotReached(),
                 new BlockReason.ValueRulesNotReachedPastDepthLimit());
     }

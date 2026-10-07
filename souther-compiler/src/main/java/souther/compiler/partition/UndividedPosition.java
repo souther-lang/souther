@@ -386,15 +386,7 @@ public record UndividedPosition(TermPath at, Why why) {
          * place the rule stands at, and what a reader does about it differs: there they read one
          * rule against the declarations, here they read the guards above it.
          */
-        NOTHING_ARRIVES_AT_THE_RULES_LINE,
-        /**
-         * The position holds its values inside something this does not reach into — the elements of
-         * a collection, what an optional holds, what a map holds. One word for all of them: which
-         * reaching is missing is a fact about this compiler, and the model reads the same either
-         * way. What this compiler could not do is told apart internally
-         * ({@link BlockReason.UnsupportedTraversal}).
-         */
-        UNSUPPORTED_TRAVERSAL
+        NOTHING_ARRIVES_AT_THE_RULES_LINE
     }
 
     /**

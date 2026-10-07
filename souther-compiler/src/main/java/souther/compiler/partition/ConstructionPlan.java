@@ -668,14 +668,15 @@ final class ConstructionPlan {
         // parameter does not declare.
         List<TypeSymbol> worn = settled.outer().isEmpty() ? view.wrappers()
                 : outside(settled.outer(), view.wrappers());
-        // A sequence with something to be placed inside it. Built out of its element rather than
-        // chosen whole, since what is being asked for is a list holding a value in a class and no
-        // proposal of a whole list can be asked to hold one.
+        // A container with something to be placed inside it — a list, a set, or a map at its
+        // values. Built out of its element rather than chosen whole, since what is being asked for
+        // is a container holding a value in a class and no proposal of a whole one can be asked to
+        // hold one.
         // Read here and handed on, so that one place decides both that the descent stops and which
         // figure stopped it. Named again where the answer is made, the two could part.
         CompositionBudget descent = CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS;
         boolean asDeepAsThisGoes = depth >= descent.maximum();
-        if (view.shape() instanceof souther.compiler.check.Shape.Sequence sequence) {
+        if (view.shape() instanceof souther.compiler.check.Shape.Container container) {
             // Asked once, here, and handed to everything below that turns on it. What is built at
             // this position, whether the descent has anything to reach, and whether the rules leave
             // room for it are one question — is the caller asking for something inside this list —
@@ -714,7 +715,7 @@ final class ConstructionPlan {
                 return new NodeResult.Made(
                         new Held(here, building, worn, Optional.empty(), holds, true));
             }
-            NodeResult inside = node(sequence.element(), here.element(), inners, symbols,
+            NodeResult inside = node(container.element(), here.element(), inners, symbols,
                     kinds, sums,
                     depth + 1, decided, required, contents, howMany);
             if (!(inside instanceof NodeResult.Made(Node element))) {

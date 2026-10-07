@@ -49,16 +49,7 @@ class AClauseNothingCouldTypeLeavesAPositionShortOfItsRulesTest {
      *
      * <p>The clause below states nothing that could be typed, so it never reaches a reading and
      * which position it governed is exactly what is unknown about it. So the word is the one for a
-     * position whose rules were never arrived at, and not the one for values held inside something
-     * the walk does not reach into: the reaching was made.
-     *
-     * <p>This model used to carry {@code unsupported_traversal}, and it was the only model here
-     * that did. What is left carrying that word is an {@code Option} and a {@code Map}, and no
-     * model written here reaches it through either: an optional divides into its two cases and is
-     * measured, and a map's contents are named by nothing a body can write that this reads. So the
-     * word goes uncarried by any document this test builds until those two are reached into, and
-     * what still holds it to meaning one thing is the projection that writes it
-     * ({@link souther.compiler.partition.ReportedReason}), tested where that is.
+     * position whose rules were never arrived at.
      */
     private static final String RULES_NEVER_ARRIVED_AT = """
             module demo
@@ -75,7 +66,6 @@ class AClauseNothingCouldTypeLeavesAPositionShortOfItsRulesTest {
         String json = reportOf(RULES_NEVER_ARRIVED_AT);
 
         assertTrue(json.contains("\"rules_not_read_at_all\""), json);
-        assertFalse(json.contains("\"unsupported_traversal\""), json);
     }
     /**
      * And the witness above is a model this compiler refuses.

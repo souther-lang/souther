@@ -2768,8 +2768,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     "the input returns here to a declaration already read above it, and what is"
                             + " under it is not read again";
             case TYPE_UNRESOLVED -> "its type could not be worked out here";
-            case UNSUPPORTED_TRAVERSAL ->
-                    "its values are held inside something this does not reach into";
         };
     }
 

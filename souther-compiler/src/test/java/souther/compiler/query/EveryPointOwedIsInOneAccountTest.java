@@ -133,17 +133,15 @@ class EveryPointOwedIsInOneAccountTest {
     }
 
     /**
-     * A module whose declarations draw a line the walk never reached the position of.
+     * A module whose walk stops before it is through the input.
      *
-     * <p>What the mapping holds is a value this compiler names no position for, so {@code Amount}'s
-     * clause is written under a position no reading is ever opened at.
+     * <p>What the list holds returns to the declaration the walk has already opened, so the walk
+     * stops there.
      */
     private static final String NOT_REACHED = """
             module example.notreached
 
-            data Amount = Int
-                invariant value >= 0 && value <= 100
-            data Req = { cost: Map<String, Amount>, flag: Bool }
+            data Req = { more: List<Req>, flag: Bool }
             data Res = { n: Int }
 
             behavior f : (r: Req) -> Res
@@ -151,7 +149,7 @@ class EveryPointOwedIsInOneAccountTest {
             let f (r) = Res { n = 0 }
 
             example f
-                | "one" : (Req { cost = [ ("a", Amount(1)) ], flag = true }) -> Res { n = 0 }
+                | "one" : (Req { more = [], flag = true }) -> Res { n = 0 }
             """;
 
     /**
@@ -159,12 +157,9 @@ class EveryPointOwedIsInOneAccountTest {
      *
      * <p>The other half of what a behavior's account answers. What a module's declarations are owed
      * is read off the lines its behaviors met, so a reading that stopped may have left a line their
-     * declarations owe unseen — and an account that came back with no debts and nothing to say would
-     * be a module whose declarations owe nothing, which is what a module every line of which is
-     * covered also answers.
-     *
-     * <p>{@code Amount} is such a declaration: it states something about its values, and this run
-     * could not get to the position carrying it to find out what is owed there.
+     * declarations owe unseen — and an account that came back with nothing to say would be a module
+     * whose declarations owe nothing, which is what a module every line of which is covered also
+     * answers.
      */
     @Test
     void aReadingThatDidNotRunOutLeavesTheDeclarationsAccountShort() {
@@ -176,8 +171,6 @@ class EveryPointOwedIsInOneAccountTest {
                 compilation.db().ask(new Adequacy.DeclaredBorders("example.notreached")).value();
         assertNotNull(account, "the model under test compiles");
 
-        assertEquals(List.of(), account.owed(),
-                "the walk never reached the position, so no debt of the declaration was found");
         assertFalse(account.weakening().isEmpty(),
                 "and the account says the reading it was made from did not run out, so the debts it"
                         + " holds are not all there are");

@@ -279,13 +279,12 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
      * A walk that did not reach into the position outranks whatever the rules came to.
      *
      * <p>Both rows, because the precedence is only visible where the other side has something to
-     * say: where the walk could not reach into what a position holds, a rule naming something
-     * inside it describes the same stop from the other end, and the first is the cause.
+     * say: where the walk could not read what is at a position, a rule naming something inside it
+     * describes the same stop from the other end, and the first is the cause.
      */
     @Test
     void aWalkThatDidNotReachInOutranksWhatTheRulesCameTo() {
-        PendingPosition blocked = new PendingPosition.Blocked(AT,
-                new BlockReason.UnsupportedTraversal(BlockReason.Traversal.MAPPING_CONTENT));
+        PendingPosition blocked = new PendingPosition.Blocked(AT, new BlockReason.TypeUnresolved());
         UndividedPosition.Why expected = new UndividedPosition.Why.CannotDerive();
 
         assertEquals(expected, blocked.complete(new BodyCutInspection.Exhausted()).why());
@@ -293,8 +292,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
         // And the finding is the stop, whatever the rules came to: a rule naming something inside a
         // position the walk could not enter describes that same stop from the other end.
         assertEquals(new souther.compiler.inputs.PositionReadingBlocked(AT,
-                        new BlockReason.UnsupportedTraversal(
-                                BlockReason.Traversal.MAPPING_CONTENT)),
+                        new BlockReason.TypeUnresolved()),
                 blocked.reportable());
     }
 

@@ -403,16 +403,6 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                     Yes
                 }
                 """.formatted(ANSWER)));
-        // Values held inside something the walk does not reach into.
-        out.put(UndividedPosition.Reason.UNSUPPORTED_TRAVERSAL, of("""
-                module m
-
-                data Ok
-                data Box = { m: Map<String, Int> }
-
-                behavior f : (b: Box) -> Ok
-                let f (b) = Ok
-                """));
         return out;
     }
 
