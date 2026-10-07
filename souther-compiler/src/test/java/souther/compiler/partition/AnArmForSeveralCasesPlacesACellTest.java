@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.Compiler;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -50,8 +51,11 @@ class AnArmForSeveralCasesPlacesACellTest {
                 """), ModulePath.EMPTY, new ArrayList<>(), Adequacy.Asked.fullReport());
         CoverageRead.Read read = compilation.db()
                 .ask(new Adequacy.Meets("example.several")).value().get("total");
-        List<Axis> axes = compilation.db()
-                .ask(new Adequacy.Divided("example.several", "total")).value().axes();
+        MeasuredInput.MeasuredAxes axes = MeasuredInput.of("total",
+                compilation.db().ask(new Adequacy.Inputs("example.several")).value().get("total")
+                        .reading(RuleReadings.of(compilation, "example.several")),
+                compilation.db().ask(new Adequacy.Divided("example.several", "total")).value())
+                .axes();
 
         InteractionCells.Offered offered = InteractionCells.of(read.interactions(), axes,
                 Budgets.generation().cellsPerGroup());

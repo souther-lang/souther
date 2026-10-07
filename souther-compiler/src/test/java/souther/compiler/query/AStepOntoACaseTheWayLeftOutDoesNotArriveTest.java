@@ -50,7 +50,7 @@ class AStepOntoACaseTheWayLeftOutDoesNotArriveTest {
                 List.of(leaf("Low"), leaf("Mid"))));
         return new WayToTheBorder(List.of(new OnTheWay.Narrowed(
                 new ConditionReportAnchor.WhereTheReadingMetIt("m", MET), LEVEL.refine(lowish),
-                List.of(new TakenConstraint.AwayFrom(THE_LEVEL, HIGH)))));
+                List.of(), List.of(new TakenConstraint.AwayFrom(THE_LEVEL, HIGH)))));
     }
 
     @Test

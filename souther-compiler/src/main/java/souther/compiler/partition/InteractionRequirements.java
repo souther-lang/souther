@@ -66,7 +66,8 @@ public record InteractionRequirements(
      * about a requirement — whether it exists — and they decide nothing about whether it is met.
      */
     public static InteractionRequirements of(String behavior, List<Interaction> groups,
-                                             List<Axis> axes, int mostCellsPerGroup) {
+                                             MeasuredInput.MeasuredAxes axes,
+                                             int mostCellsPerGroup) {
         InteractionCells.Offered offered = InteractionCells.of(groups, axes, mostCellsPerGroup);
         SequencedMap<ObligationIdentity.OfACombinationOfDecisions, List<List<ControlClaim>>> ways =
                 new LinkedHashMap<>();

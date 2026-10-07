@@ -51,13 +51,20 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
      * What {@code e} names, or null where it is nothing a row controls.
      *
      * <p>The input is asked first, because a name that is a position is that position however it
-     * was given its value. What is left is read as an answer: the fields taken off it, and under
-     * them a call this behavior stands a dependency in for.
+     * was given its value. So is a name the cases of a sum share, which is no position and stands
+     * at one under whichever case the row is: what the body decides on is the value at the name,
+     * and a row controls it by what it writes under its case. What is left is read as an answer:
+     * the fields taken off it, and under them a call this behavior stands a dependency in for.
      */
     DecisionSubject of(Core e, InputReads at) {
-        if (at.pathOf(e, newtypes) instanceof PathResolution.At(TermPath stands)
-                && inputs.at(stands) != null) {
-            return new DecisionSubject.AnInput(stands);
+        if (at.pathOf(e, newtypes) instanceof PathResolution.At(TermPath stands)) {
+            if (inputs.at(stands) != null) {
+                return new DecisionSubject.AnInput(stands);
+            }
+            // Read at the sum, as a name on a value left several cases is.
+            if (WhereANameIsWritten.ofAName(inputs, stands) != null) {
+                return new DecisionSubject.AnInput(stands.position());
+            }
         }
         List<TermPath.Step> steps = new ArrayList<>();
         Core under = e;

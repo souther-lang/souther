@@ -4366,7 +4366,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 out.put("at", one.at().toString());
                 out.put("outcome", one.spelled());
             }
-            case Condition.Side(var _, var statedAt, var held) -> {
+            case Condition.Side(var _, var statedAt, var held, var _) -> {
                 out.put("kind", "comparison");
                 constructId(out.putObject("construct"), statedAt);
                 out.put("outcome", held ? "held" : "denied");

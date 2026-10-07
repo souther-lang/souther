@@ -1260,7 +1260,7 @@ public final class Adequacy {
                 }
                 souther.compiler.partition.InteractionRequirements asked =
                         souther.compiler.partition.InteractionRequirements.of(behavior,
-                                read.interactions(), subject.axes().axes(), cells);
+                                read.interactions(), subject.axes(), cells);
                 out.put(behavior, whatTheRowsMade(behavior, asked,
                         RowReadings.readingFor(byTarget, behavior), numbering));
             });
@@ -1916,13 +1916,12 @@ public final class Adequacy {
             boolean withABody = checked != null && checked.behaviorBodies().containsKey(spec.name())
                     && met != null && met.get(spec.name()) != null;
             Map<AxisId, BodyDistinction> toldApart = withABody
-                    ? BodyDistinction.of(met.get(spec.name()), subject.axes().axes(),
-                            subject.partitioning().rulesWithoutALine())
+                    ? BodyDistinction.of(met.get(spec.name()), subject)
                     : BodyDistinction.withoutABody(subject.axes().axes());
             // Off the same reading and the same axes, so the classes a body answers nothing at are
             // the classes it is read as telling apart.
             WhereNothingIsAnswered answersNothing = withABody
-                    ? WhereNothingIsAnswered.of(met.get(spec.name()), subject.axes().axes())
+                    ? WhereNothingIsAnswered.of(met.get(spec.name()), subject.axes())
                     : WhereNothingIsAnswered.NONE;
             return Coverages.of(subject, seen,
                     db.ask(new Front.Adequacy()).value().measures(), toldApart, answersNothing);

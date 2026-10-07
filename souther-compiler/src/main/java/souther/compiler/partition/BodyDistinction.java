@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.reading.CoverageRead;
 
 import java.util.LinkedHashMap;
@@ -118,15 +117,15 @@ public sealed interface BodyDistinction {
     }
 
     /**
-     * What the body read as {@code read} tells apart at each of {@code axes}, where
-     * {@code noLine} is what the reading of the input found about the rules it drew no line for.
+     * What the body read as {@code read} tells apart at each position {@code subject} measures,
+     * with what the reading of the input found about the rules it drew no line for.
      *
      * <p>Read off the ways runs take and nothing else ({@link CoverageRead.Read#taken}). Taken from
      * the ways in to the arms or the meetings as well, a way no run takes would be read as a
      * decision the body makes.
      */
-    static Map<AxisId, BodyDistinction> of(CoverageRead.Read read, List<Axis> axes,
-                                           List<RuleWithoutALine> noLine) {
-        return WhatABodyTellsApart.of(read, axes, noLine);
+    static Map<AxisId, BodyDistinction> of(CoverageRead.Read read, MeasuredInput subject) {
+        return WhatABodyTellsApart.of(read, subject.axes(),
+                subject.partitioning().rulesWithoutALine());
     }
 }

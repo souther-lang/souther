@@ -153,7 +153,7 @@ final class GenerationFixtures {
             AdequacyPolicy.OfTheGeneration budget) {
         Set<ArmProbe> out = new LinkedHashSet<>();
         InteractionCells.Offered offered =
-                InteractionCells.of(groups, Generator.ordered(subject).axes(), budget.cellsPerGroup());
+                InteractionCells.of(groups, Generator.ordered(subject), budget.cellsPerGroup());
         for (InteractionCells.Group group : offered.groups()) {
             for (int index = 0; index < group.size(); index++) {
                 CellSelection selection = group.at(index);

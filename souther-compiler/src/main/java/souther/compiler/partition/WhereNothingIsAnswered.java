@@ -80,10 +80,12 @@ public record WhereNothingIsAnswered(List<Part> parts) {
      * <p>Placed the way a cell of the body's decisions is placed ({@link InteractionCells#whereEach}),
      * so a combination of classes this says a run comes to is one those cells would steer a row to.
      */
-    public static WhereNothingIsAnswered of(CoverageRead.Read read, List<Axis> axes) {
+    public static WhereNothingIsAnswered of(CoverageRead.Read read,
+                                            MeasuredInput.MeasuredAxes measured) {
+        List<Axis> axes = measured.axes();
         List<Part> out = new ArrayList<>();
         for (NothingAnsweredHere part : read.answersNothing()) {
-            for (InteractionCells.Cell cell : InteractionCells.whereEach(part.ways(), axes)) {
+            for (InteractionCells.Cell cell : InteractionCells.whereEach(part.ways(), measured)) {
                 Map<AxisId, Set<String>> leaves = new HashMap<>();
                 for (int axis = 0; axis < axes.size(); axis++) {
                     if (!cell.narrows(axis)) {

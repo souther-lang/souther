@@ -46,6 +46,18 @@ final class LocationWrites {
     private final Map<TermPath, List<FixtureTemplate>> written = new LinkedHashMap<>();
 
     /**
+     * The same asks, to go on asking in for one way of writing the row.
+     *
+     * <p>A row tried under one case and given up is not the row: what that way wrote at a position
+     * under its case is nothing the next way, under another, is asked for.
+     */
+    LocationWrites copy() {
+        LocationWrites out = new LocationWrites();
+        out.written.putAll(written);
+        return out;
+    }
+
+    /**
      * What asking for {@code values} at {@code at} came to.
      *
      * <p>The one place a write is told from a write already here, so the two ways of being one
