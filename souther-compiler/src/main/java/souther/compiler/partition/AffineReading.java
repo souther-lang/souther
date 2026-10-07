@@ -10,6 +10,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
@@ -131,6 +132,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 java.util.Objects.requireNonNull(at, "and was reading it in something");
             }
         }
+    }
+
+    /** The same, of the input {@code read} reads, with the names as {@code reads} has them. */
+    static OfAComparison read(StatedComparison comparison, InputReads reads, InputReading read) {
+        return read(comparison, read.domain(), reads, read.rules());
     }
 
     /** The same, saying which of the four it is. */

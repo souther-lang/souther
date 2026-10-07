@@ -4,8 +4,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import souther.compiler.KeptCalls;
+import souther.compiler.check.ElementBindings;
+import souther.compiler.check.ScopeStep;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.inputs.DeclaredInput;
+import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.InputReads;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructOccurrence;
@@ -14,6 +19,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.UnaryOperator;
 
@@ -59,8 +65,7 @@ class AWalkOverWhatAnAnswerTurnsOnAsksEachQuestionOnceTest {
     @Timeout(10)
     void aClosureThatAnswersWithWhatItWasHandedToIsAskedOnce() {
         Core.PreservedCall call = anyOverAClosure();
-        assertEquals(List.of(call),
-                WhatAForkTests.partsOfTheAnswer(call, through(e -> e == call ? e : call)),
+        assertEquals(List.of(call), parts(call, through(e -> e == call ? e : call)),
                 "a reading that leads back to the question it came from answers it once");
     }
 
@@ -73,10 +78,15 @@ class AWalkOverWhatAnAnswerTurnsOnAsksEachQuestionOnceTest {
     void anOperationCalledByWhatItsNameReachedIsReadAsTheOperation() {
         Core.Call every = calling(ValueName.Stdlib.operation("List", "all"));
         Core.Call some = calling(ValueName.Stdlib.operation("List", "any"));
-        assertEquals(List.of(), WhatAForkTests.partsOfTheAnswer(every, through(e -> e)),
-                "true whatever the list is");
-        assertEquals(List.of(some), WhatAForkTests.partsOfTheAnswer(some, through(e -> e)),
+        assertEquals(List.of(), parts(every, through(e -> e)), "true whatever the list is");
+        assertEquals(List.of(some), parts(some, through(e -> e)),
                 "whether the list holds anything");
+    }
+
+    /** The nodes the walk offers, which is what tells one part from another. */
+    private static List<Core> parts(Core atom, WhatNamesStandFor names) {
+        return WhatAForkTests.partsOfTheAnswer(atom, names).stream()
+                .map(Denotation::value).toList();
     }
 
     /** {@code operation} over a list and a closure that always holds, called by what its name
@@ -92,12 +102,37 @@ class AWalkOverWhatAnAnswerTurnsOnAsksEachQuestionOnceTest {
                 Core.CallSettlement.None.INSTANCE, Type.BOOL, POS);
     }
 
-    /** Names that stand for what {@code denotes} says, none of them for a written value. */
+    /** A reading that knows no names, which is all the walk below is handed. */
+    private static final InputReads NOWHERE =
+            InputReads.ofParameters(Map.of(), DeclaredInput.NONE, ElementBindings.NONE);
+
+    /** Names that stand for what {@code denotes} says, none of them for a written value, read the
+     *  same wherever the walk goes. */
     private static WhatNamesStandFor through(UnaryOperator<Core> denotes) {
         return new WhatNamesStandFor() {
             @Override
-            public Core denotes(Core e) {
-                return denotes.apply(e);
+            public InputReads reads() {
+                return NOWHERE;
+            }
+
+            @Override
+            public Denotation denotes(Core e) {
+                return new Denotation(denotes.apply(e), NOWHERE);
+            }
+
+            @Override
+            public Denotation standing(Core e) {
+                return denotes(e);
+            }
+
+            @Override
+            public WhatNamesStandFor in(InputReads reads) {
+                return this;
+            }
+
+            @Override
+            public WhatNamesStandFor entering(ScopeStep step) {
+                return this;
             }
 
             @Override
@@ -121,7 +156,7 @@ class AWalkOverWhatAnAnswerTurnsOnAsksEachQuestionOnceTest {
     @Test
     void aClosureIsStillReadForWhatItDecides() {
         Core.PreservedCall call = anyOverAClosure();
-        assertEquals(List.of(call.args().get(0)), WhatAForkTests.partsOfTheAnswer(call, through(e -> e)),
+        assertEquals(List.of(call.args().get(0)), parts(call, through(e -> e)),
                 "what the answer turns on is reached");
     }
 }

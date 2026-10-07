@@ -261,6 +261,16 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
             // than the rows that arrive — the one direction that takes a coverage item away.
             case PathResolution.MayStandAt _ -> null;
         };
+        // A value this reading already knows is no narrowing of anything, and needs none: every row
+        // takes the arm or none does. Read before giving up on the position, since a scrutinee
+        // standing at none is exactly what a helper handed a case written in the source matches.
+        if (scrutinee == null) {
+            Optional<Boolean> taken = reads.whetherEveryRowTakes(arm, match.scrutinee(),
+                    ruleSource.symbols(), ruleSource.newtypes());
+            if (taken.isPresent()) {
+                return new OnTheWay.Settled(met, at, taken.get());
+            }
+        }
         // The position that is narrowed, and not the narrowed one. A case declaring no field has
         // nothing under it and this reading holds no position there, which is what it is for; what
         // has to exist is the position the case is a case of, since that is what a row writes a

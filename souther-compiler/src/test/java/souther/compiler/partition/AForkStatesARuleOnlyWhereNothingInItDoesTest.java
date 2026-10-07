@@ -365,21 +365,24 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
     }
 
     /**
-     * A truth that means a comparison is that comparison's, as one the source wrote is.
+     * An emptiness check over what a filter kept is what the filter's closure answered, in either
+     * spelling.
      *
-     * <p>The walk stops at a comparison, since what is inside it is what the comparison is read
-     * from. An emptiness check states one, and stops the walk at the same place: walked into, the
-     * closure handed to {@code filter} would leave the fork a part to state, while the same check
-     * written as the size against nought left it none — two accounts of one statement, the first
-     * filing the question its reading already stopped at a second time.
+     * <p>Whether {@code filter} kept anything is whether some element met its closure, so the walk
+     * goes on into the closure as it does for {@code List.any} — and stated as the size against
+     * nought it goes on to the same place, since the two are one statement. What the closure leaves
+     * unread is the fork's to state, the same as the quantifier the check denies.
      */
     @Test
-    void anEmptinessCheckIsWhereTheWalkStopsAsTheComparisonItMeansIs() {
+    void anEmptinessCheckOverAFilterIsWhatItsClosureAnswers() {
         String empty = "List.isEmpty(List.filter(ys -> List.contains(0, ys), xs))";
         String size = "List.length(List.filter(ys -> List.contains(0, ys), xs)) == 0";
+        String some = "Bool.not(List.any(ys -> List.contains(0, ys), xs))";
         assertEquals(everythingSaid(nested("xs", size)), everythingSaid(nested("xs", empty)));
-        assertEquals(new Owned(0, 0), read(nested("xs", empty)),
-                "no fork beside the comparison the check states");
+        assertEquals(read(nested("xs", some)), read(nested("xs", empty)),
+                "what the fork owns is what the quantifier it denies owns");
+        assertEquals(new Owned(0, 1), read(nested("xs", empty)),
+                "the closure states something nothing reads, and the fork states it");
     }
 
     /**

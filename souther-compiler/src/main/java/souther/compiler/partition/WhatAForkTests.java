@@ -1,8 +1,12 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.BooleanMeaning;
+import souther.compiler.check.Choice;
 import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.check.ScopeStep;
+import souther.compiler.check.StatedComparison;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.Denotation;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.types.ValueName;
 
@@ -10,6 +14,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Which rules a fork's answer turns on, following only what the library says it does.
@@ -28,9 +33,10 @@ import java.util.Map;
  * <p><b>And never into a rule.</b> A truth that states a comparison is a rule of its own, and what
  * is inside it is what that comparison is read from — its reading's to take apart, and not parts
  * of the fork. A comparison the source wrote and an operation the library says means one
- * ({@link BooleanMeaning#asAComparison}) are one statement, so the walk stops at both: walked into,
- * {@code List.isEmpty(List.filter(p, xs))} would hand the fork whatever {@code p} leaves unread,
- * while {@code List.length(List.filter(p, xs)) == 0} hands it nothing.
+ * ({@link BooleanMeaning#asAComparison}) are one statement, so the walk stops at both — or goes on
+ * from both, where the statement is whether a container holds anything and the library says a
+ * closure decides that ({@link WhatAnEmptinessTurnsOn}): {@code List.isEmpty(List.filter(p, xs))}
+ * and {@code List.length(List.filter(p, xs)) == 0} both turn on what {@code p} answered.
  *
  * <p><b>Stopping is the answer, not a gap.</b> An operation the library says nothing about is one
  * this cannot follow, and the walk ends. What that costs is a fork left stating a rule of its own,
@@ -67,9 +73,14 @@ final class WhatAForkTests {
      * ({@link WhatNamesStandFor}) and neither keeps an account of its own, so a closure handed the
      * elements of a list written out is walked knowing they are written: a part of it that asks
      * the same thing every time is not offered here, beside a part that varies or not.
+     *
+     * <p><b>Each part with the reading it stands in.</b> A part may be written where names are bound
+     * that {@code names} does not hold — inside a {@code let}, an arm, or a helper expanded into a
+     * closure — and what it is about is what those names stand for there. Which rule a part is stays
+     * the node; what it is read as is the reading beside it.
      */
-    static List<Core> partsOfTheAnswer(Core atom, WhatNamesStandFor names) {
-        List<Core> out = new ArrayList<>();
+    static List<Denotation> partsOfTheAnswer(Core atom, WhatNamesStandFor names) {
+        List<Denotation> out = new ArrayList<>();
         turnsOn(atom, names, new HashMap<>(), out);
         return out;
     }
@@ -96,7 +107,7 @@ final class WhatAForkTests {
     }
 
     private static Follow turnsOn(Core standing, WhatNamesStandFor names,
-                                  Map<Asked, Follow> met, List<Core> out) {
+                                  Map<Asked, Follow> met, List<Denotation> out) {
         // What an answer turns on does not turn on the type it stands as.
         Core e = Core.withoutStanding(standing);
         if (e == null) {
@@ -121,18 +132,18 @@ final class WhatAForkTests {
     }
 
     private static Follow answering(Core standing, WhatNamesStandFor names,
-                                    Map<Asked, Follow> met, List<Core> out) {
+                                    Map<Asked, Follow> met, List<Denotation> out) {
         Core e = Core.withoutStanding(standing);
         // Whether it holds is decided by the parts of it that decide it, which is the same cut a
         // fork's own condition is made along ({@link ConditionSkeleton}): a closure answering
         // `a > 0 && b > 0` states two rules, and one written under a name it binds is what the
         // closure answers with. Asked here so that a closure is read the way a condition is,
         // rather than only where its whole body is the rule.
-        List<Core> parts = ConditionSkeleton.atoms(e);
-        if (parts.size() != 1 || parts.get(0) != e) {
+        List<Denotation> parts = ConditionSkeleton.atoms(e, names);
+        if (parts.size() != 1 || parts.get(0).value() != e) {
             Follow all = Follow.FIXED;
-            for (Core part : parts) {
-                all = both(all, turnsOn(part, names, met, out));
+            for (Denotation part : parts) {
+                all = both(all, turnsOn(part.value(), names.in(part.at()), met, out));
             }
             return all;
         }
@@ -153,7 +164,8 @@ final class WhatAForkTests {
             case Core.Match match -> {
                 Follow all = writtenOut(match.scrutinee(), names) ? Follow.FIXED : Follow.VARIES;
                 for (Core.Case arm : match.cases()) {
-                    all = both(all, turnsOn(arm.body(), names, met, out));
+                    all = both(all, turnsOn(arm.body(), names.entering(
+                            new ScopeStep.Chosen(Choice.Decides.ofCase(match, arm))), met, out));
                 }
                 return all;
             }
@@ -163,29 +175,33 @@ final class WhatAForkTests {
         if (writtenOut(e, names)) {
             return Follow.FIXED;
         }
-        // What a binding answers is what its body answers.
-        if (e instanceof Core.LetIn let) {
-            return turnsOn(let.body(), names, met, out);
-        }
+        // A truth that states a comparison is a rule, and what the fork turns on there is that
+        // rule. Asked of the checker, which says what a truth means, so a comparison the source
+        // wrote and an operation meaning one stop at the same place — unless what it compares is
+        // whether a container the library says a closure decides holds anything, which is what
+        // the closure answered.
+        Optional<StatedComparison> stated = BooleanMeaning.asAComparison(e);
+        Optional<WhatAnEmptinessTurnsOn.ReadBack> emptiness =
+                stated.flatMap(one -> WhatAnEmptinessTurnsOn.of(one, names));
         // An operation whose answer is the same every time turns on nothing, whatever the library
         // says or does not say about it. Followed as a question instead, one the library says
         // nothing about would be where the walk stopped, and offered as a part that varies. Which
         // answers the application can give is {@link TruthOutcomes}' to say, in either shape the
-        // application stands in.
-        if (AnOperationApplied.of(e) != null
+        // application stands in — and an emptiness read back is one, however it is spelled.
+        if ((AnOperationApplied.of(e) != null || emptiness.isPresent())
                 && TruthOutcomes.ofTheSide(e, AnswerAspect.TRUTH, names, null).isFixed()) {
             return Follow.FIXED;
         }
-        // A truth that states a comparison is a rule, and what the fork turns on there is that
-        // rule. Asked of the checker, which says what a truth means, so a comparison the source
-        // wrote and an operation meaning one stop at the same place.
-        if (BooleanMeaning.asAComparison(e).isPresent()) {
-            out.add(e);
+        if (stated.isPresent() && emptiness.isEmpty()) {
+            out.add(new Denotation(e, names.reads()));
             return Follow.VARIES;
         }
-        // And beyond an operation the library says the answer turns on, what it turns on.
-        Core beyond = beyond(e, names);
-        Follow past = beyond == null ? Follow.STOPPED : turnsOn(beyond, names, met, out);
+        // And beyond an operation the library says the answer turns on, what it turns on, read
+        // where it stands.
+        Denotation beyond = emptiness.map(WhatAnEmptinessTurnsOn.ReadBack::decidedBy)
+                .orElseGet(() -> beyond(e, names));
+        Follow past = beyond == null ? Follow.STOPPED
+                : turnsOn(beyond.value(), names.in(beyond.at()), met, out);
         // A closure is half of what an operation walking a container answers by, and the container
         // is the other half. This walk follows the closure and not the container, so where the
         // closure answers the same whatever it is handed, which answer it is settles which half
@@ -195,12 +211,19 @@ final class WhatAForkTests {
         if (past == Follow.FIXED && throughAClosure(e, names)) {
             past = Follow.STOPPED;
         }
+        // The same of an emptiness read back to its closure, where what decides is whether what
+        // the closure was handed holds anything — the container the comparison takes the size of,
+        // which is one node however the check was spelled.
+        if (emptiness.isPresent() && past != Follow.VARIES) {
+            out.add(emptiness.get().container());
+            return Follow.VARIES;
+        }
         if (past != Follow.STOPPED) {
             return past;
         }
         // Where the walk stopped, the expression is where it stopped and is the thing the answer
         // turns on — which is what a reader is offered to own or to leave.
-        out.add(e);
+        out.add(new Denotation(e, names.reads()));
         return Follow.VARIES;
     }
 
@@ -240,7 +263,7 @@ final class WhatAForkTests {
      * arrives at what the argument stands for and not at how it was written: a closure named before
      * it is handed over is the block the name was bound to.
      */
-    private static Core beyond(Core e, WhatNamesStandFor names) {
+    private static Denotation beyond(Core e, WhatNamesStandFor names) {
         AnOperationApplied applied = AnOperationApplied.of(e);
         if (applied == null) {
             return null;
@@ -262,20 +285,23 @@ final class WhatAForkTests {
                 .turnsOnWhetherAnArgumentHolds(applied.operation(), AnswerAspect.TRUTH);
         Core handed = turns == null ? null : applied.argument(turns.argument());
         return handed != null
-                && Core.withoutStanding(names.denotes(handed)) instanceof Core.Block;
+                && Core.withoutStanding(names.denotes(handed).value()) instanceof Core.Block;
     }
 
     /**
-     * What {@code e} answers with: the body of the block, where it is one, and otherwise itself.
+     * What {@code e} answers with: the body of the block, where it is one, and otherwise itself —
+     * each with the reading it stands in.
      *
      * <p>What a name stands for is asked first, of whoever owns that question. A closure written as
      * a name is the block that name was bound to, so a reading that stopped at the name would say a
      * rule inside it decides nothing — and one model would be read two ways depending on whether the
-     * author bound the closure before handing it over.
+     * author bound the closure before handing it over. And where the name was bound is where the
+     * block is read, which is not where the name was.
      */
-    private static Core answerOf(Core e, WhatNamesStandFor names) {
-        Core stands = names.denotes(e);
-        return Core.withoutStanding(stands) instanceof Core.Block block ? block.body() : stands;
+    private static Denotation answerOf(Core e, WhatNamesStandFor names) {
+        Denotation stands = names.denotes(e);
+        return Core.withoutStanding(stands.value()) instanceof Core.Block block
+                ? new Denotation(block.body(), stands.at()) : stands;
     }
 
     /** One question this walk has been asked: an expression. Told apart by the node itself, so

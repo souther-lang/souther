@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * The ways an expression arrives at a value, read off the body it is written in.
@@ -109,6 +110,13 @@ public final class ValueArrivals<P> {
      * occurrence has one went on being made.
      */
     private final Set<Core> walked =
+            java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+
+    /**
+     * The arms of a {@code match} no value of its scrutinee takes, which this reading did not go
+     * into ({@link ComparisonWays#mayTake}).
+     */
+    private final Set<Core.Case> untaken =
             java.util.Collections.newSetFromMap(new IdentityHashMap<>());
 
     /** Whether a call kept standing is a defect here or an operation the model names. */
@@ -282,6 +290,21 @@ public final class ValueArrivals<P> {
     /** Whether {@code e} can be evaluated to a value. */
     public boolean arrivesAt(Core e) {
         return comesAt(e).arrives();
+    }
+
+    /**
+     * Whether arm {@code part} of {@code match} is one a value of its scrutinee takes — what the
+     * body does, as {@link #comesAt} is, so the half with no naming answers it.
+     *
+     * <p>Beside whether a run arrives at the arm, because the two are not the same news: an arm no
+     * case of the scrutinee is taken by no run, and an arm whose body answers nothing is one runs go
+     * into.
+     */
+    public boolean takes(Core.Match match, int part) {
+        if (semantics != null) {
+            return semantics.takes(match, part);
+        }
+        return !untaken.contains(match.cases().get(part));
     }
 
     /**
@@ -750,8 +773,15 @@ public final class ValueArrivals<P> {
             return new Paths.Held<>(List.of());
         }
         Gathered out = new Gathered();
+        Predicate<Core.Case> mayTake = comparisons.mayTake(match);
         for (int part = 0; part < match.cases().size(); part++) {
             Core.Case arm = match.cases().get(part);
+            // An arm no value of the scrutinee takes is no way of the body, as a side of a
+            // condition nothing brings out is none.
+            if (!mayTake.test(arm)) {
+                untaken.add(arm);
+                continue;
+            }
             ScopeStep into = new ScopeStep.Chosen(Choice.Decides.ofCase(match, arm));
             Paths<P> body = settle(arm.body(), naming.entering(into), comparisons.entering(into),
                     inside(into, naming, comparisons, bound));

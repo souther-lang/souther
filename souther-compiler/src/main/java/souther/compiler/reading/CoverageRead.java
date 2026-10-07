@@ -492,6 +492,18 @@ public final class CoverageRead {
             case Core.Match match -> {
                 walk(match.scrutinee(), naming, reach, observed);
                 for (int part = 0; part < match.cases().size(); part++) {
+                    // Whether the arm is there at all is the reading of what the body does, as for
+                    // a side of a condition: an arm no case of the scrutinee takes is no arm to
+                    // walk into.
+                    if (!reading.takes(match, part)) {
+                        Reach none = new Reach.Nothing(
+                                PathAccess.Unreachable.Why.THE_SCRUTINEE_IS_NEVER_THAT_CASE);
+                        arms.at(match, part, none, body);
+                        walk(match.cases().get(part).body(), naming.entering(
+                                new ScopeStep.Chosen(Choice.Decides.ofCase(match,
+                                        match.cases().get(part)))), none, observed);
+                        continue;
+                    }
                     Outcome went = naming.matchCase(match, part);
                     // One way in and never more, so nothing here can go over the bound. A case the
                     // reading could not name is a way in nothing states, which is what is inside it

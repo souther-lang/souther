@@ -533,6 +533,9 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
      * <p>Every construct that bears arms is asked the same question. Asked of the {@code if} alone,
      * the arms of a {@code match} over what a supplied rule answered were one obligation however
      * many rules were handed in — the same silent count, one construct over.
+     *
+     * <p>Rules whose answer turns on what they are handed, since a rule answering one case for every
+     * value leaves the other arm one no row takes, which is owed nothing whoever decides it.
      */
     @Test
     void aMatchOverASuppliedRulesAnswerIsTheCallersToDecide() {
@@ -552,14 +555,17 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                 behavior twice : (a: Int, b: Int) -> Count
                     constructs Count
                 let twice (a, b) =
-                    Count(decide(n -> A, a) + decide(m -> B, b))
+                    Count(decide(n -> if n > 0 then A else B, a)
+                        + decide(m -> if m > 5 then A else B, b))
 
                 example twice
                     | "one each" : (1, 1) -> Count(1)
                 """, "twice");
 
-        assertEquals(4, twice.arms().counted(), "one match per rule handed in");
-        assertEquals(2, twice.arms().covered(), "and the one row reaches one arm of each");
+        assertEquals(8, twice.arms().counted(),
+                "one match per rule handed in, beside the two arms of each rule's own fork");
+        assertEquals(4, twice.arms().covered(),
+                "and the one row reaches one arm of each match and of each rule's fork");
     }
 
     /**

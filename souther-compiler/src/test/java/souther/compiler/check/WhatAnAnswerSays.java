@@ -42,6 +42,12 @@ final class WhatAnAnswerSays {
             public List<PathDecision> everyCaseRefused(String position, List<TypeSymbol> cases) {
                 return List.of();
             }
+
+            @Override
+            public List<PathDecision> noCaseTheValueCanBeIsTaken(List<TypeSymbol> canBe,
+                                                                 List<TypeSymbol> cases) {
+                return List.of();
+            }
         });
     }
 
@@ -64,6 +70,12 @@ final class WhatAnAnswerSays {
             @Override
             public List<TypeSymbol> everyCaseRefused(String position, List<TypeSymbol> cases) {
                 return cases;
+            }
+
+            @Override
+            public List<TypeSymbol> noCaseTheValueCanBeIsTaken(List<TypeSymbol> canBe,
+                                                               List<TypeSymbol> cases) {
+                return List.of();
             }
         });
     }
@@ -88,6 +100,12 @@ final class WhatAnAnswerSays {
 
             @Override
             public String everyCaseRefused(String position, List<TypeSymbol> cases) {
+                return null;
+            }
+
+            @Override
+            public String noCaseTheValueCanBeIsTaken(List<TypeSymbol> canBe,
+                                                     List<TypeSymbol> cases) {
                 return null;
             }
         });

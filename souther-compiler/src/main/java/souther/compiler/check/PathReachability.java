@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * What the model's own rules say arrives at each place in a behavior's body.
@@ -822,9 +823,19 @@ public final class PathReachability {
             return;
         }
         // Not a position of this input, or not one this reading reached: either way nothing here
-        // has rules about it to carry.
+        // has rules about it to carry. What it may still be is a value the source wrote, and an
+        // arm none of its cases takes is one nothing arrives at, whatever the rules leave.
         TermPath path = positionOf(match.scrutinee(), reads);
         if (path == null) {
+            Set<TypeSymbol> written =
+                    reads.casesWritten(match.scrutinee(), symbols, newtypes);
+            for (int i = 0; written != null && i < match.cases().size() && i < arms.length; i++) {
+                Core.Case arm = match.cases().get(i);
+                if (InputReads.whetherEveryRowTakes(arm, written).equals(Optional.of(false))) {
+                    out.put(arms[i], new Reachability.Unreachable(Proof.noCaseTheValueCanBeIsTaken(
+                            List.copyOf(written), arm.caseTypes())));
+                }
+            }
             return;
         }
         // The reading this walk was given, which is the one held here. Which location the name

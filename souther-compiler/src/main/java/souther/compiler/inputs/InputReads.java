@@ -8,10 +8,13 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -267,12 +270,9 @@ public final class InputReads {
      * could not classify would be keeping a member the arm excludes, while one that dropped it would
      * be losing a member the arm admits. Neither is the set, so the name is left with none.
      *
-     * <p>Which a member is is read off the construction or the case written where it stands, and the
-     * arm's own carriers reach further than that: a case may name a primitive, and a value written
-     * as a number is not a construction. No model gets here that way — a declared sum's cases are
-     * declared data, and the union that can name a primitive is anonymous and may not be written in
-     * a narrow type position, so no container's element type has one. A language that let one be
-     * written would arrive at the guard above rather than at a set with a member misfiled.
+     * <p>Which a member is is {@link WrittenCase}'s answer, held to the atoms the arm's cases cover
+     * ({@link Core.ResolvedPattern#takes}), so a member under a case that is itself a sum is kept by
+     * the arm written for the sum, and a number is the primitive it is.
      *
      * <p>And nothing is narrowed to no members. An arm admitting none of what the container holds is
      * an arm no value reaches, so the name inside it stands for nothing — which is what a name with
@@ -291,11 +291,11 @@ public final class InputReads {
         }
         java.util.List<Denotation> left = new java.util.ArrayList<>();
         for (Denotation each : one.alternatives()) {
-            souther.compiler.types.TypeSymbol written = caseWritten(each.value());
-            if (written == null) {
+            Optional<TypeSymbol> written = WrittenCase.of(each.value());
+            if (written.isEmpty()) {
                 return this;
             }
-            if (arm.caseTypes().contains(written)) {
+            if (arm.pattern().takes(written.get())) {
                 left.add(each);
             }
         }
@@ -386,13 +386,68 @@ public final class InputReads {
                 ? one : null;
     }
 
-    /** Which case {@code e} is written as, or null where it is not written as one. */
-    private static souther.compiler.types.TypeSymbol caseWritten(Core e) {
-        return switch (Core.withoutStanding(e)) {
-            case Core.Construct nd -> nd.typeName();
-            case Core.UnitValue unit -> unit.data();
-            default -> null;
-        };
+    /**
+     * Whether every row takes {@code arm} of a {@code match} on {@code scrutinee} — true where every
+     * case the scrutinee can be is one the arm takes, false where none is, and empty where which
+     * arm is taken turns on the row.
+     *
+     * <p>Known only where every value the scrutinee can stand for settles its own case
+     * ({@link WrittenCase}) — a construction, an optional's carrier, a value of a primitive type.
+     * A helper handed such a value at the call matches what it was handed, and which of its arms
+     * that takes is settled before any row is written: there is no position under the
+     * {@code match} for a row to put a case at, and none is needed.
+     *
+     * <p>One answer for every reader of an arm, the ways a body is walked and what reaching the arm
+     * states alike, so an arm no row takes is neither walked nor a narrowing nobody can read.
+     */
+    public Optional<Boolean> whetherEveryRowTakes(Core.Case arm, Core scrutinee, Symbols symbols,
+                                                  DeclarationNewtypes newtypes) {
+        return whetherEveryRowTakes(arm, casesWritten(scrutinee, symbols, newtypes));
+    }
+
+    /**
+     * The same, of the cases the scrutinee was already read to be ({@link #casesWritten}) — which
+     * is one question per {@code match} however many arms are asked about it.
+     */
+    public static Optional<Boolean> whetherEveryRowTakes(Core.Case arm, Set<TypeSymbol> written) {
+        if (written == null) {
+            return Optional.empty();
+        }
+        long taken = written.stream().filter(arm.pattern()::takes).count();
+        if (taken == written.size()) {
+            return Optional.of(true);
+        }
+        return taken == 0 ? Optional.of(false) : Optional.empty();
+    }
+
+    /**
+     * The cases {@code e} can be here, where every value it can stand for settles its own case
+     * ({@link WrittenCase}) — or null where any of them does not.
+     *
+     * <p>The value a name stands for, followed as far as it goes ({@link #standing}), and where that
+     * is a name standing for one of several written values ({@link ReadMeaning.OneOf}), each of
+     * them.
+     */
+    public Set<TypeSymbol> casesWritten(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
+        Denotation stands = standing(new Denotation(e, this), symbols, newtypes, new HashSet<>());
+        Optional<TypeSymbol> one = WrittenCase.of(stands.value());
+        if (one.isPresent()) {
+            return Set.of(one.get());
+        }
+        if (!(Core.withoutStanding(stands.value()) instanceof Core.Read name
+                && stands.at().meaningOf(name, symbols, newtypes) instanceof ReadMeaning.OneOf many)) {
+            return null;
+        }
+        Set<TypeSymbol> out = new LinkedHashSet<>();
+        for (Denotation each : many.alternatives()) {
+            Optional<TypeSymbol> written =
+                    WrittenCase.of(standing(each, symbols, newtypes, new HashSet<>()).value());
+            if (written.isEmpty()) {
+                return null;
+            }
+            out.add(written.get());
+        }
+        return out;
     }
 
     /**
@@ -686,6 +741,18 @@ public final class InputReads {
         written.elements().forEach(each ->
                 out.add(new Denotation(Core.withoutStanding(each), standing.at())));
         return out;
+    }
+
+    /**
+     * What {@code e} stands as here: followed through every name that stands for one value and
+     * every binding whose body is the value, and read in the names in force where it ends.
+     *
+     * <p>Beside {@link #denotes}, which follows names alone. A helper the source called stands as
+     * the binding of its parameters around its body, so what a call to one stands as is past a
+     * binding a walk after names stops at.
+     */
+    public Denotation standing(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
+        return standing(new Denotation(e, this), symbols, newtypes, new HashSet<>());
     }
 
     /**

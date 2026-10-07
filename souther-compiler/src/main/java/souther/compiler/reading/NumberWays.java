@@ -14,8 +14,11 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
+import souther.compiler.types.TypeSymbol;
 
+import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Which ways a comparison has a value behind it, answered from the number it is about.
@@ -68,6 +71,13 @@ final class NumberWays implements ComparisonWays {
         InputReads inside = reads.entering(step, symbols, newtypes);
         return inside == reads ? this
                 : new NumberWays(numbers, quantities, inside, symbols, newtypes);
+    }
+
+    @Override
+    public Predicate<Core.Case> mayTake(Core.Match match) {
+        Set<TypeSymbol> written = reads.casesWritten(match.scrutinee(), symbols, newtypes);
+        return written == null ? arm -> true
+                : arm -> InputReads.whetherEveryRowTakes(arm, written).orElse(true);
     }
 
     @Override
