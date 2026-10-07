@@ -124,6 +124,35 @@ class AFixedValueIsPartOfTheRegionEveryQuestionIsAnsweredAgainstTest {
                 "z at 100 under z <= y and y <= 2x leaves x at 50 and above");
     }
 
+    /**
+     * A fixing at a hole leaves nothing, in either vocabulary a hole is taken in by.
+     *
+     * <p>Which is what a line at a value the way holds a position apart from comes to: the ends of
+     * where {@code x} runs are the whole order either way, and the hole is in the region and not in
+     * them.
+     */
+    @Test
+    void aFixingAtAPlaceTheRegionHoldsThePositionApartFromLeavesNothing() {
+        Count five = Count.of(BigDecimal.valueOf(5));
+
+        assertTrue(region().apartFrom(term("x"), five).given(term("x"), five)
+                        .emptiness().isPresent(),
+                "x held apart from 5 and given 5 is refused");
+        assertTrue(region().assuming(LinearForm.<NumericTerm>atomMinusConstant(term("x"),
+                                ExactRatio.of(5)), Rel.NE).taken()
+                        .given(term("x"), five).emptiness().isPresent(),
+                "x - 5 /= 0 taken in and x given 5 is refused");
+    }
+
+    /** And a fixing beside the hole is not. */
+    @Test
+    void andAFixingBesideTheHoleIsNot() {
+        assertFalse(region().apartFrom(term("x"), Count.of(BigDecimal.valueOf(5)))
+                        .given(term("x"), Count.of(BigDecimal.valueOf(6)))
+                        .emptiness().isPresent(),
+                "x held apart from 5 holds 6");
+    }
+
     /** Where the term runs, of a region that holds something — which every region here does. */
     private static NumericDomain.Bounds runsBetween(SearchRegion within,
                                                     NumericTerm.FromOnePosition term) {

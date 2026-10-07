@@ -172,9 +172,8 @@ sealed interface ComparisonAssessment {
      * would look at the rule for a line their declarations refuse, and the line is fine — what
      * refuses it is on the way.
      *
-     * <p>Only a proof lands here: the whole state at the comparison shown empty, or the values that
-     * arrive shown to stop short of the line. A comparison nothing could project an arrival for
-     * keeps its line ({@link ComparisonArrival.NoProjection}).
+     * <p>Only a proof lands here: the whole state at the comparison shown empty, or the region the
+     * declarations, the way and what arrives leave together shown to hold no row at the line.
      */
     record NothingArrivesAtItsLine(Cutting cutting) implements ComparisonAssessment {
 
@@ -318,13 +317,28 @@ sealed interface ComparisonAssessment {
      * they are expanded, which is where a run has places at all. Asked inside the reading, the
      * reading would be one no tree could answer on its own.
      *
-     * <p>Only a proof drops a line. An arrival nothing could project restricts nothing and the line
-     * stands, which is what {@link ComparisonArrival.NoProjection} says —
-     * and it is not what a comparison the emitter numbered nothing for says, because that one is
-     * not asked this at all.
+     * <p><b>One question, asked of everything that holds of a row there at once.</b> A row at the
+     * line is in what the declarations leave, meets every condition the model states on the way,
+     * and is among what arrives at the place it is watched at — so the line stands where a region
+     * holding all three holds a row at it. Asked of each of them alone, a row the way holds a
+     * position apart from would be one the arrival's range runs straight through, and a line
+     * nothing reaches would stand.
+     *
+     * <p>The way is the model's and what arrives is each place's. The model states the conditions
+     * once, on the tree an author wrote; the places are where the tree that runs holds the rule, and
+     * what the walk of that tree established on the way to one of them is that place's alone.
+     *
+     * <p>Only a proof drops a line. An arrival nothing could project restricts nothing beyond what
+     * the declarations and the way leave ({@link ComparisonArrival.NoProjection}) — and it is not
+     * what a comparison the emitter numbered nothing for says, because that one is not asked this
+     * at all.
+     *
+     * @param way what the model states on the way to the comparison, over what the declarations
+     *            leave
      */
     static ComparisonAssessment narrowedByWhatArrives(
             ComparisonAssessment read,
+            Reachability way,
             List<ComparisonArrival> arrivals,
             boolean drawnByAnInvariant) {
         Cutting cutting = switch (read) {
@@ -346,21 +360,26 @@ sealed interface ComparisonAssessment {
         if (cutting == null) {
             return read;
         }
+        // A way no row takes is one no row arrives at the line by, wherever the tree that runs
+        // holds the rule.
+        if (!(way instanceof Reachability.Reaching reaching)) {
+            return new NothingArrivesAtItsLine(cutting);
+        }
         // Every place the rule is watched at, and the line goes only where all of them proved
         // nothing reaches it. One rule may be written into the tree that runs more than once, and a
         // run through any of the copies is a run through the rule — so a proof about one of them is
         // a proof about that copy, and the line is what the model states about all of them.
         //
-        // Which is why one place that could not be projected leaves the line where it was: what a
-        // walk did not settle is not a proof that nothing arrives, and the line has to be dropped by
-        // a proof rather than by the absence of one.
+        // Which is why one place that could not be projected leaves the line to the declarations
+        // and the way: what a walk did not settle is not a proof that nothing arrives, and the line
+        // has to be dropped by a proof rather than by the absence of one.
         for (ComparisonArrival arrival : arrivals) {
             boolean reaches = switch (arrival) {
                 case ComparisonArrival.NothingArrives _ -> false;
-                case ComparisonArrival.Values values ->
-                        Border.reaches(cutting.at(), cutting::seam, cutting.claim(),
-                                drawnByAnInvariant, cutting.withinGiven(values));
-                case ComparisonArrival.NoProjection _ -> true;
+                case ComparisonArrival.Values values -> cutting.reachedIn(
+                        cutting.narrowedBy(values, reaching.region()), drawnByAnInvariant);
+                case ComparisonArrival.NoProjection _ ->
+                        cutting.reachedIn(reaching.region(), drawnByAnInvariant);
             };
             if (reaches) {
                 return read;

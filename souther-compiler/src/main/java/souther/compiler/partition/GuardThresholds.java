@@ -239,13 +239,17 @@ public final class GuardThresholds {
                     cuts.reached(stated, each.assumed());
                     switch (each.standing()) {
                         case BoundaryPolicy.Standing.Admitted admitted ->
-                                // The same reading on the narrower domain a run leaves at the line.
-                                // Narrowed by what arrives at every place it is watched: the line
-                                // goes only where all of them prove nothing reaches it, since a run
-                                // through any one of them is a run through the rule.
+                                // The same reading on the narrower region a row at the line is in:
+                                // what the way states, and what arrives at every place it is
+                                // watched. The line goes only where all of them prove nothing
+                                // reaches it, since a run through any one of them is a run through
+                                // the rule.
                                 lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
                                         reaches,
                                         ComparisonAssessment.narrowedByWhatArrives(admitted.read(),
+                                                Reachability.of(
+                                                        new WayToTheBorder(each.assumed()),
+                                                        read.quantities().region()),
                                                 at.observations().stream()
                                                         .map(one -> one.arrival()).toList(), false),
                                         found, between, withoutALine);

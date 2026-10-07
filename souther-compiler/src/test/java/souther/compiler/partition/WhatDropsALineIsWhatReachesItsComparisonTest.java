@@ -7,7 +7,10 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -19,10 +22,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * and a comparison the declarations settle one way is arrived at by every row there is and takes the
  * other way out. Each has exactly one outcome nothing takes.
  *
- * <p>Only a proof drops a line. Everything the walk publishes about what arrives over-approximates
- * it, so a line the approximation does not reach is a line no arriving row reaches; the other
- * direction is not claimed, and a comparison nothing could be projected for keeps its line and its
- * rows.
+ * <p>Only a proof drops a line. What the declarations leave, what the way states and what the walk
+ * publishes about what arrives each over-approximate the rows that arrive, so a line the region
+ * holding all three holds no row at is a line no arriving row reaches; the other direction is not
+ * claimed.
  */
 class WhatDropsALineIsWhatReachesItsComparisonTest {
 
@@ -158,16 +161,74 @@ class WhatDropsALineIsWhatReachesItsComparisonTest {
     }
 
     /**
-     * A line on a multiple of the position keeps its line, arrival or none.
+     * A hole the way leaves is a line nothing arrives at, as an end is.
      *
-     * <p>What arrives is an interval of the position's own values, and this rule's quantity is twice
-     * them — a level of one order is not a level of the other, so there is nothing here to meet and
-     * the line stands. Which is the fail-open direction and costs precision rather than truth: this
-     * particular line is one nothing arriving reaches, and the measure asks for its rows anyway.
+     * <p>Every row reaching the inner equality holds {@code n /= 5}, so the value it singles out is
+     * one none of them holds. The ends of what arrives run from one end of the order to the other
+     * and say nothing about five; what the way states does. The outer comparison's line is reached
+     * from both sides and stands.
      */
     @Test
-    void aLineOnAMultipleOfThePositionIsKeptBecauseItIsOnAnotherOrder() {
-        assertEquals(0, droppedForNothingArriving(AMOUNT + """
+    void aHoleTheWayLeavesAtTheLineIsALineNothingArrivesAt() {
+        assertEquals(1, droppedForNothingArriving("""
+                module d
+
+                behavior below : (n: Int) -> String
+                let below (n) =
+                    if n /= 5 then (if n == 5 then "never" else "other") else "five"
+                """));
+    }
+
+    /**
+     * A case an arm leaves out is a hole on the order the cases stand on, and a line at it is one
+     * nothing arrives at.
+     *
+     * <p>The same question as the numeric hole above and the same answer, for the same reason: what
+     * the narrowing states is the places of the order it leaves out, and a line at one of them is a
+     * line no row past the arm holds a value at. Narrowed to one case or to a sum of several, which
+     * leave different places out.
+     */
+    @Test
+    void aCaseAnArmLeavesOutIsALineNothingArrivesAt() {
+        String levels = """
+                module d
+
+                data Low
+                data Mid
+                data High
+                data Lowish = Low | Mid
+                data Level = Lowish | High
+                data R = { level: Level }
+
+                behavior f : (r: R) -> String
+                """;
+        assertEquals(1, droppedForNothingArriving(levels + """
+                let f (r) =
+                    match r.level with
+                        | Low -> (if r.level == Mid then "never" else "low")
+                        | Mid -> "mid"
+                        | High -> "high"
+                """));
+        assertEquals(1, droppedForNothingArriving(levels + """
+                let f (r) =
+                    match r.level with
+                        | Lowish -> (if r.level == High then "never" else "low")
+                        | High -> "high"
+                """));
+    }
+
+    /**
+     * A line on a multiple of the position is asked the same question, and nothing arriving reaches
+     * it.
+     *
+     * <p>Every row past the first guard holds {@code a.value < 2500}, so twice it stops short of six
+     * thousand. The quantity is not the position's own value, and what the way states is about the
+     * row and not about a projection onto one position — so the line on the multiple is answered
+     * the way a line on the position is.
+     */
+    @Test
+    void aLineOnAMultipleOfThePositionIsAskedTheSameQuestion() {
+        assertEquals(1, droppedForNothingArriving(AMOUNT + """
                 behavior charge : (a: Amount) -> Free | Charged
                     constructs Charged
 
@@ -180,15 +241,85 @@ class WhatDropsALineIsWhatReachesItsComparisonTest {
     }
 
     /**
-     * A comparison over more than one position keeps its line, whatever arrives.
+     * Where a rule on a multiple leaves off is asked on the order the rule wrote, the one its range
+     * is on.
      *
-     * <p>What is published is an interval of one position's values, and the quantity here is the sum
-     * of two — so there is nothing to meet it into, and not being able to read a fact is no proof of
-     * anything. The line stands, which is the direction that leaves an author with work rather than
-     * with a report about a model of theirs that is fine.
+     * <p>{@code 2 * a.value < 6000} leaves off at {@code a = 2999}, which the form it wrote calls
+     * 5998. Every row arriving at it is there or below and takes it the true way, so the line is
+     * the same line {@code a.value < 3000} draws and stands as that one does — asked whether the
+     * form runs as far as 2999, the rows past the way at five thousand and up would say no.
      */
     @Test
-    void aLineOverSeveralPositionsIsKeptBecauseNothingCanBeProjectedOntoIt() {
+    void whereARuleOnAMultipleLeavesOffIsOnTheOrderItWrote() {
+        assertEquals(0, droppedForNothingArriving(AMOUNT + """
+                behavior charge : (a: Amount) -> Free | Charged
+                    constructs Charged
+
+                let charge (a) = {
+                    guard a.value >= 2500 && a.value < 3000 else Free
+                    guard 2 * a.value < 6000 else Free
+                    Charged { yen = 500 }
+                }
+                """));
+    }
+
+    /**
+     * And the same holds where nothing on the way narrows anything and the declarations stop at
+     * where the rule leaves off.
+     *
+     * <p>A {@code Window} runs to 2999 and the rule keeps every one of them, so its line is a line
+     * the quantity reaches, on its kept side. Asked at 2999 of a form running from four thousand,
+     * it was reported as a line drawn outside what the quantity ever holds.
+     */
+    @Test
+    void aRuleOnAMultipleTheDeclarationsReachIsALine() {
+        String report = reportOf("""
+                module d
+
+                data Window = Int invariant value >= 2000 && value <= 2999
+                behavior f : (x: Window) -> String
+                let f (x) = if 2 * x.value < 6000 then "a" else "b"
+                """);
+
+        assertFalse(report.contains("draws its line outside"),
+                () -> "the form reaches 5998, where the rule leaves off: " + report);
+        assertTrue(report.contains("comparison@"),
+                () -> "the line is one the measure asks rows of: " + report);
+    }
+
+    /**
+     * A line stands or falls the same however the rule is spelled.
+     *
+     * <p>{@code a.value >= 1001} and {@code a.value > 1000} draw one line between 1000 and 1001.
+     * Every row past the first guard is at 1000 or below, so a row at 1000 arrives at the line and
+     * takes the second guard the false way — whichever side of the line the number the rule wrote
+     * is on.
+     */
+    @Test
+    void aLineStandsTheSameHoweverTheRuleIsSpelled() {
+        for (String second : List.of("a.value >= 1001", "a.value > 1000")) {
+            assertEquals(0, droppedForNothingArriving(AMOUNT + """
+                    behavior charge : (a: Amount) -> Free | Charged
+                        constructs Charged
+
+                    let charge (a) = {
+                        guard a.value <= 1000 else Free
+                        guard %s else Free
+                        Charged { yen = 500 }
+                    }
+                    """.formatted(second)), second);
+        }
+    }
+
+    /**
+     * A line over several positions that a row past the way reaches stands.
+     *
+     * <p>{@code a.value} stops below five thousand and {@code b.value} does not, so the sum reaches
+     * six thousand at {@code a = 0, b = 6000}. The control for the multiple above: the same way, a
+     * quantity it does not keep from the line.
+     */
+    @Test
+    void aLineOverSeveralPositionsThatTheWayLeavesRoomForStands() {
         assertEquals(0, droppedForNothingArriving("""
                 module d
 

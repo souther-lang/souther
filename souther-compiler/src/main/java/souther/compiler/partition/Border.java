@@ -20,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
@@ -573,7 +574,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         LevelSpace space = target.levels();
         Level cut = target.at();
         if (!reaches(cut, () -> seamOf(space, cut, origin), origin.lineFacts().claim(),
-                drawnByAnInvariant(origin), within)) {
+                drawnByAnInvariant(origin), Values.within(within))) {
             // Asked and answered by whoever holds the rule. Reaching here is that reader and this
             // one disagreeing about one line, which is not a state a model can put them in.
             throw new IllegalStateException(
@@ -724,25 +725,30 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * @param parts where the rule parts the values, of a rule that ordered them. Asked only of
      *              such a rule: one that names a value parts them at no one place
      * @param claim what the rule placed on the values, which is what says which question this is
+     * @param values the values the line is asked about
      */
     public static boolean reaches(Level cut, Supplier<ExactAnswer<Seam>> parts,
                                   ComparisonClaim claim,
-                                  boolean drawnByAnInvariant, NumericDomain.Bounds within) {
-        if (within == null) {
-            return true;
-        }
+                                  boolean drawnByAnInvariant, Values values) {
         return switch (claim) {
-            case ComparisonClaim.Singled _ -> admits(within, cut);
+            case ComparisonClaim.Singled _ -> values.holdAt(cut);
             case ComparisonClaim.Cut order -> {
                 Towards kept = order.satisfyingSide();
-                yield standsAt(within, cut, parts.get(), kept)
+                ExactAnswer<Seam> seam = parts.get();
+                yield standsAt(values::extendTo, cut, seam, kept)
                         // A line with two sides owes a point against the line on each of them, so
-                        // the line's own value is enough for it to be one somebody can write a row
-                        // against: the side a rule is satisfied on may hold nothing while a row at
-                        // the line settles which way the behavior went. Asked of the satisfying
-                        // side alone, a guard the declarations can never satisfy took its whole
-                        // line with it, and the row showing the behavior going the other way was
-                        // never asked for.
+                        // the value beside it on the other side is enough for it to be one somebody
+                        // can write a row against: the side a rule is satisfied on may hold nothing
+                        // while a row at the line settles which way the behavior went. Asked of the
+                        // satisfying side alone, a guard the declarations can never satisfy took
+                        // its whole line with it, and the row showing the behavior going the other
+                        // way was never asked for.
+                        //
+                        // Where the other side leaves off, and not the number the rule wrote. The
+                        // number is on one side or the other depending on how the rule was spelled:
+                        // `n >= 1` and `n > 0` draw one line, and the first wrote the value beside
+                        // it on the kept side — asked at that, a row at nought arriving went
+                        // unasked under one spelling and not the other.
                         //
                         // The line and not the whole of the other side. Every value a length takes
                         // is above a line drawn below zero, and the rule divides them into nothing
@@ -750,10 +756,50 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                         // as one with two.
                         //
                         // Nothing outside a bound can be constructed, so a bound has no second side
-                        // for the line's own value to settle anything about.
-                        || (!drawnByAnInvariant && admits(within, cut));
+                        // for a value beside the line to settle anything about.
+                        || (!drawnByAnInvariant
+                                && standsAt(values::extendTo, cut, seam, kept.opposite()));
             }
         };
+    }
+
+    /**
+     * What {@link #reaches} asks of the values a line is drawn through.
+     *
+     * <p><b>Two questions, because the two kinds of rule ask different ones.</b> A rule that orders
+     * the values around its line divides them wherever they run either side of it, so a value taken
+     * out at the line leaves it dividing: under {@code x /= 10}, {@code x >= 10} still parts nine
+     * from eleven. A rule that names a value parts that value from the rest, so it draws a line
+     * where a value stands there — and not where the values merely run past it, which they do
+     * around a hole.
+     */
+    interface Values {
+
+        /** Whether the values run as far as {@code level}: its own value, or arbitrarily near it
+         *  from either side of a strict end. */
+        boolean extendTo(Level level);
+
+        /** Whether a value stands at {@code level}, or comes arbitrarily near it where the order
+         *  fills up to it. */
+        boolean holdAt(Level level);
+
+        /**
+         * The values of a range of the quantity itself, which has no holes: both questions are how
+         * far it runs. A null range is one nothing bounds, and runs as far as every level.
+         */
+        static Values within(NumericDomain.Bounds range) {
+            return new Values() {
+                @Override
+                public boolean extendTo(Level level) {
+                    return range == null || admits(range, level);
+                }
+
+                @Override
+                public boolean holdAt(Level level) {
+                    return extendTo(level);
+                }
+            };
+        }
     }
 
     /**
@@ -764,7 +810,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * the values part to within one step of the quantity either way, and a caller with no place to
      * ask about has nothing better to ask about than that.
      */
-    private static boolean standsAt(NumericDomain.Bounds within, Level cut,
+    private static boolean standsAt(Predicate<Level> extendTo, Level cut,
                                     ExactAnswer<Seam> parts, Towards side) {
         return switch (parts) {
             // A line is dropped for a proof that the quantity does not reach it, and a place that
@@ -773,7 +819,14 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             case ExactAnswer.Unheld<Seam> _ -> true;
             case ExactAnswer.Held<Seam> held -> {
                 Level leaves = held.value().leaving(side);
-                yield admits(within, leaves == null ? cut : leaves);
+                if (leaves == null) {
+                    yield extendTo.test(cut);
+                }
+                // On the order the threshold is on, which is the order the values are asked on.
+                yield switch (held.value().at().asWritten(leaves)) {
+                    case ExactAnswer.Unheld<Level> _ -> true;
+                    case ExactAnswer.Held<Level>(Level written) -> extendTo.test(written);
+                };
             }
         };
     }
@@ -797,7 +850,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * <p>And as places where it is not a number, which is an order whose only level is where two
      * positions meet. Nothing there has a number for an end to be lifted to.
      */
-    private static boolean admits(NumericDomain.Bounds within, Level level) {
+    static boolean admits(NumericDomain.Bounds within, Level level) {
         ExactRatio number = level.asANumber();
         if (number == null) {
             Place at = level.asAPlace();
