@@ -1545,7 +1545,8 @@ public final class Adequacy {
                             new CoverageSites.AsWritten(arm.origin(), arm.part());
                     if (asRun.answers().found().get(arm)
                             instanceof souther.compiler.reach.Reachability.Unreachable unreachable) {
-                        dead.putIfAbsent(written, new Dead(arm, unreachable.proof()));
+                        dead.merge(written, new Dead(arm, Optional.of(unreachable.proof())),
+                                Dead::alongside);
                     } else {
                         taken.add(written);
                     }
@@ -1575,11 +1576,11 @@ public final class Adequacy {
          */
         private static Report warning(
                 Db db, ControlPlace.Arm arm,
-                souther.compiler.reach.Proof proof) {
-            return Report.of(new DeadBranchProofWords(
+                Optional<souther.compiler.reach.Proof> proof) {
+            souther.compiler.diag.Diagnostic.Builder said =
                     Warnings.pointedAt(Sites.placeOf(db, arm.anchor()))
-                            .say(new DeadBranchMessage.NothingReachesThisBranch()))
-                    .of(proof)
+                            .say(new DeadBranchMessage.NothingReachesThisBranch());
+            return Report.of(proof.map(new DeadBranchProofWords(said)::of).orElse(said)
                     .hint(new DeadBranchMessage.TakeItOutOrLetSomethingReachIt())
                     .build());
         }
@@ -1662,9 +1663,22 @@ public final class Adequacy {
             }
         }
 
-        /** One dead branch and how it was shown, before either is turned into words. */
+        /**
+         * One dead branch and how it was shown, before either is turned into words.
+         *
+         * <p>The branch is the arm the source wrote, and it stands at every place a helper holding
+         * it was spliced in. What is said about it has to hold at all of them, so the proof is the
+         * one every place was shown dead by, and empty where two places were shown dead for
+         * different reasons: each of those is true where it was found and false of the arm.
+         */
         private record Dead(ControlPlace.Arm arm,
-                            souther.compiler.reach.Proof proof) {}
+                            Optional<souther.compiler.reach.Proof> proof) {
+
+            /** The same arm, also dead at another place. */
+            Dead alongside(Dead other) {
+                return proof.equals(other.proof) ? this : new Dead(arm, Optional.empty());
+            }
+        }
 
         /** Where a report about an arm points, read the way {@link Warnings#pointedAt} reads it. */
         private static souther.compiler.diag.SourcePos at(
