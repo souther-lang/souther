@@ -1399,14 +1399,17 @@ public final class Adequacy {
                     db.ask(new Placements(name)).value();
             Map<String, DecisionEvidence> out = new LinkedHashMap<>();
             read.value().forEach((behavior, rules) -> {
-                souther.compiler.partition.MeasuredInput subject = subjectOf(db, name, behavior);
+                // The positions the rules' ways are placed on, asked only where some part of the
+                // body answers nothing: anywhere else there is nothing to place them against.
+                WhereNothingIsAnswered unanswered = db.ask(new Unanswered(name, behavior)).value();
+                souther.compiler.partition.MeasuredInput subject =
+                        unanswered.regions().isEmpty() ? null : subjectOf(db, name, behavior);
                 out.put(behavior, new DecisionEvidence(rules,
                         whatTheRowsTook(behavior, rules,
                                 placed == null ? null : placed.get(behavior),
                                 RowReadings.readingFor(byTarget, behavior), numbering),
-                        subject == null ? Map.of() : DecisionEvidence.unansweredIn(rules,
-                                db.ask(new Unanswered(name, behavior)).value(),
-                                subject.axes())));
+                        subject == null ? Map.of()
+                                : DecisionEvidence.unansweredIn(rules, unanswered, subject.axes())));
             });
             return Answer.of(Ordered.map(out));
         }
@@ -1993,9 +1996,13 @@ public final class Adequacy {
         public Answer<WhereNothingIsAnswered> compute(Db db) {
             Map<String, CoverageRead.Read> met = db.ask(new Meets(name)).value();
             Bodies.Elaborated checked = db.ask(new Bodies.Observable(name)).value();
+            if (met == null || met.get(behavior) == null
+                    || met.get(behavior).answersNothing().isEmpty() || checked == null
+                    || !checked.behaviorBodies().containsKey(behavior)) {
+                return Answer.of(WhereNothingIsAnswered.NONE);
+            }
             souther.compiler.partition.MeasuredInput subject = subjectOf(db, name, behavior);
-            if (met == null || met.get(behavior) == null || checked == null
-                    || !checked.behaviorBodies().containsKey(behavior) || subject == null) {
+            if (subject == null) {
                 return Answer.of(WhereNothingIsAnswered.NONE);
             }
             return Answer.of(
@@ -3766,12 +3773,16 @@ public final class Adequacy {
                 covered.retainAll(here);
                 Set<ArmProbe> awaited = new LinkedHashSet<>(awaiting);
                 awaited.retainAll(here);
+                // The positions the arms' ways are placed on, asked only where some part of the
+                // body answers nothing: anywhere else there is nothing to place them against.
+                WhereNothingIsAnswered unanswered =
+                        db.ask(new Unanswered(name, behavior.name())).value();
                 souther.compiler.partition.MeasuredInput subject =
-                        subjectOf(db, name, behavior.name());
+                        unanswered.regions().isEmpty() ? null
+                                : subjectOf(db, name, behavior.name());
                 return BranchEvidence.measured(behavior.name(), arms, covered, awaited,
                         arrives, rowsBehind(observed), BranchEvidence.premisesOfArms(
-                                db.ask(new Unanswered(name, behavior.name())).value(),
-                                met == null ? null : met.get(behavior.name()),
+                                unanswered, met == null ? null : met.get(behavior.name()),
                                 subject == null ? null : subject.axes()));
             });
         }
@@ -6665,6 +6676,18 @@ public final class Adequacy {
      */
     public record Obligations(String name, GenerationScope scope, HowALineIsRead reading)
             implements Key<List<BorderObligationPointAssessment>> {
+
+        /**
+         * Read by the rules alone, every behavior's lines are read the one way whatever the scope
+         * admits, so the scope decides nothing and is not part of the question. Kept as asked, each
+         * behavior asking about its own points would fold every reading of the module again under a
+         * key of its own, for the answer the module's key already holds.
+         */
+        public Obligations {
+            if (reading == HowALineIsRead.THE_RULES_ALONE) {
+                scope = new GenerationScope.Module();
+            }
+        }
 
         @Override
         public String module() {
