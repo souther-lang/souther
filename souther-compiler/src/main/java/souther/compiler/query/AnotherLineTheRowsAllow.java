@@ -4,6 +4,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -722,22 +723,29 @@ public sealed interface AnotherLineTheRowsAllow {
                         }
                     }
                     // That some element meets these, or every element does, which a step leaves as
-                    // it was where it moves none of their numbers. One that does may move an
+                    // it was where it moves nothing they turn on. One that does may move an
                     // element they are about, and which elements those are is nothing an input's
-                    // numbers say.
+                    // numbers say — nor is whether an element is still the value it was compared
+                    // with, once a number of either moved.
                     case OnTheWay.TakenIn(var _, RowDemand.Exists exists) -> {
-                        if (!Collections.disjoint(exists.terms(), moved)) {
+                        if (movesAnyOf(exists.positions())) {
                             return false;
                         }
                     }
                     case OnTheWay.TakenIn(var _, RowDemand.ForAll every) -> {
-                        if (!Collections.disjoint(every.terms(), moved)) {
+                        if (movesAnyOf(every.positions())) {
                             return false;
                         }
                     }
                 }
             }
             return true;
+        }
+
+        /** Whether the step moves a number at or under one of {@code positions}. */
+        private boolean movesAnyOf(Set<TermPath> positions) {
+            return moved.stream().anyMatch(term -> positions.stream()
+                    .anyMatch(position -> term.subjectPath().isAtOrUnder(position)));
         }
     }
 

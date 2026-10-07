@@ -28,6 +28,7 @@ import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.BooleanMeaning;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.types.SourceConstructOrigin;
@@ -45,6 +46,7 @@ import souther.compiler.types.Type;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SequencedMap;
 
 /**
@@ -253,6 +255,31 @@ public final class GuardThresholds {
                         case BoundaryPolicy.Standing.Refused _ -> { }
                     }
                 }
+            }
+        }
+        // And every truth a fork's condition asks, under the construct of the model that answers
+        // it, which is the construct a run is seen coming out of. A truth asked of a name the body
+        // was handed is answered by no construct, and no run is seen at it.
+        for (ComparisonReadings.TruthMet each : comparisons.truths()) {
+            List<OnTheWay> holding = ReachingCuts.stating(each.condition(), read, true);
+            List<OnTheWay> failing = ReachingCuts.stating(each.condition(), read, false);
+            Optional<ModelOccurrence> answeredBy = DecisionNaming.answeredAt(each.condition());
+            if (answeredBy.isPresent()) {
+                cuts.answered(answeredBy.get(),
+                        new ReachingCuts.TruthOnTheWay(each.assumed(), holding, failing));
+            }
+            // And under the application a denial denies, which is where a run reading through the
+            // denial is seen coming out — the other way round from the whole where the denials
+            // turn it.
+            Optional<BooleanMeaning.UnderADenial> denied = BooleanMeaning.underADenial(
+                    Core.withoutStanding(each.condition().value()), true);
+            if (denied.isPresent()
+                    && Core.withoutStanding(denied.get().part()) instanceof Core.PreservedCall applied
+                    && applied.occurrence().isWritten()) {
+                boolean same = denied.get().positive();
+                ModelOccurrence.statedAt(applied.occurrence()).ifPresent(at -> cuts.answered(at,
+                        new ReachingCuts.TruthOnTheWay(each.assumed(),
+                                same ? holding : failing, same ? failing : holding)));
             }
         }
         return new Guards(found, withoutALine.found(), between, cuts.made(),

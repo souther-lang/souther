@@ -14,10 +14,12 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ResolvedCase;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * What a row has already had to satisfy by the time it arrives at one comparison.
@@ -54,12 +56,78 @@ import java.util.Objects;
  * the list is what lets a report say a condition is unaccounted for; it is not what the region is
  * built from.
  */
-public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison) {
+public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
+                           Lookup<ModelOccurrence, TruthOnTheWay> byTruth) {
 
-    public static final ReachingCuts NONE = new ReachingCuts(Lookup.built(_ -> { }));
+    public static final ReachingCuts NONE =
+            new ReachingCuts(Lookup.built(_ -> { }), Lookup.built(_ -> { }));
 
     public ReachingCuts {
         Objects.requireNonNull(byComparison, "what a walk collected, comparison by comparison");
+        Objects.requireNonNull(byTruth, "what a walk collected, truth by truth");
+    }
+
+    /**
+     * A truth a fork's condition asks, as the walk met it: what stood on the way to it, and what it
+     * coming out each way says ({@link #stating}).
+     *
+     * <p>Both ways said here, where the condition and the reading of the input are in hand, so that
+     * what is kept is what a row is composed against and compares as that.
+     *
+     * @param assumed what stood on the way to it
+     * @param holding what it coming out true says
+     * @param failing what it coming out false says
+     */
+    public record TruthOnTheWay(List<OnTheWay> assumed, List<OnTheWay> holding,
+                                List<OnTheWay> failing) {
+
+        public TruthOnTheWay {
+            assumed = List.copyOf(assumed);
+            holding = List.copyOf(holding);
+            failing = List.copyOf(failing);
+        }
+    }
+
+    /**
+     * What brings the truth the application {@code application} answers out {@code held}, where a
+     * fork's condition asks it: every demand it coming out that way makes of a row, and the way to
+     * it with those taken in — or empty where it asks something this reading could not state, asks
+     * nothing, or no row takes the way.
+     *
+     * <p>The demands are on the way the row is held to and not only beside it. What a row has to
+     * be for a truth to come out a way is a condition a composer meets the way it meets every
+     * condition on the way to it, so the way it is held to is the way to the truth and the truth
+     * itself. All of them, because a truth asks them all at once: some element meeting a predicate
+     * and what the predicate asks of the rest of the row are one coming out.
+     *
+     * @param declarations what the declarations leave, which the way narrows
+     */
+    public Optional<HeldOutcome> heldAt(ModelOccurrence application, boolean held,
+                                        SearchRegion declarations) {
+        TruthOnTheWay met = byTruth.get(application);
+        if (met == null) {
+            return Optional.empty();
+        }
+        List<OnTheWay> asked = held ? met.holding() : met.failing();
+        List<RowDemand> demands = new ArrayList<>();
+        for (OnTheWay each : asked) {
+            switch (each) {
+                case OnTheWay.TakenIn in -> demands.add(in.demand());
+                case OnTheWay.Settled _ -> { }
+                case OnTheWay.Declined _, OnTheWay.Narrowed _ -> {
+                    return Optional.empty();
+                }
+            }
+        }
+        if (demands.isEmpty()) {
+            return Optional.empty();
+        }
+        List<OnTheWay> way = new ArrayList<>(met.assumed());
+        way.addAll(asked);
+        return Reachability.of(new WayToTheBorder(way), declarations)
+                instanceof Reachability.Reaching reaching
+                ? Optional.of(new HeldOutcome(demands, reaching))
+                : Optional.empty();
     }
 
     /**
@@ -226,6 +294,20 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison)
     static final class Collected {
 
         private final Map<ModelOccurrence, List<OnTheWay>> byComparison = new LinkedHashMap<>();
+        private final Map<ModelOccurrence, TruthOnTheWay> byTruth = new LinkedHashMap<>();
+
+        /**
+         * The truth the application {@code answers} answers, met as {@code met} says.
+         *
+         * <p>Once per construct of the model, as a comparison is, and for the same reason: two
+         * arriving under one would be two truths the model states at one place.
+         */
+        void answered(ModelOccurrence answers, TruthOnTheWay met) {
+            if (byTruth.putIfAbsent(answers, met) != null) {
+                throw new IllegalStateException(
+                        "two truths of one reading state one construct of the model: " + answers);
+            }
+        }
 
         void reached(ModelOccurrence states, List<OnTheWay> assumed) {
             // Once per construct of the model, because that is what the walk reads: a comparison
@@ -242,7 +324,8 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison)
         }
 
         ReachingCuts made() {
-            return new ReachingCuts(Lookup.built(put -> byComparison.forEach(put::put)));
+            return new ReachingCuts(Lookup.built(put -> byComparison.forEach(put::put)),
+                    Lookup.built(put -> byTruth.forEach(put::put)));
         }
     }
 }

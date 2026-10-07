@@ -152,6 +152,8 @@ final class Reasons {
                 case SHAPES_OF_A_TOTAL_OFFERED -> "how many containers are offered for one total";
                 case WAYS_DOWN_TO_A_TOTAL_TRIED ->
                         "how many ways down to what a total adds up are tried";
+                case WAYS_UNDER_THE_CASES_TRIED ->
+                        "how many ways under the cases of a sum a container is written are tried";
                 case PLACES_A_PAIR_IS_TRIED_AT -> "how many places a pair is tried at";
                 case PLACES_A_PAIR_IS_LOOKED_AT ->
                         "how many places along a pair's line are looked at";

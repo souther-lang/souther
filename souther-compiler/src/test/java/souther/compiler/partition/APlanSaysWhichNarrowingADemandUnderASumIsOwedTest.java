@@ -224,7 +224,7 @@ class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
                 ScopedDeclarations.sumsOf(symbolsOf(BESIDE_A_LIST)),
                 Set.of(TermPath.of("query").then("item").then("method").then("amount"),
                         bag.element()),
-                Requirements.NONE,
+                Requirements.NONE, ConstructionPlan.ContentsComposed.NONE,
                 (at, _) -> at.equals(bag) ? new DeclaredBounds.CountRange(0, 0)
                         : new DeclaredBounds.CountRange(0, Integer.MAX_VALUE));
 
@@ -251,7 +251,7 @@ class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
                 ScopedDeclarations.sumsOf(symbolsOf(BESIDE_A_LIST)),
                 Set.of(TermPath.of("query").then("item").then("method").then("amount"),
                         TermPath.of("query").then("item").then("bag").element()),
-                Requirements.NONE, ANY);
+                Requirements.NONE, ConstructionPlan.ContentsComposed.NONE, ANY);
 
         assertEquals(TermPath.of("query").then("item").then("method"),
                 assertInstanceOf(ConstructionPlan.Result.Unnarrowed.class, asked,
@@ -274,7 +274,8 @@ class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
         return ConstructionPlan.of(typeOf(source), TermPath.of("query"),
                 ScopedDeclarations.wrapsOf(symbolsOf(source)), symbolsOf(source),
                 ScopedDeclarations.kindsOf(symbolsOf(source)),
-                ScopedDeclarations.sumsOf(symbolsOf(source)), decided, Requirements.NONE, ANY);
+                ScopedDeclarations.sumsOf(symbolsOf(source)), decided, Requirements.NONE,
+                ConstructionPlan.ContentsComposed.NONE, ANY);
     }
 
     private static Type typeOf(String source) {

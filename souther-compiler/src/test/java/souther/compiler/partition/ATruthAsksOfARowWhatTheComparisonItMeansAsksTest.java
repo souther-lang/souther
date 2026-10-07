@@ -75,8 +75,8 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
             behavior emptyDenied : (o: Order) -> Bool
             let emptyDenied (o) = Bool.not(List.isEmpty(o.lines))
 
-            behavior memberAsked : (o: Order, l: Line) -> Bool
-            let memberAsked (o, l) = List.contains(l, o.lines)
+            behavior keyAsked : (o: Order, m: Map<String, Int>, k: String) -> Bool
+            let keyAsked (o, m, k) = Map.containsKey(k, m)
             """;
 
     /** Either way it comes out, an emptiness check asks what the size against nought asks. */
@@ -109,7 +109,7 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
     void aTruthThatMeansNoComparisonIsDeclined() {
         for (boolean holding : List.of(true, false)) {
             OnTheWay.Declined declined = assertInstanceOf(OnTheWay.Declined.class,
-                    only("memberAsked", holding));
+                    only("keyAsked", holding));
             assertEquals(new OnTheWay.Why.NoWordsForTheShape(), declined.why());
         }
     }

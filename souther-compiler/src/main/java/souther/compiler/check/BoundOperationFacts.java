@@ -239,6 +239,19 @@ public final class BoundOperationFacts {
         return ones(BoundOperationFact.ReadsItsContainer.class);
     }
 
+    /** Where {@code operation} is handed the value it asks its container whether it holds, or null
+     *  where it asks no such thing. */
+    public DeclaredArgument asksWhetherItsContainerHolds(ValueName operation) {
+        BoundOperationFact.AsksWhetherItsContainerHolds held =
+                one(BoundOperationFact.AsksWhetherItsContainerHolds.class, operation);
+        return held == null ? null : held.value();
+    }
+
+    /** The operations that ask whether their container holds a value. */
+    public Set<ValueName> asksWhetherItsContainerHolds() {
+        return ones(BoundOperationFact.AsksWhetherItsContainerHolds.class);
+    }
+
     /** Which argument {@code aspect} of {@code operation}'s answer turns on, or null where the
      *  library says nothing about what decides it. */
     public BoundOperationFact.TurnsOnWhetherAnArgumentHolds turnsOnWhetherAnArgumentHolds(

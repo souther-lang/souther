@@ -105,6 +105,16 @@ record ValuesCarryingANumber(TermPath fixed, FixtureTemplate value,
     }
 
     /**
+     * Never asked: the plans this composes are made for a number and a few positions beside it,
+     * and hand no container a value.
+     */
+    @Override
+    public ContainerContents contentsOf(TermPath container, PlanComposer.Under under) {
+        throw new IllegalStateException("a plan composed around one number hands `" + container
+                + "` no value, so nothing is asked what it holds");
+    }
+
+    /**
      * Whether something the caller has is at or under {@code node}.
      *
      * <p>Asked of the plan's own positions rather than of the paths' steps. The two agree wherever

@@ -152,7 +152,7 @@ class AConditionOnAContainersElementsIsComposedAsWhatItSaysTest {
         if (!inTheRegion) {
             RowDemand.Exists walked = assertInstanceOf(RowDemand.Exists.class,
                     way.removeFirst().demand());
-            for (RowDemand.Relational each : walked.ofAnElement()) {
+            for (RowDemand.Relational each : walked.relations()) {
                 region = each.constraint().narrowing(region);
             }
         }

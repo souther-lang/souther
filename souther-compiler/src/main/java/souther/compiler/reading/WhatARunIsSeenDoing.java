@@ -10,6 +10,7 @@ import souther.compiler.flow.Naming;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Function;
 
 /**
@@ -49,8 +50,7 @@ final class WhatARunIsSeenDoing implements Naming<List<ControlClaim>> {
         return new ComparisonWays() {
             @Override
             public boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy) {
-                if (Core.withoutStanding(e) instanceof Core.Binary comparison
-                        && CoverageNaming.outcomeAt(plan, comparison, want).isPresent()) {
+                if (outcomeAt(e, want).isPresent()) {
                     return true;
                 }
                 return ComparisonWays.OF_THE_TREE.comesOut(e, want, settledBy);
@@ -105,13 +105,24 @@ final class WhatARunIsSeenDoing implements Naming<List<ControlClaim>> {
 
     @Override
     public List<ControlClaim> side(Core value, boolean held) {
-        if (!(Core.withoutStanding(value) instanceof Core.Binary comparison)) {
-            return null;
-        }
-        return CoverageNaming.outcomeAt(plan, comparison, held)
+        return outcomeAt(value, held)
                 .flatMap(ControlClaim::of)
                 .map(List::of)
                 .orElse(null);
+    }
+
+    /**
+     * Where a run is seen bringing {@code value} out {@code held}: at the comparison it is, or at
+     * the application of one of the language's operations whose answer it is — or empty where the
+     * plan records neither.
+     */
+    private Optional<ControlPlace.Outcome> outcomeAt(Core value, boolean held) {
+        Core e = Core.withoutStanding(value);
+        if (e instanceof Core.Binary comparison) {
+            return CoverageNaming.outcomeAt(plan, comparison, held);
+        }
+        return plan.applicationAnsweringAt(e)
+                .flatMap(application -> plan.outcomeOf(application, held));
     }
 
     @Override

@@ -3791,6 +3791,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case OnTheWay.Why.ContainerAtNoPosition _ ->
                     "a condition about what a container holds, over a container that stands at no"
                             + " position";
+            case OnTheWay.Why.ValueAtNoPosition _ ->
+                    "a condition about whether a container holds a value, where the value stands"
+                            + " at no position";
             case OnTheWay.Why.MoreThanEachElement _ ->
                     "a condition every element has to meet that is about more than the element";
             case OnTheWay.Why.SizeOfTheContainerNotStated _ ->

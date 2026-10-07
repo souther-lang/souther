@@ -16,6 +16,7 @@ import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
+import souther.compiler.semantics.ConditionJoin;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -71,12 +72,33 @@ import java.util.Set;
  * fork. Everything else evaluates its parts under what stood at it.
  */
 record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
-                          Map<ConditionOccurrence, Citation> conditionsMet) {
+                          Map<ConditionOccurrence, Citation> conditionsMet,
+                          List<TruthMet> truths) {
 
     ComparisonReadings {
         comparisons = List.copyOf(comparisons);
         forks = List.copyOf(forks);
         conditionsMet = Map.copyOf(conditionsMet);
+        truths = List.copyOf(truths);
+    }
+
+    /**
+     * A truth a fork's condition asks, or a part of one asks, and what stood on the way to it.
+     *
+     * <p>Beside the comparisons because a run is seen coming out of one as it is of a comparison,
+     * and a row held to it coming out the other way is composed under what stood on the way to it
+     * — which is this walk's to say, and said nowhere else.
+     *
+     * <p>Only the truths of a fork's condition. Those are the conditions a run is stopped at; a
+     * truth that is an answer the body hands back stops nothing.
+     *
+     * @param assumed every condition on the way to it, each with what became of it
+     */
+    record TruthMet(Condition.Truth condition, List<OnTheWay> assumed) {
+
+        TruthMet {
+            assumed = List.copyOf(assumed);
+        }
     }
 
     /**
@@ -185,7 +207,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * every step and asked of whichever copy a reader happened to hold.
      */
     private record Body(String behavior, InputReading read,
-                        souther.compiler.coverage.Arrivals answering, Templates templates) {
+                        souther.compiler.coverage.Arrivals answering, Templates templates,
+                        List<TruthMet> truths) {
 
         Symbols symbols() {
             return read.symbols();
@@ -218,6 +241,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         Core body = analysis.core();
         List<Reading> readings = new ArrayList<>();
         List<ForkMet> forks = new ArrayList<>();
+        List<TruthMet> truths = new ArrayList<>();
         Templates templates = new Templates(analysis.templates());
         // The names the conditions of this body take, handed out as the walk meets them. One of
         // these per body, because what a name is counted within is the body: counted over the
@@ -229,7 +253,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         walk(body, new Body(behavior, read,
                         souther.compiler.coverage.Arrivals.inTheTree(body,
                                 analysis.templates()::bodyOf),
-                        templates),
+                        templates, truths),
                 reads,
                 LiveFlow.of(body), List.of(), true, readings, forks, numbering);
         // What each value the body builds states, read once. A value means the same wherever it is
@@ -242,12 +266,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 walk(template, new Body(behavior, read,
                                 souther.compiler.coverage.Arrivals.inTheTree(template,
                                         analysis.templates()::bodyOf),
-                        templates),
+                        templates, truths),
                         insideATemplate, LiveFlow.of(template), entry.assumed(), entry.live(),
                         readings, forks, numbering);
             }
         }
-        return new ComparisonReadings(readings, forks, numbering.metAt());
+        return new ComparisonReadings(readings, forks, numbering.metAt(), truths);
     }
 
     /** How one build of a value was reached: what stood on the way to it, and whether what it
@@ -368,6 +392,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 // would name that one condition twice.
                 Condition condition =
                         Condition.of(iff.cond(), reads, symbols, in.newtypes(), numbering);
+                if (live) {
+                    truthsIn(condition, assumed, in.read(), in.truths());
+                }
                 // What this walk found in the condition, for the reader that decides whether the
                 // fork states a rule of its own. Said of every fork an author wrote, and of none
                 // this compiler composed — a `guard`'s supplied arm and a lowering's test state
@@ -456,6 +483,27 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             default -> ScopeStep.forEachChild(e, (child, step) ->
                     walk(child, in, reads.entering(step, symbols, in.newtypes()), flow, assumed,
                             live, out, forks, numbering));
+        }
+    }
+
+    /**
+     * Every truth {@code condition} asks, each with what stood on the way to it: what stood before
+     * the condition, and for a part after a connective, what the parts before it coming out the
+     * way that runs it say.
+     */
+    private static void truthsIn(Condition condition, List<OnTheWay> assumed, InputReading read,
+                                 List<TruthMet> out) {
+        switch (condition) {
+            case Condition.Truth truth -> out.add(new TruthMet(truth, assumed));
+            case Condition.Compares _ -> { }
+            // The right part runs where the left leaves the answer open, which under a conjunction
+            // is the left holding and under a disjunction the left failing.
+            case Condition.Joined joined -> {
+                truthsIn(joined.left(), assumed, read, out);
+                boolean leftHolding = joined.how().under(true) == ConditionJoin.BOTH;
+                truthsIn(joined.right(), taking(joined.left(), leftHolding, read, assumed), read,
+                        out);
+            }
         }
     }
 
