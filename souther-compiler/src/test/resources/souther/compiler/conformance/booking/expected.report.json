@@ -783,6 +783,58 @@
               "at" : "1"
             }
           },
+          "lineId" : {
+            "target" : {
+              "behavior" : "book",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "seat"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "1"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.booking",
+                  "declaredOn" : "Seat",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
           "axis" : "book/seat",
           "origin" : "invariant Seat #1",
           "kind" : "at_value",
@@ -855,6 +907,58 @@
                 "kind" : "whole"
               },
               "at" : "300"
+            }
+          },
+          "lineId" : {
+            "target" : {
+              "behavior" : "book",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "seat"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "300"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.booking",
+                  "declaredOn" : "Seat",
+                  "clause" : 0
+                },
+                "part" : 1,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
             }
           },
           "axis" : "book/seat",
@@ -931,6 +1035,58 @@
               "at" : "1"
             }
           },
+          "lineId" : {
+            "target" : {
+              "behavior" : "book",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "party"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "1"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.booking",
+                  "declaredOn" : "Party",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
           "axis" : "book/party",
           "origin" : "invariant Party #1",
           "kind" : "at_value",
@@ -1003,6 +1159,58 @@
                 "kind" : "whole"
               },
               "at" : "8"
+            }
+          },
+          "lineId" : {
+            "target" : {
+              "behavior" : "book",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "party"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "8"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.booking",
+                  "declaredOn" : "Party",
+                  "clause" : 0
+                },
+                "part" : 1,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
             }
           },
           "axis" : "book/party",
@@ -1476,6 +1684,54 @@
               "at" : "spring"
             }
           },
+          "lineId" : {
+            "target" : {
+              "behavior" : "redeem",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "voucher"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "text"
+                    },
+                    "answered" : {
+                      "kind" : "text"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "text"
+                },
+                "at" : "spring"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.vouchers",
+                  "definition" : "redeem",
+                  "behavior" : "redeem",
+                  "ordinal" : 3,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "holdsAtTheValue" : true,
+                "singles" : true
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
           "axis" : "redeem/voucher",
           "origin" : "comparison@1:23:25",
           "kind" : "at_value",
@@ -1562,6 +1818,63 @@
               "at" : "1"
             }
           },
+          "lineId" : {
+            "target" : {
+              "behavior" : "redeem",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "taken",
+                    "operation" : {
+                      "alias" : "String",
+                      "name" : "length"
+                    },
+                    "position" : "voucher",
+                    "arguments" : [ ]
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "text"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "1"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.vouchers",
+                  "declaredOn" : "Voucher",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
           "axis" : "redeem/String.length(voucher)",
           "origin" : "invariant Voucher #1",
           "kind" : "at_value",
@@ -1634,6 +1947,58 @@
                 "kind" : "whole"
               },
               "at" : "1"
+            }
+          },
+          "lineId" : {
+            "target" : {
+              "behavior" : "redeem",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "party"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "1"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.vouchers",
+                  "declaredOn" : "Party",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
             }
           },
           "axis" : "redeem/party",
@@ -1710,6 +2075,58 @@
               "at" : "8"
             }
           },
+          "lineId" : {
+            "target" : {
+              "behavior" : "redeem",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "party"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "8"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.vouchers",
+                  "declaredOn" : "Party",
+                  "clause" : 0
+                },
+                "part" : 1,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
           "axis" : "redeem/party",
           "origin" : "invariant Party #1",
           "kind" : "at_value",
@@ -1779,6 +2196,55 @@
                 "kind" : "whole"
               },
               "at" : "4"
+            }
+          },
+          "lineId" : {
+            "target" : {
+              "behavior" : "redeem",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "party"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "4"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.vouchers",
+                  "definition" : "redeem",
+                  "behavior" : "redeem",
+                  "ordinal" : 1,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
             }
           },
           "axis" : "redeem/party",
@@ -2919,6 +3385,63 @@
               "at" : "1"
             }
           },
+          "lineId" : {
+            "target" : {
+              "behavior" : "seat",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "taken",
+                    "operation" : {
+                      "alias" : "String",
+                      "name" : "length"
+                    },
+                    "position" : "ticket",
+                    "arguments" : [ ]
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "text"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "1"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.waitlist",
+                  "declaredOn" : "Ticket",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
           "axis" : "seat/String.length(ticket)",
           "origin" : "invariant Ticket #1",
           "kind" : "at_value",
@@ -2991,6 +3514,58 @@
                 "kind" : "whole"
               },
               "at" : "1"
+            }
+          },
+          "lineId" : {
+            "target" : {
+              "behavior" : "seat",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "party"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "1"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.waitlist",
+                  "declaredOn" : "Party",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
             }
           },
           "axis" : "seat/party",
@@ -3067,6 +3642,58 @@
               "at" : "8"
             }
           },
+          "lineId" : {
+            "target" : {
+              "behavior" : "seat",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "party"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "8"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.waitlist",
+                  "declaredOn" : "Party",
+                  "clause" : 0
+                },
+                "part" : 1,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
           "axis" : "seat/party",
           "origin" : "invariant Party #1",
           "kind" : "at_value",
@@ -3136,6 +3763,55 @@
                 "kind" : "whole"
               },
               "at" : "4"
+            }
+          },
+          "lineId" : {
+            "target" : {
+              "behavior" : "seat",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "party"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "4"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.waitlist",
+                  "definition" : "seat",
+                  "behavior" : "seat",
+                  "ordinal" : 1,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
             }
           },
           "axis" : "seat/party",

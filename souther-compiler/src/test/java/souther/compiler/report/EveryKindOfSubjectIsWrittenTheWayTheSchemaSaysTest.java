@@ -82,6 +82,21 @@ class EveryKindOfSubjectIsWrittenTheWayTheSchemaSaysTest {
         level.putObject("carrier").put("kind", "whole");
         level.put("at", "0");
         obligationId.putObject("location").put("kind", "at_the_line");
+        ObjectNode lineId = JSON.createObjectNode();
+        ObjectNode target = lineId.putObject("target");
+        target.put("behavior", "b");
+        ObjectNode quantity = target.putObject("quantity");
+        quantity.put("shape", "at_value");
+        ObjectNode weighed = quantity.putArray("terms").addObject();
+        ObjectNode term = weighed.putObject("term");
+        term.put("kind", "value");
+        term.put("position", "r.cost");
+        ObjectNode orders = weighed.putObject("orders");
+        orders.putObject("observed").put("kind", "whole");
+        orders.putObject("answered").put("kind", "whole");
+        weighed.put("coefficient", "1");
+        target.set("level", level.deepCopy());
+        lineId.set("line", line.deepCopy());
         return List.of(
                 new PublishedSubject.OfAModule("m"),
                 new PublishedSubject.OfABehavior("b"),
@@ -98,7 +113,7 @@ class EveryKindOfSubjectIsWrittenTheWayTheSchemaSaysTest {
                 new PublishedSubject.AtARule("r.cost", ruleId,
                         new PublishedRuleHandle.NumberedInvariant("Amount", 1),
                         List.of("rule_about_a_derived_value")),
-                new PublishedSubject.AtABorder("r.cost = 0", line.deepCopy()),
+                new PublishedSubject.AtABorder("r.cost = 0", lineId),
                 new PublishedSubject.AtAPoint(obligationId),
                 new PublishedSubject.AtAFork("m", writtenBy, 0, 0, "if"),
                 new PublishedSubject.AtAnArm(armId),

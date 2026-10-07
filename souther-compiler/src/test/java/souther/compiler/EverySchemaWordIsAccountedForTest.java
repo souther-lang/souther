@@ -638,6 +638,9 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "partition", "properties", "boundaries", "items", "properties",
                             "kind"),
                     souther.compiler.partition.BoundaryTarget.Shape.class),
+            new Vocabulary("quantityId.shape",
+                    List.of("$defs", "quantityId", "properties", "shape"),
+                    souther.compiler.partition.BoundaryTarget.Shape.class),
             // `no_arm_witnesses_it` was what a guard's line came back as where the arms could not
             // separate the rows that reached its comparison from the rows that did not. The
             // comparison is observed where it runs now, so nothing produces the word — and reports of

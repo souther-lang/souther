@@ -27,6 +27,8 @@ import souther.compiler.check.RuleRef;
 import souther.compiler.numeric.Towards;
 import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.BorderObligationPoint;
+import souther.compiler.partition.BorderQuantity;
+import souther.compiler.partition.BoundaryLine;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.StandingAtAPoint;
@@ -66,8 +68,13 @@ import souther.compiler.inputs.AuthoredOrder;
 import souther.compiler.inputs.InputQuestion;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.RuleSite;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
+import souther.compiler.inputs.RunSource;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meta.ModuleMetadata;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.Incompleteness;
@@ -4580,6 +4587,126 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * One line a row can be written at, as {@link BoundaryLine} tells one from another: where it was
+     * drawn, and which of the model's lines was drawn there.
+     *
+     * <p>The parts the line's own equality reads, and only those. A label or a path as an author
+     * reads it is a word two lines can share, so neither is written here; which reading drew the
+     * line is not part of which line it is, and writing it would make one line several. Each part is
+     * written by whatever already writes one, so a level here is a level as an obligation writes it
+     * and a line of the model is one as a point's id writes it.
+     *
+     * <p>One writer for every place the document names a line. An entry about a line and the entry
+     * describing that line then carry one value, and a consumer joining them compares two copies of
+     * it rather than two spellings.
+     */
+    static void boundaryLineId(ObjectNode into, BoundaryLine line) {
+        ObjectNode target = into.putObject("target");
+        target.put("behavior", line.target().behavior());
+        quantityId(target.putObject("quantity"), line.target().of());
+        level(target.putObject("level"), line.target().at());
+        authoredLineId(into.putObject("line"), line.line());
+    }
+
+    /**
+     * What a line was drawn on, by every part a quantity is equal by, out of what the quantity
+     * answers rather than which kind of quantity it is.
+     *
+     * <p>Its shape and what it weighs each of its terms by. Every quantity answers as a form over
+     * its terms ({@link BorderQuantity#direction}), which way it runs included, so one position's
+     * own values and a form weighing that position once are told apart only by the shape — and with
+     * the shape beside it the two together are the quantity. The terms in the order a form's terms
+     * are walked in, so one quantity is always written one way.
+     *
+     * <p>And the orders each term stands on. Which order a term's values are read on and which order
+     * its number is measured on are part of which quantity it is, so two quantities over one path
+     * that differ only there are two.
+     */
+    private static void quantityId(ObjectNode into, BorderQuantity quantity) {
+        into.put("shape", word(quantity.shape()));
+        ArrayNode terms = into.putArray("terms");
+        for (Map.Entry<NumericTerm, ExactRatio> each
+                : NumericTerms.entriesInOrder(quantity.direction().coefs())) {
+            ObjectNode weighed = terms.addObject();
+            termOn(weighed, quantity.ordersOf(each.getKey()));
+            weighed.put("coefficient", each.getValue().spelled());
+        }
+    }
+
+    /**
+     * A term and the two orders it stands on.
+     *
+     * <p>Either order is absent where the term has none: nothing orders a container, which is read
+     * by what it holds, and a number nothing measures has no order it is measured on.
+     */
+    private static void termOn(ObjectNode into, TermOrders on) {
+        termId(into.putObject("term"), on.term());
+        ObjectNode orders = into.putObject("orders");
+        if (on.observed() != null) {
+            carrier(orders.putObject("observed"), on.observed());
+        }
+        if (on.answered() != null) {
+            carrier(orders.putObject("answered"), on.answered());
+        }
+    }
+
+    /**
+     * A number a line is drawn on, by what makes two of them one term.
+     *
+     * <p>Each place as {@link TermPath#discriminated} spells it. The path an author reads can spell
+     * two places this compiler holds apart alike, and two terms at those places are two terms.
+     */
+    private static void termId(ObjectNode into, NumericTerm term) {
+        switch (term) {
+            case NumericTerm.ValueOf it -> {
+                into.put("kind", "value");
+                into.put("position", it.position().discriminated());
+            }
+            // And what the operation was given beside the value, by where each argument stands in
+            // the call: a quotient by two and a quotient by three are two numbers of one place.
+            case NumericTerm.TakenOf it -> {
+                into.put("kind", "taken");
+                operationId(into.putObject("operation"), it.operation());
+                into.put("position", it.position().discriminated());
+                ArrayNode arguments = into.putArray("arguments");
+                it.arguments().byPosition().forEach((at, read) -> {
+                    ObjectNode argument = arguments.addObject();
+                    argument.put("at", at);
+                    argument.put("value", ExactRatio.of(read).spelled());
+                });
+            }
+            case NumericTerm.TakenOver it -> {
+                into.put("kind", "taken_over");
+                operationId(into.putObject("operation"), it.operation());
+                ObjectNode over = into.putObject("over");
+                switch (it.source()) {
+                    case RunSource.ProjectedOccurrences run -> {
+                        over.put("kind", "occurrences");
+                        over.put("position", run.subjectPath().discriminated());
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * A library operation, by the alias it is published under and the operation under that alias.
+     *
+     * <p>Both parts and not the two joined, which is how the name holds them: a name written by
+     * joining two values is one a consumer would have to split back apart. The namespace applied has
+     * no operation under it and says so by having no {@code name}.
+     */
+    private static void operationId(ObjectNode into, ValueName.Stdlib operation) {
+        switch (operation) {
+            case ValueName.Stdlib.Operation it -> {
+                into.put("alias", it.alias());
+                into.put("name", it.name());
+            }
+            case ValueName.Stdlib.Namespace it -> into.put("alias", it.alias());
+        }
+    }
+
+    /**
      * One line of the model, by the rule that drew it and which of that rule's lines it is.
      *
      * <p>Which of the rule's lines says what named it, because the three kinds of rule do not
@@ -5403,11 +5530,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             DocumentItem drawn = boundaries.addObject();
             ObjectNode b = drawn.node();
             // What this line is owed as a line, which is what the lines beside it are asked of. The
-            // four points under it are owed at places on it and carry their own; this is the entry
-            // a finding about the line itself joins to, and there is one of it per line because a
-            // line read at several positions is one line here.
+            // four points under it are owed at places on it and carry their own; this is the id a
+            // finding about the line itself joins to.
             obligationId(b.putObject("obligationId"),
                     new ObligationIdentity.OfABorder(boundary.border().obligation()), sources);
+            // Which line this is, which the id above does not say. What a line is owed is the
+            // same at every position it is read at, and this array has an entry per position, so
+            // two entries can carry one obligation. This is what tells them apart, and it is what
+            // an entry of `keptOpenBy` about a line names it by.
+            boundaryLineId(b.putObject("lineId"), BoundaryLine.of(boundary.border()));
             b.put("axis", boundary.axis());
             // The identity, and never left out. This document says what it is about with the
             // ids the caller handed its sources over as, and `sources` explains each one; a
@@ -6592,7 +6723,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
             case PublishedSubject.AtABorder it -> {
                 into.put("label", it.label());
-                into.set("line", it.line());
+                into.set("lineId", it.lineId());
             }
             case PublishedSubject.AtAPoint it -> into.set("obligationId", it.obligationId());
             case PublishedSubject.AtAFork it -> {
@@ -6652,7 +6783,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         .stream()
                         .map(AdequacyReport::whyUnread).collect(Collectors.joining("; ")) + ")";
             }
-            case Subject.AtABorder it -> it.border().label();
+            case Subject.AtABorder it -> it.line().target().label();
             // Composed here and not by what writes a point beside a line, which takes the account
             // of the point: which of the four roles it is and which side it is on are the line's
             // answers about it and need the readings of the line to give them. A point on its own
@@ -6759,14 +6890,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         ReportedReason.words(whyStanding(asked)).stream()
                                 .map(AdequacyReport::word).toList());
             }
+            // The line the rules drew, as this document identifies one wherever it names one, and
+            // the words for it out of the same value.
             case Subject.AtABorder it -> {
-                // The line the rules drew, as this document identifies one. Named by the rule
-                // alone, two lines of one clause — the ends of what an invariant admits — come out
-                // under one identity, and the arrangement is left to write two entries it cannot
-                // tell apart.
                 ObjectNode id = JSON.createObjectNode();
-                authoredLineId(id, it.border().origin().authoredLine());
-                yield new PublishedSubject.AtABorder(it.border().label(), id);
+                boundaryLineId(id, it.line());
+                yield new PublishedSubject.AtABorder(it.line().target().label(), id);
             }
             case Subject.AtAPoint it -> {
                 ObjectNode id = JSON.createObjectNode();

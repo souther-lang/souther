@@ -210,11 +210,14 @@ public sealed interface PublishedSubject {
     /**
      * One line the rules drew.
      *
-     * <p>{@code label} is what a person is shown and {@code line} is what tells two apart. One rule
-     * draws more than one line — a clause of an invariant draws one at each end of what it admits —
-     * so a border identified by the rule it came from would be two borders under one identity.
+     * <p>{@code label} is what a person is shown and {@code lineId} is what tells two apart: where
+     * the line was drawn and which of the model's lines was drawn there, written the way the
+     * document's {@code boundaries} write the same line. Both halves, because either alone is two
+     * lines under one identity. One rule draws more than one line — a clause of an invariant draws
+     * one at each end of what it admits — and one line of a type is drawn at every position the type
+     * stands at, under one label each and one rule between them.
      */
-    record AtABorder(String label, ObjectNode line) implements PublishedSubject {
+    record AtABorder(String label, ObjectNode lineId) implements PublishedSubject {
 
         @Override
         public SubjectWord kind() {
@@ -223,7 +226,7 @@ public sealed interface PublishedSubject {
 
         @Override
         public String identity() {
-            return line.toString();
+            return lineId.toString();
         }
     }
 

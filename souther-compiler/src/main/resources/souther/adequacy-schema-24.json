@@ -627,6 +627,213 @@
         }
       }
     },
+    "boundaryLineId": {
+      "type": "object",
+      "description": "One line a row can be written at: where it was drawn, and which line of the model was drawn there. Both, because either alone names more than one line. One line of a type is drawn at every position the type stands at, and those lines share `line`; one rule draws several lines at one place, and those share `target`. Which reading of the model drew the line is not part of it, so a line one helper draws once per call is one line here. Two of these are one line exactly when they are equal as JSON values.",
+      "required": [
+        "target",
+        "line"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "type": "object",
+          "description": "Where the line was drawn: the behavior whose input it is on, the quantity it cuts and the level it cuts it at.",
+          "required": [
+            "behavior",
+            "quantity",
+            "level"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "behavior": {
+              "type": "string"
+            },
+            "quantity": {
+              "$ref": "#/$defs/quantityId"
+            },
+            "level": {
+              "$ref": "#/$defs/level"
+            }
+          }
+        },
+        "line": {
+          "$ref": "#/$defs/authoredLineId"
+        }
+      }
+    },
+    "quantityId": {
+      "type": "object",
+      "description": "What a line cuts, by every part that tells one quantity from another: which shape it is, and what it weighs each of its terms by. Every quantity is written as a form over its terms, which way it runs included — one position's own values are that position weighed once, and how far two positions stand apart is the first weighed once less the second once — so `shape` is what tells one position's values from a form weighing that position once. The orders each term stands on are part of it as well: two quantities over one place that are read or measured on different orders are two.",
+      "required": [
+        "shape",
+        "terms"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "shape": {
+          "enum": [
+            "at_value",
+            "between_positions",
+            "over_a_form"
+          ],
+          "description": "The same word `boundaries[].kind` writes for the line."
+        },
+        "terms": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Each term with its coefficient, in the order a form's terms are walked in, so one quantity is always written one way. No constant: a constant is part of the level.",
+          "items": {
+            "type": "object",
+            "required": [
+              "term",
+              "orders",
+              "coefficient"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "term": {
+                "$ref": "#/$defs/termId"
+              },
+              "orders": {
+                "$ref": "#/$defs/termOrders"
+              },
+              "coefficient": {
+                "type": "string",
+                "description": "An exact number, written one way for one value."
+              }
+            }
+          }
+        }
+      }
+    },
+    "termOrders": {
+      "type": "object",
+      "description": "The order a value at the term's place is read on, and the order the number the term names is measured on. Either is absent where the term has none: nothing orders a container, which is read by what it holds.",
+      "additionalProperties": false,
+      "properties": {
+        "observed": {
+          "$ref": "#/$defs/carrier"
+        },
+        "answered": {
+          "$ref": "#/$defs/carrier"
+        }
+      }
+    },
+    "termId": {
+      "type": "object",
+      "description": "Which number a line is drawn on. A place is written in the spelling that says which kind each narrowing is, because the spelling an author reads can write two places alike that this compiler holds apart.",
+      "required": [
+        "kind"
+      ],
+      "oneOf": [
+        {
+          "description": "The number a position holds.",
+          "required": [
+            "position"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "value"
+            },
+            "position": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "description": "A number an operation takes of what a position holds, together with whatever the call gave it beside that value, each by where it stands in the call: a quotient by two and a quotient by three are two numbers of one place.",
+          "required": [
+            "operation",
+            "position",
+            "arguments"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "taken"
+            },
+            "operation": {
+              "$ref": "#/$defs/operationId"
+            },
+            "position": {
+              "type": "string"
+            },
+            "arguments": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "at",
+                  "value"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "at": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "value": {
+                    "type": "string",
+                    "description": "An exact number, written one way for one value."
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "A number an operation takes over a run of values, which no one position holds. `over` says where the values are read from.",
+          "required": [
+            "operation",
+            "over"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "taken_over"
+            },
+            "operation": {
+              "$ref": "#/$defs/operationId"
+            },
+            "over": {
+              "type": "object",
+              "description": "Every value standing at one position inside one sequence.",
+              "required": [
+                "kind",
+                "position"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "occurrences"
+                },
+                "position": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "operationId": {
+      "type": "object",
+      "description": "A library operation: the alias the library is published under, and the operation under it. No `name` where what was applied is the namespace itself.",
+      "required": [
+        "alias"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "alias": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
     "obligationId": {
       "type": "object",
       "description": "What tells one thing a row is owed for from every other, which is not what a reader is shown. A key within this document: a `partition.obligations` entry carries it and so does every finding about one, and a consumer joins them on it. Which of the four points it is is not in here — a rule that names a value owes a row outside it on each side, so two of these can be the same `role` and the role tells them apart nowhere. What does is where the point is (`location`) and, for a run, where it stops (`stops`): a guard on a name two cases spread, whose cases stop the run in different places, owes two runs of one rule at one level on one side.",
@@ -4529,7 +4736,11 @@
             "properties": {
               "obligationId": {
                 "$ref": "#/$defs/borderObligationId",
-                "description": "What this line is owed as a line, which is what a `boundary_not_told_from_another` finding joins to. Apart from the ids under `items`: those are owed at places on the line and there are four of them, and this is the line itself, because what a row answering it shows is which of two lines the model draws. One per line, since a line read at several positions is one line here. Not in `required`: a document written before this key existed is still a document of this version."
+                "description": "What this line is owed as a line, which is what a `boundary_not_told_from_another` finding joins to. Apart from the ids under `items`: those are owed at places on the line and there are four of them, and this is the line itself, because what a row answering it shows is which of two lines the model draws. The same on every entry for one line of the model read at several positions, since what such a line is owed does not depend on where it was read; `lineId` is what tells those entries apart. Not in `required`: a document written before this key existed is still a document of this version."
+              },
+              "lineId": {
+                "$ref": "#/$defs/boundaryLineId",
+                "description": "Which line this entry is, and what an entry of `keptOpenBy` about a line names it by. One entry per `lineId`. Not in `required`: a document written before this key existed is still a document of this version."
               },
               "axis": {
                 "type": "string"
@@ -5778,7 +5989,7 @@
           "required": [
             "kind",
             "label",
-            "line"
+            "lineId"
           ],
           "additionalProperties": false,
           "properties": {
@@ -5787,11 +5998,11 @@
             },
             "label": {
               "type": "string",
-              "description": "What a person is shown for the line."
+              "description": "What a person is shown for the line. A word and not what tells two lines apart: two lines can be written alike."
             },
-            "line": {
-              "$ref": "#/$defs/authoredLineId",
-              "description": "Which of the rule's lines this is. One rule draws more than one."
+            "lineId": {
+              "$ref": "#/$defs/boundaryLineId",
+              "description": "Which line this is, as the `boundaries` entry for the same line writes it."
             }
           }
         },
