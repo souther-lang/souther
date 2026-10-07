@@ -78,9 +78,15 @@ class AConstructionUnderAnArmIsJudgedTheSameWhateverItOpenedTest {
         assertEquals(1, warnings(OPENED_FROM_WRITTEN_TEXT));
     }
 
+    /**
+     * The warnings about the construction. Not the one about the arm a written scrutinee never
+     * takes ({@code E1327}), which is a fact about the {@code match} and says nothing either way
+     * about whether the construction is settled.
+     */
     private static long warnings(String module) {
         return Compiler.compileWithWarnings(module).warnings().stream()
                 .filter(d -> d.severity() == souther.compiler.diag.Severity.WARNING)
+                .filter(d -> !"E1327".equals(d.code()))
                 .count();
     }
 }

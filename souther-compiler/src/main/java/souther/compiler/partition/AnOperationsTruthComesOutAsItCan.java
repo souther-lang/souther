@@ -6,8 +6,11 @@ import souther.compiler.flow.ComparisonWays;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 
+import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * The ways a value comes out in a tree where the language's operations stand, with a truth one of
@@ -53,6 +56,14 @@ final class AnOperationsTruthComesOutAsItCan implements ComparisonWays {
         return AnOperationApplied.of(e) != null
                 && Core.withoutStanding(e).type() == Type.Prim.BOOL
                 && outcomes.allows(want);
+    }
+
+    @Override
+    public Predicate<Core.Case> mayTake(Core.Match match) {
+        Set<TypeSymbol> written = reads.casesWritten(match.scrutinee(), read.rules().symbols(),
+                read.rules().newtypes());
+        return written == null ? arm -> true
+                : arm -> InputReads.whetherEveryRowTakes(arm, written).orElse(true);
     }
 
     @Override

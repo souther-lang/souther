@@ -12,17 +12,17 @@ import souther.compiler.check.ValueTemplates;
 import souther.compiler.core.Core;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.semantics.ConditionJoin;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * One reading of a body's comparisons: where each stands, what its names point at, what a row had
@@ -137,14 +137,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * much as the ones they do, and a list already narrowed here would be this walk deciding the
      * question on its own evidence.
      *
-     * @param atoms      what the fork tests, cut into the parts a rule can be about
-     * @param ownedHere  the parts this reading answers for: one it read a comparison at, and one
-     *                   that is a position of the input — a fork on such a part tests the values
-     *                   standing there and its arms are their classes, so the question is the
-     *                   position's
+     * @param atoms what the fork tests, cut into the parts a rule can be about, each with what of
+     *              it this reading does not answer for. Each part carries the reading it is read
+     *              in, and the fork carries none of its own: a part is never read where the fork
+     *              stands, which is a different place from where a helper or a closure wrote it
      */
-    record ForkMet(ConstructOccurrence occurrence, Core condition, Citation at, InputReads reads,
-                   List<Core> atoms, Set<Core> ownedHere) {
+    record ForkMet(ConstructOccurrence occurrence, Core condition, Citation at,
+                   List<Atom> atoms) {
 
         ForkMet {
             if (occurrence == null || condition == null || at == null) {
@@ -159,23 +158,28 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
          * <p>What the other readers claim is subtracted by whoever holds their answers, which is
          * where the three meet ({@link BehaviorSetStatements}); this says only which parts are left
          * over from what was found here.
-         *
-         * <p>Compared by being the nodes the walk met and never by what they hold: a condition
-         * writing one comparison twice writes two parts, and parts compared by their contents would
-         * be one.
          */
-        List<Core> leftHere() {
-            List<Core> out = new ArrayList<>();
-            for (Core each : atoms) {
-                boolean owned = false;
-                for (Core one : ownedHere) {
-                    owned |= one == each;
-                }
-                if (!owned) {
-                    out.add(each);
-                }
-            }
-            return out;
+        List<Atom> leftHere() {
+            return atoms.stream().filter(each -> !each.unanswered().isEmpty()).toList();
+        }
+    }
+
+    /**
+     * One part of what a fork tests, read where what it names stands, and what of what it decides
+     * this reading does not answer for ({@link #statedElsewhere}).
+     *
+     * <p>Worked out once, as the walk meets the fork, and carried to the reader that joins it with
+     * the other readers' answers: the walk over what the part turns on is the one that answers
+     * both, and walked again there it was the same answer at the same cost a second time.
+     *
+     * @param unanswered empty where this reading answers for the whole of it: a comparison it read,
+     *                   or a position of the input — a fork on such a part tests the values standing
+     *                   there and its arms are their classes, so the question is the position's
+     */
+    record Atom(Denotation at, List<Denotation> unanswered) {
+
+        Atom {
+            unanswered = List.copyOf(unanswered);
         }
     }
 
@@ -364,7 +368,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                              List<OnTheWay> assumed, boolean live, List<Reading> out,
                              List<ForkMet> forks, ConditionNumbering numbering) {
         Symbols symbols = in.symbols();
-        StatedAt stated = statedAt(e);
+        StatedAt stated = statedAt(e, () -> WhatNamesStandFor.in(reads, in.read()));
         if (stated != null) {
             // Which construct of the model it is, off the node. The two readings of a body hold
             // different copies of it and agree about this, so it is what a reader below joins on.
@@ -437,18 +441,14 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     // cutting is of the shape ({@link ConditionSkeleton}) and stops at a name; what
                     // the name denotes is the owner's question, and a reader that could not answer
                     // it would call a fork on a named comparison one nobody read.
-                    List<Core> atoms = new ArrayList<>();
-                    for (Core part : ConditionSkeleton.atoms(iff.cond())) {
-                        atoms.add(reads.denotes(part, symbols, in.newtypes()).value());
-                    }
-                    Set<Core> owned = Collections.newSetFromMap(new IdentityHashMap<>());
-                    for (Core atom : atoms) {
-                        if (statedElsewhere(atom, reads, in.read()).isEmpty()) {
-                            owned.add(atom);
-                        }
+                    List<Atom> atoms = new ArrayList<>();
+                    for (Denotation part : ConditionSkeleton.atoms(iff.cond(),
+                            WhatNamesStandFor.in(reads, in.read()))) {
+                        Denotation atom = part.at().denotes(part.value(), symbols, in.newtypes());
+                        atoms.add(new Atom(atom, statedElsewhere(atom, in.read())));
                     }
                     forks.add(new ForkMet(iff.occurrence(), iff.cond(), Citation.of(iff.pos()),
-                            reads, atoms, owned));
+                            atoms));
                 }
                 walk(iff.then(), in,
                         reads.choosing(Choice.Decides.ofCondition(iff, true), symbols,
@@ -573,8 +573,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *
      * <p>Asked of the node as it stands and not through what it stands as, so a comparison held as
      * another type is met once, where it is, and not again at its wrapper.
+     *
+     * <p>And none where what it compares is read back to the closure that decides it
+     * ({@link WhatAnEmptinessTurnsOn}): the rules there are the closure's, and the fork around it
+     * is what turns on them. The names are asked for only there: this is asked at every node a
+     * walk meets, and nearly all of them are no construct that states one.
      */
-    private static StatedAt statedAt(Core e) {
+    private static StatedAt statedAt(Core e, Supplier<WhatNamesStandFor> names) {
         ConstructOccurrence written = switch (e) {
             case Core.Binary binary -> binary.occurrence();
             case Core.PreservedCall call -> call.occurrence();
@@ -584,6 +589,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             return null;
         }
         return BooleanMeaning.asAComparison(e)
+                .filter(statement -> WhatAnEmptinessTurnsOn.of(statement, names.get()).isEmpty())
                 .map(statement -> new StatedAt(written, statement)).orElse(null);
     }
 
@@ -621,11 +627,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * as "something in there is owned", the second went with the first — which is the same partial
      * ownership a condition's own parts are cut along, lost one step past the operation.
      */
-    static List<Core> statedElsewhere(Core atom, InputReads reads, InputReading read) {
-        List<Core> left = new ArrayList<>();
-        for (Core part : WhatAForkTests.partsOfTheAnswer(atom, WhatNamesStandFor.in(reads, read))) {
-            if (statedAt(part) == null
-                    && !(reads.pathOf(part, read.rules().newtypes())
+    static List<Denotation> statedElsewhere(Denotation atom, InputReading read) {
+        List<Denotation> left = new ArrayList<>();
+        for (Denotation part : WhatAForkTests.partsOfTheAnswer(atom.value(),
+                WhatNamesStandFor.in(atom.at(), read))) {
+            // Which rule the part is, by the node; where it stands, in the reading it is written in.
+            if (statedAt(part.value(), () -> WhatNamesStandFor.in(part.at(), read)) == null
+                    && !(part.at().pathOf(part.value(), read.rules().newtypes())
                             instanceof PathResolution.At)) {
                 left.add(part);
             }
@@ -635,10 +643,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
 
     /** The parts of what {@code atom} decides that none of the three readers answers for, which is
      *  what a fork over it is left stating. */
-    static List<Core> leftUnread(Core atom, PredicateReadings predicates, InputReads reads,
-                                 InputReading read) {
-        return statedElsewhere(atom, reads, read).stream()
-                .filter(part -> !predicates.statesOneAt(part))
+    static List<Denotation> leftUnread(Atom atom, PredicateReadings predicates) {
+        return atom.unanswered().stream()
+                .filter(part -> !predicates.statesOneAt(part.value()))
                 .toList();
     }
 }

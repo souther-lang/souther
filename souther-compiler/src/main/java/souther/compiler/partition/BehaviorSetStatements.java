@@ -5,7 +5,6 @@ import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.UnreadComparison;
-import souther.compiler.core.Core;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.PredicateStatement;
 import souther.compiler.check.StatedContract;
@@ -13,6 +12,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.check.ValueOrigin;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
@@ -529,7 +529,7 @@ public final class BehaviorSetStatements {
         for (Standing each : standing) {
             List<Unread> left = new ArrayList<>();
             for (Unread was : each.unread()) {
-                List<Core> parts = was.parts().stream()
+                List<Denotation> parts = was.parts().stream()
                         .filter(part -> standing.stream().noneMatch(other -> other != each
                                 && other.states(part)))
                         .toList();
@@ -550,8 +550,8 @@ public final class BehaviorSetStatements {
     }
 
     /** One part of a condition that no reader answers for, and the parts of what it decides that
-     *  the reading was left with. */
-    private record Unread(Core atom, List<Core> parts) {}
+     *  the reading was left with — each read where it is written. */
+    private record Unread(Denotation atom, List<Denotation> parts) {}
 
     /** One fork that states a rule of its own, before any of its parts is asked whether another
      *  one's rule is what it states. */
@@ -572,9 +572,9 @@ public final class BehaviorSetStatements {
          * first would go with them. What tells them apart is which of the two the source wrote it
          * inside, which is the condition it is a part of.
          */
-        boolean states(Core part) {
+        boolean states(Denotation part) {
             for (Unread each : unread) {
-                if (each.atom() == part) {
+                if (each.atom().value() == part.value()) {
                     return true;
                 }
             }
@@ -596,11 +596,10 @@ public final class BehaviorSetStatements {
             // part unsaid — a model reported as fully read over a condition half of which nobody
             // took in.
             List<Unread> unread = new ArrayList<>();
-            for (Core atom : each.leftHere()) {
-                List<Core> parts =
-                        ComparisonReadings.leftUnread(atom, read, each.reads(), reading);
+            for (ComparisonReadings.Atom atom : each.leftHere()) {
+                List<Denotation> parts = ComparisonReadings.leftUnread(atom, read);
                 if (!parts.isEmpty()) {
-                    unread.add(new Unread(atom, parts));
+                    unread.add(new Unread(atom.at(), parts));
                 }
             }
             if (unread.isEmpty()) {
@@ -657,23 +656,23 @@ public final class BehaviorSetStatements {
             // fork turns on is still what the atom reaches: a closure that says nothing about the
             // element leaves the fork turning on the container it walks, and that is where a reader
             // is owed the question.
-            List<Core> places = each.parts().stream()
-                    .anyMatch(one -> namesSomething(one, fork, symbols, newtypes, answering))
+            List<Denotation> places = each.parts().stream()
+                    .anyMatch(one -> namesSomething(one, symbols, newtypes, answering))
                     ? each.parts() : List.of(each.atom());
-            for (Core part : places) {
+            for (Denotation part : places) {
             // Where the part stands at places this could not choose between, those are the places,
             // and they are what the walk below cannot give: it reads a part as one term over the
             // positions it names, and a term over a place nothing settled is a term at whichever
             // place a reader picked. Asked first, so a fork over such a part is filed at each of
             // them rather than at none — which is where the rule the author wrote would go.
-            if (fork.reads().pathOf(part, newtypes)
+            if (part.at().pathOf(part.value(), newtypes)
                     instanceof PathResolution.MayStandAt(var among)) {
                 among.forEach(at -> filed.putIfAbsent(FilingCoordinate.at(at),
                         new BlockReason.RuleAboutAnElementOfSeveralContainers()));
                 continue;
             }
-            GuardThresholds.Names names =
-                    GuardThresholds.namesIn(part, fork.reads(), symbols, newtypes, answering);
+            GuardThresholds.Names names = GuardThresholds.namesIn(part.value(), part.at(),
+                    symbols, newtypes, answering);
             BlockReason.RuleReadingStopped why =
                     UnreadComparison.notAboutOwnValues(names.origin());
             names.met().keySet().forEach(at -> filed.putIfAbsent(FilingCoordinate.at(at), why));
@@ -685,11 +684,11 @@ public final class BehaviorSetStatements {
     }
 
     /** Whether {@code part} names a position of the input, however the reading gets there. */
-    private static boolean namesSomething(Core part, ComparisonReadings.ForkMet fork,
-                                          Symbols symbols, DeclarationNewtypes newtypes,
+    private static boolean namesSomething(Denotation part, Symbols symbols,
+                                          DeclarationNewtypes newtypes,
                                           souther.compiler.coverage.Arrivals answering) {
-        return fork.reads().pathOf(part, newtypes) instanceof PathResolution.MayStandAt
-                || !GuardThresholds.namesIn(part, fork.reads(), symbols, newtypes, answering)
+        return part.at().pathOf(part.value(), newtypes) instanceof PathResolution.MayStandAt
+                || !GuardThresholds.namesIn(part.value(), part.at(), symbols, newtypes, answering)
                         .met().isEmpty();
     }
 }

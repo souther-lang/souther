@@ -4,6 +4,7 @@ import souther.compiler.check.ScopeStep;
 import souther.compiler.core.Core;
 
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Whether a value stands behind one way of settling an expression.
@@ -34,6 +35,18 @@ public interface ComparisonWays {
     boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy);
 
     /**
+     * Which arms of {@code match} some value of what it is on takes.
+     *
+     * <p>The same question a condition is asked one way at a time, asked of an arm: a way nothing
+     * stands behind is not a way of the body. A helper handed a case written at the call matches
+     * that case, and its other arms are no way a row goes, however the helper is written.
+     *
+     * <p>Asked of the {@code match} and answered for each arm, because what it turns on is the
+     * scrutinee, which is one value however many arms there are.
+     */
+    Predicate<Core.Case> mayTake(Core.Match match);
+
+    /**
      * The same, in a child of the node being read, {@code step} being the way into it.
      *
      * <p>Scoped like the naming and for the same reason: what a name reads is not a fact about the
@@ -56,6 +69,13 @@ public interface ComparisonWays {
         @Override
         public boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy) {
             return Witnessed.comesOut(e, want, settledBy);
+        }
+
+        // Which case a value is, where a name stands for it, is a reading of the input's names,
+        // and the text alone has none: every arm may be taken.
+        @Override
+        public Predicate<Core.Case> mayTake(Core.Match match) {
+            return arm -> true;
         }
 
         @Override

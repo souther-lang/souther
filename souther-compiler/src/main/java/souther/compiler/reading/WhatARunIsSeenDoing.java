@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * The ways along a body as what a run that took them would be seen doing, and nothing about the
@@ -56,6 +57,12 @@ final class WhatARunIsSeenDoing implements Naming<List<ControlClaim>> {
                     return true;
                 }
                 return ComparisonWays.OF_THE_TREE.comesOut(e, want, settledBy);
+            }
+
+            // Each way that may be there, and an arm a run takes is seen being taken.
+            @Override
+            public Predicate<Core.Case> mayTake(Core.Match match) {
+                return arm -> true;
             }
 
             @Override

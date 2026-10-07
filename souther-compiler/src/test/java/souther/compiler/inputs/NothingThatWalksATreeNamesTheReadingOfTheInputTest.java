@@ -138,12 +138,14 @@ class NothingThatWalksATreeNamesTheReadingOfTheInputTest {
             (movesAnEnvironmentAlong(each) ? moves : keeps)
                     .add(each.thisClass().asInternalName());
         }
-        // Every naming of the ways through a body is here, and nothing else is. A naming is scoped
-        // like the environment by contract — it answers under a binding and inside an arm — so
-        // moving one along is what a naming does rather than a shape one of them happens to have.
+        // Every naming of the ways through a body is here, and the answers a walk over what a truth
+        // turns on asks of the names, and nothing else is. Each is scoped like the environment by
+        // contract — it answers under a binding and inside an arm — so moving one along is what it
+        // does rather than a shape one of them happens to have.
         assertEquals(List.of(
                         "souther/compiler/partition/AnOperationsTruthComesOutAsItCan",
                         "souther/compiler/partition/DecisionNaming",
+                        "souther/compiler/partition/WhatNamesStandFor$In",
                         "souther/compiler/reading/CoverageNaming",
                         "souther/compiler/reading/NumberWays"),
                 moves.stream().sorted().toList());

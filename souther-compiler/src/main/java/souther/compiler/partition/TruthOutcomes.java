@@ -3,8 +3,10 @@ package souther.compiler.partition;
 import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.Denotation;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.ElementLineage;
@@ -155,7 +157,21 @@ final class TruthOutcomes {
         };
     }
 
+    /**
+     * One reading of the tree, in the names {@code names} holds where it stands.
+     *
+     * <p>Stepped with the walk: what is under a {@code let} or a closure, or what a name stands for,
+     * is read where it stands, which binds names this one does not.
+     */
     private record Reading(WhatNamesStandFor names, Symbols symbols) {
+
+        private Reading in(WhatNamesStandFor other) {
+            return other == names ? this : new Reading(other, symbols);
+        }
+
+        private Reading at(Denotation where) {
+            return in(names.in(where.at()));
+        }
 
         Outcomes truth(Core standing) {
             Core e = Core.withoutStanding(standing);
@@ -164,11 +180,11 @@ final class TruthOutcomes {
                     return Outcomes.only(written.value());
                 }
                 case Core.LetIn let -> {
-                    return truth(let.body());
+                    return in(names.entering(new ScopeStep.Let(let))).truth(let.body());
                 }
                 case Core.Read name -> {
-                    Core value = valueOf(name);
-                    return value != null ? truth(value) : unsaid(name);
+                    Denotation value = valueOf(name);
+                    return value != null ? at(value).truth(value.value()) : unsaid(name);
                 }
                 default -> { }
             }
@@ -176,6 +192,15 @@ final class TruthOutcomes {
             if (denied.isPresent()) {
                 Outcomes under = truth(denied.get().part());
                 return denied.get().positive() ? under : under.denied();
+            }
+            // A size held against nought is whether the container holds anything, written as a
+            // comparison or as the check that means one — read as the checker reads both, so the
+            // two spellings come out alike.
+            WhatAnEmptinessTurnsOn.Checked checked = BooleanMeaning.asAComparison(e)
+                    .map(WhatAnEmptinessTurnsOn::checked).orElse(null);
+            if (checked != null) {
+                Outcomes empty = emptiness(checked.container());
+                return checked.emptyWhereItHolds() ? empty : empty.denied();
             }
             if (e instanceof Core.Binary binary) {
                 Optional<ConditionJoin> joined = ConditionJoin.of(binary.op());
@@ -197,11 +222,6 @@ final class TruthOutcomes {
             if (applied == null) {
                 return Outcomes.EITHER;
             }
-            var facts = DefaultBoundOperationFacts.get();
-            if (facts.meansTheSameAsASizeOfNought(applied.operation()) != null
-                    && applied.args().size() == 1) {
-                return emptiness(applied.args().getFirst());
-            }
             Outcomes quantified = quantified(applied);
             if (quantified != null) {
                 return quantified;
@@ -218,11 +238,11 @@ final class TruthOutcomes {
             Core e = Core.withoutStanding(standing);
             switch (e) {
                 case Core.LetIn let -> {
-                    return emptiness(let.body());
+                    return in(names.entering(new ScopeStep.Let(let))).emptiness(let.body());
                 }
                 case Core.Read name -> {
-                    Core value = valueOf(name);
-                    return value != null ? emptiness(value) : unsaid(name);
+                    Denotation value = valueOf(name);
+                    return value != null ? at(value).emptiness(value.value()) : unsaid(name);
                 }
                 case Core.ListLit list -> {
                     return Outcomes.only(list.elements().isEmpty());
@@ -239,7 +259,7 @@ final class TruthOutcomes {
             var facts = DefaultBoundOperationFacts.get();
             var turns = facts.turnsOnWhetherAnArgumentHolds(applied.operation(),
                     AnswerAspect.EMPTINESS);
-            Core.Block kept = turns == null ? null : closure(applied.argument(turns.argument()));
+            Denotation kept = turns == null ? null : closure(applied.argument(turns.argument()));
             DeclaredArgument from = keptFrom(applied.operation());
             Core handed = from == null ? null : applied.argument(from);
             if (kept == null || handed == null) {
@@ -281,7 +301,7 @@ final class TruthOutcomes {
             if (container == null || turns == null) {
                 return null;
             }
-            Core.Block predicate = closure(applied.argument(turns.argument()));
+            Denotation predicate = closure(applied.argument(turns.argument()));
             Core handed = applied.argument(container.container());
             if (predicate == null || handed == null) {
                 return null;
@@ -302,9 +322,11 @@ final class TruthOutcomes {
          * written out is one of its written values, so what it answers there is the same every
          * time exactly where nothing else it reads varies, however it differs from one element to
          * the next — which is the predicate's own truth, read with its names as they stand.
+         *
+         * @param predicate what the predicate answers with, where it stands
          */
-        private Outcomes some(Core container, Core.Block predicate, boolean failing) {
-            Outcomes each = truth(predicate.body());
+        private Outcomes some(Core container, Denotation predicate, boolean failing) {
+            Outcomes each = at(predicate).truth(predicate.value());
             if (failing) {
                 each = each.denied();
             }
@@ -328,12 +350,15 @@ final class TruthOutcomes {
             };
         }
 
-        private Core.Block closure(Core handed) {
+        /** What the closure {@code handed} answers with, read inside it — or null where it stands
+         *  for no closure. */
+        private Denotation closure(Core handed) {
             if (handed == null) {
                 return null;
             }
-            Core e = Core.withoutStanding(names.denotes(handed));
-            return e instanceof Core.Block block ? block : null;
+            Denotation stands = names.denotes(handed);
+            return Core.withoutStanding(stands.value()) instanceof Core.Block block
+                    ? new Denotation(block.body(), stands.at()) : null;
         }
 
         private Optional<Outcomes> folded(Core e) {
@@ -353,10 +378,10 @@ final class TruthOutcomes {
             return names.writtenOut(name) ? Outcomes.FIXED_UNNAMED : Outcomes.EITHER;
         }
 
-        /** What {@code name} stands for, or null where it stands for no one value. */
-        private Core valueOf(Core.Read name) {
-            Core denoted = names.denotes(name);
-            return Core.withoutStanding(denoted) instanceof Core.Read same
+        /** What {@code name} stands for and where, or null where it stands for no one value. */
+        private Denotation valueOf(Core.Read name) {
+            Denotation denoted = names.denotes(name);
+            return Core.withoutStanding(denoted.value()) instanceof Core.Read same
                     && same.binding().equals(name.binding()) ? null : denoted;
         }
     }

@@ -1567,7 +1567,21 @@ public sealed interface Core {
          */
         Optional<ResolvedCase> selectedCase();
 
-        /** The cases this answers for. */
+        /**
+         * Whether a value that is the leaf {@code atom} is one this arm takes.
+         *
+         * <p>Read off what each case covers and not off the names it is written by. A case that is
+         * itself a sum takes every leaf under it, so an arm written {@code OnceKind} takes a
+         * {@code Station}, which no name in {@link #caseTypes()} is.
+         */
+        default boolean takes(TypeSymbol atom) {
+            return cases().stream().anyMatch(each -> each.atoms().contains(atom));
+        }
+
+        /**
+         * The cases this answers for, by the names they are written by — what a report or an
+         * identity quotes, and not which values the arm takes, which is {@link #takes}.
+         */
         default List<TypeSymbol> caseTypes() {
             List<TypeSymbol> out = new java.util.ArrayList<>();
             for (CaseSelector selector : selectors()) {
