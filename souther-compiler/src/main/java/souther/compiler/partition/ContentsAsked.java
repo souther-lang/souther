@@ -218,9 +218,23 @@ record ContentsAsked(List<Asked> asked) {
      * being composed from, and nothing after it is handed them.
      */
     Set<TermPath> handedOnFrom(String head) {
+        return readUnder(head, false);
+    }
+
+    /**
+     * The positions under the parameter {@code head} a value is read at for a container of its
+     * own: what composing that parameter reads out of what it is being composed from, before
+     * anything builds it.
+     */
+    Set<TermPath> readWithin(String head) {
+        return readUnder(head, true);
+    }
+
+    private Set<TermPath> readUnder(String head, boolean byItsOwn) {
         Set<TermPath> out = new LinkedHashSet<>();
         for (Asked each : asked) {
-            if (each.value().head().equals(head) && !each.container().head().equals(head)) {
+            if (each.value().head().equals(head)
+                    && each.container().head().equals(head) == byItsOwn) {
                 out.add(each.value());
             }
         }

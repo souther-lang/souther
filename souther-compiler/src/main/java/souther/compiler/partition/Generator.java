@@ -4664,11 +4664,11 @@ public final class Generator {
                      Outcome.OfferShort _, Outcome.Unplanned _, Outcome.PassedOver _,
                      Outcome.Halted _ -> tried;
                 case Outcome.Unresolved(UnresolvedCombination.Reason word, String said) -> {
-                    UnresolvedCombination.Reason itsWord =
-                            nothingStoodWhereItWasBuilt(failed.uncertified(), word);
+                    UnresolvedCombination.Reason itsWord = failed.found().wordFor(word);
                     yield whatTheSearchCameTo(whatTheEdgeHeldBack(heldBack, here, itsWord),
                             new LinkedHashMap<>(), Set.of(),
-                            new Outcome.Unresolved(itsWord, said));
+                            new Outcome.Unresolved(itsWord, failed.found()
+                                    .toldFor(word, Optional.ofNullable(said)).orElse(null)));
                 }
                 // Taken apart into what the search itself came to and what the plan was short of,
                 // which is what the rule is asked in terms of. Handed over whole, the plan's
@@ -4676,11 +4676,11 @@ public final class Generator {
                 // is owed both.
                 case Outcome.Limited(UnresolvedCombination.Reason word, String said,
                                      Set<CompositionBudget> planCut) -> {
-                    UnresolvedCombination.Reason itsWord =
-                            nothingStoodWhereItWasBuilt(failed.uncertified(), word);
+                    UnresolvedCombination.Reason itsWord = failed.found().wordFor(word);
                     yield whatTheSearchCameTo(whatTheEdgeHeldBack(heldBack, here, itsWord),
                             new LinkedHashMap<>(), planCut,
-                            new Outcome.Unresolved(itsWord, said));
+                            new Outcome.Unresolved(itsWord, failed.found()
+                                    .toldFor(word, Optional.ofNullable(said)).orElse(null)));
                 }
             };
             return switch (answered) {
@@ -4796,10 +4796,10 @@ public final class Generator {
      *
      * @param parameter   which parameter
      * @param tried       what its search came to
-     * @param uncertified whether a candidate was turned away for standing somewhere else
-     * @param here        the positions of it the caller had decided
+     * @param found     what its search found out about its own candidates beside what it came to
+     * @param here      the positions of it the caller had decided
      */
-    private record ParameterCameToNothing(int parameter, Outcome tried, boolean uncertified,
+    private record ParameterCameToNothing(int parameter, Outcome tried, SearchShortfall found,
                                           Map<TermPath, List<FixtureTemplate>> here) {}
 
     /**
@@ -4835,12 +4835,14 @@ public final class Generator {
             }
             int p = order.order().get(next);
             String head = subject.parameters().get(p);
-            // Whether a candidate was turned away for standing somewhere else, which is what tells
-            // a search that ran out of candidates from one that certified none of the ones it had.
-            // Per parameter, since it is this parameter's search the answer is about: shared, a
-            // candidate turned away under one parameter would name the reason another failed for.
-            boolean[] uncertified = {false};
-            CandidateCheck certified = certifying(check, subject, p, standing, uncertified);
+            // What this parameter's search finds out about its own candidates: one turned away for
+            // standing somewhere else, which tells a search that ran out of candidates from one
+            // that certified none of the ones it had, and one that built and had nothing to hand
+            // on. Per parameter, since it is this parameter's search the answer is about: shared,
+            // a candidate turned away under one parameter would name the reason another failed
+            // for.
+            FoundOut found = new FoundOut();
+            CandidateCheck certified = certifying(check, subject, p, standing, found);
             Map<TermPath, List<FixtureTemplate>> here = new LinkedHashMap<>();
             for (RealizationTarget target : standing.keySet()) {
                 // A position the way also narrows is not fixed at a value here. What has to hold of
@@ -4873,7 +4875,7 @@ public final class Generator {
                 return Acceptance.PASSED;
             };
             Outcome tried = valueAt(subject, p, here, settled, reaching.requirements(),
-                    new Handed(contents, elsewhere), certified, taking);
+                    new Handed(contents, elsewhere), certified, found, taking);
             return switch (tried) {
                 // Taken where the rest was composed with it, and taken first where nothing after
                 // it turns on it — so the rest is still to compose.
@@ -4886,29 +4888,29 @@ public final class Generator {
                 }
                 // Passed over for what a parameter after it came to under each value, which is
                 // what nothing being composed is about — said over all of them.
-                case Outcome.PassedOver _ -> overEveryValue(cameToNothing, uncertified[0]);
+                case Outcome.PassedOver _ -> overEveryValue(cameToNothing, found.shortfall());
                 // Stopped for a parameter after it that nothing could be composed for whatever
                 // this one is, said with the values before it that one came to nothing under.
                 case Outcome.Halted _ ->
-                        overEveryValue(withFirst(after[0], cameToNothing), uncertified[0]);
+                        overEveryValue(withFirst(after[0], cameToNothing), found.shortfall());
                 // Its own search came to nothing, which ended the walk.
                 case Outcome.Unresolved _, Outcome.Stopped _, Outcome.Unexhausted _,
                      Outcome.OfferShort _, Outcome.Limited _, Outcome.Unplanned _ ->
                         overEveryValue(withFirst(
-                                new ParameterCameToNothing(p, tried, uncertified[0], here),
-                                cameToNothing), uncertified[0]);
+                                new ParameterCameToNothing(p, tried, found.shortfall(), here),
+                                cameToNothing), found.shortfall());
             };
         }
 
         /**
-         * What every value tried came to, none of which a row was composed with — with whether a
-         * candidate of this parameter was turned away for reading back elsewhere, which is the
-         * point's to know whichever parameter the word is said at.
+         * What every value tried came to, none of which a row was composed with — with what this
+         * parameter's search found out about its own candidates, which is the point's to know
+         * whichever parameter the word is said at: a value another parameter came to nothing
+         * under is not every value there was where a value of this one was not handed on.
          */
         private static ParameterCameToNothing overEveryValue(
-                List<ParameterCameToNothing> cameToNothing, boolean uncertified) {
-            if (!(WhatTheAlternativesCameTo.over(cameToNothing, null,
-                    SearchShortfall.NONE.uncertifiedWhere(uncertified), PARAMETERS)
+                List<ParameterCameToNothing> cameToNothing, SearchShortfall found) {
+            if (!(WhatTheAlternativesCameTo.over(cameToNothing, null, found, PARAMETERS)
                     instanceof WhatTheAlternativesCameTo.Came.Said(
                             ParameterCameToNothing said))) {
                 throw new IllegalStateException(
@@ -5550,6 +5552,33 @@ public final class Generator {
     }
 
     /**
+     * What one parameter's search found out about its own candidates while it ran: one turned away
+     * for reading back elsewhere, one that built and had nothing to hand on.
+     *
+     * <p>Told by whatever met it — the check a candidate is built through, the walk that reads
+     * what a built value hands on — and read by the place that says what the search came to, as
+     * one {@link SearchShortfall} joined into everything said there. A flag per kind is one more
+     * thing every carrier has to be taught to pass, and one a carrier is not taught is lost
+     * wherever the search goes on past it.
+     */
+    private static final class FoundOut {
+
+        private SearchShortfall found = SearchShortfall.NONE;
+
+        void turnedAway() {
+            found = found.uncertifiedWhere(true);
+        }
+
+        void notHandedOn(String why) {
+            found = found.notHandedOn(why);
+        }
+
+        SearchShortfall shortfall() {
+            return found;
+        }
+    }
+
+    /**
      * {@code check}, refusing any candidate at this parameter that does not read back at the place
      * it is being built for.
      *
@@ -5570,12 +5599,12 @@ public final class Generator {
      * candidate this lets through is one worth going on with, and never one this has declared to be
      * a row at the point.
      *
-     * @param refused set where a candidate was turned away for this and nothing else, which is what
-     *                tells a search that ran out of candidates from one that certified none
+     * @param found told where a candidate was turned away for this and nothing else, which is what
+     *              tells a search that ran out of candidates from one that certified none
      */
     private static CandidateCheck certifying(CandidateCheck check, MeasuredInput subject, int parameter,
                                              Map<RealizationTarget, Place> fixing,
-                                             boolean[] refused) {
+                                             FoundOut found) {
         return new CandidateCheck() {
 
             @Override
@@ -5599,7 +5628,7 @@ public final class Generator {
                     // follows is where not being able to tell is recorded.
                     if (readsBackAt(subject, parameter, observed, each.getKey(), each.getValue())
                             instanceof RealizationReadback.Elsewhere(String why)) {
-                        refused[0] = true;
+                        found.turnedAway();
                         return new CandidateCheck.Built.Refused(why);
                     }
                 }
@@ -6742,6 +6771,21 @@ public final class Generator {
                           SearchShortfall found) {
             return new Attempt(null, reason, detail, Optional.empty(), found);
         }
+
+        /**
+         * One whose search came to {@code came} having found out {@code found} about its own
+         * candidates, in the word for all of it and with what is to be told beside it
+         * ({@link SearchShortfall#wordFor}, {@link SearchShortfall#toldFor}).
+         *
+         * <p>The word is settled here, where the attempt is made, because the walk over
+         * alternatives reads it to decide what is a proof: a search whose candidates were not
+         * all refused by the model, said in the word it came to, would be read as one that was.
+         */
+        static Attempt over(UnresolvedCombination.Reason came, String detail,
+                            Optional<String> told, SearchShortfall found) {
+            return new Attempt(null, found.wordFor(came), detail, found.toldFor(came, told),
+                    found);
+        }
     }
 
     /**
@@ -7109,14 +7153,15 @@ public final class Generator {
                                 throw new IllegalStateException(
                                         "a parameter something was composed for came to nothing");
                     };
-                    return its.uncertifiedWhere(one.uncertified());
+                    return its.and(one.found());
                 }
 
                 /**
                  * In the outcome for what was found out: a figure's, what this compiler does not
-                 * write, or an offer short of the rules — and where only a candidate turned away or
-                 * a way nobody read is more, the outcome as it was in the word for what was found
-                 * out ({@link SearchShortfall#wordFor}). This outcome has no place to keep either,
+                 * write, or an offer short of the rules — and where only a candidate turned away, a
+                 * way nobody read or a candidate not handed on is more, the outcome as it was in
+                 * the word for what was found out ({@link SearchShortfall#wordFor}), with why a
+                 * candidate was not handed on beside it. This outcome has no place to keep either,
                  * so the word is where they go: a proof kept as it was beside a way nobody read is
                  * a proof published over a search that did not have everything.
                  */
@@ -7141,16 +7186,20 @@ public final class Generator {
                             : switch (said.tried()) {
                                 case Outcome.Unresolved(UnresolvedCombination.Reason why,
                                                         String its) ->
-                                        new Outcome.Unresolved(found.wordFor(why), its);
+                                        new Outcome.Unresolved(found.wordFor(why),
+                                                found.toldFor(why, Optional.ofNullable(its))
+                                                        .orElse(null));
                                 case Outcome.Limited(UnresolvedCombination.Reason why, String its,
                                                      Set<CompositionBudget> by) ->
-                                        new Outcome.Limited(found.wordFor(why), its, by);
+                                        new Outcome.Limited(found.wordFor(why),
+                                                found.toldFor(why, Optional.ofNullable(its))
+                                                        .orElse(null), by);
                                 case Outcome.Stopped _, Outcome.Unexhausted _,
                                      Outcome.OfferShort _, Outcome.Unplanned _, Outcome.Built _,
                                      Outcome.PassedOver _, Outcome.Halted _ -> said.tried();
                             };
-                    return new ParameterCameToNothing(said.parameter(), carried,
-                            found.uncertified(), said.here());
+                    return new ParameterCameToNothing(said.parameter(), carried, found,
+                            said.here());
                 }
             };
 
@@ -7505,7 +7554,10 @@ public final class Generator {
             boolean stood = false;
             List<RowComposed.Failed> cameToNothing = new ArrayList<>();
             Optional<String> refused = Optional.empty();
-            String unwritten = null;
+            // A way that built and had nothing to hand on is one more way this did not go on
+            // with, and is said with whatever the others came to: not every way refused, and not
+            // the ways that stood being every way there was.
+            FoundOut found = new FoundOut();
             for (WrittenWay way : written.ways()) {
                 Map<TermPath, FixtureTemplate> handedOn;
                 switch (HandedOn.of(check.build(p, way.value()), way::at, read, subject.inputs(),
@@ -7516,7 +7568,7 @@ public final class Generator {
                         continue;
                     }
                     case HandedOn.Came.NotWritable(String why) -> {
-                        unwritten = unwritten == null ? why : unwritten;
+                        found.notHandedOn(why);
                         continue;
                     }
                 }
@@ -7534,44 +7586,38 @@ public final class Generator {
             // Every way that stood came to nothing under a parameter after this one: what they
             // came to, over all of them, and beside it the figure the ways were cut at, since a
             // way never handed over may be the one that parameter could be composed with.
+            SearchShortfall alsoFound = (written.cut()
+                    ? SearchShortfall.of(CompositionShortfall.of(
+                            Set.of(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES)))
+                    : SearchShortfall.NONE).and(found.shortfall());
             if (stood) {
-                return overTheAlternatives(cameToNothing, null, written.cut()
-                                ? SearchShortfall.of(CompositionShortfall.of(
-                                        Set.of(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES)))
-                                : SearchShortfall.NONE,
-                        () -> {
-                            throw new IllegalStateException(
-                                    "a way stood and nothing is said of what came of it");
-                        });
+                return overTheAlternatives(cameToNothing, null, alsoFound, () -> {
+                    throw new IllegalStateException(
+                            "a way stood and nothing is said of what came of it");
+                });
             }
             // Every way handed over was refused, which says the origin cannot be written for
             // this assignment only where every way there was was handed over — and only where
             // each was refused by the model. A way that built and had nothing to hand on is this
-            // compiler's, and the value the author chose stays the row's rather than being
-            // composed afresh.
-            if (written.cut()) {
-                return RowComposed.Failed.at(p, Attempt.no(UnresolvedCombination.Reason.wordFor(
-                                Set.of(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES)),
-                        subject.parameters().get(p), SearchShortfall.of(CompositionShortfall.of(
-                                Set.of(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES))))
-                        .localTo(p));
-            }
-            if (unwritten != null) {
-                return RowComposed.Failed.at(p, atThis(new Attempt(null,
-                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, head,
-                        Optional.of(unwritten)), p, alone));
-            }
-            return RowComposed.Failed.at(p, new Attempt(null,
-                    UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
-                    subject.parameters().get(p), refused).localTo(p));
+            // compiler's, said as why, and the value the author chose stays the row's rather than
+            // being composed afresh.
+            // The model's own refusal is said only where it is what the word says; and the
+            // attempt is this parameter's alone except where a value was not handed on, which
+            // turns on what the parameters after it are to be handed.
+            boolean notHandedOn = alsoFound.notHandedOn().isPresent();
+            Attempt none = Attempt.over(UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
+                    head, written.cut() || notHandedOn ? Optional.empty() : refused, alsoFound);
+            return RowComposed.Failed.at(p, notHandedOn ? atThis(none, p, alone)
+                    : none.localTo(p));
         }
         // Held to where the comparisons' numbers were chosen to stand, the way a row at a point of
         // a border is: a candidate built for a number has to read back as it. Whether one was
         // turned away for reading back elsewhere is what this parameter's search found out, and
-        // goes with what it came to, the way it does on the way to a point ({@link InOrder}).
-        boolean[] uncertified = {false};
+        // goes with what it came to, the way it does on the way to a point ({@link InOrder}) —
+        // and so does a candidate that built and had nothing to hand on.
+        FoundOut found = new FoundOut();
         CandidateCheck checking = row.holding().standing().isEmpty() ? check
-                : certifying(check, subject, p, row.holding().standing(), uncertified);
+                : certifying(check, subject, p, row.holding().standing(), found);
         // What the parameters after this one came to, with the value this walk handed on last;
         // every value of this one a parameter after it came to nothing under; and what the walks
         // of the rows passed over found out, where any was.
@@ -7580,13 +7626,13 @@ public final class Generator {
         SearchShortfall[] passedOver = {null};
         Outcome tried = valueFor(subject, p, row.axes().axes(), row.composedAt(),
                 row.decided(), row.required(), new Handed(row.contents(), elsewhere),
-                checking, value -> {
+                checking, found, value -> {
                     composed[p] = value.value();
                     after[0] = inputsFrom(row, next + 1, composed, with(elsewhere, value.read()));
                     return switch (after[0]) {
                         case RowComposed.Taken _ -> Acceptance.TAKEN;
-                        case RowComposed.PassedOver(SearchShortfall found) -> {
-                            passedOver[0] = joined(passedOver[0], found);
+                        case RowComposed.PassedOver(SearchShortfall thoseFound) -> {
+                            passedOver[0] = joined(passedOver[0], thoseFound);
                             yield Acceptance.PASSED;
                         }
                         case RowComposed.Halted _ -> Acceptance.STOPPED;
@@ -7606,27 +7652,26 @@ public final class Generator {
                 });
         // What this parameter's own search came to, where it came to nothing, is one more
         // alternative beside the values a parameter after it came to nothing under, and said with
-        // them. A candidate turned away for reading back elsewhere goes with each of them, and the
+        // them. What it found out about its own candidates goes with each of them, and the
         // refusals it stands among are said as what they are: candidates that did not stand where
-        // they were built for, the word an edge reads them in ({@link #nothingStoodWhereItWasBuilt}).
+        // they were built for, or that built and had nothing to hand on ({@link Attempt#over}).
         RowComposed.Failed own = switch (tried) {
             case Outcome.Built _, Outcome.PassedOver _, Outcome.Halted _ -> null;
             // The word alone, because there was nothing of this compiler's beside it. A search that
             // met no figure and walked to the end of what this writes has nothing for a reader to
             // raise, and an empty account of what it met is what says so.
             case Outcome.Unresolved(UnresolvedCombination.Reason why, String detail) ->
-                    RowComposed.Failed.at(p, atThis(Attempt.no(
-                            nothingStoodWhereItWasBuilt(uncertified[0], why), detail,
-                            SearchShortfall.NONE.uncertifiedWhere(uncertified[0])), p, alone));
+                    RowComposed.Failed.at(p, atThis(Attempt.over(why, detail, Optional.empty(),
+                            found.shortfall()), p, alone));
             // The figure's word, and beside it both what the offer was short of and what the search
             // met. A figure being reached and a rule that gave no value are two things an author
             // acts on, and the one that decides what they do first is the word.
             case Outcome.Stopped stopped -> RowComposed.Failed.at(p, atThis(Attempt.no(stopped.why(),
                     stopped.detail(), SearchShortfall.of(stopped.met(), stopped.offered())
-                            .uncertifiedWhere(uncertified[0])), p, alone));
+                            .and(found.shortfall())), p, alone));
             case Outcome.Unexhausted some -> RowComposed.Failed.at(p, atThis(Attempt.no(some.why(),
                     some.detail(), SearchShortfall.of(some.met(), some.offered())
-                            .uncertifiedWhere(uncertified[0])), p, alone));
+                            .and(found.shortfall())), p, alone));
             // The word for an offer that was not everything, and beside it which rule of the
             // position none of the values came from. Carried rather than folded into the word: an
             // author rewriting a rule and an author allowing more act on the same category and go
@@ -7636,17 +7681,16 @@ public final class Generator {
                     RowComposed.Failed.at(p, atThis(Attempt.no(
                             UnresolvedCombination.Reason.NOT_ALL_CANDIDATES_COULD_BE_OFFERED,
                             detail, SearchShortfall.of(CompositionShortfall.NONE, offered)
-                                    .uncertifiedWhere(uncertified[0])), p, alone));
+                                    .and(found.shortfall())), p, alone));
             // The word the search came to, and beside it the figure that made what it was handed
             // short of the position. Neither half follows from the other — a search that refused
             // everything it was given did so over less than there was — so a reader is told both
             // what happened and that a number of this compiler's is why it happened over so little.
             case Outcome.Limited(UnresolvedCombination.Reason why, String detail,
                                  Set<CompositionBudget> by) ->
-                    RowComposed.Failed.at(p, atThis(Attempt.no(
-                            nothingStoodWhereItWasBuilt(uncertified[0], why), detail,
+                    RowComposed.Failed.at(p, atThis(Attempt.over(why, detail, Optional.empty(),
                             SearchShortfall.of(CompositionShortfall.of(by))
-                                    .uncertifiedWhere(uncertified[0])), p, alone));
+                                    .and(found.shortfall())), p, alone));
             // A value nothing planned, in the word for a reading no search could be made of, with
             // the figure that left the plan unable to reach what was asked for.
             case Outcome.Unplanned(Set<CompositionBudget> by) ->
@@ -7661,14 +7705,13 @@ public final class Generator {
             // values before it that one after it came to nothing under.
             case Outcome.Halted _ -> after[0] instanceof RowComposed.Failed stopping
                     ? overTheAlternatives(withFirst(stopping, cameToNothing), passedOver[0],
-                            SearchShortfall.NONE.uncertifiedWhere(uncertified[0]),
-                            () -> stopping)
+                            found.shortfall(), () -> stopping)
                     : after[0];
             // Every value passed over: for a row the caller passed over, or for what a parameter
-            // after this one came to under each of them.
+            // after this one came to under each of them — beside every value of this one that
+            // was turned away or not handed on, which none of those says anything about.
             case Outcome.PassedOver _ -> overTheAlternatives(cameToNothing, passedOver[0],
-                    SearchShortfall.NONE.uncertifiedWhere(uncertified[0]),
-                    () -> new RowComposed.PassedOver(SearchShortfall.NONE));
+                    found.shortfall(), () -> new RowComposed.PassedOver(SearchShortfall.NONE));
             // This parameter's own search came to nothing. Said as what it came to, the way a
             // search that passed rows and then stopped is ({@link #over}): with what the rows
             // passed over and the values a parameter after it came to nothing under found out
@@ -7722,7 +7765,7 @@ public final class Generator {
     private static Outcome valueFor(MeasuredInput subject, int p, List<Axis> axes,
                                     Set<TermPath> composedAt, LocationWrites decided,
                                     Requirements required, Handed handed, CandidateCheck check,
-                                    ValueTaking taking) {
+                                    FoundOut found, ValueTaking taking) {
         TermPath at = TermPath.of(subject.parameters().get(p));
         Map<TermPath, List<FixtureTemplate>> here = new LinkedHashMap<>();
         for (Axis axis : axes) {
@@ -7740,7 +7783,7 @@ public final class Generator {
                 here.putIfAbsent(location, already);
             }
         }
-        return valueAt(subject, p, here, settledIn(here), required, handed, check, taking);
+        return valueAt(subject, p, here, settledIn(here), required, handed, check, found, taking);
     }
 
     /**
@@ -7778,7 +7821,7 @@ public final class Generator {
                                    Map<TermPath, List<FixtureTemplate>> decided,
                                    Map<TermPath, Place> settled,
                                    Requirements additional, Handed handed, CandidateCheck check,
-                                   ValueTaking taking) {
+                                   FoundOut found, ValueTaking taking) {
         // Where a value has to be built under this parameter, worked out once. What each position
         // may take, the search that chooses them one at a time, and the composing of what was chosen
         // all read this, so there is no second reading of the declarations for one of them to
@@ -7861,13 +7904,16 @@ public final class Generator {
                                         + ", and nothing said which of them the value under it is");
             }
         }
-        // A position a container is handed the value at, which this plan holds no position at: it
-        // is inside a value chosen whole, and what stands inside that is nothing the plan writes.
-        // Said here, before anything is searched for, rather than as every value composed coming
-        // to nothing for want of a value to hand over — which would read as the model refusing
-        // them.
+        // A position a container of this value is handed the value at, which this plan holds no
+        // position at: it is inside a value chosen whole, and what stands inside that is nothing
+        // the plan writes — and a container of this value is composed before anything builds it,
+        // so the plan is all there is to read it from. Said here, before anything is searched for,
+        // rather than as every value composed coming to nothing for want of a value to hand over —
+        // which would read as the model refusing them. A position a container of another
+        // parameter is handed is not asked here: that is read off what was built ({@link
+        // HandedOn}), where a value chosen whole has every part it holds.
         ConstructionPlan.ContentsComposed contents = handedHere;
-        for (TermPath read : contents.read()) {
+        for (TermPath read : handed.asked().readWithin(root.head())) {
             if (plan.at(read) == null) {
                 return new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                         "a container is handed the value at `" + read + "`, which is inside a"
@@ -7899,7 +7945,8 @@ public final class Generator {
         }
         // One for every pass below, so what one of them found refused is known to the others.
         Composing composing =
-                new Composing(p, plan, subject.inputs(), subject.ruleReading(), check, handed);
+                new Composing(p, plan, subject.inputs(), subject.ruleReading(), check, handed,
+                        found);
         Outcome product = walk(choices, composing, taking, subject.ruleReading());
         // A value taken is the answer, and so is every value composed being passed over or the
         // caller stopping: what the pass below is for is values the walk could not compose, and
@@ -7961,7 +8008,7 @@ public final class Generator {
         // offer.
         HeldBack held = heldBack(subject, plan, under);
         return whatTheSearchCameTo(CompositionShortfall.of(held.offer()), held.offered(),
-                held.plan(), composing.saidOf(product));
+                held.plan(), product);
     }
 
     /**
@@ -8045,20 +8092,6 @@ public final class Generator {
             return CompositionShortfall.NONE;
         }
         return heldBack.getOrDefault(here.keySet().iterator().next(), CompositionShortfall.NONE);
-    }
-
-    /**
-     * The word a search comes back with where it offered candidates and read none of them back
-     * standing at the point.
-     *
-     * <p>Said in one place because it is one rule. Such a search has not shown that every value the
-     * rules allow was refused: what it found out is that what it built did not stand where it was
-     * built for, which is its own answer. Spelled at each outcome that can carry the word, the
-     * outcomes part the first time the rule is edited.
-     */
-    private static UnresolvedCombination.Reason nothingStoodWhereItWasBuilt(
-            boolean uncertified, UnresolvedCombination.Reason why) {
-        return SearchShortfall.NONE.uncertifiedWhere(uncertified).wordFor(why);
     }
 
     /**
@@ -8297,40 +8330,27 @@ public final class Generator {
         private final Map<TermPath, Type> typeAt = new HashMap<>();
         private final Set<Map<TermPath, String>> refused = new HashSet<>();
 
-        /** Why the first value the boundary built and nothing here could hand on was not handed
-         *  on, or null where every value built was. */
-        private String unwritten;
+        /**
+         * Told of every value built and not handed on. Not read here: what the search comes to is
+         * said where the parameter's search is answered, beside whatever its alternatives came to,
+         * and a value not handed on is said there however the rest of the search went.
+         */
+        private final FoundOut found;
 
         Composing(int parameter, ConstructionPlan plan, BehaviorInputs inputs,
-                  RuleReadingContext reading, CandidateCheck check, Handed handed) {
+                  RuleReadingContext reading, CandidateCheck check, Handed handed,
+                  FoundOut found) {
             this.parameter = parameter;
             this.plan = plan;
             this.inputs = inputs;
             this.reading = reading;
             this.check = check;
             this.handed = handed;
+            this.found = found;
             this.handedOn = handed.asked().handedOnFrom(plan.root().at().head());
             for (ConstructionPlan.Slot each : plan.slots()) {
                 typeAt.put(each.at(), each.type());
             }
-        }
-
-        /**
-         * {@code came}, unless it says every value was refused and some value was built and not
-         * handed on.
-         *
-         * <p>Then it is this compiler that came to nothing: a value it could not write out of what
-         * was built is not one the model refused, and saying every candidate was refused would be
-         * saying it was. Asked of the search's last word and of nothing on the way to it, since the
-         * passes read that word as having run out of assignments, which they had.
-         */
-        Outcome saidOf(Outcome came) {
-            return unwritten != null
-                    && came instanceof Outcome.Unresolved(UnresolvedCombination.Reason why, var _)
-                    && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED
-                    ? new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                            unwritten)
-                    : came;
         }
 
         /**
@@ -8374,9 +8394,7 @@ public final class Generator {
                 }
                 case HandedOn.Came.NotWritable(String why) -> {
                     refused.add(written);
-                    if (unwritten == null) {
-                        unwritten = why;
-                    }
+                    found.notHandedOn(why);
                     yield new Tried.NotHandedOn();
                 }
             };

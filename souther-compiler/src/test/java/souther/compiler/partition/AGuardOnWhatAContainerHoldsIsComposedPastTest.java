@@ -253,6 +253,54 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
                 () -> "the way past the guard came to this compiler composing nothing: " + stop);
     }
 
+    /** The value handed over is a whole case of a sum, which a class chooses whole. */
+    private static final String A_CASE_CHOSEN_WHOLE = """
+            module example.settle
+
+            data Plain
+            data Express
+            data Kind = Plain | Express
+
+            data Small
+            data Large = { n: Int }
+            data Size = Small | Large
+
+            data Request = { level: Size, note: Int }
+
+            data Other = { allowed: List<Size> }
+
+            data Done = { n: Int }
+            data Refused
+
+            behavior settle : (kind: Kind, other: Other, request: Request) -> Done | Refused
+                constructs Done
+
+            let settle (kind, other, request) = {
+                guard List.contains(request.level, other.allowed) else Refused
+                match kind with
+                    | Plain -> Done { n = 2 }
+                    | Express -> Done { n = 3 }
+            }
+            """;
+
+    /**
+     * A container handed a position a class chooses a whole value at holds what was built there.
+     * The plan has no position inside a value chosen whole, and the value the boundary built has
+     * every part of it — so what the class chose is handed over, and the row is past the guard.
+     */
+    @Test
+    void aValueAClassChoosesWholeIsHandedOnAsItWasBuilt() {
+        Rows rows = generatedOf(A_CASE_CHOSEN_WHOLE);
+        for (String label : List.of("request.level=Small", "request.level=Large")) {
+            List<String> row = rows.classes().get(label);
+            assertNotNull(row, () -> "a row is offered for " + label + ": " + rows);
+            String level = row.get(2).replaceAll("^Request \\{ level = (.*), note = .*$", "$1");
+            assertTrue(row.get(1).contains(level),
+                    () -> "the list holds the case the request is: " + row);
+            assertNull(rows.stops().get(label), () -> "and the row is past the guard: " + rows);
+        }
+    }
+
     /** The field composed rather than stated, at a type whose strings are longer than an
      *  observation reads. */
     private static final String COMPOSED_PAST_WHAT_IS_OBSERVED = """
