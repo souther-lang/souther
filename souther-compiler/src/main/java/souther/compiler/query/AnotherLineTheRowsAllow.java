@@ -710,7 +710,7 @@ public sealed interface AnotherLineTheRowsAllow {
                     // reads. Where the position is an enumeration's, its number is the case's place
                     // on the order, and the narrowing is the places it leaves out: a step moving it
                     // still arrives where the place it moves to is none of those.
-                    case OnTheWay.Narrowed(var _, var position, var onItsOrder) -> {
+                    case OnTheWay.Narrowed(var _, var position, var _, var onItsOrder) -> {
                         if (moved.stream().anyMatch(term -> term.subjectPath().equals(position))) {
                             return false;
                         }

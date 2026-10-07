@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.Case;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
@@ -120,6 +121,30 @@ class WhatTheWaysUnderTheCasesComeToTest {
         assertTrue(under.foundOut(ContentsAsked.UnderTheCases.Walked.COMPOSED).unread());
     }
 
+    /**
+     * What the row is required to be at a name the cases share is written under each case the row
+     * can be, a way each, with nothing else asked to choose the case for it.
+     */
+    @Test
+    void aRequirementAtANameTheCasesShareIsWrittenUnderEachCase() {
+        NameReach reach = spreadUnderBoth("flag");
+        Requirements asked = Requirements.of(LEAD.then("flag").refine(ONE), reach.crossings());
+        List<Requirements> taken = new ArrayList<>();
+
+        assertEquals(ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED,
+                new ContentsAsked(List.of()).underTheCases(reach, asked)
+                        .tryEach((_, takenAs) -> {
+                            taken.add(takenAs);
+                            return false;
+                        }));
+        assertEquals(2, taken.size(), () -> "a way under each case: " + taken);
+        assertEquals(List.of(CasesLeft.of(ONE), CasesLeft.of(ONE)), List.of(
+                taken.get(0).at(LEAD.refine(ONE).then("flag")),
+                taken.get(1).at(LEAD.refine(OTHER).then("flag"))));
+        assertTrue(taken.stream().allMatch(each -> each.atANameTheCasesShare().isEmpty()),
+                () -> "each way says which case the name is under: " + taken);
+    }
+
     @Test
     void twoNamesOfOneSumAreWrittenUnderOneCase() {
         ContentsAsked.UnderTheCases under = holding("campaigns", "campaign")
@@ -127,7 +152,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
         List<ContentsAsked> handed = new ArrayList<>();
 
         assertEquals(ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED,
-                under.tryEach(each -> {
+                under.tryEach((each, _) -> {
                     handed.add(each);
                     return false;
                 }));
@@ -147,7 +172,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
         int[] handed = {0};
 
         assertEquals(ContentsAsked.UnderTheCases.Walked.COMPOSED,
-                under.tryEach(_ -> ++handed[0] == 1));
+                under.tryEach((_, _) -> ++handed[0] == 1));
         assertEquals(1, handed[0]);
     }
 
@@ -160,7 +185,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
         int[] handed = {0};
 
         assertEquals(ContentsAsked.UnderTheCases.Walked.STOPPED_AT_THE_FIGURE,
-                apart("first", "second", "third", "fourth").tryEach(_ -> {
+                apart("first", "second", "third", "fourth").tryEach((_, _) -> {
                     handed[0]++;
                     return false;
                 }));
@@ -173,7 +198,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
         int[] handed = {0};
 
         assertEquals(ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED,
-                apart("first", "second", "third").tryEach(_ -> {
+                apart("first", "second", "third").tryEach((_, _) -> {
                     handed[0]++;
                     return false;
                 }));

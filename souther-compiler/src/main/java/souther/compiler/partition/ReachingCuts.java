@@ -12,10 +12,12 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
@@ -244,20 +246,65 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
         //
         // Two values and not one: where the name stands is what the environment answers, and
         // whether the input's rules hold a position there is the reading's.
-        if (scrutinee == null || !held(inputs, scrutinee)) {
+        DeclaredInput.Taking taking = scrutinee == null ? null
+                : taking(inputs, inputs.declared(ruleSource), scrutinee,
+                        match.scrutinee().type(), selected);
+        if (taking == null) {
             return new OnTheWay.Declined(met, at,
                     new OnTheWay.Why.ForkArmNotReadAsANarrowing());
         }
-        // The case is relative to the type the scrutinee stands as, and the value there may be
-        // narrower: what the declaration puts at the position says whether reaching the arm
-        // narrows it, or comes out one way for every row because the declaration already decided.
-        return switch (inputs.declared(ruleSource)
-                .taking(scrutinee, match.scrutinee().type(), selected)) {
-            case DeclaredInput.Taking.Narrows(TermPath to) ->
-                    new OnTheWay.Narrowed(at, to, onItsOrder(to, read));
+        return switch (taking) {
+            case DeclaredInput.Taking.Narrows(TermPath to) -> new OnTheWay.Narrowed(at, to,
+                    inputs.reach().crossings(), onItsOrder(to, read));
             case DeclaredInput.Taking.Implied _ -> new OnTheWay.Settled(met, at, true);
             case DeclaredInput.Taking.Excluded _ -> new OnTheWay.Settled(met, at, false);
         };
+    }
+
+    /**
+     * What arriving at an arm leaving {@code selected} says of the value at {@code scrutinee}, or
+     * null where this reading cannot say.
+     *
+     * <p>The case is relative to the type the scrutinee stands as, and the value there may be
+     * narrower: what the declaration puts at the position says whether reaching the arm narrows it,
+     * or comes out one way for every row because the declaration already decided.
+     *
+     * <p><b>At a name the cases of a sum share, asked under each case.</b> The value there stands at
+     * one position under each case the row can be ({@link WhereANameIsWritten}), and what the
+     * declarations leave it may differ from one case to the next. The arm narrows the name where it
+     * narrows the value under some case, to the cases it leaves under any of them; it is settled
+     * only where it is settled the same way under every case. A case whose reading stopped before
+     * putting the name anywhere is a place whose declarations were never read, so nothing is said
+     * there rather than an answer made out of the cases that were.
+     */
+    private static DeclaredInput.Taking taking(InputDomain inputs, DeclaredInput declared,
+                                               TermPath scrutinee, Type matchedAs,
+                                               CasesLeft selected) {
+        if (held(inputs, scrutinee)) {
+            return declared.taking(scrutinee, matchedAs, selected);
+        }
+        WhereANameIsWritten under = WhereANameIsWritten.ofAName(inputs, scrutinee);
+        if (under == null) {
+            return null;
+        }
+        Set<Refinement> left = new LinkedHashSet<>();
+        boolean implied = true;
+        for (WhereANameIsWritten.Place place : under.places()) {
+            switch (declared.taking(place.position(), matchedAs, selected)) {
+                case DeclaredInput.Taking.Narrows(TermPath to) -> {
+                    left.addAll(to.narrowing().atoms());
+                    implied = false;
+                }
+                case DeclaredInput.Taking.Implied _ -> left.addAll(selected.atoms());
+                case DeclaredInput.Taking.Excluded _ -> implied = false;
+            }
+        }
+        if (implied) {
+            return new DeclaredInput.Taking.Implied();
+        }
+        CasesLeft kept = selected.keeping(left::contains);
+        return kept == null ? new DeclaredInput.Taking.Excluded()
+                : new DeclaredInput.Taking.Narrows(DeclaredInput.narrowedTo(scrutinee, kept));
     }
 
     /**
@@ -270,7 +317,7 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
      * places a narrowing leaves out are the places a comparison names.
      */
     private static List<TakenConstraint.AwayFrom> onItsOrder(TermPath narrowed, InputReading read) {
-        NumericTerm.ValueOf term = new NumericTerm.ValueOf(narrowed.narrowedFrom());
+        NumericTerm.ValueOf term = new NumericTerm.ValueOf(narrowed.narrowedFrom().position());
         TermOrders orders = read.quantities().ordersOf(term);
         if (orders == null || !(orders.answered() instanceof Carrier.Ordinal ordinal)) {
             return List.of();
@@ -303,8 +350,7 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
     static Set<CasesLeft> answersOf(Core.Match match, InputDomain inputs, InputReads reads,
                                     RuleReadingSource ruleSource) {
         TermPath scrutinee = reads.forkedOn(match.scrutinee(), ruleSource.newtypes())
-                instanceof PathResolution.At(var stands) && held(inputs, stands)
-                ? stands : null;
+                instanceof PathResolution.At(var stands) ? stands : null;
         DeclaredInput declared = scrutinee == null ? null : inputs.declared(ruleSource);
         Set<CasesLeft> out = new LinkedHashSet<>();
         for (Core.Case arm : match.cases()) {
@@ -312,11 +358,13 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
             if (selected == null) {
                 continue;
             }
-            if (declared == null) {
+            DeclaredInput.Taking taking = declared == null ? null
+                    : taking(inputs, declared, scrutinee, match.scrutinee().type(), selected);
+            if (taking == null) {
                 out.add(selected);
                 continue;
             }
-            switch (declared.taking(scrutinee, match.scrutinee().type(), selected)) {
+            switch (taking) {
                 case DeclaredInput.Taking.Narrows(TermPath to) -> out.add(to.narrowing());
                 case DeclaredInput.Taking.Excluded _ -> out.add(selected);
                 case DeclaredInput.Taking.Implied _ -> { }

@@ -228,8 +228,10 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
     private Read asTheArm(Core.Match match, int part, InputReads reads, OnTheWay onTheWay) {
         if (onTheWay instanceof OnTheWay.Narrowed narrowed) {
             TermPath at = narrowed.position();
+            // Where the value the fork is on stands: a name read on a value left several cases is
+            // the name read at the sum, and not a name under the set of them.
             return new Read(new DecidedCondition.Narrowed(new DecisionCondition.ACase(
-                    new DecisionSubject.AnInput(at.narrowedFrom()),
+                    new DecisionSubject.AnInput(at.narrowedFrom().position()),
                     states.answersOf(match, reads)), at.narrowing()), List.of(onTheWay));
         }
         if (!(onTheWay instanceof OnTheWay.Declined || onTheWay instanceof OnTheWay.Settled)) {

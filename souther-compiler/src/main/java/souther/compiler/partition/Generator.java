@@ -4617,9 +4617,11 @@ public final class Generator {
                 asked.underTheCases(subject.reach(), reaching.requirements());
         FixtureTemplate[] composed = new FixtureTemplate[order.parameters().size()];
         List<ParameterCameToNothing> cameToNothing = new ArrayList<>();
-        ContentsAsked.UnderTheCases.Walked walked = under.tryEach(contents -> {
+        ContentsAsked.UnderTheCases.Walked walked = under.tryEach((contents, taken) -> {
+            Reachability.Reaching thisWay = new Reachability.Reaching(reaching.region(), taken,
+                    reaching.boundedOnTheWay());
             ParameterCameToNothing one = new InOrder(subject, order, composed, standing, decided,
-                    settled, reaching, check, contents).from(0, Map.of());
+                    settled, thisWay, check, contents).from(0, Map.of());
             if (one == null) {
                 return true;
             }
@@ -6956,7 +6958,7 @@ public final class Generator {
                 kept.put(path, refinement);
             }
         });
-        return new Requirements(kept);
+        return new Requirements(kept, from.crossings());
     }
 
     /**
@@ -7470,9 +7472,9 @@ public final class Generator {
         RowComposed[] stoppedWith = {null};
         SearchShortfall[] passedOver = {null};
         List<RowComposed.Failed> cameToNothing = new ArrayList<>();
-        ContentsAsked.UnderTheCases.Walked walked = under.tryEach(contents -> {
+        ContentsAsked.UnderTheCases.Walked walked = under.tryEach((contents, taken) -> {
             RowComposed came = inputsFrom(new RowBeingComposed(axes, given, check, holding,
-                    contents, together.keySet(), decided, rowIs, taking, order), 0,
+                    contents, together.keySet(), decided, taken, taking, order), 0,
                     new FixtureTemplate[order.parameters().size()], Map.of());
             return switch (came) {
                 case RowComposed.Taken _, RowComposed.Halted _ -> {

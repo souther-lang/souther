@@ -10,8 +10,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiPredicate;
 import java.util.function.Function;
-import java.util.function.Predicate;
 
 /**
  * Which containers of a row are to hold the value at another position, and which are to hold
@@ -77,6 +77,13 @@ record ContentsAsked(List<Asked> asked) {
      * every case of a sum spreads</b> — worked out the one way every writer works it out
      * ({@link WhereANameIsWritten}). A container is a place a composer builds, so a place reached
      * is one to write at; what is left open is a case whose reading stopped.
+     *
+     * <p><b>And what {@code trying} requires at such a name is written under a case the same
+     * way.</b> A fork on {@code r.q.flag} requires the value there to be {@code Yes} whichever case
+     * {@code r.q} is, and a row is one of them: the ways are the cases, each with the requirement
+     * moved under it ({@link Requirements}). Walked together with the containers, because a row is
+     * one case of a sum whichever of them put it there — a container and a requirement chosen
+     * apart would ask for a value that is two cases at once.
      */
     UnderTheCases underTheCases(NameReach reach, Requirements trying) {
         Set<TermPath> named = new LinkedHashSet<>();
@@ -84,6 +91,7 @@ record ContentsAsked(List<Asked> asked) {
             named.add(each.container());
             named.add(each.value());
         }
+        named.addAll(trying.atANameTheCasesShare());
         List<TermPath> paths = List.copyOf(named);
         List<WhereANameIsWritten> written = new ArrayList<>();
         boolean notWorkedOut = false;
@@ -107,7 +115,8 @@ record ContentsAsked(List<Asked> asked) {
      * <p>Only ways a row can be at once: two names of one sum are written under one case, and a way
      * that put them under two would be a value that is both.
      *
-     * @param named            every container and value asked, each once
+     * @param named            every container and value asked, and every name the row is required
+     *                         something at that stands under the cases, each once
      * @param written          where each of {@code named} may be written
      * @param trying           what the row already is
      * @param someNotWorkedOut whether some way of writing one of them reached a case the row can be
@@ -136,14 +145,18 @@ record ContentsAsked(List<Asked> asked) {
         /**
          * Hands each way to {@code composes}, until it answers that one composed or the figure is
          * reached.
+         *
+         * <p>Each way with what the row is taken to be to write it so: what it already was, every
+         * case on the way to each place, and what was required at a name moved under the case it
+         * is written as. That and not {@link #trying}, which is the row before any case was chosen.
          */
-        Walked tryEach(Predicate<ContentsAsked> composes) {
+        Walked tryEach(BiPredicate<ContentsAsked, Requirements> composes) {
             int[] left = {CompositionBudget.WAYS_UNDER_THE_CASES_TRIED.maximum()};
             return from(0, trying, new LinkedHashMap<>(), composes, left);
         }
 
         private Walked from(int next, Requirements taken, Map<TermPath, TermPath> at,
-                            Predicate<ContentsAsked> composes, int[] left) {
+                            BiPredicate<ContentsAsked, Requirements> composes, int[] left) {
             if (next == named.size()) {
                 if (left[0] == 0) {
                     return Walked.STOPPED_AT_THE_FIGURE;
@@ -154,7 +167,7 @@ record ContentsAsked(List<Asked> asked) {
                     under.add(new Asked(at.get(each.container()), at.get(each.value()),
                             each.holding()));
                 }
-                return composes.test(new ContentsAsked(under)) ? Walked.COMPOSED
+                return composes.test(new ContentsAsked(under), taken) ? Walked.COMPOSED
                         : Walked.EVERY_WAY_TRIED;
             }
             for (WhereANameIsWritten.Place place : written.get(next).places()) {

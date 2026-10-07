@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
@@ -65,6 +66,23 @@ record WhereANameIsWritten(List<Place> places, boolean someNotWorkedOut) {
         List<Place> to = new ArrayList<>();
         boolean notWorkedOut = followed(reach, path, trying, 0, answered, to);
         return new WhereANameIsWritten(to, notWorkedOut);
+    }
+
+    /**
+     * Where the value at {@code name} stands under the cases, or null where {@code name} is no name
+     * the cases share that stands at a position of {@code inputs} under every case a row at it can
+     * be.
+     *
+     * <p>Every case or none. A case whose reading stopped is one whose positions nothing answered
+     * for, so a reader acting on the name there would be acting on the cases that happened to be
+     * read; and a name standing where it is written is a position, asked of as one.
+     */
+    static WhereANameIsWritten ofAName(InputDomain inputs, TermPath name) {
+        WhereANameIsWritten under = of(inputs.reach(), name.position(), name.requirements(),
+                place -> inputs.at(place) != null);
+        return under.someNotWorkedOut() || under.places().isEmpty()
+                || under.places().stream().anyMatch(each -> each.position().equals(
+                        name.position())) ? null : under;
     }
 
     /**
