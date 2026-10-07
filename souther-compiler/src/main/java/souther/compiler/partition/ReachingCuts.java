@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.carrier.Lookup;
+import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
@@ -9,10 +10,13 @@ import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -206,9 +210,10 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
      * nothing and an arm nothing could be read of are the two answers a walk has to tell apart, and
      * a silence is both of them.
      */
-    static OnTheWay entering(Core.Match match, Core.Case arm, int part, InputDomain inputs,
-                             InputReads reads, RuleReadingSource ruleSource,
-                             ConditionNumbering numbering) {
+    static OnTheWay entering(Core.Match match, Core.Case arm, int part, InputReading read,
+                             InputReads reads, ConditionNumbering numbering) {
+        InputDomain inputs = read.domain();
+        RuleReadingSource ruleSource = read.rules();
         ConditionOccurrence met = numbering.metEntering(match, part);
         ConditionReportAnchor at =
                 numbering.anchorOfArm(match.origin(), part, arm.pos(), met);
@@ -248,10 +253,35 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
         // narrows it, or comes out one way for every row because the declaration already decided.
         return switch (inputs.declared(ruleSource)
                 .taking(scrutinee, match.scrutinee().type(), selected)) {
-            case DeclaredInput.Taking.Narrows(TermPath to) -> new OnTheWay.Narrowed(at, to);
+            case DeclaredInput.Taking.Narrows(TermPath to) ->
+                    new OnTheWay.Narrowed(at, to, onItsOrder(to, read));
             case DeclaredInput.Taking.Implied _ -> new OnTheWay.Settled(met, at, true);
             case DeclaredInput.Taking.Excluded _ -> new OnTheWay.Settled(met, at, false);
         };
+    }
+
+    /**
+     * What {@code narrowed} says on the order of the position it narrows: a hole at each case of
+     * the enumeration the narrowing leaves out, and nothing where no enumeration orders the
+     * position.
+     *
+     * <p>Asked of the reading, which is what says which order a position stands on — the same
+     * question a comparison of the position against a written case is read through, so that the
+     * places a narrowing leaves out are the places a comparison names.
+     */
+    private static List<TakenConstraint.AwayFrom> onItsOrder(TermPath narrowed, InputReading read) {
+        NumericTerm.ValueOf term = new NumericTerm.ValueOf(narrowed.narrowedFrom());
+        TermOrders orders = read.quantities().ordersOf(term);
+        if (orders == null || !(orders.answered() instanceof Carrier.Ordinal ordinal)) {
+            return List.of();
+        }
+        List<TakenConstraint.AwayFrom> out = new ArrayList<>();
+        for (TypeSymbol each : ordinal.cases()) {
+            if (!narrowed.narrowing().leaves(each)) {
+                out.add(new TakenConstraint.AwayFrom(term, ordinal.at(each)));
+            }
+        }
+        return List.copyOf(out);
     }
 
     /**

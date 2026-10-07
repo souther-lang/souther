@@ -1,7 +1,6 @@
 package souther.compiler.query;
 
 import souther.compiler.inputs.CasesLeft;
-import souther.compiler.inputs.Refinement;
 import souther.compiler.partition.AnswerDemand;
 import souther.compiler.partition.MeasuredInput;
 import souther.compiler.types.TypeSymbol;
@@ -80,17 +79,11 @@ record AnswerSubjects(MeasuredInput whole, List<TypeSymbol> cases,
         List<Feasible> out = new ArrayList<>();
         for (TypeSymbol each : cases) {
             MeasuredInput standing = byCase.get(each);
-            if (standing != null && (left == null || leaves(left, each))) {
+            if (standing != null && (left == null || left.leaves(each))) {
                 out.add(new Feasible(each, standing, left == null ? demands : rest));
             }
         }
         return List.copyOf(out);
-    }
-
-    /** Whether {@code left} leaves the answer the case {@code one}. */
-    private static boolean leaves(CasesLeft left, TypeSymbol one) {
-        return left.atoms().stream().anyMatch(each -> each instanceof Refinement.SumCase sum
-                && sum.leaf().equals(one));
     }
 
     /**

@@ -8,6 +8,8 @@ import souther.compiler.partition.DecidedCondition;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.DecisionSubject;
+import souther.compiler.partition.OnTheWay;
+import souther.compiler.partition.TakenConstraint;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -139,7 +141,7 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
                 () -> "each case's field is read under that case: " + under);
         List<DecisionRule> rules = rulesOf("describeEither");
         assertTrue(rules.stream().map(AnArmOnACaseThatIsASumNarrowsToItsLeavesTest::answers)
-                        .anyMatch(each -> each.equals(List.of("v.kind -> {Hospital|Station}",
+                        .anyMatch(each -> each.equals(List.of("v.kind -> {Station|Hospital}",
                                 "v.kind -> Station"))),
                 () -> "the rule through Station takes the arm above it: " + rules);
     }
@@ -152,7 +154,7 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
     void anArmTheNarrowingLeavesNothingForIsARuleNoRowTakes() {
         DecisionReading.Ruled never = ruledOf("describeEither").stream()
                 .filter(each -> answers(each.rule()).equals(
-                        List.of("v.kind -> {Hospital|Station}", "v.kind -> Renkei")))
+                        List.of("v.kind -> {Station|Hospital}", "v.kind -> Renkei")))
                 .findFirst().orElse(null);
         assertNotNull(never, () -> "the inner Renkei arm is a column of the inner question: "
                 + rulesOf("describeEither"));
@@ -185,7 +187,7 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
                 .filter(each -> answers(each.rule()).contains("v.kind -> Station"))
                 .findFirst().orElse(null);
         assertNotNull(station, () -> "a rule goes through Station: " + rules);
-        assertEquals(List.of("v.kind -> {Hospital|Station}", "v.kind -> Station"),
+        assertEquals(List.of("v.kind -> {Station|Hospital}", "v.kind -> Station"),
                 answers(station.rule()), "the rule through Station takes the column above it too");
         Requirements.Merge required = station.states().requirements();
         assertEquals("Station", assertInstanceOf(Requirements.Merge.Merged.class, required,
@@ -201,7 +203,7 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
     /** A narrowing to several leaves that nothing narrows further is a rule as it stands. */
     @Test
     void anArmLeftAtSeveralLeavesIsARule() {
-        assertEquals(Set.of(List.of("v.kind -> {Hospital|Station}"), List.of("v.kind -> Renkei")),
+        assertEquals(Set.of(List.of("v.kind -> {Station|Hospital}"), List.of("v.kind -> Renkei")),
                 rulesOf("once").stream()
                         .map(AnArmOnACaseThatIsASumNarrowsToItsLeavesTest::answers)
                         .collect(Collectors.toSet()));
@@ -214,7 +216,7 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
      */
     @Test
     void theSameQuestionAskedTwiceIsOneColumn() {
-        assertEquals(Set.of(List.of("v.kind -> {Hospital|Station}"), List.of("v.kind -> Renkei")),
+        assertEquals(Set.of(List.of("v.kind -> {Station|Hospital}"), List.of("v.kind -> Renkei")),
                 rulesOf("twice").stream()
                         .map(AnArmOnACaseThatIsASumNarrowsToItsLeavesTest::answers)
                         .collect(Collectors.toSet()));
@@ -245,6 +247,50 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
                 () -> "the shared name stands under each case: " + counted);
     }
 
+    /**
+     * The cases a narrowing leaves are said in the order the model declares them, and not in the
+     * order their names compare in: renamed so that the names compare the other way round, the
+     * model's rules read the same once the names are put back.
+     */
+    @Test
+    void theCasesLeftAreSaidInTheOrderTheModelDeclaresThem() {
+        Set<List<String>> asWritten = ruledOf(MODEL, "describe").stream()
+                .map(each -> answers(each.rule())).collect(Collectors.toSet());
+        Set<List<String>> renamed = ruledOf(MODEL.replace("Station", "Zzzzzzz")
+                        .replace("Hospital", "Aaaaaaaa"), "describe").stream()
+                .map(each -> answers(each.rule()).stream()
+                        .map(said -> said.replace("Zzzzzzz", "Station")
+                                .replace("Aaaaaaaa", "Hospital"))
+                        .toList())
+                .collect(Collectors.toSet());
+        assertEquals(asWritten, renamed);
+        assertTrue(asWritten.stream().anyMatch(each -> each.contains("v.kind -> {Station|Hospital}")),
+                () -> "in the order OnceKind declares them: " + asWritten);
+    }
+
+    /**
+     * A narrowing of an enumeration says on the enumeration's order the places it leaves out, and a
+     * narrowing of a sum that is no enumeration says nothing there.
+     */
+    @Test
+    void aNarrowingOfAnEnumerationLeavesItsOtherPlacesOut() {
+        List<List<TakenConstraint.AwayFrom>> rated = narrowingsOnTheWay("rate");
+        assertEquals(Set.of(1, 2), rated.stream().map(List::size).collect(Collectors.toSet()),
+                () -> "Lowish leaves High out, and the arm beside it leaves both of Lowish's"
+                        + " out: " + rated);
+        assertTrue(narrowingsOnTheWay("describe").stream().allMatch(List::isEmpty),
+                "a sum whose cases hold fields is ordered by nothing");
+    }
+
+    /** What each narrowing on the way to {@code behavior}'s rules leaves out of its order. */
+    private static List<List<TakenConstraint.AwayFrom>> narrowingsOnTheWay(String behavior) {
+        return ruledOf(behavior).stream()
+                .flatMap(each -> each.states().onTheWay().stream())
+                .filter(each -> each instanceof OnTheWay.Narrowed)
+                .map(each -> ((OnTheWay.Narrowed) each).onItsOrder())
+                .toList();
+    }
+
     /** Each case column of {@code rule}, as its subject and what the rule came out as. */
     private static List<String> answers(DecisionRule rule) {
         return rule.inOrder().stream()
@@ -260,7 +306,11 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
     }
 
     private static List<DecisionReading.Ruled> ruledOf(String behavior) {
-        Compilation c = Compilation.ofSource(MODEL, "Main");
+        return ruledOf(MODEL, behavior);
+    }
+
+    private static List<DecisionReading.Ruled> ruledOf(String model, String behavior) {
+        Compilation c = Compilation.ofSource(model, "Main");
         c.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
         c.answerEverything();
         assertEquals(List.of(), c.errors().stream()

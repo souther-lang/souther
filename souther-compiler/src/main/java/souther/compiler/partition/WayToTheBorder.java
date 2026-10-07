@@ -75,6 +75,13 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     public SearchRegion narrowing(SearchRegion base) {
         SearchRegion region = base;
         for (OnTheWay each : onTheWay) {
+            // What a narrowing says on the position's own order, which a region can carry: the
+            // cases it leaves out are values no row past it holds.
+            if (each instanceof OnTheWay.Narrowed narrowed) {
+                for (TakenConstraint.AwayFrom hole : narrowed.onItsOrder()) {
+                    region = hole.narrowing(region);
+                }
+            }
             if (each instanceof OnTheWay.TakenIn taken) {
                 region = switch (taken.demand()) {
                     // Taken in, and the region is asked to take it in: an entry here is one the

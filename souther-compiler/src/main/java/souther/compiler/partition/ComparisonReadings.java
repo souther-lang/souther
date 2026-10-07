@@ -345,7 +345,6 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                              List<OnTheWay> assumed, boolean live, List<Reading> out,
                              List<ForkMet> forks, ConditionNumbering numbering) {
         Symbols symbols = in.symbols();
-        RuleReadingSource ruleSource = in.rules();
         StatedAt stated = statedAt(e);
         if (stated != null) {
             // Which construct of the model it is, off the node. The two readings of a body hold
@@ -470,8 +469,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             reads.choosing(Choice.Decides.ofCase(match, arm), symbols,
                                     in.newtypes()),
                             flow,
-                            entering(match, arm, part, in.read().domain(), reads, assumed,
-                                    ruleSource, numbering),
+                            entering(match, arm, part, in.read(), reads, assumed, numbering),
                             live, out, forks, numbering);
                 }
             }
@@ -527,12 +525,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     /** The same, for what standing inside one arm of a fork establishes ({@link
      *  ReachingCuts#entering}). */
     private static List<OnTheWay> entering(Core.Match match, Core.Case arm, int part,
-                                           souther.compiler.inputs.InputDomain inputs,
-                                           InputReads reads, List<OnTheWay> assumed,
-                                           RuleReadingSource ruleSource,
-                                           ConditionNumbering numbering) {
+                                           InputReading read, InputReads reads,
+                                           List<OnTheWay> assumed, ConditionNumbering numbering) {
         List<OnTheWay> out = new ArrayList<>(assumed);
-        out.add(ReachingCuts.entering(match, arm, part, inputs, reads, ruleSource, numbering));
+        out.add(ReachingCuts.entering(match, arm, part, read, reads, numbering));
         return List.copyOf(out);
     }
 

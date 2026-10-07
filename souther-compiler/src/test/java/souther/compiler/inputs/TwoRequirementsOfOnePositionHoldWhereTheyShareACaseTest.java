@@ -53,8 +53,8 @@ class TwoRequirementsOfOnePositionHoldWhereTheyShareACaseTest {
     }
 
     /**
-     * One case is spelled as that case, and several are spelled in one order whatever
-     * order they were met in, so that one set is one position.
+     * One case is spelled as that case, and several are one value whatever order they were met
+     * in, so that one set is one position. They are spelled in the order they are held.
      */
     @Test
     void oneCaseKeepsItsSpellingAndSeveralAreSpelledInOneOrder() {
@@ -64,7 +64,9 @@ class TwoRequirementsOfOnePositionHoldWhereTheyShareACaseTest {
         CasesLeft stationFirst = CasesLeft.of(ResolvedCase.of(
                 CaseSelector.direct(leaf("OnceKind")), List.of(STATION, HOSPITAL)));
         assertEquals(hospitalFirst, stationFirst);
-        assertEquals("v.kind@{Hospital|Station}", KIND.refine(stationFirst).toString());
+        assertEquals(hospitalFirst.hashCode(), stationFirst.hashCode());
+        assertEquals(KIND.refine(hospitalFirst), KIND.refine(stationFirst));
+        assertEquals("v.kind@{Station|Hospital}", KIND.refine(stationFirst).toString());
         assertNotEquals(KIND.refine(stationFirst), KIND.refine(only(STATION)));
     }
 

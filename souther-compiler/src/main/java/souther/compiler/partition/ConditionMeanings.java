@@ -64,8 +64,7 @@ record ConditionMeanings(souther.compiler.inputs.InputReading read) {
      * point and this is not.
      */
     OnTheWay entering(Core.Match match, int part, InputReads reads, ConditionNumbering numbering) {
-        return ReachingCuts.entering(match, match.cases().get(part), part, inputs(), reads, rules(),
-                numbering);
+        return ReachingCuts.entering(match, match.cases().get(part), part, read, reads, numbering);
     }
 
     /** What the arms of {@code match} leave its scrutinee, one answer per arm that narrows it

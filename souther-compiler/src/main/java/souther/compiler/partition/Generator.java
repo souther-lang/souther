@@ -47,6 +47,7 @@ import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -3278,19 +3279,21 @@ public final class Generator {
      * Whether the classes of one assignment can stand together, kept as the assignment moves one
      * position at a time.
      *
-     * <p>Two classes cannot stand together exactly where they require one position to be two
-     * different narrowings, which is what merging their requirements asks. Counted by position
-     * and narrowing instead of merged again from nothing, so moving one position costs that
-     * position's requirements and not every position's.
+     * <p>Two classes cannot stand together exactly where they leave one position no case in common,
+     * which is what merging their requirements asks ({@link Requirements#merge}). Kept by position
+     * instead of merged again from nothing, so moving one position costs that position's
+     * requirements and not every position's: a position is asked again only where what is asked
+     * of it changed.
      */
     private static final class StandingTogether {
 
         private final WhatEachClassRequires requires;
 
+        /** What each position is asked to be, by how many of the classes standing ask it. */
         private final Map<TermPath, Map<CasesLeft, Integer>> asked = new HashMap<>();
 
-        /** How many positions are asked to be more than one narrowing. */
-        private int disagreeing;
+        /** The positions the classes standing leave no case in common. */
+        private final Set<TermPath> disagreeing = new HashSet<>();
 
         StandingTogether(WhatEachClassRequires requires, int[] where) {
             this.requires = requires;
@@ -3308,17 +3311,15 @@ public final class Generator {
         }
 
         boolean holds() {
-            return disagreeing == 0;
+            return disagreeing.isEmpty();
         }
 
         private void add(int axis, int cls) {
             for (Map.Entry<TermPath, CasesLeft> each : requires.of(axis, cls).entrySet()) {
                 Map<CasesLeft, Integer> here =
                         asked.computeIfAbsent(each.getKey(), _ -> new HashMap<>());
-                int before = here.size();
-                here.merge(each.getValue(), 1, Integer::sum);
-                if (before == 1 && here.size() == 2) {
-                    disagreeing++;
+                if (here.merge(each.getValue(), 1, Integer::sum) == 1) {
+                    reask(each.getKey(), here);
                 }
             }
         }
@@ -3326,16 +3327,27 @@ public final class Generator {
         private void remove(int axis, int cls) {
             for (Map.Entry<TermPath, CasesLeft> each : requires.of(axis, cls).entrySet()) {
                 Map<CasesLeft, Integer> here = asked.get(each.getKey());
-                int before = here.size();
                 if (here.merge(each.getValue(), -1, Integer::sum) == 0) {
                     here.remove(each.getValue());
-                }
-                if (before == 2 && here.size() == 1) {
-                    disagreeing--;
+                    reask(each.getKey(), here);
                 }
                 if (here.isEmpty()) {
                     asked.remove(each.getKey());
                 }
+            }
+        }
+
+        /** Whether what is asked of {@code at} still leaves it a case, after it changed. */
+        private void reask(TermPath at, Map<CasesLeft, Integer> here) {
+            Iterator<CasesLeft> each = here.keySet().iterator();
+            CasesLeft common = each.hasNext() ? each.next() : null;
+            while (common != null && each.hasNext()) {
+                common = common.meet(each.next());
+            }
+            if (!here.isEmpty() && common == null) {
+                disagreeing.add(at);
+            } else {
+                disagreeing.remove(at);
             }
         }
     }
@@ -3360,25 +3372,11 @@ public final class Generator {
             }
         }
 
-        /**
-         * What standing {@code axis} at its class {@code cls} requires.
-         *
-         * <p>One case at each position, and refused otherwise. A class stands at a position of the
-         * input and selects one of its cases, so what it requires is the cases of the positions it
-         * stands under, each one — and that is what lets {@link StandingTogether} count two unequal
-         * ones as a disagreement. Two requirements leaving several cases can share one, and a
-         * count of unequal ones would call them apart where merging them would not.
-         */
+        /** What standing {@code axis} at its class {@code cls} requires. */
         Map<TermPath, CasesLeft> of(int axis, int cls) {
             Map<TermPath, CasesLeft> known = read.get(axis).get(cls);
             if (known == null) {
                 known = axes.get(axis).requiring(axes.get(axis).classes().get(cls)).refinements();
-                known.forEach((at, left) -> {
-                    if (left.only() == null) {
-                        throw new IllegalStateException("a class requires one case at `" + at
-                                + "`, and this one requires " + left.spelled());
-                    }
-                });
                 read.get(axis).set(cls, known);
             }
             return known;
