@@ -23,3 +23,26 @@ cd "$root"
 mvn -q versions:set -DnewVersion="$version" -DgenerateBackupPoms=false
 
 echo "Set Souther version to $version."
+
+# A version that is not a snapshot ships the adequacy schema the compiler writes, and that
+# schemaVersion is frozen from then on: the schema as it first shipped is kept beside the tests, and
+# AShippedSchemaAcceptsEveryDocumentItShippedAcceptingTest holds every later edit of it to accepting
+# what it accepted then. Written once. A later release writing the same schemaVersion keeps the
+# copy rather than moving it, so a narrowing made in between cannot become the new starting point.
+if [[ "$version" != *-SNAPSHOT ]]; then
+  schema_version="$(grep -o 'int SCHEMA_VERSION = [0-9]*' \
+    souther-compiler/src/main/java/souther/compiler/report/AdequacyReport.java | grep -o '[0-9]*$')"
+  if [ -z "$schema_version" ]; then
+    echo "found no SCHEMA_VERSION in AdequacyReport.java" >&2
+    exit 1
+  fi
+  shipped="souther-compiler/src/test/resources/souther/compiler/schema/released/adequacy-schema-$schema_version.json"
+  if [ -e "$shipped" ]; then
+    echo "Schema $schema_version was already frozen; kept its released contract."
+  else
+    mkdir -p "$(dirname "$shipped")"
+    cp "souther-compiler/src/main/resources/souther/adequacy-schema-$schema_version.json" "$shipped"
+    git add "$shipped"
+    echo "Froze schema $schema_version as it ships, in $shipped."
+  fi
+fi

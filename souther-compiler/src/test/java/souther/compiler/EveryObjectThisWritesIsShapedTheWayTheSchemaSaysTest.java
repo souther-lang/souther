@@ -239,47 +239,6 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
     }
 
     /**
-     * A document written before a key was added is still a document of this version.
-     *
-     * <p>Held on the key added last, which is {@code writableBecause}. The preamble says a key added
-     * since does not raise the version, and what that promises is this: the same schema takes a
-     * document with the key and a document without it. So an absent array is a producer that predates
-     * the field and never a point with no grounds — that is written as an empty array, and a reader
-     * that took the two for one answer would read every older document as a corpus nothing shows
-     * anything about.
-     */
-    @Test
-    void aDocumentWrittenBeforeAKeyWasAddedIsStillOfThisVersion() {
-        JsonNode without = document();
-        int taken = strip(without, "writableBecause");
-        assertTrue(taken > 0, "the document carries the key, or this strips nothing");
-
-        assertEquals(List.of(), DocumentShape.of(without).wrong(),
-                "the shipped schema refuses a document written before the key existed");
-    }
-
-    /** Every occurrence of {@code key} taken out, and how many there were. */
-    private static int strip(JsonNode node, String key) {
-        int taken = 0;
-        if (node instanceof tools.jackson.databind.node.ObjectNode object) {
-            if (object.has(key)) {
-                object.remove(key);
-                taken++;
-            }
-            List<String> names = new ArrayList<>();
-            object.propertyNames().forEach(names::add);
-            for (String name : names) {
-                taken += strip(object.get(name), key);
-            }
-        } else if (node.isArray()) {
-            for (JsonNode each : node) {
-                taken += strip(each, key);
-            }
-        }
-        return taken;
-    }
-
-    /**
      * And so is every document checked in as an answer.
      *
      * <p>Those are what a reader of this project meets first, and they are rewritten by a flag
