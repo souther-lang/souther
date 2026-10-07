@@ -6,7 +6,6 @@ import souther.compiler.coverage.ControlPlace;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
-import souther.compiler.reach.Reachability;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
@@ -229,7 +228,7 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
         compilation.db().ask(new Adequacy.Arrived("demo")).value().get("f").answers().found()
                 .forEach((where, said) -> {
                     if (where instanceof ControlPlace.Arm arm && arm.writtenBy("demo")
-                            && said instanceof Reachability.Unreachable) {
+                            && said instanceof souther.compiler.reach.Reachability.Unreachable) {
                         unreachable.add(arm.part());
                     }
                 });
