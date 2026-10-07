@@ -9,6 +9,7 @@ import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * What the conditions of one body decide, as the columns of its decision table.
@@ -174,7 +175,8 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
                                 declined.condition(), declined.why()), held);
             }
             // A condition the source settles is no distinction, and is taken off before a column
-            // is asked for ({@link #deciding}); nor does an arm of a fork come back as one.
+            // is asked for, the condition's ({@link #deciding}) and the arm's ({@link #entering})
+            // alike.
             case OnTheWay.Settled settled -> throw new IllegalArgumentException(
                     "a condition the source settles is no column: " + settled);
         };
@@ -206,23 +208,51 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
      * <p>A fork is not a condition of the boolean grammar, so nothing here reads it as a truth: the
      * arm establishes which case the scrutinee turned out to be, and where that could not be said
      * as a narrowing the column says so.
+     *
+     * <p>An arm the declarations already decide is no distinction the body draws where every value
+     * at the position is the arm's case, and is no column — the answer {@link #deciding} gives a
+     * condition the source settles this way. Where no value at the position is the arm's case, the
+     * arm is still one the body writes and the column is the case it selects; that no row reaches
+     * it is said beside it ({@link OnTheWay.Settled}), and not by leaving the arm without words,
+     * which would say this reading fell short of naming it.
      */
-    Read entering(Core.Match match, int part, InputReads reads, ConditionNumbering numbering) {
+    Optional<Read> entering(Core.Match match, int part, InputReads reads,
+                            ConditionNumbering numbering) {
         OnTheWay onTheWay = states.entering(match, part, reads, numbering);
-        if (!(onTheWay instanceof OnTheWay.Declined)) {
+        if (onTheWay instanceof OnTheWay.Settled settled && settled.thisWay()) {
+            return Optional.empty();
+        }
+        return Optional.of(asTheArm(match, part, reads, onTheWay));
+    }
+
+    /** The column taking arm {@code part} is, where it is one. */
+    private Read asTheArm(Core.Match match, int part, InputReads reads, OnTheWay onTheWay) {
+        if (!(onTheWay instanceof OnTheWay.Declined || onTheWay instanceof OnTheWay.Settled)) {
             return new Read(answerOf(null, onTheWay, true), List.of(onTheWay));
         }
         // Where the arithmetic had no position to narrow, the fork may still be on something a row
-        // controls. The arm says which case it turned out to be either way, and the two arms of one
-        // fork are answers about the one subject — which is what keeps a table from admitting a
-        // value that is two cases at once.
+        // controls; and where the declarations leave the position none of the arm's case, there is
+        // a position and nothing to narrow it to. The arm says which case it turned out to be either
+        // way, and the two arms of one fork are answers about the one subject — which is what keeps
+        // a table from admitting a value that is two cases at once.
+        //
+        // A column holds one case, so an arm over several leaves is a column this reading has no
+        // words for, whichever way it was met; that no row takes it, where none does, is said by
+        // what was met on the way and not by the column.
         DecisionSubject subject = subjects.of(match.scrutinee(), reads);
         Refinement narrowing = match.cases().get(part).selectedCase().map(Refinement::of)
                 .orElse(null);
-        return subject == null || narrowing == null
-                ? new Read(answerOf(null, onTheWay, true), List.of(onTheWay))
-                : new Read(new DecidedCondition.Narrowed(
-                        new DecisionCondition.ACase(subject), narrowing), List.of(onTheWay));
+        if (subject != null && narrowing != null) {
+            return new Read(new DecidedCondition.Narrowed(
+                    new DecisionCondition.ACase(subject), narrowing), List.of(onTheWay));
+        }
+        return new Read(switch (onTheWay) {
+            case OnTheWay.Settled settled -> new DecidedCondition.Unread(
+                    new DecisionCondition.AConditionNotRead(settled.condition(),
+                            new OnTheWay.Why.ForkArmNotReadAsANarrowing()), true);
+            case OnTheWay.Declined _, OnTheWay.Narrowed _, OnTheWay.TakenIn _ ->
+                    answerOf(null, onTheWay, true);
+        }, List.of(onTheWay));
     }
 
     /**

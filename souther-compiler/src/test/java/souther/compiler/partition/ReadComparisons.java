@@ -5,6 +5,7 @@ import souther.compiler.check.ElementProvenance;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.ValueTemplates;
+import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -45,8 +46,8 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
                 new AnalysisBody(checked.behaviorBodies().get(behavior), ElementProvenance.NONE,
                         ValueTemplates.NONE),
                 inputs.reading(rules), InputReads.ofParameters(inputs.parameterReads(),
-                        checked.elementBindings().get(behavior)),
-                InputReads.ofParameters(Map.of(),
+                        inputs.declared(rules), checked.elementBindings().get(behavior)),
+                InputReads.ofParameters(Map.of(), DeclaredInput.NONE,
                         checked.elementBindings().get(behavior))).comparisons(),
                 inputs, rules);
     }

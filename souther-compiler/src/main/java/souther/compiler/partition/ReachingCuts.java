@@ -4,14 +4,15 @@ import souther.compiler.carrier.Lookup;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
-import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.ResolvedCase;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -141,8 +142,11 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison)
         ConditionOccurrence met = numbering.metEntering(match, part);
         ConditionReportAnchor at =
                 numbering.anchorOfArm(match.origin(), part, arm.pos(), met);
-        Refinement narrowing = arm.selectedCase().map(Refinement::of).orElse(null);
-        if (narrowing == null) {
+        // The selection whole, and not one narrowing made out of it: a case over several leaves is
+        // one narrowing of nothing, and whether it narrows the position at all is the
+        // declaration's to say below.
+        ResolvedCase selected = arm.selectedCase().orElse(null);
+        if (selected == null) {
             return new OnTheWay.Declined(met, at,
                     new OnTheWay.Why.ForkArmNotReadAsANarrowing());
         }
@@ -169,7 +173,19 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison)
             return new OnTheWay.Declined(met, at,
                     new OnTheWay.Why.ForkArmNotReadAsANarrowing());
         }
-        return new OnTheWay.Narrowed(at, scrutinee.refine(narrowing));
+        // The case is relative to the type the scrutinee stands as, and the value there may be
+        // narrower: what the declaration puts at the position says whether reaching the arm
+        // narrows it, or comes out one way for every row because the declaration already decided.
+        return switch (inputs.declared(ruleSource)
+                .taking(scrutinee, match.scrutinee().type(), selected)) {
+            case DeclaredInput.Taking.Narrows(TermPath to) -> new OnTheWay.Narrowed(at, to);
+            // A narrowing to several of the position's distinctions is one no one position is
+            // read as, which is what a search composes against.
+            case DeclaredInput.Taking.AmongSeveral _ -> new OnTheWay.Declined(met, at,
+                    new OnTheWay.Why.ForkArmNotReadAsANarrowing());
+            case DeclaredInput.Taking.Implied _ -> new OnTheWay.Settled(met, at, true);
+            case DeclaredInput.Taking.Excluded _ -> new OnTheWay.Settled(met, at, false);
+        };
     }
 
     /**

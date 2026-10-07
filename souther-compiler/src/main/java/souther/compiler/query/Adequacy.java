@@ -82,6 +82,7 @@ import souther.compiler.types.ModelOccurrence;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.PointRole;
 import souther.compiler.inputs.AnInputRead;
+import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -796,7 +797,8 @@ public final class Adequacy {
                     // reading is made and never after it: one that grew a position when somebody
                     // looked one up would answer a question differently depending on what had been
                     // asked before it.
-                    demandOf(db, module, spec.value(), implemented, scope.value(), stated.value())));
+                    demandOf(db, module, spec.value(), implemented, scope.value(), stated.value(),
+                            DeclaredInput.of(declared.value(), reading.value()))));
         }
     }
 
@@ -812,19 +814,23 @@ public final class Adequacy {
      * not been told about. A body is where most of them are written and an injected behavior has
      * none at all, and a clause of the behavior draws its lines whether or not anything implements
      * it.
+     *
+     * <p>Spelled the way the reading spells the same locations, which is what the declarations put
+     * under the parameters says ({@link DeclaredInput}). A path the reading would not spell is one it
+     * holds no position under, whatever position it means.
      */
     private static souther.compiler.inputs.InputDemand demandOf(
             Db db, String module, Hir.SpecBehavior spec,
             SpecImplementation.Implemented implemented, Symbols symbols,
-            souther.compiler.check.StatedContract stated) {
-        return statedIn(stated, symbols, Shapes.declarationNewtypes(db),
-                bodyIn(db, module, spec, implemented, symbols));
+            souther.compiler.check.StatedContract stated, DeclaredInput declared) {
+        return statedIn(stated, symbols, Shapes.declarationNewtypes(db), declared,
+                bodyIn(db, module, spec, implemented, symbols, declared));
     }
 
     /** The locations the implementation reads, or none where nothing implements the behavior. */
     private static souther.compiler.inputs.InputDemand bodyIn(
             Db db, String module, Hir.SpecBehavior spec,
-            SpecImplementation.Implemented implemented, Symbols symbols) {
+            SpecImplementation.Implemented implemented, Symbols symbols, DeclaredInput declared) {
         Bodies.CheckedBody checked = implemented == null ? null
                 : db.ask(new Bodies.CheckedBehavior(module, spec.name())).value();
         if (checked == null) {
@@ -840,7 +846,7 @@ public final class Adequacy {
             }
         }
         return souther.compiler.inputs.InputDemand.of(checked.body(),
-                souther.compiler.inputs.InputReads.ofParameters(parameters, checked.elements()),
+                InputReads.ofParameters(parameters, declared, checked.elements()),
                 symbols, Shapes.declarationNewtypes(db));
     }
 
@@ -858,7 +864,7 @@ public final class Adequacy {
      */
     private static souther.compiler.inputs.InputDemand statedIn(
             souther.compiler.check.StatedContract stated, Symbols symbols,
-            souther.compiler.check.DeclarationNewtypes newtypes,
+            souther.compiler.check.DeclarationNewtypes newtypes, DeclaredInput declared,
             souther.compiler.inputs.InputDemand demand) {
         if (stated == null || stated.isEmpty()) {
             return demand;
@@ -867,8 +873,7 @@ public final class Adequacy {
         for (souther.compiler.core.Contract.Param param : stated.params()) {
             parameters.putIfAbsent(param.binding(), param.name());
         }
-        souther.compiler.inputs.InputReads names =
-                souther.compiler.inputs.InputReads.ofWhatIsDeclared(parameters);
+        InputReads names = InputReads.ofWhatIsDeclared(parameters, declared);
         souther.compiler.inputs.InputDemand out = demand;
         for (souther.compiler.check.StatedContract.StatedRule rule : stated.rules()) {
             for (souther.compiler.check.StatedContract.Conjunct conjunct : rule.conjuncts()) {
@@ -1098,6 +1103,7 @@ public final class Adequacy {
                 out.put(spec.name(), souther.compiler.partition.DecisionReading.of(spec.name(),
                         analysis, readingOf(db, read, reading.value()),
                         InputReads.ofParametersWhereCallsStand(read.parameterReads(),
+                                read.declared(reading.value()),
                                 ElementBindings.of(analysis, reading.value().newtypes())),
                         spec.dependsOnBehaviors()));
             }

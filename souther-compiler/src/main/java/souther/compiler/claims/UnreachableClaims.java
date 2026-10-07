@@ -2,6 +2,7 @@ package souther.compiler.claims;
 
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.ElementBindings;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
@@ -78,14 +79,15 @@ public final class UnreachableClaims {
      *             of its positions from a {@code match} on anything else
      */
     public static UnreachableClaims of(Core body, InputDomain read, Symbols symbols,
-                                       DeclarationNewtypes newtypes,
+                                       RuleReadingSource source,
                                        souther.compiler.coverage.CoverageSites.Plan plan) {
         if (body == null) {
             return NONE;
         }
         List<Claim> found = new ArrayList<>();
-        claimedUnder(body, InputReads.ofParameters(read.parameterReads(), ElementBindings.NONE),
-                symbols, newtypes, plan, NormalReturn.ofBody(body), true, found);
+        claimedUnder(body, InputReads.ofParameters(read.parameterReads(), read.declared(source),
+                        ElementBindings.NONE),
+                symbols, source.newtypes(), plan, NormalReturn.ofBody(body), true, found);
         return found.isEmpty() ? NONE
                 : new UnreachableClaims(found, Optional.of(plan.identity()));
     }

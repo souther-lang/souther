@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.collect.AppendOnly;
+import souther.compiler.numeric.ClosedStates;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
@@ -88,9 +89,24 @@ record Known(ConstraintState<FactSubject> constraints, List<Quantified> quantifi
      * is named, and a condition says it only on the path it guards. */
     enum Held { OF_THE_VALUE, ON_THE_PATH }
 
+    /**
+     * Nothing known, each domain taken from here working out what its rules leave for itself.
+     *
+     * <p>For a reader that holds no engine. A walk an engine makes starts at
+     * {@link PathEngine#nothingKnown}, which lends one walk's closures to the next.
+     */
     static Known top() {
-        return new Known(ConstraintState.top(FactSubject.inOneOrder()), List.of(),
-                AppendOnly.empty(), new Unguarded(ConstraintState.top(FactSubject.inOneOrder())));
+        return top(ClosedStates.NONE);
+    }
+
+    /**
+     * Nothing known, with what the numbers leave worked out through {@code closures}, which every
+     * fact taken in afterwards keeps.
+     */
+    static Known top(ClosedStates closures) {
+        return new Known(ConstraintState.top(FactSubject.inOneOrder(), closures), List.of(),
+                AppendOnly.empty(),
+                new Unguarded(ConstraintState.top(FactSubject.inOneOrder(), closures)));
     }
 
     /** This, with {@code f rel 0} taken as holding as far as {@code held} reaches. */
