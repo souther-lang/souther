@@ -147,6 +147,26 @@ class ARowThatStopsAtAGuardSaysWhyOverItTest {
                 () -> "and not as the model's word: " + said);
     }
 
+    /**
+     * A guard on a truth the body was handed is one a way past is read off and looked for, and the
+     * row for the class it refuses stops there for what it writes.
+     *
+     * <p>The way past is the run going down the arm that goes on, which is where such a truth is
+     * seen, and what it takes of a row is the truth holding. Looked for, the row would have to
+     * write the value its class says otherwise — which is what is said over it, and neither that
+     * the ways past were not read nor that nothing holds a row to them.
+     */
+    @Test
+    void aWayPastAGuardOnATruthIsLookedForAndSaysWhatTheRowWrites() {
+        String said = over(offered(GOES_ON
+                .replace("(kind: Kind, amount: Int)", "(kind: Kind, amount: Int, open: Bool)")
+                .replace("(kind, amount)", "(kind, amount, open)")
+                .replace("guard amount > 0", "guard open")), "open=false");
+        assertTrue(said.contains("way 1 past it: `open` is asked by the way to hold true and is"
+                        + " written another value"),
+                () -> "the word the search for the way came to: " + said);
+    }
+
     /** What is said over a row is a comment, so the block still parses. */
     @Test
     void whatIsSaidOverTheRowLeavesTheBlockSomethingAFileCanHold() {

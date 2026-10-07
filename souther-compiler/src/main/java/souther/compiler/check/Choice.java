@@ -96,8 +96,15 @@ public record Choice(Kind kind, List<Arm> arms) {
      */
     public sealed interface Decides {
 
-        /** The condition held, or it did not. */
-        record ACondition(Core cond, boolean holding) implements Decides {}
+        /** The condition of {@code fork} held, or it did not. The fork travels with it: the arm it
+         *  decides is the fork's, and an arm is where a run through the condition is seen. */
+        record ACondition(Core.If fork, boolean holding) implements Decides {
+
+            /** The condition that held or did not. */
+            public Core cond() {
+                return fork.cond();
+            }
+        }
 
         /** The scrutinee is one of the cases this arm names. The scrutinee travels with it: what an
          * arm binds is the value already there, refined to the case. */
@@ -135,7 +142,7 @@ public record Choice(Kind kind, List<Arm> arms) {
         /** What decides the arm of {@code iff} taken where its condition comes out
          *  {@code holding}. */
         static ACondition ofCondition(Core.If iff, boolean holding) {
-            return new ACondition(iff.cond(), holding);
+            return new ACondition(iff, holding);
         }
 
         /** What decides {@code arm} of {@code match}. Asked of the {@code match} and not of its

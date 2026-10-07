@@ -45,14 +45,15 @@ public record HeldOutcome(List<RowDemand> demands, Reachability.Reaching reachin
      * <p>By where a run through the condition is recorded and which way it is to come out, because
      * that is what a run is checked against: what got a row past a guard is the condition coming
      * out the way the guard needs, which is false as often as true — under
-     * {@code Bool.not(x <= 0)} it is {@code x <= 0} failing.
+     * {@code Bool.not(x <= 0)} it is {@code x <= 0} failing. Where that is recorded is a place a
+     * comparison or an application comes out a way, or for a truth no construct of its own
+     * records, the arm a fork on it takes.
      */
     @FunctionalInterface
     public interface Of {
 
-        /** What brings the condition out the way {@code outcome} says, or empty where nothing was
-         *  found that does. */
-        Optional<HeldOutcome> at(ControlPlace.Outcome outcome);
+        /** What brings a run to {@code place}, or empty where nothing was found that does. */
+        Optional<HeldOutcome> at(ControlPlace place);
 
         /** Nothing holds any condition — what a caller with no borders to read uses. */
         Of NOTHING = _ -> Optional.empty();

@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -92,8 +93,11 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * truth that is an answer the body hands back stops nothing.
      *
      * @param assumed every condition on the way to it, each with what became of it
+     * @param wholeOf the fork it is the whole condition of, whose arms a run coming out of it is
+     *                seen taking; empty for a part of a condition, which no arm is taken on alone
      */
-    record TruthMet(Condition.Truth condition, List<OnTheWay> assumed) {
+    record TruthMet(Condition.Truth condition, List<OnTheWay> assumed,
+                    Optional<ConstructOccurrence> wholeOf) {
 
         TruthMet {
             assumed = List.copyOf(assumed);
@@ -387,7 +391,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 Condition condition =
                         Condition.of(iff.cond(), reads, symbols, in.newtypes(), numbering);
                 if (live) {
-                    truthsIn(condition, assumed, in.read(), in.truths());
+                    truthsIn(condition, assumed, in.read(), in.truths(),
+                            Optional.ofNullable(iff.occurrence()));
                 }
                 // What this walk found in the condition, for the reader that decides whether the
                 // fork states a rule of its own. Said of every fork an author wrote, and of none
@@ -483,19 +488,21 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * Every truth {@code condition} asks, each with what stood on the way to it: what stood before
      * the condition, and for a part after a connective, what the parts before it coming out the
      * way that runs it say.
+     *
+     * @param wholeOf the fork {@code condition} is the whole condition of, where it is one
      */
     private static void truthsIn(Condition condition, List<OnTheWay> assumed, InputReading read,
-                                 List<TruthMet> out) {
+                                 List<TruthMet> out, Optional<ConstructOccurrence> wholeOf) {
         switch (condition) {
-            case Condition.Truth truth -> out.add(new TruthMet(truth, assumed));
+            case Condition.Truth truth -> out.add(new TruthMet(truth, assumed, wholeOf));
             case Condition.Compares _ -> { }
             // The right part runs where the left leaves the answer open, which under a conjunction
             // is the left holding and under a disjunction the left failing.
             case Condition.Joined joined -> {
-                truthsIn(joined.left(), assumed, read, out);
+                truthsIn(joined.left(), assumed, read, out, Optional.empty());
                 boolean leftHolding = joined.how().under(true) == ConditionJoin.BOTH;
                 truthsIn(joined.right(), taking(joined.left(), leftHolding, read, assumed), read,
-                        out);
+                        out, Optional.empty());
             }
         }
     }

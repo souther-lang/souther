@@ -3,6 +3,7 @@ package souther.compiler.reading;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.coverage.ControlClaim;
+import souther.compiler.coverage.ControlPlace;
 import souther.compiler.flow.Ways;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -35,10 +36,10 @@ class TheRestOfTheBlockKeepsWhatTheReadingSaidOfTheWaysTest {
             data Done = { n: Int }
             data Refused
 
-            behavior settle : (kind: Kind, amount: Int) -> Done | Refused
+            behavior settle : (kind: Kind, amount: Int, open: Bool) -> Done | Refused
                 constructs Done
 
-            let settle (kind, amount) = {
+            let settle (kind, amount, open) = {
                 guard CONDITION else Refused
                 match kind with
                     | Plain -> Done { n = 1 }
@@ -82,5 +83,41 @@ class TheRestOfTheBlockKeepsWhatTheReadingSaidOfTheWaysTest {
         assertTrue(ways instanceof Ways.Known<List<ControlClaim>>(
                         List<List<ControlClaim>> paths) && paths.size() == 1,
                 () -> "one way past the guard, written down: " + ways);
+        assertEquals(List.of(false), placesOf(ways).stream()
+                        .map(at -> at instanceof ControlPlace.Arm).toList(),
+                () -> "and it is the comparison, with nothing of the arm beside it: " + ways);
+    }
+
+    /**
+     * A truth the body was handed comes out a way at no comparison, and the way past a guard on
+     * one is the run going down the arm that goes on.
+     */
+    @Test
+    void theWayPastAGuardOnATruthIsTheArmThatGoesOn() {
+        Ways<List<ControlClaim>> ways = waysPast("open").getFirst();
+        assertEquals(List.of(true), placesOf(ways).stream()
+                        .map(at -> at instanceof ControlPlace.Arm).toList(),
+                () -> "one way past the guard, seen at the arm: " + ways);
+    }
+
+    /**
+     * And beside a comparison, the comparison and the arm: the arm says what the comparison does
+     * not, and the comparison is still what a row is steered by.
+     */
+    @Test
+    void theWayPastAGuardOnATruthAndAComparisonIsBoth() {
+        Ways<List<ControlClaim>> ways = waysPast("amount > 0 && open").getFirst();
+        assertEquals(List.of(false, true), placesOf(ways).stream()
+                        .map(at -> at instanceof ControlPlace.Arm).toList(),
+                () -> "one way past the guard, the comparison and the arm: " + ways);
+    }
+
+    /** Where each claim of the one way written down is made. */
+    private static List<ControlPlace> placesOf(Ways<List<ControlClaim>> ways) {
+        if (!(ways instanceof Ways.Known<List<ControlClaim>>(List<List<ControlClaim>> paths))
+                || paths.size() != 1) {
+            throw new AssertionError("one way past the guard, written down: " + ways);
+        }
+        return paths.getFirst().stream().map(ControlClaim::at).toList();
     }
 }

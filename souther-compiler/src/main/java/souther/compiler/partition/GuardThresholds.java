@@ -263,14 +263,19 @@ public final class GuardThresholds {
         }
         // And every truth a fork's condition asks, under the construct of the model that answers
         // it, which is the construct a run is seen coming out of. A truth asked of a name the body
-        // was handed is answered by no construct, and no run is seen at it.
+        // was handed is answered by no construct; where it is the whole of a fork's condition, the
+        // arm a run takes is where it is seen, and it is filed under the fork.
         for (ComparisonReadings.TruthMet each : comparisons.truths()) {
             List<OnTheWay> holding = ReachingCuts.stating(each.condition(), read, true);
             List<OnTheWay> failing = ReachingCuts.stating(each.condition(), read, false);
+            ReachingCuts.TruthOnTheWay met =
+                    new ReachingCuts.TruthOnTheWay(each.assumed(), holding, failing);
             Optional<ModelOccurrence> answeredBy = DecisionNaming.answeredAt(each.condition());
             if (answeredBy.isPresent()) {
-                cuts.answered(answeredBy.get(),
-                        new ReachingCuts.TruthOnTheWay(each.assumed(), holding, failing));
+                cuts.answered(answeredBy.get(), met);
+            } else {
+                each.wholeOf().flatMap(ModelOccurrence::statedAt)
+                        .ifPresent(fork -> cuts.decides(fork, met));
             }
             // And under the application a denial denies, which is where a run reading through the
             // denial is seen coming out — the other way round from the whole where the denials

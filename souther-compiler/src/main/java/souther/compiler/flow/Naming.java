@@ -76,6 +76,52 @@ public interface Naming<P> {
      */
     P forkArm(Core fork, int part);
 
+    /**
+     * {@code onlyWay} as a run that went down arm {@code part} of {@code fork} is seen taking it,
+     * written down whole, or null where this naming has no words for that.
+     *
+     * <p>Asked only where {@code onlyWay} is the one way the condition may come out the way into
+     * the arm, so a run seen at the arm is a run seen having come that way and the condition having
+     * come out the arm's way. That is what lets the arm stand for a condition no construct of its
+     * own records — a truth the body was handed comes out a way at no comparison, and the arm the
+     * fork takes on it is where a run is seen. Where the condition may come out that way by two
+     * ways the arm cannot say which, and this is not asked.
+     *
+     * <p>The way and not a second account beside it. Where the reading worked out the value
+     * {@code onlyWay} comes to, what the condition settled is what the way says, and the arm adds
+     * where a run through it is seen; a way already written down whole and seen wherever it is seen
+     * needs nothing of the arm, and is answered as it is. Where the reading could not work out the
+     * value, the way says nothing of the condition coming out the arm's way, and that is the arm's
+     * to add.
+     */
+    P seenAtTheArm(Core.If fork, int part, Arrival<P> onlyWay);
+
+    /**
+     * {@code way}, one of the ways the condition comes out into arm {@code part} of {@code fork},
+     * as a run down the arm is seen taking it.
+     *
+     * <p>Asked where there may be others, so the arm cannot stand for this way — a run down it may
+     * have come by any of them. What it can add is to what the way already says of itself: a way
+     * that says an operand was not run says something only where the operator was, and taking an
+     * arm of a fork whose condition runs the operator first says it was.
+     */
+    P oneOfTheWaysIn(Core.If fork, int part, P way);
+
+    /**
+     * {@code left}, the one way the left of {@code operator} goes on, as a run that went on into the
+     * right and came out {@code right} is seen taking it.
+     *
+     * <p>The right runs only where the left went on, so where a run through the right is recorded
+     * is where a run is seen having come by the left's one way.
+     */
+    P wentOn(Core.Binary operator, P left, Arrival<P> right);
+
+    /**
+     * {@code left}, the one way the left of {@code operator} settles its answer, as a run that
+     * stopped there without running the right is seen taking it.
+     */
+    P stoppedShort(Core.Binary operator, P left);
+
     /** How many arrivals one node is read as before the reading gives up on enumerating them. */
     int mostArrivals();
 }

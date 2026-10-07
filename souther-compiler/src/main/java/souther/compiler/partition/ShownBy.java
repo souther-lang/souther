@@ -63,6 +63,57 @@ public sealed interface ShownBy {
     }
 
     /**
+     * One arm of a fork, taken without the operand {@code notReached} having run.
+     *
+     * <p>For a condition settled on the left of an operator that stops when its answer is settled,
+     * which no construct records: what a run shows of it is that the right was not run. That is
+     * only an answer where the operator was run at all, and taking the arm of a fork whose
+     * condition runs the operator first is what says it was — so the two are one place to be seen
+     * at, and neither is one alone.
+     *
+     * @param fork       which fork of the model
+     * @param part       which arm of it
+     * @param notReached the right operand, as the construct of the model a run through it is
+     *                   recorded at
+     */
+    record AtAnArmShortOf(ModelOccurrence fork, int part, ModelOccurrence notReached)
+            implements ShownBy {
+
+        public AtAnArmShortOf {
+            if (fork == null || notReached == null) {
+                throw new IllegalArgumentException("an arm taken short of an operand is an arm of"
+                        + " some fork and short of some construct");
+            }
+            if (part < 0) {
+                throw new IllegalArgumentException("an arm stands somewhere among its fork's: "
+                        + part);
+            }
+        }
+    }
+
+    /**
+     * A condition nothing records, settled on the left of an operator whose right was not run.
+     *
+     * <p>Not yet a place to be seen at. That the right did not run says the left settled only where
+     * the operator ran, which an arm of the fork it decides says ({@link AtAnArmShortOf}); until a
+     * fork says so this is a condition no run is recognised through, as {@link NothingIsRecorded}
+     * is.
+     *
+     * @param condition  the column, which tells two of these apart
+     * @param notReached the right operand that was not run
+     */
+    record ShortOf(DecisionCondition condition, ModelOccurrence notReached) implements ShownBy {
+
+        public ShortOf {
+            if (condition == null || notReached == null) {
+                throw new IllegalArgumentException(
+                        "a condition settled short of an operand is some condition, short of some"
+                                + " construct");
+            }
+        }
+    }
+
+    /**
      * A condition with no construct of the model to be seen at.
      *
      * <p>Named by the column, which is what tells two of them apart wherever anything does. What a
@@ -70,7 +121,9 @@ public sealed interface ShownBy {
      * compiler's shortfall rather than anything about the model.
      *
      * <p>A truth the body asks of a name it was handed, or of a value no construct of the model
-     * answers, is one of these: there is no construct for a run to have answered it at.
+     * answers, is one of these: there is no construct for a run to have answered it at. Except
+     * where the fork it is asked by is entered by that one way alone, and then the arm a run takes
+     * is where it is seen ({@link AtAnArm}).
      */
     record NothingIsRecorded(DecisionCondition condition) implements ShownBy {
 

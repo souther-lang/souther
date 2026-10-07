@@ -65,14 +65,16 @@ import java.util.Set;
  * built from.
  */
 public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
-                           Lookup<ModelOccurrence, TruthOnTheWay> byTruth) {
+                           Lookup<ModelOccurrence, TruthOnTheWay> byTruth,
+                           Lookup<ModelOccurrence, TruthOnTheWay> byFork) {
 
-    public static final ReachingCuts NONE =
-            new ReachingCuts(Lookup.built(_ -> { }), Lookup.built(_ -> { }));
+    public static final ReachingCuts NONE = new ReachingCuts(Lookup.built(_ -> { }),
+            Lookup.built(_ -> { }), Lookup.built(_ -> { }));
 
     public ReachingCuts {
         Objects.requireNonNull(byComparison, "what a walk collected, comparison by comparison");
         Objects.requireNonNull(byTruth, "what a walk collected, truth by truth");
+        Objects.requireNonNull(byFork, "what a walk collected, fork by fork");
     }
 
     /**
@@ -112,7 +114,24 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
      */
     public Optional<HeldOutcome> heldAt(ModelOccurrence application, boolean held,
                                         SearchRegion declarations) {
-        TruthOnTheWay met = byTruth.get(application);
+        return held(byTruth.get(application), held, declarations);
+    }
+
+    /**
+     * What brings a run down arm {@code part} of {@code fork}, where the fork's whole condition is a
+     * truth no construct of its own records: the truth coming out the way the arm is taken on, as
+     * {@link #heldAt} answers it for an application.
+     *
+     * <p>The arm is where a run through such a truth is seen, so it is what a way past a guard on
+     * one names; and what it takes of a row is what the truth coming out that way takes.
+     */
+    public Optional<HeldOutcome> heldAtTheArm(ModelOccurrence fork, int part,
+                                              SearchRegion declarations) {
+        return held(byFork.get(fork), part == 0, declarations);
+    }
+
+    private static Optional<HeldOutcome> held(TruthOnTheWay met, boolean held,
+                                              SearchRegion declarations) {
         if (met == null) {
             return Optional.empty();
         }
@@ -418,6 +437,7 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
 
         private final Map<ModelOccurrence, List<OnTheWay>> byComparison = new LinkedHashMap<>();
         private final Map<ModelOccurrence, TruthOnTheWay> byTruth = new LinkedHashMap<>();
+        private final Map<ModelOccurrence, TruthOnTheWay> byFork = new LinkedHashMap<>();
 
         /**
          * The truth the application {@code answers} answers, met as {@code met} says.
@@ -429,6 +449,19 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
             if (byTruth.putIfAbsent(answers, met) != null) {
                 throw new IllegalStateException(
                         "two truths of one reading state one construct of the model: " + answers);
+            }
+        }
+
+        /**
+         * The truth that is the whole condition of {@code fork}, met as {@code met} says, for a truth
+         * no construct of its own records.
+         *
+         * <p>Once per fork, since a fork has one condition.
+         */
+        void decides(ModelOccurrence fork, TruthOnTheWay met) {
+            if (byFork.putIfAbsent(fork, met) != null) {
+                throw new IllegalStateException(
+                        "two conditions of one reading decide one fork of the model: " + fork);
             }
         }
 
@@ -448,7 +481,8 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
 
         ReachingCuts made() {
             return new ReachingCuts(Lookup.built(put -> byComparison.forEach(put::put)),
-                    Lookup.built(put -> byTruth.forEach(put::put)));
+                    Lookup.built(put -> byTruth.forEach(put::put)),
+                    Lookup.built(put -> byFork.forEach(put::put)));
         }
     }
 }

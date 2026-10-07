@@ -83,10 +83,11 @@ final class Arms {
      * one helper are two guards and a run past one has not passed the other.
      *
      * <p>The ways are read off the body the guard is written in by the walk that reads it, named
-     * for what a run would be seen doing ({@link WhatARunIsSeenDoing}), and asked of each guard's
-     * condition. Over the whole body and not the condition alone, because what a name in the
-     * condition stands for is what the body bound it to above. Not walked where the body has no
-     * guard, and once for each body that has one.
+     * for what a run would be seen doing ({@link WhatARunIsSeenDoing}), and asked as the ways into
+     * the arm that goes on ({@link ValueArrivals#waysInto}) — which, for a guard on a truth no
+     * comparison answers, is the arm itself. Over the whole body and not the condition alone,
+     * because what a name in the condition stands for is what the body bound it to above. Not
+     * walked where the body has no guard, and once for each body that has one.
      */
     SequencedMap<ArmProbe, TheRestOfTheBlock> restOfTheBlock(String behavior) {
         Map<Core, ArmProbe> heldAt = new IdentityHashMap<>();
@@ -113,7 +114,7 @@ final class Arms {
                         return ValueArrivals.ofBody(body, naming, naming.eitherWay());
                     });
             out.put(arm.index(), new TheRestOfTheBlock(arm, goesOn,
-                    seen.waysTo(guard.cond(), partOf(fork, goesOn) == 0)));
+                    seen.waysInto(guard, partOf(fork, goesOn))));
         }
         return Collections.unmodifiableSequencedMap(out);
     }

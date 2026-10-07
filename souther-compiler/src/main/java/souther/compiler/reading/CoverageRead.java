@@ -603,7 +603,7 @@ public final class CoverageRead {
             return new Reach.Nothing(
                     PathAccess.Unreachable.Why.THE_CONDITION_NEVER_COMES_OUT_THAT_WAY);
         }
-        if (reading.waysTo(iff.cond(), part == 0) instanceof Ways.Known<Outcome> known) {
+        if (reading.waysInto(iff, part) instanceof Ways.Known<Outcome> known) {
             return known.paths().isEmpty()
                     ? new Reach.Nothing(
                             PathAccess.Unreachable.Why.THE_CONDITION_NEVER_COMES_OUT_THAT_WAY)

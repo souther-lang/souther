@@ -5,12 +5,15 @@ import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.AnswerEmissionIndex;
 import souther.compiler.coverage.ArmEmissionIndex;
 import souther.compiler.coverage.ComparisonEmissionIndex;
+import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Which rule of a body's decision each run took.
@@ -74,19 +77,57 @@ public final class RulesTaken {
      * carrying a fork is expanded per call site, and a row through any of those copies went through
      * the arm the model states.
      */
-    private record Recognised(DecisionRule rule, List<List<ControlClaim>> conditions) {
+    private record Recognised(DecisionRule rule, List<Seen> conditions) {
 
         boolean satisfiedBy(AlignedObservation seen) {
-            for (List<ControlClaim> alternatives : conditions) {
-                boolean any = false;
-                for (ControlClaim each : alternatives) {
-                    any |= each.satisfiedBy(seen);
-                }
-                if (!any) {
+            for (Seen each : conditions) {
+                if (!each.satisfiedBy(seen)) {
                     return false;
                 }
             }
             return true;
+        }
+    }
+
+    /** What a run through one condition of a rule has to be seen doing. */
+    private sealed interface Seen {
+
+        boolean satisfiedBy(AlignedObservation seen);
+
+        /** Recorded at one of these: each a materialisation of the one place. */
+        record AtAnyOf(List<ControlClaim> alternatives) implements Seen {
+
+            @Override
+            public boolean satisfiedBy(AlignedObservation seen) {
+                for (ControlClaim each : alternatives) {
+                    if (each.satisfiedBy(seen)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        }
+
+        /**
+         * Down one of the materialisations of an arm, and at none of the places an operand is
+         * recorded at — every materialisation of it, since a run that reached any copy of the
+         * operand is one this cannot say stopped short of it.
+         */
+        record DownAnArmShortOf(List<ControlClaim> arm, List<ConditionOutcomeSite> notReached)
+                implements Seen {
+
+            @Override
+            public boolean satisfiedBy(AlignedObservation seen) {
+                if (!new AtAnyOf(arm).satisfiedBy(seen)) {
+                    return false;
+                }
+                for (ConditionOutcomeSite each : notReached) {
+                    if (seen.reached(each)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
         }
     }
 
@@ -129,13 +170,12 @@ public final class RulesTaken {
             if (!ruled.whole()) {
                 continue;
             }
-            List<List<ControlClaim>> conditions = new ArrayList<>();
+            List<Seen> conditions = new ArrayList<>();
             boolean everyOne = true;
             for (ShownBy each : ruled.shownBy()) {
-                List<ControlClaim> alternatives =
-                        claimsFor(each, comparisons, answers, arms, plan);
-                everyOne &= !alternatives.isEmpty();
-                conditions.add(alternatives);
+                Optional<Seen> seen = seenAs(each, comparisons, answers, arms, plan);
+                everyOne &= seen.isPresent();
+                seen.ifPresent(conditions::add);
             }
             if (everyOne) {
                 recognisable.add(new Recognised(ruled.rule(), List.copyOf(conditions)));
@@ -145,44 +185,78 @@ public final class RulesTaken {
     }
 
     /**
-     * Where a run through one condition of a path is recorded, one entry per materialisation the
-     * emitter numbered.
+     * What a run through one condition of a path is seen doing, or empty where this compiler
+     * cannot recognise a run through it.
      *
-     * <p>Empty says this compiler cannot recognise a run through it, which is one answer over three
-     * causes: the condition has no construct of the model, the emitted tree holds no materialisation
-     * of that construct, and the plan numbered no site for the ones it holds. None of them is
-     * anything about the model, so they arrive here as one.
+     * <p>Empty is one answer over several causes: the condition has no construct of the model, the
+     * emitted tree holds no materialisation of that construct, and the plan numbered no site for the
+     * ones it holds. None of them is anything about the model, so they arrive here as one.
      */
-    private static List<ControlClaim> claimsFor(ShownBy shown,
-                                                ComparisonEmissionIndex comparisons,
-                                                AnswerEmissionIndex answers,
-                                                ArmEmissionIndex arms,
-                                                CoverageSites.Plan plan) {
+    private static Optional<Seen> seenAs(ShownBy shown, ComparisonEmissionIndex comparisons,
+                                         AnswerEmissionIndex answers, ArmEmissionIndex arms,
+                                         CoverageSites.Plan plan) {
+        return switch (shown) {
+            case ShownBy.AtAnOutcome at -> some(new Seen.AtAnyOf(
+                    outcomes(at.construct(), at.held(), comparisons, answers, plan)));
+            case ShownBy.AtAnArm at -> some(new Seen.AtAnyOf(armOf(at.fork(), at.part(), arms)));
+            // Short of the operand at every place it is recorded, each copy of it both ways: a copy
+            // the plan records no run through is one a run may have reached, and with it this
+            // cannot say the run stopped short.
+            case ShownBy.AtAnArmShortOf at -> {
+                List<ControlClaim> arm = armOf(at.fork(), at.part(), arms);
+                List<ConditionOutcomeSite> sites = new ArrayList<>();
+                int copies = comparisons.madeFor(at.notReached()).size()
+                        + answers.madeFor(at.notReached()).size();
+                for (ControlClaim each : outcomes(at.notReached(), true, comparisons, answers,
+                        plan)) {
+                    if (each.at() instanceof ControlPlace.Outcome outcome) {
+                        sites.add(outcome.at());
+                    }
+                }
+                yield arm.isEmpty() || sites.isEmpty() || sites.size() != copies
+                        ? Optional.empty()
+                        : Optional.of(new Seen.DownAnArmShortOf(arm, List.copyOf(sites)));
+            }
+            case ShownBy.ShortOf _, ShownBy.NothingIsRecorded _ -> Optional.empty();
+        };
+    }
+
+    /** {@code seen}, where it has a place to be seen at. */
+    private static Optional<Seen> some(Seen.AtAnyOf seen) {
+        return seen.alternatives().isEmpty() ? Optional.empty() : Optional.of(seen);
+    }
+
+    /**
+     * Where {@code construct} coming out {@code held} is recorded, one entry per materialisation
+     * the emitter numbered.
+     *
+     * <p>A construct of the model is a comparison or an application and never both, so it is
+     * looked for among the copies of each and found among one.
+     */
+    private static List<ControlClaim> outcomes(ModelOccurrence construct, boolean held,
+                                               ComparisonEmissionIndex comparisons,
+                                               AnswerEmissionIndex answers,
+                                               CoverageSites.Plan plan) {
         List<ControlClaim> out = new ArrayList<>();
-        switch (shown) {
-            // A construct of the model is a comparison or an application and never both, so it is
-            // looked for among the copies of each and found among one.
-            case ShownBy.AtAnOutcome at -> {
-                for (ComparisonEmissionIndex.EmittedComparison made
-                        : comparisons.madeFor(at.construct())) {
-                    // Asked of the plan, which is the one maker of a place a comparison comes out
-                    // one way: it takes the address for the comparison being asked about, so the
-                    // two are one answer rather than a pair assembled here.
-                    plan.outcomeOf(made.occurrence(), at.held())
-                            .flatMap(ControlClaim::of).ifPresent(out::add);
-                }
-                for (CoverageSites.AnswerSite made : answers.madeFor(at.construct())) {
-                    plan.outcomeOf(made.application(), at.held())
-                            .flatMap(ControlClaim::of).ifPresent(out::add);
-                }
-            }
-            case ShownBy.AtAnArm at -> {
-                for (ControlPlace.Arm arm : arms.madeFor(
-                        new ArmEmissionIndex.ArmOfTheModel(at.fork(), at.part()))) {
-                    ControlClaim.of(arm).ifPresent(out::add);
-                }
-            }
-            case ShownBy.NothingIsRecorded _ -> { }
+        for (ComparisonEmissionIndex.EmittedComparison made : comparisons.madeFor(construct)) {
+            // Asked of the plan, which is the one maker of a place a comparison comes out one
+            // way: it takes the address for the comparison being asked about, so the two are one
+            // answer rather than a pair assembled here.
+            plan.outcomeOf(made.occurrence(), held).flatMap(ControlClaim::of).ifPresent(out::add);
+        }
+        for (CoverageSites.AnswerSite made : answers.madeFor(construct)) {
+            plan.outcomeOf(made.application(), held).flatMap(ControlClaim::of)
+                    .ifPresent(out::add);
+        }
+        return List.copyOf(out);
+    }
+
+    /** Where a run down arm {@code part} of {@code fork} is recorded, one entry per
+     *  materialisation. */
+    private static List<ControlClaim> armOf(ModelOccurrence fork, int part, ArmEmissionIndex arms) {
+        List<ControlClaim> out = new ArrayList<>();
+        for (ControlPlace.Arm arm : arms.madeFor(new ArmEmissionIndex.ArmOfTheModel(fork, part))) {
+            ControlClaim.of(arm).ifPresent(out::add);
         }
         return List.copyOf(out);
     }

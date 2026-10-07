@@ -146,6 +146,11 @@ public sealed interface DecisionRuleReading {
                 case ShownBy.AtAnOutcome(var construct, var held) ->
                         outcomeOf(plan, behavior, construct, held);
                 case ShownBy.AtAnArm(var fork, var part) -> armOf(plan, behavior, fork, part);
+                // The arm is the place a reader is sent to: the operand not run is what the run
+                // there did not do, and there is no place to send anyone for that.
+                case ShownBy.AtAnArmShortOf(var fork, var part, var _) ->
+                        armOf(plan, behavior, fork, part);
+                case ShownBy.ShortOf(var condition, var _) -> new AConditionIsNotShown(condition);
                 case ShownBy.NothingIsRecorded(var condition) ->
                         new AConditionIsNotShown(condition);
             });

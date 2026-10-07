@@ -9,10 +9,13 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.flow.Arrival;
 import souther.compiler.flow.Naming;
+import souther.compiler.flow.Truth;
 import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.ComparedNumbers;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.types.ResolvedCase;
 import souther.compiler.inputs.PathResolution;
@@ -213,14 +216,9 @@ final class CoverageNaming implements Naming<Outcome> {
             return null;
         }
         Condition what = switch (Choice.decidingArm(fork, part)) {
-            case Choice.Decides.ACondition(Core cond, boolean holding) -> {
-                TermPath read = switch (reads.pathOf(cond, newtypes)) {
-                    case PathResolution.At(var stands) -> stands;
-                    case PathResolution.NotAPosition _ -> null;
-                    case PathResolution.MayStandAt _ -> null;
-                };
-                yield read == null ? new Condition.Arm(place.arm())
-                        : new Condition.Case(read, List.of(holding ? "true" : "false"));
+            case Choice.Decides.ACondition(Core.If iff, boolean holding) -> {
+                Condition.Case truth = truthOf(iff.cond(), holding);
+                yield truth == null ? new Condition.Arm(place.arm()) : truth;
             }
             case Choice.Decides.ItWasBuilt _ -> new Condition.Arm(place.arm());
             case Choice.Decides.ItDeparted _ -> new Condition.Arm(place.arm());
@@ -232,6 +230,54 @@ final class CoverageNaming implements Naming<Outcome> {
                             + " was asked of as an arm of a fork, and no walk enters one");
         };
         return one(new Decision(what, claim));
+    }
+
+    /**
+     * The way, and where it says less than that the condition came out the arm's way, the
+     * {@code Bool} position the condition is about holding the truth the arm is taken on, seen at
+     * the arm.
+     *
+     * <p>Only where the condition says that of one position, however it is written. What the way
+     * left out is then the position's truth, which comes out a way at no construct the plan places;
+     * the arm a run took says which, and the position is what a row is composed at. A condition
+     * that is anything else is no position to say it of, and an arm that names no position steers
+     * no row — so there this has no words for the arm, and the way is the condition's.
+     */
+    @Override
+    public Outcome seenAtTheArm(Core.If fork, int part, Arrival<Outcome> onlyWay) {
+        if (onlyWay.value() != Truth.UNREAD && onlyWay.isComplete()) {
+            return onlyWay.path();
+        }
+        Condition.Case truth = truthOf(fork.cond(), part == 0);
+        ControlPlace.Arm place = armPoint(fork, part);
+        ControlClaim claim = claimAt(place);
+        return truth == null || claim == null ? null
+                : join(onlyWay.path(), one(new Decision(truth, claim)));
+    }
+
+    /** What {@code cond} coming out {@code holding} says a {@code Bool} position holds, or null
+     *  where it says nothing of one ({@link InputTruth}). */
+    private Condition.Case truthOf(Core cond, boolean holding) {
+        InputTruth truth = InputTruth.of(cond, holding, reads, symbols, newtypes);
+        return truth == null ? null
+                : new Condition.Case(truth.at(), List.of(truth.held() ? "true" : "false"));
+    }
+
+    // The decisions a row is composed against are the ones these ways hold, and an operand not run
+    // or a way among several places no class.
+    @Override
+    public Outcome oneOfTheWaysIn(Core.If fork, int part, Outcome way) {
+        return way;
+    }
+
+    @Override
+    public Outcome wentOn(Core.Binary operator, Outcome left, Arrival<Outcome> right) {
+        return left;
+    }
+
+    @Override
+    public Outcome stoppedShort(Core.Binary operator, Outcome left) {
+        return left;
     }
 
     @Override
