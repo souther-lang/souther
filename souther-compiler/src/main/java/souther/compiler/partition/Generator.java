@@ -4595,16 +4595,6 @@ public final class Generator {
             }
             heldBack.put(at, edge.met());
         }
-        // And the value the way asks of each Bool position it read, which no edge offers and no
-        // region placed. Written beside the numbers, so a location holding one of them and asked
-        // for something else as well is refused where every two asks of one location are.
-        TermPath twice = reaching.truths().writtenInto(decided);
-        if (twice != null) {
-            return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
-                    UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                    "`" + twice + "` would have to hold two values at once"),
-                    where.unrepresented());
-        }
         // What the way asks containers to hold that no region placed, and the order that lets every
         // container be composed after the parameters it is handed a value of.
         // The order is one for every way of writing them under the cases, since which parameter a
@@ -4623,15 +4613,38 @@ public final class Generator {
         // composes taken: a container a name every case of a sum spreads is composed under one of
         // the cases. What the rest came to is said over every one of them, the same whichever was
         // tried first.
-        ContentsAsked.UnderTheCases under =
-                asked.underTheCases(subject.reach(), reaching.requirements());
+        ContentsAsked.UnderTheCases under = asked.underTheCases(subject.reach(),
+                reaching.requirements(), reaching.truths().at().keySet());
         FixtureTemplate[] composed = new FixtureTemplate[order.parameters().size()];
         List<ParameterCameToNothing> cameToNothing = new ArrayList<>();
-        ContentsAsked.UnderTheCases.Walked walked = under.tryEach((contents, taken) -> {
-            Reachability.Reaching thisWay = new Reachability.Reaching(reaching.region(), taken,
-                    reaching.truths(), reaching.boundedOnTheWay());
-            ParameterCameToNothing one = new InOrder(subject, order, composed, standing, decided,
-                    settled, thisWay, check, contents).from(0, Map.of());
+        ContentsAsked.UnderTheCases.Walked walked = under.tryEach(way -> {
+            // And the value the way asks of each Bool position it read, which no edge offers and
+            // no region placed — at the position each stands at in this way, which for a Bool the
+            // cases share is under the case this way writes. Written beside the numbers, so a
+            // location holding one of them and asked for something else as well is refused where
+            // every two asks of one location are.
+            LocationWrites writes = decided.copy();
+            TermPath twice = null;
+            TruthsAsked truths = TruthsAsked.NONE;
+            switch (reaching.truths().standingAt(way.standing())) {
+                case TruthsAsked.Merge.Merged(var here) -> {
+                    truths = here;
+                    twice = here.writtenInto(writes);
+                }
+                case TruthsAsked.Merge.Conflict(var at) -> twice = at;
+            }
+            if (twice != null) {
+                cameToNothing.add(new ParameterCameToNothing(
+                        order.parameters().indexOf(twice.head()),
+                        new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                                "`" + twice + "` would have to hold two values at once"),
+                        SearchShortfall.NONE, Map.of()));
+                return false;
+            }
+            Reachability.Reaching thisWay = new Reachability.Reaching(reaching.region(),
+                    way.taken(), truths, reaching.boundedOnTheWay());
+            ParameterCameToNothing one = new InOrder(subject, order, composed, standing, writes,
+                    settled, thisWay, check, way.contents()).from(0, Map.of());
             if (one == null) {
                 return true;
             }
@@ -7466,21 +7479,8 @@ public final class Generator {
                                 + "` would have to hold two values at once")));
             }
         }
-        // And the value the way to the comparisons asks of each Bool position it read, beside what
-        // the classes wrote. A class of the position holding the other value is a row that would
-        // have to be both, which is no combination the model has — said as that, the way a class
-        // and a comparison leaving a number nowhere between them are.
-        TruthsAsked truths = holding.reaching() == null ? TruthsAsked.NONE
+        TruthsAsked truthsAsked = holding.reaching() == null ? TruthsAsked.NONE
                 : holding.reaching().truths();
-        TermPath twice = truths.writtenInto(decided);
-        if (twice != null) {
-            return RowComposed.Failed.ofTheRow(new Attempt(null,
-                    UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH, twice.toString(),
-                    Optional.of("`" + twice + "` is asked by the way to hold "
-                            + truths.at().get(twice) + " and is written another value")));
-        }
-        Set<TermPath> writtenAt = new LinkedHashSet<>(together.keySet());
-        writtenAt.addAll(truths.at().keySet());
         // The order is one for every way of writing the containers under the cases, since which
         // parameter a container is handed a value of does not turn on the case it is written
         // under.
@@ -7498,14 +7498,43 @@ public final class Generator {
         // by one under another case that does not. What they came to is said over every one of
         // them, with the figure where the walk stopped short of the rest.
         Requirements rowIs = required;
-        ContentsAsked.UnderTheCases under =
-                holding.contents().underTheCases(subject.reach(), rowIs);
+        ContentsAsked.UnderTheCases under = holding.contents().underTheCases(subject.reach(),
+                rowIs, truthsAsked.at().keySet());
         RowComposed[] stoppedWith = {null};
         SearchShortfall[] passedOver = {null};
         List<RowComposed.Failed> cameToNothing = new ArrayList<>();
-        ContentsAsked.UnderTheCases.Walked walked = under.tryEach((contents, taken) -> {
+        ContentsAsked.UnderTheCases.Walked walked = under.tryEach(way -> {
+            // And the value the way to the comparisons asks of each Bool position it read, beside
+            // what the classes wrote — at the position each stands at in this way, which for a Bool
+            // the cases share is under the case this way writes. A class of the position holding
+            // the other value is a row that would have to be both, which is no combination the
+            // model has — said as that, the way a class and a comparison leaving a number nowhere
+            // between them are.
+            LocationWrites writes = decided.copy();
+            TruthsAsked truths;
+            switch (truthsAsked.standingAt(way.standing())) {
+                case TruthsAsked.Merge.Merged(var here) -> truths = here;
+                case TruthsAsked.Merge.Conflict(var at) -> {
+                    cameToNothing.add(RowComposed.Failed.ofTheRow(new Attempt(null,
+                            UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
+                            at.toString(), Optional.of("`" + at + "` is asked by the way to"
+                                    + " hold both values"))));
+                    return false;
+                }
+            }
+            TermPath twice = truths.writtenInto(writes);
+            if (twice != null) {
+                cameToNothing.add(RowComposed.Failed.ofTheRow(new Attempt(null,
+                        UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
+                        twice.toString(), Optional.of("`" + twice + "` is asked by the way to"
+                                + " hold " + truths.at().get(twice)
+                                + " and is written another value"))));
+                return false;
+            }
+            Set<TermPath> writtenAt = new LinkedHashSet<>(together.keySet());
+            writtenAt.addAll(truths.at().keySet());
             RowComposed came = inputsFrom(new RowBeingComposed(axes, given, check, holding,
-                    contents, writtenAt, decided, taken, taking, order), 0,
+                    way.contents(), writtenAt, writes, way.taken(), taking, order), 0,
                     new FixtureTemplate[order.parameters().size()], Map.of());
             return switch (came) {
                 case RowComposed.Taken _, RowComposed.Halted _ -> {

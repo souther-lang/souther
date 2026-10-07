@@ -10,8 +10,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.BiPredicate;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Which containers of a row are to hold the value at another position, and which are to hold
@@ -84,14 +84,19 @@ record ContentsAsked(List<Asked> asked) {
      * moved under it ({@link Requirements}). Walked together with the containers, because a row is
      * one case of a sum whichever of them put it there — a container and a requirement chosen
      * apart would ask for a value that is two cases at once.
+     *
+     * <p><b>And so is every other place the row writes a value it was asked for</b>
+     * ({@code writing}): a {@code Bool} the way to a line read at a name the cases share is a
+     * value written under the case the row is, along with everything else the row is.
      */
-    UnderTheCases underTheCases(NameReach reach, Requirements trying) {
+    UnderTheCases underTheCases(NameReach reach, Requirements trying, Set<TermPath> writing) {
         Set<TermPath> named = new LinkedHashSet<>();
         for (Asked each : asked) {
             named.add(each.container());
             named.add(each.value());
         }
         named.addAll(trying.atANameTheCasesShare());
+        named.addAll(writing);
         List<TermPath> paths = List.copyOf(named);
         List<WhereANameIsWritten> written = new ArrayList<>();
         boolean notWorkedOut = false;
@@ -115,8 +120,9 @@ record ContentsAsked(List<Asked> asked) {
      * <p>Only ways a row can be at once: two names of one sum are written under one case, and a way
      * that put them under two would be a value that is both.
      *
-     * @param named            every container and value asked, and every name the row is required
-     *                         something at that stands under the cases, each once
+     * @param named            every container and value asked, every name the row is required
+     *                         something at that stands under the cases, and every other place the
+     *                         row writes a value it was asked for, each once
      * @param written          where each of {@code named} may be written
      * @param trying           what the row already is
      * @param someNotWorkedOut whether some way of writing one of them reached a case the row can be
@@ -143,20 +149,33 @@ record ContentsAsked(List<Asked> asked) {
         }
 
         /**
+         * One way of writing the row under the cases.
+         *
+         * @param contents what the containers are handed, at the places this way writes them
+         * @param taken    what the row is taken to be to write it so: what it already was, every
+         *                 case on the way to each place, and what was required at a name moved
+         *                 under the case it is written as. That and not {@link #trying}, which is the
+         *                 row before any case was chosen
+         * @param standing where each of {@link #named} stands in this way
+         */
+        record Way(ContentsAsked contents, Requirements taken, Map<TermPath, TermPath> standing) {
+
+            Way {
+                standing = Map.copyOf(standing);
+            }
+        }
+
+        /**
          * Hands each way to {@code composes}, until it answers that one composed or the figure is
          * reached.
-         *
-         * <p>Each way with what the row is taken to be to write it so: what it already was, every
-         * case on the way to each place, and what was required at a name moved under the case it
-         * is written as. That and not {@link #trying}, which is the row before any case was chosen.
          */
-        Walked tryEach(BiPredicate<ContentsAsked, Requirements> composes) {
+        Walked tryEach(Predicate<Way> composes) {
             int[] left = {CompositionBudget.WAYS_UNDER_THE_CASES_TRIED.maximum()};
             return from(0, trying, new LinkedHashMap<>(), composes, left);
         }
 
         private Walked from(int next, Requirements taken, Map<TermPath, TermPath> at,
-                            BiPredicate<ContentsAsked, Requirements> composes, int[] left) {
+                            Predicate<Way> composes, int[] left) {
             if (next == named.size()) {
                 if (left[0] == 0) {
                     return Walked.STOPPED_AT_THE_FIGURE;
@@ -167,8 +186,8 @@ record ContentsAsked(List<Asked> asked) {
                     under.add(new Asked(at.get(each.container()), at.get(each.value()),
                             each.holding()));
                 }
-                return composes.test(new ContentsAsked(under), taken) ? Walked.COMPOSED
-                        : Walked.EVERY_WAY_TRIED;
+                return composes.test(new Way(new ContentsAsked(under), taken, at))
+                        ? Walked.COMPOSED : Walked.EVERY_WAY_TRIED;
             }
             for (WhereANameIsWritten.Place place : written.get(next).places()) {
                 if (!(taken.merge(place.taken())

@@ -138,7 +138,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // which both roads a row is composed on carry with what the ways tried came to — rows
             // passed over included.
             Map.entry("souther.compiler.partition.ContentsAsked$UnderTheCases#tryEach("
-                            + "Ljava/util/function/BiPredicate;)"
+                            + "Ljava/util/function/Predicate;)"
                             + "Lsouther/compiler/partition/ContentsAsked$UnderTheCases$Walked;",
                     "stops handing over ways under the cases with some left, and answers that it"
                             + " stopped at the figure rather than that every way was tried"),

@@ -11,6 +11,7 @@ import souther.compiler.inputs.TermPath;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -83,23 +84,24 @@ class WhatTheWaysUnderTheCasesComeToTest {
                 written.places().stream().map(WhereANameIsWritten.Place::position).toList());
         assertFalse(written.someNotWorkedOut());
         assertFalse(holding("campaigns", "campaign")
-                .underTheCases(stoppedUnderTheOther("campaigns"), alreadyOne).someNotWorkedOut());
+                .underTheCases(stoppedUnderTheOther("campaigns"), alreadyOne, Set.of())
+                .someNotWorkedOut());
     }
 
     @Test
     void aCaseWhoseReadingStoppedIsOpenForTheRowsTheWayGoesThrough() {
         assertTrue(holding("campaigns", "campaign")
-                .underTheCases(stoppedUnderTheOther("campaigns"), Requirements.NONE)
+                .underTheCases(stoppedUnderTheOther("campaigns"), Requirements.NONE, Set.of())
                 .someNotWorkedOut());
         assertFalse(holding("campaigns", "campaign")
-                .underTheCases(spreadUnderBoth("campaigns"), Requirements.NONE)
+                .underTheCases(spreadUnderBoth("campaigns"), Requirements.NONE, Set.of())
                 .someNotWorkedOut());
     }
 
     @Test
     void theFigureIsWhatKeptTheRestUntriedOnlyWhereTheWalkStoppedThere() {
         ContentsAsked.UnderTheCases under = holding("campaigns", "campaign")
-                .underTheCases(spreadUnderBoth("campaigns"), Requirements.NONE);
+                .underTheCases(spreadUnderBoth("campaigns"), Requirements.NONE, Set.of());
 
         assertEquals(SearchShortfall.of(CompositionShortfall.of(
                         Set.of(CompositionBudget.WAYS_UNDER_THE_CASES_TRIED))),
@@ -115,7 +117,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
     @Test
     void aCaseNobodyReadIsWhatTheWalkFoundOutHoweverFarItWent() {
         ContentsAsked.UnderTheCases under = holding("campaigns", "campaign")
-                .underTheCases(stoppedUnderTheOther("campaigns"), Requirements.NONE);
+                .underTheCases(stoppedUnderTheOther("campaigns"), Requirements.NONE, Set.of());
 
         assertTrue(under.foundOut(ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED).unread());
         assertTrue(under.foundOut(ContentsAsked.UnderTheCases.Walked.COMPOSED).unread());
@@ -132,9 +134,9 @@ class WhatTheWaysUnderTheCasesComeToTest {
         List<Requirements> taken = new ArrayList<>();
 
         assertEquals(ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED,
-                new ContentsAsked(List.of()).underTheCases(reach, asked)
-                        .tryEach((_, takenAs) -> {
-                            taken.add(takenAs);
+                new ContentsAsked(List.of()).underTheCases(reach, asked, Set.of())
+                        .tryEach(way -> {
+                            taken.add(way.taken());
                             return false;
                         }));
         assertEquals(2, taken.size(), () -> "a way under each case: " + taken);
@@ -145,15 +147,43 @@ class WhatTheWaysUnderTheCasesComeToTest {
                 () -> "each way says which case the name is under: " + taken);
     }
 
+    /**
+     * A value the row is asked to write at a name the cases share stands under the case each way
+     * writes the row as, and a truth asked there is written at that position — where it meets what
+     * else the row writes there, as every two asks of one location do.
+     */
+    @Test
+    void aValueAskedAtANameTheCasesShareIsWrittenUnderTheCaseOfTheWay() {
+        NameReach reach = spreadUnderBoth("urgent");
+        TermPath urgent = LEAD.then("urgent");
+        List<Map<TermPath, TermPath>> standing = new ArrayList<>();
+        new ContentsAsked(List.of()).underTheCases(reach, Requirements.NONE, Set.of(urgent))
+                .tryEach(way -> {
+                    standing.add(way.standing());
+                    return false;
+                });
+        assertEquals(List.of(Map.of(urgent, LEAD.refine(ONE).then("urgent")),
+                Map.of(urgent, LEAD.refine(OTHER).then("urgent"))), standing);
+
+        TruthsAsked asked = new TruthsAsked(Map.of(urgent, true));
+        TruthsAsked underOne = ((TruthsAsked.Merge.Merged) asked.standingAt(standing.getFirst()))
+                .truths();
+        assertEquals(Map.of(LEAD.refine(ONE).then("urgent"), true), underOne.at());
+        LocationWrites writes = new LocationWrites();
+        writes.write(LEAD.refine(ONE).then("urgent"), List.of(FixtureTemplate.bool(false)));
+        assertEquals(LEAD.refine(ONE).then("urgent"), underOne.writtenInto(writes),
+                "the truth meets what a class wrote at the same position");
+    }
+
     @Test
     void twoNamesOfOneSumAreWrittenUnderOneCase() {
         ContentsAsked.UnderTheCases under = holding("campaigns", "campaign")
-                .underTheCases(spreadUnderBoth("campaigns", "campaign"), Requirements.NONE);
+                .underTheCases(spreadUnderBoth("campaigns", "campaign"), Requirements.NONE, Set.of());
         List<ContentsAsked> handed = new ArrayList<>();
 
         assertEquals(ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED,
-                under.tryEach((each, _) -> {
-                    handed.add(each);
+                under.tryEach(way -> {
+                    handed.add(way.contents());
                     return false;
                 }));
         assertEquals(List.of(holdingUnder(ONE), holdingUnder(OTHER)), handed);
@@ -168,11 +198,11 @@ class WhatTheWaysUnderTheCasesComeToTest {
     @Test
     void theWaysStopWhereOneComposes() {
         ContentsAsked.UnderTheCases under = holding("campaigns", "campaign")
-                .underTheCases(spreadUnderBoth("campaigns", "campaign"), Requirements.NONE);
+                .underTheCases(spreadUnderBoth("campaigns", "campaign"), Requirements.NONE, Set.of());
         int[] handed = {0};
 
         assertEquals(ContentsAsked.UnderTheCases.Walked.COMPOSED,
-                under.tryEach((_, _) -> ++handed[0] == 1));
+                under.tryEach(_ -> ++handed[0] == 1));
         assertEquals(1, handed[0]);
     }
 
@@ -185,7 +215,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
         int[] handed = {0};
 
         assertEquals(ContentsAsked.UnderTheCases.Walked.STOPPED_AT_THE_FIGURE,
-                apart("first", "second", "third", "fourth").tryEach((_, _) -> {
+                apart("first", "second", "third", "fourth").tryEach(_ -> {
                     handed[0]++;
                     return false;
                 }));
@@ -198,7 +228,7 @@ class WhatTheWaysUnderTheCasesComeToTest {
         int[] handed = {0};
 
         assertEquals(ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED,
-                apart("first", "second", "third").tryEach((_, _) -> {
+                apart("first", "second", "third").tryEach(_ -> {
                     handed[0]++;
                     return false;
                 }));
@@ -217,6 +247,6 @@ class WhatTheWaysUnderTheCasesComeToTest {
             asked.add(new ContentsAsked.Asked(at.then("held"), TermPath.of("value"), true));
         }
         return new ContentsAsked(asked).underTheCases(
-                new NameReach(crossings, List.of(), List.of()), Requirements.NONE);
+                new NameReach(crossings, List.of(), List.of()), Requirements.NONE, Set.of());
     }
 }

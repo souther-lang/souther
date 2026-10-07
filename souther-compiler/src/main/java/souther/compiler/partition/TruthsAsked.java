@@ -56,6 +56,29 @@ public record TruthsAsked(Map<TermPath, Boolean> at) {
     }
 
     /**
+     * The same truths, each at the position {@code standing} says the name it is asked at stands
+     * at, or the position asked for both values.
+     *
+     * <p>A {@code Bool} the cases of a sum share is read at the sum and written under whichever case
+     * the row is, the way every name the cases share is ({@link ContentsAsked#underTheCases}): asked
+     * of the name, a truth is a value a row writes at no position at all.
+     *
+     * @param standing where each name a way of writing the row wrote stands under its cases. A name
+     *                 not in it stands where it is written
+     */
+    Merge standingAt(Map<TermPath, TermPath> standing) {
+        Map<TermPath, Boolean> out = new LinkedHashMap<>();
+        for (Map.Entry<TermPath, Boolean> each : at.entrySet()) {
+            TermPath there = standing.getOrDefault(each.getKey(), each.getKey());
+            Boolean had = out.putIfAbsent(there, each.getValue());
+            if (had != null && !had.equals(each.getValue())) {
+                return new Merge.Conflict(there);
+            }
+        }
+        return new Merge.Merged(new TruthsAsked(out));
+    }
+
+    /**
      * Each value written at its position, or the first position where something else is to be
      * written already — null where none is.
      *
