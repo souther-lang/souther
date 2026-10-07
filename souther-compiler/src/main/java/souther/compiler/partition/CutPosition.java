@@ -183,6 +183,25 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
     }
 
     /**
+     * A level of the quantity, said on the order the rule wrote this line on.
+     *
+     * <p>What {@link #written} is on, and so what the number the rule wrote and the range of the
+     * form it wrote are on. A seam names the values either side of the line in the quantity's own
+     * units, which is what a value of the position is written in; held beside the threshold or
+     * beside where the written form runs, such a value is on another order by a factor of
+     * {@link #per}. {@code 2 * a < 6000} leaves off at {@code a = 2999}, which the form calls 5998.
+     *
+     * @return the level, or the way the number it comes to was not held
+     */
+    public ExactAnswer<Level> asWritten(Level ofTheQuantity) {
+        ExactRatio number = ofTheQuantity.asANumber();
+        if (number == null || per.equals(ExactRatio.ONE)) {
+            return ExactAnswer.held(ofTheQuantity);
+        }
+        return number.times(per).map(Level.OfTheQuantity::new);
+    }
+
+    /**
      * The same line, said in units {@code k} times smaller.
      *
      * <p>A line at a place is at {@code k} times that number where the unit is a {@code k}th of the

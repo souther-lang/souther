@@ -1333,6 +1333,15 @@ final class ReadQuantities implements Quantities {
         return made;
     }
 
+    /** Whether the rules leave {@code term} at {@code at} and nowhere else. */
+    private boolean pinnedAt(NumericTerm term, Place at) {
+        return projectionOf(LinearForm.atom(term))
+                instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds runs)
+                && runs.min() != null && runs.max() != null
+                && runs.min().inclusive() && runs.max().inclusive()
+                && runs.min().at().sameAs(at) && runs.max().at().sameAs(at);
+    }
+
     /** {@link #emptiness}, worked out. */
     private Optional<EmptyInput> whyNothingIsLeft() {
         for (Map.Entry<NumericTerm, Fixed> each : inOrder()) {
@@ -1357,6 +1366,16 @@ final class ReadQuantities implements Quantities {
                     && apartAt(each.getKey()).has(each.getValue().least())) {
                 return Optional.of(new EmptyInput.WhereARuleHoldsThePositionApart(each.getKey(),
                         each.getValue().least()));
+            }
+        }
+        // And a position the rules pin to a place it is held apart from. A hole is refused by
+        // whatever puts the position at it, and an equation taken in puts it there as surely as a
+        // fixing does: a line naming a value is asked as one, and the hole the way left at that
+        // value has to answer it.
+        for (Assumed taken : assumed) {
+            if (taken instanceof Assumed.ApartFrom hole && pinnedAt(hole.term(), hole.at())) {
+                return Optional.of(new EmptyInput.WhereARuleHoldsThePositionApart(hole.term(),
+                        hole.at()));
             }
         }
         // Two things fixed under cases no one value is both of. Said here rather than by the rules,
