@@ -137,13 +137,14 @@ class WhatTheSearchAnswersForDoesNotTurnOnHowCaseNamesCompareTest {
         return out;
     }
 
-    /** A key said in the names the model this is compared with uses. */
+    /** A key said in the names the model this is compared with uses, with the sets in it in one
+     *  order ({@link SpelledSets}). */
     private static String spelledBefore(String said, Map<String, String> back) {
         String out = said;
         for (Map.Entry<String, String> each : back.entrySet()) {
             out = out.replace(each.getValue(), each.getKey());
         }
-        return out;
+        return SpelledSets.inOneOrder(out);
     }
 
     /** What kind of answer it is, which is what a reader of the account acts on. */

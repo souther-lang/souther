@@ -144,10 +144,8 @@ public sealed interface ItemAssessment {
          * build. Read through, that state cannot be spelled.
          *
          * <p>Which is also what makes composing a search safe. A search adds to the
-         * {@link #searches} and changes nothing else, and every ground but one is monotone in what it
-         * reads. The one is the rules' proof, which a search proving the way leaves the point nothing
-         * takes away — two proofs of the model, of which only the search's is about the point
-         * ({@link Ground#THE_RULES_PROVE_IT}). It used to be a verdict picked from the evidence by
+         * {@link #searches} and changes nothing else, and every ground is monotone in what it reads,
+         * so the set this answers can only grow. It used to be a verdict picked from the evidence by
          * a fixed order, where building a value at a point the rules already proved replaced the
          * proof with the witness — true of whether anything was known, and false of what was doing
          * the knowing.
@@ -158,8 +156,7 @@ public sealed interface ItemAssessment {
             // counted here, an observation this compiler cut short would be reported as the model
             // admitting a row, which is the same trade as the one it is here to stop, made the
             // other way round. What that row does license is said by `WritabilityKnowledge`.
-            return WritabilityEvidence.of(projection, hasRowWitness(), searches.certified(),
-                    searches.provesInfeasible());
+            return WritabilityEvidence.of(projection, hasRowWitness(), searches.certified());
         }
     }
 
@@ -186,10 +183,12 @@ public sealed interface ItemAssessment {
          *  the model does. */
         UNPROVEN,
 
-        /** The question was not put. A line between two positions is the one this exists for: what a
+        /** The question was not put. A line between two positions is one this exists for: what a
          *  row on it takes is a place both positions admit, and reading each of them on its own does
-         *  not answer that. Told apart from {@link #UNPROVEN} so that implementing the reading later
-         *  moves a line off this state rather than off an answer somebody wrote for it. */
+         *  not answer that. A line behind a condition is the other: what a row at it takes is a
+         *  place the way to it leaves, and the position's rules read on their own do not answer that
+         *  either. Told apart from {@link #UNPROVEN} so that implementing the reading later moves a
+         *  line off this state rather than off an answer somebody wrote for it. */
         NOT_COMPUTED;
 
         /** Whether this is the state that puts a ground in the evidence. The other two are told apart
@@ -234,17 +233,9 @@ public sealed interface ItemAssessment {
          */
         public enum Ground {
 
-            /**
-             * The rules reaching the value prove the point is inside what they admit. The one
-             * ground that is about the model rather than about this run, so it stands whatever a
-             * search afterwards fails to make of the point.
-             *
-             * <p>Except a search that proves the way to the point leaves it nothing. The rules of a
-             * position say a value there is one the model admits; a point a fork drew is a value a
-             * row arriving at the fork holds, and {@code n > 10} before {@code n == 11} admits a ten
-             * at the position and never at the inner line. That proof is the model's answer to the
-             * point's own question, so where it is made this is no ground.
-             */
+            /** The rules reaching the value prove the point is inside what they admit. The one ground
+             *  that is about the model rather than about this run, so it stands whatever a search
+             *  afterwards makes of the point. */
             THE_RULES_PROVE_IT,
 
             /** A row this compilation read stands at the point, which is a value that went through
@@ -270,9 +261,9 @@ public sealed interface ItemAssessment {
          *  comes from: a caller that assembled a set of its own would be deciding what the facts
          *  beside it establish, which is this method's question and not a caller's. */
         public static WritabilityEvidence of(WritabilityProjection projection, boolean rowIsAtIt,
-                                             boolean valueWasBuilt, boolean theWayLeavesItNothing) {
+                                             boolean valueWasBuilt) {
             EnumSet<Ground> grounds = EnumSet.noneOf(Ground.class);
-            if (projection.proves() && !theWayLeavesItNothing) {
+            if (projection.proves()) {
                 grounds.add(Ground.THE_RULES_PROVE_IT);
             }
             if (rowIsAtIt) {

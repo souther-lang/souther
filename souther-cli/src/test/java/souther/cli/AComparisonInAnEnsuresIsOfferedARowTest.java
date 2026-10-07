@@ -67,6 +67,10 @@ class AComparisonInAnEnsuresIsOfferedARowTest {
      * {@code a.n.value > 100} — the fork's line at a hundred is unmet, and the clause's is met,
      * because every rule of a declaration runs whenever the behavior answers.
      *
+     * <p>The way to the fork's line is a comparison, so a row is composed through it and the line's
+     * points are ones a row can be written at; behind a condition no row is composed against, the
+     * fork's points would be undecided rather than unmet.
+     *
      * <p>Matched on the word each rule is written with, so that the two are told apart by what
      * each is rather than by the value they name: a comparison is found where it is written and a
      * clause by the name the author gave it, and a report that called them one thing would have
@@ -89,7 +93,7 @@ class AComparisonInAnEnsuresIsOfferedARowTest {
             module demo
 
             data N = Int
-            data Amount = { flag: Bool, n: N }
+            data Amount = { mode: Int, n: N }
             data Ok = { n: Int }
             data Refused = { why: String }
 
@@ -97,13 +101,13 @@ class AComparisonInAnEnsuresIsOfferedARowTest {
                 ensures small = Refused -> a.n.value <= 100
                 constructs Ok, Refused
             let charge (a) =
-                if a.flag then
+                if a.mode > 0 then
                     Ok { n = 1 }
                 else
                     if a.n.value > 100 then Ok { n = 2 } else Refused { why = "small" }
 
             example charge
-                | (Amount { flag = true, n = N(100) }) -> Ok { n = 1 }
+                | (Amount { mode = 1, n = N(100) }) -> Ok { n = 1 }
             """;
 
     /**

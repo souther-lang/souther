@@ -145,8 +145,15 @@ public sealed interface PathResolution {
      * asks it ({@link InputReads#forkedOn}).
      */
     default PathResolution heldAt() {
-        return this instanceof At(var at) && !at.position().equals(at)
-                ? new At(at.position()) : this;
+        return switch (this) {
+            case At(var at) -> new At(at.position());
+            case NotAPosition _ -> this;
+            // Each place it may stand at, as a place: the same answer about the run, whatever the
+            // narrowings on the way to any one of them. Kept as the places it may be even where
+            // they come to one, since what this says is that no read of it is settled as one.
+            case MayStandAt(var among) ->
+                    new MayStandAt(among.stream().map(TermPath::position).distinct().toList());
+        };
     }
 
     /**

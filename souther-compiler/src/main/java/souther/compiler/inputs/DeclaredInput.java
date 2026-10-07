@@ -13,7 +13,6 @@ import souther.compiler.types.TypeSymbol;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.Map;
@@ -120,7 +119,7 @@ public final class DeclaredInput {
         boolean reaches = false;
         boolean within = true;
         boolean read = false;
-        Set<TypeSymbol> left = new LinkedHashSet<>();
+        Set<TypeSymbol> left = new HashSet<>();
         for (List<TypeSymbol> leaves : readings) {
             if (leaves.isEmpty() || !matchable.containsAll(leaves)) {
                 continue;
@@ -140,10 +139,9 @@ public final class DeclaredInput {
             return new Taking.Implied();
         }
         // The leaves the arm covers that the declaration leaves, which is not empty: the arm
-        // reaches one of them. In the order the declaration writes them, which is the model's and
-        // not the arm's.
+        // reaches one of them.
         CasesLeft both = covered.keeping(each -> each instanceof Refinement.SumCase sum
-                && left.contains(sum.leaf())).orderedAs(List.copyOf(left));
+                && left.contains(sum.leaf()));
         return new Taking.Narrows(narrowedTo(at, both));
     }
 

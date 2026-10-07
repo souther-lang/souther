@@ -19,6 +19,7 @@ import souther.compiler.query.DecisionEvidence;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -144,7 +145,7 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
                 () -> "each case's field is read under that case: " + under);
         List<DecisionRule> rules = rulesOf("describeEither");
         assertTrue(rules.stream().map(AnArmOnACaseThatIsASumNarrowsToItsLeavesTest::answers)
-                        .anyMatch(each -> each.equals(List.of("v.kind -> {Station|Hospital}",
+                        .anyMatch(each -> each.equals(List.of("v.kind -> {Hospital|Station}",
                                 "v.kind -> Station"))),
                 () -> "the rule through Station takes the arm above it: " + rules);
     }
@@ -157,7 +158,7 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
     void anArmTheNarrowingLeavesNothingForIsARuleNoRowTakes() {
         DecisionReading.Ruled never = ruledOf("describeEither").stream()
                 .filter(each -> answers(each.rule()).equals(
-                        List.of("v.kind -> {Station|Hospital}", "v.kind -> Renkei")))
+                        List.of("v.kind -> {Hospital|Station}", "v.kind -> Renkei")))
                 .findFirst().orElse(null);
         assertNotNull(never, () -> "the inner Renkei arm is a column of the inner question: "
                 + rulesOf("describeEither"));
@@ -190,7 +191,7 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
                 .filter(each -> answers(each.rule()).contains("v.kind -> Station"))
                 .findFirst().orElse(null);
         assertNotNull(station, () -> "a rule goes through Station: " + rules);
-        assertEquals(List.of("v.kind -> {Station|Hospital}", "v.kind -> Station"),
+        assertEquals(List.of("v.kind -> {Hospital|Station}", "v.kind -> Station"),
                 answers(station.rule()), "the rule through Station takes the column above it too");
         Requirements.Merge required = station.states().requirements();
         assertEquals("Station", assertInstanceOf(Requirements.Merge.Merged.class, required,
@@ -206,7 +207,7 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
     /** A narrowing to several leaves that nothing narrows further is a rule as it stands. */
     @Test
     void anArmLeftAtSeveralLeavesIsARule() {
-        assertEquals(Set.of(List.of("v.kind -> {Station|Hospital}"), List.of("v.kind -> Renkei")),
+        assertEquals(Set.of(List.of("v.kind -> {Hospital|Station}"), List.of("v.kind -> Renkei")),
                 rulesOf("once").stream()
                         .map(AnArmOnACaseThatIsASumNarrowsToItsLeavesTest::answers)
                         .collect(Collectors.toSet()));
@@ -219,7 +220,7 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
      */
     @Test
     void theSameQuestionAskedTwiceIsOneColumn() {
-        assertEquals(Set.of(List.of("v.kind -> {Station|Hospital}"), List.of("v.kind -> Renkei")),
+        assertEquals(Set.of(List.of("v.kind -> {Hospital|Station}"), List.of("v.kind -> Renkei")),
                 rulesOf("twice").stream()
                         .map(AnArmOnACaseThatIsASumNarrowsToItsLeavesTest::answers)
                         .collect(Collectors.toSet()));
@@ -290,24 +291,43 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
     }
 
     /**
-     * The cases a narrowing leaves are said in the order the model declares them, and not in the
-     * order their names compare in: renamed so that the names compare the other way round, the
-     * model's rules read the same once the names are put back.
+     * Renaming the cases changes nothing about the rules: renamed so that the names compare the
+     * other way round, each rule turns on the same subjects and leaves each the same cases once the
+     * names are put back.
+     *
+     * <p>Compared as the cases each column leaves and not as how they are spelled. A set of cases is
+     * spelled in the order its names compare in, which is the one order a set can be spelled in by
+     * itself, so the spelling of a renamed model is the spelling of other names.
      */
     @Test
-    void theCasesLeftAreSaidInTheOrderTheModelDeclaresThem() {
-        Set<List<String>> asWritten = ruledOf(MODEL, "describe").stream()
-                .map(each -> answers(each.rule())).collect(Collectors.toSet());
-        Set<List<String>> renamed = ruledOf(MODEL.replace("Station", "Zzzzzzz")
-                        .replace("Hospital", "Aaaaaaaa"), "describe").stream()
-                .map(each -> answers(each.rule()).stream()
-                        .map(said -> said.replace("Zzzzzzz", "Station")
-                                .replace("Aaaaaaaa", "Hospital"))
-                        .toList())
-                .collect(Collectors.toSet());
+    void renamingTheCasesChangesNoRule() {
+        Map<String, String> back = Map.of("Zzzzzzz", "Station", "Aaaaaaaa", "Hospital");
+        Set<List<Map.Entry<String, Set<String>>>> asWritten = ruledOf(MODEL, "describe").stream()
+                .map(each -> leftBy(each.rule(), Map.of())).collect(Collectors.toSet());
+        Set<List<Map.Entry<String, Set<String>>>> renamed = ruledOf(MODEL
+                        .replace("Station", "Zzzzzzz").replace("Hospital", "Aaaaaaaa"),
+                "describe").stream()
+                .map(each -> leftBy(each.rule(), back)).collect(Collectors.toSet());
         assertEquals(asWritten, renamed);
-        assertTrue(asWritten.stream().anyMatch(each -> each.contains("v.kind -> {Station|Hospital}")),
-                () -> "in the order OnceKind declares them: " + asWritten);
+        assertTrue(asWritten.contains(List.of(Map.entry("v.kind", Set.of("Hospital", "Station")),
+                        Map.entry("v.kind", Set.of("Station")))),
+                () -> "the rule through Station is among them: " + asWritten);
+    }
+
+    /** Each case column of {@code rule}, as its subject and the names of the cases it leaves, with
+     *  each name put back through {@code back}. */
+    private static List<Map.Entry<String, Set<String>>> leftBy(DecisionRule rule,
+                                                               Map<String, String> back) {
+        return rule.inOrder().stream()
+                .filter(each -> each instanceof DecidedCondition.Narrowed)
+                .map(each -> (DecidedCondition.Narrowed) each)
+                .map(each -> Map.entry(
+                        ((DecisionSubject.AnInput) each.condition().of()).at().toString(),
+                        each.to().atoms().stream()
+                                .map(atom -> ((Refinement.SumCase) atom).leaf().name())
+                                .map(name -> back.getOrDefault(name, name))
+                                .collect(Collectors.toSet())))
+                .toList();
     }
 
     /**
