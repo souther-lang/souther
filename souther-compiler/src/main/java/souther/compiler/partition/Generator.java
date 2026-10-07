@@ -6586,16 +6586,6 @@ public final class Generator {
             this(row, reason, detail, said, SearchShortfall.NONE);
         }
 
-        /** What the rules about the positions left out of what the search was offered. */
-        SequencedMap<TermPath, StringOfferShortfall> alsoShort() {
-            return found.offered();
-        }
-
-        /** What of this compiler's the search met. */
-        CompositionShortfall met() {
-            return found.met();
-        }
-
         /** The same, said to have come to nothing at {@code parameter} alone. */
         Attempt localTo(int parameter) {
             return new Attempt(row, reason, detail, said, found, OptionalInt.of(parameter));
@@ -6603,10 +6593,6 @@ public final class Generator {
 
         static Attempt of(GeneratedRow row) {
             return new Attempt(row, null, null, Optional.empty());
-        }
-
-        static Attempt no(UnresolvedCombination.Reason reason, String detail) {
-            return new Attempt(null, reason, detail, Optional.empty());
         }
 
         /**
