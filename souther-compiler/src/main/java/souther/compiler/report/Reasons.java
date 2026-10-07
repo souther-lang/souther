@@ -173,6 +173,8 @@ final class Reasons {
                         "how many paths through one body a decision is read for";
                 case NUMBERS_OF_A_SET_TRIED ->
                         "how many of the numbers a class admits are tried";
+                case RUNS_REPAIRING_A_ROW ->
+                        "how many runs looking for a row that goes further may make";
             });
         }
         return String.join(", ", out);

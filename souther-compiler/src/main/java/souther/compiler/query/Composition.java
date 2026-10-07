@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.partition.FillResult;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.ObligationIdentity;
 
@@ -88,7 +89,7 @@ public record Composition(OfferingRequest request,
             // rows — so there is nothing to check here, and a check would be a second place
             // deciding what a row needs to be run.
             take(byBehavior, behavior,
-                    filling == null ? List.of() : filling.composed().rows(),
+                    filling == null ? List.of() : filling.composed().offers(),
                     atTheLines(owed.get(behavior)),
                     filling == null ? List.of() : filling.tellingLinesApart(),
                     filling == null ? List.of() : filling.rules().byRule().values());
@@ -104,7 +105,7 @@ public record Composition(OfferingRequest request,
 
     /** One behavior's rows, joined onto whatever it already offers. */
     private static void take(SequencedMap<String, Map<RowKey, OfferedRow>> byBehavior,
-                             String behavior, List<Generator.GeneratedRow> cells,
+                             String behavior, List<FillResult.Offer> cells,
                              List<Generator.GeneratedRow> lines,
                              List<Generator.GeneratedRow> apart,
                              Collection<Generator.GeneratedRow> rules) {
@@ -112,10 +113,12 @@ public record Composition(OfferingRequest request,
         // under two headings are legal and read as two lists of something, which they are not.
         Map<RowKey, OfferedRow> here =
                 byBehavior.computeIfAbsent(behavior, _ -> new LinkedHashMap<>());
-        for (Generator.GeneratedRow row : cells) {
-            RowKey key = RowKey.of(behavior, row);
-            here.put(key, here.computeIfAbsent(key,
-                    _ -> new OfferedRow(key, row.inputs(), row.answers(), List.of())).and(row.purposes()));
+        // The fill's rows with where each stops, which only these can carry: they are the rows a
+        // search looked past a guard for.
+        for (FillResult.Offer offer : cells) {
+            RowKey key = RowKey.of(behavior, offer.row());
+            here.put(key, here.computeIfAbsent(key, _ -> OfferedRow.of(key, offer.row()))
+                    .and(offer.row(), offer.stop()));
         }
         // The lines, joined on the stimulus and never on what they were composed for. A row at a
         // point carries a purpose no offered row may be named after — {@link OfferedRow} refuses
@@ -129,7 +132,7 @@ public record Composition(OfferingRequest request,
         // answer and not this row's label.
         for (Generator.GeneratedRow row : lines) {
             RowKey key = RowKey.of(behavior, row);
-            here.putIfAbsent(key, new OfferedRow(key, row.inputs(), row.answers(), List.of()));
+            here.putIfAbsent(key, OfferedRow.of(key, row));
         }
         // And the rows that tell a line from the line beside it, joined the same way. Such a row
         // stands at a point of its line as well — that is where it is composed — so a row already
@@ -137,7 +140,7 @@ public record Composition(OfferingRequest request,
         // the account of the line rather than by a word over it.
         for (Generator.GeneratedRow row : apart) {
             RowKey key = RowKey.of(behavior, row);
-            here.putIfAbsent(key, new OfferedRow(key, row.inputs(), row.answers(), List.of()));
+            here.putIfAbsent(key, OfferedRow.of(key, row));
         }
         // And the rules, after the lines. What a row settles decides whether it is kept and the
         // order decides which of two that settle the same things is; the body's own lines are
@@ -149,8 +152,7 @@ public record Composition(OfferingRequest request,
         // by first would be work a person is handed under half of what it does.
         for (Generator.GeneratedRow row : rules) {
             RowKey key = RowKey.of(behavior, row);
-            here.put(key, here.computeIfAbsent(key,
-                    _ -> new OfferedRow(key, row.inputs(), row.answers(), List.of())).and(row.purposes()));
+            here.put(key, here.computeIfAbsent(key, _ -> OfferedRow.of(key, row)).and(row, null));
         }
     }
 

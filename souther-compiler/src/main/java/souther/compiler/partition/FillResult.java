@@ -36,7 +36,8 @@ import java.util.Set;
  * line, and the class's own entry went on holding the line from before the merge.
  *
  * @param composed   the rows, in the order they were composed, which is the order a reader is
- *                   offered them in
+ *                   offered them in — each with what looking for a row that goes further came to,
+ *                   so that a row renumbered here takes that with it
  * @param unresolved what each place a row was looked for came to, said once apiece — the words and
  *                   what of this compiler's the search met, because a reader of this list is
  *                   reading what the class itself came to and there is no second place it is said.
@@ -46,7 +47,7 @@ import java.util.Set;
  *                   the plan named
  * @param discharge  the plan this run was asked with and what became of each thing it named
  */
-public record FillResult(SequencedMap<RowId, ComposedRow> composed,
+public record FillResult(SequencedMap<RowId, FilledRow> composed,
                          List<CameToNothing> unresolved,
                          List<GenerationReason> reasons, Discharge discharge) {
 
@@ -159,7 +160,7 @@ public record FillResult(SequencedMap<RowId, ComposedRow> composed,
             // second of those.
             return searched.getFirst();
         }
-        SequencedMap<RowId, ComposedRow> composed = new LinkedHashMap<>();
+        SequencedMap<RowId, FilledRow> composed = new LinkedHashMap<>();
         Map<OfARun, RowId> named = new LinkedHashMap<>();
         // Every obligation, folded by the kind it is — a kind added to {@link GenerationObligation}
         // without a case here does not compile, which is what keeps this fold in step with the
@@ -244,7 +245,7 @@ public record FillResult(SequencedMap<RowId, ComposedRow> composed,
      */
     private static ClassDisposition offering(ClassDisposition.AcrossRuns answer,
                                              List<FillResult> searched,
-                                             SequencedMap<RowId, ComposedRow> composed,
+                                             SequencedMap<RowId, FilledRow> composed,
                                              Map<OfARun, RowId> named) {
         return switch (answer) {
             case ClassDisposition.AcrossRuns.Built(List<ClassDisposition.AcrossRuns.Witness> of) -> {
@@ -266,7 +267,7 @@ public record FillResult(SequencedMap<RowId, ComposedRow> composed,
      */
     private static ArmDisposition offering(ArmDisposition.AcrossRuns answer,
                                            List<FillResult> searched,
-                                           SequencedMap<RowId, ComposedRow> composed,
+                                           SequencedMap<RowId, FilledRow> composed,
                                            Map<OfARun, RowId> named) {
         return switch (answer) {
             case ArmDisposition.AcrossRuns.Built(List<ArmDisposition.AcrossRuns.Witness> of) -> {
@@ -289,7 +290,7 @@ public record FillResult(SequencedMap<RowId, ComposedRow> composed,
      * each number their rows from nought, and taking the numbers as they came would hold one row
      * under an id another run's row already had.
      */
-    private static RowId naming(List<FillResult> searched, SequencedMap<RowId, ComposedRow> composed,
+    private static RowId naming(List<FillResult> searched, SequencedMap<RowId, FilledRow> composed,
                                 Map<OfARun, RowId> named, int run, RowId rowId) {
         OfARun which = new OfARun(run, rowId);
         RowId already = named.get(which);
@@ -371,23 +372,47 @@ public record FillResult(SequencedMap<RowId, ComposedRow> composed,
      * however a map happened to be walked.
      */
     public List<Generator.GeneratedRow> rows() {
+        List<Generator.GeneratedRow> out = new ArrayList<>();
+        for (Offer each : offers()) {
+            out.add(each.row());
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * A row a reader is offered, and where it stops at a guard, what looking past the guard came
+     * to.
+     *
+     * <p>One value, so that whoever takes the row takes the stop with it. Not part of the row
+     * itself: a row is handed to readers who have nothing to do with looking past a guard — the
+     * account of a declaration's lines among them — and a row that carried this would carry it to
+     * every one of them.
+     *
+     * @param row  the row, carrying what it was composed for
+     * @param stop what looking for a row that goes further came to, or null where there is nothing
+     *             to say about a guard ({@link FilledRow#repair})
+     */
+    public record Offer(Generator.GeneratedRow row, RepairShortfall stop) {}
+
+    /** The rows a reader is offered, in the order {@link #rows} gives them, each with its stop. */
+    public List<Offer> offers() {
         // By the number each row is filed under, which is what a reader is offered them by. Taken
         // off the map as it is held, the list would be in the order the search happened to compose
         // them in — an order two equal results were built two ways, so what a reader is shown would
         // not be settled by what this result is.
         List<RowId> ids = new ArrayList<>(composed.keySet());
         ids.sort(Comparator.comparingInt(RowId::value));
-        List<Generator.GeneratedRow> out = new ArrayList<>();
+        List<Offer> out = new ArrayList<>();
         for (RowId id : ids) {
-            out.add(rowFor(id));
+            out.add(new Offer(rowFor(id), composed.get(id).repair()));
         }
         return List.copyOf(out);
     }
 
     /** One of them, for a reader holding an answer that points at it. */
     public Generator.GeneratedRow rowFor(RowId id) {
-        ComposedRow row = composed.get(id);
-        if (row == null) {
+        FilledRow filled = composed.get(id);
+        if (filled == null) {
             throw new IllegalArgumentException("no row of this run is " + id);
         }
         List<Generator.Purpose> purposes = new ArrayList<>();
@@ -446,6 +471,6 @@ public record FillResult(SequencedMap<RowId, ComposedRow> composed,
                 }
             }
         }
-        return new Generator.GeneratedRow(purposes, row.inputs(), row.answers());
+        return new Generator.GeneratedRow(purposes, filled.line().inputs(), filled.line().answers());
     }
 }

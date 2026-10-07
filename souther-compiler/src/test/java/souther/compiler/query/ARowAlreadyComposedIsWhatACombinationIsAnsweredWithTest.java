@@ -75,7 +75,7 @@ class ARowAlreadyComposedIsWhatACombinationIsAnsweredWithTest {
         Set<RowId> forSomethingElse = composedForSomethingElse(filled);
         Set<Object> theirValues = new LinkedHashSet<>();
         for (RowId each : forSomethingElse) {
-            theirValues.add(filled.composed().get(each).inputs());
+            theirValues.add(filled.composed().get(each).line().inputs());
         }
 
         List<ObligationIdentity.OfAFallbackPairCell> twice = new ArrayList<>();
@@ -83,7 +83,7 @@ class ARowAlreadyComposedIsWhatACombinationIsAnsweredWithTest {
             if (each instanceof GenerationAnswer.Pair(var obligation, var disposition)
                     && disposition instanceof ClassDisposition.Built built
                     && !forSomethingElse.contains(built.rowId())
-                    && theirValues.contains(filled.composed().get(built.rowId()).inputs())) {
+                    && theirValues.contains(filled.composed().get(built.rowId()).line().inputs())) {
                 twice.add(obligation.target());
             }
         }

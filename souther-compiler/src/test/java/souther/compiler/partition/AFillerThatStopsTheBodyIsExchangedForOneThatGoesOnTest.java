@@ -5,11 +5,14 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A row's value at a position it is not about is exchanged for one that lets the body go on, where
@@ -322,15 +325,125 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
                 "the row that writes the stated list keeps it");
     }
 
-    /** What each row is for, by its label, and what it writes. */
-    private static Map<String, String> rowsOf(String source) {
+    /** A row taken past the guard carries nothing about one. */
+    @Test
+    void aRowTakenPastTheGuardSaysNothingOfIt() {
+        Map<String, RepairShortfall> stops = stopsOf(MODEL);
+        assertEquals(List.of(), stops.keySet().stream()
+                        .filter(label -> label.startsWith("kind=")).toList(),
+                () -> "the rows about the kind went on: " + stops);
+    }
+
+    /**
+     * The row about the class the guard refuses says why: the one way past it was looked for, and
+     * a row in that class going that way is one position standing at two things.
+     */
+    @Test
+    void aRowAboutTheClassTheGuardRefusesSaysWhatTheWayPastCameTo() {
+        assertEquals(List.of("searched: ONE_POSITION_CANNOT_BE_BOTH"),
+                waysOf(stopsOf(MODEL).get("amount=x <= 0")));
+    }
+
+    /**
+     * A row kept at a value the module states says the way past would compose that value afresh,
+     * and says it was not looked for — not that a search came to nothing.
+     */
+    @Test
+    void aRowKeepingAStatedValueSaysTheWayPastWouldRewriteIt() {
+        String stating = MODEL + """
+
+                let noAmount: Int = 0
+                """;
+        assertEquals(List.of("not searchable: IT_WOULD_REWRITE_A_STATED_VALUE"),
+                waysOf(stopsOf(stating).get("kind=Plain")));
+    }
+
+    /**
+     * Each way in the order the body writes it, whichever was looked for and whichever could not
+     * be: a way no border offers a point for is said where it stands, before or after the one that
+     * was searched.
+     */
+    private static final String TWO_WAYS = """
+            module example.settle
+
+            data Plain
+            data Express
+            data Kind = Plain | Express
+
+            data Amount = Int
+                invariant value >= 0 && value <= 9
+
+            data Done = { n: Int }
+            data Refused
+
+            behavior settle : (kind: Kind, a: Int, b: Amount) -> Done | Refused
+                constructs Done
+
+            let settle (kind, a, b) = {
+                guard CONDITION else Refused
+                match kind with
+                    | Plain -> Done { n = 1 }
+                    | Express -> Done { n = 2 }
+            }
+            """;
+
+    @Test
+    void eachWayPastIsSaidInTheOrderTheBodyWritesIt() {
+        assertEquals(List.of("searched: ONE_POSITION_CANNOT_BE_BOTH",
+                        "not searchable: NOTHING_HOLDS_A_ROW_TO_IT"),
+                waysOf(stopsOf(TWO_WAYS.replace("CONDITION", "a > 0 || b.value > 20"))
+                        .get("a=x <= 0")));
+        assertEquals(List.of("not searchable: NOTHING_HOLDS_A_ROW_TO_IT",
+                        "searched: ONE_POSITION_CANNOT_BE_BOTH"),
+                waysOf(stopsOf(TWO_WAYS.replace("CONDITION", "b.value > 20 || a > 0"))
+                        .get("a=x <= 0")));
+    }
+
+    /** What each way past the guard came to, in a word apiece. */
+    private static List<String> waysOf(RepairShortfall stop) {
+        assertTrue(stop instanceof RepairShortfall.NoWayPast,
+                () -> "the row stops at the guard with every way past it looked at: " + stop);
+        List<String> out = new ArrayList<>();
+        for (RepairShortfall.WayPast way : ((RepairShortfall.NoWayPast) stop).ways()) {
+            out.add(switch (way) {
+                case RepairShortfall.WayPast.Searched(CameToNothing came) ->
+                        "searched: " + came.why().reason();
+                case RepairShortfall.WayPast.CutShort(CameToNothing came, var figure) ->
+                        "cut short at " + figure + ": " + came.why().reason();
+                case RepairShortfall.WayPast.Untried(var figure) -> "untried at " + figure;
+                case RepairShortfall.WayPast.NotSearchable(var why) -> "not searchable: " + why;
+            });
+        }
+        return out;
+    }
+
+    /** Why each row stops where it does, by its label, for the rows that stop at a guard. */
+    private static Map<String, RepairShortfall> stopsOf(String source) {
+        Map<String, RepairShortfall> out = new LinkedHashMap<>();
+        for (FillResult.Offer offer : generated(source).offers()) {
+            for (Generator.Purpose purpose : offer.row().purposes()) {
+                if (purpose instanceof Generator.Purpose.ForAClass forAClass
+                        && offer.stop() != null) {
+                    out.put(forAClass.label(), offer.stop());
+                }
+            }
+        }
+        return out;
+    }
+
+    private static FillResult generated(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, Adequacy.Filling> all = Adequacy.generatedOf(compilation.db(), "example.settle");
         assertNotNull(all, "the model under test compiles");
+        return all.get("settle").composed();
+    }
+
+    /** What each row is for, by its label, and what it writes. */
+    private static Map<String, String> rowsOf(String source) {
         Map<String, String> out = new LinkedHashMap<>();
-        for (Generator.GeneratedRow row : all.get("settle").composed().rows()) {
+        for (Generator.GeneratedRow row : generated(source).rows()) {
             String written = String.join(", ", row.inputs().stream().map(i -> i.text()).toList());
             for (Generator.Purpose purpose : row.purposes()) {
                 if (purpose instanceof Generator.Purpose.ForAClass forAClass) {

@@ -18,7 +18,10 @@ import souther.compiler.publish.RuleHandleProse;
 import souther.compiler.query.Sites;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.CameToNothing;
+import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionShortfall;
 import souther.compiler.partition.FixtureTemplate;
+import souther.compiler.partition.RepairShortfall;
 import souther.compiler.partition.GenerationReason;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Generator;
@@ -238,7 +241,7 @@ public final class GeneratedRows {
         // anything to answer. Counting the candidates instead gives a number about work a reader
         // cannot see, and asking the candidates whether the block holds a hole prints the line
         // telling them to fill one over a block that has none.
-        Map<String, List<Offered>> offered = named(offering);
+        Map<String, List<Offered>> offered = named(offering, db, rendering, places);
         int rows = offering.count();
         StringBuilder out = new StringBuilder();
         if (rows > 0) {
@@ -339,11 +342,16 @@ public final class GeneratedRows {
      * @param inputs   the row's values, in the form they are written in
      * @param purposes what this layer calls the things it was composed for, in the order they were
      *                 taken
+     * @param stops    where the row stops and what looking for one that goes further came to, in
+     *                 this layer's words, one sentence per search that took it no further than a
+     *                 guard
      */
-    private record Offered(String inputs, String standsIn, List<String> purposes) {
+    private record Offered(String inputs, String standsIn, List<String> purposes,
+                           List<String> stops) {
 
         Offered {
             purposes = List.copyOf(purposes);
+            stops = List.copyOf(stops);
         }
 
         /** The same, and one more thing it turned out to answer. Kept in order and without
@@ -354,7 +362,7 @@ public final class GeneratedRows {
             }
             List<String> both = new ArrayList<>(purposes);
             both.add(purpose);
-            return new Offered(inputs, standsIn, both);
+            return new Offered(inputs, standsIn, both, stops);
         }
 
         /** The row as it is written: named where one thing names it, and not otherwise. What a
@@ -437,14 +445,20 @@ public final class GeneratedRows {
      * them apart is the name rather than the purpose: a class of one position and a class of another
      * can be written the same way, and a reader handed both would be told the same fact twice.
      */
-    private static Map<String, List<Offered>> named(Offering offering) {
+    private static Map<String, List<Offered>> named(Offering offering, Db db,
+                                                    SourceRendering rendering,
+                                                    PublishedRuleHandle.WhereARuleIs places) {
         Map<String, List<Offered>> out = new LinkedHashMap<>();
         offering.rowsByBehavior().forEach((behavior, rows) -> {
             Map<ArmProbe, String> arms = armNames(offering.searched().get(behavior));
             List<Offered> here = new ArrayList<>();
             for (OfferedRow row : rows) {
+                List<String> stops = new ArrayList<>();
+                for (RepairShortfall stop : row.stops()) {
+                    stops.add(stoppedShort(stop, db, rendering, places));
+                }
                 Offered offered = new Offered(row.key().inputs(),
-                        standingIn(offering.request().module(), row), List.of());
+                        standingIn(offering.request().module(), row), List.of(), stops);
                 for (String name : named(row.namedFor(), arms)) {
                     offered = offered.and(name);
                 }
@@ -522,6 +536,10 @@ public final class GeneratedRows {
      * out in it, and a row the formatter wrapped is still one row — its continuations are indented
      * past the {@code |} that starts it, so what starts a row is what a row starts with.
      *
+     * <p>And where the row stops at a guard nothing found a way past, which guard and what each way
+     * came to, over the row and not among the notes below the block. The notes are about places no
+     * row was found for; this row is offered, and a reader completing it is the one who needs to
+     * know it does not get past the guard.
      */
     private static String fills(String rows, Map<String, List<Offered>> offered) {
         List<Offered> inOrder = new ArrayList<>();
@@ -530,8 +548,12 @@ public final class GeneratedRows {
         int at = 0;
         for (String line : rows.lines().toList()) {
             if (line.startsWith(ROW) && at < inOrder.size()) {
-                for (String each : inOrder.get(at++).saidOver()) {
+                Offered row = inOrder.get(at++);
+                for (String each : row.saidOver()) {
                     out.append("// fills ").append(each).append(System.lineSeparator());
+                }
+                for (String each : row.stops()) {
+                    out.append("// stops at ").append(each).append(System.lineSeparator());
                 }
             }
             out.append(line).append(System.lineSeparator());
@@ -847,6 +869,72 @@ public final class GeneratedRows {
                                  SourceRendering rendering,
                                  PublishedRuleHandle.WhereARuleIs places) {
         return Reasons.met(came.met()) + saidOf(came.why(), rendering, places);
+    }
+
+    /**
+     * Where a row stops and what looking for one that goes further came to, as said after
+     * {@code stops at}.
+     *
+     * <p>The guard where the author wrote it, and each way past it in the words its search already
+     * has ({@link #saidOf(CameToNothing, SourceRendering, PublishedRuleHandle.WhereARuleIs)}). Spelled
+     * again here, a way this compiler could not compose a row down and a way the rules leave no row
+     * down would be one more pair of sentences free to say the same thing; through the one that
+     * says every search's word, the first opens on what this compiler fell short at and the second
+     * says what the model settles.
+     *
+     * <p>Each way by where the reading of the body reached it, which is the order the ways are held
+     * in. The way a search for them was ordered is a guess about where a row is, and says nothing a
+     * reader can find in the source.
+     */
+    private static String stoppedShort(RepairShortfall stop, Db db, SourceRendering rendering,
+                                       PublishedRuleHandle.WhereARuleIs places) {
+        String guard = "the guard at "
+                + Sites.placeOf(db, stop.refused().anchor()).said(rendering, null);
+        return switch (stop) {
+            case RepairShortfall.NoWayPast(var _, List<RepairShortfall.WayPast> ways)
+                    when ways.isEmpty() -> guard + ": the ways past it could not be read off the"
+                    + " body, so none was looked for";
+            case RepairShortfall.NoWayPast(var _, List<RepairShortfall.WayPast> ways) -> {
+                List<String> each = new ArrayList<>();
+                for (int at = 0; at < ways.size(); at++) {
+                    each.add("way " + (at + 1) + " past it: "
+                            + wayPast(ways.get(at), rendering, places));
+                }
+                yield guard + ", and no row was found that goes past it — "
+                        + String.join("; ", each);
+            }
+            case RepairShortfall.BackAtAGuardLookedPast _ -> guard + ": a row was taken past it"
+                    + " once, the row taken further stops at it again, and nothing looks past one"
+                    + " guard twice";
+        };
+    }
+
+    /** What one way past a guard came to, in the words that kind of answer has. */
+    private static String wayPast(RepairShortfall.WayPast way, SourceRendering rendering,
+                                  PublishedRuleHandle.WhereARuleIs places) {
+        return switch (way) {
+            case RepairShortfall.WayPast.Searched(CameToNothing came) ->
+                    saidOf(came, rendering, places);
+            // The figure first, the way every search this compiler stopped is said: what the
+            // search had come to is the answer of a search that did not finish.
+            case RepairShortfall.WayPast.CutShort(CameToNothing came, CompositionBudget figure) ->
+                    Reasons.met(CompositionShortfall.of(Set.of(figure)))
+                            + saidOf(came, rendering, places);
+            case RepairShortfall.WayPast.Untried(CompositionBudget figure) ->
+                    Reasons.met(CompositionShortfall.of(Set.of(figure)))
+                            + "it was not looked for";
+            case RepairShortfall.WayPast.NotSearchable(RepairShortfall.Barrier why) ->
+                    switch (why) {
+                        case NOTHING_HOLDS_A_ROW_TO_IT -> "nothing here can hold a row to it, so it"
+                                + " was not looked for — which does not make it a way no row goes";
+                        case IT_WOULD_REWRITE_A_STATED_VALUE -> "a row going this way would write"
+                                + " afresh a value the module states, which the row keeps as"
+                                + " written, so it was not looked for";
+                        case THE_ROW_ALREADY_DOES_ALL_OF_IT -> "the row was seen doing all of it"
+                                + " and stopped all the same, so the ways read off the body are"
+                                + " not every way there is";
+                    };
+        };
     }
 
     /**

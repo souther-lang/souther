@@ -187,7 +187,7 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
     /** And the rows the answers point at, for the same reason: an id under nothing is not a row. */
     @Test
     void aRowIdWithNothingUnderItIsNotARow() {
-        LinkedHashMap<RowId, ComposedRow> nothing = new LinkedHashMap<>();
+        LinkedHashMap<RowId, FilledRow> nothing = new LinkedHashMap<>();
         nothing.put(new RowId(0), null);
         GenerationPlan plan = planOver(List.of(), List.of());
 
@@ -209,8 +209,9 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
 
     @Test
     void aRowNothingPointsAtIsRefused() {
-        LinkedHashMap<RowId, ComposedRow> composed = new LinkedHashMap<>();
-        composed.put(new RowId(0), new ComposedRow(List.of(FixtureTemplate.integer(1)), List.of()));
+        LinkedHashMap<RowId, FilledRow> composed = new LinkedHashMap<>();
+        composed.put(new RowId(0), new FilledRow(
+                new ComposedRow(List.of(FixtureTemplate.integer(1)), List.of()), null));
         GenerationPlan plan = planOver(List.of(A_CLASS), List.of());
 
         assertThrows(IllegalStateException.class,
@@ -224,8 +225,9 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
      *  like. */
     @Test
     void aRunThatAnsweredForEverythingItWasAskedIsBuilt() {
-        LinkedHashMap<RowId, ComposedRow> composed = new LinkedHashMap<>();
-        composed.put(new RowId(0), new ComposedRow(List.of(FixtureTemplate.integer(1)), List.of()));
+        LinkedHashMap<RowId, FilledRow> composed = new LinkedHashMap<>();
+        composed.put(new RowId(0), new FilledRow(
+                new ComposedRow(List.of(FixtureTemplate.integer(1)), List.of()), null));
         GenerationPlan plan = planOver(List.of(A_CLASS), List.of(AN_ARM));
 
         FillResult filled = new FillResult(composed, List.of(), List.of(),

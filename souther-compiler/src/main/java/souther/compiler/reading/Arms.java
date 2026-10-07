@@ -117,7 +117,7 @@ final class Arms {
                     seen.waysTo(guard.cond(), partOf(fork, goesOn) == 0)
                             instanceof Ways.Known<List<ControlClaim>> known
                             ? known.paths() : List.of();
-            out.put(arm.index(), new TheRestOfTheBlock(goesOn, ways));
+            out.put(arm.index(), new TheRestOfTheBlock(arm, goesOn, ways));
         }
         return Collections.unmodifiableSequencedMap(out);
     }
