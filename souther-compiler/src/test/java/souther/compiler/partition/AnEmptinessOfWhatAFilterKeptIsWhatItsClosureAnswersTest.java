@@ -2,11 +2,14 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.coverage.ControlPlace;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.reach.Reachability;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -178,6 +181,67 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
         assertEquals(List.of("o.lines RULE_ABOUT_A_DERIVED_VALUE"), notRead(measured(compiled(
                 lines.formatted("List.isEmpty(List.filter(l -> true, o.lines))")))),
                 "what is kept is what the lines hold");
+    }
+
+    /**
+     * A check of a container the input's rules leave holding something comes to the same in either
+     * spelling: the same arm nothing reaches, the same dead branch said about it, and the same
+     * measures over what is left.
+     *
+     * <p>Only what a reader of the measure sees. How a reading on the way settles the check is its
+     * own, and two spellings agreeing there is not the claim — what they come to is.
+     */
+    @Test
+    void aContainerTheRulesLeaveHoldingSomethingIsCheckedTheSameInEitherSpelling() {
+        String box = """
+                data Box = { xs: List<Int> }
+                    invariant List.length(xs) >= 1
+
+                behavior f : (x: Box) -> Int
+                let f (x) = if %s then 2 else 1
+
+                example f
+                    | "one" : (Box { xs = [1] }) -> 1
+                """;
+        Seen call = seen(box.formatted("List.isEmpty(x.xs)"));
+        Seen size = seen(box.formatted("List.length(x.xs) == 0"));
+        assertEquals(List.of(0), call.unreachableArms(), "nothing reaches the arm the check holds on");
+        assertEquals(List.of("E1327"), call.deadBranches(), "and that is said");
+        assertEquals(call, size);
+    }
+
+    /**
+     * What a reader of the measures is shown of {@code f}.
+     *
+     * @param unreachableArms which arms of the body's own forks were proven nothing reaches
+     * @param deadBranches    the dead branches the build reports
+     * @param branch          the arms counted and the arms a row goes through
+     * @param decisionRules   how many rules what the body decides holds
+     * @param adequacy        the verdict
+     */
+    private record Seen(List<Integer> unreachableArms, List<String> deadBranches,
+                        List<Integer> branch, int decisionRules,
+                        AdequacyReport.AdequacyStatus adequacy) {}
+
+    private static Seen seen(String model) {
+        Compilation compilation = compiled(model);
+        List<Integer> unreachable = new ArrayList<>();
+        compilation.db().ask(new Adequacy.Arrived("demo")).value().get("f").answers().found()
+                .forEach((where, said) -> {
+                    if (where instanceof ControlPlace.Arm arm && arm.writtenBy("demo")
+                            && said instanceof Reachability.Unreachable) {
+                        unreachable.add(arm.part());
+                    }
+                });
+        Adequacy.BranchEvidence branch =
+                compilation.db().ask(new Adequacy.BranchCoverage("demo")).value().get("f");
+        return new Seen(unreachable,
+                compilation.warnings().stream().map(each -> each.diagnostic().code())
+                        .filter("E1327"::equals).toList(),
+                List.of(branch.arms().counted(), branch.arms().covered()),
+                compilation.db().ask(new Adequacy.DecisionReadings("demo")).value().get("f")
+                        .rules().size(),
+                AdequacyReport.of(compilation).adequacy());
     }
 
     /** Both spellings read every rule alike, tell the same apart and come to one verdict. */
