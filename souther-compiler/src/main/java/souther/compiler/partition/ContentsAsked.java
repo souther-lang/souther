@@ -9,7 +9,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -111,9 +110,9 @@ record ContentsAsked(List<Asked> asked) {
      * @param named            every container and value asked, each once
      * @param written          where each of {@code named} may be written
      * @param trying           what the row already is
-     * @param someNotWorkedOut whether some way of writing one of them reached a case whose reading
-     *                         stopped, so that what every tried way came to is not every way there
-     *                         is
+     * @param someNotWorkedOut whether some way of writing one of them reached a case the row can be
+     *                         whose reading stopped, so that what every tried way came to is not
+     *                         every way there is
      */
     record UnderTheCases(ContentsAsked asked, List<TermPath> named,
                          List<WhereANameIsWritten> written, Requirements trying,
@@ -174,25 +173,16 @@ record ContentsAsked(List<Asked> asked) {
         }
 
         /**
-         * Which of {@code cameToNothing} — what each way tried came to, in the order they were
-         * tried — a reader is told, or empty where none of them is it.
+         * What kept {@code walked} from trying every way there was: the figure, where it stopped
+         * there.
          *
-         * <p><b>Whether it is a proof does not turn on the order the ways were tried in.</b> A proof
-         * only where every
-         * way there was came to one: the rules leaving one case of a sum nothing say nothing about
-         * the case beside it, and a way this did not get to the end of, or a case whose reading
-         * stopped, may have what the others lacked. Short of that it is the first way that came to
-         * something other than a proof — this compiler falling short, which is what a reader may
-         * conclude nothing about the model from. Empty where every way tried proved nothing composes
-         * and some way was never tried, and where no way was tried at all: what is said then is the
-         * caller's, since only it knows the words for it.
+         * <p>How far the walk went and nothing about what the ways came to. That is said by whoever
+         * composed them, which knows what they came to ({@link WhatTheAlternativesCameTo}).
          */
-        <F> Optional<F> said(List<F> cameToNothing, Predicate<F> proves) {
-            if (!someNotWorkedOut && !cameToNothing.isEmpty()
-                    && cameToNothing.stream().allMatch(proves)) {
-                return Optional.of(cameToNothing.getFirst());
-            }
-            return cameToNothing.stream().filter(each -> !proves.test(each)).findFirst();
+        CompositionShortfall untried(Walked walked) {
+            return walked == Walked.STOPPED_AT_THE_FIGURE
+                    ? CompositionShortfall.of(Set.of(CompositionBudget.WAYS_UNDER_THE_CASES_TRIED))
+                    : CompositionShortfall.NONE;
         }
     }
 

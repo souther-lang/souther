@@ -120,30 +120,18 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "says a baseline whose every written way was refused was written fewer ways"
                             + " than it had, under the figure the ways were cut at"),
             // The ways under the cases of a sum a container is written: one walk hands them over,
-            // and each of the two roads a row is composed on says the figure where it stopped.
+            // and says the figure where it stopped, which both roads a row is composed on carry
+            // with what the ways tried came to — rows passed over included.
             Map.entry("souther.compiler.partition.ContentsAsked$UnderTheCases#tryEach("
                             + "Ljava/util/function/Predicate;)"
                             + "Lsouther/compiler/partition/ContentsAsked$UnderTheCases$Walked;",
                     "stops handing over ways under the cases with some left, and answers that it"
                             + " stopped at the figure rather than that every way was tried"),
-            Map.entry("souther.compiler.partition.Generator#probeFixing("
-                            + "Lsouther/compiler/partition/MeasuredInput;Ljava/lang/String;"
-                            + "Ljava/util/Map;"
-                            + "Lsouther/compiler/partition/NumbersAskedFor;"
-                            + "Lsouther/compiler/partition/Reachability$Reaching;"
-                            + "Lsouther/compiler/partition/Generator$CandidateCheck;"
-                            + "Lsouther/compiler/partition/StandInAttempt;)"
-                            + "Lsouther/compiler/partition/Generator$BoundaryAttempt;",
-                    "says a border was stopped under that figure where the walk stopped there"),
-            Map.entry("souther.compiler.partition.Generator#composed("
-                            + "Lsouther/compiler/partition/MeasuredInput$MeasuredAxes;[I"
-                            + "Lsouther/compiler/partition/Generator$HeldTogether;"
-                            + "Lsouther/compiler/partition/Generator$CandidateCheck;"
-                            + "Ljava/util/Map;"
-                            + "Lsouther/compiler/partition/Generator$RowTaking;)"
-                            + "Lsouther/compiler/partition/Generator$RowComposed;",
-                    "says a row came to nothing under that figure where the walk stopped there"
-                            + " and no way was passed over"),
+            Map.entry("souther.compiler.partition.ContentsAsked$UnderTheCases#untried("
+                            + "Lsouther/compiler/partition/ContentsAsked$UnderTheCases$Walked;)"
+                            + "Lsouther/compiler/partition/CompositionShortfall;",
+                    "hands the figure over as what kept the rest of the ways untried, where the"
+                            + " walk stopped there"),
             Map.entry("souther.compiler.partition.LevelRealizer#<clinit>()V",
                     "the places a pair is tried at and the places of its line looked at to find"
                             + " them, the steps, the progression — and the re-reads,"

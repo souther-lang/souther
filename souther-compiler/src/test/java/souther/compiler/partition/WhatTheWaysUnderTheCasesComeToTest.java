@@ -10,15 +10,15 @@ import souther.compiler.inputs.TermPath;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The ways a container and the values it is handed are written under the cases of a sum, and what
- * a row is said to have come to over all of them.
+ * The ways a container and the values it is handed are written under the cases of a sum, how far
+ * the walk over them went, and whether a case nobody read leaves any of them open.
  *
  * <p>Read off a reach built here rather than one a model was read into, because the case that
  * matters most — a case whose reading stopped — is one no model in this repository reads into
@@ -58,13 +58,6 @@ class WhatTheWaysUnderTheCasesComeToTest {
                 LEAD.then(container), LEAD.then(value), true)));
     }
 
-    private static final String PROOF = "the rules leave nothing";
-    private static final String SHORT = "this compiler fell short";
-
-    private static boolean proves(String said) {
-        return said.equals(PROOF);
-    }
-
     @Test
     void aCaseWhoseReadingStoppedIsNoWayAndLeavesTheRestOpen() {
         WhereANameIsWritten written = WhereANameIsWritten.of(stoppedUnderTheOther("campaigns"),
@@ -75,35 +68,42 @@ class WhatTheWaysUnderTheCasesComeToTest {
         assertTrue(written.someNotWorkedOut());
     }
 
+    /**
+     * A row already the case that was read is no row of the case that was not: nothing it could be
+     * is left open, so what its ways come to may be a proof.
+     */
     @Test
-    void whatEveryWayTriedProvedIsNoProofWhereACaseWasNotRead() {
-        ContentsAsked.UnderTheCases under = holding("campaigns", "campaign")
-                .underTheCases(stoppedUnderTheOther("campaigns"), Requirements.NONE);
+    void aCaseWhoseReadingStoppedLeavesNothingOpenForARowThatIsAnotherCase() {
+        Requirements alreadyOne = Requirements.NONE.and(LEAD, ONE);
+        WhereANameIsWritten written = WhereANameIsWritten.of(stoppedUnderTheOther("campaigns"),
+                LEAD.then("campaigns"), alreadyOne, _ -> true);
 
-        assertTrue(under.someNotWorkedOut());
-        assertEquals(Optional.empty(),
-                under.said(List.of(PROOF), WhatTheWaysUnderTheCasesComeToTest::proves));
+        assertEquals(List.of(LEAD.refine(ONE).then("campaigns")),
+                written.places().stream().map(WhereANameIsWritten.Place::position).toList());
+        assertFalse(written.someNotWorkedOut());
+        assertFalse(holding("campaigns", "campaign")
+                .underTheCases(stoppedUnderTheOther("campaigns"), alreadyOne).someNotWorkedOut());
     }
 
     @Test
-    void whatEveryWayThereIsProvedIsAProof() {
-        ContentsAsked.UnderTheCases under = holding("campaigns", "campaign")
-                .underTheCases(spreadUnderBoth("campaigns"), Requirements.NONE);
-
-        assertFalse(under.someNotWorkedOut());
-        assertEquals(Optional.of(PROOF),
-                under.said(List.of(PROOF, PROOF), WhatTheWaysUnderTheCasesComeToTest::proves));
+    void aCaseWhoseReadingStoppedIsOpenForTheRowsTheWayGoesThrough() {
+        assertTrue(holding("campaigns", "campaign")
+                .underTheCases(stoppedUnderTheOther("campaigns"), Requirements.NONE)
+                .someNotWorkedOut());
+        assertFalse(holding("campaigns", "campaign")
+                .underTheCases(spreadUnderBoth("campaigns"), Requirements.NONE)
+                .someNotWorkedOut());
     }
 
     @Test
-    void aShortfallUnderOneCaseIsWhatIsSaidWhicheverCaseWasTriedFirst() {
+    void theFigureIsWhatKeptTheRestUntriedOnlyWhereTheWalkStoppedThere() {
         ContentsAsked.UnderTheCases under = holding("campaigns", "campaign")
                 .underTheCases(spreadUnderBoth("campaigns"), Requirements.NONE);
 
-        assertEquals(Optional.of(SHORT),
-                under.said(List.of(PROOF, SHORT), WhatTheWaysUnderTheCasesComeToTest::proves));
-        assertEquals(Optional.of(SHORT),
-                under.said(List.of(SHORT, PROOF), WhatTheWaysUnderTheCasesComeToTest::proves));
+        assertEquals(CompositionShortfall.of(Set.of(CompositionBudget.WAYS_UNDER_THE_CASES_TRIED)),
+                under.untried(ContentsAsked.UnderTheCases.Walked.STOPPED_AT_THE_FIGURE));
+        assertEquals(CompositionShortfall.NONE,
+                under.untried(ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED));
     }
 
     @Test

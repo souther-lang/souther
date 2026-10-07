@@ -29,7 +29,8 @@ import java.util.function.Predicate;
  * that did put the name somewhere are ways, and the ones whose reading stopped before putting it
  * anywhere are positions whose rules were never read — so a writer that found nothing under the
  * first may conclude nothing about the model, since the second may have what they lacked.
- * ({@link NameReach.Standing.CasesIncomplete} says the same of itself.)
+ * ({@link NameReach.Standing.CasesIncomplete} says the same of itself.) Only where the row can be
+ * that case, as with every other: one the row is already kept out of leaves nothing open.
  *
  * @param places           where the row may write the value, each with what the row is taken to
  *                         be to write it there
@@ -97,12 +98,23 @@ record WhereANameIsWritten(List<Place> places, boolean someNotWorkedOut) {
             case NameReach.Standing.UnderTheCases(var standings) ->
                     under(reach, standings, taken, crossed, answered, to);
             // The cases that put the name somewhere are ways, and the ones whose reading stopped
-            // leave the rest open.
-            case NameReach.Standing.CasesIncomplete(var standings, var _) -> {
-                under(reach, standings, taken, crossed, answered, to);
-                yield true;
-            }
+            // leave the rest open — those of them the row can be. A case the row is already kept
+            // out of is no way of it, read or not.
+            case NameReach.Standing.CasesIncomplete(var standings, var stopped) ->
+                    under(reach, standings, taken, crossed, answered, to)
+                            | anyOfThem(stopped, taken);
         };
+    }
+
+    /** Whether the row, already {@code taken}, can be one of the cases whose reading stopped. */
+    private static boolean anyOfThem(List<NameReach.NotStanding> stopped, Requirements taken) {
+        for (NameReach.NotStanding each : stopped) {
+            if (taken.merge(Requirements.NONE.and(each.at(), each.branch()))
+                    instanceof Requirements.Merge.Merged) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean under(NameReach reach, List<NameReach.CaseStanding> standings,

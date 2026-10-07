@@ -55,6 +55,7 @@ import java.util.OptionalInt;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * Rows for the classes and the arms a caller says are owed one.
@@ -2847,7 +2848,12 @@ public final class Generator {
             });
             return switch (came) {
                 case RowComposed.Taken _ -> Taken.AND_DONE;
-                case RowComposed.PassedOver _ -> Taken.AND_MORE;
+                // Not a refusal, and what the walk met on the way to the rows passed over is met
+                // all the same: a figure it stopped at is a row raising it may yet offer.
+                case RowComposed.PassedOver(CompositionShortfall its) -> {
+                    met = met.and(its);
+                    yield Taken.AND_MORE;
+                }
                 case RowComposed.Halted _ -> Taken.NOT_TAKEN;
                 case RowComposed.Failed(Attempt why, var _) -> {
                     known.built(candidate, why);
@@ -4484,25 +4490,28 @@ public final class Generator {
             return false;
         });
         ParameterCameToNothing failed = null;
-        switch (walked) {
-            case COMPOSED -> { }
-            case STOPPED_AT_THE_FIGURE -> {
-                return BoundaryAttempt.Stopped.at(label,
-                        Set.of(CompositionBudget.WAYS_UNDER_THE_CASES_TRIED),
-                        where.unrepresented());
-            }
-            case EVERY_WAY_TRIED -> {
-                Optional<ParameterCameToNothing> said = under.said(cameToNothing,
-                        each -> each.tried() instanceof Outcome.Unresolved(var reason, var _)
-                                && reason.provesInfeasible());
-                if (said.isEmpty()) {
+        if (walked != ContentsAsked.UnderTheCases.Walked.COMPOSED) {
+            // What every way tried came to, and the figure where the walk stopped short of the
+            // rest; where no way tried is it, the figure, or that no case held them.
+            switch (WhatTheAlternativesCameTo.over(cameToNothing, null, under.untried(walked),
+                    under.someNotWorkedOut(), PARAMETERS)) {
+                case WhatTheAlternativesCameTo.Came.Said(ParameterCameToNothing said) ->
+                        failed = said;
+                case WhatTheAlternativesCameTo.Came.Untried(CompositionShortfall met) -> {
+                    return BoundaryAttempt.Stopped.at(label, met.figures(),
+                            where.unrepresented());
+                }
+                case WhatTheAlternativesCameTo.Came.NothingToSayItIn<ParameterCameToNothing> _ -> {
                     return new BoundaryAttempt.Unresolved(new UnresolvedCombination(
                             List.of(label), UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                             cameToNothing.isEmpty() && !under.someNotWorkedOut()
                                     ? NO_CASE_HOLDS_THEM : A_CASE_WAS_NOT_READ),
                             where.unrepresented());
                 }
-                failed = said.get();
+                // No row is handed a caller on the way to a point, so none is passed over.
+                case WhatTheAlternativesCameTo.Came.PassedOver<ParameterCameToNothing> _ ->
+                        throw new IllegalStateException("a row on the way to a point was passed"
+                                + " over, and nothing passes rows over there");
             }
         }
         if (failed != null) {
@@ -4718,15 +4727,21 @@ public final class Generator {
                 }
             }
             boolean awaited = order.awaited(next);
+            // What the parameters after this one came to with the value handed on last, and every
+            // value of this one a parameter after it came to nothing under.
             ParameterCameToNothing[] after = {null};
+            List<ParameterCameToNothing> cameToNothing = new ArrayList<>();
             ValueTaking taking = !awaited ? ValueTaking.FIRST : value -> {
                 composed[p] = value.value();
                 after[0] = from(next + 1, with(elsewhere, value.read()));
                 if (after[0] == null) {
                     return Acceptance.TAKEN;
                 }
-                return order.mayTurnOn(after[0].parameter(), p)
-                        ? Acceptance.PASSED : Acceptance.STOPPED;
+                if (!order.mayTurnOn(after[0].parameter(), p)) {
+                    return Acceptance.STOPPED;
+                }
+                cameToNothing.add(after[0]);
+                return Acceptance.PASSED;
             };
             Outcome tried = valueAt(subject, p, here, settled, reaching.requirements(),
                     new Handed(contents, elsewhere), certified, taking);
@@ -4740,13 +4755,31 @@ public final class Generator {
                     composed[p] = value.value();
                     yield from(next + 1, with(elsewhere, value.read()));
                 }
-                // Passed over or stopped for what a parameter after it came to, which is what
-                // nothing being composed is about.
-                case Outcome.PassedOver _, Outcome.Halted _ -> after[0];
+                // Passed over for what a parameter after it came to under each value, which is
+                // what nothing being composed is about — said over all of them.
+                case Outcome.PassedOver _ -> overEveryValue(cameToNothing);
+                // Stopped for a parameter after it that nothing could be composed for whatever
+                // this one is, said with the values before it that one came to nothing under.
+                case Outcome.Halted _ -> overEveryValue(withFirst(after[0], cameToNothing));
+                // Its own search came to nothing, which ended the walk.
                 case Outcome.Unresolved _, Outcome.Stopped _, Outcome.Unexhausted _,
                      Outcome.OfferShort _, Outcome.Limited _, Outcome.Unplanned _ ->
-                        new ParameterCameToNothing(p, tried, uncertified[0], here);
+                        overEveryValue(withFirst(
+                                new ParameterCameToNothing(p, tried, uncertified[0], here),
+                                cameToNothing));
             };
+        }
+
+        /** What every value tried came to, none of which a row was composed with. */
+        private static ParameterCameToNothing overEveryValue(
+                List<ParameterCameToNothing> cameToNothing) {
+            if (!(WhatTheAlternativesCameTo.over(cameToNothing, null, CompositionShortfall.NONE,
+                    false, PARAMETERS) instanceof WhatTheAlternativesCameTo.Came.Said(
+                            ParameterCameToNothing said))) {
+                throw new IllegalStateException(
+                        "a value was tried and nothing is said of what came of it");
+            }
+            return said;
         }
     }
 
@@ -6473,7 +6506,12 @@ public final class Generator {
                         });
                 return switch (came) {
                     case RowComposed.Taken _ -> Taken.AND_DONE;
-                    case RowComposed.PassedOver _ -> Taken.AND_MORE;
+                    // Not a refusal, and what the walk met on the way to the rows passed over is
+                    // met all the same: a figure it stopped at is a row raising it may yet offer.
+                    case RowComposed.PassedOver(CompositionShortfall its) -> {
+                        met = met.and(its);
+                        yield Taken.AND_MORE;
+                    }
                     case RowComposed.Halted _ -> Taken.NOT_TAKEN;
                     case RowComposed.Failed(Attempt why, var _) -> {
                         last = why;
@@ -6823,8 +6861,15 @@ public final class Generator {
         /** A row, taken. */
         record Taken(List<FixtureTemplate> inputs) implements RowComposed {}
 
-        /** Rows were composed and every one was passed over. Not a refusal of any of them. */
-        record PassedOver() implements RowComposed {}
+        /**
+         * Rows were composed and every one was passed over. Not a refusal of any of them.
+         *
+         * @param met what of this compiler's the walk met on the way: a figure it stopped at
+         *            before trying everything, or what an alternative beside the rows met. Nothing
+         *            where every row there was was composed and passed over; a figure here is a
+         *            row somebody raising it may yet be offered
+         */
+        record PassedOver(CompositionShortfall met) implements RowComposed {}
 
         /** The caller stopped, having run out of what deciding costs it. */
         record Halted() implements RowComposed {}
@@ -6848,6 +6893,149 @@ public final class Generator {
                 return new Failed(why, OptionalInt.of(parameter));
             }
         }
+    }
+
+    /**
+     * The word for a search that met {@code met} on the way and composed nothing: a figure's where
+     * one stopped it, the word for what this compiler does not write where it ran to the end of
+     * that, and the word for an offer short of the rules where only the offer was.
+     */
+    private static UnresolvedCombination.Reason wordForWhatWasMet(CompositionShortfall met) {
+        if (!met.figures().isEmpty()) {
+            return UnresolvedCombination.Reason.wordFor(met.figures());
+        }
+        return met.nothing() ? UnresolvedCombination.Reason.NOT_ALL_CANDIDATES_COULD_BE_OFFERED
+                : UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED;
+    }
+
+    /** Rows that came to nothing, as {@link WhatTheAlternativesCameTo} reads and writes them. */
+    private static final WhatTheAlternativesCameTo.Vocabulary<RowComposed.Failed> ROWS =
+            new WhatTheAlternativesCameTo.Vocabulary<>() {
+
+                @Override
+                public boolean proves(RowComposed.Failed one) {
+                    return one.why().reason() != null && one.why().reason().provesInfeasible();
+                }
+
+                @Override
+                public CompositionShortfall met(RowComposed.Failed one) {
+                    return one.why().met();
+                }
+
+                @Override
+                public SequencedMap<TermPath, StringOfferShortfall> offered(
+                        RowComposed.Failed one) {
+                    return one.why().alsoShort();
+                }
+
+                @Override
+                public RowComposed.Failed carrying(RowComposed.Failed said,
+                                                   CompositionShortfall met,
+                                                   SequencedMap<TermPath, StringOfferShortfall>
+                                                           offered) {
+                    Attempt was = said.why();
+                    return new RowComposed.Failed(new Attempt(null, wordForWhatWasMet(met),
+                            was.detail(), was.said(), offered, met, was.localTo()), said.at());
+                }
+            };
+
+    /**
+     * Parameters nothing was composed for, as {@link WhatTheAlternativesCameTo} reads and writes
+     * them.
+     */
+    private static final WhatTheAlternativesCameTo.Vocabulary<ParameterCameToNothing> PARAMETERS =
+            new WhatTheAlternativesCameTo.Vocabulary<>() {
+
+                @Override
+                public boolean proves(ParameterCameToNothing one) {
+                    return one.tried() instanceof Outcome.Unresolved(var reason, var _)
+                            && reason.provesInfeasible();
+                }
+
+                @Override
+                public CompositionShortfall met(ParameterCameToNothing one) {
+                    return switch (one.tried()) {
+                        case Outcome.Stopped stopped -> stopped.met();
+                        case Outcome.Unexhausted some -> some.met();
+                        case Outcome.Limited(var _, var _, Set<CompositionBudget> by) ->
+                                CompositionShortfall.of(by);
+                        case Outcome.Unplanned(Set<CompositionBudget> by) ->
+                                CompositionShortfall.of(by);
+                        case Outcome.Unresolved _, Outcome.OfferShort _ -> CompositionShortfall.NONE;
+                        case Outcome.Built _, Outcome.PassedOver _, Outcome.Halted _ ->
+                                throw new IllegalStateException(
+                                        "a parameter something was composed for came to nothing");
+                    };
+                }
+
+                @Override
+                public SequencedMap<TermPath, StringOfferShortfall> offered(
+                        ParameterCameToNothing one) {
+                    return switch (one.tried()) {
+                        case Outcome.Stopped stopped -> stopped.offered();
+                        case Outcome.Unexhausted some -> some.offered();
+                        case Outcome.OfferShort offer -> offer.offered();
+                        case Outcome.Unresolved _, Outcome.Limited _, Outcome.Unplanned _,
+                             Outcome.Built _, Outcome.PassedOver _, Outcome.Halted _ ->
+                                new LinkedHashMap<>();
+                    };
+                }
+
+                @Override
+                public ParameterCameToNothing carrying(ParameterCameToNothing said,
+                                                       CompositionShortfall met,
+                                                       SequencedMap<TermPath, StringOfferShortfall>
+                                                               offered) {
+                    String detail = switch (said.tried()) {
+                        case Outcome.Unresolved(var _, String its) -> its;
+                        case Outcome.Stopped stopped -> stopped.detail();
+                        case Outcome.Unexhausted some -> some.detail();
+                        case Outcome.OfferShort(var _, String its) -> its;
+                        case Outcome.Limited(var _, String its, var _) -> its;
+                        case Outcome.Unplanned _, Outcome.Built _, Outcome.PassedOver _,
+                             Outcome.Halted _ -> null;
+                    };
+                    Outcome carried = !met.figures().isEmpty()
+                            ? new Outcome.Stopped(met, offered, detail)
+                            : !met.nothing() ? new Outcome.Unexhausted(met, offered, detail)
+                            : new Outcome.OfferShort(offered, detail);
+                    return new ParameterCameToNothing(said.parameter(), carried,
+                            said.uncertified(), said.here());
+                }
+            };
+
+    /**
+     * What a walk over alternatives for a row none of which was taken came to
+     * ({@link WhatTheAlternativesCameTo}), as a row composed comes to it: where no alternative is
+     * the one to say it in, the figure that kept the rest untried, and otherwise what
+     * {@code nothingTried} says.
+     *
+     * @param passedOver what the walks of the rows passed over met, or null where none was
+     * @param alsoMet    what kept the walk from trying the rest
+     * @param someUnread whether an alternative stands under a case whose reading stopped
+     */
+    private static RowComposed overTheAlternatives(List<RowComposed.Failed> cameToNothing,
+                                                   CompositionShortfall passedOver,
+                                                   CompositionShortfall alsoMet,
+                                                   boolean someUnread,
+                                                   Supplier<RowComposed> nothingTried) {
+        return switch (WhatTheAlternativesCameTo.over(cameToNothing, passedOver, alsoMet,
+                someUnread, ROWS)) {
+            case WhatTheAlternativesCameTo.Came.PassedOver(CompositionShortfall met) ->
+                    new RowComposed.PassedOver(met);
+            case WhatTheAlternativesCameTo.Came.Said(RowComposed.Failed said) -> said;
+            case WhatTheAlternativesCameTo.Came.Untried(CompositionShortfall met) ->
+                    RowComposed.Failed.ofTheRow(Attempt.no(wordForWhatWasMet(met), null,
+                            new LinkedHashMap<>(), met));
+            case WhatTheAlternativesCameTo.Came.NothingToSayItIn<RowComposed.Failed> _ ->
+                    nothingTried.get();
+        };
+    }
+
+    /** {@code met} beside what was met before, where nothing before is null. */
+    private static CompositionShortfall joined(CompositionShortfall before,
+                                               CompositionShortfall met) {
+        return before == null ? met : before.and(met);
     }
 
     /**
@@ -7064,12 +7252,12 @@ public final class Generator {
         // Every way of writing what the containers are handed under the cases this row can be,
         // one at a time: a way whose rows were all passed over or came to nothing may be followed
         // by one under another case that does not. What they came to is said over every one of
-        // them, the same whichever was tried first.
+        // them, with the figure where the walk stopped short of the rest.
         Requirements rowIs = required;
         ContentsAsked.UnderTheCases under =
                 holding.contents().underTheCases(subject.reach(), rowIs);
         RowComposed[] stoppedWith = {null};
-        boolean[] passedOver = {false};
+        CompositionShortfall[] passedOver = {null};
         List<RowComposed.Failed> cameToNothing = new ArrayList<>();
         ContentsAsked.UnderTheCases.Walked walked = under.tryEach(contents -> {
             RowComposed came = inputsFrom(new RowBeingComposed(axes, given, check, holding,
@@ -7080,8 +7268,8 @@ public final class Generator {
                     stoppedWith[0] = came;
                     yield true;
                 }
-                case RowComposed.PassedOver _ -> {
-                    passedOver[0] = true;
+                case RowComposed.PassedOver(CompositionShortfall met) -> {
+                    passedOver[0] = joined(passedOver[0], met);
                     yield false;
                 }
                 case RowComposed.Failed failed -> {
@@ -7090,28 +7278,14 @@ public final class Generator {
                 }
             };
         });
-        // Passed over where some row was, which is the caller's answer and not a failure, and
-        // otherwise what the ways came to: the figure where it stopped them, and what is said over
-        // every way where they all came to nothing.
-        return switch (walked) {
-            case COMPOSED -> stoppedWith[0];
-            case STOPPED_AT_THE_FIGURE -> passedOver[0] ? new RowComposed.PassedOver()
-                    : RowComposed.Failed.ofTheRow(Attempt.no(
-                            UnresolvedCombination.Reason.wordFor(
-                                    Set.of(CompositionBudget.WAYS_UNDER_THE_CASES_TRIED)),
-                            null, new LinkedHashMap<>(), CompositionShortfall.of(
-                                    Set.of(CompositionBudget.WAYS_UNDER_THE_CASES_TRIED))));
-            case EVERY_WAY_TRIED -> passedOver[0] ? new RowComposed.PassedOver()
-                    : under.<RowComposed>said(List.copyOf(cameToNothing), each ->
-                            each instanceof RowComposed.Failed(Attempt why, var _)
-                                    && why.reason() != null
-                                    && why.reason().provesInfeasible())
-                            .orElseGet(() -> RowComposed.Failed.ofTheRow(new Attempt(null,
-                                    UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, null,
-                                    Optional.of(cameToNothing.isEmpty()
-                                            && !under.someNotWorkedOut()
-                                            ? NO_CASE_HOLDS_THEM : A_CASE_WAS_NOT_READ))));
-        };
+        if (walked == ContentsAsked.UnderTheCases.Walked.COMPOSED) {
+            return stoppedWith[0];
+        }
+        return overTheAlternatives(cameToNothing, passedOver[0], under.untried(walked),
+                under.someNotWorkedOut(), () -> RowComposed.Failed.ofTheRow(new Attempt(null,
+                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, null,
+                        Optional.of(cameToNothing.isEmpty() && !under.someNotWorkedOut()
+                                ? NO_CASE_HOLDS_THEM : A_CASE_WAS_NOT_READ))));
     }
 
     /**
@@ -7155,7 +7329,7 @@ public final class Generator {
             List<FixtureTemplate> whole = List.of(composed);
             return switch (row.taking().take(whole)) {
                 case TAKEN -> new RowComposed.Taken(whole);
-                case PASSED -> new RowComposed.PassedOver();
+                case PASSED -> new RowComposed.PassedOver(CompositionShortfall.NONE);
                 case STOPPED -> new RowComposed.Halted();
             };
         }
@@ -7188,7 +7362,7 @@ public final class Generator {
             // values chosen differently — and the next of them where a parameter after this one
             // came to nothing on what this one hands it.
             boolean stood = false;
-            RowComposed cameToNothing = null;
+            List<RowComposed.Failed> cameToNothing = new ArrayList<>();
             Optional<String> refused = Optional.empty();
             for (WrittenWay way : written.ways()) {
                 refused = check.refuse(p, way.value());
@@ -7198,15 +7372,26 @@ public final class Generator {
                 stood = true;
                 composed[p] = way.value();
                 RowComposed rest = inputsFrom(row, next + 1, composed, with(elsewhere, way.at()));
-                if (awaited && rest instanceof RowComposed.Failed(Attempt _, OptionalInt failed)
-                        && failed.isPresent() && order.mayTurnOn(failed.getAsInt(), p)) {
-                    cameToNothing = rest;
+                if (awaited && rest instanceof RowComposed.Failed failed
+                        && failed.at().isPresent()
+                        && order.mayTurnOn(failed.at().getAsInt(), p)) {
+                    cameToNothing.add(failed);
                     continue;
                 }
                 return rest;
             }
+            // Every way that stood came to nothing under a parameter after this one: what they
+            // came to, over all of them, and beside it the figure the ways were cut at, since a
+            // way never handed over may be the one that parameter could be composed with.
             if (stood) {
-                return cameToNothing;
+                return overTheAlternatives(cameToNothing, null, written.cut()
+                                ? CompositionShortfall.of(
+                                        Set.of(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES))
+                                : CompositionShortfall.NONE, false,
+                        () -> {
+                            throw new IllegalStateException(
+                                    "a way stood and nothing is said of what came of it");
+                        });
             }
             // Every way handed over was refused, which says the origin cannot be written for
             // this assignment only where every way there was was handed over.
@@ -7225,11 +7410,12 @@ public final class Generator {
         // a border is: a candidate built for a number has to read back as it.
         CandidateCheck checking = row.holding().standing().isEmpty() ? check
                 : certifying(check, subject, p, row.holding().standing(), new boolean[1]);
-        // What the parameters after this one came to, with the value this walk handed on last; and
-        // what the last of them that came to nothing said, with whether any row was passed over.
+        // What the parameters after this one came to, with the value this walk handed on last;
+        // every value of this one a parameter after it came to nothing under; and what the walks
+        // of the rows passed over met, where any was.
         RowComposed[] after = {null};
-        RowComposed[] cameToNothing = {null};
-        boolean[] passedOver = {false};
+        List<RowComposed.Failed> cameToNothing = new ArrayList<>();
+        CompositionShortfall[] passedOver = {null};
         Outcome tried = valueFor(subject, p, row.axes().axes(), row.composedAt(),
                 row.decided(), row.required(), new Handed(row.contents(), elsewhere),
                 checking, value -> {
@@ -7237,8 +7423,8 @@ public final class Generator {
                     after[0] = inputsFrom(row, next + 1, composed, with(elsewhere, value.read()));
                     return switch (after[0]) {
                         case RowComposed.Taken _ -> Acceptance.TAKEN;
-                        case RowComposed.PassedOver _ -> {
-                            passedOver[0] = true;
+                        case RowComposed.PassedOver(CompositionShortfall met) -> {
+                            passedOver[0] = joined(passedOver[0], met);
                             yield Acceptance.PASSED;
                         }
                         case RowComposed.Halted _ -> Acceptance.STOPPED;
@@ -7246,24 +7432,21 @@ public final class Generator {
                         // be composed with any other value of it either, and the walk here is
                         // stopped with what that one said. One that does may be, directly or
                         // through the parameters between them, so the next is tried.
-                        case RowComposed.Failed(Attempt _, OptionalInt failed) -> {
-                            if (failed.isEmpty() || !order.mayTurnOn(failed.getAsInt(), p)) {
+                        case RowComposed.Failed failed -> {
+                            if (failed.at().isEmpty()
+                                    || !order.mayTurnOn(failed.at().getAsInt(), p)) {
                                 yield Acceptance.STOPPED;
                             }
-                            cameToNothing[0] = after[0];
+                            cameToNothing.add(failed);
                             yield Acceptance.PASSED;
                         }
                     };
                 });
-        return switch (tried) {
-            case Outcome.Built _ -> after[0];
-            // Every value passed over: for a row the caller passed over, which is what is said
-            // where there was one, and otherwise for what a parameter after this one came to.
-            case Outcome.PassedOver _ -> passedOver[0] || cameToNothing[0] == null
-                    ? new RowComposed.PassedOver() : cameToNothing[0];
-            // Stopped by the caller, or by a parameter after this one that nothing could be composed
-            // for: either way what said so is what the walk handed on to last.
-            case Outcome.Halted _ -> after[0];
+        // What this parameter's own search came to, where it came to nothing, is one more
+        // alternative beside the values a parameter after it came to nothing under, and said with
+        // them: first, since it is what ended the walk.
+        RowComposed.Failed own = switch (tried) {
+            case Outcome.Built _, Outcome.PassedOver _, Outcome.Halted _ -> null;
             // The word alone, because there was nothing of this compiler's beside it. A search that
             // met no figure and walked to the end of what this writes has nothing for a reader to
             // raise, and an empty account of what it met is what says so.
@@ -7300,6 +7483,37 @@ public final class Generator {
                             .NO_READING_OF_THE_LINE_COULD_BE_SEARCHED, null, new LinkedHashMap<>(),
                             CompositionShortfall.of(by)), p, alone));
         };
+        return switch (tried) {
+            case Outcome.Built _ -> after[0];
+            // Stopped by the caller, which is the answer as it stands; or by a parameter after this
+            // one that nothing could be composed for whatever this one is, which is said with the
+            // values before it that one after it came to nothing under.
+            case Outcome.Halted _ -> after[0] instanceof RowComposed.Failed stopping
+                    ? overTheAlternatives(withFirst(stopping, cameToNothing), passedOver[0],
+                            CompositionShortfall.NONE, false, () -> stopping)
+                    : after[0];
+            // Every value passed over: for a row the caller passed over, or for what a parameter
+            // after this one came to under each of them.
+            case Outcome.PassedOver _ -> overTheAlternatives(cameToNothing, passedOver[0],
+                    CompositionShortfall.NONE, false,
+                    () -> new RowComposed.PassedOver(CompositionShortfall.NONE));
+            // This parameter's own search came to nothing. Said as what it came to, the way a
+            // search that passed rows and then stopped is ({@link #over}): with what the rows
+            // passed over and the values a parameter after it came to nothing under met beside it.
+            case Outcome.Unresolved _, Outcome.Stopped _, Outcome.Unexhausted _,
+                 Outcome.OfferShort _, Outcome.Limited _, Outcome.Unplanned _ ->
+                    overTheAlternatives(withFirst(own, cameToNothing), null,
+                            passedOver[0] == null ? CompositionShortfall.NONE : passedOver[0],
+                            false, () -> own);
+        };
+    }
+
+    /** {@code first}, and {@code rest} after it. */
+    private static <T> List<T> withFirst(T first, List<T> rest) {
+        List<T> out = new ArrayList<>();
+        out.add(first);
+        out.addAll(rest);
+        return out;
     }
 
     /**
