@@ -5,8 +5,10 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.flow.Arrival;
 import souther.compiler.flow.ComparisonWays;
 import souther.compiler.flow.Naming;
+import souther.compiler.flow.Truth;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -135,6 +137,25 @@ final class WhatARunIsSeenDoing implements Naming<List<ControlClaim>> {
         return armOf(fork, part);
     }
 
+    /**
+     * The way, and where it says less than that the condition came out the arm's way, the run seen
+     * going down the arm.
+     *
+     * <p>What the way could not say of a condition no construct records is said by the arm, which a
+     * run takes exactly where the condition came out that way. A way already saying it is left as
+     * it is: the arm says nothing it does not, and a claim no row can be held to beside the ones it
+     * can would make the way one nothing composes a row along.
+     */
+    @Override
+    public List<ControlClaim> seenAtTheArm(Core.If fork, int part,
+                                           Arrival<List<ControlClaim>> onlyWay) {
+        if (onlyWay.value() != Truth.UNREAD && onlyWay.isComplete()) {
+            return onlyWay.path();
+        }
+        List<ControlClaim> arm = armOf(fork, part);
+        return arm == null ? null : join(onlyWay.path(), arm);
+    }
+
     /** That a run went down arm {@code part} of {@code fork}, or null where nothing records it. */
     private List<ControlClaim> armOf(Core fork, int part) {
         ControlPlace.Arm[] arms = plan.armsOf(fork);
@@ -142,6 +163,24 @@ final class WhatARunIsSeenDoing implements Naming<List<ControlClaim>> {
             return null;
         }
         return ControlClaim.of(arms[part]).map(List::of).orElse(null);
+    }
+
+    // What a run is seen doing on these ways is the claims they hold, and an operand not run or a
+    // way among several adds no claim a run is checked against.
+    @Override
+    public List<ControlClaim> oneOfTheWaysIn(Core.If fork, int part, List<ControlClaim> way) {
+        return way;
+    }
+
+    @Override
+    public List<ControlClaim> wentOn(Core.Binary operator, List<ControlClaim> left,
+                                     Arrival<List<ControlClaim>> right) {
+        return left;
+    }
+
+    @Override
+    public List<ControlClaim> stoppedShort(Core.Binary operator, List<ControlClaim> left) {
+        return left;
     }
 
     @Override

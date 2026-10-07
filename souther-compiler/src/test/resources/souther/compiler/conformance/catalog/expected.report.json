@@ -2,7 +2,7 @@
   "schemaVersion" : 24,
   "compilerVersion" : "<version>",
   "status" : "partial",
-  "weakening" : [ "rule_unread", "decision_of_row_unreadable", "rewrite_undecided" ],
+  "weakening" : [ "rule_unread", "rewrite_undecided" ],
   "adequacy" : "not_satisfied",
   "keptOpenBy" : [ ],
   "modules" : [ {
@@ -3357,7 +3357,7 @@
   }, {
     "module" : "conformance.shipping",
     "status" : "partial",
-    "weakening" : [ "rule_unread", "decision_of_row_unreadable", "rewrite_undecided" ],
+    "weakening" : [ "rule_unread", "rewrite_undecided" ],
     "incompleteness" : [ ],
     "declarations" : [ {
       "owners" : [ {
@@ -4102,7 +4102,7 @@
         "disposition" : "met"
       } ],
       "status" : "partial",
-      "weakening" : [ "rule_unread", "decision_of_row_unreadable", "rewrite_undecided" ],
+      "weakening" : [ "rule_unread", "rewrite_undecided" ],
       "signature" : {
         "status" : "complete",
         "output" : {
@@ -5507,8 +5507,7 @@
       },
       "decision" : {
         "coverage" : {
-          "status" : "partial",
-          "weakening" : [ "decision_of_row_unreadable" ]
+          "status" : "complete"
         },
         "obligations" : [ {
           "obligationId" : {
@@ -5527,9 +5526,7 @@
               "outcome" : "書けなかった"
             } ]
           },
-          "taken" : false,
-          "requirement" : "unsettled",
-          "because" : "the_rule_the_row_took_could_not_be_told"
+          "taken" : true
         }, {
           "obligationId" : {
             "behavior" : "出荷する",
@@ -5551,9 +5548,7 @@
               "outcome" : "出荷済み"
             } ]
           },
-          "taken" : false,
-          "requirement" : "unsettled",
-          "because" : "the_rule_the_row_took_could_not_be_told"
+          "taken" : true
         }, {
           "obligationId" : {
             "behavior" : "出荷する",
@@ -5575,9 +5570,7 @@
               "outcome" : "出荷済み"
             } ]
           },
-          "taken" : false,
-          "requirement" : "unsettled",
-          "because" : "the_rule_the_row_took_could_not_be_told"
+          "taken" : true
         }, {
           "obligationId" : {
             "behavior" : "出荷する",
@@ -5595,9 +5588,7 @@
               "outcome" : "denied"
             } ]
           },
-          "taken" : false,
-          "requirement" : "unsettled",
-          "because" : "the_rule_the_row_took_could_not_be_told"
+          "taken" : true
         }, {
           "obligationId" : {
             "behavior" : "出荷する",

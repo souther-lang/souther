@@ -6,6 +6,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.UnaryOperator;
 
 /**
  * The conditions one way through a body consulted, in the order it met them.
@@ -259,6 +260,20 @@ final class DecisionPath {
             } else if (!already.answer().equals(each.answer())) {
                 return null;
             }
+        }
+        return new DecisionPath(out);
+    }
+
+    /**
+     * This path with where each condition is seen answered again by {@code seen}, for a path a run
+     * is known by more than its conditions to have taken.
+     *
+     * <p>The same rule: where a run through a condition is seen is no part of what the rule is.
+     */
+    DecisionPath seenAgain(UnaryOperator<ShownBy> seen) {
+        List<Consulted> out = new ArrayList<>();
+        for (Consulted each : consulted) {
+            out.add(new Consulted(each.answer(), seen.apply(each.shown()), each.states()));
         }
         return new DecisionPath(out);
     }

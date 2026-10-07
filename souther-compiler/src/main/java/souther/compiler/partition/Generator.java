@@ -2594,8 +2594,7 @@ public final class Generator {
                 if (each.satisfiedBy(seen)) {
                     continue;
                 }
-                Optional<HeldOutcome> holds = each.at() instanceof ControlPlace.Outcome outcome
-                        ? holding.at(outcome) : Optional.empty();
+                Optional<HeldOutcome> holds = holding.at(each.at());
                 if (holds.isEmpty()) {
                     return new WayPastTheGuard.Barred(
                             RepairShortfall.Barrier.NOTHING_HOLDS_A_ROW_TO_IT);

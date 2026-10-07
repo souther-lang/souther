@@ -50,6 +50,41 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
             }
             """;
 
+    /**
+     * A guard on a comparison and a truth the body was handed, which no comparison answers.
+     *
+     * <p>The way past is the comparison holding and the run going down the arm that goes on, which
+     * is where the truth is seen. What the arm asks of a row is the condition holding, so the row
+     * is composed with both.
+     */
+    private static final String A_COMPARISON_AND_A_TRUTH = """
+            module example.settle
+
+            data Plain
+            data Express
+            data Kind = Plain | Express
+
+            data Done = { n: Int }
+            data Refused
+
+            behavior settle : (kind: Kind, amount: Int, open: Bool) -> Done | Refused
+                constructs Done
+
+            let settle (kind, amount, open) = {
+                guard amount > 0 && open else Refused
+                match kind with
+                    | Plain -> Done { n = amount }
+                    | Express -> Done { n = amount + 500 }
+            }
+            """;
+
+    @Test
+    void aRowAboutAnotherPositionGoesOnPastAGuardOnAComparisonAndATruth() {
+        Map<String, String> rows = rowsOf(A_COMPARISON_AND_A_TRUTH);
+        assertEquals("Plain, 1, true", rows.get("kind=Plain"));
+        assertEquals("Express, 1, true", rows.get("kind=Express"));
+    }
+
     /** The rows about {@code kind} are past the guard. */
     @Test
     void aRowAboutAnotherPositionGoesOnPastTheGuard() {

@@ -84,8 +84,8 @@ final class Conditions {
     static List<NumericConstraint> settledBy(Terms terms, Choice.Decides decidedBy, Denotations at) {
         List<NumericConstraint> out = new ArrayList<>();
         switch (decidedBy) {
-            case Choice.Decides.ACondition(Core cond, boolean holding) ->
-                    stating(terms, cond, at, holding, out);
+            case Choice.Decides.ACondition(Core.If fork, boolean holding) ->
+                    stating(terms, fork.cond(), at, holding, out);
             case Choice.Decides.ByArgumentRelations(List<Choice.ArgumentRelation> relations) ->
                     standing(terms, relations, at, out);
             // A case and an attempt state nothing here. What choosing them settles is what the

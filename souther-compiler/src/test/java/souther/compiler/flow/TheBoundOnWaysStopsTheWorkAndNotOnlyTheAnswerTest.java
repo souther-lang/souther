@@ -155,6 +155,26 @@ class TheBoundOnWaysStopsTheWorkAndNotOnlyTheAnswerTest {
             return mark(fork, "arm", part);
         }
 
+        @Override
+        public Marks seenAtTheArm(Core.If fork, int part, Arrival<Marks> onlyWay) {
+            return onlyWay.value() == Truth.UNREAD ? null : onlyWay.path();
+        }
+
+        @Override
+        public Marks oneOfTheWaysIn(Core.If fork, int part, Marks way) {
+            return way;
+        }
+
+        @Override
+        public Marks wentOn(Core.Binary operator, Marks left, Arrival<Marks> right) {
+            return left;
+        }
+
+        @Override
+        public Marks stoppedShort(Core.Binary operator, Marks left) {
+            return left;
+        }
+
         private Marks mark(Core at, String what, int part) {
             int which = numbered.computeIfAbsent(at, ignored -> numbered.size());
             return new Marks(List.of(what + "@" + which + "/" + part));

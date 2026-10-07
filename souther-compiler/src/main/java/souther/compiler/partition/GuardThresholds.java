@@ -270,7 +270,7 @@ public final class GuardThresholds {
             Optional<ModelOccurrence> answeredBy = DecisionNaming.answeredAt(each.condition());
             if (answeredBy.isPresent()) {
                 cuts.answered(answeredBy.get(),
-                        new ReachingCuts.TruthOnTheWay(each.assumed(), holding, failing));
+                        new ReachingCuts.ConditionOnTheWay(each.assumed(), holding, failing));
             }
             // And under the application a denial denies, which is where a run reading through the
             // denial is seen coming out — the other way round from the whole where the denials
@@ -282,9 +282,17 @@ public final class GuardThresholds {
                     && applied.occurrence().isWritten()) {
                 boolean same = denied.get().positive();
                 ModelOccurrence.statedAt(applied.occurrence()).ifPresent(at -> cuts.answered(at,
-                        new ReachingCuts.TruthOnTheWay(each.assumed(),
+                        new ReachingCuts.ConditionOnTheWay(each.assumed(),
                                 same ? holding : failing, same ? failing : holding)));
             }
+        }
+        // And every fork's whole condition, under the fork: a run down an arm is a run that brought
+        // the condition out the arm's way, so what the arm asks of a row is that, whatever the
+        // condition is made of.
+        for (ComparisonReadings.ForkDecided each : comparisons.decided()) {
+            ModelOccurrence.statedAt(each.fork()).ifPresent(fork -> cuts.decides(fork,
+                    new ReachingCuts.ConditionOnTheWay(each.assumed(), each.holding(),
+                            each.failing())));
         }
         return new Guards(found, withoutALine.found(), between, cuts.made(),
                 comparisons.forks(), comparisons.conditionsMet());

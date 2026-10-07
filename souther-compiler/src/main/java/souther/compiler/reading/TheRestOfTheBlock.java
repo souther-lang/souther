@@ -19,7 +19,9 @@ import java.util.List;
  * <p>Each way as what a run that took it would be seen doing, which is a comparison coming out a
  * way and not merely a comparison: under {@code Bool.not(x <= 0)} the run goes on where
  * {@code x <= 0} came out false. A way is a conjunction, every claim of it at once, and the ways
- * are the alternatives — under {@code a > 0 || b > 0} either is a way on.
+ * are the alternatives — under {@code a > 0 || b > 0} either is a way on. Under a truth the body
+ * was handed, which comes out a way at no comparison, the way on is the run seen going down the
+ * arm that goes on, since that is where such a run is recorded.
  *
  * <p>Not the way into the arm. A way in says what holds on the way there in the words a row is
  * composed in, and is listed only where every way is known to be one the body has; a comparison of

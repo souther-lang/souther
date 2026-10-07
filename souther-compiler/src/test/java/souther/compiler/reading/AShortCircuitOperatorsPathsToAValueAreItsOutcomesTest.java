@@ -256,32 +256,27 @@ class AShortCircuitOperatorsPathsToAValueAreItsOutcomesTest {
     }
 
     /**
-     * A side whose value this reading cannot say leaves the paths unenumerated, and what stands
-     * after it is read no further.
+     * A truth the body was handed, beside a comparison, is seen at the arm the condition holding
+     * takes.
      *
-     * <p>Under-reading is the safe direction and this is where it is taken. The reading knows the
-     * value goes through where the left does, and it cannot say when the left does — so it does
-     * not know whether the comparison after it was evaluated at all, and a list of the ways the
-     * condition holds would be a list with paths missing from it.
+     * <p>The flag comes out a way at no comparison, so the ways the condition holds cannot be
+     * written down from what a run records of the condition. The arm can say it: the condition
+     * holds one way only, both holding, so a run down the arm brought the flag out true and the
+     * comparison out holding — the comparison seen where it is, and the flag at the arm.
      */
     @Test
-    void aSideThisReadingCannotValueLeavesThePathsUnenumerated() {
-        assertEquals(List.of(List.of("Arm")), reachKinds(read(UNREADABLE_LEFT, "fee")),
-                "nothing says when the plain flag lets the comparison be reached");
+    void aTruthBesideAComparisonIsSeenAtTheArmItHoldsInto() {
+        assertEquals(List.of(List.of("Side", Condition.Case.class.getSimpleName())),
+                reachKinds(read(UNREADABLE_LEFT, "fee")),
+                "the comparison and the flag, the flag seen at the arm");
     }
 
-    /**
-     * The same where it is the right that cannot be valued, which the left still divides.
-     *
-     * <p>The condition fails where the first comparison fails, which is a path this reading has;
-     * where it holds, whether the answer went through is the flag's business and unsaid. One of
-     * the two paths being known is not the enumeration being known, so neither arm is named by the
-     * comparisons.
-     */
+    /** The same with the flag on the right, which is the same way into the arm. */
     @Test
-    void oneKnownPathIsNotAnEnumerationOfThem() {
-        assertEquals(List.of(List.of("Arm")), reachKinds(read(UNREADABLE_RIGHT, "fee")),
-                "the ways the condition holds are not all of them said");
+    void theTruthOnTheRightIsSeenTheSameWay() {
+        assertEquals(List.of(List.of("Side", Condition.Case.class.getSimpleName())),
+                reachKinds(read(UNREADABLE_RIGHT, "fee")),
+                "the comparison and the flag, the flag seen at the arm");
     }
 
     /**

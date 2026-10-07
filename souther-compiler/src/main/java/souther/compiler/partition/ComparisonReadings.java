@@ -72,13 +72,36 @@ import java.util.Set;
  */
 record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                           Map<ConditionOccurrence, Citation> conditionsMet,
-                          List<TruthMet> truths) {
+                          List<TruthMet> truths, List<ForkDecided> decided) {
 
     ComparisonReadings {
         comparisons = List.copyOf(comparisons);
         forks = List.copyOf(forks);
         conditionsMet = Map.copyOf(conditionsMet);
         truths = List.copyOf(truths);
+        decided = List.copyOf(decided);
+    }
+
+    /**
+     * A fork's whole condition, as what it coming out each way says and what stood on the way to it.
+     *
+     * <p>What a run down an arm is seen having done. An arm is taken exactly where the condition
+     * came out the arm's way, so what it asks of a row is the whole condition coming out that way —
+     * whatever the condition is made of, and whichever of its parts nothing else records.
+     *
+     * @param fork    the fork, in the tree this walk reads
+     * @param assumed every condition on the way to the fork, each with what became of it
+     * @param holding what the condition coming out true says
+     * @param failing what the condition coming out false says
+     */
+    record ForkDecided(ConstructOccurrence fork, List<OnTheWay> assumed, List<OnTheWay> holding,
+                       List<OnTheWay> failing) {
+
+        ForkDecided {
+            assumed = List.copyOf(assumed);
+            holding = List.copyOf(holding);
+            failing = List.copyOf(failing);
+        }
     }
 
     /**
@@ -207,7 +230,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      */
     private record Body(String behavior, InputReading read,
                         souther.compiler.coverage.Arrivals answering, Templates templates,
-                        List<TruthMet> truths) {
+                        List<TruthMet> truths, List<ForkDecided> decided) {
 
         Symbols symbols() {
             return read.symbols();
@@ -237,6 +260,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         List<Reading> readings = new ArrayList<>();
         List<ForkMet> forks = new ArrayList<>();
         List<TruthMet> truths = new ArrayList<>();
+        List<ForkDecided> decided = new ArrayList<>();
         Templates templates = new Templates(analysis.templates());
         // The names the conditions of this body take, handed out as the walk meets them. One of
         // these per body, because what a name is counted within is the body: counted over the
@@ -248,7 +272,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         walk(body, new Body(behavior, read,
                         souther.compiler.coverage.Arrivals.inTheTree(body,
                                 analysis.templates()::bodyOf),
-                        templates, truths),
+                        templates, truths, decided),
                 reads,
                 LiveFlow.of(body), List.of(), true, readings, forks, numbering);
         // What each value the body builds states, read once. A value means the same wherever it is
@@ -261,12 +285,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 walk(template, new Body(behavior, read,
                                 souther.compiler.coverage.Arrivals.inTheTree(template,
                                         analysis.templates()::bodyOf),
-                        templates, truths),
+                        templates, truths, decided),
                         insideATemplate, LiveFlow.of(template), entry.assumed(), entry.live(),
                         readings, forks, numbering);
             }
         }
-        return new ComparisonReadings(readings, forks, numbering.metAt(), truths);
+        return new ComparisonReadings(readings, forks, numbering.metAt(), truths, decided);
     }
 
     /** How one build of a value was reached: what stood on the way to it, and whether what it
@@ -386,8 +410,16 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 // would name that one condition twice.
                 Condition condition =
                         Condition.of(iff.cond(), reads, symbols, in.newtypes(), numbering);
+                // What the condition coming out each way says, once: what each arm is entered
+                // under, and what a run seen down it is known to have done.
+                List<OnTheWay> holding = ReachingCuts.stating(condition, in.read(), true);
+                List<OnTheWay> failing = ReachingCuts.stating(condition, in.read(), false);
                 if (live) {
                     truthsIn(condition, assumed, in.read(), in.truths());
+                    if (iff.occurrence() != null) {
+                        in.decided().add(new ForkDecided(iff.occurrence(), assumed, holding,
+                                failing));
+                    }
                 }
                 // What this walk found in the condition, for the reader that decides whether the
                 // fork states a rule of its own. Said of every fork an author wrote, and of none
@@ -421,13 +453,11 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 walk(iff.then(), in,
                         reads.choosing(Choice.Decides.ofCondition(iff, true), symbols,
                                 in.newtypes()),
-                        flow, taking(condition, true, in.read(), assumed),
-                        live, out, forks, numbering);
+                        flow, past(assumed, holding), live, out, forks, numbering);
                 walk(iff.els(), in,
                         reads.choosing(Choice.Decides.ofCondition(iff, false), symbols,
                                 in.newtypes()),
-                        flow, taking(condition, false, in.read(), assumed),
-                        live, out, forks, numbering);
+                        flow, past(assumed, failing), live, out, forks, numbering);
             }
             // What a `let` computes is read on the way to the answer only where the name is read;
             // everywhere else a value stands in a body it is consumed by what it stands in. And its
@@ -512,8 +542,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     private static List<OnTheWay> taking(Condition condition, boolean holding,
                                          souther.compiler.inputs.InputReading read,
                                          List<OnTheWay> assumed) {
+        return past(assumed, ReachingCuts.stating(condition, read, holding));
+    }
+
+    /** What stood before, and then what was {@code stated} past it. */
+    private static List<OnTheWay> past(List<OnTheWay> assumed, List<OnTheWay> stated) {
         List<OnTheWay> out = new ArrayList<>(assumed);
-        out.addAll(ReachingCuts.stating(condition, read, holding));
+        out.addAll(stated);
         return List.copyOf(out);
     }
 

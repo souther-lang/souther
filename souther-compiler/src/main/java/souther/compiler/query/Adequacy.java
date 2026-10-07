@@ -11,6 +11,7 @@ import souther.compiler.observe.Classification;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.RowToRun;
+import souther.compiler.partition.ShownBy;
 import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.inputs.TermPath;
 
@@ -2248,11 +2249,17 @@ public final class Adequacy {
         private static CoverageSites.AsWritten armNothingReaches(
                 souther.compiler.partition.DecisionReading.Ruled ruled,
                 Set<CoverageSites.AsWritten> unreached) {
-            for (souther.compiler.partition.ShownBy each : ruled.shownBy()) {
-                if (each instanceof souther.compiler.partition.ShownBy.AtAnArm(var fork, var part)
-                        && unreached.contains(
-                                new CoverageSites.AsWritten(fork.origin(), part))) {
-                    return new CoverageSites.AsWritten(fork.origin(), part);
+            for (ShownBy each : ruled.shownBy()) {
+                CoverageSites.AsWritten arm = switch (each) {
+                    case ShownBy.AtAnArm(var fork, var part) ->
+                            new CoverageSites.AsWritten(fork.origin(), part);
+                    case ShownBy.AtAnArmShortOf(var fork, var part, var _) ->
+                            new CoverageSites.AsWritten(fork.origin(), part);
+                    case ShownBy.AtAnOutcome _, ShownBy.ShortOf _, ShownBy.NothingIsRecorded _ ->
+                            null;
+                };
+                if (arm != null && unreached.contains(arm)) {
+                    return arm;
                 }
             }
             return null;
@@ -5326,9 +5333,15 @@ public final class Adequacy {
         private static HeldOutcome.Of heldBy(MeasuredInput subject,
                                              List<BorderAssessment> edges,
                                              ReachingCuts reaching) {
-            Map<ControlPlace.Outcome, Optional<HeldOutcome>> found = new LinkedHashMap<>();
-            return outcome -> found.computeIfAbsent(outcome,
-                    asked -> holding(subject, edges, reaching, asked));
+            Map<ControlPlace, Optional<HeldOutcome>> found = new LinkedHashMap<>();
+            return place -> found.computeIfAbsent(place, asked -> switch (asked) {
+                case ControlPlace.Outcome outcome -> holding(subject, edges, reaching, outcome);
+                // An arm a run is seen taking where its fork's condition is a truth nothing else
+                // records: what that truth coming out the way the arm is taken on asks of a row.
+                case ControlPlace.Arm arm -> ModelOccurrence.statedAt(arm.arm().fork())
+                        .flatMap(fork -> reaching.heldAtTheArm(fork, arm.arm().part(),
+                                subject.quantities().region()));
+            });
         }
 
         /**

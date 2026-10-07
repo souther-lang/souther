@@ -296,8 +296,31 @@ class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
         @Override
         public Marks forkArm(Core fork, int part) {
             return mark(fork, Choice.decidingArm(fork, part)
-                    instanceof Choice.Decides.ACondition(Core cond, boolean _) ? cond : fork,
+                    instanceof Choice.Decides.ACondition(Core.If iff, boolean _)
+                            ? iff.cond() : fork,
                     "arm", part);
+        }
+
+        /** The way and the arm it is the only way into, whether or not the way was whole. */
+        @Override
+        public Marks seenAtTheArm(Core.If fork, int part, Arrival<Marks> onlyWay) {
+            Marks arm = forkArm(fork, part);
+            return arm == null ? null : join(onlyWay.path(), arm);
+        }
+
+        @Override
+        public Marks oneOfTheWaysIn(Core.If fork, int part, Marks way) {
+            return way;
+        }
+
+        @Override
+        public Marks wentOn(Core.Binary operator, Marks left, Arrival<Marks> right) {
+            return left;
+        }
+
+        @Override
+        public Marks stoppedShort(Core.Binary operator, Marks left) {
+            return left;
         }
 
         private Marks mark(Core at, Core about, String what, int part) {

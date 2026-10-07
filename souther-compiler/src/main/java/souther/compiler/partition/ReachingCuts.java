@@ -65,19 +65,22 @@ import java.util.Set;
  * built from.
  */
 public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
-                           Lookup<ModelOccurrence, TruthOnTheWay> byTruth) {
+                           Lookup<ModelOccurrence, ConditionOnTheWay> byTruth,
+                           Lookup<ModelOccurrence, ConditionOnTheWay> byFork) {
 
-    public static final ReachingCuts NONE =
-            new ReachingCuts(Lookup.built(_ -> { }), Lookup.built(_ -> { }));
+    public static final ReachingCuts NONE = new ReachingCuts(Lookup.built(_ -> { }),
+            Lookup.built(_ -> { }), Lookup.built(_ -> { }));
 
     public ReachingCuts {
         Objects.requireNonNull(byComparison, "what a walk collected, comparison by comparison");
         Objects.requireNonNull(byTruth, "what a walk collected, truth by truth");
+        Objects.requireNonNull(byFork, "what a walk collected, fork by fork");
     }
 
     /**
-     * A truth a fork's condition asks, as the walk met it: what stood on the way to it, and what it
-     * coming out each way says ({@link #stating}).
+     * A condition as the walk met it — a truth a fork's condition asks, or a fork's whole
+     * condition: what stood on the way to it, and what it coming out each way says
+     * ({@link #stating}).
      *
      * <p>Both ways said here, where the condition and the reading of the input are in hand, so that
      * what is kept is what a row is composed against and compares as that.
@@ -86,10 +89,10 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
      * @param holding what it coming out true says
      * @param failing what it coming out false says
      */
-    public record TruthOnTheWay(List<OnTheWay> assumed, List<OnTheWay> holding,
-                                List<OnTheWay> failing) {
+    public record ConditionOnTheWay(List<OnTheWay> assumed, List<OnTheWay> holding,
+                                    List<OnTheWay> failing) {
 
-        public TruthOnTheWay {
+        public ConditionOnTheWay {
             assumed = List.copyOf(assumed);
             holding = List.copyOf(holding);
             failing = List.copyOf(failing);
@@ -112,7 +115,26 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
      */
     public Optional<HeldOutcome> heldAt(ModelOccurrence application, boolean held,
                                         SearchRegion declarations) {
-        TruthOnTheWay met = byTruth.get(application);
+        return held(byTruth.get(application), held, declarations);
+    }
+
+    /**
+     * What brings a run down arm {@code part} of {@code fork}: the fork's whole condition coming
+     * out the way the arm is taken on, as {@link #heldAt} answers it for an application.
+     *
+     * <p>A way past a guard names the arm where the condition has a part no construct of its own
+     * records — the arm is where a run through it is seen. A run down the arm brought the whole
+     * condition out that way, so that is what it takes of a row, whichever of its parts the way
+     * also names; and where the condition coming out that way is nothing this can state, nothing
+     * holds a row to the arm.
+     */
+    public Optional<HeldOutcome> heldAtTheArm(ModelOccurrence fork, int part,
+                                              SearchRegion declarations) {
+        return held(byFork.get(fork), part == 0, declarations);
+    }
+
+    private static Optional<HeldOutcome> held(ConditionOnTheWay met, boolean held,
+                                              SearchRegion declarations) {
         if (met == null) {
             return Optional.empty();
         }
@@ -417,7 +439,8 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
     static final class Collected {
 
         private final Map<ModelOccurrence, List<OnTheWay>> byComparison = new LinkedHashMap<>();
-        private final Map<ModelOccurrence, TruthOnTheWay> byTruth = new LinkedHashMap<>();
+        private final Map<ModelOccurrence, ConditionOnTheWay> byTruth = new LinkedHashMap<>();
+        private final Map<ModelOccurrence, ConditionOnTheWay> byFork = new LinkedHashMap<>();
 
         /**
          * The truth the application {@code answers} answers, met as {@code met} says.
@@ -425,10 +448,23 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
          * <p>Once per construct of the model, as a comparison is, and for the same reason: two
          * arriving under one would be two truths the model states at one place.
          */
-        void answered(ModelOccurrence answers, TruthOnTheWay met) {
+        void answered(ModelOccurrence answers, ConditionOnTheWay met) {
             if (byTruth.putIfAbsent(answers, met) != null) {
                 throw new IllegalStateException(
                         "two truths of one reading state one construct of the model: " + answers);
+            }
+        }
+
+        /**
+         * The whole condition of {@code fork}, met as {@code met} says.
+         *
+         * <p>Once per fork, since a fork has one condition. A fork inside a non-recursive helper is
+         * read once per call of it, and each of those is a fork of its own.
+         */
+        void decides(ModelOccurrence fork, ConditionOnTheWay met) {
+            if (byFork.putIfAbsent(fork, met) != null) {
+                throw new IllegalStateException(
+                        "two conditions of one reading decide one fork of the model: " + fork);
             }
         }
 
@@ -448,7 +484,8 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
 
         ReachingCuts made() {
             return new ReachingCuts(Lookup.built(put -> byComparison.forEach(put::put)),
-                    Lookup.built(put -> byTruth.forEach(put::put)));
+                    Lookup.built(put -> byTruth.forEach(put::put)),
+                    Lookup.built(put -> byFork.forEach(put::put)));
         }
     }
 }

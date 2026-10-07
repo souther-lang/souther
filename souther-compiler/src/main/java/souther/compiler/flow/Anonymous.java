@@ -50,6 +50,27 @@ public final class Anonymous implements Naming<AnonymousPath> {
         return AnonymousPath.INSTANCE;
     }
 
+    @Override
+    public AnonymousPath seenAtTheArm(Core.If fork, int part, Arrival<AnonymousPath> onlyWay) {
+        return AnonymousPath.INSTANCE;
+    }
+
+    @Override
+    public AnonymousPath oneOfTheWaysIn(Core.If fork, int part, AnonymousPath way) {
+        return way;
+    }
+
+    @Override
+    public AnonymousPath wentOn(Core.Binary operator, AnonymousPath left,
+                                Arrival<AnonymousPath> right) {
+        return left;
+    }
+
+    @Override
+    public AnonymousPath stoppedShort(Core.Binary operator, AnonymousPath left) {
+        return left;
+    }
+
     /**
      * No bound, because this is the reading everything else's answers about the body come from.
      *
