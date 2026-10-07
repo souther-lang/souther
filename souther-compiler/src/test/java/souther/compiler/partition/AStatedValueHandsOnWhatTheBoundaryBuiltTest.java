@@ -36,7 +36,7 @@ class AStatedValueHandsOnWhatTheBoundaryBuiltTest {
 
     /** A field's type, the declarations it needs, the value the model states it at, and that
      *  value as a row writes it. */
-    private record Field(String type, String declared, String stated, String written) {
+    record Field(String type, String declared, String stated, String written) {
 
         @Override
         public String toString() {

@@ -105,8 +105,11 @@ sealed interface InputAtom {
 
         @Override
         public boolean equals(Object other) {
-            return this == other || other instanceof Named that && hash == that.hash
-                    && root.equals(that.root) && path.equals(that.path) && kind.equals(that.kind);
+            if (this == other) {
+                return true;
+            }
+            return other instanceof Named that && hash == that.hash && root.equals(that.root)
+                    && path.equals(that.path) && kind.equals(that.kind);
         }
 
         @Override
