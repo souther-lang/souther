@@ -138,6 +138,9 @@ class WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest {
         assertEquals(Type.INT, BehaviorInputs.stepWrittenValue(new TermPath.Step.Element(),
                         new Type.ListOf(Type.INT), wraps(), symbols(), kinds(), sums()),
                 "a sequence puts what it holds under an element");
+        assertEquals(Type.INT, BehaviorInputs.stepWrittenValue(new TermPath.Step.Element(),
+                        Type.map(Type.STRING, Type.INT), wraps(), symbols(), kinds(), sums()),
+                "and a map its values, and not its keys");
         assertEquals(typeOf("p"), BehaviorInputs.stepWrittenValue(
                         new TermPath.Step.Refine(CasesLeft.of(caseOf("P"))), typeOf("r"), wraps(),
                         symbols(),

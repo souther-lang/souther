@@ -59,7 +59,7 @@ class ANumberOverARunIsMeasuredWithoutAPositionTest {
                         + " somewhere");
     }
 
-    /** A run stands inside a sequence. One position holding one value is not a run of anything. */
+    /** A run stands inside a container. One position holding one value is not a run of anything. */
     @Test
     void aRunIsNotOnePositionHoldingOneValue() {
         assertThrows(IllegalArgumentException.class,

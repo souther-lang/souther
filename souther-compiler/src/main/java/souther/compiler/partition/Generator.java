@@ -8267,16 +8267,16 @@ public final class Generator {
     }
 
     /**
-     * Whether {@code axis} stands inside a collection the rules leave no room in.
+     * Whether {@code axis} stands inside a container the rules leave no room in.
      *
-     * <p>Asked of the collections the position is inside and not of the position itself: what a rule
-     * capping a collection at none says is that nothing stands at any position under it, whatever
+     * <p>Asked of the containers the position is inside and not of the position itself: what a rule
+     * capping a container at none says is that nothing stands at any position under it, whatever
      * the values there could otherwise be. Asked of every one of them, because a position two
-     * sequences deep needs each of them to hold something — read off the outermost alone, a list of
+     * containers deep needs each of them to hold something — read off the outermost alone, a list of
      * lists whose inner lists hold nothing was offered rows for what the inner lists hold.
      */
     private static boolean holdsNothing(MeasuredInput subject, Axis axis) {
-        for (TermPath inside : axis.path().sequencesContainingIt()) {
+        for (TermPath inside : axis.path().containersHoldingIt()) {
             // A position of the input, because the axis is at one and a container it stands inside
             // is a position the same reading found on the way down to it.
             if (subject.quantities().mostHeldAt(
@@ -8962,7 +8962,7 @@ public final class Generator {
             }
             RuleKey field = path.ruleKeyUnder(root);
             // Where no clause of the parameter can name the position, nothing of this parameter's
-            // rules is about it and there is nothing to settle. A position inside a sequence is one,
+            // rules is about it and there is nothing to settle. A position inside a container is one,
             // and so is one under a narrowing: the rules that name it are the narrowed value's.
             if (field != null && !field.isTheValueItself()) {
                 out.put(field, number);

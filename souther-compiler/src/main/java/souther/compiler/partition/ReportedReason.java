@@ -186,13 +186,11 @@ public final class ReportedReason {
         return switch (reason) {
             case BlockReason.RuleAboutADerivedValue _ ->
                     UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE;
-            case BlockReason.RuleAboutAnElementOfSeveralSequences _ ->
-                    UndividedPosition.Reason.RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_SEQUENCES;
+            case BlockReason.RuleAboutAnElementOfSeveralContainers _ ->
+                    UndividedPosition.Reason.RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_CONTAINERS;
             case BlockReason.TypeUnresolved _ -> UndividedPosition.Reason.TYPE_UNRESOLVED;
             case BlockReason.RecursiveExpansion _ ->
                     UndividedPosition.Reason.RETURNS_TO_A_DECLARATION_ALREADY_READ;
-            case BlockReason.UnsupportedTraversal _ ->
-                    UndividedPosition.Reason.UNSUPPORTED_TRAVERSAL;
             case BlockReason.UnreadComparisonForm _ ->
                     UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
             case BlockReason.UnreadValueRule _ -> UndividedPosition.Reason.UNSUPPORTED_SYNTAX;

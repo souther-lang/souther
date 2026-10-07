@@ -51,7 +51,7 @@ import java.util.function.Function;
  * <p><b>Asked by what this value's own rules call a place ({@link RuleKey}), and never by where a
  * row writes a value.</b> The two part at a sum whose cases share a spread: what the cases share is
  * named at the sum, and a row writes it under whichever case it turned out to be. So a place a rule
- * of this value cannot name — inside a sequence, under a case — has no answer here rather than an
+ * of this value cannot name — inside a container, under a case — has no answer here rather than an
  * answer nothing was written at, and taking a name to the places it stands at is somebody else's
  * ({@code InputDomain}).
  */

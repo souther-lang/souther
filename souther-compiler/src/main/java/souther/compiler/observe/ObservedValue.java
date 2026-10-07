@@ -75,6 +75,13 @@ public sealed interface ObservedValue {
         public Mapping {
             entries = List.copyOf(entries);
         }
+
+        /** The values, in the order the entries are held — what a walk over a map is handed as the
+         *  element. Made each time it is asked for, so a reader going through them asks once and
+         *  walks what it was given. */
+        public List<ObservedValue> values() {
+            return entries.stream().map(Entry::value).toList();
+        }
     }
 
     record Entry(ObservedValue key, ObservedValue value) {}

@@ -16,7 +16,7 @@ import java.util.Map;
  *
  * <p><b>And a location holding another is not a second one.</b> A container written whole and a
  * position inside it are one value asked for twice: what a total demands is every element of a
- * sequence, and what a line at an element demands is one of them. Told apart by the spelling, both
+ * container, and what a line at an element demands is one of them. Told apart by the spelling, both
  * asks are taken and the composer writes whichever it plans — which is the half-answered point
  * above, reached by two paths that are not equal.
  *

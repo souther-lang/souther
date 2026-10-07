@@ -84,7 +84,7 @@ import java.util.Optional;
  *
  * <p><b>And one space per question and not one for the input, because a position exists under
  * conditions.</b> A field of a case is there where the value turned out to be that case, and a
- * field of an element where the sequence holds one — so a question naming such a position is asked
+ * field of an element where the container holds one — so a question naming such a position is asked
  * of the rows that meet those conditions, and the rules that reach it are the ones about those
  * rows. Every reading met into one space instead, the cases of a sum would be rules that hold
  * together, and one case its own rules refuse would refuse an input whose other cases are rows an

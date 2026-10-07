@@ -144,7 +144,7 @@ final class ConstructionPlan {
         /**
          * This compiler stopped short of reading what is under it.
          *
-         * <p>Not that a figure was reached at this position. A sequence is planned by asking what
+         * <p>Not that a figure was reached at this position. A container is planned by asking what
          * stands at its element, and a plan that gave that up further down is a plan whose answer
          * here — a whole value, chosen like any other — was not arrived at by looking. So what this
          * says is that the judgement was made without the reading, and the figures are those the
@@ -167,13 +167,14 @@ final class ConstructionPlan {
     }
 
     /**
-     * A sequence composed out of what it is asked to hold, rather than chosen whole.
+     * A container composed out of what it is asked to hold, rather than chosen whole — a list, a
+     * set, or a map at its values.
      *
      * <p>Only where something is asked of what it holds: a class put at its element, or values the
-     * caller hands over to be written into it or kept out of it ({@link ContentsComposed}). A list
-     * nothing is asked of is a value like any other and is chosen whole, which is what keeps the
-     * rules about how many it holds with the one reader that has them — so this is the shape of a
-     * list a row is being built <em>into</em>, and not the shape of every list.
+     * caller hands over to be written into it or kept out of it ({@link ContentsComposed}). A
+     * container nothing is asked of is a value like any other and is chosen whole, which is what
+     * keeps the rules about how many it holds with the one reader that has them — so this is the
+     * shape of a container a row is being built <em>into</em>, and not the shape of every one.
      *
      * <p>One element and not however many. What a class at an element asks for is a list holding a
      * value in it; what the other elements are is a separate question, and answering it here would
@@ -668,14 +669,15 @@ final class ConstructionPlan {
         // parameter does not declare.
         List<TypeSymbol> worn = settled.outer().isEmpty() ? view.wrappers()
                 : outside(settled.outer(), view.wrappers());
-        // A sequence with something to be placed inside it. Built out of its element rather than
-        // chosen whole, since what is being asked for is a list holding a value in a class and no
-        // proposal of a whole list can be asked to hold one.
+        // A container with something to be placed inside it — a list, a set, or a map at its
+        // values. Built out of its element rather than chosen whole, since what is being asked for
+        // is a container holding a value in a class and no proposal of a whole one can be asked to
+        // hold one.
         // Read here and handed on, so that one place decides both that the descent stops and which
         // figure stopped it. Named again where the answer is made, the two could part.
         CompositionBudget descent = CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS;
         boolean asDeepAsThisGoes = depth >= descent.maximum();
-        if (view.shape() instanceof souther.compiler.check.Shape.Sequence sequence) {
+        if (view.shape() instanceof souther.compiler.check.Shape.Container container) {
             // Asked once, here, and handed to everything below that turns on it. What is built at
             // this position, whether the descent has anything to reach, and whether the rules leave
             // room for it are one question — is the caller asking for something inside this list —
@@ -703,9 +705,9 @@ final class ConstructionPlan {
             if (placesOne && holds.most() < neededToHold(holds)) {
                 return new NodeResult.Refused(new ModelRefusal.NoRoom(here, holds));
             }
-            // A sequence is planned by asking what stands at its element, so the figure is met here
-            // rather than below: read as a shape nothing composes — which is what a sequence is to
-            // the descent under this — a list this stopped short of looking into would be a
+            // A container is planned by asking what stands at its element, so the figure is met
+            // here rather than below: read as a shape nothing composes — which is what a container
+            // is to the descent under this — one this stopped short of looking into would be a
             // position the declarations put nothing under.
             if (asDeepAsThisGoes) {
                 return givenUpAt(descent, here, building, settled.outer(), demanded);
@@ -714,7 +716,7 @@ final class ConstructionPlan {
                 return new NodeResult.Made(
                         new Held(here, building, worn, Optional.empty(), holds, true));
             }
-            NodeResult inside = node(sequence.element(), here.element(), inners, symbols,
+            NodeResult inside = node(container.element(), here.element(), inners, symbols,
                     kinds, sums,
                     depth + 1, decided, required, contents, howMany);
             if (!(inside instanceof NodeResult.Made(Node element))) {

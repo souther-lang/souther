@@ -237,7 +237,7 @@ public sealed interface BlockReason {
                 case UnreadValueRule _ -> 5;
                 case PatternTooCostly _ -> 7;
                 case OrderedExtentTooCostly _ -> 8;
-                case RuleAboutAnElementOfSeveralSequences _ -> 9;
+                case RuleAboutAnElementOfSeveralContainers _ -> 9;
                 case EndLeftOpenByAChoice _ -> 10;
                 case ValueRuleLeftOpenByAChoice _ -> 11;
                 case LineAtANumberNoRatioHolds _ -> 12;
@@ -278,7 +278,7 @@ public sealed interface BlockReason {
                 // the position holds whatever a value taking the unread branch may hold.
                 case PatternTooCostly _, OrderedExtentTooCostly _,
                      UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                     RuleAboutAnElementOfSeveralSequences _, UnreadValueRule _,
+                     RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
                      ValueRuleRelatingTwoPositions _, CasePairingNotDetermined _ -> true;
@@ -298,12 +298,12 @@ public sealed interface BlockReason {
                 case PatternTooCostly _, OrderedExtentTooCostly _ -> RunSensitivity.MAY_CHANGE;
                 // And eight where nothing was compared against anything. A form nothing takes
                 // apart, values no line can be drawn on, a rule about a value made from this one, a
-                // rule about an element of one of several sequences, a relation between two
+                // rule about an element of one of several containers, a relation between two
                 // positions and a pairing nothing worked out are all met again by a run allowed
                 // more of everything. So is an end a choice left open: what the reading of ends
                 // stops on is a form it does not enter, and there is no figure it stopped at.
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                     RuleAboutAnElementOfSeveralSequences _, UnreadValueRule _,
+                     RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
                      ValueRuleRelatingTwoPositions _, EndLeftOpenByAChoice _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
@@ -359,14 +359,14 @@ public sealed interface BlockReason {
      */
     sealed interface AboutThePosition extends ReadingStopReason {
 
-        /** The same switch over the five ways a reading never got to a position's rules. */
+        /** The same switch over the four ways a reading never got to a position's rules. */
         @Override
         default RunSensitivity runSensitivity() {
             return switch (this) {
                 // A type nothing could interpret, a path returning to a declaration it has been
-                // through, and a place this does not reach into. None of them is a figure anything
-                // was compared against.
-                case TypeUnresolved _, RecursiveExpansion _, UnsupportedTraversal _,
+                // through, and rules nothing reached. None of them is a figure anything was
+                // compared against.
+                case TypeUnresolved _, RecursiveExpansion _,
                      ValueRulesNotReached _ -> RunSensitivity.UNAFFECTED;
                 // And the one figure among them: a reading that stopped at the depth it could
                 // afford, which a run allowed to read further need not stop at.
@@ -548,17 +548,6 @@ public sealed interface BlockReason {
     }
 
     /**
-     * The shape at the position holds values this cannot reach into, and which reaching is missing
-     * is which of {@link Traversal} it is.
-     *
-     * <p>Held apart rather than made one word, because what would lift each is a different piece of
-     * work: choosing among however many elements a sequence holds, choosing whether an optional
-     * holds one, and deciding what part of a mapping a rule is even about. Reporting them alike
-     * would let one of them being implemented read as all three.
-     */
-    record UnsupportedTraversal(Traversal traversal) implements AboutThePosition {}
-
-    /**
      * A comparison naming the position is written in a form no reader here takes apart: the
      * position inside an expression the terms do not name, or a threshold written as something
      * other than a constant.
@@ -624,10 +613,10 @@ public sealed interface BlockReason {
     record RuleAboutADerivedValue() implements RuleReadingStopped {}
 
     /**
-     * A rule is written about an element of a sequence, in a block handed to more than one walk.
+     * A rule is written about an element of a container, in a block handed to more than one walk.
      *
      * <p>One block written once and given to two operations: the name it reads the element under
-     * holds an element of a different sequence on each run, so a rule inside it is about one of
+     * holds an element of a different container on each run, so a rule inside it is about one of
      * them and nothing here says which. It is filed at every one of them, because that is what is
      * known — the rule is about one of these places and each is a place a reader can be sent to.
      *
@@ -641,7 +630,7 @@ public sealed interface BlockReason {
      * computation that is not there. What lifts this is telling the two walks apart, and what an
      * author can do about it today is write the block twice.
      */
-    record RuleAboutAnElementOfSeveralSequences() implements RuleReadingStopped {}
+    record RuleAboutAnElementOfSeveralContainers() implements RuleReadingStopped {}
 
     /**
      * A rule naming which values the position may hold is written in a form no reader here takes
@@ -936,7 +925,7 @@ public sealed interface BlockReason {
      *
      * <p>Its own word and not {@link ComparisonBetweenPositions}. Nothing here is between two
      * positions: there is one number and one line, and the values it is read from stand at a place
-     * inside a sequence. Two lines of sixty and forty are on the boundary of a hundred as surely as
+     * inside a container. Two lines of sixty and forty are on the boundary of a hundred as surely as
      * one of a hundred is, so there is no class of that place for the rule to have drawn — and a
      * reader told the rule relates two positions would go looking for the pair.
      *
@@ -1007,24 +996,5 @@ public sealed interface BlockReason {
      * the classes.
      */
     record ClassesNotComposed() implements ReadToEndWithoutLine {}
-
-    /**
-     * What a derivation would have to be able to reach into.
-     *
-     * <p>What it can reach into is not here. The elements of a {@code List} or a {@code Set} were,
-     * and are positions of the input now; so was the value an {@code Option} holds, which is a
-     * branch of the position under the narrowing that it holds one. A word for a reaching that is
-     * made says a reader can still meet it, and the next one to read this would take its presence
-     * for evidence that a sequence, or an optional, is where the walk stops.
-     */
-    enum Traversal {
-
-        /**
-         * What a {@code Map} holds. One case and not two, because which of a key and a value a rule
-         * would be about has not been decided — and a distinction invented here would be a promise
-         * about a semantics nobody has written.
-         */
-        MAPPING_CONTENT
-    }
 
 }

@@ -48,7 +48,7 @@ public final class InputNumber {
                 case PathResolution.At(var at) -> at;
                 case PathResolution.NotAPosition _ -> null;
                 // A taking is of one location, and a name that only may stand at one is no one of
-                // them. Taken of any, the number would be a size of a sequence the run it is on
+                // them. Taken of any, the number would be a size of a container the run it is on
                 // never walked.
                 case PathResolution.MayStandAt _ -> null;
             };
@@ -138,7 +138,7 @@ public final class InputNumber {
         }
         TermPath under = answered.from(at);
         // Whether what is read from there is one run is the run's own question, and it is asked
-        // rather than assumed: a walk over a sequence inside another sequence is over some of the
+        // rather than assumed: a walk over a container inside another container is over some of the
         // occurrences of its path, and a term made of it would state of every one of them what the
         // model says of those.
         RunSource over = RunSource.overTheOccurrencesAt(under);

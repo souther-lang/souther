@@ -246,7 +246,7 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
         assertNotNull(element, "what the list holds is a position");
         assertTrue(read.reach().crossings().isEmpty()
                         || read.reach().crossings().stream()
-                                .allMatch(each -> each.at().insideASequence()),
+                                .allMatch(each -> each.at().insideAContainer()),
                 "and any crossing under it is the sum's own, not the list's");
     }
 

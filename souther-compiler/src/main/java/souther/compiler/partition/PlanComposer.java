@@ -133,14 +133,19 @@ final class PlanComposer {
         }
         RuleReadingSource ruleSource = reading.source();
         // What may stand beside them is the carrier's business — a list may hold the same value
-        // again and a set may not — so the collection is asked for whole rather than padded here.
+        // again and a set may not, and a map's values stand under keys of their own — so the
+        // collection is asked for whole rather than padded here.
         if (!(TypeView.shapeOf(plan.type(), ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums())
-                instanceof Shape.Sequence carrier)) {
+                instanceof Shape.Container container)) {
             return null;
         }
-        FixtureTemplate collection =
-                Witnesses.holding(carrier, holding, keptOut, plan.holds(), reading);
+        FixtureTemplate collection = switch (container) {
+            case Shape.Sequence carrier ->
+                    Witnesses.holding(carrier, holding, keptOut, plan.holds(), reading);
+            case Shape.Mapping carrier ->
+                    Witnesses.holding(carrier, holding, keptOut, plan.holds(), reading);
+        };
         if (collection == null) {
             return null;
         }

@@ -166,7 +166,7 @@ public final class StandingAtAPoint {
         boolean unwatched = false;
         boolean stoppedShort = false;
         for (ObservedInputs one : observed) {
-            // A row has more than one value at a position inside a sequence, and standing at a point
+            // A row has more than one value at a position inside a container, and standing at a point
             // is one element standing there. Asked for one value, such a row answered with none and
             // every point on such a line came back undecided — a measurement that could not look,
             // said of a row that wrote the values plainly.
@@ -428,7 +428,7 @@ public final class StandingAtAPoint {
                 }
             }
             // Nothing is chosen, so nothing here is ruled out and the first of them is the answer.
-            // Where there is more than one the position is inside a sequence, the steps are not
+            // Where there is more than one the position is inside a container, the steps are not
             // empty, and this walk is no reading of the row: which of them it took is read by
             // nobody.
             return new ObservationAtPoint.Value(values.getFirst().value());
@@ -441,7 +441,7 @@ public final class StandingAtAPoint {
     }
 
     /**
-     * One row's values under one reading of it: an element chosen at each step inside a sequence
+     * One row's values under one reading of it: an element chosen at each step inside a container
      * the line's positions take.
      *
      * <p>A row standing at a point is one of its readings standing there, and a reading has to be

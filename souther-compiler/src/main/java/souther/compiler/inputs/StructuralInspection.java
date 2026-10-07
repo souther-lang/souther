@@ -88,12 +88,17 @@ public sealed interface StructuralInspection {
          * The position holds values of {@code element}, each of which is read the same way, at the
          * one position they share.
          *
-         * <p>One position for however many the list holds, and the path says no more than that
+         * <p>One position for however many the container holds, and the path says no more than that
          * ({@link TermPath.Step.Element}). What is written about the elements is written once, so
          * what is read of them is read once; how many of them a row has to put in a class is settled
          * where the class is and not here.
          *
-         * @param element what the sequence holds, as the signature wrote it
+         * <p>The values a container hands a walk over it one at a time: what a list or a set holds,
+         * and a map's values. A map's key is the other thing a closure over it is handed, and is not
+         * what this position is — the element a program's walk over a map is credited with is the
+         * value ({@link souther.compiler.types.Type}), and this is the same element.
+         *
+         * @param element what the container holds, as the signature wrote it
          */
         record Elements(Type element) implements Continuation {}
 
@@ -138,8 +143,8 @@ public sealed interface StructuralInspection {
          * <p><b>The stop it observed outlives that.</b> A position something else answers for is
          * still a position the walk never went into, and this arm is gone by then — so what a report
          * says about the walk is written from {@link BlockedDescent}, which is the same observation
-         * kept as one nothing later takes away. Read from here instead, a {@code Map} under a rule
-         * about its size came back with nothing to say the walk had ever stopped (issue #1084).
+         * kept as one nothing later takes away. Read from here instead, a position a rule measures
+         * would come back with nothing to say the walk had ever stopped at it.
          */
         record Blocked(BlockReason.AboutThePosition why) implements Continuation {}
     }
@@ -205,8 +210,10 @@ public sealed interface StructuralInspection {
             // optional holds is at no name of its own, so the position under it is `x@Some`.
             case Shape.Optional _ ->
                     new Retained(new Continuation.Branches(branchesOf(shape, declared)));
-            case Shape.Mapping _ -> stoppedAt(new BlockReason.UnsupportedTraversal(
-                    BlockReason.Traversal.MAPPING_CONTENT));
+            // What a map holds is one position the same way, at its values: the values are what a
+            // walk over it hands on one at a time, and the map goes on standing beside them with a
+            // size of its own.
+            case Shape.Mapping mapping -> new Retained(new Continuation.Elements(mapping.value()));
             // Nothing was interpreted, so there is nothing to be made of. A report is written about
             // a model carrying one, which is why this is answered rather than refused.
             case Shape.Unresolved _ -> stoppedAt(new BlockReason.TypeUnresolved());

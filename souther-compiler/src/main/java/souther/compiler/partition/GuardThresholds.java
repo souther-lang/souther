@@ -361,7 +361,7 @@ public final class GuardThresholds {
      * reads the places afterwards. Two things bring a comparison here and they are not the same
      * sentence: a value some operation made out of what stands at a position, and a value that is
      * what stands at a position on the run it is on, with nothing to say which of the ones it may
-     * be. Answered alike, a rule about an element of a sequence would be reported as one about a
+     * be. Answered alike, a rule about an element of a container would be reported as one about a
      * value somebody computed, and an author would go looking for the operation to invert.
      */
     static void cameFrom(StatedComparison comparison, InputReads reads,
@@ -375,7 +375,7 @@ public final class GuardThresholds {
                 case PathResolution.NotAPosition _ -> { }
                 case PathResolution.MayStandAt(var among) -> among.forEach(each ->
                         out.putIfAbsent(FilingCoordinate.at(each),
-                                new BlockReason.RuleAboutAnElementOfSeveralSequences()));
+                                new BlockReason.RuleAboutAnElementOfSeveralContainers()));
             }
         }
     }

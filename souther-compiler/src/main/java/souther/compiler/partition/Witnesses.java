@@ -393,9 +393,53 @@ final class Witnesses {
     static FixtureTemplate holding(Shape.Sequence carrier,
                                    List<FixtureTemplate> holding, List<FixtureTemplate> keptOut,
                                    DeclaredBounds.CountRange holds, RuleReadingContext reading) {
+        List<FixtureTemplate> elements = elementsHolding(carrier.element(),
+                carrier.kind() == Shape.Sequence.Kind.LIST, holding, keptOut, holds, reading);
+        return elements == null ? null : FixtureTemplate.collection(elements);
+    }
+
+    /**
+     * The same, of a map: values that hold every one of {@code holding} and nothing equal to any of
+     * {@code keptOut}, each under a key of its own.
+     *
+     * <p>What is asked of a map's element is asked of its values, which may repeat the way a list's
+     * elements may. The keys are what keeps the entries apart, and they are the key type's distinct
+     * values, the same ones a map built to a size is keyed by ({@link #ofMapping}).
+     */
+    static FixtureTemplate holding(Shape.Mapping map,
+                                   List<FixtureTemplate> holding, List<FixtureTemplate> keptOut,
+                                   DeclaredBounds.CountRange holds, RuleReadingContext reading) {
+        List<FixtureTemplate> values =
+                elementsHolding(map.value(), true, holding, keptOut, holds, reading);
+        if (values == null) {
+            return null;
+        }
+        List<FixtureTemplate> keys = distinctValuesOf(map.key(), values.size(), reading, Set.of());
+        if (keys.size() < values.size()) {
+            return null;
+        }
+        List<FixtureTemplate> entries = new ArrayList<>();
+        for (int i = 0; i < values.size(); i++) {
+            entries.add(FixtureTemplate.entry(keys.get(i), values.get(i)));
+        }
+        return FixtureTemplate.collection(entries);
+    }
+
+    /**
+     * What a container of {@code element} holds when it holds every one of {@code holding},
+     * nothing equal to any of {@code keptOut}, and as many as the rules let it — or null where
+     * nothing can.
+     *
+     * @param repeats whether the container may hold one value twice, which a list's elements and a
+     *                map's values may and a set's elements may not
+     */
+    private static List<FixtureTemplate> elementsHolding(Type element, boolean repeats,
+                                                         List<FixtureTemplate> holding,
+                                                         List<FixtureTemplate> keptOut,
+                                                         DeclaredBounds.CountRange holds,
+                                                         RuleReadingContext reading) {
         Set<String> out = new LinkedHashSet<>();
         keptOut.forEach(each -> out.add(each.text()));
-        boolean list = carrier.kind() == Shape.Sequence.Kind.LIST;
         Set<String> written = new LinkedHashSet<>();
         List<FixtureTemplate> elements = new ArrayList<>();
         for (FixtureTemplate each : holding) {
@@ -410,25 +454,25 @@ final class Witnesses {
         if (needed > holds.most()) {
             return null;
         }
-        // A list may say one of its values again, and the one it was asked to hold is the value
-        // that is surely one the element's rules admit.
-        if (list && !elements.isEmpty()) {
+        // A container that may say one of its values again says the one it was asked to hold,
+        // which is the value that is surely one the element's rules admit.
+        if (repeats && !elements.isEmpty()) {
             while (elements.size() < needed) {
                 elements.add(elements.getFirst());
             }
-            return FixtureTemplate.collection(elements);
+            return elements;
         }
         // One more than the values that may be passed over, since each kept out or already held
         // may be among them.
         int many = needed + out.size() + written.size() + 1;
-        for (FixtureTemplate each : distinctValuesOf(carrier.element(), many, reading, Set.of())) {
+        for (FixtureTemplate each : distinctValuesOf(element, many, reading, Set.of())) {
             if (elements.size() >= needed) {
                 break;
             }
             if (out.contains(each.text())) {
                 continue;
             }
-            if (list) {
+            if (repeats) {
                 while (elements.size() < needed) {
                     elements.add(each);
                 }
@@ -438,7 +482,7 @@ final class Witnesses {
         }
         // Fewer than asked for is a type with too few values, which is a container the rules want
         // and nothing can build.
-        return elements.size() < needed ? null : FixtureTemplate.collection(elements);
+        return elements.size() < needed ? null : elements;
     }
 
     /**
