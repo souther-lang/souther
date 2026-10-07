@@ -2988,7 +2988,8 @@
         },
         "disposition" : "met"
       } ],
-      "status" : "complete",
+      "status" : "partial",
+      "weakening" : [ "rule_unread" ],
       "signature" : {
         "status" : "complete",
         "output" : {
@@ -3026,16 +3027,18 @@
       },
       "partition" : {
         "axesMeasure" : {
-          "status" : "complete"
+          "status" : "partial",
+          "weakening" : [ "rule_unread" ]
         },
         "boundariesMeasure" : {
-          "status" : "complete"
+          "status" : "partial",
+          "weakening" : [ "rule_unread" ]
         },
         "axes" : [ {
           "axis" : "apportionExactly/among",
           "path" : "among",
           "read" : {
-            "extent" : "complete"
+            "extent" : "partial"
           },
           "classes" : [ "among/0 <= x < 1", "among/1 <= x" ],
           "excluded" : [ ],
@@ -3043,6 +3046,45 @@
           "status" : "complete",
           "covered" : [ "among/1 <= x" ],
           "unclassifiedRows" : 0
+        } ],
+        "unanswered" : [ {
+          "at" : "amount",
+          "rule" : "comparison@1:50:24",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.splitting",
+            "definition" : "apportionExactly",
+            "behavior" : "apportionExactly",
+            "ordinal" : 4,
+            "lowered" : 0
+          },
+          "question" : "notDetermined",
+          "subject" : {
+            "kind" : "filedAt",
+            "path" : "amount"
+          },
+          "stopped" : [ {
+            "reason" : "rule_about_a_derived_value"
+          } ]
+        }, {
+          "at" : "among",
+          "rule" : "comparison@1:50:24",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.splitting",
+            "definition" : "apportionExactly",
+            "behavior" : "apportionExactly",
+            "ordinal" : 4,
+            "lowered" : 0
+          },
+          "question" : "notDetermined",
+          "subject" : {
+            "kind" : "filedAt",
+            "path" : "among"
+          },
+          "stopped" : [ {
+            "reason" : "rule_about_a_derived_value"
+          } ]
         } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
@@ -3601,7 +3643,31 @@
           "unknown" : 0
         },
         "notDerivable" : [ ],
-        "notRead" : [ ]
+        "notRead" : [ {
+          "position" : "amount",
+          "reason" : "rule_about_a_derived_value",
+          "rule" : "comparison@1:50:24",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.splitting",
+            "definition" : "apportionExactly",
+            "behavior" : "apportionExactly",
+            "ordinal" : 4,
+            "lowered" : 0
+          }
+        }, {
+          "position" : "among",
+          "reason" : "rule_about_a_derived_value",
+          "rule" : "comparison@1:50:24",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.splitting",
+            "definition" : "apportionExactly",
+            "behavior" : "apportionExactly",
+            "ordinal" : 4,
+            "lowered" : 0
+          }
+        } ]
       },
       "branch" : {
         "status" : "complete",
@@ -3925,6 +3991,56 @@
           }
         },
         "code" : "E1916"
+      }, {
+        "kind" : "partition_not_read",
+        "disposition" : "reported",
+        "subject" : "amount",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.splitting",
+          "definition" : "apportionExactly",
+          "behavior" : "apportionExactly",
+          "ordinal" : 4,
+          "lowered" : 0
+        },
+        "reason" : "rule_about_a_derived_value"
+      }, {
+        "kind" : "partition_not_read",
+        "disposition" : "reported",
+        "subject" : "among",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.splitting",
+          "definition" : "apportionExactly",
+          "behavior" : "apportionExactly",
+          "ordinal" : 4,
+          "lowered" : 0
+        },
+        "reason" : "rule_about_a_derived_value"
+      }, {
+        "kind" : "rule_unaccounted",
+        "disposition" : "reported",
+        "subject" : "comparison@1:50:24 — what this rule states about amount",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.splitting",
+          "definition" : "apportionExactly",
+          "behavior" : "apportionExactly",
+          "ordinal" : 4,
+          "lowered" : 0
+        }
+      }, {
+        "kind" : "rule_unaccounted",
+        "disposition" : "reported",
+        "subject" : "comparison@1:50:24 — what this rule states about among",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.splitting",
+          "definition" : "apportionExactly",
+          "behavior" : "apportionExactly",
+          "ordinal" : 4,
+          "lowered" : 0
+        }
       }, {
         "kind" : "arm_unreached",
         "disposition" : "refused",
@@ -5014,25 +5130,6 @@
           },
           "stopped" : [ {
             "reason" : "rule_about_a_derived_value"
-          } ]
-        }, {
-          "at" : "指示.品目",
-          "rule" : "comparison@2:85:39",
-          "ruleId" : {
-            "kind" : "comparison",
-            "declaredIn" : "conformance.shipping",
-            "definition" : "高額割増",
-            "behavior" : "出荷する",
-            "ordinal" : 1,
-            "lowered" : 0
-          },
-          "question" : "notDetermined",
-          "subject" : {
-            "kind" : "filedAt",
-            "path" : "指示.品目"
-          },
-          "stopped" : [ {
-            "reason" : "unsupported_syntax"
           } ]
         } ],
         "claimsOffAxis" : [ ],
@@ -6270,7 +6367,7 @@
           "covered" : 3,
           "unknown" : 1
         },
-        "notDerivable" : [ "指示.記録時刻" ],
+        "notDerivable" : [ "指示.品目", "指示.記録時刻" ],
         "notRead" : [ {
           "position" : "指示.受付日",
           "reason" : "rule_about_a_derived_value",
@@ -6293,18 +6390,6 @@
             "definition" : "急ぎか",
             "behavior" : "出荷する",
             "ordinal" : 3,
-            "lowered" : 0
-          }
-        }, {
-          "position" : "指示.品目",
-          "reason" : "unsupported_syntax",
-          "rule" : "comparison@2:85:39",
-          "ruleId" : {
-            "kind" : "comparison",
-            "declaredIn" : "conformance.shipping",
-            "definition" : "高額割増",
-            "behavior" : "出荷する",
-            "ordinal" : 1,
             "lowered" : 0
           }
         } ]
@@ -6908,6 +6993,10 @@
       }, {
         "kind" : "partition_not_derivable",
         "disposition" : "reported",
+        "subject" : "指示.品目"
+      }, {
+        "kind" : "partition_not_derivable",
+        "disposition" : "reported",
         "subject" : "指示.記録時刻"
       }, {
         "kind" : "partition_not_read",
@@ -6936,19 +7025,6 @@
         },
         "reason" : "rule_about_a_derived_value"
       }, {
-        "kind" : "partition_not_read",
-        "disposition" : "reported",
-        "subject" : "指示.品目",
-        "ruleId" : {
-          "kind" : "comparison",
-          "declaredIn" : "conformance.shipping",
-          "definition" : "高額割増",
-          "behavior" : "出荷する",
-          "ordinal" : 1,
-          "lowered" : 0
-        },
-        "reason" : "unsupported_syntax"
-      }, {
         "kind" : "rule_unaccounted",
         "disposition" : "reported",
         "subject" : "comparison@2:55:57 — what this rule states about 指示.受付日",
@@ -6970,18 +7046,6 @@
           "definition" : "急ぎか",
           "behavior" : "出荷する",
           "ordinal" : 3,
-          "lowered" : 0
-        }
-      }, {
-        "kind" : "rule_unaccounted",
-        "disposition" : "reported",
-        "subject" : "comparison@2:85:39 — what this rule states about 指示.品目",
-        "ruleId" : {
-          "kind" : "comparison",
-          "declaredIn" : "conformance.shipping",
-          "definition" : "高額割増",
-          "behavior" : "出荷する",
-          "ordinal" : 1,
           "lowered" : 0
         }
       }, {

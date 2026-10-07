@@ -13,6 +13,7 @@ import souther.compiler.query.Compilation;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -48,7 +49,8 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
                 inputs.reading(rules), InputReads.ofParameters(inputs.parameterReads(),
                         inputs.declared(rules), checked.elementBindings().get(behavior)),
                 InputReads.ofParameters(Map.of(), DeclaredInput.NONE,
-                        checked.elementBindings().get(behavior))).comparisons(),
+                        checked.elementBindings().get(behavior)),
+                WhatAnAnswerTakesUp.of(inputs.reading(rules), Set.of())).comparisons(),
                 inputs, rules);
     }
 

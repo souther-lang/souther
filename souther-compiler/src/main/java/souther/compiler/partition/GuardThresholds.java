@@ -42,12 +42,14 @@ import souther.compiler.coverage.Arrivals;
 import souther.compiler.flow.ValueArrivals;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
+import java.util.Set;
 
 /**
  * The values a behavior's body compares its inputs against.
@@ -153,13 +155,18 @@ public final class GuardThresholds {
      * <p>{@code reaches} is where this reading of the module writes down the places it met rules
      * nothing this compilation holds wrote. One of them per body read and shared with every other
      * reader of that body, because an address means a place only under something that says which
-     * addresses were being handed out. */
+     * addresses were being handed out.
+     *
+     * <p>{@code dependencies} are the behaviors this one declares it depends on. A comparison over
+     * what one of them answered is a column of the decision table and no line here
+     * ({@link ComparisonAssessment.OnADependencysAnswer}). */
     public static Guards of(String behavior, AnalysisBody states, Core emitted,
                             CoverageSites.Plan plan,
                             InputReading read,
                             ElementBindings elements,
                             PathReachability.Answers arrives,
-                            RuleReachNumbering reaches) {
+                            RuleReachNumbering reaches,
+                            Set<ValueName.Behavior> dependencies) {
         // A behavior with no representation for the analysis to read leaves nothing to read. This
         // reading is of that tree — where the language's operations stand — so where there is none
         // there are no rules to be had from it, and the answer is the same one a behavior with no
@@ -200,7 +207,8 @@ public final class GuardThresholds {
                         elements),
                 // What a value states is read where nothing of the behavior's inputs is in force: a
                 // value takes none and names none.
-                InputReads.ofParametersWhereCallsStand(Map.of(), DeclaredInput.NONE, elements));
+                InputReads.ofParametersWhereCallsStand(Map.of(), DeclaredInput.NONE, elements),
+                WhatAnAnswerTakesUp.of(read, dependencies));
         // And what the tree that runs says about each of them, joined on the construct of the model
         // the two readings agree about.
         ComparisonEmissionIndex index =

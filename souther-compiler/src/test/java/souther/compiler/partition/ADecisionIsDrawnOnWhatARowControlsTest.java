@@ -2,7 +2,9 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -157,14 +159,7 @@ class ADecisionIsDrawnOnWhatARowControlsTest {
 
         DecisionCondition.AComparison comparison =
                 assertInstanceOf(DecisionCondition.AComparison.class, written);
-        assertEquals(Set.of(new DecisionAtom.OfAnAnswer(new DecisionSubject.AnAnswer(
-                        new InjectedAnswer(
-                                new souther.compiler.types.ValueName.Behavior(
-                                        "example.subjects", "riskScore"),
-                                List.of(new DecisionArgument.OfASubject(
-                                        new DecisionSubject.AnInput(
-                                                souther.compiler.inputs.TermPath.of("c"))))),
-                        List.of()))),
+        assertEquals(Set.of(new DecisionAtom.OfAnAnswer(answerAbout("riskScore"))),
                 comparison.form().coefs().keySet(),
                 "the quantity is what the dependency answered, with the newtype's value looked"
                         + " through: " + comparison);
@@ -279,6 +274,117 @@ class ADecisionIsDrawnOnWhatARowControlsTest {
     }
 
     /**
+     * A comparison over the name an arm gives what a dependency answered is the comparison over
+     * the answer.
+     *
+     * <p>The name stands for the value that was matched, and the arm narrows nothing a row writes:
+     * no position is under the call and no set of written values. Read as a name nothing could say
+     * anything about, the comparison was a column this reading names when written over the call and
+     * one it read nothing of when written through the arm.
+     */
+    @Test
+    void aComparisonThroughTheNameAnArmGivesAnAnswerIsOverTheAnswer() {
+        String model = TYPES + """
+
+                data Unscored
+
+                behavior scoreOf : (c: Customer) -> Score | Unscored
+
+                behavior decide : (c: Customer, limit: Score) -> Verdict
+                    depends on scoreOf
+                let decide (c, limit, scoreOf) =
+                    BODY
+                """;
+        Set<DecisionCondition> matched = columnsOf(model.replace("BODY", """
+                match scoreOf(c) with
+                        | Unscored -> Rejected
+                        | Score as s -> if s.value >= limit.value then Accepted else Rejected"""),
+                "decide");
+        Set<DecisionCondition> throughALet = columnsOf(model.replace("BODY", """
+                {
+                        let found = scoreOf(c)
+                        match found with
+                            | Unscored -> Rejected
+                            | Score as s -> if s.value >= limit.value then Accepted else Rejected
+                    }"""), "decide");
+
+        DecisionSubject.AnAnswer answer = answerAbout("scoreOf");
+        DecisionCondition.AComparison compared = matched.stream()
+                .filter(DecisionCondition.AComparison.class::isInstance)
+                .map(DecisionCondition.AComparison.class::cast).findFirst()
+                .orElseThrow(() -> new AssertionError("the comparison is a column: " + matched));
+        assertEquals(Set.of(new DecisionAtom.OfAnAnswer(answer),
+                        new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(TermPath.of("limit")))),
+                compared.form().coefs().keySet(),
+                "over what the dependency answered and the input it is compared with: " + compared);
+        assertTrue(matched.stream().anyMatch(column -> column
+                        instanceof DecisionCondition.ACase fork && fork.of().equals(answer)),
+                "and over the one answer the fork is on: " + matched);
+        assertEquals(matched, throughALet, "however many names stand between the call and the arm");
+    }
+
+    /**
+     * What an optional answer holds is not the answer.
+     *
+     * <p>{@code Some s} names what stands under the present carrier, and read as the value that was
+     * matched, {@code s.value} would be a number of the optional field as a whole — a column over a
+     * quantity the dependency never answered.
+     */
+    @Test
+    void whatAnOptionalInAnAnswerHoldsIsNotTheOptional() {
+        Set<DecisionCondition> columns = columnsOf(TYPES + """
+
+                data Found = { score: Score? }
+
+                behavior scoreOf : (c: Customer) -> Found
+
+                behavior decide : (c: Customer, limit: Score) -> Verdict
+                    depends on scoreOf
+                let decide (c, limit, scoreOf) =
+                    match scoreOf(c).score with
+                        | None -> Rejected
+                        | Some s -> if s.value >= limit.value then Accepted else Rejected
+                """, "decide");
+
+        assertTrue(columns.stream().noneMatch(column -> column
+                        instanceof DecisionCondition.AComparison compared
+                        && compared.form().coefs().keySet().stream()
+                                .anyMatch(DecisionAtom.OfAnAnswer.class::isInstance)),
+                "no comparison is over the optional the answer holds: " + columns);
+    }
+
+    /**
+     * A truth of an answer is one column however it is spelled, as a truth of a position is.
+     *
+     * <p>{@code trusts(c) == false} holding is {@code trusts(c)} not holding. Read as two columns, a
+     * body asking both would be a table that admits the answer holding and not.
+     */
+    @Test
+    void aTruthOfAnAnswerIsOneColumnHoweverItIsSpelled() {
+        DecisionCondition trusts = new DecisionCondition.ATruth(answerAbout("trusts"));
+        for (String spelling : List.of("trusts(c)", "trusts(c) == true", "false /= trusts(c)",
+                "trusts(c) == false", "trusts(c) /= true")) {
+            boolean holdsAt =
+                    !List.of("trusts(c) == false", "trusts(c) /= true").contains(spelling);
+            List<DecisionRule> rules = DecisionReadings.readToTheEnd(TYPES + """
+
+                    behavior trusts : (c: Customer) -> Bool
+
+                    behavior spelled : (c: Customer) -> Verdict
+                        depends on trusts
+                    let spelled (c, trusts) = if %s then Accepted else Rejected
+                    """.formatted(spelling), "spelled");
+
+            assertEquals(Set.of(trusts), columnsIn(rules),
+                    () -> spelling + " is the truth of what trusts answered: " + columnsIn(rules));
+            DecisionRule taken = rules.getFirst();
+            assertEquals(new DecidedCondition.Stood((DecisionCondition.ATruth) trusts, holdsAt),
+                    taken.consulted().get(trusts),
+                    () -> spelling + " holds where trusts(c) is " + holdsAt + ": " + rules);
+        }
+    }
+
+    /**
      * A value the model computes is no subject, and the condition over it stays unread.
      *
      * <p>The negative control this whole reading rests on: what makes an answer a subject is that a
@@ -297,6 +403,14 @@ class ADecisionIsDrawnOnWhatARowControlsTest {
         assertEquals(1, columns.size(), columns.toString());
         assertInstanceOf(DecisionCondition.AConditionNotRead.class, columns.iterator().next(),
                 "what an operation of the language answers is nothing a row pins: " + columns);
+    }
+
+    /** What {@code dependency} of this module answered when asked about {@code c}. */
+    private static DecisionSubject.AnAnswer answerAbout(String dependency) {
+        return new DecisionSubject.AnAnswer(new InjectedAnswer(
+                new ValueName.Behavior("example.subjects", dependency),
+                List.of(new DecisionArgument.OfASubject(
+                        new DecisionSubject.AnInput(TermPath.of("c"))))), List.of());
     }
 
     /** The columns of {@code behavior}, in the order the rules met them. */

@@ -17,6 +17,7 @@ import souther.compiler.values.Allowance;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Ways a test with no measurement pipeline beside it reads thresholds or assembles a partition on
@@ -42,7 +43,7 @@ final class ThresholdFixtures {
                 : GuardThresholds.of(behavior, states, emitted, plan, inputs.reading(source),
                         ElementBindings.of(states, source.newtypes()),
                         PathReachability.Answers.NONE,
-                        new RuleReachNumbering(source.symbols().module(), behavior));
+                        new RuleReachNumbering(source.symbols().module(), behavior), Set.of());
     }
 
     /** The lines one behavior's clauses draw, reading the input's rules here. */

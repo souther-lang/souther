@@ -25,6 +25,7 @@ import souther.compiler.values.Allowance;
 import souther.compiler.values.Realizations;
 import souther.compiler.values.Sameness;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -191,16 +192,20 @@ public final class BehaviorSetStatements {
      * here so that what is stated of one position is what the two come to between them. Read apart,
      * a term written about in both places would be measured twice and the second measure would be
      * told nothing of the first's classes.
+     *
+     * <p>{@code dependencies} are the behaviors this one declares it depends on. A fork on what one
+     * of them answered states no rule of its own: the decision table holds it as a column.
      */
     public static Read of(String behavior, AnalysisBody body, StatedContract stated,
                           InputReading read,
                           Map<BindingId, String> parameters, ElementBindings elements,
                           Allowance<NumericTerm.FromOnePosition> allowance,
                           List<ComparisonReadings.ForkMet> forks,
-                          RuleReachNumbering reaches) {
+                          RuleReachNumbering reaches,
+                          Set<ValueName.Behavior> dependencies) {
         return of(behavior,
                 PredicateReadings.of(behavior, body, stated, read, parameters, elements, reaches),
-                read, allowance, forks, reaches);
+                read, allowance, forks, reaches, WhatAnAnswerTakesUp.of(read, dependencies));
     }
 
     /**
@@ -214,7 +219,7 @@ public final class BehaviorSetStatements {
     static Read of(String behavior, PredicateReadings read, InputReading reading,
                    Allowance<NumericTerm.FromOnePosition> allowance,
                    List<ComparisonReadings.ForkMet> forks,
-                   RuleReachNumbering reaches) {
+                   RuleReachNumbering reaches, WhatAnAnswerTakesUp dependencies) {
         Symbols symbols = reading.symbols();
         DeclarationNewtypes newtypes = reading.newtypes();
         List<Asked> asked = new ArrayList<>();
@@ -257,7 +262,7 @@ public final class BehaviorSetStatements {
             state(each, answers.get(each.term()), statements, blocked);
         }
         return new Read(statements, blocked, nothingClassifies,
-                ofTheirOwn(behavior, read, reading, forks, reaches));
+                ofTheirOwn(behavior, read, reading, forks, reaches, dependencies));
     }
 
     /**
@@ -521,10 +526,12 @@ public final class BehaviorSetStatements {
     private static List<ForkOfItsOwn> ofTheirOwn(String behavior, PredicateReadings read,
                                                  InputReading reading,
                                                  List<ComparisonReadings.ForkMet> forks,
-                                                 RuleReachNumbering reaches) {
+                                                 RuleReachNumbering reaches,
+                                                 WhatAnAnswerTakesUp dependencies) {
         Symbols symbols = reading.symbols();
         DeclarationNewtypes newtypes = reading.newtypes();
-        List<Standing> standing = standingRules(behavior, read, reading, forks, reaches);
+        List<Standing> standing =
+                standingRules(behavior, read, reading, forks, reaches, dependencies);
         List<ForkOfItsOwn> out = new ArrayList<>();
         for (Standing each : standing) {
             List<Unread> left = new ArrayList<>();
@@ -585,7 +592,8 @@ public final class BehaviorSetStatements {
     private static List<Standing> standingRules(String behavior, PredicateReadings read,
                                                 InputReading reading,
                                                 List<ComparisonReadings.ForkMet> forks,
-                                                RuleReachNumbering reaches) {
+                                                RuleReachNumbering reaches,
+                                                WhatAnAnswerTakesUp dependencies) {
         Symbols symbols = reading.symbols();
         DeclarationNewtypes newtypes = reading.newtypes();
         List<Standing> out = new ArrayList<>();
@@ -595,10 +603,17 @@ public final class BehaviorSetStatements {
             // and a fork answered for by one owner having claimed one part would leave the other
             // part unsaid — a model reported as fully read over a condition half of which nobody
             // took in.
+            //
+            // And a part that is what a dependency answered has an owner, on the other side: no
+            // reader of the input reads `known(name)`, and the decision table holds its truth as a
+            // column. Filed here, it went out as a rule about `name` — the position the call was
+            // asked about, which is not what the fork turns on.
             List<Unread> unread = new ArrayList<>();
             for (Core atom : each.leftHere()) {
                 List<Core> parts =
-                        ComparisonReadings.leftUnread(atom, read, each.reads(), reading);
+                        ComparisonReadings.leftUnread(atom, read, each.reads(), reading).stream()
+                                .filter(part -> !dependencies.part(part, each.reads()))
+                                .toList();
                 if (!parts.isEmpty()) {
                     unread.add(new Unread(atom, parts));
                 }
