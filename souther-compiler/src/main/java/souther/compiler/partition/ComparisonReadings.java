@@ -138,9 +138,11 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * question on its own evidence.
      *
      * @param atoms what the fork tests, cut into the parts a rule can be about, each with what of
-     *              it this reading does not answer for
+     *              it this reading does not answer for. Each part carries the reading it is read
+     *              in, and the fork carries none of its own: a part is never read where the fork
+     *              stands, which is a different place from where a helper or a closure wrote it
      */
-    record ForkMet(ConstructOccurrence occurrence, Core condition, Citation at, InputReads reads,
+    record ForkMet(ConstructOccurrence occurrence, Core condition, Citation at,
                    List<Atom> atoms) {
 
         ForkMet {
@@ -446,7 +448,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         atoms.add(new Atom(atom, statedElsewhere(atom, in.read())));
                     }
                     forks.add(new ForkMet(iff.occurrence(), iff.cond(), Citation.of(iff.pos()),
-                            reads, atoms));
+                            atoms));
                 }
                 walk(iff.then(), in,
                         reads.choosing(Choice.Decides.ofCondition(iff, true), symbols,
