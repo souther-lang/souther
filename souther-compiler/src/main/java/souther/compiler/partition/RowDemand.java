@@ -129,10 +129,10 @@ public sealed interface RowDemand {
      * {@code a.flag == true} and {@code a.flag /= false} coming out the way that gives them are
      * one demand, and the same three the other way round are the other.
      *
-     * <p>Not a region's, so nothing narrowed by the way says a row past it holds this; the row is
-     * composed with the value written at the position, beside the numbers placed for it. Two of
-     * these asking one position for both values are one location asked for two, which
-     * {@link LocationWrites} refuses.
+     * <p>Not a region's, so nothing narrowed by the way says a row past it holds this. What the way
+     * asks in this vocabulary is {@link TruthsAsked}, which every composer handed the way writes
+     * beside the numbers it places; two of these asking one position for both values are a way no
+     * row takes ({@link Reachability.NothingReaches}).
      *
      * @param at   the position the truth is read at
      * @param held which of the two values a row passing the condition holds there

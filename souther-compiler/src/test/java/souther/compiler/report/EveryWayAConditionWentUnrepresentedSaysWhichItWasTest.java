@@ -120,8 +120,6 @@ class EveryWayAConditionWentUnrepresentedSaysWhichItWasTest {
                 ofTheInput(new ReachabilityGap.Why.TwoNumbersAtOneLocation()));
         out.put(ReachabilityGap.Why.ElementsWrittenAlike.class,
                 ofTheInput(new ReachabilityGap.Why.ElementsWrittenAlike()));
-        out.put(DemandGap.WhyNotStated.ATruthOfAPlaceInsideTheAnswer.class,
-                notStated(new DemandGap.WhyNotStated.ATruthOfAPlaceInsideTheAnswer()));
         out.put(DemandGap.WhyNotStated.AFormOverMoreThanOneAnswer.class,
                 notStated(new DemandGap.WhyNotStated.AFormOverMoreThanOneAnswer()));
         out.put(DemandGap.WhyNotStated.APlaceOnTheAnswersOwnOrder.class,

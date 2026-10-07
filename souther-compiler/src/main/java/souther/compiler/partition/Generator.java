@@ -4595,11 +4595,14 @@ public final class Generator {
             }
             heldBack.put(at, edge.met());
         }
-        RowDemand.ATruth twice = written(decided, truthsOn(reaching.boundedOnTheWay()));
+        // And the value the way asks of each Bool position it read, which no edge offers and no
+        // region placed. Written beside the numbers, so a location holding one of them and asked
+        // for something else as well is refused where every two asks of one location are.
+        TermPath twice = reaching.truths().writtenInto(decided);
         if (twice != null) {
             return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
                     UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                    "`" + twice.at() + "` would have to hold two values at once"),
+                    "`" + twice + "` would have to hold two values at once"),
                     where.unrepresented());
         }
         // What the way asks containers to hold that no region placed, and the order that lets every
@@ -5122,35 +5125,6 @@ public final class Generator {
             case RowDemand.ForAll every -> every.relations().isEmpty();
             case RowDemand.ATruth _ -> true;
         };
-    }
-
-    /** The truths {@code way} asks of a row, in the order it asked them. */
-    private static List<RowDemand.ATruth> truthsOn(List<OnTheWay.TakenIn> way) {
-        List<RowDemand.ATruth> out = new ArrayList<>();
-        for (OnTheWay.TakenIn each : way) {
-            if (each.demand() instanceof RowDemand.ATruth truth) {
-                out.add(truth);
-            }
-        }
-        return List.copyOf(out);
-    }
-
-    /**
-     * Each of {@code truths} written at its position — or the first asked of a position where
-     * something else is to be written already, or null where none is.
-     *
-     * <p>Written as the value it is, since no region placed it and no edge offers one. So the row
-     * is composed with the truth fixed the way a point's numbers are fixed, and one location asked
-     * for two values is refused by the one reader that answers that ({@link LocationWrites}).
-     */
-    private static RowDemand.ATruth written(LocationWrites decided, List<RowDemand.ATruth> truths) {
-        for (RowDemand.ATruth each : truths) {
-            if (decided.write(each.at(), List.of(FixtureTemplate.bool(each.held())))
-                    == LocationWrites.Written.CONFLICTING) {
-                return each;
-            }
-        }
-        return null;
     }
 
     /**
@@ -7490,6 +7464,21 @@ public final class Generator {
                                 + "` would have to hold two values at once")));
             }
         }
+        // And the value the way to the comparisons asks of each Bool position it read, beside what
+        // the classes wrote. A class of the position holding the other value is a row that would
+        // have to be both, which is no combination the model has — said as that, the way a class
+        // and a comparison leaving a number nowhere between them are.
+        TruthsAsked truths = holding.reaching() == null ? TruthsAsked.NONE
+                : holding.reaching().truths();
+        TermPath twice = truths.writtenInto(decided);
+        if (twice != null) {
+            return RowComposed.Failed.ofTheRow(new Attempt(null,
+                    UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH, twice.toString(),
+                    Optional.of("`" + twice + "` is asked by the way to hold "
+                            + truths.at().get(twice) + " and is written another value")));
+        }
+        Set<TermPath> writtenAt = new LinkedHashSet<>(together.keySet());
+        writtenAt.addAll(truths.at().keySet());
         // The order is one for every way of writing the containers under the cases, since which
         // parameter a container is handed a value of does not turn on the case it is written
         // under.
@@ -7514,7 +7503,7 @@ public final class Generator {
         List<RowComposed.Failed> cameToNothing = new ArrayList<>();
         ContentsAsked.UnderTheCases.Walked walked = under.tryEach(contents -> {
             RowComposed came = inputsFrom(new RowBeingComposed(axes, given, check, holding,
-                    contents, together.keySet(), decided, rowIs, taking, order), 0,
+                    contents, writtenAt, decided, rowIs, taking, order), 0,
                     new FixtureTemplate[order.parameters().size()], Map.of());
             return switch (came) {
                 case RowComposed.Taken _, RowComposed.Halted _ -> {

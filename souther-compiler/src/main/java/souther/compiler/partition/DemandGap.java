@@ -73,16 +73,6 @@ public sealed interface DemandGap {
     sealed interface WhyNotStated {
 
         /**
-         * A truth read off a place inside the answer.
-         *
-         * <p>A {@code Bool} divides a position into two values and puts nothing under it, so a
-         * truth of the answer itself is the value and is stated. A truth of a field is a demand
-         * about a place this reading has no way of putting a value at, and composing for the
-         * field's type instead would meet the type and not the demand.
-         */
-        record ATruthOfAPlaceInsideTheAnswer() implements WhyNotStated {}
-
-        /**
          * A comparison over more than this one answer.
          *
          * <p>A form over two answers, or over an answer and a number of the input, is one statement

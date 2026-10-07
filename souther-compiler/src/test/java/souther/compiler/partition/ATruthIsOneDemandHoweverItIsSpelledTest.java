@@ -16,6 +16,7 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -97,6 +98,28 @@ class ATruthIsOneDemandHoweverItIsSpelledTest {
         SearchRegion before = reading("bare").quantities().region();
         WayToTheBorder way = new WayToTheBorder(List.of(stated("bare", true)));
         assertSame(before, way.narrowing(before));
+    }
+
+    /**
+     * A way asking a position for one value twice asks it once, and a row composed past it is
+     * handed that value; asking it for both is a way no row takes, which is the model's word and
+     * not a row this compiler could not compose.
+     */
+    @Test
+    void twoTruthsOfOnePositionAreOneAskOrNoWay() {
+        SearchRegion region = reading("bare").quantities().region();
+
+        Reachability same = Reachability.of(new WayToTheBorder(List.of(
+                stated("bare", true), stated("equalToTrue", true))), region);
+        assertEquals(new TruthsAsked(Map.of(FLAG, true)),
+                assertInstanceOf(Reachability.Reaching.class, same).truths(),
+                () -> "one value asked twice is one ask: " + same);
+
+        Reachability both = Reachability.of(new WayToTheBorder(List.of(
+                stated("bare", true), stated("equalToFalse", true))), region);
+        assertEquals(new Reachability.TwoAtOnce.Truths(FLAG),
+                assertInstanceOf(Reachability.NothingReaches.class, both).why(),
+                () -> "both values of one position is a way nothing takes: " + both);
     }
 
     private static RowDemand.OfACondition asked(String behavior, boolean holding) {

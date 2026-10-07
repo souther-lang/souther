@@ -51,7 +51,25 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
             let decides (at, look) = if look(at).k == look(at).j then Yes else No
             """;
 
-    /** And one the reading has no way of stating at all. */
+    /** And one the reading has no way of stating at all: the answer against a number of the
+     *  input. */
+    private static final String THE_ANSWER_AGAINST_THE_INPUT = """
+            module example.against
+
+            data Reading = { n: Int, at: Int }
+            data Yes
+            data No
+            data Answer = Yes | No
+
+            behavior look : (at: Int) -> Reading
+
+            behavior decides : (at: Int) -> Answer
+                depends on look
+            let decides (at, look) = if look(at).n > at then Yes else No
+            """;
+
+    /** A truth of a place inside the answer, which the reading states and the answer is composed
+     *  holding. */
     private static final String A_TRUTH_INSIDE_THE_ANSWER = """
             module example.inside
 
@@ -139,13 +157,25 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
     /** And so is what the reading could not state. */
     @Test
     void aDemandTheReadingCannotStateIsNamedWhereItIsWritten() {
-        String said = whereNothingCouldShowARow(A_TRUTH_INSIDE_THE_ANSWER);
+        String said = whereNothingCouldShowARow(THE_ANSWER_AGAINST_THE_INPUT);
 
         assertTrue(said.contains(LEFT_OUT), () -> said);
-        assertTrue(said.contains("a truth read off a place inside what a dependency answers"),
+        assertTrue(said.contains("a comparison over more than one answer"),
                 () -> "in the words of the stage that let it go: " + said);
-        assertTrue(said.contains("12:38"),
+        assertTrue(said.contains("12:40"),
                 () -> "and at the place the condition is written: " + said);
+    }
+
+    /**
+     * A truth of a place inside the answer is stated and composed against, so it is not among what
+     * a row was composed without.
+     */
+    @Test
+    void aTruthInsideTheAnswerIsNotLeftOut() {
+        String page = human(A_TRUTH_INSIDE_THE_ANSWER);
+
+        assertFalse(page.contains(LEFT_OUT),
+                () -> "the demand was stated and a value was composed against it: " + page);
     }
 
     /**
