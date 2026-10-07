@@ -100,9 +100,10 @@ record WhereANameIsWritten(List<Place> places, boolean someNotWorkedOut) {
             // The cases that put the name somewhere are ways, and the ones whose reading stopped
             // leave the rest open — those of them the row can be. A case the row is already kept
             // out of is no way of it, read or not.
-            case NameReach.Standing.CasesIncomplete(var standings, var stopped) ->
-                    under(reach, standings, taken, crossed, answered, to)
-                            | anyOfThem(stopped, taken);
+            case NameReach.Standing.CasesIncomplete(var standings, var stopped) -> {
+                boolean belowNotWorkedOut = under(reach, standings, taken, crossed, answered, to);
+                yield belowNotWorkedOut || anyOfThem(stopped, taken);
+            }
         };
     }
 
