@@ -6,6 +6,7 @@ import souther.compiler.inputs.TermPath;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
 
@@ -89,14 +90,16 @@ class WhatTheAlternativesCameToTest {
             SearchShortfall.of(CompositionShortfall.NONE, SHORT_AT_THE_CODE));
 
     private static WhatTheAlternativesCameTo.Came<Tried> over(List<Tried> cameToNothing,
-                                                              SearchShortfall alsoFound,
-                                                              boolean someUnread) {
-        return WhatTheAlternativesCameTo.over(cameToNothing, null, alsoFound, someUnread, TRIED);
+                                                              SearchShortfall alsoFound) {
+        return WhatTheAlternativesCameTo.over(cameToNothing, null, alsoFound, TRIED);
     }
 
     private static Tried said(List<Tried> cameToNothing) {
-        return said(over(cameToNothing, SearchShortfall.NONE, false));
+        return said(over(cameToNothing, SearchShortfall.NONE));
     }
+
+    private static final SearchShortfall A_CASE_NOBODY_READ =
+            SearchShortfall.NONE.unreadWhere(true);
 
     private static Tried said(WhatTheAlternativesCameTo.Came<Tried> came) {
         return ((WhatTheAlternativesCameTo.Came.Said<Tried>) came).said();
@@ -183,7 +186,7 @@ class WhatTheAlternativesCameToTest {
 
     @Test
     void proofsBesideTheRestUntriedAreNoProof() {
-        Tried came = said(over(List.of(PROOF), SearchShortfall.of(WAYS), false));
+        Tried came = said(over(List.of(PROOF), SearchShortfall.of(WAYS)));
 
         assertEquals(WAYS, came.found().met());
         assertEquals(Generator.UnresolvedCombination.Reason.wordFor(WAYS.figures()), came.word());
@@ -191,24 +194,28 @@ class WhatTheAlternativesCameToTest {
 
     @Test
     void aProofBesideACandidateTurnedAwayIsNoProof() {
-        Tried came = said(over(List.of(PROOF), SearchShortfall.NONE.uncertifiedWhere(true),
-                false));
+        Tried came = said(over(List.of(PROOF), SearchShortfall.NONE.uncertifiedWhere(true)));
 
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, came.word());
     }
 
+    /** Proofs over the ways tried beside a way under a case nobody read: a search, not a proof. */
     @Test
-    void proofsBesideACaseNobodyReadLeaveNothingToSayItIn() {
-        assertEquals(new WhatTheAlternativesCameTo.Came.NothingToSayItIn<Tried>(),
-                over(List.of(PROOF), SearchShortfall.NONE, true));
+    void proofsBesideACaseNobodyReadAreNoProof() {
+        Tried came = said(over(List.of(PROOF, ANOTHER_PROOF), A_CASE_NOBODY_READ));
+
+        assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, came.word());
+        assertTrue(came.found().unread());
     }
 
     @Test
-    void noAlternativeTriedIsWhatStoppedTheWalkOrNothing() {
+    void noAlternativeCameToNothingIsWhatTheWalkFoundOutOrNothing() {
         assertEquals(new WhatTheAlternativesCameTo.Came.Untried<Tried>(SearchShortfall.of(WAYS)),
-                over(List.of(), SearchShortfall.of(WAYS), false));
+                over(List.of(), SearchShortfall.of(WAYS)));
+        assertEquals(new WhatTheAlternativesCameTo.Came.Untried<Tried>(A_CASE_NOBODY_READ),
+                over(List.of(), A_CASE_NOBODY_READ));
         assertEquals(new WhatTheAlternativesCameTo.Came.NothingToSayItIn<Tried>(),
-                over(List.of(), SearchShortfall.NONE, false));
+                over(List.of(), SearchShortfall.NONE));
     }
 
     /**
@@ -220,7 +227,7 @@ class WhatTheAlternativesCameToTest {
         assertEquals(new WhatTheAlternativesCameTo.Came.PassedOver<Tried>(
                         SearchShortfall.of(WAYS.and(ASSIGNMENTS))),
                 WhatTheAlternativesCameTo.over(List.of(STOPPED), SearchShortfall.NONE,
-                        SearchShortfall.of(WAYS), false, TRIED));
+                        SearchShortfall.of(WAYS), TRIED));
     }
 
     /**
@@ -233,6 +240,46 @@ class WhatTheAlternativesCameToTest {
         assertEquals(new WhatTheAlternativesCameTo.Came.PassedOver<Tried>(
                         SearchShortfall.of(CompositionShortfall.NONE, SHORT_AT_THE_CODE)),
                 WhatTheAlternativesCameTo.over(List.of(OFFERED_SHORT), SearchShortfall.NONE,
-                        SearchShortfall.NONE, false, TRIED));
+                        SearchShortfall.NONE, TRIED));
+    }
+
+    /**
+     * Rows passed over under the case that was read, and the other case's reading stopped: the
+     * rows passed over are the answer, and the case nobody read stays with it — told apart from
+     * rows passed over under every case there was.
+     */
+    @Test
+    void rowsPassedOverDoNotLoseACaseNobodyRead() {
+        assertEquals(new WhatTheAlternativesCameTo.Came.PassedOver<Tried>(A_CASE_NOBODY_READ),
+                WhatTheAlternativesCameTo.over(List.of(), SearchShortfall.NONE,
+                        A_CASE_NOBODY_READ, TRIED));
+    }
+
+    /**
+     * What a search is handed on as is the word for everything it found out, and a word kept from
+     * the candidate it came from is not: refusals beside a candidate another one turned away are no
+     * certified witness, and a proof beside one is no proof.
+     */
+    @Test
+    void whatIsHandedOnIsTheWordForEverythingFoundOut() {
+        SearchShortfall turnedAway = SearchShortfall.NONE.uncertifiedWhere(true);
+
+        assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
+                turnedAway.published(List.of(),
+                        Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null,
+                        Optional.empty()).why().reason());
+        assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                turnedAway.published(List.of(),
+                        Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE, null,
+                        Optional.empty()).why().reason());
+        assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                A_CASE_NOBODY_READ.published(List.of(),
+                        Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE, null,
+                        Optional.empty()).why().reason());
+        CameToNothing offeredShort = SearchShortfall.of(ASSIGNMENTS, SHORT_AT_THE_CODE)
+                .published(List.of(), Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
+                        null, Optional.empty());
+        assertEquals(SHORT_AT_THE_CODE, offeredShort.why().alsoShort());
+        assertEquals(ASSIGNMENTS, offeredShort.met());
     }
 }

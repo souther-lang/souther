@@ -127,11 +127,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/ContentsAsked$UnderTheCases$Walked;",
                     "stops handing over ways under the cases with some left, and answers that it"
                             + " stopped at the figure rather than that every way was tried"),
-            Map.entry("souther.compiler.partition.ContentsAsked$UnderTheCases#untried("
+            Map.entry("souther.compiler.partition.ContentsAsked$UnderTheCases#foundOut("
                             + "Lsouther/compiler/partition/ContentsAsked$UnderTheCases$Walked;)"
-                            + "Lsouther/compiler/partition/CompositionShortfall;",
-                    "hands the figure over as what kept the rest of the ways untried, where the"
-                            + " walk stopped there"),
+                            + "Lsouther/compiler/partition/SearchShortfall;",
+                    "hands the figure over in what the walk found out about the ways it did not"
+                            + " try, where it stopped there"),
             Map.entry("souther.compiler.partition.LevelRealizer#<clinit>()V",
                     "the places a pair is tried at and the places of its line looked at to find"
                             + " them, the steps, the progression — and the re-reads,"

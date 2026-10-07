@@ -173,16 +173,19 @@ record ContentsAsked(List<Asked> asked) {
         }
 
         /**
-         * What kept {@code walked} from trying every way there was: the figure, where it stopped
-         * there.
+         * What {@code walked} found out about the ways it did not try: the figure, where it stopped
+         * there, and a way under a case the row can be whose reading stopped.
          *
          * <p>How far the walk went and nothing about what the ways came to. That is said by whoever
-         * composed them, which knows what they came to ({@link WhatTheAlternativesCameTo}).
+         * composed them, which knows what they came to ({@link WhatTheAlternativesCameTo}). Both
+         * halves in the one value, so that neither travels beside it where a carrier may drop it.
          */
-        CompositionShortfall untried(Walked walked) {
-            return walked == Walked.STOPPED_AT_THE_FIGURE
-                    ? CompositionShortfall.of(Set.of(CompositionBudget.WAYS_UNDER_THE_CASES_TRIED))
-                    : CompositionShortfall.NONE;
+        SearchShortfall foundOut(Walked walked) {
+            return SearchShortfall.of(walked == Walked.STOPPED_AT_THE_FIGURE
+                            ? CompositionShortfall.of(
+                                    Set.of(CompositionBudget.WAYS_UNDER_THE_CASES_TRIED))
+                            : CompositionShortfall.NONE)
+                    .unreadWhere(someNotWorkedOut);
         }
     }
 

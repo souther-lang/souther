@@ -19,7 +19,9 @@ import java.util.Optional;
  *
  * <p><b>A proof only where every alternative there was proved it.</b> The rules leaving one
  * alternative nothing say nothing about the one beside it, and an alternative never tried — past a
- * figure, or under a case whose reading stopped — may have what the others lacked.
+ * figure, or under a case whose reading stopped — may have what the others lacked. Both are what
+ * the walk found out ({@link SearchShortfall}), and not a word of their own beside it: one held
+ * apart is one a carrier was not taught, and rows passed over are a carrier.
  *
  * <p><b>What the alternatives found out is every one's, joined whole</b> ({@link SearchShortfall}):
  * every figure and population met, every offer short of a rule, and a candidate turned away by any
@@ -84,8 +86,8 @@ final class WhatTheAlternativesCameTo {
         record Said<F>(F said) implements Came<F> {}
 
         /**
-         * No alternative to say it in, and the walk found out something of this compiler's beside
-         * them: it stopped short of the rest.
+         * No alternative came to nothing to say it in, and the walk found out something beside
+         * them: it stopped short of the rest, or a way it had stands under a case nobody read.
          *
          * @param found what it found out
          */
@@ -100,9 +102,8 @@ final class WhatTheAlternativesCameTo {
         }
 
         /**
-         * No alternative to say it in, and nothing of this compiler's to carry: none was tried, or
-         * every one tried proved nothing composes and the rest stand under a case nobody read. What
-         * is said then is the caller's, since only it knows the words for its walk.
+         * No alternative to say it in, and nothing found out beside them: there was no way to try.
+         * What is said then is the caller's, since only it knows the words for its walk.
          */
         record NothingToSayItIn<F>() implements Came<F> {}
     }
@@ -114,16 +115,15 @@ final class WhatTheAlternativesCameTo {
      * @param passedOver    what the walks of the rows passed over found out, or null where none
      *                      was: rows passed over are the answer
      * @param alsoFound     what the walk found out beside the alternatives that came to nothing:
-     *                      what kept it from trying the rest, and, where they are not the answer,
-     *                      what the walks of rows it passed over found out. Anything here is
-     *                      something between the alternatives tried and all of them, so no proof
-     *                      is said beside it
-     * @param someUnread    whether an alternative stands under a case the row can be whose reading
-     *                      stopped
+     *                      what kept it from trying the rest, a way under a case nobody read, and,
+     *                      where rows passed over are not the answer, what their walks found out.
+     *                      Anything here is something between the alternatives tried and all of
+     *                      them, so no proof is said beside it — and rows passed over carry it
+     *                      the same as everything else, since rows passed over under the ways
+     *                      tried say nothing about the ways that were not
      */
     static <F> Came<F> over(List<F> cameToNothing, SearchShortfall passedOver,
-                            SearchShortfall alsoFound, boolean someUnread,
-                            Vocabulary<F> how) {
+                            SearchShortfall alsoFound, Vocabulary<F> how) {
         SearchShortfall found = alsoFound;
         for (F each : cameToNothing) {
             found = found.and(how.found(each));
@@ -131,7 +131,7 @@ final class WhatTheAlternativesCameTo {
         if (passedOver != null) {
             return new Came.PassedOver<>(passedOver.and(found));
         }
-        Optional<F> said = said(cameToNothing, found, alsoFound, someUnread, how);
+        Optional<F> said = said(cameToNothing, found, alsoFound, how);
         if (said.isPresent()) {
             return new Came.Said<>(said.get());
         }
@@ -141,11 +141,10 @@ final class WhatTheAlternativesCameTo {
 
     /**
      * What {@code cameToNothing} came to where no row was passed over, said in one of them — or
-     * empty where none of them is it.
+     * empty where none of them came to nothing.
      */
     private static <F> Optional<F> said(List<F> cameToNothing, SearchShortfall found,
-                                        SearchShortfall alsoFound, boolean someUnread,
-                                        Vocabulary<F> how) {
+                                        SearchShortfall alsoFound, Vocabulary<F> how) {
         // The first in the order a report says them, and among one word by everything else it
         // says, as a report orders two of them.
         Comparator<F> asSaid = Comparator
@@ -155,16 +154,13 @@ final class WhatTheAlternativesCameTo {
                 .min(asSaid);
         if (notAProof.isEmpty()) {
             // Every one tried proved it, or none was tried. A proof is the answer only where they
-            // were every one there was; otherwise what was not tried is said, where it is anything
-            // of this compiler's.
+            // were every one there was; otherwise it is said in the word for what else was found
+            // out, which is not a proof.
             Optional<F> proof = cameToNothing.stream().min(asSaid);
-            if (proof.isEmpty()) {
-                return Optional.empty();
+            if (proof.isEmpty() || alsoFound.nothing()) {
+                return proof;
             }
-            if (!alsoFound.nothing()) {
-                return Optional.of(how.carrying(proof.get(), found));
-            }
-            return someUnread ? Optional.empty() : proof;
+            return Optional.of(how.carrying(proof.get(), found));
         }
         F said = notAProof.get();
         return found.equals(how.found(said)) ? notAProof : Optional.of(how.carrying(said, found));

@@ -100,10 +100,24 @@ class WhatTheWaysUnderTheCasesComeToTest {
         ContentsAsked.UnderTheCases under = holding("campaigns", "campaign")
                 .underTheCases(spreadUnderBoth("campaigns"), Requirements.NONE);
 
-        assertEquals(CompositionShortfall.of(Set.of(CompositionBudget.WAYS_UNDER_THE_CASES_TRIED)),
-                under.untried(ContentsAsked.UnderTheCases.Walked.STOPPED_AT_THE_FIGURE));
-        assertEquals(CompositionShortfall.NONE,
-                under.untried(ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED));
+        assertEquals(SearchShortfall.of(CompositionShortfall.of(
+                        Set.of(CompositionBudget.WAYS_UNDER_THE_CASES_TRIED))),
+                under.foundOut(ContentsAsked.UnderTheCases.Walked.STOPPED_AT_THE_FIGURE));
+        assertEquals(SearchShortfall.NONE,
+                under.foundOut(ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED));
+    }
+
+    /**
+     * A case nobody read is in what the walk found out, the same as the figure: whatever the ways
+     * it tried came to, and however far it went.
+     */
+    @Test
+    void aCaseNobodyReadIsWhatTheWalkFoundOutHoweverFarItWent() {
+        ContentsAsked.UnderTheCases under = holding("campaigns", "campaign")
+                .underTheCases(stoppedUnderTheOther("campaigns"), Requirements.NONE);
+
+        assertTrue(under.foundOut(ContentsAsked.UnderTheCases.Walked.EVERY_WAY_TRIED).unread());
+        assertTrue(under.foundOut(ContentsAsked.UnderTheCases.Walked.COMPOSED).unread());
     }
 
     @Test
