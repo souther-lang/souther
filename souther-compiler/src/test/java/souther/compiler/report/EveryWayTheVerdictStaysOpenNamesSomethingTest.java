@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.StandingAtAPoint;
+import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationCoverage;
@@ -80,6 +81,11 @@ class EveryWayTheVerdictStaysOpenNamesSomethingTest {
         table.put("Stopped[nothing composed]", List.of("ShowingStopped/MAY_CHANGE"));
         // And a point where nothing was stopped and nothing arrived.
         table.put("NothingShowedIt", List.of("NothingShowedARowCanBeWritten/UNAFFECTED"));
+        // And a point every row of which reaches an `unreachable`: one opener per premise, since
+        // each is a thing to prove or answer, and no allowance proves one.
+        table.put("EveryRowReachesAnUnreachable",
+                List.of("EveryRowReachesAnUnreachable/UNAFFECTED",
+                        "EveryRowReachesAnUnreachable/UNAFFECTED"));
         return table;
     }
 
@@ -182,6 +188,12 @@ class EveryWayTheVerdictStaysOpenNamesSomethingTest {
                         Set.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS))));
         out.put("NothingShowedIt",
                 new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.NothingShowedIt());
+        // Two premises with the same words, which are two things to prove.
+        out.put("EveryRowReachesAnUnreachable",
+                new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten
+                        .EveryRowReachesAnUnreachable(List.of(
+                                new WhereNothingIsAnswered.Premise("b", 0, List.of("never")),
+                                new WhereNothingIsAnswered.Premise("b", 1, List.of("never")))));
         return out;
     }
 

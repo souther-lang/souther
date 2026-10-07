@@ -15,6 +15,7 @@ import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.coverage.Runs;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.observe.AnswerObservation;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -167,7 +168,7 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
         FillResult watched = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
                 _ -> new Generator.ObservedRun(new Generator.Watched.Ran(everywhere),
-                        new AnswerObservation.NotAnswered()),
+                        new AnswerObservation.Answered(new ObservedValue.Integer(0))),
                 List.of(), List.of(), List.copyOf(everyArm), Budgets.generation());
 
         assertEquals(1, watched.rows().size(),

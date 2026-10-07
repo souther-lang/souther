@@ -17,6 +17,7 @@ import souther.compiler.coverage.Runs;
 import souther.compiler.coverage.SeenConditionOutcome;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.observe.AnswerObservation;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -47,6 +48,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * comparison, where it certifies a row that was never seen taking the arm.
  */
 class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
+
+    /** What a run that went to the end came back with. Which value is no part of what is asked
+     *  here; that there was one is, since a run that stopped without one is no witness. */
+    private static final AnswerObservation ANSWERED =
+            new AnswerObservation.Answered(new ObservedValue.Integer(0));
 
     /** One fork on one comparison, so a way into an arm is a comparison coming out a way and the
      *  arm is somewhere else. */
@@ -98,7 +104,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
                 Generator.CandidateCheck.ANY, model.read(),
                 // Seen doing everything the ways in name, and seen at no arm at all.
                 _ -> new Generator.ObservedRun(new Generator.Watched.Ran(waysWithoutTheArms(model)),
-                        new AnswerObservation.NotAnswered()),
+                        ANSWERED),
                 List.of(), List.of(), List.copyOf(everyArm), Budgets.generation());
 
         for (ArmProbe probe : everyArm) {
@@ -119,7 +125,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
         FillResult filled = GenerationFixtures.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
                 _ -> new Generator.ObservedRun(new Generator.Watched.Ran(everywhere(model, everyArm)),
-                        new AnswerObservation.NotAnswered()),
+                        ANSWERED),
                 List.of(), List.of(), List.copyOf(everyArm), Budgets.generation());
 
         assertTrue(GenerationFixtures.arms(filled.discharge()).values().stream().allMatch(ArmDisposition.Built.class::isInstance),

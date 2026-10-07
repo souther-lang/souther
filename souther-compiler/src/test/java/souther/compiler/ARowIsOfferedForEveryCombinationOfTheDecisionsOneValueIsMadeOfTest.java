@@ -259,20 +259,34 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
             """;
 
     /**
-     * What the interaction reading will not count as an outcome is still a class the rules admit.
+     * What the interaction reading will not count as an outcome is still a class the rules admit,
+     * and it is not one a row is offered at.
      *
      * <p>Two questions with two answers, and they do not have to agree. An arm answering
      * {@code unreachable} is not a way the charge on the left is settled, so it is not a factor and
-     * the sum is not a group. What the types say the position holds has not changed, so a row at
-     * that class is owed exactly as it was — a model's own claim about what cannot arise must not
-     * take away the row that would show the claim wrong.
+     * the sum is not a group. What the types say the position holds has not changed, so the class is
+     * owed exactly as it was — a model's own claim about what cannot arise must not take away the
+     * obligation that would show the claim wrong. What it is not given is a row: every row at
+     * {@code B} reaches the {@code unreachable} and is refused, so the obligation is undecided and
+     * the block offers nothing there.
      */
     @Test
-    void aClassTheBodyDeclaresUnreachableIsStillOwedARow() {
-        String block = block(ABORTING);
+    void aClassTheBodyDeclaresUnreachableIsStillOwedAndOfferedNoRow() {
+        // One row, so the classes are measured and a class no row is in is a finding at all.
+        Compilation compilation = measured(ABORTING + """
 
-        assertTrue(block.contains("(B, "),
-                "the class the body says cannot arise is still one a row is offered at: " + block);
+                example fee
+                    | "A C" : (A, C) -> 110
+                """);
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+        String block = blockOf(compilation);
+
+        assertTrue(report.contains("undecided whether a row is in `B` at"),
+                "the class the body says cannot arise is still owed, and undecided: " + report);
+        assertFalse(block.contains("(B, "),
+                "a row at the class reaches the `unreachable` and is no row to offer: " + block);
+        assertTrue(block.contains("(A, "), "the class beside it is still offered a row: " + block);
     }
 
     /** Two decisions of three and four outcomes, whose group has twelve combinations. */

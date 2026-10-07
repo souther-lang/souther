@@ -1,6 +1,7 @@
 package souther.compiler.report;
 
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.NotMeasuredReason;
 import souther.compiler.query.Weakening;
@@ -161,6 +162,33 @@ public sealed interface AdequacyUncertainty {
         public NothingShowedARowCanBeWritten {
             if (subject == null) {
                 throw new IllegalArgumentException("nothing showed a row at some point");
+            }
+        }
+
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
+        }
+    }
+
+    /**
+     * Every row that would meet some obligation reaches an {@code unreachable} a body states, and
+     * nothing here proves the inputs there do not arise.
+     *
+     * <p>One per premise of what it is about, and not one per obligation resting on it. What a
+     * reader does is prove the premise or make the body answer, and that is one thing to do however
+     * many classes of one behavior it holds open. Nothing was compared against a figure, so no
+     * allowance changes it.
+     */
+    record EveryRowReachesAnUnreachable(Subject subject, WhereNothingIsAnswered.Premise premise)
+            implements AdequacyUncertainty {
+
+        public EveryRowReachesAnUnreachable {
+            if (subject == null) {
+                throw new IllegalArgumentException("an obligation no row can meet is some point's");
+            }
+            if (premise == null) {
+                throw new IllegalArgumentException("a row that reaches an unreachable reaches one");
             }
         }
 

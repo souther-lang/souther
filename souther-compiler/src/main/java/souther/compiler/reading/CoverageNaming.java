@@ -166,6 +166,20 @@ final class CoverageNaming implements Naming<Outcome> {
         if (claim == null) {
             return null;
         }
+        Condition.Case taken = caseOf(match, part);
+        return one(new Decision(taken == null ? new Condition.Arm(place.arm()) : taken, claim));
+    }
+
+    /**
+     * What a run down arm {@code part} of {@code match} takes of the inputs, or null where the
+     * scrutinee is at no position.
+     *
+     * <p>Whether or not a run there is one anything watches. What an arm takes of the inputs is the
+     * case it is written for, which an arm nothing instruments — one that answers nothing — has as
+     * much as any other; what it lacks is a claim a run could be seen making, which is the other half
+     * of a {@link Decision} and not this.
+     */
+    public Condition.Case caseOf(Core.Match match, int part) {
         // What a fork is named by is the position it is on, and a scrutinee at none names nothing —
         // which is also what a scrutinee this reading did not follow leaves to name it with.
         TermPath at = switch (reads.pathOf(match.scrutinee(), newtypes)) {
@@ -176,7 +190,7 @@ final class CoverageNaming implements Naming<Outcome> {
             case PathResolution.MayStandAt _ -> null;
         };
         if (at == null) {
-            return one(new Decision(new Condition.Arm(place.arm()), claim));
+            return null;
         }
         // The leaves the arm reaches and not the names it is written with. A case that is itself a
         // sum stands for the leaves under it, and those are what a value at the position is; read by
@@ -189,7 +203,7 @@ final class CoverageNaming implements Naming<Outcome> {
                 each.atoms().forEach(atom -> names.add(atom.name()));
             }
         }
-        return one(new Decision(new Condition.Case(at, names), claim));
+        return new Condition.Case(at, names);
     }
 
     /**

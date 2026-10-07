@@ -1,8 +1,7 @@
-package souther.compiler.claims;
+package souther.compiler.coverage;
 
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
-import souther.compiler.coverage.NormalReturn;
 
 import java.util.List;
 

@@ -1118,6 +1118,11 @@ public final class GeneratedRows {
                     "no reading of the line this asked about could be searched, so nothing was"
                             + " looked for at it — which says nothing about whether a row stands"
                             + " there";
+            // The body's statement and not the model's: nothing proves no input arrives there, and
+            // what is known is that the compiler refuses a row that does.
+            case EVERY_ROW_THERE_REACHES_AN_UNREACHABLE ->
+                    "every row composed for it reaches an `unreachable` the body states, which the"
+                            + " compiler refuses";
         };
     }
 
