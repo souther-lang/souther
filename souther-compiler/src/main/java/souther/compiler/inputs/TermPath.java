@@ -96,17 +96,22 @@ public record TermPath(String head, List<Step> steps) {
          * that case at the same remove from the parameter as a field of a record parameter is. What
          * it adds is a requirement, and a row whose value does not meet it stands nowhere below it
          * rather than being a row nothing could read.
+         *
+         * <p>To the cases a value is left, which may be several. An arm naming a case that is a sum
+         * leaves {@code kind@{Hospital|Station}}, and what an arm inside it names is
+         * {@code kind@Station} — one narrowing of the same position, stronger, and not a second
+         * one stacked on the first.
          */
-        record Refine(Refinement refinement) implements Step {
+        record Refine(CasesLeft cases) implements Step {
 
             @Override
             public String toString() {
-                return "@" + refinement.spelled();
+                return "@" + cases.spelled();
             }
 
             @Override
             public String discriminated() {
-                return "@" + refinement.discriminated();
+                return "@" + cases.discriminated();
             }
         }
     }
@@ -157,8 +162,8 @@ public record TermPath(String head, List<Step> steps) {
         return switch (one) {
             case Step.Field field -> field.name().compareTo(((Step.Field) other).name());
             case Step.Element _ -> 0;
-            case Step.Refine refine -> compareNarrowings(refine.refinement(),
-                    ((Step.Refine) other).refinement());
+            case Step.Refine refine -> CasesLeft.compare(refine.cases(),
+                    ((Step.Refine) other).cases());
         };
     }
 
@@ -167,15 +172,6 @@ public record TermPath(String head, List<Step> steps) {
             case Step.Field _ -> 0;
             case Step.Element _ -> 1;
             case Step.Refine _ -> 2;
-        };
-    }
-
-    private static int compareNarrowings(Refinement one, Refinement other) {
-        return switch (one) {
-            case Refinement.SumCase sum -> other instanceof Refinement.SumCase that
-                    ? sum.leaf().compareTo(that.leaf()) : -1;
-            case Refinement.Presence presence -> other instanceof Refinement.Presence that
-                    ? Boolean.compare(presence.present(), that.present()) : 1;
         };
     }
 
@@ -191,7 +187,12 @@ public record TermPath(String head, List<Step> steps) {
 
     /** The same position, narrowed to the values {@code refinement} leaves. */
     public TermPath refine(Refinement refinement) {
-        return append(new Step.Refine(refinement));
+        return refine(CasesLeft.of(refinement));
+    }
+
+    /** The same position, narrowed to the values {@code cases} leaves. */
+    public TermPath refine(CasesLeft cases) {
+        return append(new Step.Refine(cases));
     }
 
     private TermPath append(Step step) {
@@ -210,11 +211,11 @@ public record TermPath(String head, List<Step> steps) {
      * keeps an account of its own.
      */
     public Requirements requirements() {
-        Map<TermPath, Refinement> out = new LinkedHashMap<>();
+        Map<TermPath, CasesLeft> out = new LinkedHashMap<>();
         TermPath at = TermPath.of(head);
         for (Step step : steps) {
             if (step instanceof Step.Refine refine) {
-                out.put(at, refine.refinement());
+                out.put(at, refine.cases());
             }
             at = at.append(step);
         }
@@ -247,8 +248,30 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /** Which values the last step leaves, which is what the arm that took it came out as. */
-    public Refinement narrowing() {
-        return ((Step.Refine) requireNarrowing().get(steps.size() - 1)).refinement();
+    public CasesLeft narrowing() {
+        return ((Step.Refine) requireNarrowing().get(steps.size() - 1)).cases();
+    }
+
+    /**
+     * Where the value this path reads stands: this path with every narrowing to several cases taken
+     * out.
+     *
+     * <p>A position is held at each case of a sum and at the sum, and at no set of its cases: a
+     * value left {@code Station} or {@code Hospital} is the value at the sum's position, narrowed,
+     * and its {@code code} is the name {@code code} read at the sum — the name the cases holding it
+     * stand at, one under each ({@link NameReach#standingOf}). That the value was left those cases
+     * is what the way to it says, and no part of which value it is. So a reader asking where a
+     * value stands, or which position a fork on it is about, asks it of this; a narrowing to one
+     * case is kept, since the case's position is a position of its own.
+     */
+    public TermPath position() {
+        List<Step> kept = new ArrayList<>();
+        for (Step step : steps) {
+            if (!(step instanceof Step.Refine refine && refine.cases().only() == null)) {
+                kept.add(step);
+            }
+        }
+        return kept.size() == steps.size() ? this : new TermPath(head, kept);
     }
 
     private List<Step> requireNarrowing() {

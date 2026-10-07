@@ -46,8 +46,8 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptySequenc
      */
     sealed interface Assumption {
 
-        /** The value at {@code at} turned out to be this case. */
-        record TheCaseAt(TermPath at, Refinement is) implements Assumption {}
+        /** The value at {@code at} turned out to be one of these cases. */
+        record TheCaseAt(TermPath at, CasesLeft is) implements Assumption {}
 
         /** The sequence at {@code sequence} holds an element, or the position named inside it
          *  stands nowhere. */
@@ -151,10 +151,14 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptySequenc
      * <p>What says a position exists in the values this describes: a sum inside a case is a place to
      * ask about only once the value is that case, and asking about it under a context that has not
      * settled the case would be walking alternatives of a sum that stands nowhere.
+     *
+     * <p>A case assumed is covered by the same case or by fewer: a context that settled
+     * {@code Station} has settled that the value is {@code Station} or {@code Hospital}.
      */
     boolean covers(StructuralContext other) {
-        for (Map.Entry<TermPath, Refinement> each : other.refinements.refinements().entrySet()) {
-            if (!each.getValue().equals(refinements.at(each.getKey()))) {
+        for (Map.Entry<TermPath, CasesLeft> each : other.refinements.refinements().entrySet()) {
+            CasesLeft assumed = refinements.at(each.getKey());
+            if (assumed == null || !assumed.within(each.getValue())) {
                 return false;
             }
         }
@@ -178,7 +182,8 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptySequenc
         return switch (opening) {
             case RootOpening.Taken _ -> true;
             case RootOpening.Refined it -> assumptions().contains(
-                    new Assumption.TheCaseAt(it.crossing().sum(), it.crossing().branch()));
+                    new Assumption.TheCaseAt(it.crossing().sum(),
+                            CasesLeft.of(it.crossing().branch())));
             case RootOpening.Inside it ->
                     assumptions().contains(new Assumption.HoldingSomething(it.sequence()));
         };

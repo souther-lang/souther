@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -39,7 +39,7 @@ public sealed interface AnswerDemand {
      *           written. Empty where the fork is on the answer itself
      */
     record ACase(InjectedAnswer of, ConditionReportAnchor anchor, List<TermPath.Step> at,
-                 Refinement to) implements AnswerDemand {
+                 CasesLeft to) implements AnswerDemand {
 
         public ACase {
             if (of == null || anchor == null || at == null || to == null) {

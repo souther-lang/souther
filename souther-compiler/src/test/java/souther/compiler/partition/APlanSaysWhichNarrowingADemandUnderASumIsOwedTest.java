@@ -263,7 +263,8 @@ class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
      *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
     private static Refinement caseOf(String leaf) {
         TypeSymbol named = TypeSymbols.declared(new TypeKey("g", leaf));
-        return Refinement.of(ResolvedCase.of(CaseSelector.direct(named), List.of(named)));
+        return Refinement.allOf(ResolvedCase.of(CaseSelector.direct(named), List.of(named)))
+                .getFirst();
     }
 
     private static ConstructionPlan.Result planning(Set<TermPath> decided) {

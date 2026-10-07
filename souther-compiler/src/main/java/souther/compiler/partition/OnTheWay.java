@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.TermPath;
 
+import java.util.List;
+
 /**
  * One condition on the way to a comparison, and what became of it.
  *
@@ -69,15 +71,26 @@ public sealed interface OnTheWay {
      *
      * <p>The position is what says which condition this is, the way a cut does for the one above.
      *
-     * @param position the scrutinee's position with the arm's case narrowed onto it
+     * <p><b>And what the same narrowing says on the position's own order, where it has one.</b> The
+     * cases of an enumeration are places on the order its declaration writes, so a value that
+     * turned out to be {@code Low} or {@code Mid} is a value away from {@code High} — one fact said
+     * in the second vocabulary, which a region can carry and a requirement cannot. Read off the
+     * position when the entry is made and not here, because which order a position stands on is
+     * the reading's answer.
+     *
+     * @param position   the scrutinee's position with the arm's case narrowed onto it
+     * @param onItsOrder the places of its order the narrowing leaves out, one hole each; empty
+     *                   where the position stands on no enumeration's order
      */
-    record Narrowed(ConditionReportAnchor anchor, TermPath position) implements OnTheWay {
+    record Narrowed(ConditionReportAnchor anchor, TermPath position,
+                    List<TakenConstraint.AwayFrom> onItsOrder) implements OnTheWay {
 
         public Narrowed {
             if (position == null || !position.narrowsWhatItReaches()) {
                 throw new IllegalArgumentException(
                         "a narrowing on the way is a position read as one of its cases: " + position);
             }
+            onItsOrder = List.copyOf(onItsOrder);
         }
     }
 

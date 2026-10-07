@@ -707,10 +707,21 @@ public sealed interface AnotherLineTheRowsAllow {
                     // Which case a value turned out to be. A step moves numbers and a narrowing is
                     // about a position being one of its cases, so a step that moves no number of
                     // that position leaves it as the row had it; one that does is past what this
-                    // reads.
-                    case OnTheWay.Narrowed(var _, var position) -> {
+                    // reads. Where the position is an enumeration's, its number is the case's place
+                    // on the order, and the narrowing is the places it leaves out: a step moving it
+                    // still arrives where the place it moves to is none of those.
+                    case OnTheWay.Narrowed(var _, var position, var onItsOrder) -> {
                         if (moved.stream().anyMatch(term -> term.subjectPath().equals(position))) {
                             return false;
+                        }
+                        for (TakenConstraint.AwayFrom hole : onItsOrder) {
+                            if (Collections.disjoint(hole.terms(), moved)) {
+                                continue;
+                            }
+                            Boolean holds = holdsAt(hole, from, at);
+                            if (holds == null || !holds) {
+                                return false;
+                            }
                         }
                     }
                     case OnTheWay.TakenIn(var _, RowDemand.Relational(var taken)) -> {

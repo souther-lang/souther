@@ -21,6 +21,7 @@ import souther.compiler.inputs.Quantities;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.reading.TheRestOfTheBlock;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
@@ -46,6 +47,7 @@ import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -3277,19 +3279,21 @@ public final class Generator {
      * Whether the classes of one assignment can stand together, kept as the assignment moves one
      * position at a time.
      *
-     * <p>Two classes cannot stand together exactly where they require one position to be two
-     * different narrowings, which is what merging their requirements asks. Counted by position
-     * and narrowing instead of merged again from nothing, so moving one position costs that
-     * position's requirements and not every position's.
+     * <p>Two classes cannot stand together exactly where they leave one position no case in common,
+     * which is what merging their requirements asks ({@link Requirements#merge}). Kept by position
+     * instead of merged again from nothing, so moving one position costs that position's
+     * requirements and not every position's: a position is asked again only where what is asked
+     * of it changed.
      */
     private static final class StandingTogether {
 
         private final WhatEachClassRequires requires;
 
-        private final Map<TermPath, Map<Refinement, Integer>> asked = new HashMap<>();
+        /** What each position is asked to be, by how many of the classes standing ask it. */
+        private final Map<TermPath, Map<CasesLeft, Integer>> asked = new HashMap<>();
 
-        /** How many positions are asked to be more than one narrowing. */
-        private int disagreeing;
+        /** The positions the classes standing leave no case in common. */
+        private final Set<TermPath> disagreeing = new HashSet<>();
 
         StandingTogether(WhatEachClassRequires requires, int[] where) {
             this.requires = requires;
@@ -3307,34 +3311,43 @@ public final class Generator {
         }
 
         boolean holds() {
-            return disagreeing == 0;
+            return disagreeing.isEmpty();
         }
 
         private void add(int axis, int cls) {
-            for (Map.Entry<TermPath, Refinement> each : requires.of(axis, cls).entrySet()) {
-                Map<Refinement, Integer> here =
+            for (Map.Entry<TermPath, CasesLeft> each : requires.of(axis, cls).entrySet()) {
+                Map<CasesLeft, Integer> here =
                         asked.computeIfAbsent(each.getKey(), _ -> new HashMap<>());
-                int before = here.size();
-                here.merge(each.getValue(), 1, Integer::sum);
-                if (before == 1 && here.size() == 2) {
-                    disagreeing++;
+                if (here.merge(each.getValue(), 1, Integer::sum) == 1) {
+                    reask(each.getKey(), here);
                 }
             }
         }
 
         private void remove(int axis, int cls) {
-            for (Map.Entry<TermPath, Refinement> each : requires.of(axis, cls).entrySet()) {
-                Map<Refinement, Integer> here = asked.get(each.getKey());
-                int before = here.size();
+            for (Map.Entry<TermPath, CasesLeft> each : requires.of(axis, cls).entrySet()) {
+                Map<CasesLeft, Integer> here = asked.get(each.getKey());
                 if (here.merge(each.getValue(), -1, Integer::sum) == 0) {
                     here.remove(each.getValue());
-                }
-                if (before == 2 && here.size() == 1) {
-                    disagreeing--;
+                    reask(each.getKey(), here);
                 }
                 if (here.isEmpty()) {
                     asked.remove(each.getKey());
                 }
+            }
+        }
+
+        /** Whether what is asked of {@code at} still leaves it a case, after it changed. */
+        private void reask(TermPath at, Map<CasesLeft, Integer> here) {
+            Iterator<CasesLeft> each = here.keySet().iterator();
+            CasesLeft common = each.hasNext() ? each.next() : null;
+            while (common != null && each.hasNext()) {
+                common = common.meet(each.next());
+            }
+            if (!here.isEmpty() && common == null) {
+                disagreeing.add(at);
+            } else {
+                disagreeing.remove(at);
             }
         }
     }
@@ -3350,7 +3363,7 @@ public final class Generator {
 
         private final List<Axis> axes;
 
-        private final List<List<Map<TermPath, Refinement>>> read = new ArrayList<>();
+        private final List<List<Map<TermPath, CasesLeft>>> read = new ArrayList<>();
 
         WhatEachClassRequires(List<Axis> axes) {
             this.axes = axes;
@@ -3360,8 +3373,8 @@ public final class Generator {
         }
 
         /** What standing {@code axis} at its class {@code cls} requires. */
-        Map<TermPath, Refinement> of(int axis, int cls) {
-            Map<TermPath, Refinement> known = read.get(axis).get(cls);
+        Map<TermPath, CasesLeft> of(int axis, int cls) {
+            Map<TermPath, CasesLeft> known = read.get(axis).get(cls);
             if (known == null) {
                 known = axes.get(axis).requiring(axes.get(axis).classes().get(cls)).refinements();
                 read.get(axis).set(cls, known);
@@ -6936,7 +6949,7 @@ public final class Generator {
      */
     private static Requirements strictlyUnder(Requirements from, Set<TermPath> locations,
                                               boolean inside) {
-        Map<TermPath, Refinement> kept = new LinkedHashMap<>();
+        Map<TermPath, CasesLeft> kept = new LinkedHashMap<>();
         from.refinements().forEach((path, refinement) -> {
             boolean under = locations.stream().anyMatch(each -> isStrictlyUnder(path, each));
             if (under == inside) {

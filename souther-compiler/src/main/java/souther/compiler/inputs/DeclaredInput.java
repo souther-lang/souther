@@ -7,13 +7,13 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
-import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.Map;
@@ -73,20 +73,27 @@ public final class DeclaredInput {
     }
 
     /**
-     * What arriving at {@code at} by an arm selecting {@code selected} says of the value there,
-     * the arm being written over a scrutinee that stands as {@code matchedAs}.
+     * What arriving at {@code at} by an arm leaving the value {@code covered} says of the value
+     * there, the arm being written over a scrutinee that stands as {@code matchedAs}.
      *
-     * <p>Asked of the selection whole, as the leaves it covers, and never of one narrowing made out
-     * of it first. A case that is itself a sum covers several leaves and is one narrowing of nothing,
-     * and a reader that had turned it into one before asking would find nothing to ask about — even
-     * where the declaration leaves the value no leaf outside the case, so that the arm narrows
-     * nothing at all.
+     * <p>Asked of the arm's selection whole, as the leaves it covers ({@link CasesLeft#selectedBy}),
+     * and never of one narrowing made out of it first. A case that is itself a sum covers several
+     * leaves, and so does an arm naming several cases; a reader that had turned either into one
+     * narrowing before asking would find nothing to ask about — even where the declaration leaves
+     * the value no leaf outside them, so that the arm narrows nothing at all.
      *
      * <p>The declaration may leave the value only leaves the arm covers, and then arriving says
      * nothing: the position is the one the declaration names, spelled the way it does. It may leave
      * the value none of them, and then no value at the position arrives that way. Otherwise arriving
-     * says which of the leaves it turned out to be — written into the path where the arm covers one,
-     * and a narrowing no one path spells where it covers several.
+     * says which of the leaves it turned out to be, and those are the leaves the arm covers that the
+     * declaration leaves — one or several, written into the path either way. An arm naming
+     * {@code OnceKind} over a field declared {@code VisitKind} leaves {@code Station} or
+     * {@code Hospital}; over a field declared {@code Station | Renkei} it leaves {@code Station},
+     * and is spelled as an arm naming {@code Station} is.
+     *
+     * <p>A position already narrowed to several leaves is read as those leaves, which is what the
+     * declaration leaves there now; and an arm narrowing it further narrows that narrowing rather
+     * than adding a second one after it ({@link #narrowedTo}).
      *
      * <p>What the declaration leaves the value is read under each name it wears as well as under
      * all of them, because the path does not say how many of them the scrutinee took off: taking a
@@ -101,13 +108,11 @@ public final class DeclaredInput {
      * <p>As the arm says it wherever the declarations say nothing this can follow, which is the
      * answer a reader was given before the declarations were asked.
      */
-    public Taking taking(TermPath at, Type matchedAs, ResolvedCase selected) {
-        List<Refinement> covered = Refinement.allOf(selected);
-        Taking asTheArmSaysIt = covered.size() == 1
-                ? new Taking.Narrows(at.refine(covered.getFirst())) : new Taking.AmongSeveral();
-        Type here = typeAt(at);
-        List<TypeSymbol> chosen = leavesOf(covered);
-        if (here == null || matchedAs == null || chosen.isEmpty()) {
+    public Taking taking(TermPath at, Type matchedAs, CasesLeft covered) {
+        Taking asTheArmSaysIt = new Taking.Narrows(narrowedTo(at, covered));
+        List<List<TypeSymbol>> readings = readingsAt(at);
+        List<TypeSymbol> chosen = leavesOf(covered.atoms());
+        if (readings == null || matchedAs == null || chosen.isEmpty()) {
             return asTheArmSaysIt;
         }
         Set<TypeSymbol> matchable = new HashSet<>(
@@ -115,19 +120,65 @@ public final class DeclaredInput {
         boolean reaches = false;
         boolean within = true;
         boolean read = false;
-        for (List<TypeSymbol> leaves : readingsOf(here)) {
+        Set<TypeSymbol> left = new LinkedHashSet<>();
+        for (List<TypeSymbol> leaves : readings) {
             if (leaves.isEmpty() || !matchable.containsAll(leaves)) {
                 continue;
             }
             read = true;
             reaches |= leaves.stream().anyMatch(chosen::contains);
             within &= chosen.containsAll(leaves);
+            left.addAll(leaves);
         }
         if (!read) {
             return asTheArmSaysIt;
         }
-        return !reaches ? new Taking.Excluded()
-                : within ? new Taking.Implied() : asTheArmSaysIt;
+        if (!reaches) {
+            return new Taking.Excluded();
+        }
+        if (within) {
+            return new Taking.Implied();
+        }
+        // The leaves the arm covers that the declaration leaves, which is not empty: the arm
+        // reaches one of them. In the order the declaration writes them, which is the model's and
+        // not the arm's.
+        CasesLeft both = covered.keeping(each -> each instanceof Refinement.SumCase sum
+                && left.contains(sum.leaf())).orderedAs(List.copyOf(left));
+        return new Taking.Narrows(narrowedTo(at, both));
+    }
+
+    /**
+     * {@code at} narrowed to {@code cases}.
+     *
+     * <p>Narrowing a position already narrowed to several leaves to some of them is one narrowing
+     * of it, stronger, and not a second narrowing after the first: {@code kind@{Hospital|Station}}
+     * narrowed to {@code Station} is {@code kind@Station}, which is the position the reading of
+     * the input holds and the one an arm naming {@code Station} outright arrives at. A step after
+     * it would be a location nothing else spells.
+     *
+     * <p>Only from several leaves. A position narrowed to one distinction and narrowed again is a
+     * distinction of what stands there — an optional inside an optional, a newtype case over a sum
+     * — and folding the two would lose the outer one.
+     */
+    private static TermPath narrowedTo(TermPath at, CasesLeft cases) {
+        return at.narrowsWhatItReaches() && at.narrowing().only() == null
+                && cases.within(at.narrowing())
+                ? at.narrowedFrom().refine(cases) : at.refine(cases);
+    }
+
+    /**
+     * What a value at {@code at} can be, as {@link #readingsOf} reads it, or null where the
+     * declarations put nothing this can follow there.
+     *
+     * <p>A position narrowed to several leaves is those leaves: the declaration put a sum there and
+     * the narrowing left this much of it.
+     */
+    private List<List<TypeSymbol>> readingsAt(TermPath at) {
+        if (at.narrowsWhatItReaches() && at.narrowing().only() == null) {
+            return List.of(leavesOf(at.narrowing().atoms()));
+        }
+        Type here = typeAt(at);
+        return here == null ? null : readingsOf(here);
     }
 
     /** The leaves {@code covered} narrows to, or none where it narrows to something that is not a
@@ -162,13 +213,23 @@ public final class DeclaredInput {
     /** What arriving at a position by an arm says of the value there ({@link #taking}). */
     public sealed interface Taking {
 
-        /** The declaration leaves the value more than the arm's one leaf, and this is the position
-         *  read as it. */
-        record Narrows(TermPath to) implements Taking {}
+        /**
+         * The declaration leaves the value more than the leaves the arm covers, and this is the
+         * position read as the ones it leaves of them.
+         *
+         * <p>One answer however many leaves that is. How many is what the narrowing at the end of
+         * {@code to} says, and a reader with nothing to do with the difference has no second shape
+         * to tell it.
+         */
+        record Narrows(TermPath to) implements Taking {
 
-        /** The declaration leaves the value more than the leaves the arm covers, and the arm covers
-         *  several: a narrowing, and one no one path spells. */
-        record AmongSeveral() implements Taking {}
+            public Narrows {
+                if (to == null || !to.narrowsWhatItReaches()) {
+                    throw new IllegalArgumentException(
+                            "an arm that narrows reads a position as some of its cases: " + to);
+                }
+            }
+        }
 
         /** The declaration leaves the value only leaves the arm covers, so arriving says nothing. */
         record Implied() implements Taking {}
@@ -230,10 +291,13 @@ public final class DeclaredInput {
                     && on.continuation() instanceof StructuralInspection.Continuation.Elements held
                     ? held.element() : null;
             // The same position, read as the case it turned out to be. Null where the case puts
-            // nothing there, which is a case that is the whole of a value.
+            // nothing there, which is a case that is the whole of a value — and where it turned
+            // out to be one of several, which no one declaration is: what is under each of them is
+            // asked of that one ({@link #readingsAt} reads the position itself as its leaves).
             case TermPath.Step.Refine refine -> under instanceof StructuralInspection.Retained on
                     && on.continuation() instanceof StructuralInspection.Continuation.Branches ways
-                    ? narrowed(ways, refine.refinement()) : null;
+                    && refine.cases().only() != null
+                    ? narrowed(ways, refine.cases().only()) : null;
         };
     }
 

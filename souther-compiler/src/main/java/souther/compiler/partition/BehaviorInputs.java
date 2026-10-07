@@ -327,14 +327,22 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                     ? sequence.element() : null;
             // What a sum's case holds is the value the sum held, and what an optional holds is at
             // no name of its own — so both narrow the type at this position and nothing is
-            // descended into.
-            case TermPath.Step.Refine refine -> switch (refine.refinement()) {
-                case Refinement.SumCase one -> shape instanceof Shape.Sum
-                        ? Type.ref(one.leaf()) : null;
-                case Refinement.Presence presence ->
-                        !(shape instanceof Shape.Optional optional) ? null
-                                : presence.present() ? optional.element() : from;
-            };
+            // descended into. A value is written as one case, so a position left several of them
+            // is no place one is written at.
+            case TermPath.Step.Refine refine -> refine.cases().only() == null ? null
+                    : narrowedType(refine.cases().only(), shape, from);
+        };
+    }
+
+    /** The type {@code one} narrows a position of {@code shape}, declared {@code declared}, to, or
+     *  null where it is no narrowing of such a position. */
+    private static Type narrowedType(Refinement one, Shape shape, Type declared) {
+        return switch (one) {
+            case Refinement.SumCase sum -> shape instanceof Shape.Sum
+                    ? Type.ref(sum.leaf()) : null;
+            case Refinement.Presence presence ->
+                    !(shape instanceof Shape.Optional optional) ? null
+                            : presence.present() ? optional.element() : declared;
         };
     }
 
@@ -426,20 +434,21 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                 // And the position it narrows to is where a case's own field becomes readable: a
                 // path that names the case may read what only that case declares, which is the
                 // model saying so rather than a row happening to be one.
+                // Left several cases, the value stands below the step where it is any of them, and
+                // as the one it is.
                 case TermPath.Step.Refine refine -> {
-                    Type narrowed = switch (refine.refinement()) {
-                        case Refinement.SumCase one -> view.shape() instanceof Shape.Sum
-                                ? Type.ref(one.leaf()) : null;
-                        case Refinement.Presence presence ->
-                                !(view.shape() instanceof Shape.Optional optional) ? null
-                                        : presence.present() ? optional.element() : view.declared();
-                    };
-                    if (narrowed == null) {
-                        return false;
+                    Type standsAs = null;
+                    for (Refinement each : refine.cases().atoms()) {
+                        Type narrowed = narrowedType(each, view.shape(), view.declared());
+                        if (narrowed == null) {
+                            return false;
+                        }
+                        if (standsAs == null && stands(each, here)) {
+                            standsAs = narrowed;
+                        }
                     }
-                    if (stands(refine.refinement(), here)) {
-                        out.add(new Standing(here, narrowed, reached.refine(refine.refinement()),
-                                at));
+                    if (standsAs != null) {
+                        out.add(new Standing(here, standsAs, reached.refine(refine.cases()), at));
                     }
                 }
             }
