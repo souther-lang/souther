@@ -422,9 +422,9 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                     // Keyed by the step, which is this path with the step taken. Two positions
                     // that took it took the same one or they are not one reading of the row.
                     TermPath inside = reached.element();
-                    for (int i = 0; i < written.elements().size(); i++) {
-                        out.add(new Standing(written.elements().get(i), element, inside,
-                                at.and(inside, i)));
+                    List<ObservedValue> held = written.elements();
+                    for (int i = 0; i < held.size(); i++) {
+                        out.add(new Standing(held.get(i), element, inside, at.and(inside, i)));
                     }
                 }
                 // The value stays where it is and what may stand there narrows. A row whose value

@@ -89,7 +89,8 @@ public sealed interface ObservedValue {
             entries = List.copyOf(entries);
         }
 
-        /** The values, which is what a walk over a map is handed as the element. */
+        /** The values, which is what a walk over a map is handed as the element. Made each time it
+         *  is asked for, so a reader going through them asks once and walks what it was given. */
         @Override
         public List<ObservedValue> elements() {
             return entries.stream().map(Entry::value).toList();
