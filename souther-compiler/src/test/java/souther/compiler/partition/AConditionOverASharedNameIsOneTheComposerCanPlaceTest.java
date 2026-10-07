@@ -156,7 +156,7 @@ class AConditionOverASharedNameIsOneTheComposerCanPlaceTest {
                 NumbersAskedFor.of(LevelRegion.point(new Level.OnACarrier(
                         domain().quantities(rules()).ordersOf(fixed.term()).answered(), at))),
                 new Reachability.Reaching(domain().quantities(rules()).region(),
-                        Requirements.NONE,
+                        Requirements.NONE, TruthsAsked.NONE,
                         List.of(new OnTheWay.TakenIn(WHERE, new RowDemand.Relational(taken)))),
                 Generator.CandidateCheck.ANY);
     }

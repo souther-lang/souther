@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.inputs.TermPath;
+
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -55,14 +57,11 @@ class ADemandNothingComposesForIsDeclinedAndNotStatedTest {
     }
 
     /**
-     * A truth read off a place inside the answer is not.
-     *
-     * <p>A {@code Bool} holds no position, so the demand is about a place a value composed for the
-     * answer has no way of being put at. What the way asks is real; what this reading can do about
-     * it is nothing, and that is what it says.
+     * And so is a truth read off a place inside the answer: the value written at that place where
+     * the answer is composed.
      */
     @Test
-    void aTruthOfAPlaceInsideTheAnswerIsDeclined() {
+    void aTruthOfAPlaceInsideTheAnswerIsStated() {
         AnswersDemanded demanded = demandsOf(TYPES + """
 
                 behavior look : (at: Int) -> Reading
@@ -72,11 +71,38 @@ class ADemandNothingComposesForIsDeclinedAndNotStatedTest {
                 let decides (at, look) = if look(at).ok then Yes else No
                 """);
 
-        assertEquals(List.of(new DemandGap.WhyNotStated.ATruthOfAPlaceInsideTheAnswer()),
+        assertTrue(demanded.declined().isEmpty(),
+                () -> "every demand of the way was stated: " + demanded);
+        assertEquals(List.of(List.of(new TermPath.Step.Field("ok"))),
+                demanded.stated().stream()
+                        .filter(AnswerDemand.ATruth.class::isInstance)
+                        .map(each -> ((AnswerDemand.ATruth) each).at()).toList(),
+                () -> "and the truth is of the place it was read off: " + demanded);
+    }
+
+    /**
+     * A comparison of the answer with a number of the input is not.
+     *
+     * <p>Which value the answer may take depends on what the input holds, and nothing here
+     * composes the two to it together. What the way asks is real; what this reading can do about
+     * it is nothing, and that is what it says.
+     */
+    @Test
+    void aComparisonOfTheAnswerWithTheInputIsDeclined() {
+        AnswersDemanded demanded = demandsOf(TYPES + """
+
+                behavior look : (at: Int) -> Reading
+
+                behavior decides : (at: Int) -> Answer
+                    depends on look
+                let decides (at, look) = if look(at).at > at then Yes else No
+                """);
+
+        assertEquals(List.of(new DemandGap.WhyNotStated.AFormOverMoreThanOneAnswer()),
                 demanded.declined().stream().map(DemandGap.Unstated::why).toList(),
                 () -> "the way asks something of the answer this cannot state, and says what"
                         + " stopped it: " + demanded);
-        assertFalse(demanded.stated().stream().anyMatch(AnswerDemand.ATruth.class::isInstance),
+        assertFalse(demanded.stated().stream().anyMatch(AnswerDemand.AComparison.class::isInstance),
                 () -> "and it is not among the demands a value would be composed against: "
                         + demanded);
     }

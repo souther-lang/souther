@@ -23,9 +23,10 @@ import java.util.Optional;
  * out to be, and neither says the other: a region has no word for a case, and a narrowing orders
  * nothing. The comparisons divide again, because the values a carrier holds are not always numbers:
  * an inequality over a form of them is the arithmetic's, and a position held against a written value
- * on an order that counts nothing is a bound on that order ({@link TakenConstraint}). So a search
- * composing a row against this reads them all, and what it still does not represent is
- * {@link #declined()}.
+ * on an order that counts nothing is a bound on that order ({@link TakenConstraint}). And a truth
+ * of a {@code Bool} position is neither: it is a value, which a region has no order for and a
+ * narrowing has no case for ({@link #truths()}). So a search composing a row against this reads
+ * them all, and what it still does not represent is {@link #declined()}.
  *
  * <p><b>This is what an answer keeps.</b> A region is a way of asking rather than something that
  * says what it is, and one kept in an answer carries the whole reading of a module's rules — down to
@@ -113,6 +114,9 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                     // the container is not held to holding none either, since elements meeting
                     // these are a way past it too.
                     case RowDemand.ForAll _ -> region;
+                    // Which of two values stands at a position no region measures. The row is
+                    // written with it where the row is composed, and the region says nothing of it.
+                    case RowDemand.ATruth _ -> region;
                 };
             }
         }
@@ -143,6 +147,23 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
             }
         }
         return new Requirements.Merge.Merged(out);
+    }
+
+    /**
+     * Which value each {@code Bool} position the way read is asked to hold, off the truths it took
+     * in — the third of what a row has to be, beside {@link #narrowing} and {@link #requirements}.
+     *
+     * <p>Or the position asked for both, which is a way no row takes for the reason two narrowings
+     * no position holds together are: whichever condition said which, no value is both.
+     */
+    public TruthsAsked.Merge truths() {
+        List<RowDemand.ATruth> asked = new ArrayList<>();
+        for (OnTheWay each : onTheWay) {
+            if (each instanceof OnTheWay.TakenIn(var _, RowDemand.ATruth truth)) {
+                asked.add(truth);
+            }
+        }
+        return TruthsAsked.of(asked);
     }
 
     /**

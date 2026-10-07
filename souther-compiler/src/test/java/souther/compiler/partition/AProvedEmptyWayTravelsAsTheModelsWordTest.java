@@ -180,7 +180,8 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
                 Map.of(new RealizationTarget.AtOnePosition(costAxis().term()), Count.of(100)),
                 NumbersAskedFor.of(LevelRegion.point(
                         new Level.OnACarrier(Carrier.WHOLE, Count.of(100)))),
-                new Reachability.Reaching(within, Requirements.NONE, List.of(cut)),
+                new Reachability.Reaching(within, Requirements.NONE, TruthsAsked.NONE,
+                        List.of(cut)),
                 Generator.CandidateCheck.ANY);
     }
 

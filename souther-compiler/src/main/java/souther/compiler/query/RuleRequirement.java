@@ -1,9 +1,9 @@
 package souther.compiler.query;
 
 import souther.compiler.coverage.CoverageSites;
-import souther.compiler.inputs.Requirements;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.OnTheWay;
+import souther.compiler.partition.Reachability;
 import souther.compiler.partition.RowToRun;
 import souther.compiler.partition.RulesTaken;
 
@@ -58,10 +58,10 @@ public sealed interface RuleRequirement {
         /**
          * The way asks one position to be two things at once.
          *
-         * <p>{@link souther.compiler.partition.Reachability.NothingReaches} is where that is
-         * established and this carries what it established.
+         * <p>{@link Reachability.NothingReaches} is where that is established and this carries what
+         * it established.
          */
-        record OnePositionCannotBeBoth(Requirements.Merge.Conflict why) implements Excluded {
+        record OnePositionCannotBeBoth(Reachability.TwoAtOnce why) implements Excluded {
 
             public OnePositionCannotBeBoth {
                 if (why == null) {

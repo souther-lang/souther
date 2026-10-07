@@ -101,7 +101,8 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
      */
     private static boolean oneRelation(List<OnTheWay> stated) {
         return stated.size() == 1 && switch (stated.getFirst()) {
-            case OnTheWay.TakenIn(var _, RowDemand.Relational _) -> true;
+            case OnTheWay.TakenIn(var _, RowDemand.Relational _),
+                 OnTheWay.TakenIn(var _, RowDemand.ATruth _) -> true;
             case OnTheWay.TakenIn(var _, RowDemand.Exists _),
                  OnTheWay.TakenIn(var _, RowDemand.ForAll _) -> false;
             case OnTheWay.Narrowed _, OnTheWay.Declined _ -> true;
@@ -142,6 +143,13 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
             // is one to ask.
             case OnTheWay.TakenIn(var _, RowDemand.Exists _),
                  OnTheWay.TakenIn(var _, RowDemand.ForAll _) -> asOneColumn(condition, held);
+            // Which of two values stands at a position: the truth of that position, whichever
+            // spelling asked it, read off the demand and not off the condition again. And what
+            // came out is the position's value and not the condition's — `f == false` holding is
+            // `f` not holding.
+            case OnTheWay.TakenIn(var _, RowDemand.ATruth truth) -> new DecidedCondition.Stood(
+                    new DecisionCondition.ATruth(new DecisionSubject.AnInput(truth.at())),
+                    truth.held());
             case OnTheWay.TakenIn(var _, RowDemand.Relational(var taken)) -> {
                 Rel proposition = taken.rel().orItsDenial();
                 DecisionCondition.Comparison column = switch (taken) {

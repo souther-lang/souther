@@ -104,7 +104,7 @@ class ACaseTheRowCannotBeIsNoWayOfWritingItTest {
                 Map.of(new RealizationTarget.AtOnePosition(fixed.term()), at),
                 NumbersAskedFor.of(LevelRegion.point(new Level.OnACarrier(
                         domain().quantities(rules()).ordersOf(fixed.term()).answered(), at))),
-                new Reachability.Reaching(region, required,
+                new Reachability.Reaching(region, required, TruthsAsked.NONE,
                         List.of(new OnTheWay.TakenIn(new ConditionReportAnchor.WhereTheReadingMetIt(
                                 "m", new ConditionOccurrence("b", 0)),
                                 new RowDemand.Relational(ABOVE_TEN)))),
