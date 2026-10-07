@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
-import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -60,9 +59,10 @@ class RulesNamingNoPositionInCommonCloseApartTest {
      * unevenly descend through fractions until the rounds run out, which is the halving pair's case
      * said once rather than drawn over and over at the price of every round.
      */
-    private static final Function<String, Granularity> SPACING = position ->
-            HALVING.contains(position) || A_HAIR_APART.contains(position)
-                    ? Granularity.DENSE : Granularity.DISCRETE;
+    private static Granularity spacing(String position) {
+        return HALVING.contains(position) || A_HAIR_APART.contains(position)
+                ? Granularity.DENSE : Granularity.DISCRETE;
+    }
 
     /**
      * A bound so far below one in scale that one plus it has no representation, so a hop from it
@@ -102,12 +102,17 @@ class RulesNamingNoPositionInCommonCloseApartTest {
             List<AffineConstraint<String>> right = read(other);
             List<AffineConstraint<String>> both = dealt(dice, left, right);
 
-            ClosedState<String> leftClosed = ClosedState.closedTogether(left, SPACING, order);
-            ClosedState<String> rightClosed = ClosedState.closedTogether(right, SPACING, order);
-            Outcome inOneRun = outcome(ClosedState.closedTogether(both, SPACING, order));
+            ClosedState<String> leftClosed = ClosedState.closedTogether(left,
+                    RulesNamingNoPositionInCommonCloseApartTest::spacing, order);
+            ClosedState<String> rightClosed = ClosedState.closedTogether(right,
+                    RulesNamingNoPositionInCommonCloseApartTest::spacing, order);
+            Outcome inOneRun = outcome(ClosedState.closedTogether(both,
+                    RulesNamingNoPositionInCommonCloseApartTest::spacing, order));
             Outcome product = outcome(ClosedState.product(List.of(leftClosed, rightClosed)));
-            Outcome parted = outcome(ClosedState.of(both, SPACING, order));
-            Outcome kept = outcome(ClosedStates.kept().of(both, SPACING, order));
+            Outcome parted = outcome(ClosedState.of(both,
+                    RulesNamingNoPositionInCommonCloseApartTest::spacing, order));
+            Outcome kept = outcome(ClosedStates.kept().of(both,
+                    RulesNamingNoPositionInCommonCloseApartTest::spacing, order));
 
             assertEquals(inOneRun, product, () -> "the product of " + left + " and " + right
                     + " is not their closure in one run");
@@ -372,7 +377,8 @@ class RulesNamingNoPositionInCommonCloseApartTest {
     private static List<AffineConstraint<String>> read(List<Written> written) {
         List<AffineConstraint<String>> out = new ArrayList<>();
         for (Written each : written) {
-            if (AffineConstraint.of(each.coefs(), each.constant(), each.rel(), SPACING)
+            if (AffineConstraint.of(each.coefs(), each.constant(), each.rel(),
+                    RulesNamingNoPositionInCommonCloseApartTest::spacing)
                     instanceof AffineConstraint.Read.Stated<String> stated) {
                 out.add(stated.constraint());
             }
@@ -397,7 +403,7 @@ class RulesNamingNoPositionInCommonCloseApartTest {
         Map<String, Granularity> kinds = new LinkedHashMap<>();
         List<String> everywhere = new ArrayList<>(ONE_HALF);
         everywhere.addAll(OTHER_HALF);
-        everywhere.forEach(position -> kinds.put(position, SPACING.apply(position)));
+        everywhere.forEach(position -> kinds.put(position, spacing(position)));
         NumericDomain<String> out = NumericDomain.top(order, closing);
         for (Written each : rules) {
             out = out.assume(new LinearForm<>(each.constant(), each.coefs()), each.rel(), kinds);
