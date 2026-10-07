@@ -121,6 +121,33 @@ class AnArmOnACaseTheDeclarationAlreadyMakesNarrowsNothingTest {
 
             behavior opened : (o: Opened) -> Int
             let opened (o) = look(o.flag.value)
+
+            data Station = { code: String }
+            data Hospital = { code: String }
+            data Renkei
+            data OnceKind = Station | Hospital
+            data VisitKind = OnceKind | Renkei
+
+            let visitText (k: VisitKind): String =
+                match k with
+                    | OnceKind as x ->
+                        match x with
+                            | Station as s -> s.code
+                            | Hospital as h -> h.code
+                    | Renkei -> ""
+
+            data Request = { kind: OnceKind }
+            data Visit = { kind: VisitKind }
+            data Linked = { kind: Renkei }
+
+            behavior once : (r: Request) -> String
+            let once (r) = visitText(r.kind)
+
+            behavior visit : (v: Visit) -> String
+            let visit (v) = visitText(v.kind)
+
+            behavior linked : (l: Linked) -> String
+            let linked (l) = visitText(l.kind)
             """;
 
     /**
@@ -193,10 +220,43 @@ class AnArmOnACaseTheDeclarationAlreadyMakesNarrowsNothingTest {
      */
     @Test
     void anArmIsAskedOfEveryNameTheValueWears() {
+        assertEquals(Set.of(), underTheField(named("whole"), "x.digits"),
+                "a field that is the case is named unnarrowed: what is under its name is no value"
+                        + " the arm can be matching");
         assertEquals(1, outOfReach("whole"),
                 "a field that is the case leaves only the other arm out of reach");
         assertEquals(0, outOfReach("opened"),
                 "a field holding the sum under a name of its own leaves every arm in reach");
+    }
+
+    /**
+     * An arm naming a case that is itself a sum is asked as the leaves it covers.
+     *
+     * <p>Such a case is one narrowing of nothing, so asked as one narrowing it had no question to
+     * put to the declaration. A field the declaration leaves only those leaves is the case already:
+     * the arm's name stands at the field, and the arms under it narrow the field to each leaf. A
+     * field the declaration leaves none of them is never the case, and the rules through the arm
+     * are rules no row is owed.
+     */
+    @Test
+    void aFieldAlreadyACaseOverSeveralLeavesIsNarrowedByTheArmsUnderIt() {
+        assertEquals(Set.of("r.kind@Station", "r.kind@Station.code", "r.kind@Hospital",
+                        "r.kind@Hospital.code"),
+                underTheField(named("once"), "r.kind"));
+        assertEquals(1, outOfReach("once"), "only the arm beside the case is out of reach");
+    }
+
+    /** The other side of the one above: a field none of the case's leaves. */
+    @Test
+    void aFieldNoneOfTheLeavesOfACaseIsOutOfReachThroughIt() {
+        assertEquals(2, outOfReach("linked"),
+                "a field none of the case's leaves is out of reach through each arm under it");
+    }
+
+    /** And a field the declaration leaves every case, which the arms divide as they always did. */
+    @Test
+    void aFieldOfEveryCaseHasEveryArmInReach() {
+        assertEquals(0, outOfReach("visit"));
     }
 
     /** How many of {@code behavior}'s rules go through an arm no value of the input takes. */

@@ -7,11 +7,15 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
+import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.Objects;
 
@@ -69,57 +73,108 @@ public final class DeclaredInput {
     }
 
     /**
-     * What arriving at {@code at} as {@code refinement}'s case says of the value there.
+     * What arriving at {@code at} by an arm selecting {@code selected} says of the value there,
+     * the arm being written over a scrutinee that stands as {@code matchedAs}.
      *
-     * <p>Three answers and no fourth. The declaration may leave the value more than one case, and
-     * then arriving says which one it turned out to be — a narrowing, written into the path. It may
-     * leave the value that case and no other, and then arriving says nothing: the position is the
-     * one the declaration names, spelled the way it does. Or it may leave the value none of what the
-     * case covers, and then no value at the position arrives that way.
+     * <p>Asked of the selection whole, as the leaves it covers, and never of one narrowing made out
+     * of it first. A case that is itself a sum covers several leaves and is one narrowing of nothing,
+     * and a reader that had turned it into one before asking would find nothing to ask about — even
+     * where the declaration leaves the value no leaf outside the case, so that the arm narrows
+     * nothing at all.
      *
-     * <p>Asked of every name the value at the position wears and of what is under them, because
-     * the path does not say which of them the arm matched. Taking a newtype's {@code value} is no
-     * step, so a field declared {@code Open = Flag} is matched as a {@code Flag} at the same path a
-     * field declared {@code WholeDigits} is matched as itself — one is a value of a sum under a
-     * name, and the other a name that is a case. A newtype is no sum, so each name is the one
-     * value it is, and what is under the last of them is what {@link AtomSpace} says it can be.
+     * <p>The declaration may leave the value only leaves the arm covers, and then arriving says
+     * nothing: the position is the one the declaration names, spelled the way it does. It may leave
+     * the value none of them, and then no value at the position arrives that way. Otherwise arriving
+     * says which of the leaves it turned out to be — written into the path where the arm covers one,
+     * and a narrowing no one path spells where it covers several.
      *
-     * <p>A narrowing wherever the declarations say nothing this can follow. That is the path the
-     * arm and the scrutinee settle between them, which is what a reader was given before the
-     * declarations were asked.
+     * <p>What the declaration leaves the value is read under each name it wears as well as under
+     * all of them, because the path does not say how many of them the scrutinee took off: taking a
+     * newtype's {@code value} is no step. A field declared {@code Open = Flag} is matched as the
+     * {@code Flag} under the name at the same path a field declared {@code WholeDigits} is matched
+     * as the case it is. Which of those readings the arm can be matching is what {@code matchedAs}
+     * settles: the scrutinee stands as a type whose leaves hold the value it was given, so a reading
+     * leaving the value something outside them is not the one the arm is over. A newtype is no sum,
+     * so each name is the one value it is, and what is under the last of them is what
+     * {@link AtomSpace} says it can be.
+     *
+     * <p>As the arm says it wherever the declarations say nothing this can follow, which is the
+     * answer a reader was given before the declarations were asked.
      */
-    public Taking taking(TermPath at, Refinement refinement) {
+    public Taking taking(TermPath at, Type matchedAs, ResolvedCase selected) {
+        List<Refinement> covered = Refinement.allOf(selected);
+        Taking asTheArmSaysIt = covered.size() == 1
+                ? new Taking.Narrows(at.refine(covered.getFirst())) : new Taking.AmongSeveral();
         Type here = typeAt(at);
-        if (here == null || !(refinement instanceof Refinement.SumCase sum)) {
-            return new Taking.Narrows(at.refine(refinement));
+        List<TypeSymbol> chosen = leavesOf(covered);
+        if (here == null || matchedAs == null || chosen.isEmpty()) {
+            return asTheArmSaysIt;
         }
-        TypeOps.NewtypeSpine spine = TypeOps.newtypeSpine(here, source.inners());
-        boolean named = spine.layers().stream()
-                .anyMatch(layer -> layer.named().equals(sum.leaf()));
-        List<TypeSymbol> under = AtomSpace.subjectAtoms(spine.terminal(), source.kinds(),
-                source.sums());
-        // Under the names the value can be this case and others, so arriving says which.
-        if (under.contains(sum.leaf()) && under.size() > 1) {
-            return new Taking.Narrows(at.refine(refinement));
+        Set<TypeSymbol> matchable = new HashSet<>(
+                AtomSpace.subjectAtoms(matchedAs, source.kinds(), source.sums()));
+        boolean reaches = false;
+        boolean within = true;
+        boolean read = false;
+        for (List<TypeSymbol> leaves : readingsOf(here)) {
+            if (leaves.isEmpty() || !matchable.containsAll(leaves)) {
+                continue;
+            }
+            read = true;
+            reaches |= leaves.stream().anyMatch(chosen::contains);
+            within &= chosen.containsAll(leaves);
         }
-        if (named || under.equals(List.of(sum.leaf()))) {
-            return new Taking.Implied();
+        if (!read) {
+            return asTheArmSaysIt;
         }
-        // Nothing this can follow is under the names, and none of them is the case.
-        return under.isEmpty() ? new Taking.Narrows(at.refine(refinement)) : new Taking.Excluded();
+        return !reaches ? new Taking.Excluded()
+                : within ? new Taking.Implied() : asTheArmSaysIt;
     }
 
-    /** What arriving at a position as a case says of the value there ({@link #taking}). */
+    /** The leaves {@code covered} narrows to, or none where it narrows to something that is not a
+     *  case of a sum. */
+    private static List<TypeSymbol> leavesOf(List<Refinement> covered) {
+        List<TypeSymbol> out = new ArrayList<>();
+        for (Refinement each : covered) {
+            switch (each) {
+                case Refinement.SumCase sum -> out.add(sum.leaf());
+                // An optional's carriers are no leaves of anything a declaration can already have
+                // settled: nothing stands as an optional that was handed something narrower.
+                case Refinement.Presence _ -> {
+                    return List.of();
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * What a value of {@code type} can be, once under each name it wears and once under all of
+     * them: the outermost name first, and what is under the last name at the end.
+     */
+    private List<List<TypeSymbol>> readingsOf(Type type) {
+        TypeOps.NewtypeSpine spine = TypeOps.newtypeSpine(type, source.inners());
+        List<List<TypeSymbol>> out = new ArrayList<>();
+        spine.layers().forEach(layer -> out.add(List.of(layer.named())));
+        out.add(AtomSpace.subjectAtoms(spine.terminal(), source.kinds(), source.sums()));
+        return out;
+    }
+
+    /** What arriving at a position by an arm says of the value there ({@link #taking}). */
     public sealed interface Taking {
 
-        /** The declaration leaves the value more than the case, and this is the position read as
-         *  it. */
+        /** The declaration leaves the value more than the arm's one leaf, and this is the position
+         *  read as it. */
         record Narrows(TermPath to) implements Taking {}
 
-        /** The declaration leaves the value the case and nothing else, so arriving says nothing. */
+        /** The declaration leaves the value more than the leaves the arm covers, and the arm covers
+         *  several: a narrowing, and one no one path spells. */
+        record AmongSeveral() implements Taking {}
+
+        /** The declaration leaves the value only leaves the arm covers, so arriving says nothing. */
         record Implied() implements Taking {}
 
-        /** The declaration leaves the value none of the case, so no value there arrives this way. */
+        /** The declaration leaves the value none of the leaves the arm covers, so no value there
+         *  arrives this way. */
         record Excluded() implements Taking {}
     }
 

@@ -235,13 +235,24 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
         // a position and nothing to narrow it to. The arm says which case it turned out to be either
         // way, and the two arms of one fork are answers about the one subject — which is what keeps
         // a table from admitting a value that is two cases at once.
+        //
+        // A column holds one case, so an arm over several leaves is a column this reading has no
+        // words for, whichever way it was met; that no row takes it, where none does, is said by
+        // what was met on the way and not by the column.
         DecisionSubject subject = subjects.of(match.scrutinee(), reads);
         Refinement narrowing = match.cases().get(part).selectedCase().map(Refinement::of)
                 .orElse(null);
-        return subject == null || narrowing == null
-                ? new Read(answerOf(null, onTheWay, true), List.of(onTheWay))
-                : new Read(new DecidedCondition.Narrowed(
-                        new DecisionCondition.ACase(subject), narrowing), List.of(onTheWay));
+        if (subject != null && narrowing != null) {
+            return new Read(new DecidedCondition.Narrowed(
+                    new DecisionCondition.ACase(subject), narrowing), List.of(onTheWay));
+        }
+        return new Read(switch (onTheWay) {
+            case OnTheWay.Settled settled -> new DecidedCondition.Unread(
+                    new DecisionCondition.AConditionNotRead(settled.condition(),
+                            new OnTheWay.Why.ForkArmNotReadAsANarrowing()), true);
+            case OnTheWay.Declined _, OnTheWay.Narrowed _, OnTheWay.TakenIn _ ->
+                    answerOf(null, onTheWay, true);
+        }, List.of(onTheWay));
     }
 
     /**
