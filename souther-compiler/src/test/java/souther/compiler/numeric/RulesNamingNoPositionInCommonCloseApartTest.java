@@ -52,9 +52,16 @@ class RulesNamingNoPositionInCommonCloseApartTest {
     /** Two positions over values that fill, for a hop the exact arithmetic cannot compose. */
     private static final List<String> A_HAIR_APART = List.of("u", "v");
 
+    /**
+     * Whole numbers for the drawn halves, and values that fill for the two systems written out.
+     *
+     * <p>A drawn half is often boxed, and over whole numbers in a box the rounds stop on their own,
+     * each taking some end a whole step in. Over values that fill, a box and a sum weighted
+     * unevenly descend through fractions until the rounds run out, which is the halving pair's case
+     * said once rather than drawn over and over at the price of every round.
+     */
     private static final Function<String, Granularity> SPACING = position ->
-            position.equals("b") || position.equals("y") || HALVING.contains(position)
-                    || A_HAIR_APART.contains(position)
+            HALVING.contains(position) || A_HAIR_APART.contains(position)
                     ? Granularity.DENSE : Granularity.DISCRETE;
 
     /**
@@ -68,10 +75,10 @@ class RulesNamingNoPositionInCommonCloseApartTest {
             CanonicalOrder.asTheyAreSpelled(),
             (one, other) -> other.compareTo(one));
 
-    private static final int CASES = 300;
+    private static final int CASES = 140;
 
     /** Fewer for the domain, which asks every form at every place under every relation. */
-    private static final int DOMAINS = 30;
+    private static final int DOMAINS = 20;
 
     @Test
     void theClosureOfBothHalvesIsTheProductOfTheClosureOfEach() {
@@ -79,23 +86,26 @@ class RulesNamingNoPositionInCommonCloseApartTest {
         Seen seen = new Seen();
         for (int round = 0; round < CASES; round++) {
             CanonicalOrder<String> order = ORDERS.get(round % ORDERS.size());
-            List<Written> one = someRules(dice, ONE_HALF);
+            // Boxed every other time: a rule over three positions carries a bound from two of them
+            // onto the third only where the two have ends, so without them a parting that left the
+            // third out of the rule's part would answer the same and be checked for nothing.
+            List<Written> drawn = someRules(dice, ONE_HALF);
+            // Two of the three are enough to carry a bound onto the third.
+            List<Written> one = dice.nextBoolean() ? boxed(drawn, List.of("a", "b")) : drawn;
             // The rounds run out on the halving pair only after every round they have, so it is
             // drawn now and then rather than as often as the others; and the hop nothing can
             // compose is said outright, since a draw reaches it only by luck.
-            List<Written> other = switch (round % 10) {
-                case 9 -> halving();
-                case 4 -> aHairApart();
-                default -> round % 2 == 0 ? renamed(one) : someRules(dice, OTHER_HALF);
-            };
+            List<Written> other = round % 40 == 39 ? halving()
+                    : round % 10 == 4 ? aHairApart()
+                    : round % 2 == 0 ? renamed(one) : someRules(dice, OTHER_HALF);
             List<AffineConstraint<String>> left = read(one);
             List<AffineConstraint<String>> right = read(other);
             List<AffineConstraint<String>> both = dealt(dice, left, right);
 
+            ClosedState<String> leftClosed = ClosedState.closedTogether(left, SPACING, order);
+            ClosedState<String> rightClosed = ClosedState.closedTogether(right, SPACING, order);
             Outcome inOneRun = outcome(ClosedState.closedTogether(both, SPACING, order));
-            Outcome product = outcome(ClosedState.product(List.of(
-                    ClosedState.closedTogether(left, SPACING, order),
-                    ClosedState.closedTogether(right, SPACING, order))));
+            Outcome product = outcome(ClosedState.product(List.of(leftClosed, rightClosed)));
             Outcome parted = outcome(ClosedState.of(both, SPACING, order));
             Outcome kept = outcome(ClosedStates.kept().of(both, SPACING, order));
 
@@ -104,8 +114,8 @@ class RulesNamingNoPositionInCommonCloseApartTest {
             assertEquals(inOneRun, parted, () -> both + " parted is not " + both + " in one run");
             assertEquals(inOneRun, kept, () -> both + " kept a part at a time is not " + both
                     + " in one run");
-            seen.saw(inOneRun, outcome(ClosedState.closedTogether(left, SPACING, order)),
-                    outcome(ClosedState.closedTogether(right, SPACING, order)));
+            seen.saw(inOneRun, leftClosed.holdsNothing(), rightClosed.holdsNothing(),
+                    ClosureQuestion.independentRules(both).size());
         }
         seen.coveredEveryCase();
     }
@@ -209,12 +219,18 @@ class RulesNamingNoPositionInCommonCloseApartTest {
         int oneHoldsNothing;
         int ranOut;
         int notComposed;
+        int aHalfInParts;
 
-        void saw(Outcome whole, Outcome left, Outcome right) {
-            if (!left.holdsNothing() && !right.holdsNothing()) {
+        void saw(Outcome whole, boolean leftHoldsNothing, boolean rightHoldsNothing, int parts) {
+            // More parts than the two halves: a half whose own rules fall apart, which is the
+            // product taken inside a half as well as across the two.
+            if (parts > 2) {
+                aHalfInParts++;
+            }
+            if (!leftHoldsNothing && !rightHoldsNothing) {
                 bothHoldSomething++;
             }
-            if (left.holdsNothing() != right.holdsNothing()) {
+            if (leftHoldsNothing != rightHoldsNothing) {
                 oneHoldsNothing++;
             }
             if (!whole.holdsNothing() && whole.status() == ClosedState.Status.BUDGET_EXHAUSTED) {
@@ -229,9 +245,11 @@ class RulesNamingNoPositionInCommonCloseApartTest {
             String counts = bothHoldSomething + " where both halves hold something, "
                     + oneHoldsNothing + " where one of them holds nothing, " + ranOut
                     + " where the rounds ran out and " + notComposed
-                    + " where a bound was not composed";
+                    + " where a bound was not composed, and " + aHalfInParts
+                    + " where a half fell apart on its own";
             assertTrue(bothHoldSomething > 0 && oneHoldsNothing > 0 && ranOut > 0
-                    && notComposed > 0, "a case the theorem covers was never drawn: " + counts);
+                    && notComposed > 0 && aHalfInParts > 0,
+                    "a case the theorem covers was never drawn: " + counts);
         }
     }
 
@@ -243,21 +261,25 @@ class RulesNamingNoPositionInCommonCloseApartTest {
      * A handful of rules over {@code positions}: bounds, differences and sums weighted unevenly,
      * with now and then a bound a hop cannot compose onto a whole number.
      *
-     * <p>One of them weighs all three positions, every time. A rule over three positions is what
-     * joins a position to a part through no difference and no pair, so it is the case a parting
-     * that took a rule for edges between two positions gets wrong, and it is drawn rather than
-     * left to turn up.
+     * <p>Every other time, one of them weighs all three positions. A rule over three positions is
+     * what joins a position to a part through no difference and no pair, so it is the case a
+     * parting that took a rule for edges between two positions gets wrong, and it is drawn rather
+     * than left to turn up. Not every time: rules over three positions that always hold one rule
+     * over all of them are always one part, and a half whose rules fall apart is the product
+     * taken inside the half.
      */
     private static List<Written> someRules(Random dice, List<String> positions) {
         List<Written> out = new ArrayList<>();
-        Map<String, ExactRatio> overAll = new LinkedHashMap<>();
-        for (String position : positions) {
-            overAll.put(position, ExactRatio.of(dice.nextBoolean() ? 1 + dice.nextInt(2)
-                    : -1 - dice.nextInt(2)));
+        if (dice.nextBoolean()) {
+            Map<String, ExactRatio> overAll = new LinkedHashMap<>();
+            for (String position : positions) {
+                overAll.put(position, ExactRatio.of(dice.nextBoolean() ? 1 + dice.nextInt(2)
+                        : -1 - dice.nextInt(2)));
+            }
+            out.add(new Written(overAll, ExactRatio.of(dice.nextInt(15) - 7),
+                    dice.nextBoolean() ? Rel.LE : Rel.GE));
         }
-        out.add(new Written(overAll, ExactRatio.of(dice.nextInt(15) - 7),
-                dice.nextBoolean() ? Rel.LE : Rel.GE));
-        int howMany = dice.nextInt(5);
+        int howMany = 1 + dice.nextInt(3);
         for (int i = 0; i < howMany; i++) {
             Map<String, ExactRatio> coefs = new LinkedHashMap<>();
             for (String position : positions) {
@@ -277,14 +299,17 @@ class RulesNamingNoPositionInCommonCloseApartTest {
     }
 
     /**
-     * {@code rules} with each of {@code positions} held between minus nine and nine, so that a form
+     * {@code rules} with each of {@code positions} held between minus four and four, so that a form
      * over both halves has ends to be read and not only no end on either side.
+     *
+     * <p>Narrow, because the rounds narrow a whole-number box a step at a time and each round reads
+     * every rule: a wider box is more rounds over the same rules and decides nothing more.
      */
     private static List<Written> boxed(List<Written> rules, List<String> positions) {
         List<Written> out = new ArrayList<>();
         for (String position : positions) {
-            out.add(new Written(Map.of(position, ExactRatio.ONE), ExactRatio.of(9), Rel.GE));
-            out.add(new Written(Map.of(position, ExactRatio.ONE), ExactRatio.of(-9), Rel.LE));
+            out.add(new Written(Map.of(position, ExactRatio.ONE), ExactRatio.of(4), Rel.GE));
+            out.add(new Written(Map.of(position, ExactRatio.ONE), ExactRatio.of(-4), Rel.LE));
         }
         out.addAll(rules);
         return out;

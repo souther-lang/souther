@@ -69,8 +69,10 @@ import java.util.function.Function;
  *       {@code F - P + b}, which the ends bound by the most {@code F} comes to and the most
  *       {@code b - P} comes to apart. Where the ends of {@code P}'s part leave {@code P <= b} a value,
  *       the second is at or above nought and the premise bounds {@code F} no tighter than its own ends
- *       do. Where they leave it none, that part's own rule is a form the rules leave nothing
- *       ({@link #theRulesLeaveAFormNothing}) in the same round, and the whole is empty either way. A
+ *       do. Where they leave it none, that part holds nothing in the same round and the whole is
+ *       empty either way: a premise over several positions is a form the rules leave nothing
+ *       ({@link #theRulesLeaveAFormNothing}), and one over a single position is a bound the
+ *       differences already put in the box, whose ends have then crossed before any round. A
  *       sum the exact arithmetic cannot hold drops a route, which only ever leaves an answer wider,
  *       so no route across parts proves what the parts do not.</li>
  * </ul>
