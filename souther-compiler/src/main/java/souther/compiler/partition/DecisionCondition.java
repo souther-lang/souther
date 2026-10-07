@@ -5,8 +5,8 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 
 import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * One distinction a body draws to decide, apart from what any path made of it.
@@ -147,10 +147,10 @@ public sealed interface DecisionCondition {
      * intersection ({@code Requirements.merge}); a column is a question the body asked.
      *
      * @param of      the scrutinee, before any arm narrows it
-     * @param answers what each arm that is a column leaves it. Compared as a set: which case a
-     *                name sorts before is nothing the model says, and two spellings of one model
-     *                ask one question. Held in the order the arms are written, which is no part of
-     *                what the column is and is how it reads the same in either spelling
+     * @param answers what each arm that is a column leaves it. A set, so two forks dividing the
+     *                subject alike are one question whatever order their arms are written in, and
+     *                held in the one order the set makes ({@link CasesLeft#compare}) so that one
+     *                question spells one way
      */
     record ACase(DecisionSubject of, Set<CasesLeft> answers) implements DecisionCondition {
 
@@ -159,7 +159,9 @@ public sealed interface DecisionCondition {
                 throw new IllegalArgumentException(
                         "a fork of a decision is asked of something, and has answers");
             }
-            answers = Collections.unmodifiableSet(new LinkedHashSet<>(answers));
+            Set<CasesLeft> ordered = new TreeSet<>(CasesLeft::compare);
+            ordered.addAll(answers);
+            answers = Collections.unmodifiableSet(ordered);
         }
     }
 

@@ -54,7 +54,7 @@ class TwoRequirementsOfOnePositionHoldWhereTheyShareACaseTest {
 
     /**
      * One case is spelled as that case, and several are one value whatever order they were met
-     * in, so that one set is one position. They are spelled in the order they are held.
+     * in, so that one set is one position and spells one way.
      */
     @Test
     void oneCaseKeepsItsSpellingAndSeveralAreSpelledInOneOrder() {
@@ -66,7 +66,10 @@ class TwoRequirementsOfOnePositionHoldWhereTheyShareACaseTest {
         assertEquals(hospitalFirst, stationFirst);
         assertEquals(hospitalFirst.hashCode(), stationFirst.hashCode());
         assertEquals(KIND.refine(hospitalFirst), KIND.refine(stationFirst));
-        assertEquals("v.kind@{Station|Hospital}", KIND.refine(stationFirst).toString());
+        assertEquals(KIND.refine(hospitalFirst).toString(), KIND.refine(stationFirst).toString());
+        assertEquals(KIND.refine(hospitalFirst).discriminated(),
+                KIND.refine(stationFirst).discriminated());
+        assertEquals("v.kind@{Hospital|Station}", KIND.refine(stationFirst).toString());
         assertNotEquals(KIND.refine(stationFirst), KIND.refine(only(STATION)));
     }
 

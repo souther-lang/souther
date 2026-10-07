@@ -211,7 +211,7 @@ class WhatTheOfferedRowsSettleDoesNotTurnOnHowCaseNamesCompareTest {
         Settlements settlements = Settlements.of(compilation.db(), offering);
         Set<String> out = new TreeSet<>();
         for (ObligationIdentity item : settlements.settled()) {
-            out.add(String.valueOf(item));
+            out.add(SpelledSets.inOneOrder(String.valueOf(item)));
         }
         return out;
     }
@@ -244,7 +244,8 @@ class WhatTheOfferedRowsSettleDoesNotTurnOnHowCaseNamesCompareTest {
             for (Map.Entry<String, String> pair : spelling.entrySet()) {
                 said = said.replace(pair.getValue(), pair.getKey());
             }
-            out.add(said);
+            // The sets in it in one order once the names are back ({@link SpelledSets}).
+            out.add(SpelledSets.inOneOrder(said));
         }
         return out;
     }

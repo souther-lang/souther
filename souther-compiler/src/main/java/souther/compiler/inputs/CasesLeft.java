@@ -5,9 +5,7 @@ import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -32,22 +30,20 @@ import java.util.stream.Collectors;
  * are distinctions of different positions, never alternatives of one, so a set holding one of each
  * is a value this refuses rather than one every reader has to decide what to do with.
  *
- * <p><b>Compared as a set, and held in the order the model declares the cases.</b> Two writings of
- * one set are one value whatever order either met the atoms in. The order they are held and spelled
- * in is the declaration's where the reader knows it ({@link DeclaredInput#taking}) and the order the
- * selection reaches them otherwise, which is the declaration's order of the cases under one case.
- * Never the order the names compare in: a model whose cases were renamed is the same model, and
- * what it says about them reads the same way round.
+ * <p><b>A set, held in one order made from the set alone.</b> Two writings of one set are one value
+ * and spell one way, whatever order either met the atoms in — which takes an order that reads
+ * nothing but the atoms, and the atoms carry their names and nothing more. So the order is the
+ * names', settled here once. An order the model declares would be read off a declaration a value
+ * does not carry, and two routes to one set could bring two of them.
  */
 public final class CasesLeft {
 
+    /** The atoms, each once, in the one order {@link #compareAtoms} sets. */
     private final List<Refinement> atoms;
 
-    /** The same atoms as a set, which is what tells two of these apart. */
-    private final Set<Refinement> members;
-
     private CasesLeft(List<Refinement> atoms) {
-        Set<Refinement> once = new LinkedHashSet<>(atoms);
+        List<Refinement> once = atoms.stream().distinct().sorted(CasesLeft::compareAtoms)
+                .toList();
         if (once.isEmpty()) {
             throw new IllegalArgumentException("a value left no case is no value");
         }
@@ -55,8 +51,7 @@ public final class CasesLeft {
             throw new IllegalArgumentException("the cases of a sum and an optional's carriers are"
                     + " distinctions of two positions, never alternatives at one: " + once);
         }
-        this.atoms = List.copyOf(once);
-        this.members = Set.copyOf(once);
+        this.atoms = once;
     }
 
     /** Exactly {@code one}. */
@@ -96,34 +91,9 @@ public final class CasesLeft {
         };
     }
 
-    /** What a value may be, in the order the model declares them. */
+    /** What a value may be, in the one order these are held in. */
     public List<Refinement> atoms() {
         return atoms;
-    }
-
-    /**
-     * The same cases, held in the order {@code declared} writes the leaves.
-     *
-     * <p>For the reader that knows what a position's declaration divides it into: a selection
-     * written over several cases reaches them in the order it was written, and that is the author's
-     * order and not the model's. Leaves {@code declared} does not name keep their place after the
-     * ones it does.
-     */
-    CasesLeft orderedAs(List<TypeSymbol> declared) {
-        List<Refinement> out = new ArrayList<>();
-        for (TypeSymbol leaf : declared) {
-            for (Refinement each : atoms) {
-                if (each instanceof Refinement.SumCase sum && sum.leaf().equals(leaf)) {
-                    out.add(each);
-                }
-            }
-        }
-        for (Refinement each : atoms) {
-            if (!out.contains(each)) {
-                out.add(each);
-            }
-        }
-        return new CasesLeft(out);
     }
 
     /** The one distinction this leaves, or null where it leaves several. */
@@ -134,7 +104,7 @@ public final class CasesLeft {
     /** What a value both leave may be, or null where they leave it nothing in common. */
     public CasesLeft meet(CasesLeft other) {
         List<Refinement> both = new ArrayList<>(atoms);
-        both.retainAll(other.members);
+        both.retainAll(other.atoms);
         return both.isEmpty() ? null : new CasesLeft(both);
     }
 
@@ -152,7 +122,7 @@ public final class CasesLeft {
 
     /** Whether every value this leaves is one {@code wider} leaves as well. */
     public boolean within(CasesLeft wider) {
-        return wider.members.containsAll(members);
+        return wider.atoms.containsAll(atoms);
     }
 
     /**
@@ -174,24 +144,17 @@ public final class CasesLeft {
                         .collect(Collectors.joining("|", "{", "}"));
     }
 
-    /**
-     * One order for these that ties no two that are not equal: the atoms of each in one order,
-     * compared atom by atom, and then the shorter first.
-     *
-     * <p>The atoms sorted for this and not as they are held, because two equal sets may be held in
-     * two orders and an order over values has to tie them.
-     */
-    static int compare(CasesLeft one, CasesLeft other) {
-        List<Refinement> mine = one.atoms.stream().sorted(CasesLeft::compareAtoms).toList();
-        List<Refinement> theirs = other.atoms.stream().sorted(CasesLeft::compareAtoms).toList();
-        int common = Math.min(mine.size(), theirs.size());
+    /** One order for these that ties no two that are not equal: atom by atom in the order each is
+     *  held in, and then the shorter first. */
+    public static int compare(CasesLeft one, CasesLeft other) {
+        int common = Math.min(one.atoms.size(), other.atoms.size());
         for (int at = 0; at < common; at++) {
-            int byAtom = compareAtoms(mine.get(at), theirs.get(at));
+            int byAtom = compareAtoms(one.atoms.get(at), other.atoms.get(at));
             if (byAtom != 0) {
                 return byAtom;
             }
         }
-        return Integer.compare(mine.size(), theirs.size());
+        return Integer.compare(one.atoms.size(), other.atoms.size());
     }
 
     /**
@@ -209,12 +172,12 @@ public final class CasesLeft {
 
     @Override
     public boolean equals(Object other) {
-        return other instanceof CasesLeft that && members.equals(that.members);
+        return other instanceof CasesLeft that && atoms.equals(that.atoms);
     }
 
     @Override
     public int hashCode() {
-        return members.hashCode();
+        return atoms.hashCode();
     }
 
     @Override
