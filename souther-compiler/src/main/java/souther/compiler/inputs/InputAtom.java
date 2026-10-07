@@ -5,6 +5,7 @@ import souther.compiler.check.RuleKey;
 import souther.compiler.numeric.CanonicalOrder;
 
 import java.util.Comparator;
+import java.util.Objects;
 
 /**
  * One subject the rules reaching a behavior's input are about, in the words of the input rather than
@@ -57,22 +58,60 @@ sealed interface InputAtom {
      * held in the name, one number arriving from the declaration's reading and from a caller's form
      * would be two, and a rule about it would say nothing about the form that names it.
      *
-     * @param root     the value whose rules name the place, which is the parameter where no
-     *                 narrowing was taken and the case where one was. A field the cases of a sum
-     *                 share is one place named by two of those, and it is this one — the nearest,
-     *                 whose rules can name it — so that the rules of both arrive about one subject
-     * @param path     what that value's own rules call the place
-     * @param kind     whether this is the count taken of the place rather than its own value. Two
-     *                 numbers at one place, and a rule about one says nothing about the other
+     * <p>A class and not a record because of what it is used as. Every closure, box and bound
+     * over an input's numbers is keyed by these, and what one is equal by reaches through the
+     * place's key into the operation and the arguments it was taken with — a walk every lookup
+     * would take again. The hash is a function of the three parts and nothing else, so it is
+     * worked out once, where they are put together, and two of these with different hashes are
+     * told apart without the walk.
      */
-    record Named(String root, RuleKey path,
-                 NumberAt.OfWhatNumber kind) implements InputAtom {
+    final class Named implements InputAtom {
 
-        public Named {
+        private final String root;
+        private final RuleKey path;
+        private final NumberAt.OfWhatNumber kind;
+        private final int hash;
+
+        /**
+         * @param root the value whose rules name the place, which is the parameter where no
+         *             narrowing was taken and the case where one was. A field the cases of a sum
+         *             share is one place named by two of those, and it is this one — the nearest,
+         *             whose rules can name it — so that the rules of both arrive about one subject
+         * @param path what that value's own rules call the place
+         * @param kind whether this is the count taken of the place rather than its own value. Two
+         *             numbers at one place, and a rule about one says nothing about the other
+         */
+        public Named(String root, RuleKey path, NumberAt.OfWhatNumber kind) {
             if (root == null || path == null) {
                 throw new IllegalArgumentException("a named number sits somewhere");
             }
-            java.util.Objects.requireNonNull(kind, "and is some number of what is there");
+            this.root = root;
+            this.path = path;
+            this.kind = Objects.requireNonNull(kind, "and is some number of what is there");
+            this.hash = Objects.hash(root, path, kind);
+        }
+
+        public String root() {
+            return root;
+        }
+
+        public RuleKey path() {
+            return path;
+        }
+
+        public NumberAt.OfWhatNumber kind() {
+            return kind;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other || other instanceof Named that && hash == that.hash
+                    && root.equals(that.root) && path.equals(that.path) && kind.equals(that.kind);
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
         }
 
         /**
