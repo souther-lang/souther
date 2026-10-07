@@ -816,7 +816,7 @@ public final class InvariantChecker {
         Map<String, BindingId> bindings = c.clauses.bindingsOf(named);
         Denotations at = Denotations.none()
                 .locations(bindings.values(), c.terms::placeSubject, c.terms::placeTerm);
-        Known k = Known.top();
+        Known k = c.engine.nothingKnown();
         boolean read = true;
         // A clause nothing could type never reaches `written`, so no reading below sees it and none
         // of them can spoil a position for it. That is a fact about what was handed over rather
@@ -3696,7 +3696,7 @@ public final class InvariantChecker {
         if (body == null) {
             return new Findings(c.errors, c.warnings, Status.ABANDONED);
         }
-        Entered in = new Entered(Known.top(), Denotations.none());
+        Entered in = c.engine.nothingEntered();
         for (Map.Entry<BindingId, Scope.Binding> p : params.bindings().entrySet()) {
             in = c.enter(new Core.Read(p.getValue().name(), p.getKey(), p.getValue().type(),
                     body.pos()), in.known(), in.at());
@@ -3812,7 +3812,7 @@ public final class InvariantChecker {
                 Core template = templates.bodyOf(build);
                 Boolean answers = templateAnswers.get(template);
                 if (answers == null) {
-                    Known left = entering(template, Known.top(), engine.insideATemplate(),
+                    Known left = entering(template, engine.nothingKnown(), engine.insideATemplate(),
                             ONE_READING);
                     answers = !left.reachesNothing();
                     templateAnswers.put(template, answers);

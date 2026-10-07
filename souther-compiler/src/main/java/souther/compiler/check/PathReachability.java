@@ -268,7 +268,7 @@ public final class PathReachability {
         Map<ControlPlace, Reachability> out = new LinkedHashMap<>();
         Map<ConstructOccurrence,
                 souther.compiler.reach.ComparisonArrival> arriving = new LinkedHashMap<>();
-        PathEngine.Entered in = PathEngine.Entered.nothing();
+        PathEngine.Entered in = engine.nothingEntered();
         for (Map.Entry<BindingId, Scope.Binding> p : params.bindings().entrySet()) {
             in = engine.enter(new Core.Read(p.getValue().name(), p.getKey(),
                     p.getValue().type(), body.pos()), in.known(), in.at());
@@ -405,7 +405,7 @@ public final class PathReachability {
      * told that the conditions on the way cannot all hold would go looking at the guards above for
      * something that is not there.
      */
-    private Known entry = Known.top();
+    private Known entry;
     private Denotations entered = Denotations.none();
 
     private PathReachability(PathEngine engine, CoverageSites.Plan plan, InputDomain read,
@@ -414,6 +414,7 @@ public final class PathReachability {
                              Map<ConstructOccurrence,
                                      souther.compiler.reach.ComparisonArrival> arriving) {
         this.engine = engine;
+        this.entry = engine.nothingKnown();
         this.plan = plan;
         // Here as well as at the ways in, so that nothing inside this class is written against a
         // reading that might not be one.
