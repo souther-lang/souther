@@ -316,6 +316,9 @@ public sealed interface ObligationDisposition {
                      // And a rewrite of the body nothing decided about, which is whether the rows
                      // depend on what the body says and not where a value stands.
                      Weakening.RewriteUndecided _,
+                     // And a premise of the body nothing proves, which is whether a row can be
+                     // written at a combination of classes and not what a reading of a line met.
+                     Weakening.PremiseUnproven _,
                      // And the readings nobody made, which is read beside these rather than among
                      // them ({@link #readingsTriedIn}): the reasons here are what a reading met,
                      // and there was no reading of those to meet anything.

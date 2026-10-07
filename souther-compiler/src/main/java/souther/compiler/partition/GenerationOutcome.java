@@ -135,7 +135,19 @@ public sealed interface GenerationOutcome {
              *  can supply. */
             A_ROW_HERE_IS_WAITING_FOR_ITS_ANSWER(
                     "a row already stands here with its answer owed, and composing a second one"
-                            + " would offer a question that is already written down");
+                            + " would offer a question that is already written down"),
+
+            /**
+             * Every row here reaches an {@code unreachable} the body states, so a row composed here
+             * is one the compiler refuses.
+             *
+             * <p>Not {@link #A_FACT_ABOUT_THE_MODEL}: nothing proves the premise, and the obligation
+             * stays open until something does or the body answers. What is not applicable is a
+             * row, because the one thing a row here would do is fail to compile.
+             */
+            EVERY_ROW_HERE_REACHES_AN_UNREACHABLE(
+                    "the body answers nothing here and a row would reach its `unreachable`, which"
+                            + " the compiler refuses; what is open is whether that premise holds");
 
             private final String said;
 

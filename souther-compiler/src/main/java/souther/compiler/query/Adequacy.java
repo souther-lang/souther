@@ -11,6 +11,7 @@ import souther.compiler.observe.Classification;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.RowToRun;
+import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.inputs.TermPath;
 
 
@@ -80,6 +81,7 @@ import souther.compiler.partition.Realization;
 import souther.compiler.partition.RowDemand;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.partition.ObligationIdentity;
+import souther.compiler.partition.WhereACaseOfAnInputIsOwed;
 import souther.compiler.partition.PointRole;
 import souther.compiler.inputs.AnInputRead;
 import souther.compiler.inputs.DeclaredInput;
@@ -1911,14 +1913,19 @@ public final class Adequacy {
             // reading, which is what is known about it and not a rule for one kind of behavior.
             Map<String, CoverageRead.Read> met = db.ask(new Meets(name)).value();
             Bodies.Elaborated checked = db.ask(new Bodies.Observable(name)).value();
-            Map<AxisId, BodyDistinction> toldApart =
-                    checked == null || !checked.behaviorBodies().containsKey(spec.name())
-                            || met == null || met.get(spec.name()) == null
-                            ? BodyDistinction.withoutABody(subject.axes().axes())
-                            : BodyDistinction.of(met.get(spec.name()), subject.axes().axes(),
-                                    subject.partitioning().rulesWithoutALine());
+            boolean withABody = checked != null && checked.behaviorBodies().containsKey(spec.name())
+                    && met != null && met.get(spec.name()) != null;
+            Map<AxisId, BodyDistinction> toldApart = withABody
+                    ? BodyDistinction.of(met.get(spec.name()), subject.axes().axes(),
+                            subject.partitioning().rulesWithoutALine())
+                    : BodyDistinction.withoutABody(subject.axes().axes());
+            // Off the same reading and the same axes, so the classes a body answers nothing at are
+            // the classes it is read as telling apart.
+            WhereNothingIsAnswered answersNothing = withABody
+                    ? WhereNothingIsAnswered.of(met.get(spec.name()), subject.axes().axes())
+                    : WhereNothingIsAnswered.NONE;
             return Coverages.of(subject, seen,
-                    db.ask(new Front.Adequacy()).value().measures(), toldApart);
+                    db.ask(new Front.Adequacy()).value().measures(), toldApart, answersNothing);
         }
     }
 
@@ -4263,7 +4270,12 @@ public final class Adequacy {
             // order is.
             Set<ClassOfAPosition> out = new LinkedHashSet<>();
             for (PartitionEvidence.AxisClass owed : evidence.classesOwed()) {
-                out.add(new ClassOfAPosition(owed.axis().at(), owed.name()));
+                ClassOfAPosition at = new ClassOfAPosition(owed.axis().at(), owed.name());
+                // Owed, and not one a row can be composed for: every row there reaches an
+                // `unreachable` and is refused. What its finding says is undecided, not missing.
+                if (evidence.answersNothing().holdingEveryRowAt(Set.of(at)).isEmpty()) {
+                    out.add(at);
+                }
             }
             return List.copyOf(out);
         }
@@ -4541,6 +4553,14 @@ public final class Adequacy {
             List<GenerationDisposition> out = new ArrayList<>();
             for (Finding finding : findings) {
                 GenerationOutcome none = whereNoRowCouldAnswer(finding.about());
+                // Before everything else that is asked of the finding, the class among them: what
+                // a row here comes to is settled by the body whatever measure named the place, and
+                // it is a row the compiler refuses.
+                if (finding.weakenedBy().causes().stream()
+                        .anyMatch(Weakening.PremiseUnproven.class::isInstance)) {
+                    none = new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
+                            .Reason.EVERY_ROW_HERE_REACHES_AN_UNREACHABLE);
+                }
                 // A finding the account cannot call missing was not asked for, and this is where
                 // that is said. The reading of the runs is what is in the way rather than anything
                 // about the thing itself, and a row is not offered against an obligation nothing
@@ -6013,6 +6033,27 @@ public final class Adequacy {
         }
 
         /**
+         * This, held open where every row that would meet it sits at {@code at} and the body of
+         * {@code behavior} answers nothing there.
+         *
+         * <p>The obligation is the measure's and stays what it is; what changes is whether its being
+         * unmet is a gap. A row there reaches an {@code unreachable} and is refused, so an author
+         * told to write one is told to write what the compiler will not take — and nothing proves
+         * the inputs there do not arise, so the obligation is not met either. Undecided, then, and
+         * on that premise: what a build refuses over is a gap a row can close.
+         */
+        public Finding heldOpenWhereNothingIsAnswered(String behavior,
+                                                      WhereNothingIsAnswered answersNothing,
+                                                      Set<ClassOfAPosition> at) {
+            Optional<WhereNothingIsAnswered.Part> part = answersNothing.holdingEveryRowAt(at);
+            if (part.isEmpty()) {
+                return this;
+            }
+            return new Finding(subject, weakenedBy.union(WeakeningSet.of(
+                    new Weakening.PremiseUnproven(behavior, part.get().reasons()))), about);
+        }
+
+        /**
          * What a build does about a finding, which is what neither surface used to say.
          *
          * <p>Three answers and not two, because the question is decided by two facts. Collapsing the
@@ -6676,10 +6717,17 @@ public final class Adequacy {
             List<Finding> out = new ArrayList<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
                 unansweredRows(rows.get(behavior.name()), out);
+                PartitionEvidence divided =
+                        partitions == null ? null : partitions.get(behavior.name());
+                // Where the body answers nothing, read once for every measure that names a class:
+                // a case of an input, a class of a position and a combination of two are one
+                // question there, and three readings of it could come to three answers.
+                WhereNothingIsAnswered answersNothing =
+                        divided == null ? WhereNothingIsAnswered.NONE : divided.answersNothing();
                 signatureFindings(behavior.name(),
-                        signatures == null ? null : signatures.get(behavior.name()), out);
-                partitionFindings(behavior,
-                        partitions == null ? null : partitions.get(behavior.name()),
+                        signatures == null ? null : signatures.get(behavior.name()),
+                        answersNothing, out);
+                partitionFindings(behavior, divided,
                         accounts == null ? null : accounts.get(behavior.name()),
                         readings == null ? List.of()
                                 : readings.getOrDefault(behavior.name(), List.of()), out);
@@ -6688,8 +6736,8 @@ public final class Adequacy {
                     out.addAll(armFindings(behavior.name(), branch.arms()));
                 }
                 combinationFindings(db, name, behavior.name(), CombinationCriterion.of(
-                        meetings == null ? null : meetings.get(behavior.name()),
-                        partitions == null ? null : partitions.get(behavior.name())), out);
+                        meetings == null ? null : meetings.get(behavior.name()), divided),
+                        answersNothing, out);
                 ReplacementEvidence rewrites =
                         replacements == null ? null : replacements.get(behavior.name());
                 if (rewrites != null) {
@@ -6736,6 +6784,7 @@ public final class Adequacy {
          */
         private static void combinationFindings(Db db, String module, String behavior,
                                                 CombinationCriterion criterion,
+                                                WhereNothingIsAnswered answersNothing,
                                                 List<Finding> out) {
             // Under the criterion the behavior is held to, which the one choice says for every
             // surface. Asking the measures directly would be this reader deciding it a second
@@ -6770,7 +6819,9 @@ public final class Adequacy {
                             : Coverages.uncovered(behavior, subject.axes(), space)) {
                         out.add(Finding.by(new FindingSubject.OfABehavior(behavior),
                                 space.counted(),
-                                new About.ACombinationOfTwoClassesNoRowIsIn(each)));
+                                new About.ACombinationOfTwoClassesNoRowIsIn(each))
+                                .heldOpenWhereNothingIsAnswered(behavior, answersNothing,
+                                        each.classes()));
                     }
                 }
             }
@@ -6868,7 +6919,8 @@ public final class Adequacy {
          * of its own — so a finding worked out here would be the second reading of one rule.
          */
         static void signatureFindings(String behavior,
-                                      SignatureEvidence signature, List<Finding> out) {
+                                      SignatureEvidence signature,
+                                      WhereNothingIsAnswered answersNothing, List<Finding> out) {
             if (signature == null || signature.counted().made().isEmpty()) {
                 return;
             }
@@ -6917,9 +6969,17 @@ public final class Adequacy {
                     // the one thing this and the domain measure are both about. Named here, where
                     // the position is in hand, so that the two halves of one obligation are two
                     // readings of one entry rather than two entries that happen to coincide.
-                    out.add(Finding.by(behavior, input.cases(),
-                            new About.ACaseNoRowAppliesItTo(input, missing,
-                                    signature.owedAt(behavior, input.at(), missing))));
+                    //
+                    // That class is also what says whether a row can be written for the case: one
+                    // the body answers nothing at is one every row of which is refused.
+                    WhereACaseOfAnInputIsOwed owed =
+                            signature.owedAt(behavior, input.at(), missing);
+                    Finding found = Finding.by(behavior, input.cases(),
+                            new About.ACaseNoRowAppliesItTo(input, missing, owed));
+                    out.add(owed instanceof ObligationIdentity.OfAClass(var at)
+                            ? found.heldOpenWhereNothingIsAnswered(behavior, answersNothing,
+                                    Set.of(at))
+                            : found);
                 }
             }
         }
@@ -6965,7 +7025,10 @@ public final class Adequacy {
                 }
                 for (PartitionEvidence.AxisClass missing : axis.uncovered()) {
                     out.add(Finding.by(behavior.name(), axis.reached(),
-                            new About.AClassNoRowIsIn(missing)));
+                            new About.AClassNoRowIsIn(missing))
+                            .heldOpenWhereNothingIsAnswered(behavior.name(),
+                                    partition.answersNothing(),
+                                    Set.of(new ClassOfAPosition(axis.at(), missing.name()))));
                 }
             }
             // This behavior's account, walked as the things it is owed. One finding per thing and

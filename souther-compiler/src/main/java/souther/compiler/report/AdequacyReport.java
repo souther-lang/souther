@@ -1566,6 +1566,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             facts = facts.union(each.value().weakening());
             unresolvedBy(rest, each.subject(), each.value().disposition());
         }
+        // And a premise an obligation rests on, which is the one thing a finding goes without that
+        // no measure does. The measure counted the obligation and the rows in full; what is open is
+        // whether a row can be written there, which is the finding's own and is read off it — read
+        // off the measures, an obligation every row of which is refused would leave the verdict
+        // satisfied over a point nothing met.
+        for (Adequacy.Finding finding : findings()) {
+            for (Weakening each : finding.weakenedBy().causes()) {
+                if (each instanceof Weakening.PremiseUnproven) {
+                    facts = facts.union(WeakeningSet.of(each));
+                }
+            }
+        }
         List<AdequacyUncertainty> out = new ArrayList<>();
         facts.causes().forEach(each -> out.add(new AdequacyUncertainty.ByWeakening(each)));
         out.addAll(rest);
@@ -2109,6 +2121,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * What a finding held open on a premise of the body says about the premise, or nothing where it
+     * rests on none.
+     *
+     * <p>The body's own words, each once. What a reader is told beside "undecided" is why no row can
+     * be asked for — a row there reaches the {@code unreachable} — and that nothing has proved the
+     * inputs there do not arise, which is the work left.
+     */
+    private static String onAPremise(Adequacy.Finding finding) {
+        for (Weakening each : finding.weakenedBy().causes()) {
+            if (each instanceof Weakening.PremiseUnproven premise) {
+                return ": a row there reaches `unreachable` (" + String.join("; ", premise.reasons())
+                        + "), and nothing here proves no input arrives there";
+            }
+        }
+        return "";
+    }
+
+    /**
      * How many of the obligations a block counts no row can be written at, where any are, and
      * nothing where none are.
      *
@@ -2229,10 +2259,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // are for different readers, and this one writes the term a row is written against.
             for (Adequacy.Finding f : behavior.findings()) {
                 if (f.about() instanceof About.AClassNoRowIsIn(var missing)) {
-                    out.append(String.format("      %s %s `%s` at %s%n", mark(f),
+                    out.append(String.format("      %s %s `%s` at %s%s%n", mark(f),
                             f.weakenedBy().isEmpty()
                                     ? "no row is in" : "undecided whether a row is in",
-                            missing.name(), missing.axis().name()));
+                            missing.name(), missing.axis().name(), onAPremise(f)));
                 }
             }
             // Not a finding: nothing is owed here, and what the line says is what the model already
@@ -2332,8 +2362,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     for (ReportedFinding f : behavior.reported()) {
                         if (f.finding().about() instanceof
                                 About.ACombinationOfTwoClassesNoRowIsIn(var combination)) {
-                            out.append(String.format("      %s no row is in %s%n",
-                                    mark(f.finding()), twoClasses(combination)));
+                            out.append(String.format("      %s %s %s%s%n",
+                                    mark(f.finding()),
+                                    f.finding().weakenedBy().isEmpty()
+                                            ? "no row is in" : "undecided whether a row is in",
+                                    twoClasses(combination), onAPremise(f.finding())));
                         }
                     }
                 }
@@ -3856,6 +3889,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     at + " would need one position to be two things at once, which no value is";
             case A_CONDITION_NEVER_COMES_OUT_THAT_WAY ->
                     at + " is past a condition that comes out the other way for every row";
+            // What the body states, said as the body's and not as the model's. Nothing proves the
+            // inputs there do not arise; what is known is that a row there is refused.
+            case EVERY_ROW_THERE_REACHES_AN_UNREACHABLE ->
+                    "every row composed for " + at + " reaches an `unreachable`, which the compiler"
+                            + " refuses";
             case NOTHING_TO_BUILD_AGAINST -> "there was nothing to build a candidate against";
             case NO_VALUES_WERE_ASKED_FOR ->
                     "this build composed no values, so no row was written for " + at;
@@ -6890,6 +6928,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case Weakening.DecisionReadingIncomplete _ -> WeakeningWord.DECISION_NOT_FULLY_READ;
             case Weakening.DecisionRuleReadShort _ -> WeakeningWord.DECISION_RULE_READ_SHORT;
             case Weakening.RewriteUndecided _ -> WeakeningWord.REWRITE_UNDECIDED;
+            case Weakening.PremiseUnproven _ -> WeakeningWord.PREMISE_UNPROVEN;
         };
     }
 

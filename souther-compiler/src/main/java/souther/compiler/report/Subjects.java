@@ -95,6 +95,9 @@ final class Subjects {
             // The behavior whose body the rewrite is of. Which rewrite, and why it was left open,
             // is the rewrite's own entry under the replacement measure.
             case Weakening.RewriteUndecided it -> new Subject.OfABehavior(it.behavior());
+            // The behavior whose body states the premise. Where it is stated is what the reasons
+            // carry, and which obligations rest on it is each obligation's own entry.
+            case Weakening.PremiseUnproven it -> new Subject.OfABehavior(it.behavior());
         };
     }
 

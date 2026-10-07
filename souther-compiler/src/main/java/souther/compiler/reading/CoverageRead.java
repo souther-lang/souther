@@ -8,7 +8,9 @@ import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.NormalReturn;
 import souther.compiler.coverage.RunBodies;
+import souther.compiler.coverage.UnreachableReasons;
 import souther.compiler.flow.ValueArrivals;
 import souther.compiler.flow.Ways;
 import souther.compiler.inputs.InputReading;
@@ -130,6 +132,12 @@ public final class CoverageRead {
     /** Every way a run of the body is known to take, in the order the walk met them. */
     private final Set<WayIn> taken = new LinkedHashSet<>();
 
+    /** The parts a run arrives at and answers nothing from, in the order the walk met them. */
+    private final List<NothingAnsweredHere> answersNothing = new ArrayList<>();
+
+    /** Whether a node of the body being walked answers a value, made the first time it is asked. */
+    private NormalReturn answering;
+
     /** How each cycle of calls is entered, joined over every call into it walked so far. */
     private final Map<Core, Entered> entered = new IdentityHashMap<>();
 
@@ -190,15 +198,21 @@ public final class CoverageRead {
      *                       not hold, the arm the rest of the block is — which is where a run that
      *                       got past the guard went on — and the comparisons the guard decides by.
      *                       Both arms are arms of this read
+     * @param answersNothing the parts of the bodies a run arrives at and answers no value from,
+     *                       each the largest such part on its way down, in the order the walk met
+     *                       them. Read on the same walk as the ways in, so the inputs said to reach
+     *                       one are the inputs every other reading here says reach it
      */
     public record Read(List<Interaction> interactions,
                        java.util.SequencedMap<ArmProbe, PathAccess> arms,
                        List<WayIn> taken,
-                       java.util.SequencedMap<ArmProbe, TheRestOfTheBlock> restOfTheBlock) {
+                       java.util.SequencedMap<ArmProbe, TheRestOfTheBlock> restOfTheBlock,
+                       List<NothingAnsweredHere> answersNothing) {
 
         public Read {
             interactions = List.copyOf(interactions);
             taken = List.copyOf(taken);
+            answersNothing = List.copyOf(answersNothing);
             arms = java.util.Collections.unmodifiableSequencedMap(
                     new java.util.LinkedHashMap<>(arms));
             restOfTheBlock = java.util.Collections.unmodifiableSequencedMap(
@@ -273,7 +287,7 @@ public final class CoverageRead {
             walked.takesAt(group);
         }
         return new Read(found, arms.found(behavior), List.copyOf(walked.taken),
-                arms.restOfTheBlock(behavior));
+                arms.restOfTheBlock(behavior), walked.answersNothing);
     }
 
     /**
@@ -286,6 +300,7 @@ public final class CoverageRead {
         body = root;
         cycle = onCycle;
         reading = readingOf.apply(root);
+        answering = null;
         if (onCycle != null) {
             read.add(onCycle);
         }
@@ -372,6 +387,9 @@ public final class CoverageRead {
             return;
         }
         boolean arrives = observed && reading.arrivesAt(node);
+        if (observed && !arrives && reach instanceof Reach.Ways(var ways)) {
+            answersNothingAt(node, ways.stream().map(WayIn::conditions).toList());
+        }
         if (node instanceof Core.LetIn let) {
             // A name given to a decision is still that decision, and a name given to a position is
             // still that position. Both environments widen here and neither answers the other's
@@ -384,6 +402,59 @@ public final class CoverageRead {
             meetings.at(node, reach.ways().stream().map(WayIn::decisions).toList(), reading);
         }
         descend(node, naming, reach, arrives);
+    }
+
+    /**
+     * That a run arriving at {@code node} by any of {@code ways} answers nothing.
+     *
+     * <p>Asked where the walk first finds a value not arriving, so what is recorded is the largest
+     * such part: below it the walk goes on with nothing observed, and nothing further down is asked.
+     * And asked of {@link NormalReturn} besides, which is the reading of whether an arm answers
+     * anything that the rest of this compiler reads — a part the two disagree about is not said to
+     * answer nothing.
+     *
+     * <p>Only where every way here is named, which is the caller's to have checked. A way in
+     * nothing states, or one stated coarser than the fork it comes out of, is one a row cannot be
+     * kept off, so it says nothing about which inputs reach this.
+     */
+    private void answersNothingAt(Core node, List<List<Condition>> ways) {
+        if (ways.isEmpty()) {
+            return;
+        }
+        if (answering == null) {
+            answering = NormalReturn.ofBody(body);
+        }
+        if (answering.at(node)) {
+            return;
+        }
+        answersNothing.add(new NothingAnsweredHere(ways, UnreachableReasons.said(node, answering)));
+    }
+
+    /**
+     * That a run down arm {@code part} of {@code match}, reached under {@code reach}, answers
+     * nothing — where the arm is one no run through is watched.
+     *
+     * <p>Such an arm has no way in a row can be steered along: a way in is what a run that came it
+     * would be seen doing, and nothing records a run through an arm that answers nothing. What it
+     * takes of the inputs is its case all the same, and that with what held on the way to the
+     * {@code match} is what a row reaching it holds.
+     */
+    private void answersNothingDown(Core.Match match, int part, CoverageNaming naming,
+                                    Reach reach) {
+        if (!(reach instanceof Reach.Ways(var ways))) {
+            return;
+        }
+        Condition.Case taken = naming.caseOf(match, part);
+        if (taken == null) {
+            return;
+        }
+        List<List<Condition>> down = new ArrayList<>();
+        for (WayIn way : ways) {
+            List<Condition> held = new ArrayList<>(way.conditions());
+            held.add(taken);
+            down.add(held);
+        }
+        answersNothingAt(match.cases().get(part).body(), down);
     }
 
     /**
@@ -430,6 +501,8 @@ public final class CoverageRead {
                             : under(reach, new Reach.Ways(List.of(new WayIn(went.holds()))));
                     if (went != null) {
                         takes(into, new Reach.Ways(List.of(new WayIn(went.holds()))));
+                    } else if (observed && !reading.arrivesAt(match.cases().get(part).body())) {
+                        answersNothingDown(match, part, naming, reach);
                     }
                     arms.at(match, part, into, body);
                     Core.Case arm = match.cases().get(part);

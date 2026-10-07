@@ -33,6 +33,7 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Classification;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
@@ -634,7 +635,16 @@ public final class Generator {
              * that, a request that could not look at the one reading it was about would have
              * reported the line as refusing a row.
              */
-            NO_READING_OF_THE_LINE_COULD_BE_SEARCHED;
+            NO_READING_OF_THE_LINE_COULD_BE_SEARCHED,
+            /**
+             * Every row that was composed sits where the body answers nothing, so each would reach
+             * an {@code unreachable} and be refused.
+             *
+             * <p>Not one of the words about the model. Nothing proves the inputs there do not
+             * arise — the body states it — so this says no row can be offered there, and not that
+             * none exists.
+             */
+            EVERY_ROW_THERE_REACHES_AN_UNREACHABLE;
 
             /**
              * Whether this reason proves there is nothing to find, which one of them does.
@@ -663,6 +673,8 @@ public final class Generator {
                          THE_BLOCK_IS_AS_LONG_AS_IT_MAY_BE,
                          THE_WAY_IN_PLACES_AT_NO_CLASS, NO_CANDIDATE_WAS_OFFERED,
                          NO_READING_OF_THE_LINE_COULD_BE_SEARCHED -> false;
+                    // What the body states and nothing proves: a statement, so not a proof.
+                    case EVERY_ROW_THERE_REACHES_AN_UNREACHABLE -> false;
                 };
             }
 
@@ -768,7 +780,8 @@ public final class Generator {
                          THE_GROUP_WAS_NOT_OFFERED, THE_POSITION_WAS_WITHHELD,
                          THE_ROWS_WERE_NOT_READ, THE_WAY_IN_PLACES_AT_NO_CLASS,
                          THE_BLOCK_IS_AS_LONG_AS_IT_MAY_BE,
-                         NO_CANDIDATE_WAS_OFFERED, NO_READING_OF_THE_LINE_COULD_BE_SEARCHED ->
+                         NO_CANDIDATE_WAS_OFFERED, NO_READING_OF_THE_LINE_COULD_BE_SEARCHED,
+                         EVERY_ROW_THERE_REACHES_AN_UNREACHABLE ->
                             throw new IllegalStateException(
                                     "no walk of a coverage item comes back with this: " + this);
                 };
@@ -1348,7 +1361,8 @@ public final class Generator {
         // the same values for is applied once — a class's row run to see how far it got among
         // them, and the candidates an arm is looked for with.
         Map<List<String>, ObservedRun> ran = new LinkedHashMap<>();
-        GoingOn goingOn = new GoingOn(read, trial, ran, holding);
+        GoingOn goingOn = new GoingOn(read, trial, ran, holding,
+                WhereNothingIsAnswered.of(read, axes.axes()));
 
         // The rows this run composes, each numbered where it is composed. The number is an
         // identity and nothing reads it as a place: what says two obligations were answered by one
@@ -1852,7 +1866,7 @@ public final class Generator {
                             Searched searched = search(axes, Pins.of(axes, Map.of(at, cls)),
                                     List.of(new Purpose.ForAReplacement(asked)), origins,
                                     (_, _) -> true, check, references, answers, List.of(),
-                                    row -> looking.of(row, null), true);
+                                    row -> looking.of(row, null), true, goingOn.answersNothing());
                             if (searched.row() != null) {
                                 seen = searched.row();
                                 break;
@@ -2366,9 +2380,11 @@ public final class Generator {
      * @param ran     what each row run so far did, by what it is written as — shared with every
      *                other search of this run, so a set of values is run once
      * @param holding what holds each comparison of the body
+     * @param answersNothing where the body read as {@code read} answers nothing, placed on this
+     *                run's axes, which no row this run composes may sit
      */
     private record GoingOn(CoverageRead.Read read, Trial trial, Map<List<String>, ObservedRun> ran,
-                           HeldOutcome.Of holding) {
+                           HeldOutcome.Of holding, WhereNothingIsAnswered answersNothing) {
 
         /** The row {@code found} took, or a row for the same requirement that got further in —
          *  with what looking further came to, where the row goes out stopped at a guard. */
@@ -2448,7 +2464,7 @@ public final class Generator {
                                 case Watched.Ran(AlignedObservation run) when run.lit(goneOn) ->
                                         Acceptance.TAKEN;
                                 default -> Acceptance.PASSED;
-                            });
+                            }, answersNothing);
                     if (searched.row() != null) {
                         further = searched.row();
                         held = List.copyOf(both);
@@ -2655,7 +2671,7 @@ public final class Generator {
                                    FixtureReferences references,
                                    List<StoodInAnswer> answers, GoingOn goingOn) {
         Searched searched = search(axes, pins, purposes, origins, (_, _) -> true, check,
-                references, answers, List.of(), _ -> Acceptance.TAKEN);
+                references, answers, List.of(), _ -> Acceptance.TAKEN, goingOn.answersNothing());
         return searched.row() == null ? new Composed(null, null, searched.came())
                 : goingOn.past(axes, pins, purposes, searched, check, references, answers);
     }
@@ -2702,15 +2718,17 @@ public final class Generator {
      * @param admits  the classes each position may stand at beside the pins
      * @param held    the comparisons every candidate is held to beside the pins
      * @param accepts what a row that holds every pin has to be besides
+     * @param answersNothing where the body answers nothing, which no row taken may sit
      */
     private static Searched search(MeasuredInput.MeasuredAxes axes, Pins pins,
                                    List<Purpose> purposes, List<ResolvedOrigin> origins,
                                    Admits admits, CandidateCheck check,
                                    FixtureReferences references, List<StoodInAnswer> answers,
                                    List<HeldOutcome> held,
-                                   Function<GeneratedRow, Acceptance> accepts) {
+                                   Function<GeneratedRow, Acceptance> accepts,
+                                   WhereNothingIsAnswered answersNothing) {
         return search(axes, pins, purposes, origins, admits, check, references, answers, held,
-                accepts, false);
+                accepts, false, answersNothing);
     }
 
     /**
@@ -2724,7 +2742,7 @@ public final class Generator {
                                    FixtureReferences references, List<StoodInAnswer> answers,
                                    List<HeldOutcome> held,
                                    Function<GeneratedRow, Acceptance> accepts,
-                                   boolean rechoosing) {
+                                   boolean rechoosing, WhereNothingIsAnswered answersNothing) {
         String label = String.join(" with ", pins.labels());
         // What the pins ask for and nothing else, which is what every other position being free
         // means. Written as a reading, it goes through the same walk a combination's readings do.
@@ -2735,14 +2753,14 @@ public final class Generator {
         // question nobody asked it. What order they are walked in is {@link #nearestFirst}'s to
         // say; how many of them may be built is this class's own budget.
         Building building = new Building(axes, pins, purposes, label, check, MOST_REPAIRS,
-                references, answers, held, accepts, rechoosing);
+                references, answers, held, accepts, rechoosing, answersNothing);
         Traversal stated = nearestFirst(axes.axes(), reading, origins, admits, building);
         if (stated == Traversal.SATISFIED) {
             return new Searched(building.found, building.foundAt, building.foundAgainst, null);
         }
         // The composition, whatever the stated values spent, and with a budget of its own.
         Building composing = new Building(axes, pins, purposes, label, check, MOST_REPAIRS,
-                references, answers, held, accepts, rechoosing);
+                references, answers, held, accepts, rechoosing, answersNothing);
         Traversal composed = composing(axes.axes(), reading, origins, admits, composing);
         if (composed == Traversal.SATISFIED) {
             return new Searched(composing.found, composing.foundAt, composing.foundAgainst, null);
@@ -2874,12 +2892,16 @@ public final class Generator {
          *  next candidate is built. */
         private final boolean rechoosing;
 
+        /** Where the body answers nothing, which no row this takes may sit. */
+        private final WhereNothingIsAnswered answersNothing;
+
         private Building(MeasuredInput.MeasuredAxes axes, Pins pins, List<Purpose> purposes,
                          String label, CandidateCheck check, int most,
                          FixtureReferences references, List<StoodInAnswer> answers,
                          List<HeldOutcome> held, Function<GeneratedRow, Acceptance> accepts,
-                         boolean rechoosing) {
+                         boolean rechoosing, WhereNothingIsAnswered answersNothing) {
             this.rechoosing = rechoosing;
+            this.answersNothing = answersNothing;
             this.axes = axes;
             this.pins = pins;
             this.purposes = purposes;
@@ -2929,6 +2951,16 @@ public final class Generator {
                         Optional.empty());
                 return Taken.AND_MORE;
             }
+            // And nowhere the body answers nothing, whatever the pins are: a row there reaches an
+            // `unreachable` and the compiler refuses it, so it is no row to hand anybody. Another
+            // candidate may hold the pins somewhere else.
+            if (answersNothingAt(answersNothing, axes, candidate.where(), made.row().inputs(),
+                    check)) {
+                last = new Attempt(null,
+                        UnresolvedCombination.Reason.EVERY_ROW_THERE_REACHES_AN_UNREACHABLE, label,
+                        Optional.empty());
+                return Taken.AND_MORE;
+            }
             GeneratedRow row = new GeneratedRow(purposes, made.row().inputs(), made.row().answers());
             return switch (accepts.apply(row)) {
                 case TAKEN -> {
@@ -2964,6 +2996,9 @@ public final class Generator {
                 }
                 first[0] = false;
                 if (!pins.holds(axes, inputs, check)) {
+                    return Acceptance.PASSED;
+                }
+                if (answersNothingAt(answersNothing, axes, candidate.where(), inputs, check)) {
                     return Acceptance.PASSED;
                 }
                 GeneratedRow row = new GeneratedRow(purposes, inputs, answers);
@@ -3807,6 +3842,50 @@ public final class Generator {
             together.move(axis, at, stood);
             where[axis] = stood;
         }
+    }
+
+    /**
+     * Whether a row of {@code inputs}, composed for the classes {@code where}, sits where the body
+     * answers nothing.
+     *
+     * <p>Where the values landed, read off what built them as {@link #inTheClass} reads it — and
+     * where nothing built them, the classes they were composed for, which is what the row says of
+     * itself. Not "every class", which is what {@code inTheClass} answers for a pin it cannot
+     * judge: asked that way, a run with no runtime would put every row in every part and offer
+     * none.
+     *
+     * <p>A position whose values stand in more than one class says nothing: which of them a run
+     * goes on with is no class of the row.
+     */
+    private static boolean answersNothingAt(WhereNothingIsAnswered answersNothing,
+                                            MeasuredInput.MeasuredAxes axes, int[] where,
+                                            List<FixtureTemplate> inputs, CandidateCheck check) {
+        if (answersNothing.parts().isEmpty()) {
+            return false;
+        }
+        List<ObservedValue> observed = new ArrayList<>();
+        for (int p = 0; p < inputs.size() && observed != null; p++) {
+            if (check.build(p, inputs.get(p)) instanceof CandidateCheck.Built.Value(var value)) {
+                observed.add(value);
+            } else {
+                observed = null;
+            }
+        }
+        Map<AxisId, Classification> landed =
+                observed == null ? Map.of() : InputClassifications.of(observed, axes);
+        Set<ClassOfAPosition> at = new HashSet<>();
+        for (int axis = 0; axis < axes.size(); axis++) {
+            AxisId id = axes.get(axis).id();
+            if (observed != null) {
+                Classification here = landed.get(id);
+                if (here != null && here.classIds().size() == 1) {
+                    at.add(new ClassOfAPosition(id, here.classIds().iterator().next()));
+                }
+            } else if (axis < where.length && where[axis] >= 0) {
+                at.add(new ClassOfAPosition(id, axes.get(axis).classes().get(where[axis]).id()));
+            }
+        }
+        return answersNothing.holdingEveryRowAt(at).isPresent();
     }
 
     /**

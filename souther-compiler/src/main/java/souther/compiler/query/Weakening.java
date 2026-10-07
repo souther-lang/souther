@@ -8,6 +8,7 @@ import souther.compiler.partition.Replacement;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.types.SourceConstructOrigin;
 
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -580,6 +581,37 @@ public sealed interface Weakening {
         public RunSensitivity runSensitivity() {
             return why.written().stream().anyMatch(ReplacementEvidence.Undecided.Why::anAllowance)
                     ? RunSensitivity.MAY_CHANGE : RunSensitivity.UNAFFECTED;
+        }
+    }
+
+    /**
+     * Every row that would meet an obligation reaches an {@code unreachable}, and nothing here
+     * proves the inputs that reach it do not arise.
+     *
+     * <p>The obligation stands — a statement is not a proof, and the row it would take away is the
+     * one that shows the statement wrong — and what is missing is any row that can be written there,
+     * since one reaching the {@code unreachable} is refused (E1911). So what no row is at is not shown
+     * to be a gap an author can close; it is open until the premise is proved or the body answers.
+     *
+     * <p>Named by the behavior and by what the {@code unreachable}s say. A combination of classes
+     * and the class it is a part of can both rest on one premise, and that is one thing to tell a
+     * reader, not one per obligation. Not by where they are written: a finding holds no place, so
+     * an edit that moves the body leaves what was found where it was.
+     *
+     * @param reasons what the {@code unreachable}s say, each once, in the order evaluation reaches
+     *                them
+     */
+    record PremiseUnproven(String behavior, List<String> reasons) implements Weakening {
+
+        public PremiseUnproven {
+            Objects.requireNonNull(behavior, "a premise is some behavior's body's");
+            reasons = List.copyOf(reasons);
+        }
+
+        /** A premise nothing proves is not proved by allowing more: it is the model's to state. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
         }
     }
 }

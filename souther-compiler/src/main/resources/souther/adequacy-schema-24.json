@@ -255,7 +255,8 @@
           "decision_rule_read_short",
           "decision_of_row_unreadable",
           "decision_run_not_watched",
-          "rewrite_undecided"
+          "rewrite_undecided",
+          "premise_unproven"
         ]
       }
     },
@@ -3918,7 +3919,8 @@
                   "no_certified_witness",
                   "no_candidate_was_offered",
                   "not_all_candidates_could_be_offered",
-                  "no_reading_of_the_line_could_be_searched"
+                  "no_reading_of_the_line_could_be_searched",
+                  "every_row_there_reaches_an_unreachable"
                 ]
               },
               "synthesisShortfallCauses": {

@@ -427,7 +427,8 @@ public final class PublicationOrders {
                 WeakeningWord.DECISION_RULE_READ_SHORT,
                 WeakeningWord.DECISION_OF_ROW_UNREADABLE,
                 WeakeningWord.DECISION_RUN_NOT_WATCHED,
-                WeakeningWord.REWRITE_UNDECIDED)) {
+                WeakeningWord.REWRITE_UNDECIDED,
+                WeakeningWord.PREMISE_UNPROVEN)) {
             out.add(new WeakeningVocabulary.AWordOfThisDocuments(word));
         }
         return out;
@@ -562,21 +563,24 @@ public final class PublicationOrders {
             case THE_RULES_LEAVE_NOTHING_THERE -> 2;
             case ONE_POSITION_CANNOT_BE_BOTH -> 3;
             case A_CONDITION_NEVER_COMES_OUT_THAT_WAY -> 4;
-            case NOTHING_COMPOSES_ONE -> 5;
-            case NOTHING_STANDS_IN_FOR_A_DEPENDENCY -> 6;
-            case A_TABLE_IS_WHAT_THIS_NEEDS -> 7;
-            case NOTHING_TO_BUILD_AGAINST -> 8;
-            case THE_WAY_IN_PLACES_AT_NO_CLASS -> 9;
-            case THE_SEARCH_LEFT_SOMETHING_UNTRIED -> 10;
-            case THE_BLOCK_IS_AS_LONG_AS_IT_MAY_BE -> 11;
-            case THE_GROUP_WAS_NOT_OFFERED -> 12;
-            case THE_POSITION_WAS_WITHHELD -> 13;
-            case NO_VALUES_WERE_ASKED_FOR -> 14;
-            case NO_CANDIDATE_WAS_OFFERED -> 15;
-            case NO_CERTIFIED_WITNESS -> 16;
-            case NO_READING_OF_THE_LINE_COULD_BE_SEARCHED -> 17;
-            case THE_ROWS_WERE_NOT_READ -> 18;
-            case LINKAGE_FAILED -> 19;
+            // After what the model settles and before what this compiler fell short of: it is what
+            // the body says, and nothing has settled whether it holds.
+            case EVERY_ROW_THERE_REACHES_AN_UNREACHABLE -> 5;
+            case NOTHING_COMPOSES_ONE -> 6;
+            case NOTHING_STANDS_IN_FOR_A_DEPENDENCY -> 7;
+            case A_TABLE_IS_WHAT_THIS_NEEDS -> 8;
+            case NOTHING_TO_BUILD_AGAINST -> 9;
+            case THE_WAY_IN_PLACES_AT_NO_CLASS -> 10;
+            case THE_SEARCH_LEFT_SOMETHING_UNTRIED -> 11;
+            case THE_BLOCK_IS_AS_LONG_AS_IT_MAY_BE -> 12;
+            case THE_GROUP_WAS_NOT_OFFERED -> 13;
+            case THE_POSITION_WAS_WITHHELD -> 14;
+            case NO_VALUES_WERE_ASKED_FOR -> 15;
+            case NO_CANDIDATE_WAS_OFFERED -> 16;
+            case NO_CERTIFIED_WITNESS -> 17;
+            case NO_READING_OF_THE_LINE_COULD_BE_SEARCHED -> 18;
+            case THE_ROWS_WERE_NOT_READ -> 19;
+            case LINKAGE_FAILED -> 20;
         };
     }
 

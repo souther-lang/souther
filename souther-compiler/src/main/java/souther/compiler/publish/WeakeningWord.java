@@ -251,5 +251,13 @@ public enum WeakeningWord {
      * A rewrite of a body nothing here could decide about: whether a row tells it from the body is
      * not known. Which of the ways that happens it was is the reason the rewrite's own entry gives.
      */
-    REWRITE_UNDECIDED
+    REWRITE_UNDECIDED,
+
+    /**
+     * Every row that would meet an obligation reaches an {@code unreachable} nothing here proves.
+     *
+     * <p>The obligation is not taken away and is not a gap either: a row there is one the compiler
+     * refuses, so none can be written until the premise is proved or the body answers.
+     */
+    PREMISE_UNPROVEN
 }

@@ -558,10 +558,6 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "(" + core + "L" + c + "inputs/InputReads;L" + c + "check/Symbols;L" + c
                         + "check/DeclarationNewtypes;L" + c + "coverage/CoverageSites$Plan;L" + c
                         + "coverage/NormalReturn;ZLjava/util/List;)V", 1, GOES_ON_INTO_IT);
-        row(out, c + "claims/UnreachableReasons", "collect",
-                "(" + core + "L" + c + "coverage/NormalReturn;Ljava/util/List;)V", 1,
-                "follows what a node evaluates first to where a run stops, and what a Widen"
-                        + " evaluates is what it holds (Evaluated)");
         row(out, c + "codegen/BodyGen", "genExpr",
                 "(" + core + "L" + c + "types/Type;)L" + c + "types/Type;", 1,
                 "asks whether the node just emitted was an unreachable, to say which shape it left;"
@@ -632,6 +628,10 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "which names a node binds, asked of every node the descent meets: a Widen binds"
                         + " none");
         row(out, c + "coverage/NormalReturn", "mayEnter", "(" + core + "I)Z", 1, OF_A_FORK);
+        row(out, c + "coverage/UnreachableReasons", "collect",
+                "(" + core + "L" + c + "coverage/NormalReturn;Ljava/util/List;)V", 1,
+                "follows what a node evaluates first to where a run stops, and what a Widen"
+                        + " evaluates is what it holds (Evaluated)");
         row(out, c + "partition/ComparisonAssessment", "readsAnswer",
                 "(" + core + "L" + c + "types/BindingId;)Z", 1, COUNTS_THROUGH_IT);
         row(out, c + "partition/ComparisonReadings", "statedAt",

@@ -331,6 +331,31 @@ public final class InteractionCells {
         return new CellSelection(placed.cell(), claims);
     }
 
+    /**
+     * The classes a row arriving by one of {@code ways} sits in, one cell per way this can place.
+     * Each way is the conditions that hold on it together.
+     *
+     * <p>The reading a cell is made by and nothing beside it. A condition places at the classes it
+     * leaves whole — a case at the class that is that case, a comparison at every class on its side
+     * of a line the axis is cut at — so a row in a cell placed here is a row that comes that way,
+     * and not only one that may.
+     *
+     * <p>A way with a condition placed at no class is left out rather than read wider. What it
+     * leaves is a set of rows this cannot name, and a cell drawn without it would take in rows that
+     * go the other way round that fork.
+     */
+    public static List<Cell> whereEach(List<List<souther.compiler.reading.Condition>> ways,
+                                       List<Axis> axes) {
+        List<Cell> out = new ArrayList<>();
+        for (List<souther.compiler.reading.Condition> way : ways) {
+            Cell placed = narrowedBy(way, axes);
+            if (placed != null) {
+                out.add(placed);
+            }
+        }
+        return out;
+    }
+
     /** The groups worth offering, over the ordered {@code axes}, and the ones held back. */
     public static Offered of(List<Interaction> groups, List<Axis> axes, int mostCellsPerGroup) {
         List<Group> out = new ArrayList<>();
