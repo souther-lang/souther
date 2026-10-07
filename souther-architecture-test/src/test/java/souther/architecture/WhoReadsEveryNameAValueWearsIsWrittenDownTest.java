@@ -96,6 +96,9 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
      *
      * <p>The form a value is written into an issue in: a newtype is reported as what it wraps, and
      * the form names each name the value is opened through on the way there.
+     *
+     * <p>What arriving at a position as a case says of the value there: a path does not say how
+     * many of the names an arm's scrutinee took off, so each name is asked whether it is the case.
      */
     private static final List<String> WALKING = List.of(
             row(CHECK + "BoundaryConstraints", "messageForm",
@@ -112,6 +115,10 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_POSITION),
             row(TYPE_VIEW, "of",
                     "(" + TYPE + INNERS + SYMBOLS + KINDS + SUMS + ")L" + TYPE_VIEW + ";",
+                    THE_SPINE),
+            row(INPUTS + "DeclaredInput", "taking",
+                    "(L" + INPUTS + "TermPath;L" + INPUTS + "Refinement;)L" + INPUTS
+                            + "DeclaredInput$Taking;",
                     THE_SPINE),
             row(INPUTS + "InputDomain", "walk",
                     "(L" + INPUTS + "TermPath;" + TYPE + "L" + INPUTS + "ExpansionTrace;" + CONTEXT

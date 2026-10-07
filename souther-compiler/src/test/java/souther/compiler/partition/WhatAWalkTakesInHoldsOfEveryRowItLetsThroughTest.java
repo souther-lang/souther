@@ -95,7 +95,7 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         souther.compiler.inputs.InputDomain inputs =
                 compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
-        InputReads reads = InputReads.ofParameters(inputs.parameterReads(),
+        InputReads reads = InputReads.ofParameters(inputs.parameterReads(), inputs.declared(rules),
                 checked.elementBindings().get(behavior));
         return ReachingCuts.stating(Condition.of(body, reads, rules.symbols(), rules.newtypes(),
                 new ConditionNumbering(module, behavior)), inputs.reading(rules), holding);

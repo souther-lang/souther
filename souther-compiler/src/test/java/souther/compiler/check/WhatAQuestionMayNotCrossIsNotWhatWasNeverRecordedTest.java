@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
@@ -62,7 +63,8 @@ class WhatAQuestionMayNotCrossIsNotWhatWasNeverRecordedTest {
                 Map.of(ELEMENT, List.of(read("xs", CONTAINER))),
                 Map.of(CONTAINER, read("held", HELD)),
                 provenance, Map.of());
-        return InputReads.ofParameters(Map.of(HELD, "held", MADE_FROM, "made"), elements);
+        return InputReads.ofParameters(Map.of(HELD, "held", MADE_FROM, "made"),
+                DeclaredInput.NONE, elements);
     }
 
     private static ElementProvenance madeFrom() {

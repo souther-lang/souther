@@ -240,7 +240,7 @@ public final class CoverageRead {
         RuleReadingSource source = input.rules();
         Symbols symbols = source.symbols();
         InputReads reads = InputReads.ofParameters(input.domain().parameterReads(),
-                ElementBindings.NONE);
+                input.declared(), ElementBindings.NONE);
         // One reading of this body's comparisons, handed to both readers of them. What a way is
         // admitted by and what a decision is said of are two questions about one comparison, and
         // each reading it for itself is how they came to be about different numbers.

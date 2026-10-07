@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.ElementBindings;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
@@ -45,6 +46,11 @@ import java.util.Set;
  * about the location it stands at are two questions, asked of two values, meeting only where a
  * reader puts one answer to the other.
  *
+ * <p>What is reachable is what the declaration puts at a path ({@link DeclaredInput}), which is no
+ * reading and is there before one. A path is spelled the way the declaration names the location:
+ * an arm selecting the one case the declaration leaves a value narrows nothing, and written as a
+ * narrowing it would be a second spelling of a location the reading holds under the first.
+ *
  * <p>Which is a difference in how long each of them lives, and not only in what each of them is
  * about. What is here is a function of the program point — the bindings gone under, the arm gone
  * into — and changes at every step of a walk. The reading is one value for a whole analysis. Held
@@ -64,11 +70,14 @@ public final class InputReads {
 
     private final BindingEnvironment names;
     private final Map<BindingId, java.util.List<Denotation>> alternatives;
+    private final DeclaredInput declared;
 
     private InputReads(BindingEnvironment names,
-                       Map<BindingId, java.util.List<Denotation>> alternatives) {
+                       Map<BindingId, java.util.List<Denotation>> alternatives,
+                       DeclaredInput declared) {
         this.names = names;
         this.alternatives = Map.copyOf(alternatives);
+        this.declared = declared;
     }
 
     /**
@@ -79,14 +88,18 @@ public final class InputReads {
      * would put the reading back inside the walk to be reached for later, so what comes in is the
      * part this uses.
      *
+     * <p>{@code declared} is what the declaration puts under those parameters, which is what says
+     * how a position the body narrows is spelled ({@link DeclaredInput}). Given
+     * {@link DeclaredInput#NONE}, every arm narrows the position it matched.
+     *
      * <p>{@code elements} is what the operations that handed their closures the contents of
      * containers were read to say, since the tree this walks has none of them left in it. Given
      * nothing, every name inside a closure names no position.
      */
     public static InputReads ofParameters(Map<BindingId, String> parameters,
-                                          souther.compiler.check.ElementBindings elements) {
+                                          DeclaredInput declared, ElementBindings elements) {
         return new InputReads(new BindingEnvironment(BindingEnvironment.rooted(parameters),
-                Map.of(), elements, false), Map.of());
+                Map.of(), elements, false), Map.of(), declared);
     }
 
     /**
@@ -104,9 +117,9 @@ public final class InputReads {
      * be reported as this compiler failing to expand something.
      */
     public static InputReads ofParametersWhereCallsStand(
-            Map<BindingId, String> parameters, souther.compiler.check.ElementBindings elements) {
+            Map<BindingId, String> parameters, DeclaredInput declared, ElementBindings elements) {
         return new InputReads(new BindingEnvironment(BindingEnvironment.rooted(parameters),
-                Map.of(), elements, true), Map.of());
+                Map.of(), elements, true), Map.of(), declared);
     }
 
     /**
@@ -116,9 +129,10 @@ public final class InputReads {
      * <p>Which is why the bindings are handed in: a behavior nothing implements binds its
      * parameters nowhere a body could, and its clauses still name them.
      */
-    public static InputReads ofWhatIsDeclared(Map<BindingId, String> roots) {
+    public static InputReads ofWhatIsDeclared(Map<BindingId, String> roots,
+                                              DeclaredInput declared) {
         return new InputReads(new BindingEnvironment(BindingEnvironment.rooted(roots), Map.of(),
-                souther.compiler.check.ElementBindings.NONE, true), Map.of());
+                ElementBindings.NONE, true), Map.of(), declared);
     }
 
     /**
@@ -134,9 +148,10 @@ public final class InputReads {
      * reading of what a declaration wrote: that is the representation a declaration's own rules are
      * held in, and a clause read in the one that runs would have the calls in it gone.
      */
-    public static InputReads ofADeclaredClause(Map<BindingId, TermPath> roots) {
+    public static InputReads ofADeclaredClause(Map<BindingId, TermPath> roots,
+                                               DeclaredInput declared) {
         return new InputReads(new BindingEnvironment(roots, Map.of(),
-                souther.compiler.check.ElementBindings.NONE, true), Map.of());
+                ElementBindings.NONE, true), Map.of(), declared);
     }
 
     /**
@@ -148,8 +163,9 @@ public final class InputReads {
      * reading does with one is a rule it keeps whatever a body can be written to say.
      */
     static InputReads written(Map<BindingId, TermPath> roots, Map<BindingId, Core> bound,
-                              souther.compiler.check.ElementBindings elements) {
-        return new InputReads(new BindingEnvironment(roots, bound, elements, false), Map.of());
+                              ElementBindings elements) {
+        return new InputReads(new BindingEnvironment(roots, bound, elements, false), Map.of(),
+                DeclaredInput.NONE);
     }
 
     /**
@@ -210,18 +226,32 @@ public final class InputReads {
         if (standing == null) {
             return admitting(scrutinee, arm, symbols, newtypes);
         }
-        TermPath narrowed = standing.refine(narrowing);
+        // The case is relative to the type the scrutinee stands as here, and the value may have been
+        // handed in as a wider one than it is. What the declaration puts at the position says
+        // whether the arm narrows it, finds it already the case, or finds it never one.
+        TermPath narrowed = switch (declared.taking(standing, narrowing)) {
+            case DeclaredInput.Taking.Narrows(TermPath to) -> to;
+            case DeclaredInput.Taking.Implied _ -> standing;
+            // No value at the position is of the case, so the name under the arm stands at no
+            // position of it.
+            case DeclaredInput.Taking.Excluded _ -> null;
+        };
+        if (narrowed == null) {
+            return admitting(scrutinee, arm, symbols, newtypes);
+        }
         // And nothing is asked of the reading. What this answers is which location the arm's name
-        // stands for, which the arm and the scrutinee's path settle between them: the value that was
-        // matched, read as the case the arm selects. Whether a row is ever written there — whether
-        // the position exists, whether the rules leave the case anything — is a question about the
-        // model, and it is {@link InputDomain}'s to answer about the path this produced.
+        // stands for, which the arm, the scrutinee's path and the declaration settle between them:
+        // the value that was matched, read as the case the arm selects. Whether a row is ever
+        // written there — whether the position exists, whether the rules leave the case anything —
+        // is a question about the model, and it is {@link InputDomain}'s to answer about the path
+        // this produced.
         //
         // Held together, the two could not both be answered: the reading has to be built before it
         // can be asked, and it cannot be built without knowing which paths the body names. Asking
         // only the first here is what breaks that circle, and the cost of asking it alone is a name
         // that stands for a place no row reaches — which the reading refuses when it is asked.
-        return new InputReads(names.naming(arm.binder().binding(), narrowed), alternatives);
+        return new InputReads(names.naming(arm.binder().binding(), narrowed), alternatives,
+                declared);
     }
 
     /**
@@ -274,7 +304,7 @@ public final class InputReads {
         }
         Map<BindingId, java.util.List<Denotation>> wider = new LinkedHashMap<>(alternatives);
         wider.put(arm.binder().binding(), left);
-        return new InputReads(names, wider);
+        return new InputReads(names, wider, declared);
     }
 
     /**
@@ -360,7 +390,7 @@ public final class InputReads {
     /** The same, inside what {@code binder} binds. */
     public InputReads and(Core.Binder binder, Core value) {
         BindingEnvironment inside = names.inside(binder, value);
-        return inside == names ? this : new InputReads(inside, alternatives);
+        return inside == names ? this : new InputReads(inside, alternatives, declared);
     }
 
     /** Where {@code e} stands, read here ({@link PathResolution}). */
@@ -563,7 +593,7 @@ public final class InputReads {
      * reading that took either would have written out a set missing the other half.
      *
      * <p><b>Followed with this environment and never with the body's.</b> What a binding holds is
-     * also recorded over the whole body ({@link souther.compiler.check.ElementBindings#boundTo}), and
+     * also recorded over the whole body ({@link ElementBindings#boundTo}), and
      * reading a container out of that would give a value with no environment to read it in — after
      * which the environment each element is read in would be whichever one the caller had in hand.
      * Where the way to the list runs through a binding this walk has not passed, the elements are
@@ -676,16 +706,18 @@ public final class InputReads {
     public boolean equals(Object other) {
         return this == other
                 || (other instanceof InputReads that && names.equals(that.names)
-                        && alternatives.equals(that.alternatives));
+                        && alternatives.equals(that.alternatives)
+                        && declared.equals(that.declared));
     }
 
     @Override
     public int hashCode() {
-        return names.hashCode() * 31 + alternatives.hashCode();
+        return (names.hashCode() * 31 + alternatives.hashCode()) * 31 + declared.hashCode();
     }
 
     @Override
     public String toString() {
-        return "InputReads[names=" + names + ", alternatives=" + alternatives + "]";
+        return "InputReads[names=" + names + ", alternatives=" + alternatives + ", declared="
+                + declared + "]";
     }
 }

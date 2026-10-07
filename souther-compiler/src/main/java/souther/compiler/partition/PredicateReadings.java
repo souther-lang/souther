@@ -11,6 +11,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.ValueTemplates;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
+import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 
@@ -147,7 +148,8 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
         if (body != null) {
             Builds builds = new Builds(body.templates());
             walk(body.core(), behavior, read,
-                    InputReads.ofParametersWhereCallsStand(parameters, elements),
+                    InputReads.ofParametersWhereCallsStand(parameters, read.declared(),
+                            elements),
                     LiveFlow.of(body.core()), true, predicates, reaches, statedAt, builds);
             // What each value the body builds states, read once and where nothing of the
             // behavior's inputs is in force: a value takes none and names none.
@@ -155,7 +157,8 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
                 Boolean live = builds.read().get(template);
                 if (live != null) {
                     walk(template, behavior, read,
-                            InputReads.ofParametersWhereCallsStand(Map.of(), elements),
+                            InputReads.ofParametersWhereCallsStand(Map.of(), DeclaredInput.NONE,
+                                    elements),
                             LiveFlow.of(template), live, predicates, reaches, statedAt, builds);
                 }
             }
@@ -171,7 +174,7 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
         // once ({@link ClauseStatements}), so what this walk does is read each of them.
         if (stated != null && !stated.isEmpty()) {
             InputReads reads = InputReads.ofWhatIsDeclared(
-                    EnsuresThresholds.rootsOf(stated.params()));
+                    EnsuresThresholds.rootsOf(stated.params()), read.declared());
             for (StatedContract.StatedRule rule : stated.rules()) {
                 for (StatedContract.Conjunct conjunct : rule.conjuncts()) {
                     Core one = conjunct.stated().orNull();

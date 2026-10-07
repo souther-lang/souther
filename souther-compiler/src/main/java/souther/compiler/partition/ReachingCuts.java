@@ -4,6 +4,7 @@ import souther.compiler.carrier.Lookup;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -169,7 +170,14 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison)
             return new OnTheWay.Declined(met, at,
                     new OnTheWay.Why.ForkArmNotReadAsANarrowing());
         }
-        return new OnTheWay.Narrowed(at, scrutinee.refine(narrowing));
+        // The case is relative to the type the scrutinee stands as, and the value there may be
+        // narrower: what the declaration puts at the position says whether reaching the arm
+        // narrows it, or comes out one way for every row because the declaration already decided.
+        return switch (inputs.declared(ruleSource).taking(scrutinee, narrowing)) {
+            case DeclaredInput.Taking.Narrows(TermPath to) -> new OnTheWay.Narrowed(at, to);
+            case DeclaredInput.Taking.Implied _ -> new OnTheWay.Settled(met, at, true);
+            case DeclaredInput.Taking.Excluded _ -> new OnTheWay.Settled(met, at, false);
+        };
     }
 
     /**

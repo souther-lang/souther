@@ -113,7 +113,8 @@ public final class EnsuresThresholds {
         if (stated == null || stated.isEmpty()) {
             return Clauses.NONE;
         }
-        InputReads reads = InputReads.ofWhatIsDeclared(rootsOf(stated.params()));
+        InputReads reads = InputReads.ofWhatIsDeclared(rootsOf(stated.params()),
+                read.declared());
         Drawn drawn = new Drawn(stated.behavior().name(), new ArrayList<>(), new ArrayList<>(),
                 new RulesWithNoLine.Gathered());
         for (StatedContract.StatedRule rule : stated.rules()) {
