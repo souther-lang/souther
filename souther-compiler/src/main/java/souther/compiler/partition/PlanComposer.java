@@ -140,11 +140,20 @@ final class PlanComposer {
                 instanceof Shape.Container container)) {
             return null;
         }
+        // The key the plan put the element under, where it put it under one: the first value held
+        // is the element, so the first entry is that key's.
+        FixtureTemplate key = null;
+        if (plan.key().isPresent()) {
+            key = compose(plan.key().get(), values, reading);
+            if (key == null) {
+                return null;
+            }
+        }
         FixtureTemplate collection = switch (container) {
-            case Shape.Sequence carrier ->
-                    Witnesses.holding(carrier, holding, keptOut, plan.holds(), reading);
+            case Shape.Sequence carrier -> key != null ? null
+                    : Witnesses.holding(carrier, holding, keptOut, plan.holds(), reading);
             case Shape.Mapping carrier ->
-                    Witnesses.holding(carrier, holding, keptOut, plan.holds(), reading);
+                    Witnesses.holding(carrier, holding, keptOut, key, plan.holds(), reading);
         };
         if (collection == null) {
             return null;

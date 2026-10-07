@@ -17,8 +17,9 @@ import java.util.Set;
 
 /**
  * Which library operations hand a closure the contents of a container, and where: the closure is
- * argument {@code closureArg}, the value it receives is closure parameter {@code elementParam}, and
- * the container it comes from is argument {@code containerArg}.
+ * argument {@code closureArg}, the value it receives is closure parameter {@code elementParam}, the
+ * container it comes from is argument {@code containerArg}, and where the container is a map, the
+ * key the value is filed under arrives on closure parameter {@code keyParam}.
  *
  * <p>Two checks read this and neither states it. The totality check credits a value a closure is
  * handed as a sub-term of the container, so recursing on it is structural; the invariant-discharge
@@ -49,8 +50,10 @@ final class Combinators {
     }
 
     /** What a call hands its closure: the argument that takes the function, the block that argument
-     * is, the parameter the element arrives on, and the container it comes from. */
-    record Handed(Core closure, Core.Block step, Core.Binder element, Core container) {}
+     * is, the parameter the element arrives on, the container it comes from, and the parameter the
+     * key it is filed under arrives on — null where the closure is handed no key. */
+    record Handed(Core closure, Core.Block step, Core.Binder element, Core container,
+                  Core.Binder key) {}
 
     /** The same, off the tree an author wrote, where a closure is the block as written. */
     record Written(Hir.Block step, Hir.Binder element, Hir.Expr container) {}
@@ -97,9 +100,13 @@ final class Combinators {
         }
         Core closure = args.get(rule.closureArg());
         Core.Block step = blockOf.apply(closure);
-        return step == null || rule.elementParam() >= step.params().size() ? null
-                : new Handed(closure, step, step.params().get(rule.elementParam()),
-                        args.get(rule.containerArg()));
+        if (step == null || rule.elementParam() >= step.params().size()
+                || rule.keyParam() >= step.params().size()) {
+            return null;
+        }
+        return new Handed(closure, step, step.params().get(rule.elementParam()),
+                args.get(rule.containerArg()),
+                rule.handsAKey() ? step.params().get(rule.keyParam()) : null);
     }
 
     /**
@@ -231,8 +238,38 @@ final class Combinators {
                             + " contents of more than one of its arguments, or on more than one"
                             + " parameter, so which is not read off its signature");
                 }
-                found = new Combinator(closureArg, p, c);
+                found = new Combinator(closureArg, p, c,
+                        keyParam(qualified, Type.keyOf(params.get(c)), closureParams, p));
             }
+        }
+        return found;
+    }
+
+    /**
+     * The parameter of the closure the container's key arrives on, or {@link Combinator#NO_KEY}
+     * where the container files what it holds under none or the closure takes no parameter of that
+     * type.
+     *
+     * <p>Read the way the element is: the parameter whose type is the type of the key. One that
+     * could be either the key or the value — a map whose two types are one type variable — is not
+     * read off the signature, and is refused rather than answered with whichever came first.
+     */
+    private static int keyParam(ValueName.Stdlib.Operation qualified, Type key,
+                                List<Type> closureParams, int elementParam) {
+        if (key == null) {
+            return Combinator.NO_KEY;
+        }
+        int found = Combinator.NO_KEY;
+        for (int q = 0; q < closureParams.size(); q++) {
+            if (!key.equals(closureParams.get(q))) {
+                continue;
+            }
+            if (q == elementParam || found != Combinator.NO_KEY) {
+                throw new IllegalStateException(qualified + " hands its closure a key on a"
+                        + " parameter that could as well be another, so which is not read off its"
+                        + " signature");
+            }
+            found = q;
         }
         return found;
     }

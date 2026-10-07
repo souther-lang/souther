@@ -120,7 +120,7 @@ final class BindingEnvironment {
         if (root != null) {
             return new BindingRole.Root(root);
         }
-        List<Core> containers = elements.containersOf(binding);
+        List<HeldIn> containers = elements.containersOf(binding);
         if (containers.size() == 1) {
             return new BindingRole.Element(containers.get(0));
         }

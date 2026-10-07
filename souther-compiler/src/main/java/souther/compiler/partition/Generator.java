@@ -4052,8 +4052,7 @@ public final class Generator {
             Map<TermPath, FixtureTemplate> written = new LinkedHashMap<>();
             written.put(TermPath.of(subject.parameters().get(p)), way);
             for (Moves leaf : leaves) {
-                if (leaf.path.steps().stream()
-                        .noneMatch(step -> step instanceof TermPath.Step.Element)) {
+                if (!leaf.path.insideAContainer()) {
                     written.put(leaf.path, leaf.chosen);
                 }
             }
@@ -4149,7 +4148,9 @@ public final class Generator {
                         }
                         yield at.elements;
                     }
-                    case TermPath.Step.Refine _ -> null;
+                    // A value moved under every key of a map is one key written as many times, and
+                    // the map those entries make holds one of them.
+                    case TermPath.Step.Key _, TermPath.Step.Refine _ -> null;
                 };
                 if (at == null) {
                     return false;

@@ -180,6 +180,9 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
         if (type == BindingId.class) {
             return new BindingId(new BindingOwner.OfValue("example", "f"), 0);
         }
+        if (type.isEnum()) {
+            return type.getEnumConstants()[0];
+        }
         throw new IllegalStateException("nothing here makes a " + type.getName()
                 + ", so an answer carrying one would be held to nothing");
     }

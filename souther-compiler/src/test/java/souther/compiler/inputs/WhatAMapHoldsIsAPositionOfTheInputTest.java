@@ -48,6 +48,32 @@ class WhatAMapHoldsIsAPositionOfTheInputTest {
         assertEquals(Type.INT, values.type(), "and it is what the map holds, not its key");
     }
 
+    private static final TermPath KEYS = TermPath.of("u").then("counts").key();
+
+    /** The keys are a position of their own, holding what the map is keyed by. */
+    @Test
+    void theKeysAreAPositionBesideTheValues() {
+        InputDomain inputs = read().inputs();
+        Position keys = inputs.at(KEYS);
+        assertNotNull(keys, "the walk read a position at the map's keys");
+        assertEquals(Type.STRING, keys.type(), "and it is what the map is keyed by");
+        assertEquals(Type.INT, inputs.at(VALUES).type(),
+                "beside the values, which stay what the map holds");
+    }
+
+    /**
+     * The declarations say the same of the two paths, where a walk that stopped above them leaves
+     * nothing else to say it: the keys are what the map is keyed by and the values are what it
+     * holds.
+     */
+    @Test
+    void theDeclarationsPutTheKeyTypeAtTheKeys() {
+        Read read = read();
+        DeclaredInput declared = DeclaredInput.of(read.sig(), read.rules());
+        assertEquals(Type.STRING, declared.typeAt(KEYS), "a key is what the map is keyed by");
+        assertEquals(Type.INT, declared.typeAt(VALUES), "and a value is what it holds");
+    }
+
     /** And a number there is one this input's rules can name, so it is asked about like any. */
     @Test
     void aNumberThereIsAskedAboutLikeAnyOther() {
@@ -57,7 +83,7 @@ class WhatAMapHoldsIsAPositionOfTheInputTest {
                 "an Int a map holds is measured on the order every Int is");
     }
 
-    private record Read(InputDomain inputs, RuleReadingSource rules) {}
+    private record Read(InputDomain inputs, RuleReadingSource rules, DeclaredSig sig) {}
 
     private static Read read() {
         Compilation compilation = Compilation.ofSource(A_MAP_BESIDE_A_FIELD, "Main");
@@ -67,6 +93,7 @@ class WhatAMapHoldsIsAPositionOfTheInputTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return new Read(InputDomain.of(sigs.get("take"),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES)), rules);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES)), rules,
+                sigs.get("take"));
     }
 }

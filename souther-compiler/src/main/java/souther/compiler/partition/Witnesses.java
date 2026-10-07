@@ -405,16 +405,37 @@ final class Witnesses {
      * <p>What is asked of a map's element is asked of its values, which may repeat the way a list's
      * elements may. The keys are what keeps the entries apart, and they are the key type's distinct
      * values, the same ones a map built to a size is keyed by ({@link #ofMapping}).
+     *
+     * <p>{@code key}, where there is one, is the key the first of {@code holding} is filed under —
+     * a class was put at the map's keys, and the entry holding the element is the entry it is about.
+     * Every other entry is keyed apart from it, since a map holds one entry under a key.
      */
     static FixtureTemplate holding(Shape.Mapping map,
                                    List<FixtureTemplate> holding, List<FixtureTemplate> keptOut,
-                                   DeclaredBounds.CountRange holds, RuleReadingContext reading) {
+                                   FixtureTemplate key, DeclaredBounds.CountRange holds,
+                                   RuleReadingContext reading) {
         List<FixtureTemplate> values =
                 elementsHolding(map.value(), true, holding, keptOut, holds, reading);
         if (values == null) {
             return null;
         }
-        List<FixtureTemplate> keys = distinctValuesOf(map.key(), values.size(), reading, Set.of());
+        List<FixtureTemplate> keys = new ArrayList<>();
+        Set<String> written = new LinkedHashSet<>();
+        if (key != null) {
+            keys.add(key);
+            written.add(key.text());
+        }
+        // One more than is needed, so that the key already chosen being one of them still leaves
+        // enough beside it.
+        for (FixtureTemplate each
+                : distinctValuesOf(map.key(), values.size() + keys.size(), reading, Set.of())) {
+            if (keys.size() == values.size()) {
+                break;
+            }
+            if (written.add(each.text())) {
+                keys.add(each);
+            }
+        }
         if (keys.size() < values.size()) {
             return null;
         }

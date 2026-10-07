@@ -346,25 +346,32 @@ final class InputPath {
      * a walk over a list written in the body states the caller's rule about the input on the first
      * run whatever the second does.
      */
-    private PathResolution oneOfTheElementsOf(BindingId binding, List<Core> containers,
+    private PathResolution oneOfTheElementsOf(BindingId binding, List<HeldIn> containers,
                                               BindingEnvironment names) {
         List<PathResolution> each = new ArrayList<>();
-        for (Core container : containers) {
-            each.add(trail.through(binding, () -> containerPath(container, names))
-                    .deeper(TermPath::element));
+        for (HeldIn held : containers) {
+            each.add(at(binding, held, names));
         }
         return PathResolution.anyOf(each);
     }
 
     private PathResolution elementOf(BindingId binding, BindingEnvironment names) {
-        if (!(names.roleOf(binding) instanceof BindingRole.Element(var container))) {
+        if (!(names.roleOf(binding) instanceof BindingRole.Element(var held))) {
             return new PathResolution.NotAPosition();
         }
-        // The container names no position of this behavior's input — it is what another operation
-        // answered, or something this does not read — so neither does an element of it. Where a
-        // reading of provenance goes on from there is not this walk's.
-        return trail.through(binding, () -> containerPath(container, names))
-                .deeper(TermPath::element);
+        return at(binding, held, names);
+    }
+
+    /**
+     * Where the part {@code held} names of its container stands.
+     *
+     * <p>The container names no position of this behavior's input — it is what another operation
+     * answered, or something this does not read — so neither does anything it holds. Where a reading
+     * of provenance goes on from there is not this walk's.
+     */
+    private PathResolution at(BindingId binding, HeldIn held, BindingEnvironment names) {
+        return trail.through(binding, () -> containerPath(held.container(), held.part(), names))
+                .deeper(held.part()::of);
     }
 
     /**
@@ -381,14 +388,14 @@ final class InputPath {
      * at a position whose values are not the ones the rule is about, which an author cannot tell
      * from a line their model states.
      */
-    private PathResolution containerPath(Core e, BindingEnvironment names) {
+    private PathResolution containerPath(Core e, HeldIn.Part part, BindingEnvironment names) {
         // And where the expression names no position, its elements may still be at one, so the ways
         // an operation's answer holds them are tried beside it.
         return switch (named(e, names)) {
             case PathResolution.At at -> at;
             // Each is a way to the same place, and neither is asked unless the other came back
             // without it, so whichever reached a position is the answer.
-            case PathResolution.NotAPosition _ -> elementsOf(e, names);
+            case PathResolution.NotAPosition _ -> elementsOf(e, part, names);
             // A container standing at one of several places is where its elements are, and there
             // are as many of those as there are of it. Read further for one of them, the elements
             // would come back at a single place while the container they are of stands at more.
@@ -396,9 +403,17 @@ final class InputPath {
         };
     }
 
-    /** The ways an operation's answer holds the elements of what it was given, and no position
-     *  where the expression is not one of them. */
-    private PathResolution elementsOf(Core standing, BindingEnvironment names) {
+    /**
+     * The ways an operation's answer holds the elements of what it was given, and no position where
+     * the expression is not one of them.
+     *
+     * <p>{@code part} is which of what the answer holds is being followed, and a key is followed
+     * through no operation. What the library says an answer holds is its elements; whether the
+     * argument they came from files them under the same keys — or under any, since a list files
+     * nothing — it does not say, and a key followed on the strength of the elements would land at a
+     * place no key may stand.
+     */
+    private PathResolution elementsOf(Core standing, HeldIn.Part part, BindingEnvironment names) {
         // Which elements a value holds does not turn on the type it stands as.
         Core e = Core.withoutStanding(standing);
         if (e instanceof Core.Read r) {
@@ -406,9 +421,12 @@ final class InputPath {
                 // Through a binding an expansion wrote, where the operation it removed answered the
                 // elements it was given. The operation is gone from this tree, so what says so was
                 // written where it still stood.
-                case ElementStep.Through(var same) -> trail.through(r.binding(),
-                        () -> containerPath(new Core.Read(r.name(), same, r.type(), r.pos()),
-                                names));
+                // The edge says the elements are the same and says nothing about keys: what the
+                // removed operation was given may have been a list, which files nothing under one.
+                case ElementStep.Through(var same) -> part == HeldIn.Part.KEY
+                        ? new PathResolution.NotAPosition()
+                        : trail.through(r.binding(), () -> containerPath(
+                                new Core.Read(r.name(), same, r.type(), r.pos()), part, names));
                 // The question this walk is asking does not cross what was written here, which is
                 // an answer and not a road not taken. What the binding holds is what the walk on
                 // the other side of that edge made, so reading it is the crossing said another way.
@@ -420,7 +438,7 @@ final class InputPath {
                 case ElementStep.NoEdge _ -> {
                     Core held = names.heldAnywhereBy(r.binding());
                     yield held == null ? new PathResolution.NotAPosition()
-                            : trail.through(r.binding(), () -> containerPath(held, names));
+                            : trail.through(r.binding(), () -> containerPath(held, part, names));
                 }
             };
         }
@@ -459,7 +477,8 @@ final class InputPath {
         // The call may be the runnable tree's and not a kept one, so its argument count is checked
         // here rather than by a kept call's own constructor.
         int argument = which == null ? -1 : CallArguments.positionOf(which, operation);
-        return argument < 0 || argument >= args.size() ? new PathResolution.NotAPosition()
-                : containerPath(args.get(argument), names);
+        return argument < 0 || argument >= args.size() || part == HeldIn.Part.KEY
+                ? new PathResolution.NotAPosition()
+                : containerPath(args.get(argument), part, names);
     }
 }

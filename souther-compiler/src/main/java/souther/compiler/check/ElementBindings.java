@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.ElementProjection;
+import souther.compiler.inputs.HeldIn;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ValueName;
 
@@ -14,7 +15,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Which of a body's bindings hold an element of a container, and of which container.
+ * Which of a body's bindings hold an element of a container, or the key a map files one under, and
+ * of which container.
  *
  * <p>A fact about the program and not about any reader of it. What a standard-library operation
  * hands its closure is stated by the library's own signature ({@link Combinators}); this is that
@@ -43,7 +45,7 @@ import java.util.Set;
  * container is not always one — it can be what another operation answered, which is where a reading
  * of provenance goes on rather than stopping ({@link ElementLineage}).
  */
-public record ElementBindings(Map<BindingId, List<Core>> containers,
+public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                               Map<BindingId, Core> held,
                               ElementProvenance provenance,
                               Map<BindingId, ElementProjection> projected,
@@ -64,7 +66,7 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
     }
 
     /** Of a body that builds no value. */
-    public ElementBindings(Map<BindingId, List<Core>> containers, Map<BindingId, Core> held,
+    public ElementBindings(Map<BindingId, List<HeldIn>> containers, Map<BindingId, Core> held,
                            ElementProvenance provenance,
                            Map<BindingId, ElementProjection> projected) {
         this(containers, held, provenance, projected, ValueTemplates.NONE);
@@ -109,16 +111,16 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
     }
 
     /**
-     * The containers an element at {@code binding} was taken from, empty where the binding holds
-     * something else.
+     * The containers what is at {@code binding} was taken from, each with the part of it the binding
+     * was handed, empty where the binding holds something else.
      *
-     * <p>More than one where one block was handed to more than one walk: the binding takes an
-     * element of a different container on each run, which is a fact about the model and not a
-     * reading that stopped. Answered as none, a name that plainly holds an element would read as a
-     * name from nowhere; answered as whichever came first, a rule inside the block would be filed
-     * at a container it says nothing about.
+     * <p>More than one where one block was handed to more than one walk: the binding takes from a
+     * different container on each run, which is a fact about the model and not a reading that
+     * stopped. Answered as none, a name that plainly holds an element would read as a name from
+     * nowhere; answered as whichever came first, a rule inside the block would be filed at a
+     * container it says nothing about.
      */
-    public List<Core> containersOf(BindingId binding) {
+    public List<HeldIn> containersOf(BindingId binding) {
         return binding == null ? List.of() : containers.getOrDefault(binding, List.of());
     }
 
@@ -161,7 +163,7 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
 
     private static ElementBindings of(Core body, List<Core> templates, ValueTemplates values,
                                       ElementProvenance provenance, DeclarationNewtypes newtypes) {
-        Map<BindingId, List<Core>> found = new LinkedHashMap<>();
+        Map<BindingId, List<HeldIn>> found = new LinkedHashMap<>();
         Map<BindingId, Core> held = new LinkedHashMap<>();
         Map<BindingId, Core> answered = new LinkedHashMap<>();
         Map<BindingId, Core> standing = new LinkedHashMap<>();
@@ -212,7 +214,7 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
      * about, so the source is read and agreed with rather than discarded.
      */
     private static Map<BindingId, ElementProjection> projections(
-            Map<BindingId, Core> answered, Map<BindingId, List<Core>> containers,
+            Map<BindingId, Core> answered, Map<BindingId, List<HeldIn>> containers,
             Map<BindingId, Core> held, ElementProvenance provenance,
             DeclarationNewtypes newtypes) {
         Map<BindingId, ElementProjection> out = new LinkedHashMap<>();
@@ -225,10 +227,11 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
             // Of the one container the walk is over. A binding taking elements of more than one
             // has no one walk for a projection to be of, and which of them this answer is a place
             // in is the very thing that could not be worked out.
-            List<Core> from =
+            List<HeldIn> from =
                     containers.getOrDefault(read.binding(), List.of());
-            if (from.size() != 1
-                    || !readsWhatIsHeldBy(from.get(0), provenance.projectedFrom(parameter), held)) {
+            if (from.size() != 1 || from.get(0).part() != HeldIn.Part.ELEMENT
+                    || !readsWhatIsHeldBy(from.get(0).container(),
+                            provenance.projectedFrom(parameter), held)) {
                 return;
             }
             ElementProjection projected =
@@ -280,7 +283,7 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
         return false;
     }
 
-    private static void walk(Core e, Map<BindingId, List<Core>> found,
+    private static void walk(Core e, Map<BindingId, List<HeldIn>> found,
                              Map<BindingId, Core> held,
                              ElementProvenance provenance, Map<BindingId, Core> answered,
                              Map<BindingId, Core> standing, ValueTemplates values) {
@@ -331,25 +334,44 @@ public record ElementBindings(Map<BindingId, List<Core>> containers,
      */
     private static void handed(ValueName operation,
                                List<Core> args,
-                               Map<BindingId, List<Core>> found,
+                               Map<BindingId, List<HeldIn>> found,
                                Map<BindingId, Core> standing, Map<BindingId, Core> held) {
         Combinators.Handed handed = Combinators.handedTo(operation, args,
                 closure -> blockOf(closure, held));
-        if (handed == null || handed.element().binding() == null) {
+        if (handed == null) {
+            return;
+        }
+        // The key a map files the element under is handed beside it, and is a part of the map of
+        // its own. Nothing below is about a key: what is licensed per element is a run's answer for
+        // the element.
+        if (handed.key() != null && handed.key().binding() != null) {
+            takes(found, handed.key().binding(),
+                    new HeldIn(handed.container(), HeldIn.Part.KEY));
+        }
+        if (handed.element().binding() == null) {
             return;
         }
         BindingId element = handed.element().binding();
-        // The nearest binding of a name stands, as everywhere else: a body binding one twice has
-        // two bindings, and each is answered where it is. One closure handed to two calls is one
-        // binding taking elements of two containers, and both are kept — which of them a run is in
-        // is what the binding cannot say, and saying neither would lose the element as well.
-        List<Core> from =
-                found.computeIfAbsent(element, _ -> new ArrayList<>());
-        if (from.stream().noneMatch(each -> each == handed.container())) {
-            from.add(handed.container());
-        }
+        takes(found, element, new HeldIn(handed.container(), HeldIn.Part.ELEMENT));
         if (standing != null && answersOnePerElementOf(operation, handed.container(), args)) {
             standing.putIfAbsent(element, handed.step().body());
+        }
+    }
+
+    /**
+     * That {@code binding} is handed {@code what}.
+     *
+     * <p>The nearest binding of a name stands, as everywhere else: a body binding one twice has two
+     * bindings, and each is answered where it is. One closure handed to two calls is one binding
+     * taking from two containers, and both are kept — which of them a run is in is what the binding
+     * cannot say, and saying neither would lose the element as well.
+     */
+    private static void takes(Map<BindingId, List<HeldIn>> found, BindingId binding,
+                              HeldIn what) {
+        List<HeldIn> from = found.computeIfAbsent(binding, _ -> new ArrayList<>());
+        if (from.stream().noneMatch(each -> each.container() == what.container()
+                && each.part() == what.part())) {
+            from.add(what);
         }
     }
 
