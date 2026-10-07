@@ -298,7 +298,7 @@ public final class InputReads {
             if (written == null) {
                 return this;
             }
-            if (arm.caseTypes().contains(written)) {
+            if (arm.pattern().takes(written)) {
                 left.add(each);
             }
         }
@@ -362,11 +362,11 @@ public final class InputReads {
         if (written == null) {
             return Optional.empty();
         }
-        if (arm.caseTypes().containsAll(written)) {
+        long taken = written.stream().filter(arm.pattern()::takes).count();
+        if (taken == written.size()) {
             return Optional.of(true);
         }
-        return written.stream().noneMatch(arm.caseTypes()::contains)
-                ? Optional.of(false) : Optional.empty();
+        return taken == 0 ? Optional.of(false) : Optional.empty();
     }
 
     /**

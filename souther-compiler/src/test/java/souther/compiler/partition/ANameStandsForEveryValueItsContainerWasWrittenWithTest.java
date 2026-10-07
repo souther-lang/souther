@@ -92,6 +92,21 @@ class ANameStandsForEveryValueItsContainerWasWrittenWithTest {
     }
 
     /**
+     * An arm on a case that is itself a sum admits the members that are cases under it.
+     *
+     * <p>{@code AtMost} is a {@code Bounded}, so the arm written {@code Bounded | Whatever} keeps
+     * it, and the arm under it that takes {@code AtMost} is left with that member alone.
+     */
+    @Test
+    void anArmOnASumOfCasesAdmitsTheMembersUnderIt() {
+        assertEquals("OneOf[g.AtMost]", standingOn("""
+                {
+                        let ks: List<Wide> = [ AtMost { threshold = 100000 }, Whatever ]
+                        if List.any((k) -> reachesWide(n, k), ks) then Yes else No
+                    }"""));
+    }
+
+    /**
      * A list written empty names no value, which is not a set of none.
      *
      * <p>A statement about every member of nothing holds whatever it says, so an empty set would be
@@ -132,6 +147,18 @@ class ANameStandsForEveryValueItsContainerWasWrittenWithTest {
                     match reason with
                         | AtMost { threshold } -> n >= threshold
                         | Whatever             -> false
+
+                data Below = { threshold: Int }
+                data Bounded = AtMost | Below
+                data Wide = Bounded | Whatever
+
+                let reachesWide (n: Int, wide: Wide): Bool =
+                    match wide with
+                        | Bounded | Whatever as w ->
+                            match w with
+                                | AtMost { threshold } -> n >= threshold
+                                | Below -> false
+                                | Whatever -> false
 
                 behavior classify : (n: Int) -> Yes | No
                 let classify (n) = %s
