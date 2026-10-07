@@ -112,7 +112,8 @@ class AnOptionalsClassesStateWhichNarrowingTheyAreTest {
         ConstructionPlan.Held many = assertInstanceOf(ConstructionPlan.Held.class,
                 root.under().get("many"),
                 "the list is built around what it was asked to hold, and not proposed whole");
-        ConstructionPlan.Exact exact = assertInstanceOf(ConstructionPlan.Exact.class, many.under(),
+        ConstructionPlan.Exact exact = assertInstanceOf(ConstructionPlan.Exact.class,
+                many.under().orElseThrow(),
                 "and what it holds is the value the narrowing settled");
         assertEquals(element.refine(Refinement.of(new Case.Presence(false))), exact.at());
         assertEquals("None", exact.exact().text());
@@ -137,7 +138,7 @@ class AnOptionalsClassesStateWhichNarrowingTheyAreTest {
                 ConstructionPlan.of(read.sig().inputs().get(0).type(), TermPath.of("query"),
                         read.rules().inners(), read.rules().symbols(), read.rules().kinds(),
                         read.rules().sums(),
-                        Set.of(), required,
+                        Set.of(), required, ConstructionPlan.ContentsComposed.NONE,
                         ONE_AT_LEAST),
                 "nothing here asks one position to be two things").plan();
     }

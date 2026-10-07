@@ -315,6 +315,8 @@ public final class OperationFacts {
             about("List", "contains", reads(at(1), ElementShape.PERMUTES)),
             about("Set", "contains", reads(at(1), ElementShape.PERMUTES)),
             about("Map", "containsKey", reads(at(1), ElementShape.PERMUTES)),
+            about("List", "contains", new OperationFact.AsksWhetherItsContainerHolds(at(0))),
+            about("Set", "contains", new OperationFact.AsksWhetherItsContainerHolds(at(0))),
 
             about("List", "allDistinctBy",
                     new OperationFact.IsStatedOverAProjection(new ArgumentRef.TheClosure())),

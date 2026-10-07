@@ -72,6 +72,12 @@ public enum CompositionBudget {
      *  nothing. What multiplies here is the cases of every sum the way down crosses. */
     WAYS_DOWN_TO_A_TOTAL_TRIED(8),
 
+    /** How many ways of writing the containers a row's conditions hand values to are tried, where
+     *  their names are spread by the cases of a sum. What multiplies here is the cases of every
+     *  sum the names cross, and each way is a row composed whole; a search reaching this goes no
+     *  further and is carried out with the figure. */
+    WAYS_UNDER_THE_CASES_TRIED(8),
+
     /** How many places along a line a pair is tried at, which is places the walk offered and not
      *  places it went past. What it costs to step over a place the anchored position may not stand
      *  at is {@link #PLACES_A_PAIR_IS_LOOKED_AT}. */
@@ -263,7 +269,8 @@ public enum CompositionBudget {
                     VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT;
             case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS, PAIRINGS_BUILT_AT_ONCE,
                  ELEMENTS_A_TOTAL_IS_SPREAD_OVER, SHAPES_OF_A_TOTAL_OFFERED,
-                 WAYS_DOWN_TO_A_TOTAL_TRIED, PLACES_A_PAIR_IS_TRIED_AT, STEPS_A_SEARCH_MAY_TAKE,
+                 WAYS_DOWN_TO_A_TOTAL_TRIED, WAYS_UNDER_THE_CASES_TRIED,
+                 PLACES_A_PAIR_IS_TRIED_AT, STEPS_A_SEARCH_MAY_TAKE,
                  ASSIGNMENTS_A_SEARCH_COMPOSES, VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                  LEVELS_A_SIDE_IS_ASKED_AT, TIMES_THE_RULES_ARE_ASKED_AGAIN,
                  VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT, VALUES_A_POINT_IS_TRIED_WITH,

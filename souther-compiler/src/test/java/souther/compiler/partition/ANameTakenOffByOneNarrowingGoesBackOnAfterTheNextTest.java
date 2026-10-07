@@ -118,7 +118,8 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
                         TermPath.of(read.parameter()), read.rules().inners(),
                         read.rules().symbols(),
                         read.rules().kinds(), read.rules().sums(), Set.of(),
-                        axis.requiring(cls), ONE_AT_LEAST),
+                        axis.requiring(cls), ConstructionPlan.ContentsComposed.NONE,
+                        ONE_AT_LEAST),
                 "nothing here asks one position to be two things").plan();
 
         return names(under(plan.root(), axis.path().refine(cls.selects())));
@@ -129,7 +130,8 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
         return switch (node) {
             case ConstructionPlan.Slot slot -> slot.at().equals(at) ? slot : null;
             case ConstructionPlan.Exact exact -> exact.at().equals(at) ? exact : null;
-            case ConstructionPlan.Held held -> under(held.under(), at);
+            case ConstructionPlan.Held held -> held.under().map(each -> under(each, at))
+                    .orElse(null);
             case ConstructionPlan.Built built -> built.under().values().stream()
                     .map(each -> under(each, at)).filter(each -> each != null).findFirst()
                     .orElse(null);

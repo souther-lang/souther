@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.coverage.ControlPlace;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -17,10 +18,23 @@ import java.util.Optional;
  * operation's answer asks of the value it was asked of — is the producer's, so what composes a row
  * against these composes it against {@link RowDemand}s whichever condition stopped the row.
  *
- * @param demand   what the row has to be for the condition to come out that way
- * @param reaching what the way to the condition asks of the row
+ * @param demands  what the row has to be for the condition to come out that way: every thing it
+ *                 asks, which for a point of a border is the point and for an operation's truth
+ *                 may be several at once — some element meeting a predicate, and what the
+ *                 predicate asks of the rest of the row beside it
+ * @param reaching what the way to the condition asks of the row — and, where a demand is one a
+ *                 condition makes ({@link RowDemand.OfACondition}), the condition itself, which a
+ *                 composer meets the way it meets every condition on the way
  */
-public record HeldOutcome(RowDemand demand, Reachability.Reaching reaching) {
+public record HeldOutcome(List<RowDemand> demands, Reachability.Reaching reaching) {
+
+    public HeldOutcome {
+        demands = List.copyOf(demands);
+        if (demands.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "a condition held to coming out a way asks something of the row");
+        }
+    }
 
     /**
      * What holds each condition of one behavior, asked for one condition at a time.

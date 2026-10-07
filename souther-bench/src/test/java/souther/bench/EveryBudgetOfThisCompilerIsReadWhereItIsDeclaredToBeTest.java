@@ -114,10 +114,24 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " and hands it over the same way"),
             Map.entry("souther.compiler.partition.Generator#inputsFrom("
                             + "Lsouther/compiler/partition/Generator$RowBeingComposed;I"
-                            + "Ljava/util/List;)"
+                            + "[Lsouther/compiler/partition/FixtureTemplate;"
+                            + "Ljava/util/Map;)"
                             + "Lsouther/compiler/partition/Generator$RowComposed;",
                     "says a baseline whose every written way was refused was written fewer ways"
                             + " than it had, under the figure the ways were cut at"),
+            // The ways under the cases of a sum a container is written: one walk hands them over,
+            // and says the figure where it stopped, which both roads a row is composed on carry
+            // with what the ways tried came to — rows passed over included.
+            Map.entry("souther.compiler.partition.ContentsAsked$UnderTheCases#tryEach("
+                            + "Ljava/util/function/Predicate;)"
+                            + "Lsouther/compiler/partition/ContentsAsked$UnderTheCases$Walked;",
+                    "stops handing over ways under the cases with some left, and answers that it"
+                            + " stopped at the figure rather than that every way was tried"),
+            Map.entry("souther.compiler.partition.ContentsAsked$UnderTheCases#foundOut("
+                            + "Lsouther/compiler/partition/ContentsAsked$UnderTheCases$Walked;)"
+                            + "Lsouther/compiler/partition/SearchShortfall;",
+                    "hands the figure over in what the walk found out about the ways it did not"
+                            + " try, where it stopped there"),
             Map.entry("souther.compiler.partition.LevelRealizer#<clinit>()V",
                     "the places a pair is tried at and the places of its line looked at to find"
                             + " them, the steps, the progression — and the re-reads,"
@@ -196,6 +210,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/check/SumCases;I"
                             + "Ljava/util/Set;"
                             + "Lsouther/compiler/inputs/Requirements;"
+                            + "Lsouther/compiler/partition/ConstructionPlan$ContentsComposed;"
                             + "Lsouther/compiler/partition/ConstructionPlan$HowManyItHolds;)"
                             + "Lsouther/compiler/partition/ConstructionPlan$NodeResult;",
                     "stops descending where a value is still made of positions, and says which"
