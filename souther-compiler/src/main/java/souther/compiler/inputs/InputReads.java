@@ -636,6 +636,18 @@ public final class InputReads {
     }
 
     /**
+     * What {@code e} stands as here: followed through every name that stands for one value and
+     * every binding whose body is the value, and read in the names in force where it ends.
+     *
+     * <p>Beside {@link #denotes}, which follows names alone. A helper the source called stands as
+     * the binding of its parameters around its body, so what a call to one stands as is past a
+     * binding a walk after names stops at.
+     */
+    public Denotation standing(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
+        return standing(new Denotation(e, this), symbols, newtypes, new HashSet<>());
+    }
+
+    /**
      * {@code from} followed through the steps that have one successor, as far as they go.
      *
      * <p>A name standing for one value and the body of a binding, and nothing else. A normal form

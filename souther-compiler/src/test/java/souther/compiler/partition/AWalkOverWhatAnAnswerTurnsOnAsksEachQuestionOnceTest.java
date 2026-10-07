@@ -121,6 +121,11 @@ class AWalkOverWhatAnAnswerTurnsOnAsksEachQuestionOnceTest {
             }
 
             @Override
+            public Denotation standing(Core e) {
+                return denotes(e);
+            }
+
+            @Override
             public WhatNamesStandFor in(InputReads reads) {
                 return this;
             }

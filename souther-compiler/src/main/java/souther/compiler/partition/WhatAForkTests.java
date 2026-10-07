@@ -4,6 +4,7 @@ import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.Choice;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ScopeStep;
+import souther.compiler.check.StatedComparison;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.semantics.AnswerAspect;
@@ -13,6 +14,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Which rules a fork's answer turns on, following only what the library says it does.
@@ -31,9 +33,10 @@ import java.util.Map;
  * <p><b>And never into a rule.</b> A truth that states a comparison is a rule of its own, and what
  * is inside it is what that comparison is read from — its reading's to take apart, and not parts
  * of the fork. A comparison the source wrote and an operation the library says means one
- * ({@link BooleanMeaning#asAComparison}) are one statement, so the walk stops at both: walked into,
- * {@code List.isEmpty(List.filter(p, xs))} would hand the fork whatever {@code p} leaves unread,
- * while {@code List.length(List.filter(p, xs)) == 0} hands it nothing.
+ * ({@link BooleanMeaning#asAComparison}) are one statement, so the walk stops at both — or goes on
+ * from both, where the statement is whether a container holds anything and the library says a
+ * closure decides that ({@link WhatAnEmptinessTurnsOn}): {@code List.isEmpty(List.filter(p, xs))}
+ * and {@code List.length(List.filter(p, xs)) == 0} both turn on what {@code p} answered.
  *
  * <p><b>Stopping is the answer, not a gap.</b> An operation the library says nothing about is one
  * this cannot follow, and the walk ends. What that costs is a fork left stating a rule of its own,
@@ -172,25 +175,31 @@ final class WhatAForkTests {
         if (writtenOut(e, names)) {
             return Follow.FIXED;
         }
+        // A truth that states a comparison is a rule, and what the fork turns on there is that
+        // rule. Asked of the checker, which says what a truth means, so a comparison the source
+        // wrote and an operation meaning one stop at the same place — unless what it compares is
+        // whether a container the library says a closure decides holds anything, which is what
+        // the closure answered.
+        Optional<StatedComparison> stated = BooleanMeaning.asAComparison(e);
+        Optional<WhatAnEmptinessTurnsOn.ReadBack> emptiness =
+                stated.flatMap(one -> WhatAnEmptinessTurnsOn.of(one, names));
         // An operation whose answer is the same every time turns on nothing, whatever the library
         // says or does not say about it. Followed as a question instead, one the library says
         // nothing about would be where the walk stopped, and offered as a part that varies. Which
         // answers the application can give is {@link TruthOutcomes}' to say, in either shape the
-        // application stands in.
-        if (AnOperationApplied.of(e) != null
+        // application stands in — and an emptiness read back is one, however it is spelled.
+        if ((AnOperationApplied.of(e) != null || emptiness.isPresent())
                 && TruthOutcomes.ofTheSide(e, AnswerAspect.TRUTH, names, null).isFixed()) {
             return Follow.FIXED;
         }
-        // A truth that states a comparison is a rule, and what the fork turns on there is that
-        // rule. Asked of the checker, which says what a truth means, so a comparison the source
-        // wrote and an operation meaning one stop at the same place.
-        if (BooleanMeaning.asAComparison(e).isPresent()) {
+        if (stated.isPresent() && emptiness.isEmpty()) {
             out.add(new Denotation(e, names.reads()));
             return Follow.VARIES;
         }
         // And beyond an operation the library says the answer turns on, what it turns on, read
         // where it stands.
-        Denotation beyond = beyond(e, names);
+        Denotation beyond = emptiness.map(WhatAnEmptinessTurnsOn.ReadBack::decidedBy)
+                .orElseGet(() -> beyond(e, names));
         Follow past = beyond == null ? Follow.STOPPED
                 : turnsOn(beyond.value(), names.in(beyond.at()), met, out);
         // A closure is half of what an operation walking a container answers by, and the container
@@ -201,6 +210,13 @@ final class WhatAForkTests {
         // every time; here the container decides, and the application is what is offered.
         if (past == Follow.FIXED && throughAClosure(e, names)) {
             past = Follow.STOPPED;
+        }
+        // The same of an emptiness read back to its closure, where what decides is whether what
+        // the closure was handed holds anything — the container the comparison takes the size of,
+        // which is one node however the check was spelled.
+        if (emptiness.isPresent() && past != Follow.VARIES) {
+            out.add(emptiness.get().container());
+            return Follow.VARIES;
         }
         if (past != Follow.STOPPED) {
             return past;

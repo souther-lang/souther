@@ -40,6 +40,10 @@ interface WhatNamesStandFor {
      *  in there; itself, here, where it is none. */
     Denotation denotes(Core e);
 
+    /** What {@code e} stands as, through every name that is one value and every binding whose body
+     *  is the value, and the reading it stands in there. */
+    Denotation standing(Core e);
+
     /** The same questions asked in {@code reads}, where a denotation went. */
     WhatNamesStandFor in(InputReads reads);
 
@@ -72,6 +76,11 @@ interface WhatNamesStandFor {
         @Override
         public Denotation denotes(Core e) {
             return reads.denotes(e, read.rules().symbols(), read.rules().newtypes());
+        }
+
+        @Override
+        public Denotation standing(Core e) {
+            return reads.standing(e, read.rules().symbols(), read.rules().newtypes());
         }
 
         @Override

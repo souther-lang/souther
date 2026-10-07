@@ -366,7 +366,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                              List<OnTheWay> assumed, boolean live, List<Reading> out,
                              List<ForkMet> forks, ConditionNumbering numbering) {
         Symbols symbols = in.symbols();
-        StatedAt stated = statedAt(e);
+        StatedAt stated = statedAt(e, WhatNamesStandFor.in(reads, in.read()));
         if (stated != null) {
             // Which construct of the model it is, off the node. The two readings of a body hold
             // different copies of it and agree about this, so it is what a reader below joins on.
@@ -576,8 +576,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *
      * <p>Asked of the node as it stands and not through what it stands as, so a comparison held as
      * another type is met once, where it is, and not again at its wrapper.
+     *
+     * <p>And none where what it compares is read back to the closure that decides it
+     * ({@link WhatAnEmptinessTurnsOn}): the rules there are the closure's, and the fork around it
+     * is what turns on them.
      */
-    private static StatedAt statedAt(Core e) {
+    private static StatedAt statedAt(Core e, WhatNamesStandFor names) {
         ConstructOccurrence written = switch (e) {
             case Core.Binary binary -> binary.occurrence();
             case Core.PreservedCall call -> call.occurrence();
@@ -587,6 +591,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             return null;
         }
         return BooleanMeaning.asAComparison(e)
+                .filter(statement -> WhatAnEmptinessTurnsOn.of(statement, names).isEmpty())
                 .map(statement -> new StatedAt(written, statement)).orElse(null);
     }
 
@@ -629,7 +634,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         for (Denotation part : WhatAForkTests.partsOfTheAnswer(atom.value(),
                 WhatNamesStandFor.in(atom.at(), read))) {
             // Which rule the part is, by the node; where it stands, in the reading it is written in.
-            if (statedAt(part.value()) == null
+            if (statedAt(part.value(), WhatNamesStandFor.in(part.at(), read)) == null
                     && !(part.at().pathOf(part.value(), read.rules().newtypes())
                             instanceof PathResolution.At)) {
                 left.add(part);

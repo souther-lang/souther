@@ -193,6 +193,15 @@ final class TruthOutcomes {
                 Outcomes under = truth(denied.get().part());
                 return denied.get().positive() ? under : under.denied();
             }
+            // A size held against nought is whether the container holds anything, written as a
+            // comparison or as the check that means one — read as the checker reads both, so the
+            // two spellings come out alike.
+            WhatAnEmptinessTurnsOn.Checked checked = BooleanMeaning.asAComparison(e)
+                    .map(WhatAnEmptinessTurnsOn::checked).orElse(null);
+            if (checked != null) {
+                Outcomes empty = emptiness(checked.container());
+                return checked.emptyWhereItHolds() ? empty : empty.denied();
+            }
             if (e instanceof Core.Binary binary) {
                 Optional<ConditionJoin> joined = ConditionJoin.of(binary.op());
                 if (joined.isPresent()) {
@@ -212,11 +221,6 @@ final class TruthOutcomes {
             AnOperationApplied applied = AnOperationApplied.of(e);
             if (applied == null) {
                 return Outcomes.EITHER;
-            }
-            var facts = DefaultBoundOperationFacts.get();
-            if (facts.meansTheSameAsASizeOfNought(applied.operation()) != null
-                    && applied.args().size() == 1) {
-                return emptiness(applied.args().getFirst());
             }
             Outcomes quantified = quantified(applied);
             if (quantified != null) {
