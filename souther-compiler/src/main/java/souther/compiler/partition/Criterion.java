@@ -1,6 +1,12 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.Carrier;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * What a row has to do to be at one coverage item of a border.
@@ -95,11 +101,23 @@ public sealed interface Criterion {
          * lines the quantity stands at no value of: what was in it was decided exactly, and what was
          * looked for was found by stepping past it (issues #901, #903).
          */
-        public souther.compiler.numeric.Place somewhereInside(
-                souther.compiler.check.Carrier carrier,
-                souther.compiler.numeric.Endpoint min, souther.compiler.numeric.Endpoint max) {
+        public Place somewhereInside(Carrier carrier, Endpoint min, Endpoint max) {
+            return somewhereIn(region(), away, carrier, min, max);
+        }
+
+        /**
+         * A place of {@code carrier} in {@code region}, held to what the rules leave the position,
+         * or null where nothing composed one.
+         *
+         * <p>The search a run of this kind is looked in by, for whatever set of the position's
+         * values is the run: a class with values taken out of its run is looked in the same way,
+         * one of the runs those leave at a time, so a value it holds is never found by stepping
+         * onto one it does not.
+         */
+        static Place somewhereIn(LevelRegion region, Towards away, Carrier carrier,
+                                 Endpoint min, Endpoint max) {
             LevelSpace space = LevelSpace.onACarrier(carrier);
-            for (LevelInterval look : runsInside(carrier, min, max)) {
+            for (LevelInterval look : runsInside(region, carrier, min, max)) {
                 Level found = space.witness(look, away).level();
                 if (found instanceof Level.OnACarrier on) {
                     return on.at();
@@ -115,28 +133,31 @@ public sealed interface Criterion {
          * <p>One reading of the geometry, because there is more than one thing to do with it. A
          * caller with a set of admitted values crosses each of these with that set rather than
          * taking a value out of one of them and putting it to the set afterwards
-         * ({@link souther.compiler.check.Carrier#somewhereIn}), and it has to be looking in the same
-         * runs and in the same order as the caller that wants a value and nothing else. Read twice,
-         * the two would be free to disagree about which end of the item is the near one.
+         * ({@link Carrier#somewhereIn}), and it has to be looking in the same runs and in the same
+         * order as the caller that wants a value and nothing else. Read twice, the two would be free
+         * to disagree about which end of the item is the near one.
          */
-        public java.util.List<LevelInterval> runsInside(
-                souther.compiler.check.Carrier carrier,
-                souther.compiler.numeric.Endpoint min, souther.compiler.numeric.Endpoint max) {
+        public List<LevelInterval> runsInside(Carrier carrier, Endpoint min, Endpoint max) {
+            return runsInside(region(), carrier, min, max);
+        }
+
+        /** The same, of any set of the position's values made up of runs. */
+        static List<LevelInterval> runsInside(LevelRegion region, Carrier carrier,
+                                              Endpoint min, Endpoint max) {
             LevelInterval leaves = new LevelInterval(
                     endOf(carrier, min), endOf(carrier, max));
-            java.util.List<LevelInterval> out = new java.util.ArrayList<>();
-            for (LevelInterval part : region().parts()) {
+            List<LevelInterval> out = new ArrayList<>();
+            for (LevelInterval part : region.parts()) {
                 LevelInterval look = part.intersect(leaves);
                 if (look != null) {
                     out.add(look);
                 }
             }
-            return java.util.List.copyOf(out);
+            return List.copyOf(out);
         }
 
         /** What the rules leave the position, as an end of a run of its values. */
-        private static Bound endOf(souther.compiler.check.Carrier carrier,
-                                   souther.compiler.numeric.Endpoint end) {
+        private static Bound endOf(Carrier carrier, Endpoint end) {
             return end == null ? null
                     : Bound.at(new Level.OnACarrier(carrier, end.at()), end.inclusive());
         }

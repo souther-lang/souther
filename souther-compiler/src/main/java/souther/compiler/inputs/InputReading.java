@@ -51,6 +51,12 @@ public final class InputReading {
         return quantities;
     }
 
+    /** What the declarations put at a path of this input, read under the same source
+     *  ({@link InputDomain#declared}). */
+    public DeclaredInput declared() {
+        return domain.declared(rules);
+    }
+
     /** The scope and the clause representation the two were read against. */
     public RuleReadingSource rules() {
         return rules;

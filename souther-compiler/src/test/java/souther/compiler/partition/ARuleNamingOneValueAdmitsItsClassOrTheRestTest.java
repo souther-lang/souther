@@ -48,16 +48,18 @@ class ARuleNamingOneValueAdmitsItsClassOrTheRestTest {
     }
 
     /**
-     * The value inside a class that holds others places nothing.
+     * A value singled out beside a line is a class of its own, and the decision admits it or the
+     * rest as it does where equalities alone divide the position.
      *
-     * <p>The cut at ten makes the classes, and three is one of the values below it: a decision
-     * wanting three or not three keeps some of that class and drops the rest of it.
+     * <p>The cut at ten makes the runs, and three is taken out of the one below it: the classes
+     * are three, the run below ten without it, and the run from ten up. The rest is both of the
+     * others, because the rule naming three holds at none of their values.
      */
     @Test
-    void theValueInsideAWiderClassPlacesNothing() {
-        assertEquals(Map.of(true, PLACED_NOTHING, false, PLACED_NOTHING),
-                admittedOn("x == 3 || x >= 10"),
-                "both ways are decided, and no class of the axis is three and nothing else");
+    void aValueBesideALineIsAClassTheDecisionAdmits() {
+        assertEquals(Map.of(true, List.of("= 3"),
+                        false, List.of("x < 10 and x /= 3", "10 <= x")),
+                admittedOn("x == 3 || x >= 10"));
     }
 
     /** What a way that placed no cell is written as, apart from a cell admitting no class. */

@@ -45,7 +45,7 @@ final class DecisionReadings {
         InputDomain inputs =
                 compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
         return DecisionReading.of(behavior, analysis, inputs.reading(rules),
-                InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
+                InputReads.ofParametersWhereCallsStand(inputs.parameterReads(), inputs.declared(rules),
                         ElementBindings.of(analysis, rules.newtypes())),
                 compilation.db().ask(new Bodies.Spec(module, behavior)).value()
                         .dependsOnBehaviors());

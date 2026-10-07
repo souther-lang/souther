@@ -16,7 +16,6 @@ import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.ReadableFields;
 import souther.compiler.check.ReadingPolicy;
-import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.semantics.TakenArguments;
@@ -688,89 +687,21 @@ public final class InputDomain {
      */
     public Type typeAt(TermPath path, RuleReadingSource source) {
         Position position = at(path);
-        return position != null ? position.type() : declaredAt(path, source);
+        // Under a position the walk stopped at, what the declarations say at each step is the only
+        // answer there is.
+        return position != null ? position.type() : declared(source).typeAt(path);
     }
 
     /**
-     * What the declarations put at {@code path}, however far down it goes, or null where they put
-     * nothing this can follow.
+     * What the declarations put at a path of this input, read off them alone under
+     * {@code source}.
      *
-     * <p>Under a position the walk stopped at this is the only answer there is: there is no position
-     * to ask and the type is what the declaration says at each step. A path is finite and each step
-     * of it is followed once, so following one under a declaration that names itself ends where the
-     * path does.
-     *
-     * <p>Step by step through {@link StructuralInspection}, which is what the walk above takes its
-     * own steps from. What is under a type is one fact, and a second reading of it here would be
-     * this and that walk disagreeing about what a path reaches — which is the shape of defect this
-     * whole change is about, one level down.
+     * <p>For a walk of a body, which has to spell a position the way this reading does before the
+     * reading exists ({@link DeclaredInput}). Made when asked and not held: what reads the
+     * declarations is a capability, and this is a value.
      */
-    private Type declaredAt(TermPath path, RuleReadingSource source) {
-        Type here = null;
-        for (Parameter parameter : parameters) {
-            if (parameter.name().equals(path.head())) {
-                here = parameter.type();
-                break;
-            }
-        }
-        for (TermPath.Step step : path.steps()) {
-            here = here == null ? null : under(here, step, source);
-        }
-        return here;
-    }
-
-    /**
-     * What one step of a path stands at, or null where the declarations put nothing there.
-     *
-     * <p><b>Exhaustive over the kinds of step, with no {@code default}.</b> A path goes into a
-     * field, into what a sequence holds, or nowhere at all while narrowing which values may stand
-     * where it already is ({@link Refinement}) — three, and a reading that answered one of them and
-     * let the rest fall to null would lose a line the model draws for every path carrying one. It
-     * did: written for fields alone, a rule comparing two fields of a list's elements was read as
-     * naming nothing, and the border it draws went away. A fourth kind is a compile error here
-     * rather than a fourth quiet absence.
-     */
-    private static Type under(Type type, TermPath.Step step, RuleReadingSource source) {
-        // Asked of the shape rather than through the proof a position is made with. What is under a
-        // type is a question about the type, and a type nothing can be read at answers nothing here
-        // rather than being refused as a position this compiler disagrees with itself about.
-        if (!(TypeView.shapeOf(type, source.inners(), source.symbols(), source.kinds(),
-                        source.sums())
-                instanceof Shape.ReadablePositionShape shape)) {
-            return null;
-        }
-        StructuralInspection under =
-                StructuralInspection.of(shape,
-                        Distinctions.ofType(shape, source.symbols(), source.kinds(),
-                                source.sums()));
-        return switch (step) {
-            // A field of a record, or a name a sum's cases all spread. The second is readable on a
-            // value of the sum without opening a case, so the model does put something at it, and a
-            // reading that answered for the first alone would say the model puts nothing where the
-            // language reads a value.
-            case TermPath.Step.Field field -> under instanceof StructuralInspection.Decomposed made
-                    ? made.under().get(field.name())
-                    : ReadableFields.of(shape).declaredFields().get(field.name());
-            case TermPath.Step.Element _ -> under instanceof StructuralInspection.Retained on
-                    && on.continuation() instanceof StructuralInspection.Continuation.Elements held
-                    ? held.element() : null;
-            // The same position, read as the case it turned out to be. Null where the case puts
-            // nothing there, which is a case that is the whole of a value.
-            case TermPath.Step.Refine refine -> under instanceof StructuralInspection.Retained on
-                    && on.continuation() instanceof StructuralInspection.Continuation.Branches ways
-                    ? narrowed(ways, refine.refinement()) : null;
-        };
-    }
-
-    /** The type the branch for this narrowing stands at, or null where the sum has no such branch. */
-    private static Type narrowed(StructuralInspection.Continuation.Branches ways,
-                                 Refinement refinement) {
-        for (StructuralInspection.Branch branch : ways.branches()) {
-            if (refinement.equals(branch.refinement())) {
-                return branch.under();
-            }
-        }
-        return null;
+    public DeclaredInput declared(RuleReadingSource source) {
+        return DeclaredInput.of(parameters, source);
     }
 
     /**

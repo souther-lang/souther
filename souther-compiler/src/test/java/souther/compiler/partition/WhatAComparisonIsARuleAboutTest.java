@@ -81,7 +81,7 @@ class WhatAComparisonIsARuleAboutTest {
         }
         return ComparisonAssessment.of("f", comparison.stated(), Citation.of(binary.pos()),
                 inputs.reading(rules),
-                InputReads.ofWhatIsDeclared(roots), rule.value(),
+                InputReads.ofWhatIsDeclared(roots, inputs.declared(rules)), rule.value(),
                 souther.compiler.coverage.Arrivals.inTheTree(read), false);
     }
 

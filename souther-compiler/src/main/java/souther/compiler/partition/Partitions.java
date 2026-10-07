@@ -42,7 +42,6 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
-import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.regex.Language;
 import net.unit8.notation199x.pattern.Meter;
@@ -642,7 +641,6 @@ public final class Partitions {
         Type type = at.position().type();
         List<RuleEvidence> mine = evidence.stream()
                 .filter(each -> each.at().equals(term)).toList();
-        List<Threshold> here = RuleEvidence.linesIn(mine);
         List<GuardThresholds.Guards.Singled> points = RuleEvidence.pointsIn(mine);
         // What this term's values can be, which is the type's bound already narrowed by whatever
         // the record it sits in says about it. Reading the type again here would put a threshold
@@ -718,8 +716,8 @@ public final class Partitions {
         // rules they were composed from and for whether the cuts stand is the answer's, said once;
         // read off it three times, each reading is a place to disagree about what the arm meant.
         Composition made = switch (classed) {
-            // The classes are the runs of values the walk below works out, and the cuts are as they
-            // have always been.
+            // The classes are what the walk below works out of the lines and the values singled
+            // out, and the cuts are as they have always been.
             case Classing.Classed.OnTheOrder _ -> Composition.ON_AN_ORDER;
             // A cut is a place on the order, and a class that is a set has no answer to where it
             // lies — so a position whose classes are sets has none, and a value singled out is in
@@ -756,25 +754,6 @@ public final class Partitions {
         // is a denominator this stage closed over the rules that worked, which the account refuses.
         account.heldShut(blocked);
         RulesWithNoLine stated = rules;
-        if (here.isEmpty() && !points.isEmpty()) {
-            // Nothing orders this position, so its classes are the values singled out and
-            // everything else. Ranges here would ask the rows for a distinction between the two
-            // sides of a value the behavior treats alike.
-            taken.stream().filter(each -> !(each instanceof RuleEvidence.BySet))
-                    .forEach(each -> account.measured(each, id));
-            return made(out, at, behavior, term,
-                    made.classesFor(axis, () -> singledClasses(points, term, type, reading,
-                            domain, at.position().admits(), ruleReading)),
-                    made.divides(),
-                    // A cut is a place on the order the values are counted on, and a class that is
-                    // a set has no answer to where it lies — so where the classes are sets there
-                    // are no cuts, and the value singled out is in them rather than beside them.
-                    // Published as both, the position would state one distinction twice in two
-                    // algebras, and every line on it would fall in no class ({@link Axis}).
-                    made.keepsCuts() ? mergedPoints(cutsOf(axis), points, carrier) : List.of(),
-                    partedOf(axis), narrowedOf(axis),
-                    new BodyCutInspection.Evidence(), stated);
-        }
         // Every line handed here is one the quantity reaches, and nothing here asks again. Whether
         // it does is {@link Cutting#reached}'s answer, given where the comparison is read and again
         // at each position its name is filed at; a line it refuses never becomes evidence. Asked
@@ -790,8 +769,8 @@ public final class Partitions {
                 continue;   // already answered for above, as a class the vocabularies will not hold
             }
             account.measured(each, id);
-            // A value singled out beside an ordering is one more line among the ranges, which the
-            // model drew itself, and it is merged with them below.
+            // A value singled out is not a line among the ranges: it is a class of its own inside
+            // the run it falls in, which the classes below take up beside the lines.
             if (each instanceof RuleEvidence.Divides(Threshold line)) {
                 reachable.add(line);
             }
@@ -805,28 +784,31 @@ public final class Partitions {
         // what keeps `NoLine` meaning that a rule was written about the position rather than
         // everything that came to nothing.
         NumericDomain.Bounds within = domain;
+        // The lines and the values singled out divide the position together, into one list of
+        // classes: the runs the lines leave, and each value out of the run it falls in.
+        List<Parting> parted = new ArrayList<>(partedOf(axis));
+        reachable.forEach(each -> parted.add(
+                Parting.by(each.parts(), each.origin().authoredLine())));
         return made(out, at, behavior, term,
-                made.classesFor(axis, () -> Intervals.classesOf(
+                made.classesFor(axis, () -> OrderedClasses.of(
                         Intervals.of(reachable, within == null ? null : within.min(),
                                 within == null ? null : within.max(), carrier),
-                        term, type, reading, ruleReading,
-                        within == null ? null : within.min(),
-                        within == null ? null : within.max())),
+                        points, term, type, reading, ruleReading, within,
+                        at.position().admits(), PatternPlan.Budget.OF_A_WITNESS::meter)),
                 made.divides(),
-                // Asked of the answer, as the branch above asks it. A cut is a place on the order
-                // the values are counted on, and a class that is a set has no answer to where it
-                // lies — so a position whose classes are sets carries none, and one that kept the
-                // cuts a declaration left would be an axis every line of which falls in no class
-                // ({@link Axis}). A bounded string with a rule about its prefixes is exactly that
-                // pair, and it is a model somebody writes.
+                // A cut is a place on the order the values are counted on, and a class that is a
+                // set has no answer to where it lies — so a position whose classes are sets
+                // carries none, and the value singled out is in them rather than beside them.
+                // Published as both, the position would state one distinction twice in two
+                // algebras, and every line on it would fall in no class ({@link Axis}). A bounded
+                // string with a rule about its prefixes is exactly that pair, and it is a model
+                // somebody writes.
                 made.keepsCuts()
                         ? mergedPoints(merged(cutsOf(axis), reachable, carrier), points, carrier)
                         : List.of(),
-                reachable.stream()
-                        .map(each -> Parting.by(each.parts(), each.origin().authoredLine()))
-                        .toList(),
-                narrowedOf(axis),
-                reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), stated);
+                parted, narrowedOf(axis),
+                reachable.isEmpty() && points.isEmpty() ? null : new BodyCutInspection.Evidence(),
+                stated);
     }
 
     /**
@@ -1083,105 +1065,12 @@ public final class Partitions {
         return out;
     }
 
-    /**
-     * The classes a position divided only by equalities has: each value singled out, and the rest.
-     *
-     * <p>The last of those is not an interval and is not asked to be. What a class needs is a way to
-     * say whether a value is in it and a value that stands for it, and a complement has both — the
-     * shape a class has been limited to is what this is here to stop being the limit.
-     *
-     * @param within  where the rules leave the number the values are singled out of
-     * @param admits  which values the declarations leave standing at the position. Beside
-     *                {@code within} and not instead of it: a rule about how many a value holds is
-     *                about another number of the same place, and what it leaves is said of the
-     *                values rather than of this number — so a representative worked out from the
-     *                range alone is one the declarations may refuse
-     */
-    private static List<PartitionClass> singledClasses(List<GuardThresholds.Guards.Singled> points,
-                                                       NumericTerm.FromOnePosition term, Type type,
-                                                       Quantities reading,
-                                                       NumericDomain.Bounds within, ValueSet admits,
-                                                       RuleReadingContext ruleReading) {
-        // Asked here rather than handed in beside the term. A term and a pair of orders are two
-        // arguments, and two arguments can be about two terms; the reading is one argument that
-        // answers about whichever term it is asked.
-        TermOrders orders = reading.ordersOf(term);
-        Carrier carrier = orders.answered();
-        List<Place> values = new ArrayList<>();
-        for (GuardThresholds.Guards.Singled each : points) {
-            if (values.stream().noneMatch(had -> had.sameAs(each.value()))) {
-                values.add(each.value());
-            }
-        }
-        List<PartitionClass> classes = new ArrayList<>();
-        for (Place value : values) {
-            String written = carrier.written(value);
-            classes.add(classAt(term + "/= " + written, "= " + written,
-                    orders, new NumericSet.At(value), value, type, reading, ruleReading));
-        }
-        // Out of what writing one value costs, as every witness for a row is. Which number beside
-        // the ones singled out to write is chosen here, where what a witness may cost is named;
-        // what a value standing at that number looks like is asked of the one reader that answers
-        // it, so the number and the value it is written into are not two spellings of one thing.
-        Place other = carrier.somethingOtherThan(PlacesApart.of(values), within, admits,
-                PatternPlan.Budget.OF_A_WITNESS.meter());
-        String label = "/= " + String.join(", ",
-                values.stream().map(carrier::written).toList());
-        classes.add(classAt(term + "/" + label, label,
-                orders, new NumericSet.AwayFrom(values), other, type, reading, ruleReading));
-        // Classes of the number the values were singled out of, said where that is known.
-        return classes.stream().map(each -> each.ofTheNumber(term)).toList();
-    }
-
     /** A count written at a position, wearing every name that position declares — which the reading
      *  of the position says, and nothing here asks again. */
     private static FixtureTemplate standing(TypeView view, Carrier carrier, Place at,
             RuleReadingSource ruleSource) {
         return WornNames.under(view.wrappers(),
                 FixtureTemplate.on(carrier, at, ruleSource.symbols().scope()::reach), ruleSource);
-    }
-
-    /**
-     * A class over the values a rule singled out, standing for whatever writes a value at one of
-     * those numbers.
-     *
-     * <p><b>Asked of the one reader that writes a value for a number.</b> A value singled out of a
-     * number taken of a position is not a value of the position: the ninth hour is a number and a
-     * time is what stands there, and a class that wrote the number itself put a count where the
-     * decoder wanted a time. Which is the same second writer the classes of a range had, in the one
-     * place that still had it.
-     */
-    private static PartitionClass classAt(String id, String label, TermOrders orders,
-                                          NumericSet is, Place at, Type type, Quantities reading,
-                                          RuleReadingContext ruleReading) {
-        String what = "a value whose " + Intervals.measureOf(orders.term().atOnePosition()) + " is "
-                + (is instanceof NumericSet.At ? "the one" : "none of the ones") + " singled out";
-        if (at == null) {
-            // No number was named beside the ones singled out, which is this compiler naming one
-            // place in a run and not the order having none left.
-            return PartitionClass.of(id, label, holding(orders, is),
-                    new RepresentativeSource.NotArrivedAt(CompositionShortfall.writing(
-                            Set.of(CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED)),
-                            "nothing here composed " + what
-                                    + ", which does not make one unwritable"));
-        }
-        // The number this reader named, and what stands at it asked of what writes a value for a
-        // number. Written here out of the carrier instead, a number taken of the position went into
-        // the row where the value it was taken of belongs — a count where a time was owed.
-        //
-        // The class stays what it is. Asked as the one number named, a class holding every number
-        // but the ones a rule singled out would be answered by whichever of them this reader
-        // reached for first — and nothing built at that one would be told as a class with no value
-        // in it, which is every other number it holds going unlooked at.
-        return PartitionClass.of(id, label, holding(orders, is),
-                Intervals.standingFor(orders, is, at, type, reading, ruleReading, what));
-    }
-
-    /** A class that reads the count of the number {@code on} is of out of a row, and answers about
-     *  it. The number comes from the orders rather than beside them: a class of one number built on
-     *  another's order is what the pair naming its own number is here to stop. */
-    private static Recognition holding(TermOrders on, NumericSet is) {
-        return new Recognition.OfACount(on.term().atOnePosition(), on, is);
     }
 
     /** The cuts a position has, with the values a body singled out added as lines of their own. */

@@ -122,7 +122,10 @@ final class DecisionNaming implements Naming<DecisionPath> {
 
     @Override
     public DecisionPath matchCase(Core.Match match, int part) {
-        return atAnArm(meanings.entering(match, part, reads, numbering), match.occurrence(), part);
+        // Nothing, for an arm every row at the fork takes, which decides nothing.
+        return meanings.entering(match, part, reads, numbering)
+                .map(read -> atAnArm(read, match.occurrence(), part))
+                .orElse(DecisionPath.NOWHERE);
     }
 
     /**

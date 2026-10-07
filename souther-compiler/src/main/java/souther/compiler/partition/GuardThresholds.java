@@ -13,6 +13,7 @@ import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.check.UnreadComparison;
 import souther.compiler.check.ValueOrigin;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
@@ -195,10 +196,11 @@ public final class GuardThresholds {
         // are two expansions with two sets of bindings — so `elements` is the reading of this tree
         // and the other one's answer would be about bindings this tree does not have.
         ComparisonReadings comparisons = ComparisonReadings.of(behavior, states, read,
-                InputReads.ofParametersWhereCallsStand(inputs.parameterReads(), elements),
+                InputReads.ofParametersWhereCallsStand(inputs.parameterReads(), read.declared(),
+                        elements),
                 // What a value states is read where nothing of the behavior's inputs is in force: a
                 // value takes none and names none.
-                InputReads.ofParametersWhereCallsStand(Map.of(), elements));
+                InputReads.ofParametersWhereCallsStand(Map.of(), DeclaredInput.NONE, elements));
         // And what the tree that runs says about each of them, joined on the construct of the model
         // the two readings agree about.
         ComparisonEmissionIndex index =

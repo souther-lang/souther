@@ -231,7 +231,7 @@ class AConditionRecordedAsTakenInIsOneTheRegionRepresentsTest {
             RuleReadingSource rules = RuleReadings.of(compilation, module);
             souther.compiler.inputs.InputDomain inputs =
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get(name);
-            InputReads reads = InputReads.ofParameters(inputs.parameterReads(),
+            InputReads reads = InputReads.ofParameters(inputs.parameterReads(), inputs.declared(rules),
                     checked.elementBindings().get(name));
             return new Read(body, inputs.reading(rules), reads, rules, module, name);
         });

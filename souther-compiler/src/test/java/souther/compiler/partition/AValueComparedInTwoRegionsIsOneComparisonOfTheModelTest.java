@@ -7,6 +7,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.query.Adequacy;
@@ -78,8 +79,10 @@ class AValueComparedInTwoRegionsIsOneComparisonOfTheModelTest {
 
         List<ComparisonReadings.Reading> readings = ComparisonReadings.of("f", read.analysis(),
                 read.inputs().reading(read.rules()),
-                InputReads.ofParametersWhereCallsStand(read.inputs().parameterReads(), elements),
-                InputReads.ofParametersWhereCallsStand(Map.of(), elements)).comparisons();
+                InputReads.ofParametersWhereCallsStand(read.inputs().parameterReads(),
+                        read.inputs().declared(read.rules()), elements),
+                InputReads.ofParametersWhereCallsStand(Map.of(), DeclaredInput.NONE, elements))
+                .comparisons();
 
         long ofTheValue = readings.stream()
                 .filter(each -> each.occurrence().origin().owner() instanceof WrittenOwner.Body owner

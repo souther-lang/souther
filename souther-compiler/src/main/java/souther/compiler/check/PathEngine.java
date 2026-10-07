@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.ClosedStates;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.core.Contract;
 import souther.compiler.core.Contract.Guard;
@@ -71,6 +72,9 @@ final class PathEngine {
     /** What each behavior a body may call states about its answer, by the name it is called under. */
     private final Map<ValueName.Behavior, AssumedContract> contracts;
 
+    /** One closure per question for as long as this engine is held ({@link #nothingKnown}). */
+    private final ClosedStates closures = ClosedStates.kept();
+
     /** The environment a value's body is read in, which is the same for every build of it. */
     Denotations insideATemplate() {
         return terms.insideATemplate();
@@ -133,6 +137,29 @@ final class PathEngine {
     }
 
     /**
+     * Nothing known yet, where every walk this engine makes starts.
+     *
+     * <p>Every domain started here works out what its rules leave through {@link #closures}, so a
+     * closure one walk of this engine worked out is lent to every other that asks the same
+     * question. The walks of one engine read one body or one declaration's rules over and over —
+     * an arm, a guard, the path to each — and each asks what the rules on the way leave.
+     */
+    Known nothingKnown() {
+        return Known.top(closures);
+    }
+
+    /** What this engine's walks work their closures out through, for a reader holding it to
+     *  lending them ({@link ClosedStates#workedOut}). */
+    ClosedStates closures() {
+        return closures;
+    }
+
+    /** {@link #nothingKnown}, at no place. */
+    Entered nothingEntered() {
+        return new Entered(nothingKnown(), Denotations.none());
+    }
+
+    /**
      * A place and what is known of it, answered together.
      *
      * <p>Both halves or neither: a value's place and what is known of it are separate questions with
@@ -141,6 +168,7 @@ final class PathEngine {
      */
     record Entered(Known known, Denotations at) {
 
+        /** {@link Known#top}, at no place, for a reader that holds no engine. */
         static Entered nothing() {
             return new Entered(Known.top(), Denotations.none());
         }

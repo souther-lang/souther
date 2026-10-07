@@ -96,6 +96,10 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
      *
      * <p>The form a value is written into an issue in: a newtype is reported as what it wraps, and
      * the form names each name the value is opened through on the way there.
+     *
+     * <p>What arriving at a position by an arm says of the value there: a path does not say how
+     * many of the names an arm's scrutinee took off, so the value is read under each name it wears
+     * as well as under all of them.
      */
     private static final List<String> WALKING = List.of(
             row(CHECK + "BoundaryConstraints", "messageForm",
@@ -112,6 +116,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_POSITION),
             row(TYPE_VIEW, "of",
                     "(" + TYPE + INNERS + SYMBOLS + KINDS + SUMS + ")L" + TYPE_VIEW + ";",
+                    THE_SPINE),
+            row(INPUTS + "DeclaredInput", "readingsOf", "(" + TYPE + ")Ljava/util/List;",
                     THE_SPINE),
             row(INPUTS + "InputDomain", "walk",
                     "(L" + INPUTS + "TermPath;" + TYPE + "L" + INPUTS + "ExpansionTrace;" + CONTEXT
