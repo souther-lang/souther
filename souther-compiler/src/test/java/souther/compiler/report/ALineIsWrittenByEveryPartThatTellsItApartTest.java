@@ -146,47 +146,103 @@ class ALineIsWrittenByEveryPartThatTellsItApartTest {
         assertEquals(idOf(unspelled), idOf(spelled), "written one way");
     }
 
-    /** One line, and lines each differing from it in one part. */
+    /**
+     * One line, and lines each differing from it, or from another line here, in one component of
+     * what a line is equal by.
+     *
+     * <p>Laid out by those components rather than by the shapes a model happens to draw, so a part
+     * the writer leaves out is a pair named here. Each group says which equality it is walking:
+     * the line's, the target's, the quantity's, a term's, the orders', a level's.
+     */
     private static List<BoundaryLine> lines() {
         NumericTerm.ValueOf cost = valueAt(TermPath.of("cost"));
         NumericTerm.ValueOf fee = valueAt(TermPath.of("fee"));
-        NumericTerm.TakenOf length = NumericTerm.TakenOf.of(
-                ValueName.Stdlib.operation("String", "length"), TermPath.of("name"), Type.STRING,
-                INNERS, SYMBOLS);
+        NumericTerm.TakenOf lengthOfName = lengthOf(TermPath.of("name"));
+        NumericTerm.TakenOf lengthOfTitle = lengthOf(TermPath.of("title"));
+        NumericTerm.TakenOf countOfLines = takenOfAList("length");
+        NumericTerm.TakenOf sumOfLines = takenOfAList("sum");
         NumericTerm.TakenOf halved = quotientOf(TermPath.of("cost"), 2);
         NumericTerm.TakenOf thirded = quotientOf(TermPath.of("cost"), 3);
-        NumericTerm.TakenOver total = NumericTerm.TakenOver.of(
-                ValueName.Stdlib.operation("List", "sum"),
-                RunSource.overTheOccurrencesAt(TermPath.of("lines").element().then("amount")),
-                Type.INT, INNERS, SYMBOLS);
+        NumericTerm.TakenOver totalOfLines = totalOver("lines");
+        NumericTerm.TakenOver totalOfFees = totalOver("fees");
+        Carrier stages = new Carrier.Ordinal(declared("Stage"),
+                List.of(declared("Open"), declared("Shut")));
+        Carrier stagesTheOtherWay = new Carrier.Ordinal(declared("Stage"),
+                List.of(declared("Shut"), declared("Open")));
         return List.of(
                 at(cost, whole(0), drawn(0)),
-                // Where it is drawn.
-                new BoundaryLine(BoundaryTarget.at(new BorderQuantity.OfACoordinate("other",
-                        cost, TermOrdersFixtures.itself(cost, Carrier.WHOLE)), whole(0)),
-                        drawn(0)),
-                at(fee, whole(0), drawn(0)),
+                // The line: which line of the model was drawn there.
+                at(cost, whole(0), drawn(1)),
+                // The target: which behavior's input the quantity is on.
+                coordinate("other", cost, TermOrdersFixtures.itself(cost, Carrier.WHOLE),
+                        whole(0)),
+                // The target: where on the quantity it was cut, and what kind of level that is.
                 at(cost, whole(1), drawn(0)),
-                new BoundaryLine(BoundaryTarget.at(new BorderQuantity.OfACoordinate("b", cost,
-                        TermOrdersFixtures.orders(cost, Carrier.DENSE, Carrier.WHOLE)), whole(0)),
+                coordinate("b", cost, TermOrdersFixtures.itself(cost, Carrier.WHOLE), count(0)),
+                // The quantity: its shape, where the terms it weighs and how are the same.
+                new BoundaryLine(BoundaryTarget.at(new BorderQuantity.OverAForm("b",
+                        LinearForm.<NumericTerm>atom(cost), Map.<NumericTerm, TermOrders>of(cost,
+                                TermOrdersFixtures.itself(cost, Carrier.WHOLE))), whole(0)),
                         drawn(0)),
-                at(length, whole(0), drawn(0)),
-                at(halved, whole(0), drawn(0)),
-                at(thirded, whole(0), drawn(0)),
+                // The quantity: which terms, which way and by how much.
+                at(fee, whole(0), drawn(0)),
                 new BoundaryLine(BoundaryTarget.at(apart(cost, fee), count(0)), drawn(0)),
                 new BoundaryLine(BoundaryTarget.at(apart(fee, cost), count(0)), drawn(0)),
                 new BoundaryLine(BoundaryTarget.at(form(cost, 2, fee, 1), count(9)), drawn(0)),
                 new BoundaryLine(BoundaryTarget.at(form(cost, 3, fee, 1), count(9)), drawn(0)),
                 new BoundaryLine(BoundaryTarget.at(form(cost, 2, fee, 3), count(9)), drawn(0)),
-                new BoundaryLine(BoundaryTarget.at(form(total, 2, fee, 1), count(9)), drawn(0)),
-                // A form weighing one position once runs the way that position's own values do,
-                // and is another quantity.
-                new BoundaryLine(BoundaryTarget.at(new BorderQuantity.OverAForm("b",
-                        LinearForm.<NumericTerm>atom(cost), Map.<NumericTerm, TermOrders>of(cost,
-                                TermOrdersFixtures.itself(cost, Carrier.WHOLE))), whole(0)),
+                // The orders a term stands on: what it is read on, and what it is measured on.
+                coordinate("b", cost, TermOrdersFixtures.orders(cost, Carrier.DENSE, Carrier.WHOLE),
+                        whole(0)),
+                coordinate("b", cost, TermOrdersFixtures.orders(cost, Carrier.WHOLE, Carrier.DENSE),
+                        whole(0)),
+                // A level: the carrier it is on, the order that carrier is when it is a sum's cases.
+                coordinate("b", cost, TermOrdersFixtures.itself(cost, Carrier.DENSE),
+                        new Level.OnACarrier(Carrier.DENSE, Count.of(0))),
+                coordinate("b", cost, TermOrdersFixtures.itself(cost, stages),
+                        new Level.OnACarrier(stages, Count.of(0))),
+                coordinate("b", cost, TermOrdersFixtures.itself(cost, stagesTheOtherWay),
+                        new Level.OnACarrier(stagesTheOtherWay, Count.of(0))),
+                // A number taken of a place: by which operation, of which place, given what.
+                at(lengthOfName, whole(0), drawn(0)),
+                at(lengthOfTitle, whole(0), drawn(0)),
+                at(countOfLines, whole(0), drawn(0)),
+                at(sumOfLines, whole(0), drawn(0)),
+                at(halved, whole(0), drawn(0)),
+                at(thirded, whole(0), drawn(0)),
+                // A number taken over a run: of which values.
+                new BoundaryLine(BoundaryTarget.at(form(totalOfLines, 2, fee, 1), count(9)),
                         drawn(0)),
-                // Which line of the model was drawn there.
-                at(cost, whole(0), drawn(1)));
+                new BoundaryLine(BoundaryTarget.at(form(totalOfFees, 2, fee, 1), count(9)),
+                        drawn(0)));
+    }
+
+    private static BoundaryLine coordinate(String behavior, NumericTerm.FromOnePosition term,
+                                           TermOrders orders, Level level) {
+        return new BoundaryLine(BoundaryTarget.at(
+                new BorderQuantity.OfACoordinate(behavior, term, orders), level), drawn(0));
+    }
+
+    private static NumericTerm.TakenOf lengthOf(TermPath path) {
+        return NumericTerm.TakenOf.of(ValueName.Stdlib.operation("String", "length"), path,
+                Type.STRING, INNERS, SYMBOLS);
+    }
+
+    /** {@code List.<operation>} of the list at {@code lines}, which a count and a sum both take. */
+    private static NumericTerm.TakenOf takenOfAList(String operation) {
+        return NumericTerm.TakenOf.of(ValueName.Stdlib.operation("List", operation),
+                TermPath.of("lines"), new Type.ListOf(Type.INT), INNERS, SYMBOLS);
+    }
+
+    /** The sum of every amount standing under {@code list}. */
+    private static NumericTerm.TakenOver totalOver(String list) {
+        return NumericTerm.TakenOver.of(ValueName.Stdlib.operation("List", "sum"),
+                RunSource.overTheOccurrencesAt(TermPath.of(list).element().then("amount")),
+                Type.INT, INNERS, SYMBOLS);
+    }
+
+    private static TypeSymbol declared(String name) {
+        return TypeSymbols.declared(new TypeKey("m", name));
     }
 
     private static String idOf(BoundaryLine line) {
