@@ -7,16 +7,22 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Towards;
+import souther.compiler.reach.ComparisonArrival;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
-import java.util.function.Supplier;
 
 /**
  * What one comparison cuts, and where — the one place that decides it.
@@ -241,21 +247,126 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
-     * Whether the quantity runs as far as this line, which is what makes it a line the rule draws.
+     * Whether the rows {@code region} holds reach this line, which is what makes it a line the rule
+     * draws.
      *
-     * <p>Asked where the comparison is read and again at every position filing moves the line to
-     * ({@link #movedTo}). The move takes the quantity somewhere the rules may leave it less room: a
-     * case whose invariant stops short of the line is a quantity the line does not reach, however
-     * far the name it was written at runs. One question at both places, so the reading and the
-     * filing cannot come to disagree about one line.
+     * <p>One question wherever a line is asked about, and the region is what differs: what the
+     * rules leave where the comparison is read and at every position filing moves the line to
+     * ({@link #movedTo}), and what also arrives at the comparison where a body is walked to it. The
+     * move takes the quantity somewhere the rules may leave it less room: a case whose invariant
+     * stops short of the line is a quantity the line does not reach, however far the name it was
+     * written at runs. Asked one way at all of them, the reading, the filing and the walk cannot
+     * come to disagree about one line.
      *
-     * @param parts              where the rule parts the quantity's values, as the caller already
-     *                           holds it
+     * <p>Two questions, and {@link Border#reaches} says which a rule asks ({@link Border.Values}).
+     * How far the quantity runs inside the region is a question about its extent, and the region's
+     * projection answers it. Whether a row stands at a value is a question about one equation, and
+     * it is asked as one: the line taken in beside everything else the region holds and the region
+     * asked whether anything is left. Read off the projection instead, a value the way holds the
+     * quantity apart from would be inside the ends of everything around it — the ends of
+     * everything but five are the ends of everything.
+     *
      * @param drawnByAnInvariant whether a clause of a value's own declarations drew the line, which
      *                           has no far side for anything to stand on
      */
-    boolean reached(Supplier<ExactAnswer<Seam>> parts, boolean drawnByAnInvariant) {
-        return Border.reaches(at, parts, claim, drawnByAnInvariant, within);
+    boolean reachedIn(SearchRegion region, boolean drawnByAnInvariant) {
+        NumericDomain.FormProjection runs = region.projectionOf(of.direction());
+        if (runs instanceof NumericDomain.FormProjection.NothingIsLeft) {
+            return false;
+        }
+        Border.Values extent = Border.Values.within(
+                runs instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds range)
+                        ? range : null);
+        return Border.reaches(at, this::seam, claim, drawnByAnInvariant, new Border.Values() {
+            @Override
+            public boolean extendTo(Level level) {
+                return extent.extendTo(level);
+            }
+
+            @Override
+            public boolean holdAt(Level level) {
+                // Whether a row stands at the value is asked of a value the quantity takes. One
+                // it never takes is the order's answer and not the rows': `2 * a == 9` names
+                // nothing an integer is twice, under any rules, and the line is the order's to
+                // place (`Places.AT_NO_VALUE`). Asked of a region, that is a region holding no
+                // row at a value no row could ever hold.
+                if (!Boolean.TRUE.equals(of.levels().attainable(level).orNull())) {
+                    return extent.extendTo(level);
+                }
+                // An equation this region cannot carry is no proof that nothing stands there.
+                return atTheLevel(region, level)
+                        .map(there -> there.emptiness().isEmpty()).orElse(true);
+            }
+        });
+    }
+
+    /**
+     * {@code region} with what arrives at the comparison taken in, where what arrives is about a
+     * position this quantity is over.
+     *
+     * <p>A range of one position is a constraint on that position and is taken in as one, so it
+     * narrows the quantity whatever form of the position it is — the position itself, a multiple
+     * of it, or a sum it is a term of. A range of a position the quantity is not over says nothing
+     * about this line, and the region is not asked to name a position it may hold no rules for.
+     *
+     * <p>An end the region cannot carry narrows nothing, which still holds every row that arrives.
+     */
+    SearchRegion narrowedBy(ComparisonArrival.Values arriving, SearchRegion region) {
+        NumericTerm.FromOnePosition position = new NumericTerm.ValueOf(arriving.path());
+        if (!of.direction().coefs().containsKey(position)) {
+            return region;
+        }
+        NumericDomain.Bounds bounds = arriving.bounds();
+        SearchRegion out = region;
+        if (bounds.min() != null) {
+            out = taking(out, position, bounds.min(), bounds.min().inclusive() ? Rel.GE : Rel.GT);
+        }
+        if (bounds.max() != null) {
+            out = taking(out, position, bounds.max(), bounds.max().inclusive() ? Rel.LE : Rel.LT);
+        }
+        return out;
+    }
+
+    /** {@code region} with {@code position rel end} taken in, in the vocabulary its place is in. */
+    private static SearchRegion taking(SearchRegion region, NumericTerm.FromOnePosition position,
+                                       Endpoint end, Rel rel) {
+        if (!(end.at() instanceof Count count)) {
+            return region.assuming(position, end.at(), rel);
+        }
+        return region.assuming(LinearForm.<NumericTerm>atomMinusConstant(position, count.exactly()),
+                rel) instanceof SearchRegion.Assumption.Taken(SearchRegion narrower)
+                ? narrower : region;
+    }
+
+    /**
+     * {@code region} with this quantity taken to stand at {@code level}: the line as an equation,
+     * in whichever vocabulary the level is in.
+     *
+     * <p>A number is a level of the form the rule wrote, so the equation is the form less it — over
+     * one position or several, weighed or not. A level that is no number is a place on an order
+     * that counts nothing, which only one position's own value stands on, and the equation is that
+     * position at that place.
+     *
+     * <p>Empty where the equation cannot be said: the form less the level past what the exact
+     * arithmetic holds, or a region with no way to carry it.
+     */
+    private Optional<SearchRegion> atTheLevel(SearchRegion region, Level level) {
+        LinearForm<NumericTerm> direction = of.direction();
+        ExactRatio number = level.asANumber();
+        if (number != null) {
+            LinearForm<NumericTerm> form = direction.minus(LinearForm.constant(number)).orNull();
+            return form != null
+                    && region.assuming(form, Rel.EQ)
+                            instanceof SearchRegion.Assumption.Taken(SearchRegion there)
+                    ? Optional.of(there) : Optional.empty();
+        }
+        if (direction.coefs().size() != 1 || direction.constant().signum() != 0) {
+            return Optional.empty();
+        }
+        Map.Entry<NumericTerm, ExactRatio> only = direction.coefs().entrySet().iterator().next();
+        NumericTerm.FromOnePosition position = only.getKey().atOnePosition();
+        return position == null || !only.getValue().equals(ExactRatio.ONE) ? Optional.empty()
+                : Optional.of(region.assuming(position, level.asAPlace(), Rel.EQ));
     }
 
     /**
@@ -586,52 +697,6 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // names them. Written out here, a reader that reached the numbers by another way would
         // write it out again, and the two would file one rule at two coordinates.
         return AffineReading.filedAt(of.direction().coefs().keySet());
-    }
-
-    /**
-     * What the rules leave this quantity, narrowed by what actually arrives at the comparison —
-     * where the arrival is an interval of this quantity at all, and {@link #within} untouched where
-     * it is not.
-     *
-     * <p>Whether it is lives here, because it is a reading of the quantity and the quantity is this
-     * record's one answer. Asked by the caller instead, a second reader of the direction would stand
-     * beside this one, free to disagree with it about what the rule is about.
-     *
-     * <p><b>The quantity is the position's own value, and nothing else is taken.</b> An arrival
-     * states an interval of the value at one path, so it is an interval of this quantity exactly
-     * where the two are the same value — a quantity that is some multiple of the position is on
-     * another order, and its line is a level of that one. Taken with a change of units, the
-     * arithmetic would be written for a shape no reader produces: what publishes an arrival is one
-     * side of the comparison being that position, and the quantity such a comparison cuts is the
-     * position itself. So the narrower rule is the whole of what is reachable, and what a multiple
-     * costs is precision on a line that stands rather than an answer that is wrong.
-     *
-     * <p>Total over what it takes. An arrival this cannot project restricts nothing — not being
-     * able to read a fact is not a proof — so the answer is what the declarations leave, unchanged.
-     * The whole-state proof that nothing arrives is not taken here at all: that arm of the arrival
-     * is no interval of anything, and a caller holds it apart ({@code ComparisonAssessment}).
-     *
-     * <p>Sound as a meet of two over-approximations: every arriving row is inside both, so a line
-     * outside the meet is a line no arriving row reaches.
-     */
-    souther.compiler.numeric.NumericDomain.Bounds withinGiven(
-            souther.compiler.reach.ComparisonArrival.Values arriving) {
-        LinearForm<NumericTerm> direction = of.direction();
-        if (direction.coefs().size() != 1 || direction.constant().signum() != 0) {
-            return within;
-        }
-        java.util.Map.Entry<NumericTerm, ExactRatio> only =
-                direction.coefs().entrySet().iterator().next();
-        if (!only.getValue().equals(ExactRatio.ONE)
-                || !(only.getKey() instanceof NumericTerm.ValueOf(var position))
-                // The one thing this cannot read off its own quantity: which position the interval
-                // is of. Both are the position the comparison turns on today and the check is what
-                // says so — the day the two readings part, a line would be held inside the values of
-                // somewhere else.
-                || !position.equals(arriving.path())) {
-            return within;
-        }
-        return within == null ? arriving.bounds() : within.meet(arriving.bounds());
     }
 
     /** Whether the rule singles a value out rather than ordering the values around it. */

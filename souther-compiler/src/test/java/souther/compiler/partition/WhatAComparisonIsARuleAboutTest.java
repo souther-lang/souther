@@ -237,10 +237,27 @@ class WhatAComparisonIsARuleAboutTest {
     @Test
     void aLineTheQuantityDoesNotReachIsUnderstoodRatherThanUnread() {
         assertEquals("OutsideTheDomain",
-                named(about("(xs: List<Int>)", "List.length(xs) <= -1")),
-                "a length below zero is a line the quantity never reaches");
+                named(about("(xs: List<Int>)", "List.length(xs) <= -2")),
+                "a line between two lengths below zero is one the quantity never reaches");
         assertEquals("AtAPosition", named(about("(xs: List<Int>)", "List.length(xs) <= 3")),
                 "and the same rule at a length it does reach cuts the position");
+    }
+
+    /**
+     * A line at the very start of what the quantity takes is a line, however the rule is spelled.
+     *
+     * <p>{@code List.length(xs) <= -1} and {@code List.length(xs) < 0} draw one line, between minus
+     * one and nought. No length satisfies either, and an empty list stands at the line on its far
+     * side: a row there shows which way the rule went, and catches the rule written
+     * {@code <= 0}. Which is the answer a guard the declarations never satisfy gets wherever the
+     * number it wrote falls.
+     */
+    @Test
+    void aLineAtTheStartOfWhatTheQuantityTakesIsALineHoweverItIsSpelled() {
+        assertEquals("AtAPosition", named(about("(xs: List<Int>)", "List.length(xs) <= -1")),
+                "the empty list is on the far side of the line");
+        assertEquals("AtAPosition", named(about("(xs: List<Int>)", "List.length(xs) < 0")),
+                "and the same line, spelled with the number on its far side, is the same line");
     }
 
     /** What the rule does to the quantity it cuts. */

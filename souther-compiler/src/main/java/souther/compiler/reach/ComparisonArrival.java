@@ -38,9 +38,12 @@ public sealed interface ComparisonArrival {
      * Not proven empty, and what arrives leaves the value at {@code path} within {@code bounds}.
      *
      * <p>An over-approximation of the values that arrive, and never a claim that any row does:
-     * unsettled is not reachable, and a condition the walk could not read narrowed nothing here. So
-     * a line these bounds do not reach is a line no arriving row reaches — that direction is sound —
-     * while a line they do reach proves nothing.
+     * unsettled is not reachable, and a condition the walk could not read narrowed nothing here.
+     *
+     * <p>A constraint and not an answer about a line. It is taken in beside what the declarations
+     * leave and what the way states, and the line is asked of all of them at once: bounds have no
+     * word for a value taken out of their middle, so asked on their own they would hold a line at
+     * a hole the way leaves.
      */
     record Values(TermPath path, NumericDomain.Bounds bounds) implements ComparisonArrival {
 
@@ -59,7 +62,7 @@ public sealed interface ComparisonArrival {
      * can name a value for, a rule that stands in no body for anything to be on the way to, and a
      * reader handed no entry at all because the walk fell over before finishing. All three read
      * alike because all three license the same thing — nothing. Not being able to project is not a
-     * proof of anything, so a border under this stands as the declarations alone leave it.
+     * proof of anything, so a border under this stands as the declarations and the way leave it.
      */
     record NoProjection() implements ComparisonArrival {}
 }
