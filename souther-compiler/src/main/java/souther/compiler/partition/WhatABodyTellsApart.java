@@ -333,10 +333,14 @@ final class WhatABodyTellsApart {
         // be. A row is one case of a sum for every condition on its way, so the conditions are read
         // together as one choice of case and never one at a time: a fork on the flag reached past a
         // comparison only a `Small` can pass tells `Small`'s flag apart and says nothing of
-        // `Large`'s. Conditions about sums nothing relates are chosen apart, since a case of one
-        // says nothing of the other.
+        // `Large`'s. Conditions whose choices touch nothing of each other are chosen apart
+        // ({@link CaseChoices}), since a case of one says nothing of the other.
+        List<List<Requirements>> takenUnderEach = new ArrayList<>();
+        for (Placed.UnderTheCases each : underTheCases) {
+            takenUnderEach.add(each.underEach().stream().map(Placed.UnderACase::taken).toList());
+        }
         Admitted taken = direct;
-        for (List<Integer> together : relatedByTheirSums(underTheCases)) {
+        for (List<Integer> together : CaseChoices.chosenTogether(takenUnderEach)) {
             List<Admitted> ways = waysUnderTheCases(together, underTheCases, saidUnderTheCases,
                     direct);
             // No case leaves a row that takes the way, so none does.
@@ -355,42 +359,6 @@ final class WhatABodyTellsApart {
             }
             unread[at] |= taken.unread[at];
         }
-    }
-
-    /**
-     * The conditions under the cases, in groups whose cases go together: two conditions are in one
-     * group where some case either can be under requires something of a sum the other's do too.
-     * Each group as indices into {@code underTheCases}, in the order the way met them.
-     */
-    private static List<List<Integer>> relatedByTheirSums(List<Placed.UnderTheCases> underTheCases) {
-        int[] group = new int[underTheCases.size()];
-        List<Set<TermPath>> sums = new ArrayList<>();
-        for (int i = 0; i < underTheCases.size(); i++) {
-            group[i] = i;
-            Set<TermPath> asked = new LinkedHashSet<>();
-            for (Placed.UnderACase one : underTheCases.get(i).underEach()) {
-                asked.addAll(one.taken().refinements().keySet());
-            }
-            sums.add(asked);
-        }
-        for (int i = 0; i < group.length; i++) {
-            for (int j = 0; j < i; j++) {
-                if (!Collections.disjoint(sums.get(i), sums.get(j))) {
-                    int from = group[i];
-                    int to = group[j];
-                    for (int k = 0; k < group.length; k++) {
-                        if (group[k] == from) {
-                            group[k] = to;
-                        }
-                    }
-                }
-            }
-        }
-        Map<Integer, List<Integer>> out = new LinkedHashMap<>();
-        for (int i = 0; i < group.length; i++) {
-            out.computeIfAbsent(group[i], _ -> new ArrayList<>()).add(i);
-        }
-        return List.copyOf(out.values());
     }
 
     /** The positions the conditions {@code together} are measured at under some case. */
