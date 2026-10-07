@@ -172,6 +172,41 @@ class AnArmOnACaseTheSourceWroteIsSettledTest {
         assertEquals(gaps(written), gaps(helper));
     }
 
+    private static final String PICKED = """
+            data Missing
+
+            let pick (v: Int | Missing): Int =
+                match v with
+                    | Int as q -> q
+                    | Missing -> 0
+
+            behavior visit : (n: Int) -> Int
+            let visit (n) = if n > 5 then %s else %s
+
+            example visit
+                | "far" : (6) -> %s
+                | "near" : (5) -> %s
+            """;
+
+    /**
+     * A primitive is a case as a declared one is: a number handed to a helper over a union that
+     * holds it settles which arm the helper takes.
+     */
+    @Test
+    void aPrimitiveTheSourceWroteSettlesTheArm() {
+        Compilation primitive = compiled(PICKED.formatted("pick(3)", "9", "3", "9"));
+        assertEquals(List.of(1), provenUnreachable(primitive), "the Missing arm");
+        assertEquals(List.of("Int is never Missing"), whyDead(primitive));
+    }
+
+    /** One helper handed a primitive at one call and a declared case at another has no dead arm. */
+    @Test
+    void aUnionsArmsEachTakenByOneCallAreNotDead() {
+        Compilation both = compiled(PICKED.formatted("pick(3)", "pick(Missing)", "3", "0"));
+        assertEquals(List.of(), deadBranches(both));
+        assertEquals(List.of(), open(both), "nothing holds the verdict open");
+    }
+
     /**
      * The arms of the source's own forks proven unreachable, by their place in the fork — read
      * before the rows, which a row going through such an arm would otherwise take back.
@@ -218,7 +253,9 @@ class AnArmOnACaseTheSourceWroteIsSettledTest {
         Compilation compilation = Compilation.ofSource("module demo\n\n" + model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model compiles and its rows hold");
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code() + " " + each.diagnostic().literalMessage())
+                .toList(), "the model compiles and its rows hold");
         return compilation;
     }
 }
