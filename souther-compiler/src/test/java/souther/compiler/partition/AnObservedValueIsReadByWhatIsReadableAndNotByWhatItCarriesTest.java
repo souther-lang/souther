@@ -200,8 +200,7 @@ class AnObservedValueIsReadByWhatIsReadableAndNotByWhatItCarriesTest {
      */
     @Test
     void anElementOfAMapIsEveryValueTheRowWrote() {
-        BehaviorInputs inputs = new BehaviorInputs(List.of("m"),
-                List.of(Type.map(Type.STRING, Type.INT)), RuleReadings.ofSource(SPREAD), POLICY);
+        BehaviorInputs inputs = over(Type.map(Type.STRING, Type.INT));
         ObservedValue row = new ObservedValue.Mapping(List.of(
                 new ObservedValue.Entry(new ObservedValue.Text("a"), new ObservedValue.Integer(5)),
                 new ObservedValue.Entry(new ObservedValue.Text("b"), new ObservedValue.Integer(1))));
@@ -211,6 +210,33 @@ class AnObservedValueIsReadByWhatIsReadableAndNotByWhatItCarriesTest {
         assertEquals(List.of(new ObservedValue.Integer(5), new ObservedValue.Integer(1)),
                 read instanceof WalkResult.Reached(List<ObservedValue> values) ? values : null,
                 () -> "the walk into the map's values was taken: " + read);
+    }
+
+    /**
+     * And a value that is not the container the position declares is not read as one.
+     *
+     * <p>Both of them hold values a walk is handed one at a time, and that is not what makes them
+     * readable here: a map written where a list is declared, or a list where a map is, is the type
+     * and the value disagreeing about what stands at the position, and the step cannot be taken.
+     */
+    @Test
+    void aContainerOfTheOtherKindIsAStepThatCannotBeTaken() {
+        ObservedValue aMap = new ObservedValue.Mapping(List.of(
+                new ObservedValue.Entry(new ObservedValue.Text("a"), new ObservedValue.Integer(5))));
+        ObservedValue aList = new ObservedValue.Sequence(List.of(new ObservedValue.Integer(5)));
+
+        assertInstanceOf(WalkResult.CouldNotWalk.class,
+                over(new Type.ListOf(Type.INT)).valuesAt(List.of(aMap), TermPath.of("m").element()),
+                "a map where a list is declared");
+        assertInstanceOf(WalkResult.CouldNotWalk.class,
+                over(Type.map(Type.STRING, Type.INT))
+                        .valuesAt(List.of(aList), TermPath.of("m").element()),
+                "and a list where a map is");
+    }
+
+    /** One parameter {@code m} of {@code type}. */
+    private static BehaviorInputs over(Type type) {
+        return new BehaviorInputs(List.of("m"), List.of(type), RuleReadings.ofSource(SPREAD), POLICY);
     }
 
     private static TermPath amount() {

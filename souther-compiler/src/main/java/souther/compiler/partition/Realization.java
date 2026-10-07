@@ -31,7 +31,7 @@ public sealed interface Realization {
      *
      * <p><b>Demands and not assignments.</b> An entry says that this number is to answer this place,
      * and the key says which value a row rebuilds to make it do so — which for a number one position
-     * answers is that position, and for a number taken over a run is the sequence its values are
+     * answers is that position, and for a number taken over a run is the container its values are
      * read from. The place is what the term answers and never what is written at the root: no total
      * is written at a list.
      *

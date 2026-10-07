@@ -59,7 +59,7 @@ final class ObservedFixtures {
      * parameter they are under, written as fixtures.
      *
      * <p>One value at each. A path read at no value of the one built, or at as many values as a
-     * sequence holds, is a position that has no one value to hand over, and is said as that.
+     * container holds, is a position that has no one value to hand over, and is said as that.
      */
     static Writing<Map<TermPath, FixtureTemplate>> at(BehaviorInputs inputs,
                                                      ObservedValue built, Set<TermPath> paths,

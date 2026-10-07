@@ -6,7 +6,7 @@ package souther.compiler.inputs;
  *
  * <p>A rule root is a reading opened at a value, and not a fact about every value the behavior
  * takes. What a parameter's rules say holds of every row; what a case's rules say holds of the rows
- * whose value turned out to be that case, and what an element's say holds where the sequence holds
+ * whose value turned out to be that case, and what an element's say holds where the container holds
  * one. A reading that met all of them into one space would be saying that every row is every case
  * at once — which is a sum's cases refusing an input between them, and a rule of the value above
  * reaching a position under a name nothing resolves to.
@@ -41,14 +41,14 @@ sealed interface RootOpening {
     record Refined(TermPath outer, SharedNames crossing) implements RootOpening {}
 
     /**
-     * An element: its rules hold where {@code sequence} holds one.
+     * An element: its rules hold where {@code container} holds one.
      *
-     * <p>Nothing crosses. What a clause of the value out here says is written about the sequence,
+     * <p>Nothing crosses. What a clause of the value out here says is written about the container,
      * and an element is a value with a declaration of its own.
      *
-     * @param outer    where the rules that were handed on were read
-     * @param sequence the container, whose being empty is a row this behavior takes as readily as
-     *                 one that fills it
+     * @param outer     where the rules that were handed on were read
+     * @param container the container, whose being empty is a row this behavior takes as readily as
+     *                  one that fills it
      */
-    record Inside(TermPath outer, TermPath sequence) implements RootOpening {}
+    record Inside(TermPath outer, TermPath container) implements RootOpening {}
 }

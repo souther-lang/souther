@@ -2743,7 +2743,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case RULE_ABOUT_A_DERIVED_VALUE ->
                     "it is about a value made from this one, and what it says about the values here"
                             + " is not worked out";
-            case RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_SEQUENCES ->
+            case RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_CONTAINERS ->
                     "it is written inside a block handed to more than one walk, so it is about an"
                             + " element of this position or of another and nothing says which";
             case RULE_CUTS_NOTHING ->

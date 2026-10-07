@@ -62,21 +62,8 @@ public sealed interface ObservedValue {
         }
     }
 
-    /**
-     * A value that holds others a walk over it is handed one at a time, and what those are.
-     *
-     * <p>A list's or a set's elements, and a map's values, in the order the value holds them. One
-     * question for every reader of a row that steps into an element, so that what a map holds is
-     * read at the element by all of them or by none.
-     */
-    sealed interface Held extends ObservedValue permits Sequence, Mapping {
-
-        /** What a walk over this value is handed, one at a time. */
-        List<ObservedValue> elements();
-    }
-
     /** A {@code List} or a {@code Set}. Which one it was is the declared type's to say, not the value's. */
-    record Sequence(List<ObservedValue> elements) implements Held {
+    record Sequence(List<ObservedValue> elements) implements ObservedValue {
         public Sequence {
             elements = List.copyOf(elements);
         }
@@ -84,15 +71,15 @@ public sealed interface ObservedValue {
 
     /** A {@code Map}, as its entries. Not a {@link Sequence} of pairs: an entry has a key and a value,
      * and flattening it would make the reader restate which is which. */
-    record Mapping(List<Entry> entries) implements Held {
+    record Mapping(List<Entry> entries) implements ObservedValue {
         public Mapping {
             entries = List.copyOf(entries);
         }
 
-        /** The values, which is what a walk over a map is handed as the element. Made each time it
-         *  is asked for, so a reader going through them asks once and walks what it was given. */
-        @Override
-        public List<ObservedValue> elements() {
+        /** The values, in the order the entries are held — what a walk over a map is handed as the
+         *  element. Made each time it is asked for, so a reader going through them asks once and
+         *  walks what it was given. */
+        public List<ObservedValue> values() {
             return entries.stream().map(Entry::value).toList();
         }
     }

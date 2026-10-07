@@ -145,24 +145,10 @@ class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
      */
     private static Set<Incompleteness.Code> everyCodeAValueArrivesUnreadWith() {
         Set<Incompleteness.Code> out = new LinkedHashSet<>();
-        for (Class<?> shape : shapesUnder(ObservedValue.class)) {
+        for (Class<?> shape : ObservedValue.class.getPermittedSubclasses()) {
             Incompleteness.Code code = oneOf(shape).unread();
             if (code != null) {
                 out.add(code);
-            }
-        }
-        return out;
-    }
-
-    /** Every shape a value of {@code sealed} can take, through the sealed kinds it is divided
-     *  into on the way: what holds other values is one of those, and a value is never only that. */
-    private static List<Class<?>> shapesUnder(Class<?> sealed) {
-        List<Class<?>> out = new ArrayList<>();
-        for (Class<?> permitted : sealed.getPermittedSubclasses()) {
-            if (permitted.isSealed()) {
-                out.addAll(shapesUnder(permitted));
-            } else {
-                out.add(permitted);
             }
         }
         return out;

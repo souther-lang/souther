@@ -140,7 +140,7 @@ public final class InputReads {
      *
      * <p>Rooted at paths rather than at parameter names, which is what such a clause needs: it binds
      * the fields of the declaration that wrote it, and those fields stand wherever a value of that
-     * declaration stands — under a parameter, under a field of one, under what a sequence holds. A
+     * declaration stands — under a parameter, under a field of one, under what a container holds. A
      * name here is a field's binding and never a parameter's, so there is no name to look a
      * parameter up by.
      *
@@ -576,7 +576,7 @@ public final class InputReads {
             }
             // An element of more than one container is an element, and what it may be is not the
             // values of any one of them. Answered with what one container was written with, a name
-            // would stand for a value out of a sequence the run it is on never walked; answered
+            // would stand for a value out of a container the run it is on never walked; answered
             // with what all of them were, it would stand for a set no run puts there.
             case BindingRole.ElementOfSeveral _ -> new ReadMeaning.Element();
             // Read in this environment. Bindings are added on the way down and each tells itself

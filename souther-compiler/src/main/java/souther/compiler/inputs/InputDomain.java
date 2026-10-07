@@ -104,7 +104,7 @@ public final class InputDomain {
      * <p><b>What starts a new one is a descent crossing a boundary of rule ownership</b>, which is
      * wherever the value below is one a declaration writes its own clauses about. Narrowing into a
      * case is one — what a {@code GlobalQuery} says about its {@code tag} is written in
-     * {@code GlobalQuery} and cannot be written in the sum — and so is entering what a sequence
+     * {@code GlobalQuery} and cannot be written in the sum — and so is entering what a container
      * holds, since what {@code Tag} says about itself is written in {@code Tag} however the position
      * is reached. Both go through {@link #takeTheRulesOver} and nothing else does, which is what a
      * shape this compiler learns to walk later has to do to have its rules read at all (#1072).
@@ -1122,8 +1122,8 @@ public final class InputDomain {
                 if (!stopped) {
                     handoffs.passesTo(placed.root(), path, List.of(at));
                 }
-                // Nothing crosses into what a sequence holds: what a clause of the value out here
-                // says is written about the sequence, and an element is a value with a declaration
+                // Nothing crosses into what a container holds: what a clause of the value out here
+                // says is written about the container, and an element is a value with a declaration
                 // of its own.
                 takeTheRulesOver(placed.root(), path, at, elements.element(), ancestry, reading,
                         found, roots, java.util.Set.of(), handoffs, observed, null,
@@ -1258,7 +1258,7 @@ public final class InputDomain {
      * Open a reading at a position the rules were passed to, and say that it took them.
      *
      * <p>The one way a reading of a value begins under another. What a case of a sum holds and what
-     * a sequence holds are values with declarations of their own, and a clause is not written across
+     * a container holds are values with declarations of their own, and a clause is not written across
      * either boundary: what {@code Tag} says about itself is written in {@code Tag}, whether the
      * position is reached by narrowing an optional or by being one of however many a list holds. So
      * both cross here, and a shape this compiler learns to walk later is a shape whose rules are

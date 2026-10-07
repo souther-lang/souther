@@ -346,7 +346,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
      *
      * <p>Not a position at which this term may be divided. What a reader may do with this is go and
      * look — read the values, ask what the declarations put there, send an author to it — and none
-     * of those is drawing a line. A term whose values come from a run of a sequence answers here as
+     * of those is drawing a line. A term whose values come from a run of a container answers here as
      * readily as one answered by a single place, and only the second of them has a position a class
      * can be a class of ({@link FromOnePosition#position}).
      *
@@ -400,7 +400,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
             case TakenOf taken -> TakenOf.of(taken.operation(), other, taken.arguments(), at,
                     inners, symbols);
             // What moves here is where a number is taken, and a run is not taken anywhere: its
-            // values come from a place inside a sequence, and the name that would move is the
+            // values come from a place inside a container, and the name that would move is the
             // container's. Answered as "not there" rather than by rebuilding the run at a
             // location, which would be this reading inventing where a walk got its values.
             case TakenOver _ -> null;
