@@ -34,7 +34,7 @@ import java.util.Objects;
  * the value rather than a place in it ({@link #requirements}).
  *
  * <p><b>A location, and nothing about how many values stand at one.</b> A {@link Step.Element}
- * says the position is inside the sequence above it; it does not say some element, or every element,
+ * says the position is inside the container above it; it does not say some element, or every element,
  * or one in particular. How many elements of a list a class has to hold is a property of what is
  * owed there and of the row that answers it, and putting it here would make two paths out of one
  * location — after which a rule written about the location and a row walked to it would no longer
@@ -73,12 +73,17 @@ public record TermPath(String head, List<Step> steps) {
         }
 
         /**
-         * Inside the sequence the path has reached so far.
+         * Inside the container the path has reached so far: what a list or a set holds, or a map's
+         * values.
          *
          * <p>Which element is not something a path can say, and not something it is short of
          * saying: a list holds as many as it holds, and they are one position because one rule is
          * written about them. What a class here means, and how many elements a row has to put in
          * one, are settled where the class and the row are and not here.
+         *
+         * <p>A map's values and not its keys. The values are what a walk over a map hands on as
+         * the element, and a key is a value of another type standing beside each of them, so the
+         * two are not one position.
          */
         record Element() implements Step {
 
@@ -180,7 +185,7 @@ public record TermPath(String head, List<Step> steps) {
         return append(new Step.Field(field));
     }
 
-    /** The same path, inside the sequence it has reached. */
+    /** The same path, inside the container it has reached. */
     public TermPath element() {
         return append(new Step.Element());
     }
@@ -284,10 +289,10 @@ public record TermPath(String head, List<Step> steps) {
         return steps;
     }
 
-    /** Whether any step of this reaches inside a sequence. */
-    public boolean insideASequence() {
+    /** Whether any step of this reaches inside a container. */
+    public boolean insideAContainer() {
         for (Step step : steps) {
-            if (reachesInsideASequence(step)) {
+            if (reachesInsideAContainer(step)) {
                 return true;
             }
         }
@@ -295,14 +300,14 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /**
-     * Whether {@code step} goes inside a collection.
+     * Whether {@code step} goes inside a container.
      *
      * <p>Exhaustive over {@link Step}, with no {@code default}, and the one place the question is
      * decided. Three readers ask it — whether this position is inside one at all, which one a clause
      * can name, and which ones have to hold a value for it to exist — and a step added later would
      * have joined whichever side each reader's condition happened to leave it on.
      */
-    private static boolean reachesInsideASequence(Step step) {
+    private static boolean reachesInsideAContainer(Step step) {
         return switch (step) {
             case Step.Element _ -> true;
             // A field goes into the value and a narrowing stays at it. Neither is a container's
@@ -335,7 +340,7 @@ public record TermPath(String head, List<Step> steps) {
      * are being read, and putting it in {@link #ruleKey} would make this path know that too.
      *
      * <p>The one way a position becomes a name. Which of the steps below the root are names is
-     * decided here and nowhere else — a step into a sequence and a narrowing to a case are places
+     * decided here and nowhere else — a step into a container and a narrowing to a case are places
      * a value can be and are not names any rule writes — so a name is never assembled out of the
      * steps by anybody who would have to remember that.
      *
@@ -366,15 +371,15 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /**
-     * The sequence this position is inside, or this path where it is inside none.
+     * The outermost container this position is inside, or this path where it is inside none.
      *
      * <p>Up to the first element step, which is the container a clause of the value can name — what
-     * is written about what a list holds is written about the list. A position two sequences deep
+     * is written about what a list holds is written about the list. A position two containers deep
      * answers with the outer one, since that is where the naming stops either way.
      */
-    public TermPath containingSequence() {
+    public TermPath outermostContainer() {
         for (int i = 0; i < steps.size(); i++) {
-            if (reachesInsideASequence(steps.get(i))) {
+            if (reachesInsideAContainer(steps.get(i))) {
                 return new TermPath(head, steps.subList(0, i));
             }
         }
@@ -382,17 +387,17 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /**
-     * Every sequence this position stands inside, outermost first.
+     * Every container this position stands inside, outermost first.
      *
-     * <p>One per element step. A position two sequences deep stands inside both, and a value stands
+     * <p>One per element step. A position two containers deep stands inside both, and a value stands
      * at it only where each of them holds something — so a reader asking what has to hold a value
-     * for this one to exist is owed all of them. {@link #containingSequence} answers with the first
+     * for this one to exist is owed all of them. {@link #outermostContainer} answers with the first
      * and is asked the other question: which container a clause of the value can name.
      */
-    public List<TermPath> sequencesContainingIt() {
+    public List<TermPath> containersHoldingIt() {
         List<TermPath> out = new ArrayList<>();
         for (int i = 0; i < steps.size(); i++) {
-            if (reachesInsideASequence(steps.get(i))) {
+            if (reachesInsideAContainer(steps.get(i))) {
                 out.add(new TermPath(head, steps.subList(0, i)));
             }
         }
@@ -404,7 +409,7 @@ public record TermPath(String head, List<Step> steps) {
      * this is rooted at can name it.
      *
      * <p>Null for two unlike reasons, and both of them are the same shape of answer. The clauses of
-     * a record relate the fields of that record, and a position inside a sequence is not one of
+     * a record relate the fields of that record, and a position inside a container is not one of
      * them — {@code items.charge} is a field of what a list holds, and no clause of the record
      * holding the list is written at that name. And a clause is not written across a refinement
      * either: what a {@code GlobalQuery} says about its {@code tag} is written in

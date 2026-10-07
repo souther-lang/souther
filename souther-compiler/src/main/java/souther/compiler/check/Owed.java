@@ -63,7 +63,7 @@ public sealed interface Owed {
      * <p><b>A name the rules of the value write, and never a place a row writes a value at.</b> The
      * two part at a sum whose cases share a spread, and a question is on the side the rules are
      * read from: what is at a name here is what a rule of this value could have said something
-     * about, which is why a position inside a sequence or under a case is not one of these rather
+     * about, which is why a position inside a container or under a case is not one of these rather
      * than one nothing is written at.
      */
     record Boundary(NumberAt<RuleKey> on) implements Owed {

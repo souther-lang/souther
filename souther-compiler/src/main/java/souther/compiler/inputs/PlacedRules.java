@@ -190,7 +190,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     /**
      * What is left for the position at {@code path}, which is read from the value this is of.
      *
-     * <p>Nothing at a position inside a sequence, and nothing at the value's own path. The clauses
+     * <p>Nothing at a position inside a container, and nothing at the value's own path. The clauses
      * read here relate the fields of a record ({@link TermPath#ruleKeyUnder}, since the value this
      * is of need not be the parameter), and neither of those is one of them.
      */
@@ -495,7 +495,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * What the rules of this value call {@code path}, for the questions every position answers.
      *
      * <p>Every position under this reading's root has a name here, the root's own included. What a
-     * sequence holds is not one of them: an element is a value with a declaration of its own and a
+     * container holds is not one of them: an element is a value with a declaration of its own and a
      * reading is opened at it, so a path under this root never steps into one — and a position this
      * reading is not of is not a position it may be asked about.
      */

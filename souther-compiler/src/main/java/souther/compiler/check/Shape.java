@@ -68,7 +68,21 @@ public sealed interface Shape permits Shape.ReadablePositionShape, Shape.Cases, 
      * have no terminator at all.
      */
     sealed interface ReadablePositionShape extends Shape
-            permits Scalar, Product, Sum, Sequence, Unit, Mapping, Optional, Unresolved {}
+            permits Scalar, Product, Sum, Container, Unit, Optional, Unresolved {}
+
+    /**
+     * A shape whose values a walk over it hands on one at a time, and what those values are.
+     *
+     * <p>A list's or a set's elements, and a map's values. Asked once here because several readers
+     * step into the element of a position — a walk over the input, a value written for a row, a
+     * row read back — and one that answered for a list alone would have a map's values be an
+     * element to some of them and nothing to the rest.
+     */
+    sealed interface Container extends ReadablePositionShape permits Sequence, Mapping {
+
+        /** What a walk over a value of this shape is handed, one at a time. */
+        Type element();
+    }
 
     /** A primitive, written as itself. */
     record Scalar(Type.Prim prim) implements ReadablePositionShape {}
@@ -153,13 +167,21 @@ public sealed interface Shape permits Shape.ReadablePositionShape, Shape.Cases, 
 
     /** A {@code List} or a {@code Set}, and what it holds. Which of the two is the declared type's
      *  to say — the values are the same either way, and how they are written is not. */
-    record Sequence(Kind kind, Type element) implements ReadablePositionShape {
+    record Sequence(Kind kind, Type element) implements Container {
 
         public enum Kind { LIST, SET }
     }
 
     /** A {@code Map}, by what it is keyed by and what it holds. */
-    record Mapping(Type key, Type value) implements ReadablePositionShape {}
+    record Mapping(Type key, Type value) implements Container {
+
+        /** The values, which is what a walk over a map is handed as the element. The key is the
+         *  other thing it is handed, and is not this. */
+        @Override
+        public Type element() {
+            return value;
+        }
+    }
 
     /** An {@code Option}, and what it holds when it holds anything. */
     record Optional(Type element) implements ReadablePositionShape {}

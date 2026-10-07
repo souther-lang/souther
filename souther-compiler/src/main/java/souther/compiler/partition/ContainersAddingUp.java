@@ -976,9 +976,9 @@ final class ContainersAddingUp {
      * <p><b>One occurrence of the number per element, and nothing here has to check it.</b> The
      * split this fills a container from is one number per element, so a way down that passed
      * through a container of its own would build a value coming to a multiple of the total. No such
-     * way is asked about: a run is read from a path standing inside one sequence
+     * way is asked about: a run is read from a path standing inside one container
      * ({@link souther.compiler.inputs.RunSource}), and a total of what a location holds is read at
-     * the element itself — so a position under the element with a sequence on the way to it is not
+     * the element itself — so a position under the element with a container on the way to it is not
      * a number this is ever asked to write for. Guarded here as well, the guard would be one
      * nothing can reach and nothing could show wrong.
      *

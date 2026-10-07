@@ -7,16 +7,16 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * What a question about an input assumes stands: the narrowings it selects, and the sequences it
+ * What a question about an input assumes stands: the narrowings it selects, and the containers it
  * needs to hold an element.
  *
  * <p>Every position of an input exists under conditions. A field of a case is there where the value
- * turned out to be that case; a field of an element is there where the sequence holds one. So a
+ * turned out to be that case; a field of an element is there where the container holds one. So a
  * question naming positions is a question asked of the rows that meet those conditions, and which
  * rules reach it is settled by that and by nothing else ({@link #holds}).
  *
- * <p><b>Structural and nothing else.</b> It records the refinements selected and the containing
- * sequences required to hold an element. It holds no numeric constraint, no fixed value and no
+ * <p><b>Structural and nothing else.</b> It records the refinements selected and the containers
+ * required to hold an element. It holds no numeric constraint, no fixed value and no
  * assumption: <em>those are interpreted under this context, not made part of it.</em> Which is what
  * the name is for. Called a context outright it would be where the next reader files a fixed value —
  * a fixed value being part of the context of a question in every sense but this one — and the line
@@ -29,7 +29,7 @@ import java.util.Set;
  * per question instead, each reader would look at a path and decide for itself that a case was
  * wanted, and the readers would come apart one at a time.
  */
-record StructuralContext(Requirements refinements, Set<TermPath> nonEmptySequences) {
+record StructuralContext(Requirements refinements, Set<TermPath> nonEmptyContainers) {
 
     /** A question that assumes nothing: the parameters, and whatever stands under no condition. */
     static final StructuralContext NONE = new StructuralContext(Requirements.NONE, Set.of());
@@ -49,9 +49,9 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptySequenc
         /** The value at {@code at} turned out to be one of these cases. */
         record TheCaseAt(TermPath at, CasesLeft is) implements Assumption {}
 
-        /** The sequence at {@code sequence} holds an element, or the position named inside it
+        /** The container at {@code container} holds an element, or the position named inside it
          *  stands nowhere. */
-        record HoldingSomething(TermPath sequence) implements Assumption {}
+        record HoldingSomething(TermPath container) implements Assumption {}
     }
 
     /**
@@ -64,12 +64,12 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptySequenc
     List<Assumption> assumptions() {
         List<Assumption> out = new ArrayList<>();
         refinements.refinements().forEach((at, is) -> out.add(new Assumption.TheCaseAt(at, is)));
-        nonEmptySequences.forEach(each -> out.add(new Assumption.HoldingSomething(each)));
+        nonEmptyContainers.forEach(each -> out.add(new Assumption.HoldingSomething(each)));
         return List.copyOf(out);
     }
 
     StructuralContext {
-        nonEmptySequences = Set.copyOf(nonEmptySequences);
+        nonEmptyContainers = Set.copyOf(nonEmptyContainers);
     }
 
     /**
@@ -77,13 +77,13 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptySequenc
      *
      * <p>Both halves read off the path, which is where they are already kept:
      * {@link TermPath#requirements} says which narrowings were taken to get here, and
-     * {@link TermPath#sequencesContainingIt} says which containers have to hold something for this
+     * {@link TermPath#containersHoldingIt} says which containers have to hold something for this
      * to be anywhere. Kept beside a path instead, a position would carry a second account of what it
      * already says.
      */
     static StructuralContext of(TermPath path) {
         return new StructuralContext(path.requirements(),
-                new LinkedHashSet<>(path.sequencesContainingIt()));
+                new LinkedHashSet<>(path.containersHoldingIt()));
     }
 
     /**
@@ -91,15 +91,15 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptySequenc
      *
      * <p>Refinements are compared by {@link Requirements#merge} and by nothing written here: whether
      * two narrowings hold of one value is that type's question, asked by everything that decides
-     * whether two positions can be in one row. Sequences only accumulate — needing one to hold an
+     * whether two positions can be in one row. Containers only accumulate — needing one to hold an
      * element and needing another to hold one are never at odds.
      */
     Merge merge(StructuralContext other) {
         return switch (refinements.merge(other.refinements)) {
             case Requirements.Merge.Conflict it -> new Merge.Disagreeing(it);
             case Requirements.Merge.Merged it -> {
-                Set<TermPath> both = new LinkedHashSet<>(nonEmptySequences);
-                both.addAll(other.nonEmptySequences);
+                Set<TermPath> both = new LinkedHashSet<>(nonEmptyContainers);
+                both.addAll(other.nonEmptyContainers);
                 yield new Merge.Together(new StructuralContext(it.requirements(), both));
             }
         };
@@ -129,19 +129,19 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptySequenc
      * position, which is a caller asking about a case it has already ruled out.
      */
     StructuralContext and(TermPath at, Refinement branch) {
-        return new StructuralContext(refinements.and(at, branch), nonEmptySequences);
+        return new StructuralContext(refinements.and(at, branch), nonEmptyContainers);
     }
 
     /**
-     * The same, with {@code sequence} required to hold an element as well.
+     * The same, with {@code container} required to hold an element as well.
      *
      * <p>What a reader asking whether anything can stand inside a container assumes while it asks.
      * A container that may be empty is a value whatever is true of what it would hold, so the
      * question is only ever asked under this.
      */
-    StructuralContext holding(TermPath sequence) {
-        Set<TermPath> more = new LinkedHashSet<>(nonEmptySequences);
-        more.add(sequence);
+    StructuralContext holding(TermPath container) {
+        Set<TermPath> more = new LinkedHashSet<>(nonEmptyContainers);
+        more.add(container);
         return new StructuralContext(refinements, more);
     }
 
@@ -162,7 +162,7 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptySequenc
                 return false;
             }
         }
-        return nonEmptySequences.containsAll(other.nonEmptySequences);
+        return nonEmptyContainers.containsAll(other.nonEmptyContainers);
     }
 
     /**
@@ -185,7 +185,7 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptySequenc
                     new Assumption.TheCaseAt(it.crossing().sum(),
                             CasesLeft.of(it.crossing().branch())));
             case RootOpening.Inside it ->
-                    assumptions().contains(new Assumption.HoldingSomething(it.sequence()));
+                    assumptions().contains(new Assumption.HoldingSomething(it.container()));
         };
     }
 }

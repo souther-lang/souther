@@ -142,7 +142,7 @@ final class InputPath {
                 case BindingRole.Element _ -> elementOf(r.binding(), names);
                 // An element of more than one container is at one of their places and which is not
                 // settled. Answered with the first, a rule under this name would be filed at a
-                // sequence it says nothing about; answered with none, it would read as a name that
+                // container it says nothing about; answered with none, it would read as a name that
                 // holds nothing of the input, and a rule the author wrote about their input would
                 // leave the measurement without a word.
                 case BindingRole.ElementOfSeveral(var containers) ->
@@ -207,7 +207,7 @@ final class InputPath {
             // A choice between values, which stands at no one place.
             case Core.If _, Core.IfConstructed _, Core.Match _ -> new PathResolution.NotAPosition();
             // A place inside a tuple, which is no position of an input: what a path is made of is a
-            // field, an element of a sequence and a case ({@link TermPath.Step}), and a tuple's
+            // field, an element of a container and a case ({@link TermPath.Step}), and a tuple's
             // places are none of the three. This is what the model says and not what this walk
             // declined to follow — there is nothing here to name.
             case Core.TupleGet _ -> new PathResolution.NotAPosition();

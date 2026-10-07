@@ -259,7 +259,7 @@ public final class DeclaredInput {
      * What one step of a path stands at, or null where the declarations put nothing there.
      *
      * <p><b>Exhaustive over the kinds of step, with no {@code default}.</b> A path goes into a
-     * field, into what a sequence holds, or nowhere at all while narrowing which values may stand
+     * field, into what a container holds, or nowhere at all while narrowing which values may stand
      * where it already is ({@link Refinement}) — three, and a reading that answered one of them and
      * let the rest fall to null would lose a line the model draws for every path carrying one. A
      * fourth kind is a compile error here rather than a fourth quiet absence.

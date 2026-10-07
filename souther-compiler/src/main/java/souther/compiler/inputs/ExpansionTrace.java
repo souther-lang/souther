@@ -44,8 +44,8 @@ public record ExpansionTrace(Map<TypeSymbol, TermPath> open) {
      * later is answered here rather than walked as one that opens nothing — which is the answer
      * that does not terminate.
      *
-     * <p>A sequence and an optional open nothing. What a list holds and what an option holds are
-     * types in their own right and are declared elsewhere or nowhere; the position under them is
+     * <p>A container and an optional open nothing. What a container holds and what an option holds
+     * are types in their own right and are declared elsewhere or nowhere; the position under them is
      * where the declaration they name is opened, and it is that position this is asked of.
      */
     public static TypeSymbol unfoldedBy(Shape.ReadablePositionShape shape) {

@@ -43,7 +43,7 @@ import java.util.List;
  * @param term    the number this axis is of: a location's own content, or something taken of it.
  *                Answered by one input position and held as such, because that is what an axis is:
  *                a run of classes over the values of a number a row can be asked for somewhere. A
- *                number read from a run of a sequence has no such place, so it draws a line without
+ *                number read from a run of a container has no such place, so it draws a line without
  *                dividing anything and never arrives here
  * @param classes exclusive and exhaustive over the term's values, or empty where the model does
  *                not divide them

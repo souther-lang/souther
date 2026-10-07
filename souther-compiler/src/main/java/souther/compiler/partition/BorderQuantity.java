@@ -1067,7 +1067,7 @@ public sealed interface BorderQuantity {
          * Every value standing at {@code path}, for a number taken over a run of them.
          *
          * <p>Beside {@link #at} and not instead of it. What a row holds at a place inside a
-         * sequence is as many values as it wrote, and which question is being asked decides what to
+         * container is as many values as it wrote, and which question is being asked decides what to
          * do with them: a rule relating two positions is about one element and picks, and a rule
          * about what they add up to is about all of them and does not. Answered by one method, the
          * caller that wanted one would be handed a list to choose from and the choosing would move

@@ -88,12 +88,12 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         table.put("LineSideNotWorkedOut", "LINE_SIDE_NOT_WORKED_OUT/UNAFFECTED");
         table.put("RuleAboutADerivedValue",
                 "RULE_ABOUT_A_DERIVED_VALUE/UNAFFECTED");
-        // And a rule about an element of one of several sequences, which is the same two measures
-        // short for a reason of its own: the rule was read and which of the sequences it is about
+        // And a rule about an element of one of several containers, which is the same two measures
+        // short for a reason of its own: the rule was read and which of the containers it is about
         // is what nothing here works out, so what it divides and what it bounds are unknown at
         // each of them. A run allowed more meets it again — nothing was compared against a figure.
-        table.put("RuleAboutAnElementOfSeveralSequences",
-                "RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_SEQUENCES/UNAFFECTED");
+        table.put("RuleAboutAnElementOfSeveralContainers",
+                "RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_CONTAINERS/UNAFFECTED");
         table.put("UnreadValueRule", "UNSUPPORTED_SYNTAX/UNAFFECTED");
         // An end a choice in the rule left open. Its own word and not the one above: the rule at
         // this position was read, and what an author acts on is the branch written beside it. A run
@@ -203,7 +203,6 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         table.put("TypeUnresolved", "TYPE_UNRESOLVED/UNAFFECTED");
         table.put("RecursiveExpansion",
                 "RETURNS_TO_A_DECLARATION_ALREADY_READ/UNAFFECTED");
-        table.put("UnsupportedTraversal", "UNSUPPORTED_TRAVERSAL/UNAFFECTED");
         table.put("ValueRulesNotReached", "RULES_NOT_READ_AT_ALL/UNAFFECTED");
         // The two rows this pair is for. One word out there and two reasons in here: a document
         // promises a reader the hole under the position and not which figure this compiler stopped
@@ -434,7 +433,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.LineSideNotWorkedOut(
                         souther.compiler.numeric.UnheldNumber.NO_REPRESENTATION_EXISTS),
                 new BlockReason.RuleAboutADerivedValue(),
-                new BlockReason.RuleAboutAnElementOfSeveralSequences(),
+                new BlockReason.RuleAboutAnElementOfSeveralContainers(),
                 new BlockReason.UnreadValueRule(),
                 new BlockReason.EndLeftOpenByAChoice(),
                 new BlockReason.ValueRuleLeftOpenByAChoice(),
@@ -458,7 +457,6 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                         souther.compiler.types.TypeSymbols.declared(
                                 new souther.compiler.types.TypeKey("g", "Chain")),
                         TermPath.of("c")),
-                new BlockReason.UnsupportedTraversal(BlockReason.Traversal.MAPPING_CONTENT),
                 new BlockReason.ValueRulesNotReached(),
                 new BlockReason.ValueRulesNotReachedPastDepthLimit());
     }

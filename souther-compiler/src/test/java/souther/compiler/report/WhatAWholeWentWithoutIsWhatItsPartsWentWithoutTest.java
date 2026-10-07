@@ -45,14 +45,9 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
      * this is looking for — so a model producing only one kind would hold the rule over one path
      * and say nothing about the rest.
      *
-     * <p>The mapping is what leaves a reading short. What it holds is a value this compiler does not
-     * name a position for, so {@code Amount}'s rule is written under a position no reading is ever
-     * opened at — and nothing a row does reaches it.
-     *
-     * <p>It used to be an {@code Assignee?} with a clause behind the option. That clause is read at
-     * the narrowing, where a row meets it and a border is owed against it, so the model went short of
-     * nothing (#1072). What is wanted here is a reading that really did not happen, which is what a
-     * mapping still is.
+     * <p>The list of issues inside an issue is what leaves a reading short. What it holds returns to
+     * the declaration the walk has already opened, so the walk stops there — a reading that really
+     * did not happen, and nothing a row does reaches past it.
      */
     private static final String MODEL = """
             module example.whole
@@ -62,7 +57,7 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
             data Small = { n: Int }
             data Amount = Int
                 invariant ranged = value >= 0
-            data Issue = { cost: Map<String, Amount> }
+            data Issue = { cost: Amount, more: List<Issue> }
 
             partial let spin (n: Int): Int = spin(n)
 

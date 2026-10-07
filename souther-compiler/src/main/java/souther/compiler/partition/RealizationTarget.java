@@ -130,11 +130,11 @@ public sealed interface RealizationTarget {
     }
 
     /**
-     * A number taken over a run of values, realized by writing the sequence they are read from.
+     * A number taken over a run of values, realized by writing the container they are read from.
      *
      * <p>What makes the root one location is the run's own invariant: a run is over every occurrence
-     * of the path it is read from, and a path standing inside two sequences is not one
-     * ({@code inputs.RunSource}). So there is exactly one sequence holding all of the values, and
+     * of the path it is read from, and a path standing inside two containers is not one
+     * ({@code inputs.RunSource}). So there is exactly one container holding all of the values, and
      * rebuilding it is the whole of what moves the number.
      *
      * <p>The values themselves are not written anywhere and no position of the row holds them. A
@@ -145,7 +145,7 @@ public sealed interface RealizationTarget {
 
         @Override
         public TermPath writeRoot() {
-            return term.source().subjectPath().containingSequence();
+            return term.source().subjectPath().outermostContainer();
         }
 
         @Override

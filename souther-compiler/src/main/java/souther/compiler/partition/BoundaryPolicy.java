@@ -101,7 +101,7 @@ final class BoundaryPolicy {
      * <p>What the reading settles is this: <b>every atom of a form it composed is a term the row
      * decides.</b> A value at a position of the input is one, a number taken of one is one, and a
      * number taken over the occurrences of one path in a single run is one — that last names no
-     * single position, and what makes the row decide it is the run naming exactly one sequence
+     * single position, and what makes the row decide it is the run naming exactly one container
      * ({@link souther.compiler.inputs.RunSource}). What a row does not decide is not an atom at all:
      * it enters a form only where it was written out and every value of it came to the same form
      * ({@link souther.compiler.check.AffineForms}), after which it is a number and no longer an

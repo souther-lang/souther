@@ -86,7 +86,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
 
     /**
      * The values read at {@code path} off what a row wrote, which is one value at most positions and
-     * however many were written at a position inside a sequence.
+     * however many were written at a position inside a container.
      *
      * <p>Read at the path and not written at it. Where a row puts a value and where a reading names
      * one part at a sum every case of which spreads a declaration: the name is readable at the sum
@@ -131,7 +131,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
 
     /**
      * One value a row put at {@code path}, and which element was taken to reach it at each step
-     * inside a sequence.
+     * inside a container.
      *
      * <p>The element and not only the value, because a relation between two positions is about one
      * element and not about the two sets. A row holding one person under a line and another over it
@@ -140,8 +140,8 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      * off the sets, the pairs one row covers are every combination of them, and a row is counted as
      * evidence for a combination none of its elements is in.
      *
-     * @param at which element was taken at each step inside a sequence, outermost first. Empty
-     *           where the path enters no sequence, which is one occurrence and stands with every
+     * @param at which element was taken at each step inside a container, outermost first. Empty
+     *           where the path enters no container, which is one occurrence and stands with every
      *           other
      */
     public record Occurrence(ElementsTaken at, ObservedValue value) {
@@ -323,8 +323,8 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
         return switch (step) {
             case TermPath.Step.Field named -> shape instanceof Shape.Product product
                     ? product.fields().get(named.name()) : null;
-            case TermPath.Step.Element _ -> shape instanceof Shape.Sequence sequence
-                    ? sequence.element() : null;
+            case TermPath.Step.Element _ -> shape instanceof Shape.Container container
+                    ? container.element() : null;
             // What a sum's case holds is the value the sum held, and what an optional holds is at
             // no name of its own — so both narrow the type at this position and nothing is
             // descended into. A value is written as one case, so a position left several of them
@@ -349,7 +349,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
     /**
      * One observed value on the way down a path, with the type the reading exposes at that position.
      *
-     * <p>A list of these and not one, because a step into what a sequence holds turns one value
+     * <p>A list of these and not one, because a step into what a container holds turns one value
      * into as many as it holds. Everything else keeps the count it had.
      *
      * <p><b>How an observed value is read, which is not where a written one has its parts.</b> The
@@ -411,18 +411,21 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                 // Every element the row wrote, and no choice among them. Which of them a rule is
                 // about is not something the coordinate says, so what stands here is all of them
                 // and what a class comes to over them is the caller's to decide. A list holding
-                // none is a step taken: the walk arrived and the row wrote nothing there.
+                // none is a step taken: the walk arrived and the row wrote nothing there. A map's
+                // element is its values, as it is wherever a walk is handed one.
                 case TermPath.Step.Element _ -> {
-                    Type element = view.shape() instanceof Shape.Sequence sequence
-                            ? sequence.element() : null;
-                    if (element == null || !(here instanceof ObservedValue.Sequence written)) {
+                    if (!(view.shape() instanceof Shape.Container container)) {
+                        return false;
+                    }
+                    List<ObservedValue> held = heldAsDeclared(container, here);
+                    if (held == null) {
                         return false;
                     }
                     // Keyed by the step, which is this path with the step taken. Two positions
                     // that took it took the same one or they are not one reading of the row.
                     TermPath inside = reached.element();
-                    for (int i = 0; i < written.elements().size(); i++) {
-                        out.add(new Standing(written.elements().get(i), element, inside,
+                    for (int i = 0; i < held.size(); i++) {
+                        out.add(new Standing(held.get(i), container.element(), inside,
                                 at.and(inside, i)));
                     }
                 }
@@ -465,6 +468,27 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                 };
                 case Refinement.Presence presence ->
                         presence.present() != (here instanceof ObservedValue.Absent);
+            };
+        }
+
+        /**
+         * What the value written here holds at its element, read as the container the position
+         * declares — or null where the value is not that container.
+         *
+         * <p>Exhaustive over the containers, each held to the one observation that is a value of
+         * it: a list's or a set's is a sequence and a map's is its entries, read at their values.
+         * A value of the other kind is the type and the row disagreeing about what stands here,
+         * which is a step this walk cannot take rather than elements it can read; and a container
+         * added later stops this compiling instead of being read off whichever observation it
+         * resembles.
+         */
+        private static List<ObservedValue> heldAsDeclared(Shape.Container declared,
+                                                          ObservedValue here) {
+            return switch (declared) {
+                case Shape.Sequence _ ->
+                        here instanceof ObservedValue.Sequence written ? written.elements() : null;
+                case Shape.Mapping _ ->
+                        here instanceof ObservedValue.Mapping written ? written.values() : null;
             };
         }
     }

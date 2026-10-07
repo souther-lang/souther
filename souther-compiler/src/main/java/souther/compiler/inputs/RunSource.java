@@ -41,7 +41,7 @@ public sealed interface RunSource {
      * Whether every occurrence of {@code where} is in one run, which is what
      * {@link ProjectedOccurrences} says of the path it holds.
      *
-     * <p>One sequence, and the two ways of not being one are one question. None of them is a run at
+     * <p>One container, and the two ways of not being one are one question. None of them is a run at
      * all — a position holding one value is one value. Two of them is a run this cannot name:
      * {@code groups[*].lines[*].amount} says every line of every group, a walk over one group's
      * lines is over some of them, and the path is the whole of what a {@link ProjectedOccurrences}
@@ -53,7 +53,7 @@ public sealed interface RunSource {
      * does, so the gap is one reading short and never a line drawn wrong.
      */
     private static boolean namesOneRun(TermPath where) {
-        return where.sequencesContainingIt().size() == 1;
+        return where.containersHoldingIt().size() == 1;
     }
 
     /**
@@ -76,14 +76,14 @@ public sealed interface RunSource {
             // One invariant, and the two ways of failing it are two sentences about it rather than
             // two guards: a reader with a third thing to say about the path says it in the question.
             if (!namesOneRun(subjectPath)) {
-                throw new IllegalArgumentException(subjectPath.insideASequence()
+                throw new IllegalArgumentException(subjectPath.insideAContainer()
                         ? "a run is over every occurrence of the path it is read from, and `"
                                 + subjectPath + "` stands inside "
-                                + subjectPath.sequencesContainingIt().size()
-                                + " sequences, so which of its occurrences a walk was over is not"
+                                + subjectPath.containersHoldingIt().size()
+                                + " containers, so which of its occurrences a walk was over is not"
                                 + " said by it"
-                        : "a run stands inside a sequence, and `" + subjectPath + "` is one position"
-                                + " holding one value");
+                        : "a run stands inside a container, and `" + subjectPath + "` is one"
+                                + " position holding one value");
             }
         }
 

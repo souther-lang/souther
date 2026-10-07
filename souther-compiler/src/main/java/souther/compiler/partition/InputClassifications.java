@@ -107,7 +107,7 @@ public final class InputClassifications {
     /** Where each value the walk arrived at falls, and what stopped any that nothing could read. */
     private static Classification among(Axis axis, List<BehaviorInputs.Occurrence> values) {
         // Every value here, the class it is in, and the element it came from. One value at most
-        // positions; as many as were written at a position inside a sequence, where they need not
+        // positions; as many as were written at a position inside a container, where they need not
         // fall together — and where one of them being unreadable leaves the classes the others
         // reached standing, since each is a value of its own.
         List<Classification.At> in = new ArrayList<>();

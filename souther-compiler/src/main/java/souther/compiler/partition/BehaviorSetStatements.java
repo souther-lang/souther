@@ -461,7 +461,7 @@ public final class BehaviorSetStatements {
     /** A rule about a value that is what stands at one of {@code among}, said at each of them. */
     private static Outcome mayStandAt(List<TermPath> among) {
         return new Outcome.SayingNothing(among.stream().map(FilingCoordinate::at).toList(),
-                new BlockReason.RuleAboutAnElementOfSeveralSequences());
+                new BlockReason.RuleAboutAnElementOfSeveralContainers());
     }
 
     /**
@@ -655,7 +655,7 @@ public final class BehaviorSetStatements {
             //
             // And the atom itself where those parts are about nothing of the input. What such a
             // fork turns on is still what the atom reaches: a closure that says nothing about the
-            // element leaves the fork turning on the sequence it walks, and that is where a reader
+            // element leaves the fork turning on the container it walks, and that is where a reader
             // is owed the question.
             List<Core> places = each.parts().stream()
                     .anyMatch(one -> namesSomething(one, fork, symbols, newtypes, answering))
@@ -669,7 +669,7 @@ public final class BehaviorSetStatements {
             if (fork.reads().pathOf(part, newtypes)
                     instanceof PathResolution.MayStandAt(var among)) {
                 among.forEach(at -> filed.putIfAbsent(FilingCoordinate.at(at),
-                        new BlockReason.RuleAboutAnElementOfSeveralSequences()));
+                        new BlockReason.RuleAboutAnElementOfSeveralContainers()));
                 continue;
             }
             GuardThresholds.Names names =

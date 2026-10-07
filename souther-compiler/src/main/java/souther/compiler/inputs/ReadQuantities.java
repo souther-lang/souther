@@ -842,7 +842,7 @@ final class ReadQuantities implements Quantities {
      * numbers they stand at, which is the whole of what the narrowing means. There is no number in
      * it left over to state.
      *
-     * <p>That a sequence holds something is a number, and one no clause writes: it is what the
+     * <p>That a container holds something is a number, and one no clause writes: it is what the
      * question assumed by naming a position inside it. Said only where this reading measures the
      * container by how many it holds — where it does not, there is no subject to say it of, and what
      * the rules leave is wider rather than wrong.
@@ -855,7 +855,7 @@ final class ReadQuantities implements Quantities {
                 return rules;
             }
             case StructuralContext.Assumption.HoldingSomething it -> {
-                NumericTerm counted = howManyItHolds(it.sequence());
+                NumericTerm counted = howManyItHolds(it.container());
                 if (counted == null) {
                     return rules;
                 }
@@ -1451,12 +1451,12 @@ final class ReadQuantities implements Quantities {
         }
         for (OpenedRules opened : byRoot.values()) {
             if (!(opened.opening() instanceof RootOpening.Inside it)
-                    || under.nonEmptySequences().contains(it.sequence())
-                    || !under.covers(StructuralContext.of(it.sequence()))
-                    || !inside(it.sequence(), below)) {
+                    || under.nonEmptyContainers().contains(it.container())
+                    || !under.covers(StructuralContext.of(it.container()))
+                    || !inside(it.container(), below)) {
                 continue;
             }
-            standing = standing.with(holds(it.sequence(), under));
+            standing = standing.with(holds(it.container(), under));
             if (standing instanceof Viability.ProvedImpossible) {
                 return standing;
             }
@@ -1483,9 +1483,9 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * What a sequence and the values it holds come to together.
+     * What a container and the values it holds come to together.
      *
-     * <p><b>An element nothing can build refuses the sequence only where the sequence cannot be
+     * <p><b>An element nothing can build refuses the container only where the container cannot be
      * empty.</b> A container that may hold none is a value whatever is true of what it would hold,
      * so what its element's rules refuse is a row nobody has to write rather than an input nobody
      * can. The two are one question asked in the order the model settles it: how many the rules
@@ -1495,8 +1495,8 @@ final class ReadQuantities implements Quantities {
      * <p>Where nothing says how many it holds, nothing is proved. A reading that took an unmeasured
      * container for one that must hold something would refuse a model for a rule nobody wrote.
      */
-    private Viability holds(TermPath sequence, StructuralContext under) {
-        NumericTerm counted = howManyItHolds(sequence);
+    private Viability holds(TermPath container, StructuralContext under) {
+        NumericTerm counted = howManyItHolds(container);
         if (counted == null) {
             return new Viability.MayStand();
         }
@@ -1511,10 +1511,10 @@ final class ReadQuantities implements Quantities {
         if (many == null || CountDomain.leastFrom(many.min()) < 1) {
             return new Viability.MayStand();
         }
-        Viability inside = viability(under.holding(sequence), sequence);
+        Viability inside = viability(under.holding(container), container);
         return inside instanceof Viability.ProvedImpossible it
                 ? new Viability.ProvedImpossible(new Emptiness.AtAField(
-                        new Emptiness.AtAField.Where.In(sequence.toString()),
+                        new Emptiness.AtAField.Where.In(container.toString()),
                         new Emptiness.NonEmptyCollectionWithNoElement(it.why())))
                 : inside;
     }
