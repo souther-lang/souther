@@ -282,4 +282,57 @@ class WhatTheAlternativesCameToTest {
         assertEquals(SHORT_AT_THE_CODE, offeredShort.why().alsoShort());
         assertEquals(ASSIGNMENTS, offeredShort.met());
     }
+
+    /** A candidate that built and had nothing this could hand on, and why. */
+    private static final SearchShortfall NOT_HANDED_ON =
+            SearchShortfall.NONE.notHandedOn("the value built cannot be written");
+
+    /**
+     * Another value of a parameter came to nothing under the one after it, and a value that built
+     * was not handed on at all: what the one after it came to is not about every value there was,
+     * so it is said in the word for this compiler composing nothing, with why — whatever it was.
+     */
+    @Test
+    void whatAnotherValueCameToBesideOneNotHandedOnIsThisCompilersWord() {
+        for (Tried other : List.of(PROOF, REFUSED)) {
+            Tried came = said(over(List.of(other), NOT_HANDED_ON));
+
+            assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, came.word(),
+                    () -> "beside " + other);
+            assertEquals(Optional.of("the value built cannot be written"),
+                    came.found().notHandedOn());
+        }
+    }
+
+    /** The same where it was one of the alternatives that met it, whichever came first. */
+    @Test
+    void aCandidateOneAlternativeDidNotHandOnIsCarriedWhicheverCameFirst() {
+        Tried notHandedOn = new Tried(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                NOT_HANDED_ON);
+        Tried first = said(List.of(PROOF, notHandedOn));
+        Tried last = said(List.of(notHandedOn, PROOF));
+
+        assertEquals(first, last);
+        assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, first.word());
+    }
+
+    /** Rows passed over are the answer, and a value not handed on stays with them. */
+    @Test
+    void rowsPassedOverDoNotLoseAValueNotHandedOn() {
+        assertEquals(new WhatTheAlternativesCameTo.Came.PassedOver<Tried>(NOT_HANDED_ON),
+                WhatTheAlternativesCameTo.over(List.of(REFUSED), SearchShortfall.NONE,
+                        NOT_HANDED_ON, TRIED));
+    }
+
+    /** And why it was not handed on is what a reader is told beside the word it made. */
+    @Test
+    void whyAValueWasNotHandedOnIsToldBesideTheWordItMade() {
+        CameToNothing published = NOT_HANDED_ON.published(List.of(),
+                Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null,
+                Optional.empty());
+
+        assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                published.why().reason());
+        assertEquals(Optional.of("the value built cannot be written"), published.why().said());
+    }
 }

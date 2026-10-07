@@ -180,8 +180,51 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
         if (at < 0 || at >= inputs.size()) {
             return WalkResult.couldNotWalk();
         }
+        return switch (standingAt(inputs.get(at), at, path, views)) {
+            case WalkResult.Reached(List<Standing> found) -> WalkResult.reached(found.stream()
+                    .map(each -> new Occurrence(each.at(), each.value())).toList());
+            case WalkResult.CouldNotWalk<List<Standing>> _ -> WalkResult.couldNotWalk();
+        };
+    }
+
+    /**
+     * One value the walk arrived at, with the type the reading exposes at its position.
+     *
+     * <p>For a reader that writes the value somewhere else. The value says which case it is and
+     * what it holds, and only the position says what it is written as: a {@code Sequence} is a list
+     * or a set by the type declared for it, and a whole number at a {@code Decimal} is a decimal.
+     * Carried out of the one walk rather than asked of the path again, since a second walk for the
+     * type is a second reading of where a name every case of a sum spreads is.
+     *
+     * @param value the value as the position wears it, names and all
+     * @param type  what the reading exposes at the position
+     */
+    record ObservedAt(ObservedValue value, Type type) {}
+
+    /**
+     * The values at {@code path} in {@code value}, the value of the parameter the path starts at,
+     * each with the type the reading exposes where it stands.
+     *
+     * <p>The walk {@link #occurrencesAt} takes, for one parameter's value and not a row's: a value
+     * the boundary built for one parameter is read before the others are composed.
+     */
+    WalkResult<List<ObservedAt>> observedAt(ObservedValue value, TermPath path) {
+        int at = indexOf(path);
+        if (at < 0) {
+            return WalkResult.couldNotWalk();
+        }
+        return switch (standingAt(value, at, path, new HashMap<>())) {
+            case WalkResult.Reached(List<Standing> found) -> WalkResult.reached(found.stream()
+                    .map(each -> new ObservedAt(each.value(), each.type())).toList());
+            case WalkResult.CouldNotWalk<List<Standing>> _ -> WalkResult.couldNotWalk();
+        };
+    }
+
+    /** What stands at {@code path}, walked down from {@code value} at the {@code at}-th input. */
+    private WalkResult<List<Standing>> standingAt(ObservedValue value, int at, TermPath path,
+                                                  Map<Type, TypeView> views) {
         Function<Type, TypeView> viewOf = type -> views.computeIfAbsent(type, this::view);
-        List<Standing> standing = List.of(new Standing(inputs.get(at), types.get(at),
+        List<Standing> standing = List.of(new Standing(value, types.get(at),
                 TermPath.of(path.head()), ElementsTaken.NONE));
         for (TermPath.Step step : path.steps()) {
             List<Standing> next = new ArrayList<>();
@@ -205,8 +248,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
         // Nothing here is a row that wrote no element, which is a reading that arrived: a step that
         // could not be taken has already said so above. Answered alike, a row writing the empty
         // list would be reported as one nothing could be read from.
-        return WalkResult.reached(
-                standing.stream().map(each -> new Occurrence(each.at(), each.value())).toList());
+        return WalkResult.reached(standing);
     }
 
     /** What a value of {@code type} is under the declarations this was read against. */

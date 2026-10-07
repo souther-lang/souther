@@ -210,6 +210,38 @@ record ContentsAsked(List<Asked> asked) {
     }
 
     /**
+     * The positions under the parameter {@code head} a value is read at for a container of another
+     * parameter: what that parameter's value is to hand on once it is composed.
+     *
+     * <p>Apart from {@link #composedUnder}'s, which also has the positions a container of this
+     * parameter's own is handed. Those are read while the value is composed, out of what it is
+     * being composed from, and nothing after it is handed them.
+     */
+    Set<TermPath> handedOnFrom(String head) {
+        return readUnder(head, false);
+    }
+
+    /**
+     * The positions under the parameter {@code head} a value is read at for a container of its
+     * own: what composing that parameter reads out of what it is being composed from, before
+     * anything builds it.
+     */
+    Set<TermPath> readWithin(String head) {
+        return readUnder(head, true);
+    }
+
+    private Set<TermPath> readUnder(String head, boolean byItsOwn) {
+        Set<TermPath> out = new LinkedHashSet<>();
+        for (Asked each : asked) {
+            if (each.value().head().equals(head)
+                    && each.container().head().equals(head) == byItsOwn) {
+                out.add(each.value());
+            }
+        }
+        return out;
+    }
+
+    /**
      * Each parameter whose containers are handed a value read off another parameter, with those
      * others: the parameters it has to be composed after.
      */

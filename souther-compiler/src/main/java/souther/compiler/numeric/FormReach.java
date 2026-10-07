@@ -106,7 +106,29 @@ final class FormReach<A> {
 
     /** What {@code Σ coefs·position + constant} runs between. */
     Reach of(Map<A, ExactRatio> coefs, ExactRatio constant) {
-        return between(coefs, constant, null);
+        return between(inOrder(coefs), constant, null);
+    }
+
+    /**
+     * {@code coefs} in the one order its positions decide, which every sum here is taken in.
+     *
+     * <p>Taken once, where a form comes in, because the sums are exact and an exact sum can fail
+     * part of the way: a term far enough apart in scale from the sum so far has no representation
+     * beside it, and whether it does turns on which terms were added before it. Walked in whatever
+     * order the caller's map iterates in — a hash table's, a copy whose order changes from one run
+     * to the next — a bound would be found or not found by the order of a table rather than by the
+     * form. Every walk below keeps the order it is handed.
+     */
+    private Map<A, ExactRatio> inOrder(Map<A, ExactRatio> coefs) {
+        // One term is added in one order, and most forms here have one.
+        if (coefs.size() < 2) {
+            return coefs;
+        }
+        Map<A, ExactRatio> out = new LinkedHashMap<>();
+        for (Map.Entry<A, ExactRatio> each : order.walking(coefs.entrySet(), Map.Entry::getKey)) {
+            out.put(each.getKey(), each.getValue());
+        }
+        return out;
     }
 
     /**
@@ -127,7 +149,7 @@ final class FormReach<A> {
      * for.
      */
     Reach ofTheRestOf(AffineConstraint<A> asking, Map<A, ExactRatio> coefs, ExactRatio constant) {
-        return between(coefs, constant, asking);
+        return between(inOrder(coefs), constant, asking);
     }
 
     /**
@@ -137,12 +159,12 @@ final class FormReach<A> {
      * derived wants — and not the product of the ranges either, which holds less than this does.
      */
     ExactCut mostFromTheEndsAndTheDifferences(Map<A, ExactRatio> coefs, ExactRatio constant) {
-        return fromTheEnds(coefs, constant);
+        return fromTheEnds(inOrder(coefs), constant);
     }
 
     /** The highest the form is proven to come to, or null where nothing bounds it above. */
     ExactCut most(Map<A, ExactRatio> coefs, ExactRatio constant) {
-        return highest(coefs, constant, null);
+        return highest(inOrder(coefs), constant, null);
     }
 
     private Reach between(Map<A, ExactRatio> coefs, ExactRatio constant, AffineConstraint<A> without) {
