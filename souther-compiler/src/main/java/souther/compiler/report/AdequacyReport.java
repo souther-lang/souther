@@ -3060,12 +3060,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         Set<Said> order = new java.util.TreeSet<>(Said.IN_ORDER);
         Map<String, Integer> counted = new LinkedHashMap<>();
         int all = 0;
-        for (DecisionReading.Ruled ruled : decision.read().found()) {
-            RuleSettlement came = behavior.ruleSettlements().get(ruled.rule());
+        // Each rule once, however many places state it: what is counted is the rules.
+        for (DecisionReading.Stated stated : decision.read().stated()) {
+            RuleSettlement came = behavior.ruleSettlements().get(stated.rule());
             if (came == null || !answer.isInstance(came.requirement())) {
                 continue;
             }
-            Said said = said(came, ruled.states(), rendering, places,
+            Said said = said(came, stated.display().states(), rendering, places,
                     behavior.conditionPlaces(), declaredIn);
             order.add(said);
             counted.merge(said.text(), 1, Integer::sum);
@@ -5682,18 +5683,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         weakening(out, decision.derivation());
         ArrayNode all = out.putArray("obligations");
         Optional<DecisionEvidence.RowsPlaced> placed = decision.took().made();
-        for (DecisionReading.Ruled ruled : decision.read().found()) {
+        // One entry per rule, however many places state it: an obligation is published once.
+        for (DecisionReading.Stated stated : decision.read().stated()) {
             ObjectNode one = all.addObject();
-            ruleId(one.putObject("obligationId"), behavior.name(), ruled.rule());
-            placed.ifPresent(rows -> one.put("taken", rows.rules().contains(ruled.rule())));
+            ruleId(one.putObject("obligationId"), behavior.name(), stated.rule());
+            placed.ifPresent(rows -> one.put("taken", rows.rules().contains(stated.rule())));
             // What this rule's own derivation went without, on the rule. The coverage above says
             // the measure is short of some rule; which one is this entry's to say, and a consumer
             // handed only the measure's word could not tell a rule read short from its neighbours.
-            weakening(one, decision.readShortOf(ruled));
+            weakening(one, decision.readShortOf(stated));
             // Whether a row is owed here at all, where something asked. Beside `taken` and not
             // folded into it: a rule no row took and nothing could show a row for is not a gap,
             // and a consumer reading `taken` alone would count it as one.
-            RuleSettlement came = behavior.ruleSettlements().get(ruled.rule());
+            RuleSettlement came = behavior.ruleSettlements().get(stated.rule());
             if (came != null) {
                 one.put("requirement", wire(came.requirement()));
                 // And which answer it was, rule by rule. The page counts these under their reason

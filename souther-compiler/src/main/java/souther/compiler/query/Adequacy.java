@@ -2235,18 +2235,54 @@ public final class Adequacy {
             // rules once for every rule.
             Set<DecisionRule> toSettle = new LinkedHashSet<>(evidence.notTakenByRows());
             Map<DecisionRule, RuleSettlement> out = new LinkedHashMap<>();
-            for (souther.compiler.partition.DecisionReading.Ruled ruled
-                    : evidence.read().found()) {
-                if (!toSettle.contains(ruled.rule())) {
+            for (souther.compiler.partition.DecisionReading.Stated stated
+                    : evidence.read().stated()) {
+                if (!toSettle.contains(stated.rule())) {
                     continue;
                 }
-                RuleSettlement settled = whatSettles(ruled, probe, taken, declared, unreachedArms,
-                        evidence.unanswered().containsKey(ruled.rule()));
+                boolean everyRowAborts = evidence.unanswered().containsKey(stated.rule());
+                List<RuleSettlement> atEach = new ArrayList<>();
+                for (souther.compiler.partition.DecisionReading.Ruled each
+                        : stated.occurrences()) {
+                    atEach.add(whatSettles(each, probe, taken, declared, unreachedArms,
+                            everyRowAborts));
+                }
+                RuleSettlement settled = acrossThePlaces(atEach);
                 if (settled != null) {
-                    out.put(ruled.rule(), settled);
+                    out.put(stated.rule(), settled);
                 }
             }
             return Answer.of(Ordered.map(out));
+        }
+
+        /**
+         * What one rule came to over every place it is stated, out of what each place came to.
+         *
+         * <p>Excluded only where every place is. A row taking the rule at any place takes the rule,
+         * so a place the model leaves no row says nothing about the others; this is the
+         * subtraction an arm is left out of the count by, and for the same reason. Otherwise the
+         * place that established the most, the first of them where two established as much, and
+         * nothing where a place was not searched for because every row of the rule aborts.
+         *
+         * @param atEach what each place came to, null for a place not searched for
+         */
+        static RuleSettlement acrossThePlaces(List<RuleSettlement> atEach) {
+            RuleSettlement excluded = null;
+            RuleSettlement established = null;
+            boolean unsearched = false;
+            for (RuleSettlement here : atEach) {
+                if (here == null) {
+                    unsearched = true;
+                } else if (here.requirement() instanceof RuleRequirement.Excluded) {
+                    excluded = excluded == null ? here : excluded;
+                } else if (established == null || establishes(here) > establishes(established)) {
+                    established = here;
+                }
+            }
+            if (established != null) {
+                return established;
+            }
+            return unsearched ? null : excluded;
         }
 
         /**
@@ -7083,16 +7119,20 @@ public final class Adequacy {
             // And a rule every row of which reaches an `unreachable` is one too, with no search
             // behind it: it is owed a row the way any rule is, and what is open about it is the
             // premise the body states. Unless the model settled it, which outranks the premise.
-            for (souther.compiler.partition.DecisionReading.Ruled ruled
-                    : decision.read().found()) {
-                RuleSettlement came = settled.get(ruled.rule());
+            //
+            // One finding per rule, whatever number of places state it: the places are where it
+            // stands, and a row taking it at any of them takes it. A reader is shown the first.
+            for (souther.compiler.partition.DecisionReading.Stated stated
+                    : decision.read().stated()) {
+                RuleSettlement came = settled.get(stated.rule());
                 boolean owed = came == null
-                        ? notTaken.contains(ruled.rule())
-                                && decision.unanswered().containsKey(ruled.rule())
+                        ? notTaken.contains(stated.rule())
+                                && decision.unanswered().containsKey(stated.rule())
                         : came.requirement() instanceof RuleRequirement.Required;
                 if (owed) {
                     out.add(Finding.by(new FindingSubject.OfABehavior(behavior),
-                            decision.at(ruled), new About.ARuleNoRowTakes(behavior, ruled)));
+                            decision.at(stated),
+                            new About.ARuleNoRowTakes(behavior, stated.display())));
                 }
             }
         }

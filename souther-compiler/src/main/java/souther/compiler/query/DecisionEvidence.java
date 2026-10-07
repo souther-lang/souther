@@ -6,6 +6,7 @@ import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.InteractionCells;
 import souther.compiler.partition.MeasuredInput;
+import souther.compiler.partition.RowRegion;
 import souther.compiler.partition.RulesTaken;
 import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.publish.CanonicalSelection;
@@ -237,14 +238,26 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
         return readShortOf(read, ruled);
     }
 
+    /**
+     * The same of a rule over every place it is stated: read short where any of them is, since a
+     * row taking the rule may take it at that one.
+     */
+    public WeakeningSet readShortOf(DecisionReading.Stated stated) {
+        WeakeningSet out = WeakeningSet.none();
+        for (DecisionReading.Ruled each : stated.occurrences()) {
+            out = out.union(readShortOf(read, each));
+        }
+        return out;
+    }
+
     private static WeakeningSet readShortOf(DecisionReading read, DecisionReading.Ruled ruled) {
         return ruled.whole() ? WeakeningSet.none()
                 : WeakeningSet.of(new Weakening.DecisionRuleReadShort(read.behavior()));
     }
 
     /**
-     * What a finding about {@code ruled} rests on: what the reading of the runs and of the list went
-     * without, and what this rule's own derivation did.
+     * What a finding about {@code stated} rests on: what the reading of the runs and of the list
+     * went without, and what this rule's own derivation did at any place it is stated.
      *
      * <p>A rule read short is a shortfall about that rule. A rule read in full beside it is one
      * whose runs are recognised and whose absence is established the way it would be in a body
@@ -259,7 +272,7 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
      * <p>Its own value rather than a set handed to whoever raises the finding, for the reason
      * {@link InteractionEvidence#at} is.
      */
-    public OfOneRule at(DecisionReading.Ruled ruled) {
+    public OfOneRule at(DecisionReading.Stated stated) {
         Set<Weakening> ofSomeRule = new LinkedHashSet<>();
         for (DecisionReading.Ruled each : read.found()) {
             ofSomeRule.addAll(readShortOf(each).causes());
@@ -270,8 +283,8 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
                 bearing = bearing.union(WeakeningSet.of(each));
             }
         }
-        return new OfOneRule(bearing.union(readShortOf(ruled)), ObligationDisposition.openOn(
-                unanswered.getOrDefault(ruled.rule(), List.of())));
+        return new OfOneRule(bearing.union(readShortOf(stated)), ObligationDisposition.openOn(
+                unanswered.getOrDefault(stated.rule(), List.of())));
     }
 
     /**
@@ -298,6 +311,10 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
      * ({@link DecisionReading.Ruled#states}), drawn wide ({@link InteractionCells#holdingEveryRowOf}):
      * a condition this cannot place keeps the rows it would have left out, so a rule is in here
      * only where the rows that take it are.
+     *
+     * <p>Over every place the rule is stated, together. A row taking it at any of them is a row of
+     * the rule, so one place whose rows answer leaves the rule a gap like any other, however every
+     * row at another place fares.
      */
     public static Map<DecisionRule, List<WhereNothingIsAnswered.Premise>> unansweredIn(
             DecisionReading read, WhereNothingIsAnswered unanswered,
@@ -306,11 +323,14 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
         if (unanswered.regions().isEmpty()) {
             return out;
         }
-        for (DecisionReading.Ruled ruled : read.found()) {
-            List<WhereNothingIsAnswered.Premise> premises = unanswered.everyRowIn(
-                    InteractionCells.holdingEveryRowOf(ruled.states(), axes));
+        for (DecisionReading.Stated stated : read.stated()) {
+            RowRegion rows = RowRegion.NONE;
+            for (DecisionReading.Ruled each : stated.occurrences()) {
+                rows = rows.or(InteractionCells.holdingEveryRowOf(each.states(), axes));
+            }
+            List<WhereNothingIsAnswered.Premise> premises = unanswered.everyRowIn(rows);
             if (!premises.isEmpty()) {
-                out.put(ruled.rule(), premises);
+                out.put(stated.rule(), premises);
             }
         }
         return out;

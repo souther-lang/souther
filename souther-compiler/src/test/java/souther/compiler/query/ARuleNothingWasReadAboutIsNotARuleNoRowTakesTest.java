@@ -80,10 +80,10 @@ class ARuleNothingWasReadAboutIsNotARuleNoRowTakesTest {
                         WeakeningSet.of(new Weakening.DecisionRunNotWatched("decides"))),
                 read.unanswered());
 
-        DecisionReading.Ruled ruled = partly.read().found().get(0);
+        DecisionReading.Stated stated = partly.read().stated().get(0);
         Adequacy.Finding finding = Adequacy.Finding.by(
-                new FindingSubject.OfABehavior("decides"), partly.at(ruled),
-                new About.ARuleNoRowTakes("decides", ruled));
+                new FindingSubject.OfABehavior("decides"), partly.at(stated),
+                new About.ARuleNoRowTakes("decides", stated.display()));
 
         assertEquals(Adequacy.Finding.Disposition.UNDECIDED,
                 finding.disposition(),
