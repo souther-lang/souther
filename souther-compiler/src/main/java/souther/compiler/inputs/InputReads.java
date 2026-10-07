@@ -215,7 +215,7 @@ public final class InputReads {
         }
         // What the arm narrows is a position of the input, and a scrutinee that stands at none
         // narrows nothing.
-        TermPath standing = switch (pathOf(scrutinee, newtypes)) {
+        TermPath standing = switch (forkedOn(scrutinee, newtypes)) {
             case PathResolution.At(var at) -> at;
             case PathResolution.NotAPosition _ -> null;
             // A scrutinee that only may stand at a position narrows nothing here either. What an
@@ -393,8 +393,23 @@ public final class InputReads {
         return inside == names ? this : new InputReads(inside, alternatives, declared);
     }
 
-    /** Where {@code e} stands, read here ({@link PathResolution}). */
+    /**
+     * Where {@code e} stands, read here ({@link PathResolution}): a position, and never a narrowing
+     * of one to several cases ({@link PathResolution#heldAt}).
+     */
     public PathResolution pathOf(Core e, DeclarationNewtypes newtypes) {
+        return InputPath.of(e, names, newtypes).heldAt();
+    }
+
+    /**
+     * What a fork on {@code e} reads: where it stands, with what the arms above already left it.
+     *
+     * <p>Beside {@link #pathOf} because the two questions part at a name an arm bound over several
+     * cases. The value stands at the sum's position; a fork on it is asked of the cases the arm
+     * left, so that an arm inside naming one of them narrows the same narrowing further rather than
+     * the position afresh ({@link DeclaredInput#taking}).
+     */
+    public PathResolution forkedOn(Core e, DeclarationNewtypes newtypes) {
         return InputPath.of(e, names, newtypes);
     }
 
@@ -691,7 +706,7 @@ public final class InputReads {
     /** Where {@code e}'s value came from. Not where it is: a value made from a position is not that
      *  position ({@link InputPath#cameFrom}). */
     public PathResolution cameFrom(Core e, DeclarationNewtypes newtypes) {
-        return InputPath.cameFrom(e, names, newtypes);
+        return InputPath.cameFrom(e, names, newtypes).heldAt();
     }
 
     /**

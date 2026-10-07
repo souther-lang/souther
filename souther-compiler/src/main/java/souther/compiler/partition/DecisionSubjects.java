@@ -55,12 +55,9 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
      * them a call this behavior stands a dependency in for.
      */
     DecisionSubject of(Core e, InputReads at) {
-        // The position, and not a narrowing of it to several cases: a fork on a value left
-        // `Station` or `Hospital` is about the position those are cases of, as every other fork on
-        // it is.
         if (at.pathOf(e, newtypes) instanceof PathResolution.At(TermPath stands)
-                && inputs.at(stands.position()) != null) {
-            return new DecisionSubject.AnInput(stands.position());
+                && inputs.at(stands) != null) {
+            return new DecisionSubject.AnInput(stands);
         }
         List<TermPath.Step> steps = new ArrayList<>();
         Core under = e;

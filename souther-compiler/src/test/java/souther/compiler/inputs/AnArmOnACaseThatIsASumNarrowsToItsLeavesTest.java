@@ -67,6 +67,32 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
             behavior describeEither : (v: Visit) -> String
             let describeEither (v) = eitherText(v.kind)
 
+            data Counts = { count: Int }
+            data Desk = { ...Counts }
+            data Ward = { ...Counts, beds: Int }
+            data Staffed = Desk | Ward
+            data Unit = Staffed | Renkei
+            data Floor = { unit: Unit }
+
+            behavior busy : (f: Floor) -> String
+            let busy (f) =
+                match f.unit with
+                    | Staffed as x -> if x.count > 3 then "busy" else "quiet"
+                    | Renkei -> ""
+
+            data Low
+            data Mid
+            data High
+            data Lowish = Low | Mid
+            data Level = Lowish | High
+            data Rated = { level: Level }
+
+            behavior rate : (r: Rated) -> String
+            let rate (r) =
+                match r.level with
+                    | Lowish as x -> if x == Mid then "mid" else "low"
+                    | High -> "high"
+
             behavior describe : (v: Visit) -> String
             let describe (v) = visitText(v.kind)
 
@@ -192,6 +218,31 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
                 rulesOf("twice").stream()
                         .map(AnArmOnACaseThatIsASumNarrowsToItsLeavesTest::answers)
                         .collect(Collectors.toSet()));
+    }
+
+    /**
+     * A value left several cases stands at the position those are cases of, and a name every case
+     * spreads stands under each case.
+     *
+     * <p>Neither is the narrowing to the set, which is no position the input holds: compared or
+     * counted at it, the value would be a number of nothing. The narrowing is what a fork on the
+     * value reads, and nothing else.
+     */
+    @Test
+    void aValueLeftSeveralCasesStandsAtItsPosition() {
+        Compilation c = Compilation.ofSource(MODEL, "Main");
+        c.measure(Adequacy.Asked.fullReport());
+        c.answerEverything();
+        assertEquals(List.of(), c.errors().stream()
+                .map(e -> e.diagnostic().code().toString()).toList(), "the model is measured");
+
+        Set<String> rated = underTheField(named("rate"), "r");
+        assertTrue(rated.contains("r.level") && rated.stream().noneMatch(each -> each.contains("{")),
+                () -> "the value compared is the position's: " + rated);
+        Set<String> counted = underTheField(named("busy"), "f.unit");
+        assertTrue(counted.containsAll(Set.of("f.unit@Desk.count", "f.unit@Ward.count"))
+                        && counted.stream().noneMatch(each -> each.contains("{")),
+                () -> "the shared name stands under each case: " + counted);
     }
 
     /** Each case column of {@code rule}, as its subject and what the rule came out as. */

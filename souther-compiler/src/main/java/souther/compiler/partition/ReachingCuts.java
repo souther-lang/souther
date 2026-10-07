@@ -223,7 +223,7 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
         // The arm is declined for either answer: a search composes against a position read as one
         // of its cases, and there is no position to narrow whether the scrutinee stands at none or
         // this reading did not follow it to one.
-        TermPath scrutinee = switch (reads.pathOf(match.scrutinee(), ruleSource.newtypes())) {
+        TermPath scrutinee = switch (reads.forkedOn(match.scrutinee(), ruleSource.newtypes())) {
             case PathResolution.At(var stands) -> stands;
             case PathResolution.NotAPosition _ -> null;
             // And declined for a scrutinee that only may stand at one. What a narrowing is composed
@@ -272,7 +272,7 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
      */
     static Set<CasesLeft> answersOf(Core.Match match, InputDomain inputs, InputReads reads,
                                     RuleReadingSource ruleSource) {
-        TermPath scrutinee = reads.pathOf(match.scrutinee(), ruleSource.newtypes())
+        TermPath scrutinee = reads.forkedOn(match.scrutinee(), ruleSource.newtypes())
                 instanceof PathResolution.At(var stands) && held(inputs, stands)
                 ? stands : null;
         DeclaredInput declared = scrutinee == null ? null : inputs.declared(ruleSource);
