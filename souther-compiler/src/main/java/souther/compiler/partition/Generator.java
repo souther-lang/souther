@@ -8650,8 +8650,8 @@ public final class Generator {
             RuleKey field = fieldUnder(slot.at());
             NumericDomain.Bounds here =
                     field == null ? null : left.at(field).bounds();
-            List<FixtureTemplate> stands = Partitions.representativesHolding(slot.type(), reading,
-                    here, field == null ? null : left.heldAt(field));
+            List<FixtureTemplate> stands = subject.representativesHolding(slot.type(), here,
+                    field == null ? null : left.heldAt(field));
             if (stands.isEmpty()) {
                 // Nothing could be written at all: a position of a type nothing stands for. Which is
                 // not the same as a value that was written and refused, and reporting it as one sends
