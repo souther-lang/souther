@@ -24,9 +24,8 @@ import java.util.Set;
  * its own.
  *
  * <p>Each of these is a caller supplying a default or an assembled parameter and delegating whole
- * to the one production computation — {@link GuardThresholds#of(String, AnalysisBody, Core,
- * CoverageSites.Plan, InputReading, ElementBindings, PathReachability.Answers,
- * RuleReachNumbering)}, {@link EnsuresThresholds#of(StatedContract, InputReading)}
+ * to the one production computation — {@link GuardThresholds#of},
+ * {@link EnsuresThresholds#of(StatedContract, InputReading)}
  * and {@link Partitions#withEvidence}. None of these fixtures reads a comparison or a clause a
  * second way; they only fill in what a caller with a narrower question does not need to say.
  */
