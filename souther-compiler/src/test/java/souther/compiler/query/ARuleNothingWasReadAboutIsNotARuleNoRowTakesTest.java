@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.partition.DecisionReading;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -53,7 +54,8 @@ class ARuleNothingWasReadAboutIsNotARuleNoRowTakesTest {
         DecisionEvidence unread = new DecisionEvidence(read.read(),
                 new Measurement.FailedToMeasure<>(
                         DecisionEvidence.Unreadable.NO_ROW_CAME_BACK,
-                        WeakeningSet.of(new Weakening.BodyNotInEvaluation("decides"))));
+                        WeakeningSet.of(new Weakening.BodyNotInEvaluation("decides"))),
+                Map.of());
 
         assertEquals(List.of(), unread.notTakenByRows(),
                 () -> "no rule is said to be one no row takes: " + unread.notTakenByRows());
@@ -75,7 +77,8 @@ class ARuleNothingWasReadAboutIsNotARuleNoRowTakesTest {
         DecisionEvidence read = decision();
         DecisionEvidence partly = new DecisionEvidence(read.read(),
                 new Measurement.Partial<>(read.took().made().orElseThrow(),
-                        WeakeningSet.of(new Weakening.DecisionRunNotWatched("decides"))));
+                        WeakeningSet.of(new Weakening.DecisionRunNotWatched("decides"))),
+                read.unanswered());
 
         DecisionReading.Ruled ruled = partly.read().found().get(0);
         Adequacy.Finding finding = Adequacy.Finding.by(

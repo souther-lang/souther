@@ -225,7 +225,7 @@ class AnObligationsExplanationNamesEachReasonOnceTest {
     private static ReadingReasons explanationOf(List<Weakening> met) {
         ObligationDisposition disposition = ObligationDisposition.of(
                 new ObligationCoverage.Undecided(WeakeningSet.ofAll(met)),
-                new WritabilityKnowledge.NoEvidence());
+                new WritabilityKnowledge.NoEvidence(), ObligationDisposition.openOn(List.of()));
         ObligationDisposition.Undecided undecided =
                 assertInstanceOf(ObligationDisposition.Undecided.class, disposition,
                         "a point whose readings did not run out is one nobody can decide");

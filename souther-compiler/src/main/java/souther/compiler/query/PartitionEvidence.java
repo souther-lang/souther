@@ -17,13 +17,11 @@ import souther.compiler.partition.BodyDistinction;
 import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.RuleEvidenceOrigin;
 import souther.compiler.partition.UndividedPosition;
-import souther.compiler.partition.WhereNothingIsAnswered;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.SequencedMap;
 import java.util.Set;
 
@@ -66,10 +64,6 @@ import java.util.Set;
  *                     is why they are two things and not one wider count. Not a report's list of
  *                     reasons: these are what classification observed, and joining them to
  *                     everything else a module could not read happens where that list is built
- * @param answersNothing the classes at which the body answers nothing. Beside the measures and not
- *                     in them: what a row is owed at and how many rows are in it are counted the
- *                     same with or without it, and what it settles is whether a row that would meet
- *                     one of those obligations can be written
  */
 public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                 PairSpace pairs,
@@ -78,8 +72,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                 List<souther.compiler.inputs.PositionReadingBlocked> blocked,
                                 List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                 List<Unanswered> unanswered,
-                                List<Incompleteness> whyUnclassified,
-                                WhereNothingIsAnswered answersNothing) implements RuleCitations {
+                                List<Incompleteness> whyUnclassified) implements RuleCitations {
 
 
     /**
@@ -93,7 +86,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
     public static final PartitionEvidence NONE = new PartitionEvidence(
             PartitionDerivation.noSubject(),
             PairSpace.NONE, List.of(), List.of(), List.of(), List.of(),
-            List.of(), List.of(), WhereNothingIsAnswered.NONE);
+            List.of(), List.of());
 
     /**
      * What the model divides a behavior into, where its boundary could not be worked out.
@@ -119,7 +112,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         return new PartitionEvidence(
                 why.failed(behavior),
                 PairSpace.notMeasurable(why, behavior), List.of(), List.of(), List.of(), List.of(),
-                List.of(), List.of(), WhereNothingIsAnswered.NONE);
+                List.of(), List.of());
     }
 
     /** Whether this is what a behavior missing something its boundary is made of comes to. */
@@ -134,8 +127,6 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         blocked = List.copyOf(blocked);
         unanswered = List.copyOf(unanswered);
         whyUnclassified = List.copyOf(whyUnclassified);
-        Objects.requireNonNull(answersNothing,
-                "a body that answers everywhere says so with an empty reading");
     }
 
     /**

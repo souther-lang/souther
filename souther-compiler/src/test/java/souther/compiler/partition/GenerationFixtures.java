@@ -78,7 +78,8 @@ final class GenerationFixtures {
         return Generator.fill(planOver(subject, everyClassNoRowSitsIn(subject, existing),
                         List.copyOf(read.arms().keySet())),
                 existing, check, read, trial, List.of(), AnswersStoodIn.REQUIRING_NOTHING,
-                HeldOutcome.Of.NOTHING, budget);
+                HeldOutcome.Of.NOTHING,
+                WhereNothingIsAnswered.of(subject.behavior(), read, subject.axes()), budget);
     }
 
     /**
@@ -95,7 +96,7 @@ final class GenerationFixtures {
                            AdequacyPolicy.OfTheGeneration budget) {
         return Generator.fill(planOver(subject, classesOwed, armsOwed), existing, check, read,
                 trial, baselines, AnswersStoodIn.REQUIRING_NOTHING, HeldOutcome.Of.NOTHING,
-                budget);
+                WhereNothingIsAnswered.of(subject.behavior(), read, subject.axes()), budget);
     }
 
     /**

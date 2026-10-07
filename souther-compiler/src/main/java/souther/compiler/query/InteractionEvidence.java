@@ -4,6 +4,8 @@ import souther.compiler.observe.MeasureReason;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.InteractionRequirements;
 import souther.compiler.partition.ObligationIdentity;
+import souther.compiler.partition.WhereNothingIsAnswered;
+import souther.compiler.publish.CanonicalSelection;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -25,14 +27,18 @@ import java.util.Set;
  * come back unreadable, or come back read in part — and a combination nothing was seen making under
  * any of those is not a combination nothing covers.
  *
- * @param asked what the body's meetings ask of the rows
- * @param made  which of them the rows were seen making, and how far that reading got
+ * @param asked      what the body's meetings ask of the rows
+ * @param made       which of them the rows were seen making, and how far that reading got
+ * @param unanswered where the same body answers nothing, which is what says whether a row making
+ *                   a combination can be written at all
  */
-public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMeeting> made) {
+public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMeeting> made,
+                                  WhereNothingIsAnswered unanswered) {
 
     public InteractionEvidence {
         Objects.requireNonNull(asked, "a behavior's combinations are some reading's");
         Objects.requireNonNull(made, "there is always an answer to what the rows made");
+        Objects.requireNonNull(unanswered, "a body answers nothing somewhere or nowhere");
     }
 
     /**
@@ -73,6 +79,9 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
      * <p>Its own value rather than a set handed to whoever raises the finding. What a finding rests
      * on is the thing that found it, and a caller free to assemble a set could give one meeting's
      * finding what another meeting's reading went without.
+     *
+     * <p>And what is open about the meeting itself beside it: whether every row making it, by any
+     * way the body has to it, reaches an {@code unreachable}.
      */
     public OfOneMeeting at(ObligationIdentity.OfACombinationOfDecisions meeting) {
         WeakeningSet bearing = WeakeningSet.none();
@@ -84,14 +93,24 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
             }
             bearing = bearing.union(WeakeningSet.of(each));
         }
-        return new OfOneMeeting(bearing);
+        return new OfOneMeeting(bearing, ObligationDisposition.openOn(
+                unanswered.everyRowIn(asked.rowsOf(meeting))));
     }
 
-    /** What one meeting's reading went without, as the thing a finding about it rests on. */
-    public record OfOneMeeting(WeakeningSet weakening) {
+    /**
+     * What one meeting's reading went without, and what is open about the meeting itself, as the
+     * thing a finding about it rests on.
+     *
+     * @param weakening what the reading of it went without
+     * @param open      what is open about whether a row making it can be written, and nothing
+     *                  where one can be as far as anything here says
+     */
+    public record OfOneMeeting(WeakeningSet weakening,
+                               CanonicalSelection<ObligationDisposition.Uncertainty> open) {
 
         public OfOneMeeting {
-            java.util.Objects.requireNonNull(weakening, "a reading went without something or not");
+            Objects.requireNonNull(weakening, "a reading went without something or not");
+            Objects.requireNonNull(open, "a meeting says what is open about it, if nothing");
         }
     }
 
@@ -150,7 +169,8 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
      */
     public static InteractionEvidence of(String behavior, InteractionRequirements asked,
                                          List<Generator.Watched> watched,
-                                         WeakeningSet weakening) {
+                                         WeakeningSet weakening,
+                                         WhereNothingIsAnswered unanswered) {
         Set<ObligationIdentity.OfACombinationOfDecisions> met = new LinkedHashSet<>();
         int seen = 0;
         List<Generator.Watched.Ran> ran = new ArrayList<>();
@@ -186,7 +206,8 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
                     behavior, asked.notMeasured().size())));
         }
         return new InteractionEvidence(asked, went.isEmpty()
-                ? new Measurement.Complete<>(rows) : new Measurement.Partial<>(rows, went));
+                ? new Measurement.Complete<>(rows) : new Measurement.Partial<>(rows, went),
+                unanswered);
     }
 
     /**

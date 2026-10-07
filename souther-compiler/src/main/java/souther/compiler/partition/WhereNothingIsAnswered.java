@@ -5,9 +5,9 @@ import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.NothingAnsweredHere;
 
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -16,27 +16,29 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * The classes at which a body answers nothing: every row sitting there reaches an
+ * The rows at which a body answers nothing: every row sitting there reaches an
  * {@code unreachable}.
  *
- * <p>What a row is owed at is the model's answer and is not changed by this. A class the rules admit
- * stays one a row is owed at however the body describes it, because the body's {@code unreachable}
- * is a statement nothing here proves, and an obligation taken away on its word is the row that
- * would have shown it wrong going unasked for. What this answers is the other question about such
- * an obligation: whether a row that meets it can be written. Every one would reach an
+ * <p>What a row is owed at is the model's answer and is not changed by this. An obligation stays one
+ * a row is owed at however the body describes it, because the body's {@code unreachable} is a
+ * statement nothing here proves, and an obligation taken away on its word is the row that would have
+ * shown it wrong going unasked for. What this answers is the other question about such an
+ * obligation: whether a row that meets it can be written. Every one would reach an
  * {@code unreachable} and be refused (E1911), so an obligation in here is one no row can be told to
  * meet and no build can be told to refuse over — it stays open until the premise is proved or the
  * body answers.
  *
  * <p><b>Every row, and so the union.</b> A part that answers nothing is reached by as many ways as
  * the walk named, and two parts may answer nothing for two values of a third position between
- * them. A row holding an obligation's classes may come any of those ways, so the obligation is in
- * here exactly where the cells of all of them together hold every such row — and asked of one way
- * at a time, a pair two ways share would be a gap no row can close.
+ * them. A row an obligation asks for may come any of those ways, so the obligation is in here
+ * exactly where the cells of all of them together hold every such row — and asked of one way at a
+ * time, an obligation two ways share would be a gap no row can close.
  *
- * <p>Whole cells only, and nothing read wider. A way with a condition placed at no class is left out
- * ({@link InteractionCells#whereEach}), which can only leave an obligation outside — never put one
- * in that some row escapes.
+ * <p>Drawn narrow, and asked of a region drawn wide. A way with a condition placed at no class is
+ * left out ({@link InteractionCells#whereEach}), and what an obligation asks for keeps every row a
+ * condition could not place ({@link InteractionCells#holdingEvery}). So the one can be inside the
+ * other only where the rows themselves are; what is lost is an obligation left outside, never one
+ * put in that some row escapes.
  *
  * @param behavior the behavior whose body this is
  * @param regions  one per part that answers nothing, in the order the walk met them
@@ -60,24 +62,16 @@ public record WhereNothingIsAnswered(String behavior, List<Region> regions,
     }
 
     /**
-     * One part of the body that answers nothing: the cells of every way to it this could place,
-     * and the premise it states.
+     * One part of the body that answers nothing: the rows of every way to it this could place, and
+     * the premise it states.
      *
-     * @param ways    the classes each way leaves each position it narrows, one map per way. A
-     *                position a way says nothing about is not in its map, and a row may hold any
-     *                class there
+     * @param where   the rows that come to the part, drawn narrow: a row in here is one that does
      * @param premise what the part states, and which part it is
      */
-    public record Region(List<Map<AxisId, Set<String>>> ways, Premise premise) {
+    public record Region(RowRegion where, Premise premise) {
 
         public Region {
-            List<Map<AxisId, Set<String>>> copied = new ArrayList<>();
-            for (Map<AxisId, Set<String>> way : ways) {
-                Map<AxisId, Set<String>> one = new HashMap<>();
-                way.forEach((axis, ids) -> one.put(axis, Set.copyOf(ids)));
-                copied.add(Map.copyOf(one));
-            }
-            ways = List.copyOf(copied);
+            Objects.requireNonNull(where, "a part is come to by some rows or none");
             Objects.requireNonNull(premise, "a part that answers nothing states something");
         }
     }
@@ -118,66 +112,107 @@ public record WhereNothingIsAnswered(String behavior, List<Region> regions,
                                             MeasuredInput.MeasuredAxes measured) {
         List<Axis> axes = measured.axes();
         List<Region> regions = new ArrayList<>();
-        Map<AxisId, List<String>> narrowed = new LinkedHashMap<>();
+        Set<AxisId> narrowed = new LinkedHashSet<>();
         List<NothingAnsweredHere> parts = read.answersNothing();
         for (int at = 0; at < parts.size(); at++) {
             NothingAnsweredHere part = parts.get(at);
-            List<Map<AxisId, Set<String>>> ways = new ArrayList<>();
+            List<RowRegion.Cell> ways = new ArrayList<>();
             for (InteractionCells.Cell cell : InteractionCells.whereEach(part.ways(), measured)) {
-                Map<AxisId, Set<String>> leaves = new HashMap<>();
-                for (int axis = 0; axis < axes.size(); axis++) {
-                    if (!cell.narrows(axis)) {
-                        continue;
-                    }
-                    Set<String> admitted = new HashSet<>();
-                    for (int c = 0; c < axes.get(axis).classes().size(); c++) {
-                        if (cell.admits(axis, c)) {
-                            admitted.add(axes.get(axis).classes().get(c).id());
-                        }
-                    }
-                    Axis position = axes.get(axis);
-                    leaves.put(position.id(), admitted);
-                    narrowed.computeIfAbsent(position.id(),
-                            _ -> position.classes().stream().map(PartitionClass::id).toList());
-                }
-                ways.add(leaves);
+                RowRegion.Cell placed = RowRegion.Cell.of(cell, axes);
+                narrowed.addAll(placed.classes().keySet());
+                ways.add(placed);
             }
-            regions.add(new Region(ways, new Premise(behavior, at, part.said().stream()
-                    .map(UnreachableReasons.Said::reason).distinct().toList())));
+            regions.add(new Region(RowRegion.of(ways), new Premise(behavior, at, part.said()
+                    .stream().map(UnreachableReasons.Said::reason).distinct().toList())));
         }
-        return new WhereNothingIsAnswered(behavior, regions, narrowed);
+        Map<AxisId, List<String>> classes = new LinkedHashMap<>();
+        for (Axis axis : axes) {
+            if (narrowed.contains(axis.id())) {
+                classes.put(axis.id(), axis.classes().stream().map(PartitionClass::id).toList());
+            }
+        }
+        return new WhereNothingIsAnswered(behavior, regions, classes);
     }
 
     /**
-     * The premises every row holding {@code fixed} rests on, or nothing where some such row answers.
+     * The premises every row of {@code obligation} rests on, or nothing where some such row answers.
      *
-     * <p>Every row, so the question is whether the classes {@code fixed} leaves — one at each
-     * position it names, any at every other — are inside the cells of every region together. The
+     * <p>Every row, so the question is whether each cell of the obligation — one class at each
+     * position it narrows, any at every other — is inside the cells of every region together. The
      * premises named are the parts such a row may reach, which is every region one of whose cells
-     * meets them: which of them a run aborts at is which way it came.
+     * meets one of the obligation's: which of them a run aborts at is which way it came.
+     *
+     * <p>Nothing for an obligation no row is in. Whether a row can be written there is a question
+     * about the obligation and not about where the body answers, and every row of none reaching an
+     * {@code unreachable} is not a premise anything rests on.
      */
-    public List<Premise> everyRowAt(Set<ClassOfAPosition> fixed) {
+    public List<Premise> everyRowIn(RowRegion obligation) {
         if (regions.isEmpty()) {
             return List.of();
         }
-        Map<AxisId, Set<String>> box = new LinkedHashMap<>();
-        classes.forEach((axis, ids) -> box.put(axis, new LinkedHashSet<>(ids)));
-        for (ClassOfAPosition each : fixed) {
-            if (box.containsKey(each.at())) {
-                box.put(each.at(), new LinkedHashSet<>(Set.of(each.classId())));
+        BitSet resting = new BitSet();
+        for (RowRegion.Cell cell : cellsOf(obligation)) {
+            Map<AxisId, Set<String>> box = boxOf(cell);
+            if (box == null) {
+                continue;
             }
-        }
-        List<Map<AxisId, Set<String>>> cells = new ArrayList<>();
-        Set<Premise> resting = new LinkedHashSet<>();
-        for (Region region : regions) {
-            for (Map<AxisId, Set<String>> way : region.ways()) {
-                if (meets(way, box)) {
-                    cells.add(way);
-                    resting.add(region.premise());
+            List<Map<AxisId, Set<String>>> meeting = new ArrayList<>();
+            for (int at = 0; at < regions.size(); at++) {
+                for (RowRegion.Cell way : cellsOf(regions.get(at).where())) {
+                    if (meets(way.classes(), box)) {
+                        meeting.add(way.classes());
+                        resting.set(at);
+                    }
                 }
             }
+            if (!covered(box, meeting)) {
+                return List.of();
+            }
         }
-        return covered(box, cells) ? List.copyOf(resting) : List.of();
+        List<Premise> out = new ArrayList<>();
+        resting.stream().forEach(at -> out.add(regions.get(at).premise()));
+        return List.copyOf(out);
+    }
+
+    /**
+     * The premises every row holding {@code fixed} rests on, or nothing where some such row answers:
+     * the rows a class of one position, or a combination of classes of several, asks for.
+     */
+    public List<Premise> everyRowAt(Set<ClassOfAPosition> fixed) {
+        Map<AxisId, Set<String>> at = new HashMap<>();
+        for (ClassOfAPosition each : fixed) {
+            at.computeIfAbsent(each.at(), _ -> new LinkedHashSet<>()).add(each.classId());
+        }
+        return everyRowIn(RowRegion.of(List.of(new RowRegion.Cell(at))));
+    }
+
+    /** The cells {@code rows} is the union of: none for no row, and one naming nothing for all. */
+    private static List<RowRegion.Cell> cellsOf(RowRegion rows) {
+        return switch (rows) {
+            case RowRegion.None _ -> List.of();
+            case RowRegion.All _ -> List.of(new RowRegion.Cell(Map.of()));
+            case RowRegion.Cells(var cells) -> cells;
+        };
+    }
+
+    /**
+     * The classes {@code cell} leaves each position some region narrows, or null where it leaves one
+     * of them none. A position no region narrows is left out: every region holds all of it alike.
+     */
+    private Map<AxisId, Set<String>> boxOf(RowRegion.Cell cell) {
+        Map<AxisId, Set<String>> box = new LinkedHashMap<>();
+        for (Map.Entry<AxisId, List<String>> each : classes.entrySet()) {
+            Set<String> left = new LinkedHashSet<>(each.getValue());
+            Set<String> asked = cell.classes().get(each.getKey());
+            if (asked != null) {
+                left.retainAll(asked);
+            }
+            if (left.isEmpty()) {
+                return null;
+            }
+            box.put(each.getKey(), left);
+        }
+        return box;
     }
 
     /**

@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Objects;
 import java.util.SequencedMap;
 
 /**
@@ -22,11 +23,42 @@ import java.util.SequencedMap;
  * answers a requirement is a run that did all of some one of its ways, rather than one that did all
  * the claims of all of them. Written as a union, a requirement two groups arrive at would ask for a
  * run through both.
+ *
+ * <p>And each way keeps the rows that stand at it beside what a run there does. The two are one
+ * reading of one walk, and a reader asking which rows a requirement is about — whether every one of
+ * them reaches an {@code unreachable} — asks them of the cell this placed rather than placing the
+ * decisions again.
  */
 public record InteractionRequirements(
         int read,
-        SequencedMap<ObligationIdentity.OfACombinationOfDecisions, List<List<ControlClaim>>> ways,
+        SequencedMap<ObligationIdentity.OfACombinationOfDecisions, List<Way>> ways,
         List<InteractionCells.NotOffered> notMeasured) {
+
+    /**
+     * One way to a requirement: the rows that take it, and what a run that took it is seen doing.
+     *
+     * @param where  the rows the cell of the way holds, which are the rows that come this way
+     * @param claims what a run that came this way did, all of which a run meeting it does
+     */
+    public record Way(RowRegion where, List<ControlClaim> claims) {
+
+        public Way {
+            Objects.requireNonNull(where, "a way is taken by some rows or none");
+            claims = List.copyOf(claims);
+        }
+    }
+
+    /**
+     * The rows that meet {@code item} by some way, which is the rows it asks for: none for a
+     * requirement this states no way to.
+     */
+    public RowRegion rowsOf(ObligationIdentity.OfACombinationOfDecisions item) {
+        RowRegion rows = RowRegion.NONE;
+        for (Way way : ways.getOrDefault(item, List.of())) {
+            rows = rows.or(way.where());
+        }
+        return rows;
+    }
 
     public InteractionRequirements {
         ways = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(ways));
@@ -69,7 +101,7 @@ public record InteractionRequirements(
                                              MeasuredInput.MeasuredAxes axes,
                                              int mostCellsPerGroup) {
         InteractionCells.Offered offered = InteractionCells.of(groups, axes, mostCellsPerGroup);
-        SequencedMap<ObligationIdentity.OfACombinationOfDecisions, List<List<ControlClaim>>> ways =
+        SequencedMap<ObligationIdentity.OfACombinationOfDecisions, List<Way>> ways =
                 new LinkedHashMap<>();
         for (InteractionCells.Group group : offered.groups()) {
             for (int index = 0; index < group.size(); index++) {
@@ -80,10 +112,11 @@ public record InteractionRequirements(
                 ObligationIdentity.OfACombinationOfDecisions item =
                         new ObligationIdentity.OfACombinationOfDecisions(
                                 behavior, group.settledAt(index));
-                List<List<ControlClaim>> already =
-                        ways.computeIfAbsent(item, _ -> new ArrayList<>());
-                if (!already.contains(selection.claims())) {
-                    already.add(selection.claims());
+                List<Way> already = ways.computeIfAbsent(item, _ -> new ArrayList<>());
+                Way way = new Way(RowRegion.of(List.of(
+                        RowRegion.Cell.of(selection.cell(), axes.axes()))), selection.claims());
+                if (!already.contains(way)) {
+                    already.add(way);
                 }
             }
         }
@@ -102,8 +135,8 @@ public record InteractionRequirements(
      */
     public boolean met(ObligationIdentity.OfACombinationOfDecisions item,
                        java.util.function.Predicate<ControlClaim> done) {
-        for (List<ControlClaim> way : ways.getOrDefault(item, List.of())) {
-            if (way.stream().allMatch(done)) {
+        for (Way way : ways.getOrDefault(item, List.of())) {
+            if (way.claims().stream().allMatch(done)) {
                 return true;
             }
         }

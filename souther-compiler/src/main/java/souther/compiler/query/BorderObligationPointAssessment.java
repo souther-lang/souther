@@ -5,6 +5,7 @@ import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.PointRole;
+import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.check.RuleCitations;
 import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.publish.PublicationOrders;
@@ -14,7 +15,10 @@ import souther.compiler.publish.PublishedSentence;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Everything known about one point a row is owed at: what it asks, and what all the readings of it
@@ -184,8 +188,13 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * key say the caller handed lines that were never merged. That is what the refusal below is
      * about; it is not a fold, and joining two such entries would put the order of a walk into what
      * a row is offered for.
+     *
+     * @param premisesOf the parts of the reading's body every row reaching the line there would
+     *                   reach, or nothing where some such row answers
      */
-    public static List<BorderObligationPointAssessment> across(List<BorderAssessment> readings) {
+    public static List<BorderObligationPointAssessment> across(
+            List<BorderAssessment> readings,
+            Function<BorderAssessment, List<WhereNothingIsAnswered.Premise>> premisesOf) {
         Map<BorderObligationPoint, java.util.SequencedMap<Reading, BorderAssessment>> byPoint =
                 new LinkedHashMap<>();
         Map<BorderObligationPoint, souther.compiler.partition.PointAttribution> attribution =
@@ -221,7 +230,8 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
             }
         }
         List<BorderObligationPointAssessment> out = new ArrayList<>();
-        byPoint.forEach((point, met) -> out.add(of(point, attribution.get(point), met)));
+        byPoint.forEach((point, met) ->
+                out.add(of(point, attribution.get(point), met, premisesOf)));
         return List.copyOf(out);
     }
 
@@ -241,11 +251,34 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
     public static BorderObligationPointAssessment of(
             BorderObligationPoint point,
             souther.compiler.partition.PointAttribution attribution,
-            java.util.SequencedMap<Reading, BorderAssessment> met) {
+            java.util.SequencedMap<Reading, BorderAssessment> met,
+            Function<BorderAssessment, List<WhereNothingIsAnswered.Premise>> premisesOf) {
         List<BorderAssessment> readings = List.copyOf(met.values());
         Demand asked = asked(point, readings);
         return new BorderObligationPointAssessment(point, attribution,
-                reachedBy(point, readings), asked, came(point.point(), readings, asked), met);
+                reachedBy(point, readings), asked,
+                came(point.point(), readings, asked, premisesOf), met);
+    }
+
+    /**
+     * The parts of the bodies every row at the point would reach, over every reading of it, or
+     * nothing where some reading has a row that answers.
+     *
+     * <p>Every reading, because a row at the point is a row of any of them: one reading whose body
+     * answers there is a row that can be written, whatever the others' bodies say.
+     */
+    private static List<WhereNothingIsAnswered.Premise> premisesAt(
+            List<BorderAssessment> readings,
+            Function<BorderAssessment, List<WhereNothingIsAnswered.Premise>> premisesOf) {
+        Set<WhereNothingIsAnswered.Premise> out = new LinkedHashSet<>();
+        for (BorderAssessment reading : readings) {
+            List<WhereNothingIsAnswered.Premise> here = premisesOf.apply(reading);
+            if (here.isEmpty()) {
+                return List.of();
+            }
+            out.addAll(here);
+        }
+        return List.copyOf(out);
     }
 
     /**
@@ -388,7 +421,10 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      */
     private static ObligationAssessment came(DomainPoint role,
                                              List<BorderAssessment> readings,
-                                             Demand asked) {
+                                             Demand asked,
+                                             Function<BorderAssessment,
+                                                     List<WhereNothingIsAnswered.Premise>>
+                                                     premisesOf) {
         if (asked instanceof Demand.NotOwed not) {
             throw new IllegalStateException(
                     "a point nobody is owed a row at, assessed as one that is: " + not.reason());
@@ -421,7 +457,8 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
             }
         }
         return new ObligationAssessment(asked.criterion(),
-                ObligationCoverage.acrossTheReadings(coverage), projection, searched);
+                ObligationCoverage.acrossTheReadings(coverage), projection, searched,
+                ObligationDisposition.openOn(premisesAt(readings, premisesOf)));
     }
 
     /** The measured half, which a point owed a row always has. */

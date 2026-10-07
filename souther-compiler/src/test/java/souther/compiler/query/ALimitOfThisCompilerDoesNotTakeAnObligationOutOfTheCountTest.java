@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.partition.StandingAtAPoint;
+import souther.compiler.publish.CanonicalSelection;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -41,6 +42,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
 
+    /** Nothing open about the obligation itself: what is said here is the readings' and the
+     *  searches' answer alone. */
+    private static final CanonicalSelection<ObligationDisposition.Uncertainty> NOTHING_OPEN =
+            ObligationDisposition.openOn(List.of());
+
     /**
      * A point the rows ran out on, where the value built for it could not be read back.
      *
@@ -53,7 +59,8 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
         assertEquals(ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped(
                                 prevented()))),
-                ObligationDisposition.of(new ObligationCoverage.Missed(), prevented()),
+                ObligationDisposition.of(new ObligationCoverage.Missed(), prevented(),
+                        NOTHING_OPEN),
                 "the question left open is whether a row can be written, not whether one is,"
                         + " and it says what stopped the showing");
     }
@@ -73,7 +80,7 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
                         new ObligationDisposition.Uncertainty
                                 .WhetherARowCanBeWritten.NothingShowedIt())),
                 ObligationDisposition.of(new ObligationCoverage.Missed(),
-                        new WritabilityKnowledge.NoEvidence()),
+                        new WritabilityKnowledge.NoEvidence(), NOTHING_OPEN),
                 "a point nothing promises a row at is a point nobody could decide, not a point"
                         + " the model stopped owing — and what it is open on is that nothing"
                         + " showed it, which is not a budget having stopped anything");
@@ -83,7 +90,8 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
     @Test
     void aShowingThatArrivedIsTheOneThatMakesAFinding() {
         assertEquals(new ObligationDisposition.Unmet(),
-                ObligationDisposition.of(new ObligationCoverage.Missed(), established()),
+                ObligationDisposition.of(new ObligationCoverage.Missed(), established(),
+                        NOTHING_OPEN),
                 "a point the rules prove and no row is at is a row somebody owes");
     }
 
@@ -99,7 +107,7 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
                 new ObligationCoverage.Undecided(WeakeningSet.of(
                         new Weakening.BorderValueUnreadable(null,
                                 ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)))),
-                prevented());
+                prevented(), NOTHING_OPEN);
 
         assertEquals(ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
@@ -131,7 +139,7 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
                 ObligationDisposition.of(
                         new ObligationCoverage.NotMeasured(
                         UnaskedReasons.of(ItemAssessment.Coverage.NotAsked.NO_ROWS)),
-                        new WritabilityKnowledge.NoEvidence()),
+                        new WritabilityKnowledge.NoEvidence(), NOTHING_OPEN),
                 "nothing was read and nothing promises a row, both are open about it, and each"
                         + " says which of the two left it so");
     }
@@ -157,12 +165,13 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
                 if (coverage instanceof ObligationCoverage.Witnessed
                         && knowledge instanceof WritabilityKnowledge.Refuted) {
                     assertThrows(IllegalStateException.class,
-                            () -> ObligationDisposition.of(coverage, knowledge),
+                            () -> ObligationDisposition.of(coverage, knowledge, NOTHING_OPEN),
                             "a row at a point the rules leave no value at is not a state to"
                                     + " answer for");
                     continue;
                 }
-                ObligationDisposition it = ObligationDisposition.of(coverage, knowledge);
+                ObligationDisposition it =
+                        ObligationDisposition.of(coverage, knowledge, NOTHING_OPEN);
                 reached.add(it.getClass().getSimpleName());
                 assertTrue(it instanceof ObligationDisposition.Met
                                 || it instanceof ObligationDisposition.Unmet
@@ -187,10 +196,12 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
     @Test
     void aLimitDoesNotTurnAMissIntoAHitOrBack() {
         for (ObligationCoverage coverage : everyCoverage()) {
-            ObligationDisposition withGrounds = ObligationDisposition.of(coverage, established());
+            ObligationDisposition withGrounds =
+                    ObligationDisposition.of(coverage, established(), NOTHING_OPEN);
             for (WritabilityKnowledge weaker : List.of(prevented(),
                     new WritabilityKnowledge.NoEvidence())) {
-                ObligationDisposition stopped = ObligationDisposition.of(coverage, weaker);
+                ObligationDisposition stopped =
+                        ObligationDisposition.of(coverage, weaker, NOTHING_OPEN);
                 assertTrue(weakensTo(withGrounds, stopped),
                         () -> "a limit moved " + coverage + " from " + withGrounds + " to " + stopped
                                 + ", which is a verdict and not a loss of knowledge");

@@ -387,7 +387,7 @@ class AnArmNothingReachesIsNotOwedARowTest {
     void aProvenArmLeavesTheDenominator() {
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
                 List.of(UNREACHED_ARM, TAKEN_ARM), Set.of(TAKEN), Set.of(),
-                proving().asRunWith(Set.of(TAKEN)), WeakeningSet.none());
+                proving().asRunWith(Set.of(TAKEN)), WeakeningSet.none(), _ -> List.of());
 
         assertEquals(List.of(TAKEN), probesOf(measured));
         assertEquals(1, measured.arms().covered());
@@ -417,7 +417,7 @@ class AnArmNothingReachesIsNotOwedARowTest {
         PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(UNREACHED, TAKEN));
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
                 List.of(UNREACHED_ARM, TAKEN_ARM), Set.of(UNREACHED, TAKEN), Set.of(), asRun,
-                WeakeningSet.none());
+                WeakeningSet.none(), _ -> List.of());
 
         // What a disproved proof bears on is the set of arms and not any one of them. Which arms
         // there are is what the proofs decided, so a proof shown wrong leaves that set in doubt;
@@ -451,7 +451,7 @@ class AnArmNothingReachesIsNotOwedARowTest {
         PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(UNREACHED));
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
                 List.of(UNREACHED_ARM, TAKEN_ARM), Set.of(UNREACHED), Set.of(), asRun,
-                WeakeningSet.none());
+                WeakeningSet.none(), _ -> List.of());
 
         assertEquals(1, measured.arms().covered(), "the row went through the arm it went through");
         assertEquals(List.of(TAKEN), measured.arms().unmet().stream()

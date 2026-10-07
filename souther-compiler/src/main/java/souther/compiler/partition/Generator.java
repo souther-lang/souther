@@ -1261,13 +1261,14 @@ public final class Generator {
                                         souther.compiler.reading.CoverageRead.Read read,
                                         Trial trial, List<Baseline> baselines,
                                         AnswersStoodIn stood, HeldOutcome.Of holding,
+                                        WhereNothingIsAnswered unanswered,
                                         AdequacyPolicy.OfTheGeneration budget) {
         return switch (stood) {
             case AnswersStoodIn.NothingComposed(var why) ->
                     FillResult.nothingWasLookedFor(plan, why, List.of());
             case AnswersStoodIn.Stood(var answers) ->
                     filling(plan, existing, check, read, trial, baselines, answers, holding,
-                            budget);
+                            unanswered, budget);
         };
     }
 
@@ -1277,6 +1278,7 @@ public final class Generator {
                                       souther.compiler.reading.CoverageRead.Read read,
                                       Trial trial, List<Baseline> baselines,
                                       List<StoodInAnswer> answers, HeldOutcome.Of holding,
+                                      WhereNothingIsAnswered unanswered,
                                       AdequacyPolicy.OfTheGeneration budget) {
         MeasuredInput subject = plan.subject();
         List<ClassOfAPosition> classesOwed = plan.classesOwed();
@@ -1361,8 +1363,7 @@ public final class Generator {
         // the same values for is applied once — a class's row run to see how far it got among
         // them, and the candidates an arm is looked for with.
         Map<List<String>, ObservedRun> ran = new LinkedHashMap<>();
-        GoingOn goingOn = new GoingOn(read, trial, ran, holding,
-                WhereNothingIsAnswered.of(axes.subject().behavior(), read, axes));
+        GoingOn goingOn = new GoingOn(read, trial, ran, holding, unanswered);
 
         // The rows this run composes, each numbered where it is composed. The number is an
         // identity and nothing reads it as a place: what says two obligations were answered by one

@@ -111,11 +111,11 @@ class ALineReadUnderEachCaseIsOneRowToWriteTest {
     void theOrderTheReadingsArriveInDecidesNothing() {
         List<BorderAssessment> readings = readingsOf("");
         List<BorderObligationPointAssessment> forwards =
-                BorderObligationPointAssessment.across(readings);
+                BorderObligationPointAssessment.across(readings, _ -> List.of());
         List<BorderAssessment> reversed = new ArrayList<>(readings);
         java.util.Collections.reverse(reversed);
         List<BorderObligationPointAssessment> backwards =
-                BorderObligationPointAssessment.across(reversed);
+                BorderObligationPointAssessment.across(reversed, _ -> List.of());
 
         assertEquals(points(forwards), points(backwards),
                 "the same points, whichever order their readings were met in");
