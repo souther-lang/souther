@@ -113,7 +113,8 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
         oneOfEach().forEach((leaf, attempt) -> {
             ObligationDisposition disposition = ObligationDisposition.of(
                     new ObligationCoverage.Missed(),
-                    WritabilityKnowledge.of(nothingShown(), SearchOutcomes.of(attempt)));
+                    WritabilityKnowledge.of(nothingShown(), SearchOutcomes.of(attempt)),
+                    ObligationDisposition.openOn(List.of()));
             if (attempt instanceof ItemAssessment.Attempt.Prevented) {
                 // Which question is open, rather than what it is open on. What stopped the showing
                 // is the attempt's own and is read back from it two rows above; asserted here it

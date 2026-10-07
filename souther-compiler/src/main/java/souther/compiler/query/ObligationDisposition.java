@@ -258,6 +258,34 @@ public sealed interface ObligationDisposition {
     }
 
     /**
+     * What is open about an obligation every row of which rests on {@code premises}: nothing where
+     * there are none.
+     *
+     * <p>The one crossing from where a body answers nothing to what is open about an obligation, for
+     * every account that has one. What decides is the rows the obligation asks for and the parts of
+     * the body that answer nothing ({@link WhereNothingIsAnswered#everyRowIn}); this is how the answer
+     * is said, once.
+     */
+    static CanonicalSelection<Uncertainty> openOn(List<WhereNothingIsAnswered.Premise> premises) {
+        return PublicationOrders.OPEN_QUESTIONS.keep(premises.isEmpty() ? List.of()
+                : List.of(new Uncertainty.WhetherARowCanBeWritten.EveryRowReachesAnUnreachable(
+                        premises)));
+    }
+
+    /** The parts of the body every row of an obligation open as {@code open} would reach, where that
+     *  is what keeps it open; empty otherwise. */
+    static List<WhereNothingIsAnswered.Premise> premisesIn(
+            CanonicalSelection<Uncertainty> open) {
+        for (Uncertainty each : open.written()) {
+            if (each instanceof Uncertainty.WhetherARowCanBeWritten
+                    .EveryRowReachesAnUnreachable(var premises)) {
+                return premises;
+            }
+        }
+        return List.of();
+    }
+
+    /**
      * What the readings of a point met and whether they were all tried, out of what the measurement
      * of it went without.
      *
@@ -373,7 +401,38 @@ public sealed interface ObligationDisposition {
      * compiler's, and one where nothing was composed at all, and one nobody read against, are three
      * things this compiler did or did not do — and none of them is the model taking a row back.
      */
-    static ObligationDisposition of(ObligationCoverage coverage, WritabilityKnowledge knowledge) {
+    static ObligationDisposition of(ObligationCoverage coverage, WritabilityKnowledge knowledge,
+                                    CanonicalSelection<Uncertainty> open) {
+        // What is open about the obligation itself refines a point no row is at, and nothing else.
+        // A row seen at the point is met whatever the body says about the rest, and a proof that no
+        // value is there settles it whatever the body says; a gap is a point nothing showed a row
+        // can be written at only where the body does not say every such row aborts.
+        //
+        // And it answers whether a row can be written, which a search may have left open too. The
+        // body saying every such row aborts is the answer to that question and the search finding
+        // nothing is what that answer predicts, so the one is said in place of the other.
+        ObligationDisposition read = of(coverage, knowledge);
+        if (open.isEmpty()) {
+            return read;
+        }
+        return switch (read) {
+            case Met _, Refuted _ -> read;
+            case Unmet _ -> new Undecided(open);
+            case Undecided it -> {
+                List<Uncertainty> both = new ArrayList<>();
+                for (Uncertainty each : it.because().written()) {
+                    if (!(each instanceof Uncertainty.WhetherARowCanBeWritten)) {
+                        both.add(each);
+                    }
+                }
+                both.addAll(open.written());
+                yield Undecided.about(both);
+            }
+        };
+    }
+
+    private static ObligationDisposition of(ObligationCoverage coverage,
+                                            WritabilityKnowledge knowledge) {
         // And a point no row can be written at is settled whatever the readings came to, which is
         // the one answer that outranks them. Reading more rows cannot put a row where no value is,
         // so a reading that stopped leaves nothing open here.

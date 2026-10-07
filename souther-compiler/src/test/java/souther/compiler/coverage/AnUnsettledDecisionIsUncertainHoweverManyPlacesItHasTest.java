@@ -56,7 +56,8 @@ class AnUnsettledDecisionIsUncertainHoweverManyPlacesItHasTest {
     private static Adequacy.BranchEvidence over(DecidedBy decided) {
         return Adequacy.BranchEvidence.measured("b",
                 List.of(arm(0, decided), arm(1, decided)), Set.of(), Set.of(),
-                souther.compiler.query.Adequacy.NOTHING_PROVEN, WeakeningSet.none());
+                souther.compiler.query.Adequacy.NOTHING_PROVEN, WeakeningSet.none(),
+                _ -> List.of());
     }
 
     /** One place whose rule nothing settled is a fork this cannot say how many rules it stands for. */
@@ -114,7 +115,7 @@ class AnUnsettledDecisionIsUncertainHoweverManyPlacesItHasTest {
                 List.of(arm(0, DecidedBy.NOT_SAID), arm(1, DecidedBy.NOT_SAID),
                         arm(2, beside, 0, DecidedBy.THE_DECLARATION)),
                 Set.of(), Set.of(), souther.compiler.query.Adequacy.NOTHING_PROVEN,
-                WeakeningSet.none());
+                WeakeningSet.none(), _ -> List.of());
 
         assertEquals(1, measured.arms().unmet().size(),
                 () -> "the settled fork's arm is a gap: " + measured.arms().all());

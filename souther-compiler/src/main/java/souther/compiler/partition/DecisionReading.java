@@ -12,7 +12,9 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -83,9 +85,63 @@ public record DecisionReading(String behavior, List<Ruled> found, Enumeration en
         }
     }
 
-    /** The rules themselves, for a reader that asks what the body decides and not where. */
+    /**
+     * One rule and every place the body states it.
+     *
+     * <p>What is owed a row, settled, found or counted is the rule, and the places are where it
+     * stands. A row that takes the rule at any of them takes the rule, so what a reader asks of the
+     * rule is asked over all of them together: the rows it asks for are the rows of every place, and
+     * one place's answer is not the rule's. Read one place at a time, a rule stated twice would be
+     * judged by whichever place was met first or last.
+     *
+     * @param rule        the rule
+     * @param occurrences every place it is stated, in the order the reading met them. Never empty
+     */
+    public record Stated(DecisionRule rule, List<Ruled> occurrences) {
+
+        public Stated {
+            occurrences = List.copyOf(occurrences);
+            if (occurrences.isEmpty()) {
+                throw new IllegalArgumentException("a rule is stated somewhere: " + rule);
+            }
+            for (Ruled each : occurrences) {
+                if (!each.rule().equals(rule)) {
+                    throw new IllegalArgumentException("the places of one rule are of that rule: "
+                            + rule + " with " + each.rule());
+                }
+            }
+        }
+
+        /**
+         * The place a reader is shown, which is where to look and not where the rule is: the
+         * conditions are the rule's, and every place states them alike.
+         */
+        public Ruled display() {
+            return occurrences.getFirst();
+        }
+    }
+
+    /**
+     * Every rule once, with every place it is stated, in the order the reading first met each.
+     *
+     * <p>The one grouping of the places of a rule. A reader that asks about the rule — what it is
+     * owed, what settles it, whether every row of it aborts — asks this, and only a reader that
+     * asks about a place reads {@link #found} itself.
+     */
+    public List<Stated> stated() {
+        Map<DecisionRule, List<Ruled>> byRule = new LinkedHashMap<>();
+        for (Ruled each : found) {
+            byRule.computeIfAbsent(each.rule(), _ -> new ArrayList<>()).add(each);
+        }
+        List<Stated> out = new ArrayList<>();
+        byRule.forEach((rule, occurrences) -> out.add(new Stated(rule, occurrences)));
+        return List.copyOf(out);
+    }
+
+    /** The rules themselves, each once, for a reader that asks what the body decides and not
+     *  where. */
     public List<DecisionRule> rules() {
-        return found.stream().map(Ruled::rule).toList();
+        return stated().stream().map(Stated::rule).toList();
     }
 
     /** Whether the reading wrote down every way through the body, or would not hold them apart. */

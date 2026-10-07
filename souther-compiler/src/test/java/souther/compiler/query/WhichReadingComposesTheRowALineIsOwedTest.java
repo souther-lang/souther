@@ -277,7 +277,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
         PointResolution resolved = PointResolver.resolveAt(
                 new ObligationAssessment(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)),
                         new ObligationCoverage.Witnessed(),
-                        ItemAssessment.WritabilityProjection.PROVEN, SearchOutcomes.none()),
+                        ItemAssessment.WritabilityProjection.PROVEN, SearchOutcomes.none(),
+                        ObligationDisposition.openOn(List.of())),
                 List.of(at("anywhere")), _ -> {
                     throw new AssertionError("nothing is searched at a point a row stands at");
                 });
@@ -316,7 +317,8 @@ class WhichReadingComposesTheRowALineIsOwedTest {
     private static ObligationAssessment owed() {
         return new ObligationAssessment(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)),
                 new ObligationCoverage.Missed(),
-                ItemAssessment.WritabilityProjection.PROVEN, SearchOutcomes.none());
+                ItemAssessment.WritabilityProjection.PROVEN, SearchOutcomes.none(),
+                ObligationDisposition.openOn(List.of()));
     }
 
     private static PointResolver.ReadingEvidence searched(ItemAssessment.Attempt attempt) {

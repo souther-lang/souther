@@ -23,7 +23,6 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.partition.Border;
-import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.check.ComparisonClaim;
@@ -241,7 +240,7 @@ final class AReportOfOneBorder {
                 new Measurement.Complete<>(List.of()),
                 PartitionEvidence.PairSpace.NONE,
                 List.of(), List.of(), List.of(), List.of(), List.of(),
-                List.of(), WhereNothingIsAnswered.NONE);
+                List.of());
     }
 
     /**
@@ -260,7 +259,7 @@ final class AReportOfOneBorder {
                                                 souther.compiler.inputs.TermPath.of("t")))))),
                 PartitionEvidence.PairSpace.NONE,
                 List.of(), List.of(), List.of(), List.of(), List.of(),
-                List.of(), WhereNothingIsAnswered.NONE);
+                List.of());
     }
 
     /** The border measure made in full, over the one border. */
@@ -299,7 +298,8 @@ final class AReportOfOneBorder {
                 new souther.compiler.query.BehaviorEvidence(
                         Adequacy.RowReading.NONE, null, partition, lines,
                         lines.readAs(read -> souther.compiler.query
-                                .BorderObligationPointAssessment.across(read).stream()
+                                .BorderObligationPointAssessment.across(read, _ -> List.of())
+                                .stream()
                                 .filter(point -> point.belongsToBehaviorAccount("weigh"))
                                 .toList()),
                         null, null, null, null),

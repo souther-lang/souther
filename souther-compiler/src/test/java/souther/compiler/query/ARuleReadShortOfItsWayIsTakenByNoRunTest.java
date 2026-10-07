@@ -114,10 +114,11 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
         DecisionReading.Ruled readShort = ruled(ONE_DISTINCTION, false);
         DecisionEvidence evidence = evidenceWithNoRows(reading(whole, readShort));
 
-        assertEquals(WeakeningSet.none(), evidence.at(whole).weakening(),
+        assertEquals(WeakeningSet.none(), evidence.at(statedAt(whole)).weakening(),
                 "the rule read in full rests on nothing its neighbour went without");
         assertEquals(WeakeningSet.of(new Weakening.DecisionRuleReadShort("decides")),
-                evidence.at(readShort).weakening(), "and the rule read short rests on that");
+                evidence.at(statedAt(readShort)).weakening(),
+                "and the rule read short rests on that");
 
         assertEquals(Adequacy.Finding.Disposition.UNDECIDED,
                 findingAbout(evidence, readShort).disposition(),
@@ -128,8 +129,13 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
 
     private static Adequacy.Finding findingAbout(DecisionEvidence evidence,
                                                  DecisionReading.Ruled ruled) {
-        return Adequacy.Finding.by(new FindingSubject.OfABehavior("decides"), evidence.at(ruled),
-                new About.ARuleNoRowTakes("decides", ruled));
+        return Adequacy.Finding.by(new FindingSubject.OfABehavior("decides"),
+                evidence.at(statedAt(ruled)), new About.ARuleNoRowTakes("decides", ruled));
+    }
+
+    /** The rule of {@code ruled}, stated at that one place. */
+    private static DecisionReading.Stated statedAt(DecisionReading.Ruled ruled) {
+        return new DecisionReading.Stated(ruled.rule(), List.of(ruled));
     }
 
     private static DecisionReading.Ruled ruled(DecisionRule rule, boolean whole) {
@@ -146,7 +152,7 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
     private static DecisionEvidence evidenceWithNoRows(DecisionReading read) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         return new DecisionEvidence(read, DecisionEvidence.of("decides",
-                rulesOf(compilation, read), List.of(), WeakeningSet.none()));
+                rulesOf(compilation, read), List.of(), WeakeningSet.none()), Map.of());
     }
 
     private static RulesTaken rulesOf(Compilation compilation, DecisionReading read) {

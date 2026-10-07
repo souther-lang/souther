@@ -110,6 +110,7 @@ import souther.compiler.query.DecisionRuleReading;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.ArmDisposition;
 import souther.compiler.query.ArmExclusion;
+import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.query.ArmObligation;
 import souther.compiler.query.ArmSummary;
 import souther.compiler.query.BorderAssessment;
@@ -175,6 +176,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -872,7 +874,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     partPlaces(compilation, partition, reported),
                     ruleReadings(compilation, name, behavior.name(),
                             decisions == null ? null : decisions.get(behavior.name()),
-                            requirements),
+                            reported),
                     requirements));
         }
         Adequacy.DeclaredBoundaries declared =
@@ -946,12 +948,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>One entry per finding about a rule and nothing else, so a page describes a rule by every
      * condition it turns on: read off whichever conditions a walk happened to have words for,
      * two rules of one behavior would be shown the same sentence with nothing under it.
+     *
+     * <p>Which rules those are is the findings' answer and is read off them. A rule is raised for
+     * more than what its search came to — every row of it reaching an {@code unreachable} is raised
+     * with no search behind it — so a page deciding again from the search would have a line about
+     * the rule and no description of it.
      */
     private static Map<DecisionReading.Ruled, List<ShownCondition>> ruleReadings(
             Compilation compilation, String module, String behavior, DecisionEvidence decision,
-            Map<DecisionRule, RuleSettlement> requirements) {
+            List<ReportedFinding> reported) {
         if (decision == null) {
             return Map.of();
+        }
+        Set<DecisionReading.Ruled> about = new HashSet<>();
+        for (ReportedFinding each : reported) {
+            if (each.about() instanceof About.ARuleNoRowTakes(var _, var ruled)) {
+                about.add(ruled);
+            }
         }
         CoverageSites.Plan plan = placesOf(compilation, module);
         Map<DecisionReading.Ruled, List<ShownCondition>> out = new LinkedHashMap<>();
@@ -959,8 +972,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // The rules a finding is about, which are the ones a page describes condition by
             // condition. What is owed no row is counted under its reason rather than written out,
             // so describing one would be work for a line nobody reads.
-            RuleSettlement came = requirements.get(rule.rule());
-            if (came == null || !(came.requirement() instanceof RuleRequirement.Required)) {
+            if (!about.contains(rule)) {
                 continue;
             }
             List<ShownCondition> shown = new ArrayList<>();
@@ -1587,6 +1599,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 premised.addAll(open);
             }
         }
+        // And of an arm, which is not a finding: an arm nobody can decide is named under its
+        // count and is never refused over, so what holds it open is read off the arm's account.
+        for (ModuleReport module : modules) {
+            for (BehaviorReport behavior : module.behaviors()) {
+                if (behavior.branch() == null) {
+                    continue;
+                }
+                for (ArmSummary arms : behavior.branch().measured().made().stream().toList()) {
+                    for (ArmObligation.Counted arm : arms.undecided()) {
+                        if (!arm.open().isEmpty()) {
+                            List<AdequacyUncertainty> open = new ArrayList<>();
+                            unresolvedBy(open, new Subject.OfABehavior(behavior.name()),
+                                    new ObligationDisposition.Undecided(arm.open()));
+                            premised.addAll(open);
+                        }
+                    }
+                }
+            }
+        }
         rest.addAll(premised);
         List<AdequacyUncertainty> out = new ArrayList<>();
         facts.causes().forEach(each -> out.add(new AdequacyUncertainty.ByWeakening(each)));
@@ -2145,7 +2176,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * inputs there do not arise, which is the work left.
      */
     private static String onAPremise(Adequacy.Finding finding) {
-        List<String> said = finding.premises().stream()
+        return onAPremise(finding.premises());
+    }
+
+    /** The same, of whatever obligation every row of which rests on {@code premises}. */
+    private static String onAPremise(List<WhereNothingIsAnswered.Premise> premises) {
+        List<String> said = premises.stream()
                 .flatMap(premise -> premise.reasons().stream()).distinct().toList();
         return said.isEmpty() ? ""
                 : ": a row there reaches `unreachable` (" + String.join("; ", said)
@@ -2188,8 +2224,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * finding and the word in the margin as a footnote.
      */
     private String noRow(Adequacy.Finding finding) {
-        return finding.weakenedBy().isEmpty() && finding.open().isEmpty()
-                ? "no row " : "undecided whether a row ";
+        return finding.established() ? "no row " : "undecided whether a row ";
     }
 
     /** The positions this report has an axis for, which is what tells a claim it can print beside
@@ -2273,9 +2308,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // are for different readers, and this one writes the term a row is written against.
             for (Adequacy.Finding f : behavior.findings()) {
                 if (f.about() instanceof About.AClassNoRowIsIn(var missing)) {
-                    out.append(String.format("      %s %s `%s` at %s%s%n", mark(f),
-                            f.weakenedBy().isEmpty() && f.open().isEmpty()
-                                    ? "no row is in" : "undecided whether a row is in",
+                    out.append(String.format("      %s %sis in `%s` at %s%s%n", mark(f), noRow(f),
                             missing.name(), missing.axis().name(), onAPremise(f)));
                 }
             }
@@ -2376,11 +2409,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     for (ReportedFinding f : behavior.reported()) {
                         if (f.finding().about() instanceof
                                 About.ACombinationOfTwoClassesNoRowIsIn(var combination)) {
-                            out.append(String.format("      %s %s %s%s%n",
-                                    mark(f.finding()),
-                                    f.finding().weakenedBy().isEmpty()
-                                            && f.finding().open().isEmpty()
-                                            ? "no row is in" : "undecided whether a row is in",
+                            out.append(String.format("      %s %sis in %s%s%n",
+                                    mark(f.finding()), noRow(f.finding()),
                                     twoClasses(combination), onAPremise(f.finding())));
                         }
                     }
@@ -2830,9 +2860,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // have written, and left to the number alone a reader is shown a difference with nothing
         // under it to act on.
         for (ArmObligation.Counted open : arms.undecided()) {
-            out.append(String.format("      ? undecided whether a row goes through `%s` (%s)%n",
+            out.append(String.format("      ? undecided whether a row goes through `%s` (%s)%s%n",
                     ArmVocabulary.label(open.display()),
-                    behavior.placeOf(open.display()).said(rendering, declaredIn)));
+                    behavior.placeOf(open.display()).said(rendering, declaredIn),
+                    onAPremise(open.premises())));
         }
         // Whatever findings there are, and no second opinion about whether there may be any. Which
         // arms may be named is settled where they are collected, so a condition repeated here would
@@ -2940,8 +2971,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         ReasonProse.of(meetings.made().why()).sentence(), held)));
         for (ReportedFinding f : behavior.reported()) {
             if (f.finding().about() instanceof About.ACombinationNoRowMakes) {
-                out.append(String.format("      %s no row makes this combination of the decisions%n",
-                        mark(f.finding())));
+                out.append(String.format("      %s %smakes this combination of the decisions%s%n",
+                        mark(f.finding()), noRow(f.finding()), onAPremise(f.finding())));
             }
         }
     }
@@ -2992,8 +3023,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             if (!(f.finding().about() instanceof About.ARuleNoRowTakes rule)) {
                 continue;
             }
-            out.append(String.format("      %s no row takes a decision rule%n",
-                    mark(f.finding())));
+            out.append(String.format("      %s %stakes a decision rule%s%n",
+                    mark(f.finding()), noRow(f.finding()), onAPremise(f.finding())));
             // Every condition of it, so that two rules of one behavior are told apart by what a
             // reader is shown. The sentence above says only which behavior, because what tells the
             // rules apart is the proposition each condition is keyed on and that is written the
@@ -3036,12 +3067,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         Set<Said> order = new java.util.TreeSet<>(Said.IN_ORDER);
         Map<String, Integer> counted = new LinkedHashMap<>();
         int all = 0;
-        for (DecisionReading.Ruled ruled : decision.read().found()) {
-            RuleSettlement came = behavior.ruleSettlements().get(ruled.rule());
+        // Each rule once, however many places state it: what is counted is the rules.
+        for (DecisionReading.Stated stated : decision.read().stated()) {
+            RuleSettlement came = behavior.ruleSettlements().get(stated.rule());
             if (came == null || !answer.isInstance(came.requirement())) {
                 continue;
             }
-            Said said = said(came, ruled.states(), rendering, places,
+            Said said = said(came, stated.display().states(), rendering, places,
                     behavior.conditionPlaces(), declaredIn);
             order.add(said);
             counted.merge(said.text(), 1, Integer::sum);
@@ -5782,18 +5814,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         weakening(out, decision.derivation());
         ArrayNode all = out.putArray("obligations");
         Optional<DecisionEvidence.RowsPlaced> placed = decision.took().made();
-        for (DecisionReading.Ruled ruled : decision.read().found()) {
+        // One entry per rule, however many places state it: an obligation is published once.
+        for (DecisionReading.Stated stated : decision.read().stated()) {
             ObjectNode one = all.addObject();
-            ruleId(one.putObject("obligationId"), behavior.name(), ruled.rule());
-            placed.ifPresent(rows -> one.put("taken", rows.rules().contains(ruled.rule())));
+            ruleId(one.putObject("obligationId"), behavior.name(), stated.rule());
+            placed.ifPresent(rows -> one.put("taken", rows.rules().contains(stated.rule())));
             // What this rule's own derivation went without, on the rule. The coverage above says
             // the measure is short of some rule; which one is this entry's to say, and a consumer
             // handed only the measure's word could not tell a rule read short from its neighbours.
-            weakening(one, decision.readShortOf(ruled));
+            weakening(one, decision.readShortOf(stated));
             // Whether a row is owed here at all, where something asked. Beside `taken` and not
             // folded into it: a rule no row took and nothing could show a row for is not a gap,
             // and a consumer reading `taken` alone would count it as one.
-            RuleSettlement came = behavior.ruleSettlements().get(ruled.rule());
+            RuleSettlement came = behavior.ruleSettlements().get(stated.rule());
             if (came != null) {
                 one.put("requirement", wire(came.requirement()));
                 // And which answer it was, rule by rule. The page counts these under their reason

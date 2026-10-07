@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.types.ModelOccurrence;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Towards;
@@ -354,6 +355,78 @@ public final class InteractionCells {
             }
         }
         return out;
+    }
+
+    /**
+     * Every row that arrives by one of {@code ways}, and maybe more: the rows something asks for,
+     * drawn wide.
+     *
+     * <p>The other direction from {@link #whereEach}. A condition placed at no class is left out of
+     * its way rather than the way out of the region, which can only take in rows that do not come
+     * that way — so a row that does is in here whatever this could not place. A way whose placed
+     * conditions leave a position nothing is one no row comes, and adds no row.
+     */
+    public static RowRegion holdingEvery(List<List<souther.compiler.reading.Condition>> ways,
+                                         MeasuredInput.MeasuredAxes axes) {
+        List<RowRegion.Cell> out = new ArrayList<>();
+        for (List<souther.compiler.reading.Condition> way : ways) {
+            Cell cell = Cell.anything(axes.axes());
+            for (souther.compiler.reading.Condition each : way) {
+                Cell said = admittedBy(each, axes);
+                if (said != null) {
+                    cell = cell.and(said);
+                    if (cell == null) {
+                        break;
+                    }
+                }
+            }
+            if (cell != null) {
+                out.add(RowRegion.Cell.of(cell, axes.axes()));
+            }
+        }
+        return RowRegion.of(out);
+    }
+
+    /**
+     * Every row that reaches what {@code way} leads to, and maybe more.
+     *
+     * <p>Drawn wide, for the reason {@link #holdingEvery} is: what a rule or a point of a line asks
+     * for is in here whatever this could not place. A condition no row brings out the way the walk
+     * went is a way no row takes, and that is said as no row rather than left out. A narrowing of a
+     * position an axis measures keeps the classes it does not tell apart from the cases it leaves,
+     * and leaves out only a class that selects another case: a value is one case. Everything else on
+     * the way — what the arithmetic took in, and what was declined — narrows nothing here.
+     */
+    public static RowRegion holdingEveryRowOf(WayToTheBorder way, MeasuredInput.MeasuredAxes axes) {
+        if (way.neverComesOut().isPresent()) {
+            return RowRegion.NONE;
+        }
+        List<Axis> measured = axes.axes();
+        Cell cell = Cell.anything(measured);
+        for (OnTheWay each : way.onTheWay()) {
+            if (!(each instanceof OnTheWay.Narrowed narrowed) || !narrowed.crossings().isEmpty()) {
+                continue;
+            }
+            TermPath at = narrowed.position().narrowedFrom().position();
+            List<Refinement> left = narrowed.position().narrowing().atoms();
+            for (int axis = 0; axis < measured.size(); axis++) {
+                if (!(measured.get(axis).term() instanceof NumericTerm.ValueOf)
+                        || !measured.get(axis).path().equals(at)) {
+                    continue;
+                }
+                Cell said = Cell.anything(measured);
+                List<PartitionClass> classes = measured.get(axis).classes();
+                for (int c = 0; c < classes.size(); c++) {
+                    Refinement selects = classes.get(c).selects();
+                    said.allowed()[axis][c] = selects == null || left.contains(selects);
+                }
+                cell = cell.and(said);
+                if (cell == null) {
+                    return RowRegion.NONE;
+                }
+            }
+        }
+        return RowRegion.of(List.of(RowRegion.Cell.of(cell, measured)));
     }
 
     /** The groups worth offering, over the ordered {@code axes}, and the ones held back. */
