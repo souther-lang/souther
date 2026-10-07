@@ -9,7 +9,6 @@ import java.util.Deque;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -294,10 +293,11 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
     private interface Node {
         Object find(@Nullable Object key, int keyHash, int shift, WorkCheckpoint checkpoint);
 
-        /** Reports into {@code probe} where {@code key}'s value is held inline under this node, and
-         *  answers whether it is held at all. A key in a collision bucket is not reported: the bucket
-         *  is the rare case and has nothing to gain. */
-        boolean probe(@Nullable Object key, int keyHash, int shift, Probe probe, WorkCheckpoint checkpoint);
+        /** {@code key}'s value under this node, or {@code NOT_FOUND}, as {@link #find} answers; where
+         *  the value is held inline it also reports the slot into {@code probe}. A key in a collision
+         *  bucket is found but its slot is not reported: the bucket is the rare case and has nothing
+         *  to gain, so {@code probe} is left as it was given. */
+        Object probe(@Nullable Object key, int keyHash, int shift, Probe probe, WorkCheckpoint checkpoint);
 
         /**
          * This node with {@code key} mapped to {@code val}.
@@ -413,22 +413,22 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
         }
 
         @Override
-        public boolean probe(@Nullable Object key, int keyHash, int shift, Probe probe,
-                             WorkCheckpoint checkpoint) {
+        public Object probe(@Nullable Object key, int keyHash, int shift, Probe probe,
+                            WorkCheckpoint checkpoint) {
             int bitpos = 1 << ((keyHash >>> shift) & MASK);
             if ((dataMap & bitpos) != 0) {
                 int i = dataIndex(bitpos);
                 if (!Values.equal(keyAt(i), key, checkpoint)) {
-                    return false;
+                    return NOT_FOUND;
                 }
                 probe.holder = contents;
                 probe.index = 2 * i + 1;
-                return true;
+                return valAt(i);
             }
             if ((nodeMap & bitpos) != 0) {
                 return nodeAt(nodeIndex(bitpos)).probe(key, keyHash, shift + BITS, probe, checkpoint);
             }
-            return false;
+            return NOT_FOUND;
         }
 
         @Override
@@ -668,9 +668,9 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
         }
 
         @Override
-        public boolean probe(@Nullable Object key, int keyHash, int shift, Probe probe,
-                             WorkCheckpoint checkpoint) {
-            return false;   // a bucket of colliding keys: rare, and the walk down it is the cost
+        public Object probe(@Nullable Object key, int keyHash, int shift, Probe probe,
+                            WorkCheckpoint checkpoint) {
+            return find(key, keyHash, shift, checkpoint);
         }
 
         @Override
@@ -917,13 +917,16 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
         @Override
         @SuppressWarnings({"unchecked", "null"})
         public @Nullable V get(@Nullable Object key) {
-            if (root.probe(key, hashOf(key, checkpoint), 0, probe, checkpoint)) {
-                probe.key = key;
-                return (V) Objects.requireNonNull(probe.holder)[probe.index];
-            }
             probe.holder = null;
             probe.key = null;
-            return null;
+            Object found = root.probe(key, hashOf(key, checkpoint), 0, probe, checkpoint);
+            if (found == NOT_FOUND) {
+                return null;
+            }
+            if (probe.holder != null) {
+                probe.key = key;
+            }
+            return (V) found;
         }
 
         @Override

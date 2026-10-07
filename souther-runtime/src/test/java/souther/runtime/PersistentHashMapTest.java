@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Random;
+import java.util.function.IntFunction;
 import org.junit.jupiter.api.Test;
 
 /** {@link PersistentHashMap} against a {@link HashMap} oracle, including forced hash collisions. */
@@ -269,13 +270,27 @@ class PersistentHashMapTest {
      */
     @Test
     void aBuilderReadAndThenWrittenAgreesWithAnOracle() {
-        Map<Integer, Integer> oracle = new LinkedHashMap<>();
-        PersistentHashMap.Builder<Integer, Integer> builder = new PersistentHashMap.Builder<>();
+        readThenWriteAgainstAnOracle(id -> id);
+    }
+
+    /**
+     * The same drive over keys whose full hashes collide, so most of them sit in collision buckets
+     * and the rest inline until a second key with their hash arrives. A key in a bucket has no slot
+     * the probe can report, and the read must find it all the same.
+     */
+    @Test
+    void aBuilderReadAndThenWrittenAgreesWithAnOracleWhereHashesCollide() {
+        readThenWriteAgainstAnOracle(id -> new Key(id, id % 16));
+    }
+
+    private static <K> void readThenWriteAgainstAnOracle(IntFunction<K> keyOf) {
+        Map<K, Integer> oracle = new LinkedHashMap<>();
+        PersistentHashMap.Builder<K, Integer> builder = new PersistentHashMap.Builder<>();
         int seed = 12345;
         for (int step = 0; step < 20_000; step++) {
             seed = seed * 1103515245 + 12345;
-            int read = Math.floorMod(seed >> 8, 400);
-            int written = Math.floorMod(seed >> 16, 400);
+            K read = keyOf.apply(Math.floorMod(seed >> 8, 400));
+            K written = keyOf.apply(Math.floorMod(seed >> 16, 400));
             // The read the builder answers must be the oracle's, and the write that follows it must
             // land whether or not it is the key just read.
             assertEquals(oracle.get(read), builder.get(read), "read of " + read + " at step " + step);
@@ -286,6 +301,41 @@ class PersistentHashMapTest {
         }
         assertEquals(oracle, builder);
         assertEquals(oracle, builder.build());
+    }
+
+    /** A key read out of a collision bucket and written back: the upsert a fold that counts does,
+     *  on keys that all hash alike as a sum's unit cases do. */
+    @Test
+    void aKeyInACollisionBucketIsReadAndThenUpdated() {
+        PersistentHashMap.Builder<Key, Integer> builder = new PersistentHashMap.Builder<>();
+        Key a = new Key(1, 1);
+        Key b = new Key(2, 1);
+        builder.set(a, 1);
+        builder.set(b, 1);
+        assertEquals(1, builder.get(b));
+        builder.set(b, 2);
+        assertEquals(2, builder.get(b));
+        assertEquals(1, builder.get(a));
+        assertEquals(2, builder.size());
+    }
+
+    /** A read that finds its key in a bucket reports no slot, so it must not leave behind the slot an
+     *  earlier read found inline: the write after it would land on that other key. */
+    @Test
+    void aReadFromACollisionBucketForgetsTheSlotAnEarlierReadFound() {
+        PersistentHashMap.Builder<Key, Integer> builder = new PersistentHashMap.Builder<>();
+        Key inline = new Key(0, 2);
+        Key a = new Key(1, 1);
+        Key b = new Key(2, 1);
+        builder.set(inline, 10);
+        builder.set(a, 1);
+        builder.set(b, 1);
+        assertEquals(10, builder.get(inline));
+        assertEquals(1, builder.get(b));
+        builder.set(b, 2);
+        assertEquals(10, builder.get(inline));
+        assertEquals(2, builder.get(b));
+        assertEquals(3, builder.size());
     }
 
     /** A read that finds nothing leaves nothing behind: the write that follows adds the key rather
