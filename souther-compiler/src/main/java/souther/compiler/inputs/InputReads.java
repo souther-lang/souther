@@ -8,7 +8,6 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
-import souther.compiler.types.ResolvedCase;
 
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -178,18 +177,18 @@ public final class InputReads {
      * it names is as many spellings of one position as there are walks, of which the axes carry
      * one.
      *
-     * <p>Only where the arm narrows the scrutinee to one distinction of it, or to none because the
-     * declaration already leaves the value nothing the arm does not cover. An arm that does narrow
-     * the position to several of its distinctions — answering for several cases, or naming a case
-     * that is itself a sum over leaves the position divides into — narrows to none of them in
-     * particular, and a name that stands for no position is what a reader is given for it.
+     * <p>Where the arm narrows the scrutinee, to one of its distinctions or to several: an arm naming
+     * a case that is itself a sum, or naming several cases, leaves the value the leaves they cover,
+     * and the name stands at the position narrowed to those. Where the declaration already leaves
+     * the value nothing the arm does not cover, the arm narrows nothing and the name stands at the
+     * position as it is.
      *
      * <p><b>And the narrowing is the checker's resolution, not one worked out from it here.</b>
      * Which case an arm took was decided there, together with what the value turns out to be once
      * it is taken and which leaves selecting it covers; a reader that took the case's name instead
      * would have an optional's present carrier and a sum's case declared under the same word
      * arriving as one thing, and a case above two leaves arriving as a place. So what crosses into
-     * this vocabulary is the resolved case, whole. The scrutinee's type is handed on with it and
+     * this vocabulary is the resolved selection, whole. The scrutinee's type is handed on with it and
      * decides nothing about the case: it says which of the names a value wears the arm can be
      * matching ({@link DeclaredInput#taking}).
      *
@@ -209,8 +208,8 @@ public final class InputReads {
         if (arm.binder() == null || arm.binder().binding() == null) {
             return this;
         }
-        // An arm selecting several cases resolves to none of them.
-        ResolvedCase selected = arm.selectedCase().orElse(null);
+        // An arm over an optional's two carriers at once leaves a position nothing to narrow it to.
+        CasesLeft selected = CasesLeft.selectedBy(arm.pattern());
         if (selected == null) {
             return admitting(scrutinee, arm, symbols, newtypes);
         }
@@ -233,8 +232,6 @@ public final class InputReads {
         TermPath narrowed = switch (declared.taking(standing, scrutinee.type(), selected)) {
             case DeclaredInput.Taking.Narrows(TermPath to) -> to;
             case DeclaredInput.Taking.Implied _ -> standing;
-            // A narrowing to several of the position's distinctions is to no one of them.
-            case DeclaredInput.Taking.AmongSeveral _ -> null;
             // No value at the position is of the case, so the name under the arm stands at no
             // position of it.
             case DeclaredInput.Taking.Excluded _ -> null;

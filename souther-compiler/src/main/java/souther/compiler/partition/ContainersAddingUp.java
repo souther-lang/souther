@@ -8,6 +8,7 @@ import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.BoundaryDomain;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
@@ -1241,10 +1242,13 @@ final class ContainersAddingUp {
         TermPath out = TermPath.of(path.head());
         List<TermPath.Step> steps = path.steps();
         for (int i = 0; i <= steps.size(); i++) {
-            Refinement named = required.at(out);
+            // A case named, and not several: a position left several cases is no position the
+            // plan builds, so the path goes on under the sum, where the plan says no case was
+            // stated.
+            CasesLeft named = required.at(out);
             boolean refinedNext = i < steps.size()
                     && steps.get(i) instanceof TermPath.Step.Refine;
-            if (named != null && !refinedNext) {
+            if (named != null && named.only() != null && !refinedNext) {
                 out = out.refine(named);
             }
             if (i == steps.size()) {
@@ -1253,7 +1257,7 @@ final class ContainersAddingUp {
             out = switch (steps.get(i)) {
                 case TermPath.Step.Field(String name) -> out.then(name);
                 case TermPath.Step.Element _ -> out.element();
-                case TermPath.Step.Refine(Refinement already) -> out.refine(already);
+                case TermPath.Step.Refine(CasesLeft already) -> out.refine(already);
             };
         }
         return out;
@@ -1274,7 +1278,7 @@ final class ContainersAddingUp {
             out = switch (step) {
                 case TermPath.Step.Field(String name) -> out.then(name);
                 case TermPath.Step.Element _ -> out.element();
-                case TermPath.Step.Refine(Refinement already) -> out.refine(already);
+                case TermPath.Step.Refine(CasesLeft already) -> out.refine(already);
             };
         }
         return out;

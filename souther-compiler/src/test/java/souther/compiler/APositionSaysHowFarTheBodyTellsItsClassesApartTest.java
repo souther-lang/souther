@@ -154,49 +154,47 @@ class APositionSaysHowFarTheBodyTellsItsClassesApartTest {
     /**
      * And a position what is told apart at is not read says nothing either.
      *
-     * <p>The inner {@code match} is on a name bound over two cases, which is no position, so what the
-     * body tells apart at {@code lead.reason} is read in part. A part is not said as the whole: no
-     * line, and nothing for a reader to weigh.
+     * <p>Whether the construction held its rules tells {@code Off} from the other two, and which
+     * values an attempt tells apart is nothing its arms name — so what the body tells apart at
+     * {@code f} is read in part. A part is not said as the whole: no line, and nothing for a reader
+     * to weigh.
      */
     @Test
     void aPositionWhatIsToldApartAtIsNotReadSaysNothing() {
         String model = """
                 module example.bound
 
-                data NoBudget
-                data NoNeed
-                data BantFailure = NoBudget | NoNeed
-                data DuplicateOf
-                data Reason = BantFailure | DuplicateOf
-
-                data Lead = { reason: Reason }
+                data On
+                data Off
+                data Pending
+                data Flag = On | Off | Pending
+                data Active = Flag invariant value /= Off
+                data NotActive
                 data Ok = { n: Int }
 
-                behavior judge : (lead: Lead, n: Int) -> Ok
-                    constructs Ok
+                behavior judge : (f: Flag, n: Int) -> Ok | NotActive
+                    constructs Ok, Active
 
-                let judge (lead, n) = {
+                let judge (f, n) = {
                     guard n > 10 else Ok { n = 0 }
-                    match lead.reason with
-                        | BantFailure as b ->
-                            match b with
-                                | NoBudget -> Ok { n = 1 }
-                                | NoNeed -> Ok { n = 2 }
-                        | DuplicateOf -> Ok { n = 3 }
+                    guard Active(f) as active else NotActive
+                    match f with
+                        | On | Pending -> Ok { n = 1 }
+                        | Off -> Ok { n = 2 }
                 }
 
                 example judge
-                    | (Lead { reason = NoBudget }, 5)  -> Ok { n = 0 }
-                    | (Lead { reason = NoBudget }, 50) -> Ok { n = 1 }
+                    | (On, 5)  -> Ok { n = 0 }
+                    | (On, 50) -> Ok { n = 1 }
                 """;
         String human = report(model);
         PartitionEvidence partition = coverageOf(model, "example.bound");
 
         assertInstanceOf(BodyDistinction.Unread.class, partition.axes().stream()
-                        .filter(each -> each.name().equals("lead.reason")).findFirst().orElseThrow()
+                        .filter(each -> each.name().equals("f")).findFirst().orElseThrow()
                         .toldApart(),
                 () -> "what the body tells apart is read in part: " + partition.axes());
-        assertFalse(human.contains("lead.reason holds"),
+        assertFalse(human.contains("f holds"),
                 () -> "and nothing is said about what was read in part: " + human);
         assertInstanceOf(ReaderDisposition.Settled.class,
                 ReaderDisposition.of(partition.pairs(), partition.axes()),

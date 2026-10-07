@@ -186,8 +186,9 @@ class APositionUnderACaseIsAPositionTest {
     /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
      *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
     private static Refinement toLeaf(souther.compiler.types.TypeSymbol leaf) {
-        return Refinement.of(souther.compiler.types.ResolvedCase.of(
-                souther.compiler.types.CaseSelector.direct(leaf), java.util.List.of(leaf)));
+        return Refinement.allOf(souther.compiler.types.ResolvedCase.of(
+                souther.compiler.types.CaseSelector.direct(leaf), java.util.List.of(leaf)))
+                .getFirst();
     }
 
     /** The case's own name, taken off the reading that holds it. */

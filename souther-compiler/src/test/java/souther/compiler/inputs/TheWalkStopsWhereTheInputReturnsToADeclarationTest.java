@@ -183,8 +183,8 @@ class TheWalkStopsWhereTheInputReturnsToADeclarationTest {
     /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
      *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
     private static Refinement toLeaf(souther.compiler.types.TypeSymbol leaf) {
-        return Refinement.of(souther.compiler.types.ResolvedCase.of(
-                CaseSelector.direct(leaf), List.of(leaf)));
+        return Refinement.allOf(souther.compiler.types.ResolvedCase.of(
+                CaseSelector.direct(leaf), List.of(leaf))).getFirst();
     }
 
     /** The declaration {@code name} stands for in the model under test. */

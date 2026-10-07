@@ -127,8 +127,8 @@ class OneReadingTakesBothRoadsToAPositionTest {
     private static Refinement caseOf(String name) {
         souther.compiler.types.TypeSymbol leaf = souther.compiler.types.TypeSymbols.declared(
                 new souther.compiler.types.TypeKey("g", name));
-        return Refinement.of(souther.compiler.types.ResolvedCase.of(
-                souther.compiler.types.CaseSelector.direct(leaf), List.of(leaf)));
+        return Refinement.allOf(souther.compiler.types.ResolvedCase.of(
+                souther.compiler.types.CaseSelector.direct(leaf), List.of(leaf))).getFirst();
     }
 
     private static InputDomain reading(TermPath demanded) {

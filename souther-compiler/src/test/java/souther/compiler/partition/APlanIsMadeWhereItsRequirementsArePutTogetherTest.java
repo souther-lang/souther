@@ -243,8 +243,8 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
      *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
     private static Refinement caseOf(String leaf) {
         souther.compiler.types.TypeSymbol named = TypeSymbols.declared(new TypeKey("g", leaf));
-        return Refinement.of(souther.compiler.types.ResolvedCase.of(
-                CaseSelector.direct(named), java.util.List.of(named)));
+        return Refinement.allOf(souther.compiler.types.ResolvedCase.of(
+                CaseSelector.direct(named), java.util.List.of(named))).getFirst();
     }
 
     /** The behavior's one parameter type, and the names it is read against. */

@@ -232,8 +232,8 @@ class AContainerAddingUpHoldsWhatItsElementsAreAskedForTest {
 
     /** The narrowing to one leaf of a sum. */
     private static Refinement toLeaf(String leaf) {
-        return Refinement.of(ResolvedCase.of(CaseSelector.direct(declared(leaf)),
-                List.of(declared(leaf))));
+        return Refinement.allOf(ResolvedCase.of(CaseSelector.direct(declared(leaf)),
+                List.of(declared(leaf)))).getFirst();
     }
 
     private static TypeSymbol declared(String data) {

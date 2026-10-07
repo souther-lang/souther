@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.partition.AnswerDemand;
 import souther.compiler.partition.MeasuredInput;
@@ -49,35 +50,47 @@ record AnswerSubjects(MeasuredInput whole, List<TypeSymbol> cases,
      * caller holding several is holding what the model left open rather than a question this
      * declined to answer.
      *
-     * <p>Choosing the case of a union answers the demand that named it, so that demand does not
-     * travel on: passed to a composer working over the case's own type, it would ask for a
+     * <p>Every demand on which case the answer is narrows them, and together they leave the cases
+     * each of them leaves: a fork leaving {@code Station} or {@code Hospital} and one inside it
+     * leaving {@code Station} leave {@code Station}. A case chosen answers all of them, so none of
+     * them travels on: passed to a composer working over the case's own type, it would ask for a
      * narrowing of a position the case does not have.
      */
     List<Feasible> against(List<AnswerDemand> demands) {
         if (whole != null) {
             return List.of(new Feasible(null, whole, demands));
         }
+        CasesLeft left = null;
+        List<AnswerDemand> rest = new ArrayList<>();
         for (AnswerDemand each : demands) {
             if (each instanceof AnswerDemand.ACase(var _, var _, var steps, var to)
-                    && steps.isEmpty() && to instanceof Refinement.SumCase sum) {
-                MeasuredInput standing = byCase.get(sum.leaf());
-                return standing == null ? List.of()
-                        : List.of(new Feasible(sum.leaf(), standing, demands.stream()
-                                .filter(left -> left != each).toList()));
+                    && steps.isEmpty()) {
+                left = left == null ? to : left.meet(to);
+                if (left == null) {
+                    return List.of();
+                }
+            } else {
+                rest.add(each);
             }
         }
-        // Nothing says which case, so a value of any of them is a value the way admits, and each of
-        // them is a candidate. A way that asks something else of a union answer — its truth, or a
-        // comparison over it — is one nothing here composes for: the demand stays in hand, and no
-        // value meets it.
+        // Nothing says which case where nothing narrowed them, so a value of any of them is a value
+        // the way admits, and each of them is a candidate. A way that asks something else of a
+        // union answer — its truth, or a comparison over it — is one nothing here composes for: the
+        // demand stays in hand, and no value meets it.
         List<Feasible> out = new ArrayList<>();
         for (TypeSymbol each : cases) {
             MeasuredInput standing = byCase.get(each);
-            if (standing != null) {
-                out.add(new Feasible(each, standing, demands));
+            if (standing != null && (left == null || leaves(left, each))) {
+                out.add(new Feasible(each, standing, left == null ? demands : rest));
             }
         }
         return List.copyOf(out);
+    }
+
+    /** Whether {@code left} leaves the answer the case {@code one}. */
+    private static boolean leaves(CasesLeft left, TypeSymbol one) {
+        return left.atoms().stream().anyMatch(each -> each instanceof Refinement.SumCase sum
+                && sum.leaf().equals(one));
     }
 
     /**

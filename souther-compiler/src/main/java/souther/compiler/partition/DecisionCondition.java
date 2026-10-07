@@ -1,7 +1,12 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 /**
  * One distinction a body draws to decide, apart from what any path made of it.
@@ -129,14 +134,32 @@ public sealed interface DecisionCondition {
      * stand a dependency in; "the second arm was taken" is a fact about the text, and a fork's arms
      * are the answers to one question about one subject rather than a question apiece.
      *
-     * @param of the scrutinee, before any arm narrows it
+     * <p>And the answers it has, because one subject can be asked two questions. A fork on whether a
+     * visit is a {@code OnceKind} or a {@code Renkei} and a fork inside the first on whether it is a
+     * {@code Station} or a {@code Hospital} are both about the visit's kind, and a rule through
+     * {@code Station} answers both: {@code Station} or {@code Hospital} to the first and
+     * {@code Station} to the second. Told apart by the subject alone, the two would be one column
+     * answered two ways, and the rule a contradiction. Two forks dividing a subject the same way
+     * are one column however often a path meets them.
+     *
+     * <p>That the second answer implies the first is not this column's to say. Which values a row
+     * may be at once is what the requirements on the way put together, and they do it by
+     * intersection ({@code Requirements.merge}); a column is a question the body asked.
+     *
+     * @param of      the scrutinee, before any arm narrows it
+     * @param answers what each arm that is a column leaves it. Compared as a set: which case a
+     *                name sorts before is nothing the model says, and two spellings of one model
+     *                ask one question. Held in the order the arms are written, which is no part of
+     *                what the column is and is how it reads the same in either spelling
      */
-    record ACase(DecisionSubject of) implements DecisionCondition {
+    record ACase(DecisionSubject of, Set<CasesLeft> answers) implements DecisionCondition {
 
         public ACase {
-            if (of == null) {
-                throw new IllegalArgumentException("a fork of a decision is asked of something");
+            if (of == null || answers == null || answers.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "a fork of a decision is asked of something, and has answers");
             }
+            answers = Collections.unmodifiableSet(new LinkedHashSet<>(answers));
         }
     }
 

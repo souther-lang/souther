@@ -80,8 +80,8 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
     private static Refinement toLeaf(String leaf) {
         souther.compiler.types.TypeSymbol named =
                 TypeSymbols.declared(new TypeKey("example.q", leaf));
-        return Refinement.of(souther.compiler.types.ResolvedCase.of(
-                CaseSelector.direct(named), java.util.List.of(named)));
+        return Refinement.allOf(souther.compiler.types.ResolvedCase.of(
+                CaseSelector.direct(named), java.util.List.of(named))).getFirst();
     }
 
     /** Every class of every position, including the ones only one case has. */

@@ -21,6 +21,7 @@ import souther.compiler.inputs.Quantities;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.reading.TheRestOfTheBlock;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
@@ -3286,7 +3287,7 @@ public final class Generator {
 
         private final WhatEachClassRequires requires;
 
-        private final Map<TermPath, Map<Refinement, Integer>> asked = new HashMap<>();
+        private final Map<TermPath, Map<CasesLeft, Integer>> asked = new HashMap<>();
 
         /** How many positions are asked to be more than one narrowing. */
         private int disagreeing;
@@ -3311,8 +3312,8 @@ public final class Generator {
         }
 
         private void add(int axis, int cls) {
-            for (Map.Entry<TermPath, Refinement> each : requires.of(axis, cls).entrySet()) {
-                Map<Refinement, Integer> here =
+            for (Map.Entry<TermPath, CasesLeft> each : requires.of(axis, cls).entrySet()) {
+                Map<CasesLeft, Integer> here =
                         asked.computeIfAbsent(each.getKey(), _ -> new HashMap<>());
                 int before = here.size();
                 here.merge(each.getValue(), 1, Integer::sum);
@@ -3323,8 +3324,8 @@ public final class Generator {
         }
 
         private void remove(int axis, int cls) {
-            for (Map.Entry<TermPath, Refinement> each : requires.of(axis, cls).entrySet()) {
-                Map<Refinement, Integer> here = asked.get(each.getKey());
+            for (Map.Entry<TermPath, CasesLeft> each : requires.of(axis, cls).entrySet()) {
+                Map<CasesLeft, Integer> here = asked.get(each.getKey());
                 int before = here.size();
                 if (here.merge(each.getValue(), -1, Integer::sum) == 0) {
                     here.remove(each.getValue());
@@ -3350,7 +3351,7 @@ public final class Generator {
 
         private final List<Axis> axes;
 
-        private final List<List<Map<TermPath, Refinement>>> read = new ArrayList<>();
+        private final List<List<Map<TermPath, CasesLeft>>> read = new ArrayList<>();
 
         WhatEachClassRequires(List<Axis> axes) {
             this.axes = axes;
@@ -3359,11 +3360,25 @@ public final class Generator {
             }
         }
 
-        /** What standing {@code axis} at its class {@code cls} requires. */
-        Map<TermPath, Refinement> of(int axis, int cls) {
-            Map<TermPath, Refinement> known = read.get(axis).get(cls);
+        /**
+         * What standing {@code axis} at its class {@code cls} requires.
+         *
+         * <p>One case at each position, and refused otherwise. A class stands at a position of the
+         * input and selects one of its cases, so what it requires is the cases of the positions it
+         * stands under, each one — and that is what lets {@link StandingTogether} count two unequal
+         * ones as a disagreement. Two requirements leaving several cases can share one, and a
+         * count of unequal ones would call them apart where merging them would not.
+         */
+        Map<TermPath, CasesLeft> of(int axis, int cls) {
+            Map<TermPath, CasesLeft> known = read.get(axis).get(cls);
             if (known == null) {
                 known = axes.get(axis).requiring(axes.get(axis).classes().get(cls)).refinements();
+                known.forEach((at, left) -> {
+                    if (left.only() == null) {
+                        throw new IllegalStateException("a class requires one case at `" + at
+                                + "`, and this one requires " + left.spelled());
+                    }
+                });
                 read.get(axis).set(cls, known);
             }
             return known;
@@ -6896,7 +6911,7 @@ public final class Generator {
      */
     private static Requirements strictlyUnder(Requirements from, Set<TermPath> locations,
                                               boolean inside) {
-        Map<TermPath, Refinement> kept = new LinkedHashMap<>();
+        Map<TermPath, CasesLeft> kept = new LinkedHashMap<>();
         from.refinements().forEach((path, refinement) -> {
             boolean under = locations.stream().anyMatch(each -> isStrictlyUnder(path, each));
             if (under == inside) {

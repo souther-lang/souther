@@ -47,7 +47,7 @@ record SharedNames(TermPath sum, Refinement branch, Set<String> names) {
         if (steps.size() <= narrowing + 1
                 || !here.isAtOrUnder(sum)
                 || !(steps.get(narrowing) instanceof TermPath.Step.Refine taken)
-                || !taken.refinement().equals(branch)
+                || !branch.equals(taken.cases().only())
                 || !(steps.get(narrowing + 1) instanceof TermPath.Step.Field field)
                 || !names.contains(field.name())) {
             return null;
@@ -111,7 +111,7 @@ record SharedNames(TermPath sum, Refinement branch, Set<String> names) {
         List<TermPath.Step> steps = there.steps();
         int narrowing = sum.steps().size();
         List<TermPath.Step> under = new ArrayList<>(steps.subList(0, narrowing));
-        under.add(new TermPath.Step.Refine(branch));
+        under.add(new TermPath.Step.Refine(CasesLeft.of(branch)));
         under.addAll(steps.subList(narrowing, steps.size()));
         return new TermPath(there.head(), under);
     }
