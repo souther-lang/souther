@@ -71,7 +71,7 @@ public record ObligationAssessment(Criterion criterion, ObligationCoverage cover
         // written at the point whichever reading of the line composed it — the readings owe the one
         // row between them, so what one of them showed the point, they all showed it.
         return ItemAssessment.WritabilityEvidence.of(projection, hasRowWitness(),
-                searches.certified(), searches.provesInfeasible());
+                searches.certified());
     }
 
     /**

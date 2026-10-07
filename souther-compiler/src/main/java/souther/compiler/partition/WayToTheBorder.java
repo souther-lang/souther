@@ -52,6 +52,20 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     }
 
     /**
+     * Whether a row reaches the border whatever it holds: nothing on the way asks anything of it,
+     * and nothing on the way went unread.
+     *
+     * <p>Which is what makes a value the declarations admit a row at the border. Where something on
+     * the way does ask — a comparison taken in, a narrowing, a condition this reading declined — a
+     * value the declarations admit may be one no row arriving at the border holds, and what the
+     * declarations prove about it is about the position and not about the border.
+     */
+    public boolean asksNothingOfARow() {
+        return onTheWay.stream().allMatch(each ->
+                each instanceof OnTheWay.Settled settled && settled.thisWay());
+    }
+
+    /**
      * {@code base} narrowed by what of the {@link OnTheWay.TakenIn} entries a region can say, in
      * the order they are written.
      *

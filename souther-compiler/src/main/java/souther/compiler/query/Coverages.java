@@ -1214,9 +1214,15 @@ final class Coverages {
                         () -> StandingAtAPoint.valuesOf(line, rows, site), elsewhere, way);
             }
 
+            // What the position's rules prove answers this border's points only where a row reaches
+            // the border whatever it holds. Behind a condition the point asks whether a row arriving
+            // here can hold the value, and the position's rules were never put that: `n > 10` and
+            // then `n == 11` admits a ten at the position and none at the inner line. So the
+            // question is left unput, and what settles the point is what a search over the way finds.
             @Override
             public ItemAssessment.WritabilityProjection projection() {
-                return projection;
+                return way.asksNothingOfARow() ? projection
+                        : ItemAssessment.WritabilityProjection.NOT_COMPUTED;
             }
         };
     }

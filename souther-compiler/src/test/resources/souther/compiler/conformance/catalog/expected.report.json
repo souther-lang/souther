@@ -4587,7 +4587,7 @@
             "relation" : "=",
             "against" : "11",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "writableBecause" : [ "a_value_was_built" ],
             "status" : "complete",
             "hit" : false
           }, {
@@ -4598,7 +4598,7 @@
             "relation" : "=",
             "against" : "12",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "writableBecause" : [ "a_value_was_built" ],
             "status" : "complete",
             "hit" : false
           }, {
@@ -4610,7 +4610,7 @@
             "relation" : "in",
             "against" : "0 <= Time.hour(指示.集荷時刻) < 11",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           }, {
@@ -4622,7 +4622,7 @@
             "relation" : "in",
             "against" : "12 < Time.hour(指示.集荷時刻) <= 23",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "writableBecause" : [ "a_row_is_at_it" ],
             "status" : "complete",
             "hit" : true
           } ]
@@ -4993,7 +4993,7 @@
           },
           "relation" : "=",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "writableBecause" : [ "a_value_was_built" ],
           "status" : "complete",
           "hit" : false,
           "disposition" : "unmet",
@@ -5049,7 +5049,7 @@
           },
           "relation" : "=",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "writableBecause" : [ "a_value_was_built" ],
           "status" : "complete",
           "hit" : false,
           "disposition" : "unmet",
@@ -5115,7 +5115,7 @@
           },
           "relation" : "in",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+          "writableBecause" : [ "a_row_is_at_it" ],
           "status" : "complete",
           "hit" : true,
           "disposition" : "met",
@@ -5181,7 +5181,7 @@
           },
           "relation" : "in",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+          "writableBecause" : [ "a_row_is_at_it" ],
           "status" : "complete",
           "hit" : true,
           "disposition" : "met",

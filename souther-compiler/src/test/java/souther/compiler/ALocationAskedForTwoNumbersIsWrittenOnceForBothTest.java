@@ -183,7 +183,7 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
     @Test
     void bothNumbersAreAnsweredByTheOneValueTheRowWrites() {
         for (String model : List.of(TWO_PARTS_OF_A_TIME, TWO_PARTS_OF_A_DATE,
-                TWO_PARTS_COMPARED_WITH_EACH_OTHER, A_VALUE_AND_A_NUMBER_TAKEN_OF_IT)) {
+                TWO_PARTS_COMPARED_WITH_EACH_OTHER)) {
             List<String> open = whatNothingCouldShow(model);
 
             assertEquals(List.of(), open,
@@ -198,6 +198,29 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
             assertFalse(human(model).contains(LEFT_OUT),
                     () -> "the way to each line was used whole:\n" + human(model));
         }
+    }
+
+    /**
+     * A number taken of the value a rule names is written where that value has it, and claimed
+     * nowhere else.
+     *
+     * <p>The rule above leaves {@code b} one string, four long, so of the points of the length only
+     * the one at four has a value standing at it. That one is written by the string the rule names.
+     * The points away from four have none, and the rules over the length alone would say a row can
+     * be written there — which is a word about a line read without the way to it, and a person told
+     * it looks for a row the model does not have.
+     */
+    @Test
+    void aNumberTakenOfANamedValueIsWrittenWhereThatValueHasIt() {
+        List<String> open = whatNothingCouldShow(A_VALUE_AND_A_NUMBER_TAKEN_OF_IT);
+
+        assertFalse(open.stream().anyMatch(each -> each.contains("ON point (comparison@12:28)")),
+                () -> "the string the rule names is four long: " + open);
+        assertEquals(List.of("IN point (comparison@12:28)", "OUT point (comparison@12:28)"),
+                open.stream().map(each -> each.substring(each.indexOf(" at the ") + 8,
+                        each.indexOf(") — ") + 1)).toList(),
+                () -> "no string the rule leaves is any other length, so nothing says a row can"
+                        + " be written there: " + open);
     }
 
     /** One part alone composes as it did, so nothing above turns on there being two. */

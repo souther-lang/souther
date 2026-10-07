@@ -1793,7 +1793,7 @@
             "relation" : "=",
             "against" : "4",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "writableBecause" : [ "a_value_was_built" ],
             "status" : "unavailable",
             "reason" : "no_rows"
           }, {
@@ -1805,7 +1805,7 @@
             "relation" : "=",
             "against" : "5",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "writableBecause" : [ "a_value_was_built" ],
             "status" : "unavailable",
             "reason" : "no_rows"
           }, {
@@ -1817,7 +1817,7 @@
             "relation" : "in",
             "against" : "1 <= party < 4",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "writableBecause" : [ "a_value_was_built" ],
             "status" : "unavailable",
             "reason" : "no_rows"
           }, {
@@ -1829,7 +1829,7 @@
             "relation" : "in",
             "against" : "5 < party <= 8",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "writableBecause" : [ "a_value_was_built" ],
             "status" : "unavailable",
             "reason" : "no_rows"
           } ]
@@ -2220,7 +2220,7 @@
           },
           "relation" : "=",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "writableBecause" : [ "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
@@ -2278,7 +2278,7 @@
           },
           "relation" : "=",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "writableBecause" : [ "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
@@ -2345,7 +2345,7 @@
           },
           "relation" : "in",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "writableBecause" : [ "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
@@ -2412,7 +2412,7 @@
           },
           "relation" : "in",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "writableBecause" : [ "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
@@ -3149,8 +3149,8 @@
             },
             "relation" : "=",
             "against" : "4",
-            "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it" ],
+            "knownWritable" : false,
+            "writableBecause" : [ ],
             "status" : "unavailable",
             "reason" : "no_rows"
           }, {
@@ -3161,8 +3161,8 @@
             },
             "relation" : "=",
             "against" : "5",
-            "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it" ],
+            "knownWritable" : false,
+            "writableBecause" : [ ],
             "status" : "unavailable",
             "reason" : "no_rows"
           }, {
@@ -3173,8 +3173,8 @@
             },
             "relation" : "in",
             "against" : "1 <= party < 4",
-            "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it" ],
+            "knownWritable" : false,
+            "writableBecause" : [ ],
             "status" : "unavailable",
             "reason" : "no_rows"
           }, {
@@ -3185,8 +3185,8 @@
             },
             "relation" : "in",
             "against" : "5 < party <= 8",
-            "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it" ],
+            "knownWritable" : false,
+            "writableBecause" : [ ],
             "status" : "unavailable",
             "reason" : "no_rows"
           } ]
@@ -3398,12 +3398,12 @@
             "lowered" : 0
           },
           "relation" : "=",
-          "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it" ],
+          "knownWritable" : false,
+          "writableBecause" : [ ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
-          "undecidedAbout" : [ "whether_a_row_is_at_it" ],
+          "undecidedAbout" : [ "whether_a_row_is_at_it", "whether_a_row_can_be_written" ],
           "readings" : [ {
             "behavior" : "seat",
             "axis" : "seat/party",
@@ -3456,12 +3456,12 @@
             "lowered" : 0
           },
           "relation" : "=",
-          "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it" ],
+          "knownWritable" : false,
+          "writableBecause" : [ ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
-          "undecidedAbout" : [ "whether_a_row_is_at_it" ],
+          "undecidedAbout" : [ "whether_a_row_is_at_it", "whether_a_row_can_be_written" ],
           "readings" : [ {
             "behavior" : "seat",
             "axis" : "seat/party",
@@ -3523,12 +3523,12 @@
             "lowered" : 0
           },
           "relation" : "in",
-          "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it" ],
+          "knownWritable" : false,
+          "writableBecause" : [ ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
-          "undecidedAbout" : [ "whether_a_row_is_at_it" ],
+          "undecidedAbout" : [ "whether_a_row_is_at_it", "whether_a_row_can_be_written" ],
           "readings" : [ {
             "behavior" : "seat",
             "axis" : "seat/party",
@@ -3590,12 +3590,12 @@
             "lowered" : 0
           },
           "relation" : "in",
-          "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it" ],
+          "knownWritable" : false,
+          "writableBecause" : [ ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
-          "undecidedAbout" : [ "whether_a_row_is_at_it" ],
+          "undecidedAbout" : [ "whether_a_row_is_at_it", "whether_a_row_can_be_written" ],
           "readings" : [ {
             "behavior" : "seat",
             "axis" : "seat/party",
