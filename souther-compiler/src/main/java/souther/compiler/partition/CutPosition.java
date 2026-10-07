@@ -82,6 +82,12 @@ public record CutPosition(Level written, ExactRatio per) implements Comparable<C
      */
     public ExactRatio exactly() {
         ExactRatio at = numberOf(written);
+        // A line a rule wrote over the whole quantity is where it was written, and dividing by one
+        // would only put the same ratio back into lowest terms. Nearly every line is one of these,
+        // and every comparison of two lines asks both for this.
+        if (per.equals(ExactRatio.ONE)) {
+            return at;
+        }
         return at == null ? null
                 : at.dividedBy(per).orFail("a position built where its number has no representation");
     }
