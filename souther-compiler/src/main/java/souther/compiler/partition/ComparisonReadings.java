@@ -5,7 +5,6 @@ import souther.compiler.check.Choice;
 import souther.compiler.check.BooleanMeaning;
 import souther.compiler.diag.Citation;
 import souther.compiler.check.DeclarationNewtypes;
-import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.Symbols;
@@ -216,10 +215,6 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
 
         DeclarationNewtypes newtypes() {
             return read.newtypes();
-        }
-
-        RuleReadingSource rules() {
-            return read.rules();
         }
     }
 
