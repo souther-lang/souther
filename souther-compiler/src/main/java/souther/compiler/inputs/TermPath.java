@@ -215,11 +215,13 @@ public record TermPath(String head, List<Step> steps) {
         TermPath at = TermPath.of(head);
         for (Step step : steps) {
             if (step instanceof Step.Refine refine) {
-                out.put(at, refine.cases());
+                // Keyed by where the value stands: under a narrowing to several cases, a name is
+                // the name read at the sum, and what is required of it is required there.
+                out.put(at.position(), refine.cases());
             }
             at = at.append(step);
         }
-        return new Requirements(out);
+        return new Requirements(out, List.of());
     }
 
     /**

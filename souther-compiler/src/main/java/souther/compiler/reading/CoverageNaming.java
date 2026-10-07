@@ -1,6 +1,7 @@
 package souther.compiler.reading;
 
 import souther.compiler.check.Choice;
+import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
@@ -131,7 +132,7 @@ final class CoverageNaming implements Naming<Outcome> {
         // here reads both halves of to notice.
         return ControlClaim.of(outcome)
                 .map(claim -> one(new Decision(
-                        new Condition.Side(at, outcome.occurrence(), held), claim)))
+                        new Condition.Side(at, outcome.occurrence(), held, lineOf(drawn)), claim)))
                 .orElse(null);
     }
 
@@ -147,6 +148,13 @@ final class CoverageNaming implements Naming<Outcome> {
         return plan.comparisons().occurrenceAt(comparison)
                 .filter(plan::instruments)
                 .flatMap(site -> plan.outcomeOf(site, held));
+    }
+
+    /** What {@code drawn} places on its number, where its other side is a value the number's order
+     *  writes and its operator states something. */
+    private static Optional<Condition.Side.Line> lineOf(ComparedNumber drawn) {
+        return drawn.at() != null && drawn.placed() instanceof ComparisonClaim claim
+                ? Optional.of(new Condition.Side.Line(drawn.at(), claim)) : Optional.empty();
     }
 
     /** Which case of the union this arm is, said of the position matched on where there is one, or

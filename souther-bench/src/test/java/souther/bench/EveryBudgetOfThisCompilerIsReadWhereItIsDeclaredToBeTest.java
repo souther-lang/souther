@@ -133,9 +133,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Generator$Composed;",
                     "says a way past a guard whose search was refused a run was cut short under the"
                             + " figure, beside the row that goes out"),
-            // The ways under the cases of a sum a container is written: one walk hands them over,
-            // and says the figure where it stopped, which both roads a row is composed on carry
-            // with what the ways tried came to — rows passed over included.
+            // The ways under the cases of a sum a container, or a requirement at a name the cases
+            // share, is written: one walk hands them over, and says the figure where it stopped,
+            // which both roads a row is composed on carry with what the ways tried came to — rows
+            // passed over included.
             Map.entry("souther.compiler.partition.ContentsAsked$UnderTheCases#tryEach("
                             + "Ljava/util/function/Predicate;)"
                             + "Lsouther/compiler/partition/ContentsAsked$UnderTheCases$Walked;",

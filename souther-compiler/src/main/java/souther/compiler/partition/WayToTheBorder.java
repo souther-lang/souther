@@ -139,7 +139,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
         Requirements out = Requirements.NONE;
         for (OnTheWay each : onTheWay) {
             if (each instanceof OnTheWay.Narrowed narrowed) {
-                Requirements.Merge both = out.merge(narrowed.position().requirements());
+                Requirements.Merge both = out.merge(narrowed.requirements());
                 if (!(both instanceof Requirements.Merge.Merged merged)) {
                     return both;
                 }

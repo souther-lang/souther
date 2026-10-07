@@ -308,7 +308,7 @@ public final class InteractionCells {
      */
     public static CellSelection at(souther.compiler.reading.WayIn way,
                                    souther.compiler.coverage.ControlClaim arrivesAt,
-                                   List<Axis> axes) {
+                                   MeasuredInput.MeasuredAxes axes) {
         if (way.decisions().isEmpty()) {
             // Nothing has to hold to get here, so there is nothing to steer a row by. The body
             // itself is reached this way.
@@ -332,7 +332,8 @@ public final class InteractionCells {
     }
 
     /** The groups worth offering, over the ordered {@code axes}, and the ones held back. */
-    public static Offered of(List<Interaction> groups, List<Axis> axes, int mostCellsPerGroup) {
+    public static Offered of(List<Interaction> groups, MeasuredInput.MeasuredAxes axes,
+                             int mostCellsPerGroup) {
         List<Group> out = new ArrayList<>();
         List<NotOffered> held = new ArrayList<>();
         for (Interaction group : groups) {
@@ -415,7 +416,8 @@ public final class InteractionCells {
     }
 
     /** What each outcome of each factor leaves open, or null where the group is not one to offer. */
-    private static List<List<Placed>> factorsOf(Interaction group, List<Axis> axes) {
+    private static List<List<Placed>> factorsOf(Interaction group,
+                                                MeasuredInput.MeasuredAxes axes) {
         List<List<Placed>> out = new ArrayList<>();
         for (Factor factor : group.factors()) {
             List<Placed> outcomes = new ArrayList<>();
@@ -441,7 +443,7 @@ public final class InteractionCells {
      * being of a different set of them than the classes are.
      */
     private static Placed placedBy(List<souther.compiler.reading.Decision> made,
-                                   List<Axis> axes) {
+                                   MeasuredInput.MeasuredAxes axes) {
         Cell cell = narrowedBy(
                 made.stream().map(souther.compiler.reading.Decision::constrains).toList(), axes);
         return cell == null ? null
@@ -451,8 +453,9 @@ public final class InteractionCells {
     }
 
     /** What {@code holds} leaves open, or null where any of it narrows nothing or narrows it away. */
-    private static Cell narrowedBy(List<souther.compiler.reading.Condition> holds, List<Axis> axes) {
-        Cell cell = Cell.anything(axes);
+    private static Cell narrowedBy(List<souther.compiler.reading.Condition> holds,
+                                   MeasuredInput.MeasuredAxes axes) {
+        Cell cell = Cell.anything(axes.axes());
         for (souther.compiler.reading.Condition each : holds) {
             Cell said = admittedBy(each, axes);
             if (said == null) {
@@ -478,24 +481,53 @@ public final class InteractionCells {
     /**
      * Which classes {@code condition} leaves its position, or null where it names none.
      *
-     * <p>The one reading of a condition into classes. What a body tells apart at a position is
-     * this asked of every condition about it ({@link BodyDistinction}), so a cell and that answer
-     * cannot read one condition two ways.
+     * <p>Where the condition stands is {@link ConditionPlacement}'s answer, which is the one a
+     * body's distinctions are read from as well ({@link BodyDistinction}); what it leaves there is
+     * {@link #admittedAt}'s. So a cell and that answer cannot read one condition two ways.
+     *
+     * <p>A condition under the cases is no cell. A cell leaves each position a set of its classes
+     * and a row stands at every position it narrows; a condition about a name the cases share
+     * leaves one position a set under one case and another under the next, which is a choice
+     * between cells and no one of them. Declined here, as a condition that narrows nothing is,
+     * rather than read as one of the cases.
      */
-    static Cell admittedBy(souther.compiler.reading.Condition condition, List<Axis> axes) {
+    static Cell admittedBy(souther.compiler.reading.Condition condition,
+                           MeasuredInput.MeasuredAxes axes) {
+        return switch (ConditionPlacement.of(condition, axes)) {
+            case ConditionPlacement.AtAPosition(int axis) ->
+                    admittedAt(condition, axes.axes(), axis, standingOf(condition));
+            case ConditionPlacement.UnderTheCases _, ConditionPlacement.AtNoPosition _,
+                 ConditionPlacement.Unnamed _ -> null;
+        };
+    }
+
+    /** Where {@code condition} is written, for a case of the value there; null for anything
+     *  else. */
+    static TermPath standingOf(souther.compiler.reading.Condition condition) {
+        return condition instanceof souther.compiler.reading.Condition.Case one ? one.at() : null;
+    }
+
+    /**
+     * Which classes {@code condition} leaves the position {@code axis} measures, or null where it
+     * names none of them.
+     *
+     * <p>The one reading of a condition into classes, once where it stands is known.
+     *
+     * @param standing where a case of a value is asked, which is the position the axis measures or
+     *                 one it is a name worn over; nothing for a comparison, whose number says which
+     *                 axis it is
+     */
+    static Cell admittedAt(souther.compiler.reading.Condition condition, List<Axis> axes,
+                           int axis, TermPath standing) {
         switch (condition) {
             case souther.compiler.reading.Condition.Case one -> {
-                int axis = axisAt(axes, one.at());
-                if (axis < 0) {
-                    return null;
-                }
                 // Every case the arm answers for. Where the axis is the union itself, its classes
                 // are the cases a value there can be, so a case the arm names and the axis has no
                 // class of is one the rules refuse there: no value is it, and it admits nothing.
                 // Anywhere else a case with no class is something about the position no class of
                 // this axis reads, and the condition places at none of them.
                 List<PartitionClass> classes = axes.get(axis).classes();
-                boolean ofTheUnion = axes.get(axis).path().equals(one.at()) && !classes.isEmpty()
+                boolean ofTheUnion = axes.get(axis).path().equals(standing) && !classes.isEmpty()
                         && classes.stream()
                                 .allMatch(each -> each.selects() instanceof Refinement.SumCase);
                 Cell cell = Cell.anything(axes);
@@ -517,10 +549,6 @@ public final class InteractionCells {
                 return cell;
             }
             case souther.compiler.reading.Condition.Side one -> {
-                int axis = axisOf(axes, one.at());
-                if (axis < 0) {
-                    return null;
-                }
                 // Which construct of the model the decision was about, since a rule is stated at
                 // one and the decision was recorded at whichever materialisation of it ran. Empty
                 // where the model states nothing there — a comparison inside one of the language's
@@ -600,7 +628,8 @@ public final class InteractionCells {
     }
 
     /**
-     * Which position one decision is about, or -1 where this run measures none.
+     * Which position one decision is about, or -1 where this run measures none — for a condition
+     * that stands at one position ({@link ConditionPlacement}).
      *
      * <p>The one lookup, so that what a condition narrows and what it is about are the same
      * question asked once. A second walk written beside it would answer for a position the

@@ -134,7 +134,7 @@ class AGroupTooWideToWalkSaysSoTest {
     void aGroupPastTheLimitIsHeldBackAndSaidSo() {
         Model model = Model.of(THIRTEEN);
         InteractionCells.Offered offered =
-                InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation().cellsPerGroup());
+                InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation().cellsPerGroup());
 
         assertEquals(List.of(), offered.groups(),
                 "the group is not offered, which is what the limit is for");
@@ -149,7 +149,7 @@ class AGroupTooWideToWalkSaysSoTest {
     void andUnderTheLimitTheGroupIsOffered() {
         Model model = Model.of(TWELVE);
         InteractionCells.Offered offered =
-                InteractionCells.of(model.groups(), model.subject().axes().axes(), Budgets.generation().cellsPerGroup());
+                InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation().cellsPerGroup());
 
         assertEquals(List.of(), offered.notOffered(),
                 "nothing is held back");
@@ -175,14 +175,14 @@ class AGroupTooWideToWalkSaysSoTest {
     @Test
     void aGroupOfExactlyTheBudgetIsOffered() {
         Model model = Model.of(TWO);
-        assertEquals(4, InteractionCells.of(model.groups(), model.subject().axes().axes(),
+        assertEquals(4, InteractionCells.of(model.groups(), model.subject().axes(),
                         atMost(4).cellsPerGroup()).groups().get(0).size(),
                 "two decisions of two outcomes are four choices");
 
-        assertEquals(List.of(), InteractionCells.of(model.groups(), model.subject().axes().axes(),
+        assertEquals(List.of(), InteractionCells.of(model.groups(), model.subject().axes(),
                         atMost(4).cellsPerGroup()).notOffered(),
                 "a group of exactly the budget is offered");
-        assertEquals(1, InteractionCells.of(model.groups(), model.subject().axes().axes(),
+        assertEquals(1, InteractionCells.of(model.groups(), model.subject().axes(),
                         atMost(3).cellsPerGroup()).notOffered().size(),
                 "and one choice past it is not");
     }
@@ -382,7 +382,7 @@ class AGroupTooWideToWalkSaysSoTest {
         AdequacyPolicy.OfTheGeneration budget = atMost(8);
 
         InteractionCells.Offered offered =
-                InteractionCells.of(model.groups(), model.subject().axes().axes(), budget.cellsPerGroup());
+                InteractionCells.of(model.groups(), model.subject().axes(), budget.cellsPerGroup());
         assertEquals(1, offered.notOffered().size(), "the outer group is past the budget");
         assertEquals(3, offered.groups().size(), "and the three inner ones are offered");
 

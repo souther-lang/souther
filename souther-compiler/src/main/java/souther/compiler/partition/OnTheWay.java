@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.NameReach;
+import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 
 import java.util.List;
@@ -65,9 +67,16 @@ public sealed interface OnTheWay {
      * a thing a row can be composed to be, while "this arm was taken" is not.
      *
      * <p>The narrowed position and not the pair it is made of. What has to hold of the parameter
-     * for such a position to exist in it is {@link TermPath#requirements()}, which is where every
-     * other reader of a narrowing asks; carried as a position and a refinement side by side, this
-     * would be the one place that splits them its own way.
+     * for such a position to exist in it is {@link #requirements()}, read off the position, which
+     * is where every other reader of a narrowing asks; carried as a position and a refinement side
+     * by side, this would be the one place that splits them its own way.
+     *
+     * <p><b>Or a name the cases of a sum share, narrowed.</b> {@code r.q.flag} is readable on a
+     * value of {@code Q} and stands under whichever case the value turns out to be, so a fork on it
+     * narrows the value at the name, and that is a requirement under each case rather than at any
+     * one position. The crossings are what says where the name stands once a case is chosen, and
+     * they are what makes the requirement move there ({@link Requirements}); at an ordinary
+     * position there are none.
      *
      * <p>The position is what says which condition this is, the way a cut does for the one above.
      *
@@ -79,10 +88,13 @@ public sealed interface OnTheWay {
      * the reading's answer.
      *
      * @param position   the scrutinee's position with the arm's case narrowed onto it
+     * @param crossings  where the names {@code position} steps through stand once the sum above
+     *                   each is one of its cases; only the ones some name of it crosses are kept
      * @param onItsOrder the places of its order the narrowing leaves out, one hole each; empty
      *                   where the position stands on no enumeration's order
      */
     record Narrowed(ConditionReportAnchor anchor, TermPath position,
+                    List<NameReach.Crossing> crossings,
                     List<TakenConstraint.AwayFrom> onItsOrder) implements OnTheWay {
 
         public Narrowed {
@@ -90,7 +102,13 @@ public sealed interface OnTheWay {
                 throw new IllegalArgumentException(
                         "a narrowing on the way is a position read as one of its cases: " + position);
             }
+            crossings = Requirements.of(position, crossings).crossings();
             onItsOrder = List.copyOf(onItsOrder);
+        }
+
+        /** What has to hold of the parameter for a row to be past this narrowing. */
+        public Requirements requirements() {
+            return Requirements.of(position, crossings);
         }
     }
 

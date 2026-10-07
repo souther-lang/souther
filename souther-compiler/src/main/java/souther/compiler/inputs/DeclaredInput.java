@@ -158,7 +158,7 @@ public final class DeclaredInput {
      * distinction of what stands there — an optional inside an optional, a newtype case over a sum
      * — and folding the two would lose the outer one.
      */
-    private static TermPath narrowedTo(TermPath at, CasesLeft cases) {
+    public static TermPath narrowedTo(TermPath at, CasesLeft cases) {
         return at.narrowsWhatItReaches() && at.narrowing().only() == null
                 && cases.within(at.narrowing())
                 ? at.narrowedFrom().refine(cases) : at.refine(cases);
