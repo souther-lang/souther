@@ -399,19 +399,43 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
                         .get("a=x <= 0")));
     }
 
+    /**
+     * A guard whose ways past the reading cannot write down is said as that, and never as a guard
+     * no row goes past: the first is this compiler's and the second the model's.
+     */
+    @Test
+    void aGuardWhoseWaysPastCannotBeReadSaysSo() {
+        RepairShortfall stop = stopsOf(MODEL.replace("guard amount > 0",
+                "guard (if amount > 0 then amount else 0 - amount) > 4")).get("kind=Plain");
+        assertTrue(stop != null && stop.came() instanceof RepairShortfall.AtTheGuard.WaysNotRead,
+                () -> "the ways past the guard were not read, which is what is said: " + stop);
+    }
+
+    /** A stop says which requirement the looking was done for, which is the class its row is. */
+    @Test
+    void aStopSaysWhichRequirementItWasLookedFor() {
+        RepairShortfall stop = stopsOf(MODEL).get("amount=x <= 0");
+        assertNotNull(stop, "the row about the refused class stops at the guard");
+        List<String> labels = new ArrayList<>();
+        stop.soughtFor().forEach(purpose -> labels.addAll(purpose.labels()));
+        assertEquals(List.of("amount=x <= 0"), labels);
+    }
+
     /** What each way past the guard came to, in a word apiece. */
     private static List<String> waysOf(RepairShortfall stop) {
-        assertTrue(stop instanceof RepairShortfall.NoWayPast,
+        assertTrue(stop != null && stop.came() instanceof RepairShortfall.AtTheGuard.NoWayPast,
                 () -> "the row stops at the guard with every way past it looked at: " + stop);
         List<String> out = new ArrayList<>();
-        for (RepairShortfall.WayPast way : ((RepairShortfall.NoWayPast) stop).ways()) {
+        for (RepairShortfall.WayPast way
+                : ((RepairShortfall.AtTheGuard.NoWayPast) stop.came()).ways()) {
             out.add(switch (way) {
                 case RepairShortfall.WayPast.Searched(CameToNothing came) ->
                         "searched: " + came.why().reason();
-                case RepairShortfall.WayPast.CutShort(CameToNothing came, var figure) ->
+                case RepairShortfall.WayPast.CutShort(CameToNothing came,
+                        CompositionBudget figure) ->
                         "cut short at " + figure + ": " + came.why().reason();
-                case RepairShortfall.WayPast.Untried(var figure) -> "untried at " + figure;
-                case RepairShortfall.WayPast.NotSearchable(var why) -> "not searchable: " + why;
+                case RepairShortfall.WayPast.NotSearchable(RepairShortfall.Barrier why) ->
+                        "not searchable: " + why;
             });
         }
         return out;

@@ -5,6 +5,7 @@ import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
+import souther.compiler.flow.Ways;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleKey;
@@ -2343,13 +2344,15 @@ public final class Generator {
      *
      * <p>Kept only where the new row was seen in the rest of the block. Each guard is looked past
      * once, and what deciding between rows costs is runs, so that is what is counted
-     * ({@link CompositionBudget#RUNS_REPAIRING_A_ROW}); where they run out, the row furthest in so
-     * far goes out. What was held before is held after, so a row past the second guard is still
-     * past the first.
+     * ({@link CompositionBudget#RUNS_REPAIRING_A_ROW}), and counted where a row not run before is
+     * run: looking at a row run already costs nothing, so running out ends nothing by itself, and
+     * a way is given up only where its own search wanted a run and had none. What was held before
+     * is held after, so a row past the second guard is still past the first.
      *
      * <p><b>And where the row goes out stopped at a guard, what the looking came to goes with
-     * it</b> ({@link RepairShortfall}): which guard, and every way past it — searched and composing
-     * nothing, searched until the runs ran out, never reached for want of a run, or one nothing here
+     * it</b> ({@link RepairShortfall}): which guard, for which requirement, and what the guard came
+     * to — no way past it at all, ways this reading could not write down, or every way written,
+     * each searched and composing nothing, searched until a run was refused, or one nothing here
      * can hold a row to. Each in its own words, so a way the model lets no row down and a way this
      * compiler could not compose a row for are not read as one answer. A row not stopped at a
      * guard, or one nothing says how far it got, carries nothing: there is no guard to say it
@@ -2397,26 +2400,37 @@ public final class Generator {
                 }
                 // Each guard once: looking past one a second time is where going round starts.
                 if (!tried.add(rest.get().arm())) {
-                    return Composed.stopping(best,
-                            new RepairShortfall.BackAtAGuardLookedPast(rest.get().refused()));
+                    return Composed.stopping(best, new RepairShortfall(purposes,
+                            rest.get().refused(),
+                            new RepairShortfall.AtTheGuard.BackAtAGuardLookedPast()));
+                }
+                // What the reading said of the ways past, which is three answers: none of them is
+                // a list's emptiness standing for the other two.
+                List<List<ControlClaim>> written = switch (rest.get().ways()) {
+                    case Ways.Unknown<List<ControlClaim>> _ -> null;
+                    case Ways.Known<List<ControlClaim>>(List<List<ControlClaim>> paths) -> paths;
+                };
+                if (written == null || written.isEmpty()) {
+                    return Composed.stopping(best, new RepairShortfall(purposes,
+                            rest.get().refused(), written == null
+                                    ? new RepairShortfall.AtTheGuard.WaysNotRead()
+                                    : new RepairShortfall.AtTheGuard.NoWayGoesPast()));
                 }
                 ArmProbe goneOn = rest.get().arm();
-                List<WayPastTheGuard> ways = waysOn(seen, rest.get(), against);
+                List<WayPastTheGuard> ways = waysOn(seen, written, against);
                 RepairShortfall.WayPast[] came = new RepairShortfall.WayPast[ways.size()];
                 // Two ways that ask the row for the same things are one search, and what it came
                 // to is what both of them came to.
                 Map<List<HeldOutcome>, RepairShortfall.WayPast> asked = new HashMap<>();
                 GeneratedRow further = null;
+                // Every way is looked for, runs left or not. Looking at a row run already costs
+                // nothing, so a search with none left can still be answered by rows run before;
+                // what says a way was given up is a run refused inside its own search.
                 for (int at : fewestFirst(ways)) {
                     List<HeldOutcome> way = ((WayPastTheGuard.Holding) ways.get(at)).demands();
                     RepairShortfall.WayPast already = asked.get(way);
                     if (already != null) {
                         came[at] = already;
-                        continue;
-                    }
-                    if (runs.left == 0) {
-                        came[at] = new RepairShortfall.WayPast.Untried(
-                                CompositionBudget.RUNS_REPAIRING_A_ROW);
                         continue;
                     }
                     List<HeldOutcome> both = new ArrayList<>(held);
@@ -2452,8 +2466,8 @@ public final class Generator {
                                 instanceof WayPastTheGuard.Barred(RepairShortfall.Barrier why)
                                 ? new RepairShortfall.WayPast.NotSearchable(why) : came[at]);
                     }
-                    return Composed.stopping(best,
-                            new RepairShortfall.NoWayPast(rest.get().refused(), each));
+                    return Composed.stopping(best, new RepairShortfall(purposes,
+                            rest.get().refused(), new RepairShortfall.AtTheGuard.NoWayPast(each)));
                 }
                 // Taken only where it was seen going on, and a row run once is not run again.
                 if (!(watched(further, runs).orElse(null)
@@ -2471,7 +2485,11 @@ public final class Generator {
 
             private int left = CompositionBudget.RUNS_REPAIRING_A_ROW.maximum();
 
-            /** Whether the search under way was stopped in front of a row for want of a run. */
+            /**
+             * Whether the search under way was refused a run for a row it had not seen run, which
+             * is the one thing that says a way was given up — and never read off {@link #left},
+             * which says what is left and not that anything was wanted.
+             */
             private boolean stopped;
         }
 
@@ -2517,8 +2535,8 @@ public final class Generator {
         }
 
         /**
-         * Each way past the guard {@code stopped}, as what holds every part of it {@code seen} did
-         * not do, or why nothing here can.
+         * Each of {@code written}, the ways past a guard the reading wrote down, as what holds every
+         * part of it {@code seen} did not do, or why nothing here can.
          *
          * <p>A way whole and not a comparison at a time. A way is what the guard's condition takes
          * all at once — both sides of an {@code &&}, the second of an {@code ||} with the first
@@ -2534,10 +2552,11 @@ public final class Generator {
          *
          * <p>In the order the reading wrote them, one apiece.
          */
-        private List<WayPastTheGuard> waysOn(AlignedObservation seen, TheRestOfTheBlock stopped,
+        private List<WayPastTheGuard> waysOn(AlignedObservation seen,
+                                             List<List<ControlClaim>> written,
                                              Set<String> against) {
             List<WayPastTheGuard> out = new ArrayList<>();
-            for (List<ControlClaim> way : stopped.ways()) {
+            for (List<ControlClaim> way : written) {
                 out.add(wayOn(seen, way, against));
             }
             return out;

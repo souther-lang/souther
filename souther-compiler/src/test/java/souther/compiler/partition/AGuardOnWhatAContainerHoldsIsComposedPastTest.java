@@ -241,10 +241,11 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
     @Test
     void aFieldOnlyNamedIsSaidBesideTheRowAsNothingComposingOne() {
         RepairShortfall stop = generatedOf(ONLY_NAMED).stops().get("kind=Plain");
-        assertTrue(stop instanceof RepairShortfall.NoWayPast,
+        assertTrue(stop != null && stop.came() instanceof RepairShortfall.AtTheGuard.NoWayPast,
                 () -> "the row stops at the guard with every way past it looked at: " + stop);
         List<Generator.UnresolvedCombination.Reason> said = new ArrayList<>();
-        for (RepairShortfall.WayPast way : ((RepairShortfall.NoWayPast) stop).ways()) {
+        for (RepairShortfall.WayPast way
+                : ((RepairShortfall.AtTheGuard.NoWayPast) stop.came()).ways()) {
             assertTrue(way instanceof RepairShortfall.WayPast.Searched,
                     () -> "each way was looked for to the end: " + way);
             said.add(((RepairShortfall.WayPast.Searched) way).came().why().reason());

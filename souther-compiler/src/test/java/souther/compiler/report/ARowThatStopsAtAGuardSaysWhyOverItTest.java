@@ -129,6 +129,21 @@ class ARowThatStopsAtAGuardSaysWhyOverItTest {
                 () -> "and the row that does stop is said to: " + block);
     }
 
+    /**
+     * A guard whose ways past the reading cannot write down is said as this compiler's shortfall,
+     * and not as a guard no row goes past.
+     */
+    @Test
+    void waysPastNotReadAreSaidAsThisCompilersAndNotAsTheModels() {
+        String said = over(offered(GOES_ON.replace("guard amount > 0",
+                "guard (if amount > 0 then amount else 0 - amount) > 4")), "kind=Express");
+        assertTrue(said.contains("the ways past it could not be read off the body")
+                        && said.contains("which does not make it a guard no row goes past"),
+                () -> "the guard's ways were not read, said as such: " + said);
+        assertFalse(said.contains("never comes out the way the block goes on"),
+                () -> "and not as the model's word: " + said);
+    }
+
     /** What is said over a row is a comment, so the block still parses. */
     @Test
     void whatIsSaidOverTheRowLeavesTheBlockSomethingAFileCanHold() {

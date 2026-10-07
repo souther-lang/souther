@@ -48,9 +48,10 @@ import java.util.List;
  *                 taken
  * @param stops    what looking for a row that goes further came to, for each search that composed
  *                 this row and took it no further than a guard — each once, in the order they
- *                 arrived. A row two searches arrive at stops where it stops for both of them,
- *                 and what each found out looking past the guard is about the requirement it was
- *                 composed for, so neither is the other's to drop
+ *                 arrived, and each saying which requirement it was looked for
+ *                 ({@link RepairShortfall#soughtFor}). A row two searches arrive at stops where it
+ *                 stops for both of them, and what each found out is about its own requirement,
+ *                 so neither is the other's to drop and neither is read as the other's
  */
 public record OfferedRow(RowKey key, List<FixtureTemplate> inputs, List<StoodInAnswer> answers,
                          List<Generator.Purpose> namedFor, List<RepairShortfall> stops) {

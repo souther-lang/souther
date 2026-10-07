@@ -7,7 +7,6 @@ import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.SourceOutcome;
 import souther.compiler.flow.ValueArrivals;
-import souther.compiler.flow.Ways;
 import souther.compiler.types.SourceConstruct;
 
 import java.util.Collections;
@@ -113,11 +112,8 @@ final class Arms {
                         WhatARunIsSeenDoing naming = new WhatARunIsSeenDoing(plan);
                         return ValueArrivals.ofBody(body, naming, naming.eitherWay());
                     });
-            List<List<ControlClaim>> ways =
-                    seen.waysTo(guard.cond(), partOf(fork, goesOn) == 0)
-                            instanceof Ways.Known<List<ControlClaim>> known
-                            ? known.paths() : List.of();
-            out.put(arm.index(), new TheRestOfTheBlock(arm, goesOn, ways));
+            out.put(arm.index(), new TheRestOfTheBlock(arm, goesOn,
+                    seen.waysTo(guard.cond(), partOf(fork, goesOn) == 0)));
         }
         return Collections.unmodifiableSequencedMap(out);
     }

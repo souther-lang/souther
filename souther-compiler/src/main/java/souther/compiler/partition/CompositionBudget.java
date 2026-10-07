@@ -239,11 +239,12 @@ public enum CompositionBudget {
      * body.
      *
      * <p><b>It stops no search for the row, so it has no word.</b> The row the search found holds
-     * every pin and goes out whatever this comes to. What reaching it stops is the looking for a
-     * way past the guard the row stops at, and that is carried beside the row
-     * ({@link RepairShortfall.WayPast.CutShort}, {@link RepairShortfall.WayPast.Untried}) — a way
-     * the runs ran out in front of is said as one nobody finished looking for, never as one that
-     * holds no row.
+     * every pin and goes out whatever this comes to. What reaching it stops is a search for a way
+     * past the guard the row stops at, at the first row it would have to run, and that is carried
+     * beside the row ({@link RepairShortfall.WayPast.CutShort}) — a way a run was refused on is said
+     * as one nobody finished looking for, never as one that holds no row. Reaching it ends nothing
+     * by itself: a row run already costs nothing to look at again, so a search with none left goes
+     * on as far as rows run before take it.
      */
     RUNS_REPAIRING_A_ROW(16);
 

@@ -453,16 +453,20 @@ public final class GeneratedRows {
             Map<ArmProbe, String> arms = armNames(offering.searched().get(behavior));
             List<Offered> here = new ArrayList<>();
             for (OfferedRow row : rows) {
-                List<String> stops = new ArrayList<>();
-                for (RepairShortfall stop : row.stops()) {
-                    stops.add(stoppedShort(stop, db, rendering, places));
-                }
                 Offered offered = new Offered(row.key().inputs(),
-                        standingIn(offering.request().module(), row), List.of(), stops);
+                        standingIn(offering.request().module(), row), List.of(), List.of());
                 for (String name : named(row.namedFor(), arms)) {
                     offered = offered.and(name);
                 }
-                here.add(offered);
+                // Whose search a stop was said only where the row goes by more than one name: a
+                // row named for one thing already says which requirement it was looked for.
+                List<String> stops = new ArrayList<>();
+                for (RepairShortfall stop : row.stops()) {
+                    stops.add(stoppedShort(stop, offered.purposes().size() > 1, db, rendering,
+                            places));
+                }
+                here.add(new Offered(offered.inputs(), offered.standsIn(), offered.purposes(),
+                        stops));
             }
             out.put(behavior, List.copyOf(here));
         });
@@ -885,16 +889,23 @@ public final class GeneratedRows {
      * <p>Each way by where the reading of the body reached it, which is the order the ways are held
      * in. The way a search for them was ordered is a guess about where a row is, and says nothing a
      * reader can find in the source.
+     *
+     * <p>And for which requirement, where the row answers more than one. The looking was done for
+     * one of them, with its classes held, and a reader told only that the row stops would not know
+     * whose search said so.
      */
-    private static String stoppedShort(RepairShortfall stop, Db db, SourceRendering rendering,
+    private static String stoppedShort(RepairShortfall stop, boolean among, Db db,
+                                       SourceRendering rendering,
                                        PublishedRuleHandle.WhereARuleIs places) {
         String guard = "the guard at "
                 + Sites.placeOf(db, stop.refused().anchor()).said(rendering, null);
-        return switch (stop) {
-            case RepairShortfall.NoWayPast(var _, List<RepairShortfall.WayPast> ways)
-                    when ways.isEmpty() -> guard + ": the ways past it could not be read off the"
-                    + " body, so none was looked for";
-            case RepairShortfall.NoWayPast(var _, List<RepairShortfall.WayPast> ways) -> {
+        if (among) {
+            List<String> labels = new ArrayList<>();
+            stop.soughtFor().forEach(purpose -> labels.addAll(purpose.labels()));
+            guard += " looking for `" + String.join("` with `", labels) + "`";
+        }
+        return switch (stop.came()) {
+            case RepairShortfall.AtTheGuard.NoWayPast(List<RepairShortfall.WayPast> ways) -> {
                 List<String> each = new ArrayList<>();
                 for (int at = 0; at < ways.size(); at++) {
                     each.add("way " + (at + 1) + " past it: "
@@ -903,9 +914,17 @@ public final class GeneratedRows {
                 yield guard + ", and no row was found that goes past it — "
                         + String.join("; ", each);
             }
-            case RepairShortfall.BackAtAGuardLookedPast _ -> guard + ": a row was taken past it"
-                    + " once, the row taken further stops at it again, and nothing looks past one"
-                    + " guard twice";
+            // What the reading of the body settles: said as the model's, with nothing about a
+            // search, because there was nothing to search for.
+            case RepairShortfall.AtTheGuard.NoWayGoesPast _ -> guard + ": its condition never"
+                    + " comes out the way the block goes on, so no row goes past it";
+            // And this compiler's, said as such: the guard may well let rows past.
+            case RepairShortfall.AtTheGuard.WaysNotRead _ -> guard + ": the ways past it could not"
+                    + " be read off the body, so none was looked for — which does not make it a"
+                    + " guard no row goes past";
+            case RepairShortfall.AtTheGuard.BackAtAGuardLookedPast _ -> guard + ": a row was taken"
+                    + " past it once, the row taken further stops at it again, and nothing looks"
+                    + " past one guard twice";
         };
     }
 
@@ -920,9 +939,6 @@ public final class GeneratedRows {
             case RepairShortfall.WayPast.CutShort(CameToNothing came, CompositionBudget figure) ->
                     Reasons.met(CompositionShortfall.of(Set.of(figure)))
                             + saidOf(came, rendering, places);
-            case RepairShortfall.WayPast.Untried(CompositionBudget figure) ->
-                    Reasons.met(CompositionShortfall.of(Set.of(figure)))
-                            + "it was not looked for";
             case RepairShortfall.WayPast.NotSearchable(RepairShortfall.Barrier why) ->
                     switch (why) {
                         case NOTHING_HOLDS_A_ROW_TO_IT -> "nothing here can hold a row to it, so it"
