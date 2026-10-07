@@ -3988,21 +3988,17 @@ public final class Generator {
                 throw new IllegalArgumentException("a parameter written is written some way");
             }
         }
-
-        /** Whether every way writes a value at each of {@code positions}. */
-        boolean writesAt(Set<TermPath> positions) {
-            return ways.stream().allMatch(way -> way.at().keySet().containsAll(positions));
-        }
     }
 
     /**
      * One way a parameter is written, and the value it writes at each position it writes one at.
      *
-     * <p>The second because a container another parameter holds may be handed the value at one of
-     * those positions, and a way written against a value the model states writes that value by
-     * name: what stands at a field it does not move is nothing this way says. So what it does say —
-     * the whole value, and each field it moves to a value of a class — is kept where the way is
-     * written, rather than read back out of the value it came to.
+     * <p>The second for where nothing builds the way. A container another parameter holds may be
+     * handed the value at one of those positions, and what a position of a value is once built is
+     * read off what was built; with nothing to build it, what the way says is all there is. A way
+     * written against a value the model states writes that value by name, so what stands at a
+     * field it does not move is nothing this says — only the whole value, and each field it moves
+     * to a value of a class.
      *
      * @param at the value at each position this way writes one at, the parameter itself among them
      */
@@ -7495,35 +7491,38 @@ public final class Generator {
         boolean awaited = order.awaited(next);
         Written written = row.given().get(head);
         if (written != null) {
-            // A container handed the value at a position of this parameter holds what the way
-            // writes there. A way written against a value the model states names that value, and
-            // what stands at a field it does not move is nothing it says — so where a container
-            // is handed one of those, there is no value to hand it, and that is said rather than
-            // the parameter composed afresh: the value the author chose is the row's.
-            Set<TermPath> read = row.contents().composedUnder(head).read();
-            if (!written.writesAt(read)) {
-                return RowComposed.Failed.at(p, atThis(new Attempt(null,
-                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, head,
-                        Optional.of("a container is handed the value at " + read + ", and `"
-                                + head + "` is written as a value the model states, which names"
-                                + " it rather than writing it")), p, alone));
-            }
             // Written as the caller says, and put through the same check a composed value goes
             // through: how a row is written never decides whether the model allows it. The first
             // way the model does not refuse, since each is the same value with a class's own
             // values chosen differently — and the next of them where a parameter after this one
             // came to nothing on what this one hands it.
+            //
+            // And what a container of another parameter is handed is read off what was built, the
+            // way it is for a composed value ({@link HandedOn}): a way written against a value the
+            // model states names that value, and what stands at a field it does not move is the
+            // boundary's to say. The row goes on naming the value.
+            Set<TermPath> read = row.contents().handedOnFrom(head);
             boolean stood = false;
             List<RowComposed.Failed> cameToNothing = new ArrayList<>();
             Optional<String> refused = Optional.empty();
+            String unwritten = null;
             for (WrittenWay way : written.ways()) {
-                refused = check.refuse(p, way.value());
-                if (refused.isPresent()) {
-                    continue;
+                Map<TermPath, FixtureTemplate> handedOn;
+                switch (HandedOn.of(check.build(p, way.value()), way::at, read, subject.inputs(),
+                        subject.ruleReading())) {
+                    case HandedOn.Came.Values(var at) -> handedOn = at;
+                    case HandedOn.Came.Refused(String why) -> {
+                        refused = Optional.of(why);
+                        continue;
+                    }
+                    case HandedOn.Came.NotWritable(String why) -> {
+                        unwritten = unwritten == null ? why : unwritten;
+                        continue;
+                    }
                 }
                 stood = true;
                 composed[p] = way.value();
-                RowComposed rest = inputsFrom(row, next + 1, composed, with(elsewhere, way.at()));
+                RowComposed rest = inputsFrom(row, next + 1, composed, with(elsewhere, handedOn));
                 if (awaited && rest instanceof RowComposed.Failed failed
                         && failed.at().isPresent()
                         && order.mayTurnOn(failed.at().getAsInt(), p)) {
@@ -7546,16 +7545,25 @@ public final class Generator {
                         });
             }
             // Every way handed over was refused, which says the origin cannot be written for
-            // this assignment only where every way there was was handed over.
-            return RowComposed.Failed.at(p, written.cut()
-                    ? Attempt.no(UnresolvedCombination.Reason.wordFor(
-                                    Set.of(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES)),
-                            subject.parameters().get(p), SearchShortfall.of(CompositionShortfall.of(
-                                    Set.of(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES))))
-                            .localTo(p)
-                    : new Attempt(null,
-                            UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
-                            subject.parameters().get(p), refused).localTo(p));
+            // this assignment only where every way there was was handed over — and only where
+            // each was refused by the model. A way that built and had nothing to hand on is this
+            // compiler's, and the value the author chose stays the row's rather than being
+            // composed afresh.
+            if (written.cut()) {
+                return RowComposed.Failed.at(p, Attempt.no(UnresolvedCombination.Reason.wordFor(
+                                Set.of(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES)),
+                        subject.parameters().get(p), SearchShortfall.of(CompositionShortfall.of(
+                                Set.of(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES))))
+                        .localTo(p));
+            }
+            if (unwritten != null) {
+                return RowComposed.Failed.at(p, atThis(new Attempt(null,
+                        UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, head,
+                        Optional.of(unwritten)), p, alone));
+            }
+            return RowComposed.Failed.at(p, new Attempt(null,
+                    UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
+                    subject.parameters().get(p), refused).localTo(p));
         }
         // Held to where the comparisons' numbers were chosen to stand, the way a row at a point of
         // a border is: a candidate built for a number has to read back as it. Whether one was
@@ -7890,7 +7898,8 @@ public final class Generator {
                             choices.missingAt()));
         }
         // One for every pass below, so what one of them found refused is known to the others.
-        Composing composing = new Composing(p, plan, subject.ruleReading(), check, handed);
+        Composing composing =
+                new Composing(p, plan, subject.inputs(), subject.ruleReading(), check, handed);
         Outcome product = walk(choices, composing, taking, subject.ruleReading());
         // A value taken is the answer, and so is every value composed being passed over or the
         // caller stopping: what the pass below is for is values the walk could not compose, and
@@ -7952,7 +7961,7 @@ public final class Generator {
         // offer.
         HeldBack held = heldBack(subject, plan, under);
         return whatTheSearchCameTo(CompositionShortfall.of(held.offer()), held.offered(),
-                held.plan(), product);
+                held.plan(), composing.saidOf(product));
     }
 
     /**
@@ -8280,22 +8289,48 @@ public final class Generator {
 
         private final int parameter;
         private final ConstructionPlan plan;
+        private final BehaviorInputs inputs;
         private final RuleReadingContext reading;
         private final CandidateCheck check;
         private final Handed handed;
+        private final Set<TermPath> handedOn;
         private final Map<TermPath, Type> typeAt = new HashMap<>();
         private final Set<Map<TermPath, String>> refused = new HashSet<>();
 
-        Composing(int parameter, ConstructionPlan plan, RuleReadingContext reading,
-                  CandidateCheck check, Handed handed) {
+        /** Why the first value the boundary built and nothing here could hand on was not handed
+         *  on, or null where every value built was. */
+        private String unwritten;
+
+        Composing(int parameter, ConstructionPlan plan, BehaviorInputs inputs,
+                  RuleReadingContext reading, CandidateCheck check, Handed handed) {
             this.parameter = parameter;
             this.plan = plan;
+            this.inputs = inputs;
             this.reading = reading;
             this.check = check;
             this.handed = handed;
+            this.handedOn = handed.asked().handedOnFrom(plan.root().at().head());
             for (ConstructionPlan.Slot each : plan.slots()) {
                 typeAt.put(each.at(), each.type());
             }
+        }
+
+        /**
+         * {@code came}, unless it says every value was refused and some value was built and not
+         * handed on.
+         *
+         * <p>Then it is this compiler that came to nothing: a value it could not write out of what
+         * was built is not one the model refused, and saying every candidate was refused would be
+         * saying it was. Asked of the search's last word and of nothing on the way to it, since the
+         * passes read that word as having run out of assignments, which they had.
+         */
+        Outcome saidOf(Outcome came) {
+            return unwritten != null
+                    && came instanceof Outcome.Unresolved(UnresolvedCombination.Reason why, var _)
+                    && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED
+                    ? new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                            unwritten)
+                    : came;
         }
 
         /**
@@ -8324,12 +8359,27 @@ public final class Generator {
                 return new Tried.OutOfBudget();
             }
             FromTheAssignment values = new FromTheAssignment(chosen, plan, handed);
-            FixtureTemplate built = compose(plan.root(), values, reading);
-            if (built != null && check.refuse(parameter, built).isEmpty()) {
-                return new Tried.Built(new ComposedValue(built, values.read(reading)));
+            FixtureTemplate composed = compose(plan.root(), values, reading);
+            if (composed == null) {
+                refused.add(written);
+                return new Tried.Refused();
             }
-            refused.add(written);
-            return new Tried.Refused();
+            return switch (HandedOn.of(check.build(parameter, composed),
+                    () -> values.read(handedOn, reading), handedOn, inputs, reading)) {
+                case HandedOn.Came.Values(var read) ->
+                        new Tried.Built(new ComposedValue(composed, read));
+                case HandedOn.Came.Refused _ -> {
+                    refused.add(written);
+                    yield new Tried.Refused();
+                }
+                case HandedOn.Came.NotWritable(String why) -> {
+                    refused.add(written);
+                    if (unwritten == null) {
+                        unwritten = why;
+                    }
+                    yield new Tried.NotHandedOn();
+                }
+            };
         }
 
         /** What {@link #attempt} came to. */
@@ -8340,6 +8390,12 @@ public final class Generator {
 
             /** Composed, and refused. */
             record Refused() implements Tried {}
+
+            /**
+             * Composed and built, and what a container of another parameter is to be handed out
+             * of it is nothing this can write — which is not the model refusing it.
+             */
+            record NotHandedOn() implements Tried {}
 
             /** Known refused without composing it, so nothing was spent. */
             record Known() implements Tried {}
@@ -8747,12 +8803,12 @@ public final class Generator {
      * container is handed.
      *
      * <p>Both, because the second is of the first: a container under another parameter that is to
-     * hold the value at one of this one's positions holds what this value has there, and the
-     * assignment that says so is gone once the value is built. Worked out where it is built
-     * ({@link Composing#attempt}) and carried with it, rather than read back out of the value.
+     * hold the value at one of this one's positions holds what this value has there. Read where it
+     * is built ({@link Composing#attempt}), off what the boundary built, and carried with it: the
+     * text of the value is what a row writes, and is not what a position of it is once built.
      *
      * @param value the parameter's value
-     * @param read  what stands at each position of it a value is read at
+     * @param read  what stands at each position of it another parameter's container is handed
      */
     private record ComposedValue(FixtureTemplate value, Map<TermPath, FixtureTemplate> read) {
 
@@ -9069,7 +9125,8 @@ public final class Generator {
                     }
                 }
                 case Composing.Tried.OutOfBudget _ -> stopped = true;
-                case Composing.Tried.Refused _, Composing.Tried.Known _ -> { }
+                case Composing.Tried.Refused _, Composing.Tried.NotHandedOn _,
+                     Composing.Tried.Known _ -> { }
             }
             if (stopped) {
                 break;
@@ -9184,12 +9241,16 @@ public final class Generator {
             });
         }
 
-        /** What stands at each position of this value another container's value is read at,
-         *  leaving out a position nothing composes. */
-        Map<TermPath, FixtureTemplate> read(RuleReadingContext reading) {
+        /**
+         * What the assignment puts at each of {@code positions}, leaving out a position nothing
+         * composes.
+         *
+         * <p>What a value hands on where nothing built it, and only then: built, what stands at a
+         * position of it is read off what the boundary built ({@link Composing#attempt}).
+         */
+        Map<TermPath, FixtureTemplate> read(Set<TermPath> positions, RuleReadingContext reading) {
             Map<TermPath, FixtureTemplate> out = new LinkedHashMap<>();
-            for (TermPath each
-                    : handed.asked().composedUnder(plan.root().at().head()).read()) {
+            for (TermPath each : positions) {
                 ConstructionPlan.Node node = plan.at(each);
                 FixtureTemplate value = node == null ? null : compose(node, this, reading);
                 if (value != null) {

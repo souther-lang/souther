@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.cst.CstParser;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.observe.Limits;
 import souther.compiler.partition.Generator;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -24,7 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ARowThatStopsAtAGuardSaysWhyOverItTest {
 
     /** A set handed a field of a value the module states, which the row names and does not move,
-     *  so nothing here composes a set that holds it. */
+     *  at a string longer than an observation reads — so what was built there is nothing this can
+     *  write, and nothing here composes a set that holds it. */
     private static final String ONLY_NAMED = """
             module example.settle
 
@@ -32,14 +34,14 @@ class ARowThatStopsAtAGuardSaysWhyOverItTest {
             data Express
             data Kind = Plain | Express
 
-            data Request = { level: Int, note: Int }
+            data Request = { level: String, note: Int }
 
-            data Other = { allowed: Set<Int> }
+            data Other = { allowed: Set<String> }
 
             data Done = { n: Int }
             data Refused
 
-            let usual = Request { level = 1, note = 1 }
+            let usual = Request { level = "%s", note = 1 }
 
             behavior settle : (kind: Kind, other: Other, request: Request) -> Done | Refused
                 constructs Done
@@ -50,7 +52,7 @@ class ARowThatStopsAtAGuardSaysWhyOverItTest {
                     | Plain -> Done { n = 2 }
                     | Express -> Done { n = 3 }
             }
-            """;
+            """.formatted("x".repeat(Limits.DEFAULT.maxText() + 1));
 
     /** The row past the guard, with nothing to say about one. */
     private static final String GOES_ON = """
@@ -112,7 +114,8 @@ class ARowThatStopsAtAGuardSaysWhyOverItTest {
     @Test
     void theWayPastIsSaidAsThisCompilerComposingNothing() {
         String said = over(offered(ONLY_NAMED), "kind=Plain");
-        assertTrue(said.contains("way 1 past it: a container is handed the value at"),
+        assertTrue(said.contains("way 1 past it: the value built at `request.level` cannot be"
+                        + " written"),
                 () -> "the word the search for the way came to: " + said);
         assertFalse(said.contains(GeneratedRows.why(
                         Generator.UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE)),

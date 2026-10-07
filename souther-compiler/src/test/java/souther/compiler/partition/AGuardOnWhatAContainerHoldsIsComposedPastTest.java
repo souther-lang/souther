@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.observe.Limits;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -17,6 +18,7 @@ import java.util.regex.Pattern;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -202,47 +204,95 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
     }
 
     /**
-     * A container handed a field of a stated value the row names without moving it has nothing to
-     * hold, which is this compiler not having that value — and not the model leaving no row.
+     * A container handed a field of a stated value the row names without moving it holds what the
+     * boundary built there, and the row goes on naming the value.
      *
-     * <p>Both ways round. Nothing about the behavior is said to be impossible or refused by the
-     * model's rules on the strength of it; and the row is not offered as one past the guard: it
-     * stays the author's value as it was composed, with the set holding nothing, which is a row
-     * that stops at the guard. Why it stops there is said beside it, which the next test holds.
+     * <p>Both halves. The request is still the author's value, written by its name rather than
+     * composed afresh or spelled out; and the set holds the level that value has, which nothing in
+     * the row writes — so the row is past the guard and nothing is said of it stopping there.
      */
     @Test
-    void aFieldOnlyNamedIsNoValueThisHasAndNoProofOfAnything() {
+    void aFieldOnlyNamedIsHandedOnAsTheBoundaryBuiltIt() {
         Rows rows = generatedOf(ONLY_NAMED);
         List<String> row = rows.classes().get("kind=Plain");
         assertNotNull(row, () -> "a row is offered for the kind: " + rows);
         assertEquals("usual", row.get(2),
                 () -> "the request is the stated value, not composed afresh: " + row);
-        assertEquals(List.of(), elementsOf(row.get(1), "allowed"),
-                () -> "and the set holds nothing handed to it, so the row stops at the guard: "
-                        + row);
-        assertEquals(List.of(), rows.said().stream()
-                        .filter(word -> word == Generator.UnresolvedCombination.Reason
-                                .THE_RULES_LEAVE_NOTHING_THERE
-                                || word == Generator.UnresolvedCombination.Reason
-                                .ALL_CANDIDATES_REJECTED)
-                        .toList(),
-                () -> "nothing is said to be left no row or refused by the model: " + rows);
+        assertEquals(List.of("1"), elementsOf(row.get(1), "allowed"),
+                () -> "the set holds the level the stated value has: " + row);
+        assertNull(rows.stops().get("kind=Plain"),
+                () -> "and the row is past the guard: " + rows.stops());
     }
 
     /**
-     * And the row carries why it stops at the guard: the one way past it was looked for, and what
-     * that came to is this compiler composing nothing — never the model's word that the rules
-     * leave nothing there.
-     *
-     * <p>What tells the two apart from outside. A row that dropped the membership demand would let
-     * the stated value through unrepaired and leave every row and every note as they are; what
-     * changes is this, which then says nothing was looked for or says something else was met.
+     * Where what was built at the field is nothing this can write — a string longer than an
+     * observation reads — the row still names the stated value and stops at the guard, and the
+     * way past it came to this compiler composing nothing: never the model refusing a value, and
+     * never the rules leaving nothing there.
      */
     @Test
-    void aFieldOnlyNamedIsSaidBesideTheRowAsNothingComposingOne() {
-        RepairShortfall stop = generatedOf(ONLY_NAMED).stops().get("kind=Plain");
+    void aFieldBuiltAsNothingThisCanWriteIsSaidAsNothingComposingOne() {
+        Rows rows = generatedOf(ONLY_NAMED
+                .replace("level: Int", "level: String")
+                .replace("Set<Int>", "Set<String>")
+                .replace("level = 1", "level = \"" + "x".repeat(Limits.DEFAULT.maxText() + 1)
+                        + "\""));
+        assertEquals("usual", rows.classes().get("kind=Plain").get(2),
+                () -> "the request is the stated value, not composed afresh: " + rows);
+        RepairShortfall stop = rows.stops().get("kind=Plain");
         assertTrue(stop != null && stop.came() instanceof RepairShortfall.AtTheGuard.NoWayPast,
                 () -> "the row stops at the guard with every way past it looked at: " + stop);
+        List<Generator.UnresolvedCombination.Reason> said = new ArrayList<>();
+        for (RepairShortfall.WayPast way
+                : ((RepairShortfall.AtTheGuard.NoWayPast) stop.came()).ways()) {
+            assertTrue(way instanceof RepairShortfall.WayPast.Searched,
+                    () -> "each way was looked for to the end: " + way);
+            said.add(((RepairShortfall.WayPast.Searched) way).came().why().reason());
+        }
+        assertEquals(List.of(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE), said,
+                () -> "the way past the guard came to this compiler composing nothing: " + stop);
+    }
+
+    /** The field composed rather than stated, at a type whose strings are longer than an
+     *  observation reads. */
+    private static final String COMPOSED_PAST_WHAT_IS_OBSERVED = """
+            module example.settle
+
+            data Plain
+            data Express
+            data Kind = Plain | Express
+
+            data Long = String
+                invariant String.length(value) >= %d
+
+            data Request = { level: Long, note: Int }
+
+            data Other = { allowed: Set<Long> }
+
+            data Done = { n: Int }
+            data Refused
+
+            behavior settle : (kind: Kind, other: Other, request: Request) -> Done | Refused
+                constructs Done
+
+            let settle (kind, other, request) = {
+                guard Set.contains(request.level, other.allowed) else Refused
+                match kind with
+                    | Plain -> Done { n = 2 }
+                    | Express -> Done { n = 3 }
+            }
+            """.formatted(Limits.DEFAULT.maxText() + 1);
+
+    /**
+     * And the same of a value composed here: every value built had nothing to hand on, which is
+     * this compiler composing nothing and not every candidate refused by the model.
+     */
+    @Test
+    void aComposedFieldBuiltAsNothingThisCanWriteIsSaidAsNothingComposingOne() {
+        Rows rows = generatedOf(COMPOSED_PAST_WHAT_IS_OBSERVED);
+        RepairShortfall stop = rows.stops().get("kind=Plain");
+        assertTrue(stop != null && stop.came() instanceof RepairShortfall.AtTheGuard.NoWayPast,
+                () -> "the row stops at the guard with every way past it looked at: " + rows);
         List<Generator.UnresolvedCombination.Reason> said = new ArrayList<>();
         for (RepairShortfall.WayPast way
                 : ((RepairShortfall.AtTheGuard.NoWayPast) stop.came()).ways()) {
@@ -365,10 +415,8 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
     }
 
     /** What one module's behavior was offered: a row per class, one per side of the membership a
-     *  rule turns on, the word for each search that came to nothing, and why each class's row
-     *  stops where it does where it stops at a guard. */
+     *  rule turns on, and why each class's row stops where it does where it stops at a guard. */
     private record Rows(Map<String, List<String>> classes, Map<Boolean, List<String>> rules,
-                        List<Generator.UnresolvedCombination.Reason> said,
                         Map<String, RepairShortfall> stops) {}
 
     /** What each model was offered, compiled once however many tests ask about it. */
@@ -404,8 +452,7 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
                 .filter(each -> each instanceof DecidedCondition.Unread)
                 .forEach(each -> rules.put(((DecidedCondition.Unread) each).held(),
                         written(row))));
-        return new Rows(classes, rules, filling.composed().unresolved().stream()
-                .map(each -> each.why().reason()).toList(), stops);
+        return new Rows(classes, rules, stops);
     }
 
     private static List<String> written(Generator.GeneratedRow row) {
