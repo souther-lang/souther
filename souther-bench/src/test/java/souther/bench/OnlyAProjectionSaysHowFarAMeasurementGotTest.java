@@ -237,13 +237,15 @@ class OnlyAProjectionSaysHowFarAMeasurementGotTest {
                                 + "Lsouther/compiler/query/AnotherLineTheRowsAllow$OneDoes;"
                                 + "Lsouther/compiler/query/About;)"
                                 + "Lsouther/compiler/query/Adequacy$Finding;",
-                        // And one of the above held open where the body answers nothing at what
-                        // it is about. Not a second account of what the measurement went without:
-                        // the measurement's is kept whole, and what is added is the obligation's
-                        // own — that every row meeting it reaches an `unreachable` — read off the
-                        // reading of where the body answers nothing and taken whole from it.
-                        "souther.compiler.query.Adequacy$Finding#heldOpenWhereNothingIsAnswered("
-                                + "Ljava/lang/String;"
+                        // And a measure together with the reading of where the body answers
+                        // nothing, for an obligation at classes of positions. Two things found it
+                        // and each is taken whole: what the measurement went without is its own,
+                        // and whether a row can be written at the classes is the body's — which is
+                        // what is open about the obligation and not what the measure went without.
+                        "souther.compiler.query.Adequacy$Finding#by("
+                                + "Lsouther/compiler/query/FindingSubject;"
+                                + "Lsouther/compiler/query/Measure;"
+                                + "Lsouther/compiler/query/About;"
                                 + "Lsouther/compiler/partition/WhereNothingIsAnswered;"
                                 + "Ljava/util/Set;)"
                                 + "Lsouther/compiler/query/Adequacy$Finding;",

@@ -427,8 +427,7 @@ public final class PublicationOrders {
                 WeakeningWord.DECISION_RULE_READ_SHORT,
                 WeakeningWord.DECISION_OF_ROW_UNREADABLE,
                 WeakeningWord.DECISION_RUN_NOT_WATCHED,
-                WeakeningWord.REWRITE_UNDECIDED,
-                WeakeningWord.PREMISE_UNPROVEN)) {
+                WeakeningWord.REWRITE_UNDECIDED)) {
             out.add(new WeakeningVocabulary.AWordOfThisDocuments(word));
         }
         return out;
@@ -448,7 +447,8 @@ public final class PublicationOrders {
                     AdequacyOpeningWord.NOT_MEASURED,
                     AdequacyOpeningWord.SHOWING_STOPPED,
                     AdequacyOpeningWord.NOTHING_WAS_COMPOSED,
-                    AdequacyOpeningWord.NOTHING_SHOWED_IT));
+                    AdequacyOpeningWord.NOTHING_SHOWED_IT,
+                    AdequacyOpeningWord.EVERY_ROW_REACHES_AN_UNREACHABLE));
 
     /**
      * Why a measure the verdict rests on was never made, from what an author can do about it to

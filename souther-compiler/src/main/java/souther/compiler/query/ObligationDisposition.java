@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.partition.StandingAtAPoint;
+import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 
@@ -226,6 +227,33 @@ public sealed interface ObligationDisposition {
              * second account of the same searches.
              */
             record NothingShowedIt() implements WhetherARowCanBeWritten {}
+
+            /**
+             * Every row that would meet the obligation reaches an {@code unreachable}, and nothing
+             * here proves the inputs there do not arise.
+             *
+             * <p>The model's own body says no row can be written — a row there is refused (E1911)
+             * — and says it as a statement, not a proof. So the obligation is not taken away, which
+             * would make the statement the one thing no row is asked to test, and not a gap either,
+             * which would ask an author for a row the compiler refuses. It stays open on the
+             * premises named until one is proved or the body answers.
+             *
+             * <p>Nothing a measurement went without: the rows were read and the obligation counted
+             * in full. What is open is whether a row can be written, which is this family's question.
+             *
+             * @param premises the parts of the body a row there may reach, each once. Never empty
+             */
+            record EveryRowReachesAnUnreachable(List<WhereNothingIsAnswered.Premise> premises)
+                    implements WhetherARowCanBeWritten {
+
+                public EveryRowReachesAnUnreachable {
+                    premises = List.copyOf(premises);
+                    if (premises.isEmpty()) {
+                        throw new IllegalArgumentException(
+                                "a row that reaches an unreachable reaches some premise");
+                    }
+                }
+            }
         }
     }
 
@@ -316,9 +344,6 @@ public sealed interface ObligationDisposition {
                      // And a rewrite of the body nothing decided about, which is whether the rows
                      // depend on what the body says and not where a value stands.
                      Weakening.RewriteUndecided _,
-                     // And a premise of the body nothing proves, which is whether a row can be
-                     // written at a combination of classes and not what a reading of a line met.
-                     Weakening.PremiseUnproven _,
                      // And the readings nobody made, which is read beside these rather than among
                      // them ({@link #readingsTriedIn}): the reasons here are what a reading met,
                      // and there was no reading of those to meet anything.

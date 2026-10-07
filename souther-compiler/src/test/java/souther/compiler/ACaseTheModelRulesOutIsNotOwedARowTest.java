@@ -10,9 +10,9 @@ import souther.compiler.query.InputCaseEvidence;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
+import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.query.About;
 import souther.compiler.query.PartitionEvidence;
-import souther.compiler.query.Weakening;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
@@ -618,10 +618,11 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
                 .filter(each -> each.about() instanceof About.AClassNoRowIsIn)
                 .toList();
 
-        assertEquals(Adequacy.Finding.Disposition.UNDECIDED, classAt(classes, "Off").disposition());
-        assertTrue(classAt(classes, "Off").weakenedBy().causes().contains(
-                        new Weakening.PremiseUnproven("pick", List.of("the probe never passes Off"))),
-                () -> classAt(classes, "Off").toString());
+        Adequacy.Finding off = classAt(classes, "Off");
+        assertEquals(Adequacy.Finding.Disposition.UNDECIDED, off.disposition());
+        assertEquals(List.of(List.of("the probe never passes Off")),
+                off.premises().stream().map(WhereNothingIsAnswered.Premise::reasons).toList(),
+                off::toString);
         assertEquals(Adequacy.Finding.Disposition.REFUSED,
                 classAt(classes, "Pending").disposition());
     }

@@ -133,6 +133,10 @@ public sealed interface ReaderDisposition {
             case AdequacyUncertainty.ShowingStopped _,
                  AdequacyUncertainty.NothingShowedARowCanBeWritten _ ->
                     new LookAtWhatShowedNoRow(subject);
+            // What shows no row is the body itself: the premise it states is what to prove or
+            // answer, and it is at the behavior that states it.
+            case AdequacyUncertainty.EveryRowReachesAnUnreachable _ ->
+                    new LookAtWhatShowedNoRow(subject);
             case AdequacyUncertainty.ByWeakening it -> switch (subject) {
                 case Subject.AtARule _ -> new LookAtTheRule(subject);
                 case Subject.AtAFork _ -> new LookAtTheFork(subject);

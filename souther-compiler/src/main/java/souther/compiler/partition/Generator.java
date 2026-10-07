@@ -1362,7 +1362,7 @@ public final class Generator {
         // them, and the candidates an arm is looked for with.
         Map<List<String>, ObservedRun> ran = new LinkedHashMap<>();
         GoingOn goingOn = new GoingOn(read, trial, ran, holding,
-                WhereNothingIsAnswered.of(read, axes));
+                WhereNothingIsAnswered.of(axes.subject().behavior(), read, axes));
 
         // The rows this run composes, each numbered where it is composed. The number is an
         // identity and nothing reads it as a place: what says two obligations were answered by one
@@ -2396,7 +2396,7 @@ public final class Generator {
             Runs runs = new Runs();
             if (read.restOfTheBlock().isEmpty()
                     || !(watched(found.row(), runs).orElse(null)
-                            instanceof Watched.Ran(AlignedObservation seen))) {
+                            instanceof ObservedRun(Watched.Ran(AlignedObservation seen), var _))) {
                 // Nothing says how far it got, so nothing is further and no guard is one it
                 // stopped at.
                 return Composed.going(found.row());
@@ -2461,7 +2461,13 @@ public final class Generator {
                                     runs.stopped = true;
                                     yield Acceptance.STOPPED;
                                 }
-                                case Watched.Ran(AlignedObservation run) when run.lit(goneOn) ->
+                                // Past the guard and to an answer. A run that went on and then
+                                // stopped without one is a row the compiler refuses, wherever it
+                                // got to first.
+                                case ObservedRun(Watched.Ran(AlignedObservation run),
+                                                 AnswerObservation answer)
+                                        when run.lit(goneOn)
+                                        && !(answer instanceof AnswerObservation.NotAnswered) ->
                                         Acceptance.TAKEN;
                                 default -> Acceptance.PASSED;
                             }, answersNothing);
@@ -2489,7 +2495,7 @@ public final class Generator {
                 }
                 // Taken only where it was seen going on, and a row run once is not run again.
                 if (!(watched(further, runs).orElse(null)
-                        instanceof Watched.Ran(AlignedObservation now))) {
+                        instanceof ObservedRun(Watched.Ran(AlignedObservation now), var _))) {
                     throw new IllegalStateException("a row taken for going past a guard is one"
                             + " that was seen doing so: " + further);
                 }
@@ -2625,11 +2631,11 @@ public final class Generator {
          * What running {@code row} came to, run once whoever asks; or empty where it has not been
          * run and {@code runs} has none left. A row run already costs nothing.
          */
-        private Optional<Watched> watched(GeneratedRow row, Runs runs) {
+        private Optional<ObservedRun> watched(GeneratedRow row, Runs runs) {
             List<String> writtenAs = new ComposedRow(row.inputs(), row.answers()).writtenAs();
             ObservedRun already = ran.get(writtenAs);
             if (already != null) {
-                return Optional.of(already.watched());
+                return Optional.of(already);
             }
             if (runs.left == 0) {
                 return Optional.empty();
@@ -2637,7 +2643,7 @@ public final class Generator {
             runs.left--;
             ObservedRun now = trial.run(row.toRun());
             ran.put(writtenAs, now);
-            return Optional.of(now.watched());
+            return Optional.of(now);
         }
 
         /**
@@ -3860,7 +3866,7 @@ public final class Generator {
     private static boolean answersNothingAt(WhereNothingIsAnswered answersNothing,
                                             MeasuredInput.MeasuredAxes axes, int[] where,
                                             List<FixtureTemplate> inputs, CandidateCheck check) {
-        if (answersNothing.parts().isEmpty()) {
+        if (answersNothing.regions().isEmpty()) {
             return false;
         }
         List<ObservedValue> observed = new ArrayList<>();
@@ -3885,7 +3891,7 @@ public final class Generator {
                 at.add(new ClassOfAPosition(id, axes.get(axis).classes().get(where[axis]).id()));
             }
         }
-        return answersNothing.holdingEveryRowAt(at).isPresent();
+        return !answersNothing.everyRowAt(at).isEmpty();
     }
 
     /**
@@ -6734,6 +6740,13 @@ public final class Generator {
                         return Taken.AND_DONE;
                     }
                     case Watched.Ran ran -> {
+                        // A run that stopped without an answer is no witness, wherever it went
+                        // before it stopped: a row that aborts is one the compiler refuses — at an
+                        // `unreachable` it is E1911 — and what it lit, it lit on the way to nothing.
+                        if (observed.answer() instanceof AnswerObservation.NotAnswered) {
+                            missed = true;
+                            return Taken.AND_MORE;
+                        }
                         // Through the one thing that can say a row filled a combination, which is
                         // the same thing a row already in the file is put through.
                         Optional<CellSelection.CertifiedWitness> seen =
@@ -6796,6 +6809,11 @@ public final class Generator {
                             }
                             if (!(observed.watched() instanceof Watched.Ran ran)) {
                                 return Acceptance.STOPPED;
+                            }
+                            // No witness, for the reason one built at once is none.
+                            if (observed.answer() instanceof AnswerObservation.NotAnswered) {
+                                missed = true;
+                                return Acceptance.PASSED;
                             }
                             Optional<CellSelection.CertifiedWitness> seen =
                                     selection.certifying(candidate.where(), ran.seen());

@@ -5,12 +5,13 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.ClassOfAPosition;
+import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
-import souther.compiler.query.Weakening;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.AdequacyUncertainty;
 import souther.compiler.report.GeneratedRows;
 
 import java.util.List;
@@ -107,6 +108,59 @@ class AnObligationEveryRowOfWhichReachesAnUnreachableIsUndecidedTest {
     private static final String ALL_BLANK = HALF_BLANK.replace(
             "| Off -> 3", "| Off -> unreachable \"never Off here\"");
 
+    /**
+     * Blank whatever the third position is, and said by two parts of the body that each answer
+     * nothing for one value of it. Neither part holds every row at the pair; the two together do.
+     * Nothing above them answers nothing as a whole — a run with {@code Off} gets past the first —
+     * so there is no one part that holds the pair on its own.
+     */
+    private static final String SPLIT_BLANK = HALF_BLANK.replace("""
+                             | Q -> match c with
+                                      | On  -> unreachable "never On here"
+                                      | Off -> 3
+            """, """
+                             | Q -> {
+                                 let first = match c with
+                                     | On  -> unreachable "never On here"
+                                     | Off -> 3
+                                 match c with
+                                     | On  -> first
+                                     | Off -> unreachable "never Off here"
+                             }
+            """);
+
+    /** The same twice over in two behaviors, the second saying the same thing in two places. */
+    private static final String THE_SAME_WORDS = """
+            module example.words
+
+            data X
+            data Y
+            data A = X | Y
+            data P
+            data Q
+            data B = P | Q
+            data On
+            data Off
+            data C = On | Off
+
+            behavior f : (a: A, b: B, c: C) -> Int
+
+            let f (a, b, c) =
+                match a with
+                    | X -> match c with
+                             | On  -> 1
+                             | Off -> unreachable "not applicable"
+                    | Y -> match b with
+                             | P -> 2
+                             | Q -> unreachable "not applicable"
+
+            example f
+                | "X P On"  : (X, P, On) -> 1
+                | "X Q On"  : (X, Q, On) -> 1
+                | "Y P On"  : (Y, P, On) -> 2
+                | "Y P Off" : (Y, P, Off) -> 2
+            """;
+
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
@@ -134,12 +188,10 @@ class AnObligationEveryRowOfWhichReachesAnUnreachableIsUndecidedTest {
                         + " in " + AdequacyReport.of(compilation).findings()));
     }
 
-    /** What the body's premise says, where a finding is held open on one. */
+    /** What the body's premises say, where a finding is held open on them, in the order met. */
     private static List<String> premiseOf(Adequacy.Finding finding) {
-        return finding.weakenedBy().causes().stream()
-                .filter(Weakening.PremiseUnproven.class::isInstance)
-                .map(each -> ((Weakening.PremiseUnproven) each).reasons())
-                .findFirst().orElse(List.of());
+        return finding.premises().stream()
+                .flatMap(each -> each.reasons().stream()).toList();
     }
 
     private static String reportOn(Compilation compilation) {
@@ -232,6 +284,65 @@ class AnObligationEveryRowOfWhichReachesAnUnreachableIsUndecidedTest {
 
         assertEquals(Adequacy.Finding.Disposition.UNDECIDED, all.disposition());
         assertEquals(List.of("never On here", "never Off here"), premiseOf(all));
+    }
+
+    /**
+     * Two parts of the body that hold the pair between them hold it.
+     *
+     * <p>A row at {@code Y} and {@code Q} aborts at the first part with {@code On} and at the second
+     * with {@code Off}, so every row there aborts — and neither part holds every such row on its
+     * own. Asked of one part at a time, the pair would be a gap no row can close, and a row the
+     * generator offered for it would be refused.
+     */
+    @Test
+    void aPairTwoPartsHoldBetweenThemIsUndecided() {
+        assertFalse(SPLIT_BLANK.equals(HALF_BLANK), "the fixture is the split one");
+        Compilation compilation = measured(SPLIT_BLANK);
+        Adequacy.Finding split = pairFinding(compilation, "Y", "Q");
+
+        assertEquals(Adequacy.Finding.Disposition.UNDECIDED, split.disposition());
+        assertEquals(List.of("never On here", "never Off here"), premiseOf(split));
+        String offered = GeneratedRows.of(compilation, "example.half", "f",
+                SourceRendering.namedByIdentity(SourceLayouts.NONE)).text();
+        assertFalse(offered.contains("(Y, Q"), offered);
+    }
+
+    /**
+     * Two parts that say the same words are two premises, and the verdict is open on each.
+     *
+     * <p>What a reader is sent to is the part, and two parts are two things to prove or answer.
+     * Told apart by the words, the second would fold into the first and a reader would fix one and
+     * be told the verdict is settled. And a combination the two hold only between them —
+     * {@code Q} with {@code Off}, which one of them holds where {@code a} is {@code X} and the other
+     * where it is {@code Y} — rests on both.
+     */
+    @Test
+    void twoPartsSayingTheSameWordsAreTwoPremises() {
+        Compilation compilation = measured(THE_SAME_WORDS);
+        List<AdequacyUncertainty> open = AdequacyReport.of(compilation).whatKeepsTheVerdictOpen();
+        List<WhereNothingIsAnswered.Premise> premises = open.stream()
+                .filter(AdequacyUncertainty.EveryRowReachesAnUnreachable.class::isInstance)
+                .map(each -> ((AdequacyUncertainty.EveryRowReachesAnUnreachable) each).premise())
+                .toList();
+
+        assertEquals(2, premises.size(), () -> open.toString());
+        assertEquals(List.of(List.of("not applicable"), List.of("not applicable")),
+                premises.stream().map(WhereNothingIsAnswered.Premise::reasons).toList());
+        assertEquals(2, pairFinding(compilation, "Q", "Off").premises().size());
+        assertEquals(Adequacy.Finding.Disposition.UNDECIDED,
+                pairFinding(compilation, "Q", "Off").disposition());
+    }
+
+    /**
+     * And what holds a finding open is not something its measurement went without: the pairs were
+     * counted in full.
+     */
+    @Test
+    void theMeasurementWentWithoutNothing() {
+        Adequacy.Finding blank = pairFinding(measured(BLANK), "Y", "Q");
+
+        assertTrue(blank.weakenedBy().isEmpty(), () -> blank.weakenedBy().toString());
+        assertFalse(blank.open().isEmpty());
     }
 
     /**
