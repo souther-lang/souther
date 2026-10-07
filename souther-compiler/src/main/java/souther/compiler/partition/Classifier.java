@@ -56,4 +56,25 @@ public interface Classifier {
         }
         return at;
     }
+
+    /**
+     * The value under {@code worn} where it wears every one of them, or null where it does not.
+     *
+     * <p>The same names taken off the same way, for a reader that needs the value to be one of the
+     * position's. {@link #inside} stops where a name is not there and hands back what it has,
+     * which is right for a class asking what it can of a value; a reader writing the value back
+     * under the position's names would put a name on that the value never wore.
+     */
+    static ObservedValue wearing(List<TypeSymbol> worn, ObservedValue value) {
+        ObservedValue at = value;
+        for (TypeSymbol name : worn) {
+            if (!(at instanceof ObservedValue.Constructed constructed)
+                    || !name.equals(constructed.type())
+                    || constructed.field("value") == null) {
+                return null;
+            }
+            at = constructed.field("value");
+        }
+        return at;
+    }
 }

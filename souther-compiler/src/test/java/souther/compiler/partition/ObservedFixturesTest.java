@@ -92,12 +92,28 @@ class ObservedFixturesTest {
                 Type.ref(declared("Point")));
     }
 
-    /** A value that is not the construction the position declares is not written as either. */
+    /**
+     * A value that is not the construction the position declares is not written as either — and
+     * the position does not make up what the value lacks: a name it never wore, the temporal it
+     * was not, a field the declaration has no place for.
+     */
     @Test
     void aValueOfAnotherShapeIsNotWritten() {
         notWritable(new ObservedValue.Text("7"), Type.INT);
         notWritable(new ObservedValue.Constructed(declared("Code"),
                 Map.of("value", new ObservedValue.Integer(3))), Type.ref(declared("Point")));
+        notWritable(new ObservedValue.Integer(3), Type.ref(declared("Code")));
+        notWritable(new ObservedValue.Temporal("2024-02-29"), Type.Prim.TIME);
+        notWritable(new ObservedValue.Constructed(declared("Point"),
+                Map.of("x", new ObservedValue.Integer(1), "y", new ObservedValue.Integer(2),
+                        "z", new ObservedValue.Integer(3))), Type.ref(declared("Point")));
+    }
+
+    /** A temporal is written as the one its text is, where that is the one the position is. */
+    @Test
+    void aTemporalIsWrittenAsTheOneItIs() {
+        assertEquals("Date(\"2024-02-29\")",
+                written(new ObservedValue.Temporal("2024-02-29"), Type.Prim.DATE));
     }
 
     /** A decimal the grammar has no plain literal for. */

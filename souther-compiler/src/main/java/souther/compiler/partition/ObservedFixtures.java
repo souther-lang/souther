@@ -109,7 +109,12 @@ final class ObservedFixtures {
                 return new Writing.NotWritable<>(unwritable.why());
             }
         }
-        ObservedValue inside = Classifier.inside(view.wrappers(), value);
+        // Every name the position wears, or no value of the position: putting a name back on a
+        // value that did not wear it would write a value the boundary did not build.
+        ObservedValue inside = Classifier.wearing(view.wrappers(), value);
+        if (inside == null) {
+            return notOf();
+        }
         if (inside.unread() != null) {
             return unread(inside);
         }
@@ -159,10 +164,16 @@ final class ObservedFixtures {
     /**
      * A primitive, written as what the position declares and holding what the value holds.
      *
-     * <p>The position decides the literal and not the value. A boundary carries a whole number
-     * where a {@code Decimal} stands, so a value read as an integer at a decimal is a decimal.
+     * <p>The value has to be of the primitive the position declares, as the value says
+     * ({@link ObservedValue#primitive}): a date read where a time stands is not written as a time.
+     * The one exception is the one a boundary makes: it carries a whole number where a
+     * {@code Decimal} stands, so a value read as an integer at a decimal is a decimal.
      */
     private static Writing<FixtureTemplate> scalar(ObservedValue value, Type.Prim prim) {
+        if (value.primitive() != prim
+                && !(prim == Type.Prim.DECIMAL && value instanceof ObservedValue.Integer)) {
+            return new Writing.NotWritable<>("the value is not one a " + prim + " is written as");
+        }
         FixtureTemplate written = switch (prim) {
             case INT -> value instanceof ObservedValue.Integer(long n)
                     ? FixtureTemplate.integer(n) : null;
@@ -210,6 +221,12 @@ final class ObservedFixtures {
         if (!(reading.source().symbols().scope().reach(made.type())
                 instanceof TypeReachName.Written name)) {
             return new Writing.NotWritable<>(WornNames.noSpellingFor(made.type()));
+        }
+        // The fields the declaration writes and no others: a field the value holds and the
+        // declaration does not is a value of something else, and writing the declaration's would
+        // drop it without a word.
+        if (!made.fields().keySet().equals(product.fields().keySet())) {
+            return notOf();
         }
         SequencedMap<String, FixtureTemplate> fields = new LinkedHashMap<>();
         for (Map.Entry<String, Type> field : product.fields().entrySet()) {
