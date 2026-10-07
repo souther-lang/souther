@@ -89,9 +89,7 @@ class AConditionAtANameTheCasesShareIsPlacedWhereItsWayCanStandTest {
     }
 
     private static Map<String, BodyDistinction> toldApart(String behavior) {
-        Compilation c = Compilation.ofSource(MODEL, "Main");
-        c.measure(Adequacy.Asked.fullReport());
-        c.answerEverything();
+        Compilation c = Measured.ONCE;
         assertEquals(List.of(), c.errors().stream()
                 .map(e -> e.diagnostic().code() + " " + e.diagnostic().said()).toList(),
                 "the model is measured");
@@ -99,5 +97,18 @@ class AConditionAtANameTheCasesShareIsPlacedWhereItsWayCanStandTest {
                 .get(behavior);
         return partition.axes().stream().collect(Collectors.toMap(
                 PartitionEvidence.AxisCoverage::name, PartitionEvidence.AxisCoverage::toldApart));
+    }
+
+    /** The model measured once: every behavior here is asked of the one measurement. */
+    private static final class Measured {
+
+        static final Compilation ONCE = measure();
+
+        private static Compilation measure() {
+            Compilation c = Compilation.ofSource(MODEL, "Main");
+            c.measure(Adequacy.Asked.fullReport());
+            c.answerEverything();
+            return c;
+        }
     }
 }
