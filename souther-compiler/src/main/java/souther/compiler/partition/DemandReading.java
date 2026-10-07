@@ -12,7 +12,6 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
-import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
@@ -150,41 +149,47 @@ final class DemandReading {
     /**
      * What a value the body asks the truth of asks of a row.
      *
-     * <p>Bindings and names are looked through on the way down, as {@link Condition#of} looks
-     * through them: a denial the library writes as a body binds what it denies, and what it binds
-     * is the truth.
+     * <p>Read as what it is asked of ({@link InputTruth#asked}): bindings, names and denials are
+     * looked through on the way down, as {@link Condition#of} looks through them — a denial the
+     * library writes as a body binds what it denies, and what it binds is the truth.
      *
      * @param behavior whose body the truth is in, which is whose a predicate handed to an
      *                 operation inside it is
      */
     private static List<Read> ofATruth(Core value, InputReads reads, InputReading read,
                                        boolean holding, String behavior) {
-        // Which answers it can give, before what it asks: one the source settles asks nothing of
-        // a row, or is a way no row takes, and read for its relations it would be neither — a
-        // predicate always holding states no relation of the element, and every element meeting
-        // it is not a container holding none. {@link TruthOutcomes} is the one reading of that,
-        // which the ways a body is walked are read by too.
+        List<Read> settled = settled(value, reads, read, holding);
+        if (settled != null) {
+            return settled;
+        }
+        InputTruth.Asked asked = InputTruth.asked(value, holding, reads, read.rules().symbols(),
+                read.rules().newtypes());
+        settled = settled(asked.value(), asked.reads(), read, asked.holding());
+        if (settled != null) {
+            return settled;
+        }
+        return ofWhatIsAsked(asked.value(), asked.reads(), read, asked.holding(), behavior);
+    }
+
+    /**
+     * Which answers {@code value} can give, before what it asks, where the source settles it: one
+     * the source settles asks nothing of a row, or is a way no row takes, and read for its
+     * relations it would be neither — a predicate always holding states no relation of the
+     * element, and every element meeting it is not a container holding none. {@link TruthOutcomes}
+     * is the one reading of that, which the ways a body is walked are read by too. Null where the
+     * source leaves it open.
+     */
+    private static List<Read> settled(Core value, InputReads reads, InputReading read,
+                                      boolean holding) {
         TruthOutcomes.Outcomes outcomes = TruthOutcomes.ofTheTruth(value,
                 WhatNamesStandFor.in(reads, read), read.rules().symbols());
-        if (outcomes.always(holding) || outcomes.always(!holding)) {
-            return List.of(new Read.Settled(outcomes.always(holding)));
-        }
-        Core e = Core.withoutStanding(value);
-        if (e instanceof Core.LetIn let) {
-            return ofATruth(let.body(), reads.and(let.binder(), let.value()), read, holding,
-                    behavior);
-        }
-        // It terminates because a binder's value can only mention binders introduced before it.
-        if (e instanceof Core.Read name
-                && reads.meaningOf(name, read.rules().symbols(), read.rules().newtypes())
-                        instanceof ReadMeaning.Through through) {
-            return ofATruth(through.denotes().value(), through.denotes().at(), read, holding,
-                    behavior);
-        }
-        Optional<BooleanMeaning.UnderADenial> denied = BooleanMeaning.underADenial(e, holding);
-        if (denied.isPresent()) {
-            return ofATruth(denied.get().part(), reads, read, denied.get().positive(), behavior);
-        }
+        return outcomes.always(holding) || outcomes.always(!holding)
+                ? List.of(new Read.Settled(outcomes.always(holding))) : null;
+    }
+
+    /** What a truth asks of a row, read as what it is asked of. */
+    private static List<Read> ofWhatIsAsked(Core e, InputReads reads, InputReading read,
+                                            boolean holding, String behavior) {
         TermPath truth = InputTruth.positionOf(e, reads, read.rules().newtypes());
         if (truth != null) {
             return List.of(new Read.Demands(new RowDemand.ATruth(truth, holding)));

@@ -32,17 +32,69 @@ public record InputTruth(TermPath at, boolean held) {
     /**
      * What {@code cond} coming out {@code holding} says of one {@code Bool} position, or null where
      * it says nothing of one: {@code cond} is the position, or a comparison of it against a truth
-     * the source settles.
+     * the source settles — read through what {@link #asked} reads through.
      */
     public static InputTruth of(Core cond, boolean holding, InputReads reads, Symbols symbols,
                                 DeclarationNewtypes newtypes) {
-        TermPath at = positionOf(cond, reads, newtypes);
+        Asked asked = asked(cond, holding, reads, symbols, newtypes);
+        TermPath at = positionOf(asked.value(), asked.reads(), newtypes);
         if (at != null) {
-            return new InputTruth(at, holding);
+            return new InputTruth(at, asked.holding());
         }
-        return BooleanMeaning.asAComparison(Core.withoutStanding(cond))
-                .map(comparison -> compared(comparison, holding, reads, symbols, newtypes))
+        return BooleanMeaning.asAComparison(asked.value())
+                .map(comparison -> compared(comparison, asked.holding(), asked.reads(), symbols,
+                        newtypes))
                 .orElse(null);
+    }
+
+    /**
+     * A truth as what it is asked of: the value itself, read where it stands, and which way it is
+     * to come out.
+     *
+     * @param value   the value, standing as nothing wider
+     * @param reads   what the names in it read
+     * @param holding which way it is to come out
+     */
+    public record Asked(Core value, InputReads reads, boolean holding) { }
+
+    /**
+     * {@code truth} coming out {@code holding}, as what it is asked of: through a {@code let} to
+     * its body, through a name to what it stands for, and through a denial to what it denies, the
+     * other way round.
+     *
+     * <p>The one way through these, for every reader of what a truth is. A reader that looked
+     * through some of them and not others would hold {@code Bool.not(a.flag)} as one condition and
+     * {@code a.flag == false} as another.
+     *
+     * <p>It terminates because a binder's value can only mention binders introduced before it, and a
+     * denial is smaller than what it denies.
+     */
+    public static Asked asked(Core truth, boolean holding, InputReads reads, Symbols symbols,
+                              DeclarationNewtypes newtypes) {
+        Core value = truth;
+        InputReads in = reads;
+        boolean way = holding;
+        while (true) {
+            Core e = Core.withoutStanding(value);
+            if (e instanceof Core.LetIn let) {
+                value = let.body();
+                in = in.and(let.binder(), let.value());
+                continue;
+            }
+            if (e instanceof Core.Read name
+                    && in.meaningOf(name, symbols, newtypes) instanceof ReadMeaning.Through through) {
+                value = through.denotes().value();
+                in = through.denotes().at();
+                continue;
+            }
+            Optional<BooleanMeaning.UnderADenial> denied = BooleanMeaning.underADenial(e, way);
+            if (denied.isPresent()) {
+                value = denied.get().part();
+                way = denied.get().positive();
+                continue;
+            }
+            return new Asked(e, in, way);
+        }
     }
 
     /**

@@ -7,6 +7,7 @@ import souther.compiler.core.Core;
 import souther.compiler.flow.Arrival;
 import souther.compiler.flow.Naming;
 import souther.compiler.flow.Truth;
+import souther.compiler.flow.WhatAConditionRuns;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
@@ -223,7 +224,10 @@ final class DecisionNaming implements Naming<DecisionPath> {
             return way;
         }
         Set<ModelOccurrence> alwaysRun = new LinkedHashSet<>();
-        rightsOfWhatRuns(fork.cond(), part == 0, alwaysRun);
+        for (Core.Binary ran : WhatAConditionRuns.whenItCameOut(fork.cond(), part == 0)
+                .operators()) {
+            recordedAsItself(ran.right()).ifPresent(alwaysRun::add);
+        }
         return way.seenAgain(shown -> shown instanceof ShownBy.ShortOf(var _, var notReached)
                 && alwaysRun.contains(notReached)
                 ? new ShownBy.AtAnArmShortOf(stated, part, notReached) : shown);
@@ -293,31 +297,6 @@ final class DecisionNaming implements Naming<DecisionPath> {
     private static ModelOccurrence forkStated(Core.If fork) {
         return Optional.ofNullable(fork.occurrence()).flatMap(ModelOccurrence::statedAt)
                 .orElse(null);
-    }
-
-    /**
-     * The right operands, as the constructs a run through each is recorded at, of the operators
-     * that stop when their answer is settled and that every run bringing {@code value} out
-     * {@code cameOut} ran — added to {@code out}.
-     *
-     * <p>Such an operator runs its left always. It runs its right too where it came out the way
-     * that needs both — {@code &&} holding, {@code ||} failing — and then both came out that way;
-     * otherwise which way the left came out is not known here, and only the left is followed.
-     *
-     * @param cameOut which way {@code value} came out, or null where that is not known
-     */
-    private static void rightsOfWhatRuns(Core value, Boolean cameOut, Set<ModelOccurrence> out) {
-        if (!(Core.withoutStanding(value) instanceof Core.Binary binary)
-                || !binary.op().stopsWhenItsAnswerIsSettled()) {
-            return;
-        }
-        recordedAsItself(binary.right()).ifPresent(out::add);
-        if (cameOut != null && cameOut == binary.op().rightRunsWhenLeftIs()) {
-            rightsOfWhatRuns(binary.left(), cameOut, out);
-            rightsOfWhatRuns(binary.right(), cameOut, out);
-        } else {
-            rightsOfWhatRuns(binary.left(), null, out);
-        }
     }
 
     /**

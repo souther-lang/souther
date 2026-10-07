@@ -12,6 +12,7 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.flow.Arrival;
 import souther.compiler.flow.Naming;
 import souther.compiler.flow.Truth;
+import souther.compiler.flow.WhatAConditionRuns;
 import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.ComparedNumbers;
 import souther.compiler.inputs.InputReads;
@@ -233,26 +234,39 @@ final class CoverageNaming implements Naming<Outcome> {
     }
 
     /**
-     * The way, and where it says less than that the condition came out the arm's way, the
-     * {@code Bool} position the condition is about holding the truth the arm is taken on, seen at
-     * the arm.
+     * The way, and where it says less than that the condition came out the arm's way, each part of
+     * the condition a run down the arm brought out a known way: a {@code Bool} position holding the
+     * truth it came to, seen at the arm, and a comparison as it is seen anywhere.
      *
-     * <p>Only where the condition says that of one position, however it is written. What the way
-     * left out is then the position's truth, which comes out a way at no construct the plan places;
-     * the arm a run took says which, and the position is what a row is composed at. A condition
-     * that is anything else is no position to say it of, and an arm that names no position steers
-     * no row — so there this has no words for the arm, and the way is the condition's.
+     * <p>What the way left out is then the positions' truths, which come out a way at no construct
+     * the plan places; the arm a run took says which, and the positions are what a row is composed
+     * at. Only where every part is one of those and came out a way the arm says
+     * ({@link WhatAConditionRuns}): a part this has no words for is no position to say anything
+     * of, and a part the arm leaves open — under {@code a || b} holding, which of the two did — is
+     * nothing the arm says. There this has no words for the arm, and the way is the condition's.
      */
     @Override
     public Outcome seenAtTheArm(Core.If fork, int part, Arrival<Outcome> onlyWay) {
         if (onlyWay.value() != Truth.UNREAD && onlyWay.isComplete()) {
             return onlyWay.path();
         }
-        Condition.Case truth = truthOf(fork.cond(), part == 0);
-        ControlPlace.Arm place = armPoint(fork, part);
-        ControlClaim claim = claimAt(place);
-        return truth == null || claim == null ? null
-                : join(onlyWay.path(), one(new Decision(truth, claim)));
+        ControlClaim claim = claimAt(armPoint(fork, part));
+        WhatAConditionRuns ran = WhatAConditionRuns.whenItCameOut(fork.cond(), part == 0);
+        if (claim == null || !ran.whole()) {
+            return null;
+        }
+        Outcome out = onlyWay.path();
+        for (WhatAConditionRuns.Settled each : ran.settled()) {
+            InputTruth truth = InputTruth.of(each.part(), each.held(), reads, symbols, newtypes);
+            Outcome seen = truth == null ? side(each.part(), each.held())
+                    : one(new Decision(new Condition.Case(truth.at(),
+                            List.of(truth.held() ? "true" : "false")), claim));
+            out = seen == null ? null : join(out, seen);
+            if (out == null) {
+                return null;
+            }
+        }
+        return out;
     }
 
     /** What {@code cond} coming out {@code holding} says a {@code Bool} position holds, or null
