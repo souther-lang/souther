@@ -46,7 +46,7 @@ public sealed interface EmptyInput {
      * of one kind ({@link Refinement}) — read as cases, the same contradiction under an optional
      * would arrive as a shape of its own with nothing to be an instance of.
      */
-    record TwoRefinementsAtOnePosition(TermPath at, Refinement one, Refinement other)
+    record TwoRefinementsAtOnePosition(TermPath at, CasesLeft one, CasesLeft other)
             implements EmptyInput {}
 
     /**

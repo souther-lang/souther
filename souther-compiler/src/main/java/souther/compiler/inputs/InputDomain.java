@@ -6,7 +6,10 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.SpecImplementation;
 import souther.compiler.check.DeclarationReadings;
+import souther.compiler.check.AtomSpace;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.DeclarationKind;
+import souther.compiler.check.Shape;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.DeclaredCoordinates;
 import souther.compiler.check.RuleCitation;
@@ -687,9 +690,42 @@ public final class InputDomain {
      */
     public Type typeAt(TermPath path, RuleReadingSource source) {
         Position position = at(path);
+        if (position != null) {
+            return position.type();
+        }
         // Under a position the walk stopped at, what the declarations say at each step is the only
         // answer there is.
-        return position != null ? position.type() : declared(source).typeAt(path);
+        Type declared = declared(source).typeAt(path);
+        return declared != null ? declared : underTheCases(path);
+    }
+
+    /**
+     * What a name read at a sum is, read off the positions it stands at under the cases, or null
+     * where it stands under none or under cases that disagree.
+     *
+     * <p>For a name only some of the sum's cases spread — {@code code}, which {@code Station} and
+     * {@code Hospital} spread and {@code Renkei} does not — read on a value a fork left those cases.
+     * The declarations of the sum have no such name, since a value of the sum may be the case
+     * without it; the cases holding it do, and where it stands under them is what the walk wrote
+     * down ({@link NameReach#standingOf}). Sharing is nominal, so the cases holding it declare one
+     * type for it, and a name they disagree about is none this answers for.
+     */
+    private Type underTheCases(TermPath path) {
+        List<NameReach.CaseStanding> standings = switch (reach.standingOf(path)) {
+            case NameReach.Standing.UnderTheCases it -> it.standings();
+            case NameReach.Standing.CasesIncomplete it -> it.standings();
+            case NameReach.Standing.AtThePathItself _ -> List.of();
+        };
+        Type out = null;
+        for (NameReach.CaseStanding each : standings) {
+            Position under = at(each.position());
+            Type here = under != null ? under.type() : underTheCases(each.position());
+            if (here == null || (out != null && !out.equals(here))) {
+                return null;
+            }
+            out = here;
+        }
+        return out;
     }
 
     /**
@@ -993,6 +1029,56 @@ public final class InputDomain {
     }
 
     /**
+     * The names that cross into {@code branch}: the ones a value of the sum reads ({@code shared}),
+     * and the ones a value of a case of the sum that holds this one reads.
+     *
+     * <p>A case that is itself a sum is a type a value of the position can be read as — an arm
+     * naming {@code OnceKind} binds one — and what its cases all spread is readable on such a value
+     * whether or not the cases beside it spread it too. {@code Station} and {@code Hospital}
+     * spreading {@code Common} put {@code code} under each, readable on a {@code OnceKind} and not
+     * on a {@code VisitKind} that may be a {@code Renkei}. So the name stands at the sum, under the
+     * cases it reaches, exactly as a name every case spreads does; what tells the two apart is only
+     * which cases a value reading it can be, and that is what the way to the read says.
+     *
+     * <p>Read off the same answer that makes the names readable ({@link ReadableFields}), asked of
+     * each case the sum lists that is a sum and holds this one, down through the cases those list.
+     * Sharing stays nominal: a field two cases happen to name alike is not shared by them.
+     */
+    private static Set<String> readUnder(List<String> shared, ReadablePosition input,
+                                         Refinement branch, RuleReadingSource source) {
+        Set<String> out = new java.util.LinkedHashSet<>(shared);
+        if (input.shape() instanceof Shape.Sum sum && branch instanceof Refinement.SumCase leaf) {
+            readByACaseHolding(sum.name(), leaf.leaf(), source, out, new HashSet<>());
+        }
+        return out;
+    }
+
+    /** What {@link #readUnder} adds for the cases {@code sum} lists, and the cases under those. */
+    private static void readByACaseHolding(TypeSymbol sum, TypeSymbol leaf, RuleReadingSource source,
+                                           Set<String> out, Set<TypeSymbol> met) {
+        if (!(sum instanceof TypeSymbol.AtModule at) || !met.add(sum)) {
+            return;
+        }
+        List<TypeSymbol> listed = source.declarations().listed().of(at.key());
+        if (listed == null) {
+            return;
+        }
+        for (TypeSymbol each : listed) {
+            if (!(each instanceof TypeSymbol.AtModule member)
+                    || source.kinds().of(member.key()) != DeclarationKind.SUM) {
+                continue;
+            }
+            Type asIs = Type.ref(each);
+            if (!AtomSpace.subjectAtoms(asIs, source.kinds(), source.sums()).contains(leaf)) {
+                continue;
+            }
+            out.addAll(ReadableFields.of(TypeView.shapeOf(asIs, source.inners(), source.symbols(),
+                    source.kinds(), source.sums())).declaredFields().keySet());
+            readByACaseHolding(each, leaf, source, out, met);
+        }
+    }
+
+    /**
      * What follows a position that stands, walked.
      *
      * <p>Beside the position and never instead of it: what a list holds is read, and the list is
@@ -1090,9 +1176,10 @@ public final class InputDomain {
                 for (StructuralInspection.Branch branch : standing) {
                     int before = found.size();
                     // What the value above calls the positions under this case, where it calls them
-                    // anything: the names its cases share and nothing else.
+                    // anything: the names a value of the sum, or of a case of it holding this one,
+                    // reads — and nothing else.
                     SharedNames crossing = new SharedNames(path, branch.refinement(),
-                            new java.util.LinkedHashSet<>(shared));
+                            readUnder(shared, input, branch.refinement(), reading.source()));
                     // Handed down as the reading of the case is opened, so a clause written above
                     // is read at the position it is about by the one reading of that position.
                     // Nothing to hand down where nothing crosses, which is not the same as the case

@@ -14,6 +14,7 @@ import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Case;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Distinctions;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.StructuralInspection;
@@ -138,7 +139,8 @@ class WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest {
                         new Type.ListOf(Type.INT), wraps(), symbols(), kinds(), sums()),
                 "a sequence puts what it holds under an element");
         assertEquals(typeOf("p"), BehaviorInputs.stepWrittenValue(
-                        new TermPath.Step.Refine(caseOf("P")), typeOf("r"), wraps(), symbols(),
+                        new TermPath.Step.Refine(CasesLeft.of(caseOf("P"))), typeOf("r"), wraps(),
+                        symbols(),
                         kinds(), sums()),
                 "and a narrowing to a case is that case at the same position");
         assertNull(BehaviorInputs.stepWrittenValue(new TermPath.Step.Element(), typeOf("r"),

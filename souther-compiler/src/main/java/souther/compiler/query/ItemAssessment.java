@@ -183,10 +183,12 @@ public sealed interface ItemAssessment {
          *  the model does. */
         UNPROVEN,
 
-        /** The question was not put. A line between two positions is the one this exists for: what a
+        /** The question was not put. A line between two positions is one this exists for: what a
          *  row on it takes is a place both positions admit, and reading each of them on its own does
-         *  not answer that. Told apart from {@link #UNPROVEN} so that implementing the reading later
-         *  moves a line off this state rather than off an answer somebody wrote for it. */
+         *  not answer that. A line behind a condition is the other: what a row at it takes is a
+         *  place the way to it leaves, and the position's rules read on their own do not answer that
+         *  either. Told apart from {@link #UNPROVEN} so that implementing the reading later moves a
+         *  line off this state rather than off an answer somebody wrote for it. */
         NOT_COMPUTED;
 
         /** Whether this is the state that puts a ground in the evidence. The other two are told apart

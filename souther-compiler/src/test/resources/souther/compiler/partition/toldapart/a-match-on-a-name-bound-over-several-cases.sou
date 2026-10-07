@@ -1,12 +1,11 @@
-// A `match` on a name bound over several cases is a decision nothing can place.
+// A `match` on a name bound over several cases is a decision about the position the name stands at.
 //
-// `b` is the value matched at `lead.reason`, as one of the two cases under BantFailure — which is no
-// one position, so the inner `match` is a fork about a subject the reading cannot name. It tells the
-// two apart; read as about nothing, the position would be said to be told apart as two groups of
-// three, which the inner arms refute. The outer arms are read, and what they say is part of the
-// answer and not the whole of it.
+// `b` is the value matched at `lead.reason`, narrowed to the two cases under BantFailure. That is
+// a narrowing of the position to several of its cases and still the position, so the inner `match`
+// is a fork about `lead.reason`: the outer arms tell BantFailure's two cases from DuplicateOf, and
+// the inner ones tell the two apart.
 //
-// told apart at lead.reason: unread
+// told apart at lead.reason: 3 groups of 3
 module example.bound
 
 data NoBudget

@@ -158,8 +158,9 @@ class AComparisonOnANumberTakenOfALocationSteersARowTest {
         // A leaf is a case that covers itself, which is what the checker's resolution of the arm
         // says, so selecting it narrows the position to that one distinction.
         TermPath underNamed = TermPath.of("slot").refine(
-                souther.compiler.inputs.Refinement.of(souther.compiler.types.ResolvedCase.of(
-                        souther.compiler.types.CaseSelector.direct(named), List.of(named))))
+                souther.compiler.inputs.Refinement.allOf(souther.compiler.types.ResolvedCase.of(
+                        souther.compiler.types.CaseSelector.direct(named), List.of(named)))
+                        .getFirst())
                 .then("c");
 
         assertEquals(List.of(read.lengthAt(underNamed)),

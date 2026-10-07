@@ -16,8 +16,13 @@ import java.util.Map;
  * itself that a row cannot be a {@code FeedQuery} and have a {@code GlobalQuery}'s {@code tag} — and
  * the coverage denominator and the generator disagreeing about which combinations exist is how a
  * report comes to ask for rows nothing can write.
+ *
+ * <p><b>What is required at a position is the cases it is left, and two requirements of one
+ * position are both of them.</b> A value the outer arm leaves {@code Station} or {@code Hospital}
+ * and the inner arm leaves {@code Station} is a {@code Station}, so the two hold together and what
+ * holds is the stronger one. They disagree only where they leave the position no case in common.
  */
-public record Requirements(Map<TermPath, Refinement> refinements) {
+public record Requirements(Map<TermPath, CasesLeft> refinements) {
 
     /** Nothing has to be true: a position under no refinement, or a class that selects none. */
     public static final Requirements NONE = new Requirements(Map.of());
@@ -40,43 +45,52 @@ public record Requirements(Map<TermPath, Refinement> refinements) {
      * by no value, and would have a row reported impossible with nothing having decided that.
      */
     public Requirements and(TermPath at, Refinement refinement) {
-        if (refinement == null) {
-            return this;
-        }
-        Refinement had = refinements.get(at);
-        if (refinement.equals(had)) {
+        return refinement == null ? this : and(at, CasesLeft.of(refinement));
+    }
+
+    /** The same, with the position at {@code at} left {@code cases}. */
+    public Requirements and(TermPath at, CasesLeft cases) {
+        CasesLeft had = refinements.get(at);
+        if (cases.equals(had)) {
             return this;
         }
         if (had != null) {
             throw new IllegalArgumentException(
                     "`" + at + "` is required to be " + had.spelled() + " and asked to be "
-                            + refinement.spelled() + "; whether two requirements hold together is"
+                            + cases.spelled() + "; whether two requirements hold together is"
                             + " what merging them answers");
         }
-        Map<TermPath, Refinement> wider = new LinkedHashMap<>(refinements);
-        wider.put(at, refinement);
+        Map<TermPath, CasesLeft> wider = new LinkedHashMap<>(refinements);
+        wider.put(at, cases);
         return new Requirements(wider);
     }
 
     /** What is required at {@code at}, or null where nothing is. */
-    public Refinement at(TermPath at) {
+    public CasesLeft at(TermPath at) {
         return refinements.get(at);
     }
 
     /**
      * Both, or the position they disagree about.
      *
-     * <p>Two requirements are compatible exactly when no position is required to be two different
-     * things. A position one of them says nothing about is one the other settles alone: a row is
-     * free to be whatever it likes where nothing asked.
+     * <p>Two requirements are compatible exactly when every position both of them speak of is left
+     * some case by each of them in common, and what is required there afterwards is those cases. A
+     * position one of them says nothing about is one the other settles alone: a row is free to be
+     * whatever it likes where nothing asked.
      */
     public Merge merge(Requirements other) {
-        Map<TermPath, Refinement> both = new LinkedHashMap<>(refinements);
-        for (Map.Entry<TermPath, Refinement> each : other.refinements.entrySet()) {
-            Refinement had = both.putIfAbsent(each.getKey(), each.getValue());
-            if (had != null && !had.equals(each.getValue())) {
+        Map<TermPath, CasesLeft> both = new LinkedHashMap<>(refinements);
+        for (Map.Entry<TermPath, CasesLeft> each : other.refinements.entrySet()) {
+            CasesLeft had = both.get(each.getKey());
+            if (had == null) {
+                both.put(each.getKey(), each.getValue());
+                continue;
+            }
+            CasesLeft common = had.meet(each.getValue());
+            if (common == null) {
                 return new Merge.Conflict(each.getKey(), had, each.getValue());
             }
+            both.put(each.getKey(), common);
         }
         return new Merge.Merged(new Requirements(both));
     }
@@ -98,6 +112,6 @@ public record Requirements(Map<TermPath, Refinement> refinements) {
          * <p>Which position, and which two, because that is what a report of an absent combination
          * is about: a pair left out of the denominator is left out for a reason an author can read.
          */
-        record Conflict(TermPath at, Refinement one, Refinement other) implements Merge {}
+        record Conflict(TermPath at, CasesLeft one, CasesLeft other) implements Merge {}
     }
 }

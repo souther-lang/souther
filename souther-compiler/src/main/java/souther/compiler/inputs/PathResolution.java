@@ -133,6 +133,30 @@ public sealed interface PathResolution {
     }
 
     /**
+     * The same answer, with every narrowing to several cases on the way to the place taken out
+     * ({@link TermPath#position}).
+     *
+     * <p>Where a value stands, as against how a fork reads it. A name an arm bound over
+     * {@code Station} or {@code Hospital} stands for the value at the sum's position, and a field
+     * every one of those cases spreads read off it is that field's name at the sum: what it is
+     * compared with, what it is counted as and which position the body names are those, and the
+     * name is crossed into the cases the way every name read at a sum is. That the arm left the
+     * value two of the cases is what the way says, and a fork on the name is the one reader that
+     * asks it ({@link InputReads#forkedOn}).
+     */
+    default PathResolution heldAt() {
+        return switch (this) {
+            case At(var at) -> new At(at.position());
+            case NotAPosition _ -> this;
+            // Each place it may stand at, as a place: the same answer about the run, whatever the
+            // narrowings on the way to any one of them. Kept as the places it may be even where
+            // they come to one, since what this says is that no read of it is settled as one.
+            case MayStandAt(var among) ->
+                    new MayStandAt(among.stream().map(TermPath::position).distinct().toList());
+        };
+    }
+
+    /**
      * The same answer with {@code step} taken at every position it names.
      *
      * <p>For a reader whose question is about where a value stands rather than about which place it

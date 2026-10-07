@@ -656,7 +656,7 @@
             "relation" : "=",
             "against" : "5",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "writableBecause" : [ "a_value_was_built" ],
             "status" : "unavailable",
             "reason" : "no_rows"
           }, {
@@ -668,7 +668,7 @@
             "relation" : "=",
             "against" : "4",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "writableBecause" : [ "a_value_was_built" ],
             "status" : "unavailable",
             "reason" : "no_rows"
           }, {
@@ -680,7 +680,7 @@
             "relation" : "in",
             "against" : "5 < worked <= 7",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "writableBecause" : [ "a_value_was_built" ],
             "status" : "unavailable",
             "reason" : "no_rows"
           }, {
@@ -692,7 +692,7 @@
             "relation" : "in",
             "against" : "1 <= worked < 4",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "writableBecause" : [ "a_value_was_built" ],
             "status" : "unavailable",
             "reason" : "no_rows"
           } ]
@@ -1129,7 +1129,7 @@
           },
           "relation" : "=",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "writableBecause" : [ "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
@@ -1187,7 +1187,7 @@
           },
           "relation" : "=",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "writableBecause" : [ "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
@@ -1254,7 +1254,7 @@
           },
           "relation" : "in",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "writableBecause" : [ "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
@@ -1321,7 +1321,7 @@
           },
           "relation" : "in",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "writableBecause" : [ "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
@@ -2067,7 +2067,7 @@
             "relation" : "=",
             "against" : "101",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "writableBecause" : [ "a_value_was_built" ],
             "status" : "unavailable",
             "reason" : "no_rows"
           }, {
@@ -2078,7 +2078,7 @@
             "relation" : "=",
             "against" : "100",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "writableBecause" : [ "a_value_was_built" ],
             "status" : "unavailable",
             "reason" : "no_rows"
           }, {
@@ -2090,7 +2090,7 @@
             "relation" : "in",
             "against" : "101 < hours <= 200",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "writableBecause" : [ "a_value_was_built" ],
             "status" : "unavailable",
             "reason" : "no_rows"
           }, {
@@ -2102,7 +2102,7 @@
             "relation" : "in",
             "against" : "45 < hours < 100",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "writableBecause" : [ "a_value_was_built" ],
             "status" : "unavailable",
             "reason" : "no_rows"
           } ]
@@ -2148,7 +2148,7 @@
             "relation" : "=",
             "against" : "46",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "writableBecause" : [ "a_value_was_built" ],
             "status" : "unavailable",
             "reason" : "no_rows"
           }, {
@@ -2159,7 +2159,7 @@
             "relation" : "=",
             "against" : "45",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "writableBecause" : [ "a_value_was_built" ],
             "status" : "unavailable",
             "reason" : "no_rows"
           }, {
@@ -2171,7 +2171,7 @@
             "relation" : "in",
             "against" : "46 < hours <= 100",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "writableBecause" : [ "a_value_was_built" ],
             "status" : "unavailable",
             "reason" : "no_rows"
           }, {
@@ -2183,7 +2183,7 @@
             "relation" : "in",
             "against" : "0 <= hours < 45",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "writableBecause" : [ "a_value_was_built" ],
             "status" : "unavailable",
             "reason" : "no_rows"
           } ]
@@ -2397,7 +2397,7 @@
           },
           "relation" : "=",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "writableBecause" : [ "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
@@ -2454,7 +2454,7 @@
           },
           "relation" : "=",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "writableBecause" : [ "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
@@ -2521,7 +2521,7 @@
           },
           "relation" : "in",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "writableBecause" : [ "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
@@ -2602,7 +2602,7 @@
           },
           "relation" : "in",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "writableBecause" : [ "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
@@ -2660,7 +2660,7 @@
           },
           "relation" : "=",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "writableBecause" : [ "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
@@ -2717,7 +2717,7 @@
           },
           "relation" : "=",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "writableBecause" : [ "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
@@ -2798,7 +2798,7 @@
           },
           "relation" : "in",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "writableBecause" : [ "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
@@ -2865,7 +2865,7 @@
           },
           "relation" : "in",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "writableBecause" : [ "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",

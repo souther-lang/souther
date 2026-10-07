@@ -7,6 +7,7 @@ import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Case;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Distinctions;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
@@ -371,7 +372,7 @@ final class ConstructionPlan {
         TermPath at();
 
         /** No value is at both, and this is the position and the two it would have to be. */
-        record Conflict(TermPath at, Refinement one, Refinement other) implements ModelRefusal {}
+        record Conflict(TermPath at, CasesLeft one, CasesLeft other) implements ModelRefusal {}
 
         /**
          * A value is to be placed inside a collection the rules leave no room in.
@@ -897,14 +898,21 @@ final class ConstructionPlan {
      * a case that is a newtype over an optional narrowed to what the optional holds and the case's
      * own name was never put back, so the row carried a value of a type the parameter does not
      * declare. The state is a {@link Settled}, so a step cannot move one half and leave the other.
+     *
+     * <p>Up to a requirement that leaves the position several cases, and not past it. What is built
+     * is one case, and which of the ones left is no more this plan's to choose than which case of
+     * a position nothing narrowed is: the position is built as what the declaration puts there,
+     * and a value of a case the requirement leaves out is a row that does not take the way — which
+     * is what a composer handed a way it could not state all of is free to write
+     * ({@link Reachability}).
      */
     private static Settled settle(Type declared, TermPath at, NewtypeInners inners,
                                   Symbols symbols,
                                   DeclarationKinds kinds, SumCases sums,
                                   Requirements required) {
         Settled settled = new Settled(at, declared, null, List.of());
-        for (Refinement refinement = required.at(settled.at()); refinement != null;
-                refinement = required.at(settled.at())) {
+        for (Refinement refinement = oneCaseAt(required, settled.at()); refinement != null;
+                refinement = oneCaseAt(required, settled.at())) {
             settled = applying(settled, refinement, inners, symbols, kinds, sums);
             // Nothing narrows what is not there, so a narrowing that settled the value is the end
             // of the chain whatever else was written.
@@ -913,6 +921,13 @@ final class ConstructionPlan {
             }
         }
         return settled;
+    }
+
+    /** The one case {@code required} leaves the position at {@code at}, or null where it leaves it
+     *  none in particular. */
+    private static Refinement oneCaseAt(Requirements required, TermPath at) {
+        CasesLeft left = required.at(at);
+        return left == null ? null : left.only();
     }
 
     /**
@@ -968,7 +983,7 @@ final class ConstructionPlan {
             if (!each.isAtOrUnder(absent)) {
                 continue;
             }
-            Refinement stated = required.at(each);
+            CasesLeft stated = required.at(each);
             throw new IllegalStateException(stated != null
                     ? "`" + each + "` is required to be " + stated.spelled() + " at or under `"
                             + absent + "`, which holds no value; nothing stands there for a"

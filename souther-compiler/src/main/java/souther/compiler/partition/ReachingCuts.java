@@ -1,25 +1,31 @@
 package souther.compiler.partition;
 
 import souther.compiler.carrier.Lookup;
+import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.ModelOccurrence;
-import souther.compiler.types.ResolvedCase;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * What a row has already had to satisfy by the time it arrives at one comparison.
@@ -190,10 +196,10 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
      *
      * <p><b>The narrowing and never the arm.</b> What a search can compose against is a position
      * read as one of its cases; "the second arm was taken" is a fact about the text. So what is
-     * carried is the scrutinee's position with the arm's case on it, and where this reading cannot
-     * arrive at one — a scrutinee no position holds, an arm answering for several cases, an arm
-     * naming a case that is itself a sum, a case the declarations leave no position at — nothing is
-     * invented and the arm is declined.
+     * carried is the scrutinee's position with the arm's cases on it — the leaves under them where
+     * a case is itself a sum — and where this reading cannot arrive at one — a scrutinee no position
+     * holds, an arm over an optional's two carriers at once, a case the declarations leave no
+     * position at — nothing is invented and the arm is declined.
      *
      * <p>And the narrowing is the one the checker's resolution of the arm settles, taken as it is
      * rather than built again from the case's name: the name says neither whether an optional's
@@ -204,16 +210,17 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
      * nothing and an arm nothing could be read of are the two answers a walk has to tell apart, and
      * a silence is both of them.
      */
-    static OnTheWay entering(Core.Match match, Core.Case arm, int part, InputDomain inputs,
-                             InputReads reads, RuleReadingSource ruleSource,
-                             ConditionNumbering numbering) {
+    static OnTheWay entering(Core.Match match, Core.Case arm, int part, InputReading read,
+                             InputReads reads, ConditionNumbering numbering) {
+        InputDomain inputs = read.domain();
+        RuleReadingSource ruleSource = read.rules();
         ConditionOccurrence met = numbering.metEntering(match, part);
         ConditionReportAnchor at =
                 numbering.anchorOfArm(match.origin(), part, arm.pos(), met);
-        // The selection whole, and not one narrowing made out of it: a case over several leaves is
-        // one narrowing of nothing, and whether it narrows the position at all is the
+        // The selection whole, and not one narrowing made out of it: a case over several leaves
+        // leaves the value several, and whether it narrows the position at all is the
         // declaration's to say below.
-        ResolvedCase selected = arm.selectedCase().orElse(null);
+        CasesLeft selected = CasesLeft.selectedBy(arm.pattern());
         if (selected == null) {
             return new OnTheWay.Declined(met, at,
                     new OnTheWay.Why.ForkArmNotReadAsANarrowing());
@@ -221,7 +228,7 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
         // The arm is declined for either answer: a search composes against a position read as one
         // of its cases, and there is no position to narrow whether the scrutinee stands at none or
         // this reading did not follow it to one.
-        TermPath scrutinee = switch (reads.pathOf(match.scrutinee(), ruleSource.newtypes())) {
+        TermPath scrutinee = switch (reads.forkedOn(match.scrutinee(), ruleSource.newtypes())) {
             case PathResolution.At(var stands) -> stands;
             case PathResolution.NotAPosition _ -> null;
             // And declined for a scrutinee that only may stand at one. What a narrowing is composed
@@ -237,7 +244,7 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
         //
         // Two values and not one: where the name stands is what the environment answers, and
         // whether the input's rules hold a position there is the reading's.
-        if (scrutinee == null || inputs.at(scrutinee) == null) {
+        if (scrutinee == null || !held(inputs, scrutinee)) {
             return new OnTheWay.Declined(met, at,
                     new OnTheWay.Why.ForkArmNotReadAsANarrowing());
         }
@@ -246,14 +253,82 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
         // narrows it, or comes out one way for every row because the declaration already decided.
         return switch (inputs.declared(ruleSource)
                 .taking(scrutinee, match.scrutinee().type(), selected)) {
-            case DeclaredInput.Taking.Narrows(TermPath to) -> new OnTheWay.Narrowed(at, to);
-            // A narrowing to several of the position's distinctions is one no one position is
-            // read as, which is what a search composes against.
-            case DeclaredInput.Taking.AmongSeveral _ -> new OnTheWay.Declined(met, at,
-                    new OnTheWay.Why.ForkArmNotReadAsANarrowing());
+            case DeclaredInput.Taking.Narrows(TermPath to) ->
+                    new OnTheWay.Narrowed(at, to, onItsOrder(to, read));
             case DeclaredInput.Taking.Implied _ -> new OnTheWay.Settled(met, at, true);
             case DeclaredInput.Taking.Excluded _ -> new OnTheWay.Settled(met, at, false);
         };
+    }
+
+    /**
+     * What {@code narrowed} says on the order of the position it narrows: a hole at each case of
+     * the enumeration the narrowing leaves out, and nothing where no enumeration orders the
+     * position.
+     *
+     * <p>Asked of the reading, which is what says which order a position stands on — the same
+     * question a comparison of the position against a written case is read through, so that the
+     * places a narrowing leaves out are the places a comparison names.
+     */
+    private static List<TakenConstraint.AwayFrom> onItsOrder(TermPath narrowed, InputReading read) {
+        NumericTerm.ValueOf term = new NumericTerm.ValueOf(narrowed.narrowedFrom());
+        TermOrders orders = read.quantities().ordersOf(term);
+        if (orders == null || !(orders.answered() instanceof Carrier.Ordinal ordinal)) {
+            return List.of();
+        }
+        List<TakenConstraint.AwayFrom> out = new ArrayList<>();
+        for (TypeSymbol each : ordinal.cases()) {
+            if (!narrowed.narrowing().leaves(each)) {
+                out.add(new TakenConstraint.AwayFrom(term, ordinal.at(each)));
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * What the arms of {@code match} leave the scrutinee, one entry per arm that is a column.
+     *
+     * <p>The question a fork asks, as the answers it has. Two forks over one position can ask two
+     * questions — whether a visit is a {@code OnceKind} or a {@code Renkei}, and inside the first,
+     * whether it is a {@code Station} or a {@code Hospital} — and a rule through both answers each of
+     * them, so what tells the two columns apart is which answers each fork has and not the position
+     * they are about. Two forks dividing a position the same way are one question, wherever each is
+     * written.
+     *
+     * <p>Each answer is the one the arm is read as ({@link #entering}): the cases the declaration
+     * leaves of the ones the arm covers where it narrows the position, and the cases the arm covers
+     * where the declaration leaves it none of them or where no position is narrowed. An arm the
+     * declaration already decides is no column and no answer, and neither is an arm over an
+     * optional's two carriers at once.
+     */
+    static Set<CasesLeft> answersOf(Core.Match match, InputDomain inputs, InputReads reads,
+                                    RuleReadingSource ruleSource) {
+        TermPath scrutinee = reads.forkedOn(match.scrutinee(), ruleSource.newtypes())
+                instanceof PathResolution.At(var stands) && held(inputs, stands)
+                ? stands : null;
+        DeclaredInput declared = scrutinee == null ? null : inputs.declared(ruleSource);
+        Set<CasesLeft> out = new LinkedHashSet<>();
+        for (Core.Case arm : match.cases()) {
+            CasesLeft selected = CasesLeft.selectedBy(arm.pattern());
+            if (selected == null) {
+                continue;
+            }
+            if (declared == null) {
+                out.add(selected);
+                continue;
+            }
+            switch (declared.taking(scrutinee, match.scrutinee().type(), selected)) {
+                case DeclaredInput.Taking.Narrows(TermPath to) -> out.add(to.narrowing());
+                case DeclaredInput.Taking.Excluded _ -> out.add(selected);
+                case DeclaredInput.Taking.Implied _ -> { }
+            }
+        }
+        return out;
+    }
+
+    /** Whether the input's rules hold the position a fork on {@code scrutinee} narrows
+     *  ({@link TermPath#position}). */
+    private static boolean held(InputDomain inputs, TermPath scrutinee) {
+        return inputs.at(scrutinee.position()) != null;
     }
 
     /**

@@ -5,10 +5,12 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * What the conditions of one behavior's body state, against the reading of its input.
@@ -62,8 +64,13 @@ record ConditionMeanings(souther.compiler.inputs.InputReading read) {
      * point and this is not.
      */
     OnTheWay entering(Core.Match match, int part, InputReads reads, ConditionNumbering numbering) {
-        return ReachingCuts.entering(match, match.cases().get(part), part, inputs(), reads, rules(),
-                numbering);
+        return ReachingCuts.entering(match, match.cases().get(part), part, read, reads, numbering);
+    }
+
+    /** What the arms of {@code match} leave its scrutinee, one answer per arm that narrows it
+     *  ({@link ReachingCuts#answersOf}). */
+    Set<CasesLeft> answersOf(Core.Match match, InputReads reads) {
+        return ReachingCuts.answersOf(match, inputs(), reads, rules());
     }
 
     /** What taking arm {@code part} of {@code attempt}, written at {@code at}, says of the input. */

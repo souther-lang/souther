@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.CasesLeft;
 
 /**
  * One condition a path consulted, and what it came out as.
@@ -42,17 +42,22 @@ public sealed interface DecidedCondition {
     }
 
     /**
-     * A subject read as one of its cases.
+     * A subject read as some of its cases.
      *
-     * @param to which values the arm the path took leaves at that subject
+     * @param to which values the arm the path took leaves at that subject, which is one of the
+     *           answers the fork has
      */
-    record Narrowed(DecisionCondition.ACase condition, Refinement to)
+    record Narrowed(DecisionCondition.ACase condition, CasesLeft to)
             implements DecidedCondition {
 
         public Narrowed {
             if (condition == null || to == null) {
                 throw new IllegalArgumentException(
                         "an answer about a subject is one of the cases it was read as");
+            }
+            if (!condition.answers().contains(to)) {
+                throw new IllegalArgumentException("an arm of a fork answers the fork's question: "
+                        + to + " is none of " + condition.answers());
             }
         }
     }
