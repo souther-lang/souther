@@ -2401,14 +2401,14 @@ public final class Generator {
                             new RepairShortfall.BackAtAGuardLookedPast(rest.get().refused()));
                 }
                 ArmProbe goneOn = rest.get().arm();
-                List<Way> ways = waysOn(seen, rest.get(), against);
+                List<WayPastTheGuard> ways = waysOn(seen, rest.get(), against);
                 RepairShortfall.WayPast[] came = new RepairShortfall.WayPast[ways.size()];
                 // Two ways that ask the row for the same things are one search, and what it came
                 // to is what both of them came to.
                 Map<List<HeldOutcome>, RepairShortfall.WayPast> asked = new HashMap<>();
                 GeneratedRow further = null;
                 for (int at : fewestFirst(ways)) {
-                    List<HeldOutcome> way = ((Way.Holding) ways.get(at)).demands();
+                    List<HeldOutcome> way = ((WayPastTheGuard.Holding) ways.get(at)).demands();
                     RepairShortfall.WayPast already = asked.get(way);
                     if (already != null) {
                         came[at] = already;
@@ -2448,7 +2448,8 @@ public final class Generator {
                 if (further == null) {
                     List<RepairShortfall.WayPast> each = new ArrayList<>();
                     for (int at = 0; at < ways.size(); at++) {
-                        each.add(ways.get(at) instanceof Way.Barred(RepairShortfall.Barrier why)
+                        each.add(ways.get(at)
+                                instanceof WayPastTheGuard.Barred(RepairShortfall.Barrier why)
                                 ? new RepairShortfall.WayPast.NotSearchable(why) : came[at]);
                     }
                     return Composed.stopping(best,
@@ -2480,10 +2481,10 @@ public final class Generator {
          * <p>Every way the reading wrote down is one of these, so none of them leaves the account
          * of what looking past the guard came to by being left out of the list.
          */
-        private sealed interface Way {
+        private sealed interface WayPastTheGuard {
 
             /** What holds every part of the way the row did not do. */
-            record Holding(List<HeldOutcome> demands) implements Way {
+            record Holding(List<HeldOutcome> demands) implements WayPastTheGuard {
 
                 public Holding {
                     demands = List.copyOf(demands);
@@ -2491,7 +2492,7 @@ public final class Generator {
             }
 
             /** Nothing here can hold a row to it, and why. */
-            record Barred(RepairShortfall.Barrier why) implements Way {}
+            record Barred(RepairShortfall.Barrier why) implements WayPastTheGuard {}
         }
 
         /**
@@ -2503,14 +2504,15 @@ public final class Generator {
          * changes the row least. Which is the order they are looked for in and nothing more; what
          * each came to is said in the order the reading wrote them.
          */
-        private static List<Integer> fewestFirst(List<Way> ways) {
+        private static List<Integer> fewestFirst(List<WayPastTheGuard> ways) {
             List<Integer> out = new ArrayList<>();
             for (int at = 0; at < ways.size(); at++) {
-                if (ways.get(at) instanceof Way.Holding) {
+                if (ways.get(at) instanceof WayPastTheGuard.Holding) {
                     out.add(at);
                 }
             }
-            out.sort(Comparator.comparingInt(at -> ((Way.Holding) ways.get(at)).demands().size()));
+            out.sort(Comparator.comparingInt(
+                    at -> ((WayPastTheGuard.Holding) ways.get(at)).demands().size()));
             return out;
         }
 
@@ -2532,9 +2534,9 @@ public final class Generator {
          *
          * <p>In the order the reading wrote them, one apiece.
          */
-        private List<Way> waysOn(AlignedObservation seen, TheRestOfTheBlock stopped,
-                                 Set<String> against) {
-            List<Way> out = new ArrayList<>();
+        private List<WayPastTheGuard> waysOn(AlignedObservation seen, TheRestOfTheBlock stopped,
+                                             Set<String> against) {
+            List<WayPastTheGuard> out = new ArrayList<>();
             for (List<ControlClaim> way : stopped.ways()) {
                 out.add(wayOn(seen, way, against));
             }
@@ -2542,7 +2544,8 @@ public final class Generator {
         }
 
         /** One of them. */
-        private Way wayOn(AlignedObservation seen, List<ControlClaim> way, Set<String> against) {
+        private WayPastTheGuard wayOn(AlignedObservation seen, List<ControlClaim> way,
+                                      Set<String> against) {
             List<HeldOutcome> demands = new ArrayList<>();
             for (ControlClaim each : way) {
                 if (each.satisfiedBy(seen)) {
@@ -2551,17 +2554,20 @@ public final class Generator {
                 Optional<HeldOutcome> holds = each.at() instanceof ControlPlace.Outcome outcome
                         ? holding.at(outcome) : Optional.empty();
                 if (holds.isEmpty()) {
-                    return new Way.Barred(RepairShortfall.Barrier.NOTHING_HOLDS_A_ROW_TO_IT);
+                    return new WayPastTheGuard.Barred(
+                            RepairShortfall.Barrier.NOTHING_HOLDS_A_ROW_TO_IT);
                 }
                 if (holds.get().demands().stream()
                         .anyMatch(demand -> writesAnyOf(demand, against))) {
-                    return new Way.Barred(RepairShortfall.Barrier.IT_WOULD_REWRITE_A_STATED_VALUE);
+                    return new WayPastTheGuard.Barred(
+                            RepairShortfall.Barrier.IT_WOULD_REWRITE_A_STATED_VALUE);
                 }
                 demands.add(holds.get());
             }
             return demands.isEmpty()
-                    ? new Way.Barred(RepairShortfall.Barrier.THE_ROW_ALREADY_DOES_ALL_OF_IT)
-                    : new Way.Holding(demands);
+                    ? new WayPastTheGuard.Barred(
+                            RepairShortfall.Barrier.THE_ROW_ALREADY_DOES_ALL_OF_IT)
+                    : new WayPastTheGuard.Holding(demands);
         }
 
         /** Whether holding the row to {@code demand} composes a parameter in {@code against}. */
