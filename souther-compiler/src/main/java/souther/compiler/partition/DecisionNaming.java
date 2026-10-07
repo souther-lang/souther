@@ -7,8 +7,8 @@ import souther.compiler.core.Core;
 import souther.compiler.flow.Arrival;
 import souther.compiler.flow.Naming;
 import souther.compiler.flow.Truth;
-import souther.compiler.flow.WhatAConditionRuns;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.WhatAConditionRuns;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 
@@ -224,9 +224,9 @@ final class DecisionNaming implements Naming<DecisionPath> {
             return way;
         }
         Set<ModelOccurrence> alwaysRun = new LinkedHashSet<>();
-        for (Core.Binary ran : WhatAConditionRuns.whenItCameOut(fork.cond(), part == 0)
-                .operators()) {
-            recordedAsItself(ran.right()).ifPresent(alwaysRun::add);
+        for (Core right : WhatAConditionRuns.whenItCameOut(fork.cond(), part == 0, reads,
+                meanings.states().symbols(), meanings.states().newtypes()).mayNotRun()) {
+            recordedAsItself(right).ifPresent(alwaysRun::add);
         }
         return way.seenAgain(shown -> shown instanceof ShownBy.ShortOf(var _, var notReached)
                 && alwaysRun.contains(notReached)

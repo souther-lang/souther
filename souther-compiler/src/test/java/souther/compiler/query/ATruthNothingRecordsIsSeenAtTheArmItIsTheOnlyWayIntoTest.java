@@ -102,6 +102,39 @@ class ATruthNothingRecordsIsSeenAtTheArmItIsTheOnlyWayIntoTest {
                 | (true, 1, 0) -> No
             """;
 
+    /** {@link #BOTH} with the condition given a name before the fork. */
+    private static final String BOTH_NAMED = """
+            module demo
+            data Yes
+            data No
+            behavior decides : (flag: Bool, n: Int) -> Yes | No
+            let decides (flag, n) = {
+                let ok = flag && n > 0
+                if ok then Yes else No
+            }
+            example decides
+                | (true, 1) -> Yes
+                | (false, 1) -> No
+                | (true, 0) -> No
+            """;
+
+    /** {@link #TWO_DEEP} with the inner operator given a name, which the outer one reads. */
+    private static final String TWO_DEEP_NAMED_INSIDE = """
+            module demo
+            data Yes
+            data No
+            behavior decides : (flag: Bool, n: Int, m: Int) -> Yes | No
+            let decides (flag, n, m) = {
+                let first = flag && n > 0
+                if first && m > 0 then Yes else No
+            }
+            example decides
+                | (true, 1, 1) -> Yes
+                | (false, 1, 1) -> No
+                | (true, 0, 1) -> No
+                | (true, 1, 0) -> No
+            """;
+
     /** The operator on the right of another, which runs it on every way into the {@code else}
      *  arm. */
     private static final String ON_THE_RIGHT = """
@@ -153,6 +186,25 @@ class ATruthNothingRecordsIsSeenAtTheArmItIsTheOnlyWayIntoTest {
     @Test
     void eachRowIsPlacedAtTheRuleThroughATruthSettledShortOfTheNearerOperand() {
         assertEveryRowIsPlacedAtItsOwnRule(TWO_DEEP, 4);
+    }
+
+    /**
+     * Giving the condition, or a part of it, a name does not change which rules a run is placed
+     * at.
+     *
+     * <p>Held to the inline form: the same rules, every row placed at one, and no condition of any
+     * rule left seen nowhere. A reading that looked for the operators in the condition as it is
+     * written found none behind a name, and left the truth the left settled seen nowhere.
+     */
+    @Test
+    void aConditionGivenANameIsPlacedAtAsWrittenOut() {
+        assertEquals(Set.copyOf(evidenceOf(BOTH).rules()),
+                Set.copyOf(evidenceOf(BOTH_NAMED).rules()), "the same rules, named or not");
+        assertEveryRowIsPlacedAtItsOwnRule(BOTH_NAMED, 3);
+        assertEquals(Set.copyOf(evidenceOf(TWO_DEEP).rules()),
+                Set.copyOf(evidenceOf(TWO_DEEP_NAMED_INSIDE).rules()),
+                "the same rules, a part named or not");
+        assertEveryRowIsPlacedAtItsOwnRule(TWO_DEEP_NAMED_INSIDE, 4);
     }
 
     @Test

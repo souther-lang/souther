@@ -266,14 +266,16 @@ class AShortCircuitOperatorsPathsToAValueAreItsOutcomesTest {
      */
     @Test
     void aTruthBesideAComparisonIsSeenAtTheArmItHoldsInto() {
-        assertEquals(List.of(List.of("Side", "Case")), reachKinds(read(UNREADABLE_LEFT, "fee")),
+        assertEquals(List.of(List.of("Side", Condition.Case.class.getSimpleName())),
+                reachKinds(read(UNREADABLE_LEFT, "fee")),
                 "the comparison and the flag, the flag seen at the arm");
     }
 
     /** The same with the flag on the right, which is the same way into the arm. */
     @Test
     void theTruthOnTheRightIsSeenTheSameWay() {
-        assertEquals(List.of(List.of("Side", "Case")), reachKinds(read(UNREADABLE_RIGHT, "fee")),
+        assertEquals(List.of(List.of("Side", Condition.Case.class.getSimpleName())),
+                reachKinds(read(UNREADABLE_RIGHT, "fee")),
                 "the comparison and the flag, the flag seen at the arm");
     }
 

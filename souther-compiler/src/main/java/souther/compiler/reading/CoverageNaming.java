@@ -12,11 +12,11 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.flow.Arrival;
 import souther.compiler.flow.Naming;
 import souther.compiler.flow.Truth;
-import souther.compiler.flow.WhatAConditionRuns;
 import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.ComparedNumbers;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.InputTruth;
+import souther.compiler.inputs.WhatAConditionRuns;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.types.ResolvedCase;
 import souther.compiler.inputs.PathResolution;
@@ -251,22 +251,51 @@ final class CoverageNaming implements Naming<Outcome> {
             return onlyWay.path();
         }
         ControlClaim claim = claimAt(armPoint(fork, part));
-        WhatAConditionRuns ran = WhatAConditionRuns.whenItCameOut(fork.cond(), part == 0);
+        WhatAConditionRuns ran = WhatAConditionRuns.whenItCameOut(fork.cond(), part == 0, reads,
+                symbols, newtypes);
         if (claim == null || !ran.whole()) {
             return null;
         }
         Outcome out = onlyWay.path();
         for (WhatAConditionRuns.Settled each : ran.settled()) {
-            InputTruth truth = InputTruth.of(each.part(), each.held(), reads, symbols, newtypes);
-            Outcome seen = truth == null ? side(each.part(), each.held())
-                    : one(new Decision(new Condition.Case(truth.at(),
-                            List.of(truth.held() ? "true" : "false")), claim));
-            out = seen == null ? null : join(out, seen);
+            // Each part read where it was written, which behind a name is not where the fork is.
+            InputTruth truth = InputTruth.of(each.part(), each.held(), each.reads(), symbols,
+                    newtypes);
+            if (truth != null) {
+                out = join(out, one(new Decision(new Condition.Case(truth.at(),
+                        List.of(truth.held() ? "true" : "false")), claim)));
+            } else if (!named(onlyWay.path(), each)) {
+                return null;
+            }
             if (out == null) {
                 return null;
             }
         }
         return out;
+    }
+
+    /**
+     * Whether {@code way} already says {@code part} came out the way it did — a comparison the
+     * walk named where it read it.
+     *
+     * <p>Asked of the way and not read again here. The walk read the comparison once, under what
+     * its names read where it stands, and the way is the one way the condition came out: a
+     * comparison on it the walk had words for is on it, and one it had none for is not, which is
+     * a part this has no words for either.
+     */
+    private static boolean named(Outcome way, WhatAConditionRuns.Settled part) {
+        if (!(Core.withoutStanding(part.part()) instanceof Core.Binary comparison)
+                || comparison.occurrence() == null) {
+            return false;
+        }
+        for (Decision each : way.holds()) {
+            if (each.constrains() instanceof Condition.Side side
+                    && side.statedAt().equals(comparison.occurrence())
+                    && side.held() == part.held()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** What {@code cond} coming out {@code holding} says a {@code Bool} position holds, or null

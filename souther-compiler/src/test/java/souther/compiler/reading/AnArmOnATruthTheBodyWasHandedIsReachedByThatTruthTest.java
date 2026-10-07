@@ -88,20 +88,79 @@ class AnArmOnATruthTheBodyWasHandedIsReachedByThatTruthTest {
      */
     @Test
     void anArmOnATruthAndAComparisonIsReachedByBoth() {
-        List<List<String>> underTheTruth = new ArrayList<>();
-        for (PathAccess each : armsOf("open && amount > 0").values()) {
-            if (each instanceof PathAccess.Ways ways && theModels(ways)
-                    && shapes(ways).contains("Case(open=true)")) {
-                underTheTruth.add(shapes(ways));
-            }
-        }
-        underTheTruth.sort(Comparator.comparing(List::toString));
         assertEquals(List.of(List.of("Side", "Case(open=true)", "Side"),
                         List.of("Side", "Case(open=true)", "Side"),
                         List.of("Side", "Case(open=true)")),
-                underTheTruth, () -> "the arm the fork takes on both holding, and the arms under"
-                        + " it, hold the truth and the comparisons: "
-                        + armsOf("open && amount > 0").values());
+                underTheTruth(armsOf("open && amount > 0")),
+                () -> "the arm the fork takes on both holding, and the arms under it, hold the"
+                        + " truth and the comparisons: " + armsOf("open && amount > 0").values());
+    }
+
+    /** The same condition given a name before the fork, which is the same condition. */
+    @Test
+    void anArmOnANamedConditionIsReachedAsOnTheConditionWrittenOut() {
+        Map<ArmProbe, PathAccess> named = armsIn(MODEL_NAMED.replace("CONDITION",
+                "open && amount > 0"));
+        assertEquals(underTheTruth(armsOf("open && amount > 0")), underTheTruth(named),
+                () -> "named, the arms are reached as written out: " + named.values());
+    }
+
+    /**
+     * And a part of the condition given a name, which the condition's operator reads: the part is
+     * what the name stands for, and a run down the arm brought each of its own parts out a known
+     * way.
+     */
+    @Test
+    void anArmOnAConditionWithANamedPartIsReachedAsOnTheConditionWrittenOut() {
+        Map<ArmProbe, PathAccess> named = armsIn(MODEL_NAMED_PART);
+        assertEquals(underTheTruth(armsOf("open && amount > 0 && amount > 5")),
+                underTheTruth(named),
+                () -> "a part named, the arms are reached as written out: " + named.values());
+    }
+
+    /** {@link #MODEL} with a part of the condition given a name before the fork. */
+    private static final String MODEL_NAMED_PART = """
+            module example.settle
+
+            data Big
+            data Small
+            data Shut
+
+            behavior settle : (open: Bool, amount: Int) -> Big | Small | Shut
+
+            let settle (open, amount) = {
+                let first = open && amount > 0
+                if first && amount > 5 then (if amount > 10 then Big else Small) else Shut
+            }
+            """;
+
+    /** {@link #MODEL} with the condition given a name before the fork. */
+    private static final String MODEL_NAMED = """
+            module example.settle
+
+            data Big
+            data Small
+            data Shut
+
+            behavior settle : (open: Bool, amount: Int) -> Big | Small | Shut
+
+            let settle (open, amount) = {
+                let ok = CONDITION
+                if ok then (if amount > 10 then Big else Small) else Shut
+            }
+            """;
+
+    /** The shapes of the ways into the model's arms that hold {@code open} true. */
+    private static List<List<String>> underTheTruth(Map<ArmProbe, PathAccess> arms) {
+        List<List<String>> out = new ArrayList<>();
+        for (PathAccess each : arms.values()) {
+            if (each instanceof PathAccess.Ways ways && theModels(ways)
+                    && shapes(ways).contains("Case(open=true)")) {
+                out.add(shapes(ways));
+            }
+        }
+        out.sort(Comparator.comparing(List::toString));
+        return out;
     }
 
     /**
@@ -141,8 +200,11 @@ class AnArmOnATruthTheBodyWasHandedIsReachedByThatTruthTest {
     }
 
     private static Map<ArmProbe, PathAccess> armsOf(String condition) {
-        Compilation compilation = Compilation.ofSource(MODEL.replace("CONDITION", condition),
-                "Main");
+        return armsIn(MODEL.replace("CONDITION", condition));
+    }
+
+    private static Map<ArmProbe, PathAccess> armsIn(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()
