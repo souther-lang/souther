@@ -2,7 +2,6 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
@@ -130,8 +129,150 @@ class SchemaEvolutionTest {
                         }"""));
     }
 
+    /**
+     * A condition that holds of more documents is a narrowing, though each part of it grew.
+     *
+     * <p>{@code {"k": "y"}} was outside the condition and owed nothing; with {@code y} added to what
+     * the condition allows it is inside it, and owes {@code m}, which it does not carry.
+     */
+    @Test
+    void aConditionThatHoldsOfMoreIsANarrowing() {
+        String shipped = """
+                {
+                  "if": { "required": ["k"], "properties": { "k": { "enum": ["x"] } } },
+                  "then": { "required": ["m"] }
+                }""";
+        assertEquals(List.of("/if: changed where a part accepting more can make the whole accept"
+                        + " less"),
+                narrowings(shipped, """
+                        {
+                          "if": { "required": ["k"], "properties": { "k": { "enum": ["x", "y"] } } },
+                          "then": { "required": ["m"] }
+                        }"""));
+        assertEquals(List.of("/if: changed where a part accepting more can make the whole accept"
+                        + " less"),
+                narrowings(shipped, """
+                        {
+                          "if": {
+                            "required": ["k"],
+                            "properties": { "k": { "enum": ["x"] }, "j": { "const": 1 } }
+                          },
+                          "then": { "required": ["m"] }
+                        }"""),
+                "and so is a key added to what the condition names");
+    }
+
+    /** A part under {@code not} accepting more is the whole refusing more. */
+    @Test
+    void whatANotAcceptsGrowingIsANarrowing() {
+        assertEquals(List.of("/not: changed where a part accepting more can make the whole accept"
+                        + " less"),
+                narrowings("""
+                        { "not": { "required": ["k", "m"] } }""", """
+                        { "not": { "required": ["k"] } }"""));
+    }
+
+    /**
+     * A branch of a {@code oneOf} may grow where no other branch can take what it takes, and not
+     * where one can.
+     */
+    @Test
+    void aBranchGrowsOnlyWhereNoOtherBranchCanShareADocument() {
+        String toldApart = """
+                {
+                  "required": ["kind"],
+                  "oneOf": [
+                    { "properties": { "kind": { "const": "a" }, "v": { "enum": ["x"] } } },
+                    { "properties": { "kind": { "const": "b" }, "v": { "enum": ["z"] } } }
+                  ]
+                }""";
+        assertEquals(List.of(), narrowings(toldApart, """
+                {
+                  "required": ["kind"],
+                  "oneOf": [
+                    { "properties": { "kind": { "const": "a" }, "v": { "enum": ["x", "z"] } } },
+                    { "properties": { "kind": { "const": "b" }, "v": { "enum": ["z"] } } }
+                  ]
+                }"""), "a document either branch takes says which by its kind");
+
+        String alike = """
+                {
+                  "oneOf": [
+                    { "properties": { "v": { "enum": ["x"] } } },
+                    { "properties": { "v": { "enum": ["z"] } } }
+                  ]
+                }""";
+        assertEquals(List.of("/oneOf/0: changed where a part accepting more can make the whole"
+                        + " accept less"),
+                narrowings(alike, """
+                        {
+                          "oneOf": [
+                            { "properties": { "v": { "enum": ["x", "z"] } } },
+                            { "properties": { "v": { "enum": ["z"] } } }
+                          ]
+                        }"""), "{\"v\": \"z\"} matched one branch and now matches both");
+    }
+
+    /**
+     * A definition a {@code not} reaches is as it shipped, even where it is reached elsewhere as
+     * well; one reached only where things may grow may grow.
+     */
+    @Test
+    void aDefinitionReachedWhereNothingMayGrowIsAsItShipped() {
+        String shipped = """
+                {
+                  "properties": { "a": { "$ref": "#/$defs/w" }, "b": { "$ref": "#/$defs/u" } },
+                  "not": { "properties": { "c": { "$ref": "#/$defs/v" } } },
+                  "$defs": {
+                    "w": { "enum": ["x"] },
+                    "v": { "$ref": "#/$defs/w" },
+                    "u": { "enum": ["x"] }
+                  }
+                }""";
+        assertEquals(List.of("/$defs/w: changed where a part accepting more can make the whole"
+                        + " accept less"),
+                narrowings(shipped, """
+                        {
+                          "properties": { "a": { "$ref": "#/$defs/w" }, "b": { "$ref": "#/$defs/u" } },
+                          "not": { "properties": { "c": { "$ref": "#/$defs/v" } } },
+                          "$defs": {
+                            "w": { "enum": ["x", "y"] },
+                            "v": { "$ref": "#/$defs/w" },
+                            "u": { "enum": ["x", "y"] }
+                          }
+                        }"""));
+    }
+
+    /** A key added to an object that admits others takes the key out of what held it before. */
+    @Test
+    void aKeyAddedToAnOpenObjectIsANarrowing() {
+        assertEquals(List.of("/properties/b: added to an object that admits other keys"),
+                narrowings("""
+                        {
+                          "properties": { "a": { "type": "string" } },
+                          "additionalProperties": { "type": "string" }
+                        }""", """
+                        {
+                          "properties": { "a": { "type": "string" }, "b": { "type": "integer" } },
+                          "additionalProperties": { "type": "string" }
+                        }"""));
+    }
+
+    /** A key a document carries named {@code description} is a key, not something said in prose. */
+    @Test
+    void aKeyNamedDescriptionIsCompared() {
+        assertEquals(List.of("/not: changed where a part accepting more can make the whole accept"
+                        + " less"),
+                narrowings("""
+                        { "not": { "properties": { "description": { "const": 1 } } } }""", """
+                        { "not": { "properties": { "description": { "const": 2 } } } }"""));
+    }
+
     private static List<String> narrowings(String current) {
-        JsonNode shipped = JSON.readTree(SHIPPED);
-        return SchemaEvolution.narrowings(shipped, JSON.readTree(current));
+        return narrowings(SHIPPED, current);
+    }
+
+    private static List<String> narrowings(String shipped, String current) {
+        return SchemaEvolution.narrowings(JSON.readTree(shipped), JSON.readTree(current));
     }
 }

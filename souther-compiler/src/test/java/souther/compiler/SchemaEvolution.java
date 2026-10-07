@@ -3,93 +3,314 @@ package souther.compiler;
 import tools.jackson.databind.JsonNode;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.IntPredicate;
 
 /**
  * Where a later copy of a schema accepts fewer documents than the copy that shipped.
  *
  * <p>The rule a frozen {@code schemaVersion} is held to (spec, the adequacy report's versioning): the
  * documents it accepts may grow and must not shrink. This is not a decision of that for JSON Schema
- * at large, and refuses to look like one. It knows the ways this repository grows a schema — a key
- * added to an object's {@code properties}, a definition added to {@code $defs}, a word added to an
- * {@code enum}, a key taken out of {@code required} — and the one thing that changes nothing a
- * document is held to, a {@code description}. Everything else has to be as it shipped. So a change
- * that grows the set in a way not listed here is named as a narrowing too, and is a decision
- * somebody makes here rather than one that passes unread.
+ * at large, and refuses to look like one. It lets a schema grow only where growing a part is shown
+ * to grow the whole, and asks everything else to be as it shipped, so a change it cannot show to be
+ * safe is named as a narrowing and is a decision somebody makes here rather than one that passes
+ * unread.
+ *
+ * <p><b>The ways a part grows.</b> A key taken out of {@code required}, a word added to an
+ * {@code enum}, a key added to the {@code properties} of an object that admits no others, and a
+ * {@code description} said differently, which changes nothing a document is held to.
+ *
+ * <p><b>Where a part growing grows the whole.</b> Only where the part is asked of a document the way
+ * the whole is: under {@code properties}, {@code items}, {@code allOf}, {@code anyOf}, {@code then},
+ * {@code else}, an {@code additionalProperties} that is a schema, a {@code contains} with no upper
+ * count, and a branch of a {@code oneOf} no other branch can share a document with. Anywhere else a
+ * part accepting more can make the whole accept less: a condition of an {@code if} that holds of more
+ * documents sends some of them to a {@code then} that refuses them, a {@code not} refuses whatever
+ * its part accepts, two branches of a {@code oneOf} that come to accept one document both refuse it,
+ * and a {@code contains} matching more can pass its {@code maxContains}. There a part has to be as it
+ * shipped, and so does every definition a {@code $ref} there reaches, since the reference is the
+ * same text whatever the definition says.
  */
 public final class SchemaEvolution {
+
+    /** Keywords whose value maps a name to something, so the names are not keywords. */
+    private static final Set<String> NAMING = Set.of(
+            "properties", "$defs", "patternProperties", "dependentSchemas", "dependentRequired");
+
+    private static final String DEFINITION = "#/$defs/";
 
     private SchemaEvolution() {
     }
 
     /** Each place {@code current} accepts less than {@code shipped} did, by its path from the root. */
     public static List<String> narrowings(JsonNode shipped, JsonNode current) {
+        Set<String> asShipped = definitionsReachedWhereNothingMayGrow(shipped);
+        asShipped.addAll(definitionsReachedWhereNothingMayGrow(current));
         List<String> out = new ArrayList<>();
-        compare(shipped, current, "", out);
+        compare(shipped, current, "", true, out);
+        JsonNode shippedDefinitions = shipped.path("$defs");
+        JsonNode currentDefinitions = current.path("$defs");
+        for (String name : shippedDefinitions.propertyNames()) {
+            String at = "/$defs/" + name;
+            if (!currentDefinitions.has(name)) {
+                out.add(at + ": no longer here");
+            } else {
+                compare(shippedDefinitions.get(name), currentDefinitions.get(name), at,
+                        !asShipped.contains(name), out);
+            }
+        }
         return out;
     }
 
-    private static void compare(JsonNode shipped, JsonNode current, String at, List<String> out) {
-        if (shipped.isObject() && current.isObject()) {
-            for (String key : shipped.propertyNames()) {
-                if (key.equals("description")) {
-                    continue;
+    /**
+     * Compares one schema with its later copy.
+     *
+     * @param mayGrow whether a part here accepting more makes the whole accept more; where it does
+     *                not, the two have to be alike apart from what they say about themselves
+     */
+    private static void compare(JsonNode shipped, JsonNode current, String at, boolean mayGrow,
+                                List<String> out) {
+        if (!shipped.isObject() || !current.isObject()) {
+            if (!alike(shipped, current)) {
+                out.add(at + ": " + shipped + " shipped and " + current + " now");
+            }
+            return;
+        }
+        if (!mayGrow) {
+            if (!alike(shipped, current)) {
+                out.add(at + ": changed where a part accepting more can make the whole accept less");
+            }
+            return;
+        }
+        for (String key : shipped.propertyNames()) {
+            if (key.equals("description") || key.equals("$defs")) {
+                continue;
+            }
+            String here = at + "/" + key;
+            if (!current.has(key)) {
+                out.add(here + ": no longer here");
+                continue;
+            }
+            JsonNode was = shipped.get(key);
+            JsonNode is = current.get(key);
+            switch (key) {
+                case "required" -> {
+                    Set<String> added = words(is);
+                    added.removeAll(words(was));
+                    if (!added.isEmpty()) {
+                        out.add(here + ": now requires " + added);
+                    }
                 }
-                String here = at + "/" + key;
-                if (!current.has(key)) {
-                    out.add(here + ": no longer here");
-                    continue;
+                case "enum" -> {
+                    Set<String> gone = words(was);
+                    gone.removeAll(words(is));
+                    if (!gone.isEmpty()) {
+                        out.add(here + ": no longer allows " + gone);
+                    }
                 }
-                switch (key) {
-                    // Fewer keys a document must carry is more documents.
-                    case "required" -> {
-                        Set<String> added = words(current.get(key));
-                        added.removeAll(words(shipped.get(key)));
-                        if (!added.isEmpty()) {
-                            out.add(here + ": now requires " + added);
+                case "properties" -> {
+                    for (String name : was.propertyNames()) {
+                        if (!is.has(name)) {
+                            out.add(here + "/" + name + ": no longer here");
+                        } else {
+                            compare(was.get(name), is.get(name), here + "/" + name, true, out);
                         }
                     }
-                    // More words a field may carry is more documents.
-                    case "enum" -> {
-                        Set<String> gone = words(shipped.get(key));
-                        gone.removeAll(words(current.get(key)));
-                        if (!gone.isEmpty()) {
-                            out.add(here + ": no longer allows " + gone);
-                        }
-                    }
-                    // Each name as it shipped, and names added beside them.
-                    case "properties", "$defs" -> {
-                        for (String name : shipped.get(key).propertyNames()) {
-                            if (!current.get(key).has(name)) {
-                                out.add(here + "/" + name + ": no longer here");
-                            } else {
-                                compare(shipped.get(key).get(name), current.get(key).get(name),
-                                        here + "/" + name, out);
+                    // A key added where the object admits no others was refused before and is
+                    // held to its own schema now. Where it admits others, the key was held to
+                    // what they are held to, and its own schema can be narrower.
+                    if (!(closed(shipped) && closed(current))) {
+                        for (String name : is.propertyNames()) {
+                            if (!was.has(name)) {
+                                out.add(here + "/" + name + ": added to an object that admits"
+                                        + " other keys");
                             }
                         }
                     }
-                    default -> compare(shipped.get(key), current.get(key), here, out);
                 }
+                case "items", "then", "else" -> compare(was, is, here, true, out);
+                case "additionalProperties" -> compare(was, is, here, was.isObject(), out);
+                case "contains" -> compare(was, is, here,
+                        !shipped.has("maxContains") && !current.has("maxContains"), out);
+                case "allOf", "anyOf" -> eachBranch(was, is, here, out, _ -> true);
+                case "oneOf" -> eachBranch(was, is, here, out,
+                        i -> exclusive(was, i, shipped) && exclusive(is, i, current));
+                default -> compare(was, is, here, false, out);
             }
-            for (String key : current.propertyNames()) {
-                if (!shipped.has(key) && !key.equals("description")) {
-                    out.add(at + "/" + key + ": not in what shipped");
-                }
-            }
-        } else if (shipped.isArray() && current.isArray()) {
-            if (shipped.size() != current.size()) {
-                out.add(at + ": " + shipped.size() + " entries shipped and " + current.size()
-                        + " now");
-                return;
-            }
-            for (int i = 0; i < shipped.size(); i++) {
-                compare(shipped.get(i), current.get(i), at + "/" + i, out);
-            }
-        } else if (!shipped.equals(current)) {
-            out.add(at + ": " + shipped + " shipped and " + current + " now");
         }
+        for (String key : current.propertyNames()) {
+            if (!shipped.has(key) && !key.equals("description")) {
+                out.add(at + "/" + key + ": not in what shipped");
+            }
+        }
+    }
+
+    private static void eachBranch(JsonNode was, JsonNode is, String at, List<String> out,
+                                   IntPredicate mayGrow) {
+        if (was.size() != is.size()) {
+            out.add(at + ": " + was.size() + " branches shipped and " + is.size() + " now");
+            return;
+        }
+        for (int i = 0; i < was.size(); i++) {
+            compare(was.get(i), is.get(i), at + "/" + i, mayGrow.test(i), out);
+        }
+    }
+
+    /**
+     * Whether no other branch of {@code branches} accepts a document branch {@code at} does.
+     *
+     * <p>Shown by a key the document must carry to match the branch, held there to one value no
+     * other branch allows: every other branch holds the same key to a different {@code const}. So a
+     * document the branch comes to accept carries that value and is refused by every other branch,
+     * and the {@code oneOf} still matches exactly one.
+     *
+     * @param owner the object the {@code oneOf} is a keyword of, whose {@code required} the branch is
+     *              asked under as well
+     */
+    private static boolean exclusive(JsonNode branches, int at, JsonNode owner) {
+        JsonNode branch = branches.get(at);
+        Set<String> required = words(branch.path("required"));
+        required.addAll(words(owner.path("required")));
+        for (String key : branch.path("properties").propertyNames()) {
+            JsonNode held = branch.get("properties").get(key);
+            if (!held.has("const") || !required.contains(key)) {
+                continue;
+            }
+            boolean onlyHere = true;
+            for (int other = 0; other < branches.size(); other++) {
+                JsonNode there = branches.get(other).path("properties").path(key);
+                if (other != at && !(there.has("const") && !there.get("const").equals(held.get("const")))) {
+                    onlyHere = false;
+                }
+            }
+            if (onlyHere) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Every definition some {@code $ref} reaches from a place nothing may grow, directly or through
+     * another such definition.
+     */
+    private static Set<String> definitionsReachedWhereNothingMayGrow(JsonNode schema) {
+        List<Reference> found = new ArrayList<>();
+        references(schema, true, found, "");
+        Set<String> out = new HashSet<>();
+        for (Reference each : found) {
+            if (!each.mayGrow()) {
+                out.add(each.definition());
+            }
+        }
+        boolean grew = true;
+        while (grew) {
+            grew = false;
+            for (Reference each : found) {
+                if (each.from() != null && out.contains(each.from()) && out.add(each.definition())) {
+                    grew = true;
+                }
+            }
+        }
+        return out;
+    }
+
+    /** One {@code $ref}: the definition it names, whether it stands where a part may grow, and the
+     *  definition it is written inside, or null for one outside every definition. */
+    private record Reference(String definition, boolean mayGrow, String from) {}
+
+    private static void references(JsonNode node, boolean mayGrow, List<Reference> out,
+                                   String from) {
+        if (node.isArray()) {
+            node.forEach(each -> references(each, mayGrow, out, from));
+            return;
+        }
+        if (!node.isObject()) {
+            return;
+        }
+        if (node.has("$ref") && node.get("$ref").asString().startsWith(DEFINITION)) {
+            out.add(new Reference(node.get("$ref").asString().substring(DEFINITION.length()),
+                    mayGrow, from.isEmpty() ? null : from));
+        }
+        for (String key : node.propertyNames()) {
+            JsonNode value = node.get(key);
+            switch (key) {
+                case "description", "$ref" -> {
+                }
+                case "$defs" -> {
+                    for (String name : value.propertyNames()) {
+                        references(value.get(name), true, out, name);
+                    }
+                }
+                case "properties" -> {
+                    for (String name : value.propertyNames()) {
+                        references(value.get(name), mayGrow, out, from);
+                    }
+                }
+                case "items", "then", "else", "allOf", "anyOf" ->
+                        references(value, mayGrow, out, from);
+                case "additionalProperties" -> references(value, mayGrow, out, from);
+                case "contains" ->
+                        references(value, mayGrow && !node.has("maxContains"), out, from);
+                case "oneOf" -> {
+                    for (int i = 0; i < value.size(); i++) {
+                        references(value.get(i), mayGrow && exclusive(value, i, node), out, from);
+                    }
+                }
+                default -> references(value, false, out, from);
+            }
+        }
+    }
+
+    /** Whether an object admits no keys but the ones it names. */
+    private static boolean closed(JsonNode schema) {
+        return schema.has("additionalProperties")
+                && schema.get("additionalProperties").isBoolean()
+                && !schema.get("additionalProperties").asBoolean();
+    }
+
+    /**
+     * Whether two parts of a schema hold a document to the same things: equal, apart from what
+     * either says about itself in a {@code description}.
+     *
+     * <p>A {@code description} is a keyword only where a keyword stands. Under a keyword that maps
+     * names to schemas the same word is the name of a key a document carries, and is compared.
+     */
+    private static boolean alike(JsonNode a, JsonNode b) {
+        return alike(a, b, false);
+    }
+
+    private static boolean alike(JsonNode a, JsonNode b, boolean names) {
+        if (a.isObject() && b.isObject()) {
+            Set<String> keys = new LinkedHashSet<>();
+            a.propertyNames().forEach(keys::add);
+            b.propertyNames().forEach(keys::add);
+            for (String key : keys) {
+                if (!names && key.equals("description")) {
+                    continue;
+                }
+                if (!a.has(key) || !b.has(key)
+                        || !alike(a.get(key), b.get(key), !names && NAMING.contains(key))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (a.isArray() && b.isArray()) {
+            if (a.size() != b.size()) {
+                return false;
+            }
+            for (int i = 0; i < a.size(); i++) {
+                if (!alike(a.get(i), b.get(i), false)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return a.equals(b);
     }
 
     private static Set<String> words(JsonNode array) {

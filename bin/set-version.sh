@@ -30,9 +30,11 @@ echo "Set Souther version to $version."
 # what it accepted then. Written once. A later release writing the same schemaVersion keeps the
 # copy rather than moving it, so a narrowing made in between cannot become the new starting point.
 if [[ "$version" != *-SNAPSHOT ]]; then
-  schema_version="$(grep -o 'int SCHEMA_VERSION = [0-9]*' \
-    souther-compiler/src/main/java/souther/compiler/report/AdequacyReport.java | grep -o '[0-9]*$')"
-  if [ -z "$schema_version" ]; then
+  # Asked as the condition, so that finding nothing reaches the message below rather than ending
+  # the script where pipefail first sees it.
+  if ! schema_version="$(grep -o 'int SCHEMA_VERSION = [0-9][0-9]*' \
+      souther-compiler/src/main/java/souther/compiler/report/AdequacyReport.java \
+      | grep -o '[0-9][0-9]*$')"; then
     echo "found no SCHEMA_VERSION in AdequacyReport.java" >&2
     exit 1
   fi
