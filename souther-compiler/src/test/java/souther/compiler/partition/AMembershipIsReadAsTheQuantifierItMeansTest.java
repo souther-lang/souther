@@ -7,6 +7,7 @@ import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
@@ -194,12 +195,13 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
         InputDomain inputs = COMPILATION.db().ask(new Adequacy.Inputs(module())).value()
                 .get(behavior);
         assertNotNull(inputs, "the model under test compiles");
+        InputReading reading = inputs.reading(rules());
         InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
-                ElementBindings.of(analysis, rules().newtypes()));
+                reading.declared(), ElementBindings.of(analysis, rules().newtypes()));
         List<OnTheWay> stated = ReachingCuts.stating(Condition.of(analysis.core(), reads,
                         rules().symbols(), rules().newtypes(),
                         new ConditionNumbering(module(), behavior)),
-                inputs.reading(rules()), holding);
+                reading, holding);
         assertEquals(1, stated.size(), () -> "one condition: " + stated);
         return stated.getFirst();
     }
