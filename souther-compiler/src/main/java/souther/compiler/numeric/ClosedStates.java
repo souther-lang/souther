@@ -1,5 +1,6 @@
 package souther.compiler.numeric;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -24,6 +25,13 @@ import java.util.function.Function;
  * {@link #NONE}, which keeps nothing, and is where a reader stays until somebody has measured a
  * repetition it owns.
  *
+ * <p>A question is a part of the rules that names no position another part names, because that is
+ * what one closure is: the rules together leave the product of what their parts leave
+ * ({@link ClosedState}). So rules that differ from rules asked before in some of their parts are
+ * lent the closure of every other part. Nothing here knows why two sets of rules share a part — a
+ * search fixing one position and leaving the rest, or two contexts reading one declaration — and
+ * nothing here needs to.
+ *
  * <p>Carried and not part of what a domain is. Two domains holding the same rules are the same
  * domain whichever of these they carry; what differs is only whether working the rules out is done
  * again.
@@ -34,11 +42,22 @@ import java.util.function.Function;
 public final class ClosedStates {
 
     /** Nothing kept: every domain works out what its rules leave for itself. */
-    public static final ClosedStates NONE = new ClosedStates(null, null);
+    public static final ClosedStates NONE = new ClosedStates(null, null, false);
+
+    /**
+     * Nothing kept, and every set of rules closed in one run rather than a part at a time
+     * ({@link ClosedState#closedTogether}).
+     *
+     * <p>For a test holding what a domain answers over the product of its parts to what it answers
+     * over the closure that product stands for — including the questions a domain is asked after
+     * the closure, about forms over positions of two parts. Nothing else asks for this: the two are
+     * one closure, and this one costs what the rules cost together.
+     */
+    static final ClosedStates IN_ONE_RUN = new ClosedStates(null, null, true);
 
     /** One closure per question, kept for as long as whatever holds this is held. */
     public static ClosedStates kept() {
-        return new ClosedStates(new ConcurrentHashMap<>(), new ConcurrentHashMap<>());
+        return new ClosedStates(new ConcurrentHashMap<>(), new ConcurrentHashMap<>(), false);
     }
 
     private final Map<ClosureQuestion<?>, ClosedState<?>> answers;
@@ -59,22 +78,41 @@ public final class ClosedStates {
 
     private final AtomicLong workedOut = new AtomicLong();
 
+    /** Whether the rules are closed in one run, which is {@link #IN_ONE_RUN} and nothing else. */
+    private final boolean inOneRun;
+
     private ClosedStates(Map<ClosureQuestion<?>, ClosedState<?>> answers,
-                         Map<CanonicalOrder<?>, Map<Set<?>, Map<?, Integer>>> places) {
+                         Map<CanonicalOrder<?>, Map<Set<?>, Map<?, Integer>>> places,
+                         boolean inOneRun) {
         this.answers = answers;
         this.places = places;
+        this.inOneRun = inOneRun;
     }
 
     /** What {@code rules} leave, spaced by {@code spacing} and walked in {@code order}. */
     <A> ClosedState<A> of(List<AffineConstraint<A>> rules, Function<A, Granularity> spacing,
                           CanonicalOrder<A> order) {
+        if (inOneRun) {
+            return ClosedState.closedTogether(rules, spacing, order);
+        }
         // Nothing kept, so nothing to state: the question is what a kept closure is found by, and a
         // closure that is not kept is worked out from what it was handed, as it always was.
         if (answers == null) {
             return ClosedState.of(rules, spacing, order);
         }
-        ClosureQuestion<A> question =
-                ClosureQuestion.of(rules, spacing, weighed -> placed(weighed, order));
+        // Asked a part at a time. A question is one closure on its own, and two sets of rules that
+        // differ only in some of their parts put the same question for every other part.
+        List<ClosureQuestion<A>> questions =
+                ClosureQuestion.independent(rules, spacing, weighed -> placed(weighed, order));
+        List<ClosedState<A>> closed = new ArrayList<>(questions.size());
+        for (ClosureQuestion<A> question : questions) {
+            closed.add(of(question));
+        }
+        return ClosedState.product(closed);
+    }
+
+    /** What {@code question} leaves, lent where it has been worked out before. */
+    private <A> ClosedState<A> of(ClosureQuestion<A> question) {
         // The cast holds because an entry is only ever put under the question it answers, and a
         // question over positions of type A is answered by a closure over the same positions.
         @SuppressWarnings("unchecked")

@@ -119,6 +119,42 @@ public final class DifferenceBounds<A> {
         return closing(between, above, below, positions);
     }
 
+    /**
+     * Closures over positions no two of them share, as the one closure of all their rules.
+     *
+     * <p>No edge runs from one of them into another, so no path does either, and closing their
+     * rules together composes exactly the hops each of them composed on its own. What is left is to
+     * hold the tables side by side — all three of them, and not only the {@link #relations}: a
+     * difference between positions of two of these is still answered through nought, out of one
+     * position's bound above and the other's bound below ({@link #differenceBound}).
+     *
+     * @throws IllegalArgumentException where two of them say something about one position, which
+     *         is a path from one into the other that neither of them closed
+     */
+    static <A> DifferenceBounds<A> product(List<DifferenceBounds<A>> parts) {
+        Map<A, Map<A, ExactCut>> related = new LinkedHashMap<>();
+        Map<A, ExactCut> above = new LinkedHashMap<>();
+        Map<A, ExactCut> below = new LinkedHashMap<>();
+        Set<A> positions = new LinkedHashSet<>();
+        boolean holdsNothing = false;
+        boolean everyHopWasComposed = true;
+        for (DifferenceBounds<A> part : parts) {
+            for (A position : part.positions) {
+                if (!positions.add(position)) {
+                    throw new IllegalArgumentException(
+                            "`" + position + "` is in two of the closures being put together");
+                }
+            }
+            related.putAll(part.related);
+            above.putAll(part.above);
+            below.putAll(part.below);
+            holdsNothing |= part.holdsNothing;
+            everyHopWasComposed &= part.everyHopWasComposed;
+        }
+        return new DifferenceBounds<>(related, above, below, positions, holdsNothing,
+                everyHopWasComposed);
+    }
+
     /** Whether this can hold what {@code constraint} says, in full — which is what the shapes above
      *  amount to, asked directly so that they can be pinned down. */
     static <A> boolean canHold(AffineConstraint<A> constraint, CanonicalOrder<A> order) {

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.AffineConstraint.Read;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -144,6 +145,33 @@ class OneClosureStandsForEveryQuestionEqualToItTest {
                 CanonicalOrder.asTheyAreSpelled());
 
         assertEquals(2, kept.workedOut());
+    }
+
+    /**
+     * A part of the rules is a question of its own, so rules that differ from rules asked before in
+     * one part are lent the closure of every other part.
+     *
+     * <p>Which is what a search placing values asks: the rules it walks with one position fixed at
+     * each value it tries. The part that position is in is asked again for every value, and the part
+     * it is not in is worked out once however many values are tried.
+     */
+    @Test
+    void rulesThatDifferInOnePartAreLentTheClosureOfTheOthers() {
+        ClosedStates kept = ClosedStates.kept();
+        List<AffineConstraint<String>> walked = List.of(
+                rule("a", 1, "b", -1, -2),
+                rule("c", 1, "d", -1, -3));
+        int tried = 50;
+
+        kept.of(walked, atom -> Granularity.DISCRETE, CanonicalOrder.asTheyAreSpelled());
+        for (int value = 0; value < tried; value++) {
+            List<AffineConstraint<String>> placed = new ArrayList<>(walked);
+            placed.add(rule("c", 1, "c", 0, -value));
+            kept.of(placed, atom -> Granularity.DISCRETE, CanonicalOrder.asTheyAreSpelled());
+        }
+
+        assertEquals(2 + tried, kept.workedOut(),
+                "the part no value was placed in was worked out again for a value placed elsewhere");
     }
 
     @Test
