@@ -39,6 +39,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * What a condition states about the subjects it is finally about, read off the tree where the
@@ -86,6 +87,15 @@ final class Pullback {
     private final Optional<ModelOccurrence> where;
     private final List<Leaf> leaves = new ArrayList<>();
     private final Set<TermPath> quantifying = new HashSet<>();
+    /**
+     * Where whether a container holds anything was asked, while what it holds is being read.
+     *
+     * <p>What a size of a position is read off is the expression that asked about it — the check or
+     * the comparison an author wrote — and not the position: a fork asking whether a list holds
+     * anything is answered for by whoever reads that question, and a position as a whole is no
+     * reader of it.
+     */
+    private Denotation askedAt;
     private int unread;
 
     private Pullback(InputReading read, Optional<ModelOccurrence> where) {
@@ -178,10 +188,11 @@ final class Pullback {
         if (stated.isPresent()) {
             WhatAnEmptinessTurnsOn.Checked checked = WhatAnEmptinessTurnsOn.checked(stated.get());
             if (checked != null) {
-                Proposition some = observe(checked.container(), AnswerAspect.EMPTINESS, reads);
+                Proposition some = asking(new Denotation(e, reads),
+                        () -> observe(checked.container(), AnswerAspect.EMPTINESS, reads));
                 return checked.emptyWhereItHolds() ? some.denied() : some;
             }
-            return leaf(compared(stated.get(), reads), e, reads);
+            return leaf(compared(stated.get(), fixed(e, reads), reads), e, reads);
         }
         AnOperationApplied applied = AnOperationApplied.of(e);
         if (applied != null) {
@@ -220,12 +231,16 @@ final class Pullback {
                 return observe(source, AnswerAspect.EMPTINESS, reads);
             }
         }
+        // What the container's holding anything is read off, or where reading it stopped, is the
+        // question that asked it, where something asked it.
+        Denotation asked = askedAt != null ? askedAt : new Denotation(e, reads);
         if (reads.pathOf(e, read.rules().newtypes()) instanceof PathResolution.At(TermPath held)) {
             Proposition some = holdsSomethingAt(held);
-            return some != null ? leaf(some, e, reads)
-                    : unread(e, reads, new OnTheWay.Why.SizeOfTheContainerNotStated());
+            return leaf(some != null ? some
+                    : unreadPart(new OnTheWay.Why.SizeOfTheContainerNotStated(),
+                            fixed(e, reads)), asked);
         }
-        return unread(e, reads, new OnTheWay.Why.NoWordsForTheShape());
+        return leaf(unreadPart(new OnTheWay.Why.NoWordsForTheShape(), fixed(e, reads)), asked);
     }
 
     /** What an optional that is no binding, name or choice holding a value states. */
@@ -277,7 +292,11 @@ final class Pullback {
             } else if (subject != null) {
                 selects = new Proposition.InCases(subject, CasesLeft.selectedBy(arm.pattern()), true);
             } else {
-                return unread(match, reads, new OnTheWay.Why.ForkArmNotReadAsANarrowing());
+                // Which arm is taken is the match's own reader's to classify, and no part offered
+                // here: what is read is what the arms answer. Not the same whatever the input even
+                // over values the source wrote out, since what is matched is one of several of them
+                // and each may take another arm — one alone is settled above.
+                selects = unreadPart(new OnTheWay.Why.ForkArmNotReadAsANarrowing(), false);
             }
             List<Proposition> arrives = new ArrayList<>(before.stream()
                     .map(Proposition::denied).toList());
@@ -307,8 +326,7 @@ final class Pullback {
         if (over == null || handed == null) {
             return null;
         }
-        Proposition some = someElement(over, handed, law.ofTheClosure(), law.elementParam(), e,
-                reads);
+        Proposition some = someElement(over, handed, law.ofTheClosure(), e, reads);
         return law.result().holds() ? some : some.denied();
     }
 
@@ -316,23 +334,24 @@ final class Pullback {
      * Some element of {@code over}, handed to the closure at {@code handed}, making it answer as
      * {@code witness}.
      */
-    private Proposition someElement(Core over, Core handed, SideAnswered witness, int elementParam,
-                                    Core e, InputReads reads) {
+    private Proposition someElement(Core over, Core handed, SideAnswered witness, Core e,
+                                    InputReads reads) {
         Denotation closure = reads.denotes(handed, read.rules().symbols(), read.rules().newtypes());
         if (!(Core.withoutStanding(closure.value()) instanceof Core.Block block)) {
             return unread(e, reads, new OnTheWay.Why.NoWordsForTheShape());
         }
         Denotation container = reads.standing(over, read.rules().symbols(),
                 read.rules().newtypes());
-        // A container the source wrote out is its elements, each handed to the closure in turn.
+        // A container the source wrote out has no element where it is empty. Otherwise what the
+        // closure is handed is one of the written values, which is how the reading of the input
+        // reads its parameter ({@code ReadMeaning.OneOf}) for every reader of the closure: what it
+        // states of the input is what it states of any of them.
         if (Core.withoutStanding(container.value()) instanceof Core.ListLit list) {
-            List<Proposition> each = new ArrayList<>();
-            for (Core element : list.elements()) {
-                InputReads handedOne = closure.at().and(block.params().get(elementParam), element);
-                Proposition answered = observe(block.body(), witness.aspect(), handedOne);
-                each.add(witness.holds() ? answered : answered.denied());
+            if (list.elements().isEmpty()) {
+                return new Proposition.Always(false);
             }
-            return Proposition.any(each);
+            Proposition answered = observe(block.body(), witness.aspect(), closure.at());
+            return witness.holds() ? answered : answered.denied();
         }
         if (!(reads.pathOf(over, read.rules().newtypes()) instanceof PathResolution.At(
                 TermPath held))) {
@@ -356,7 +375,7 @@ final class Pullback {
                 return ofTheElement;
             }
             Proposition some = holdsSomethingAt(held);
-            return some != null ? leaf(some, over, reads)
+            return some != null ? leaf(some, new Denotation(e, reads))
                     : unread(over, reads, new OnTheWay.Why.SizeOfTheContainerNotStated());
         }
         return new Proposition.Some(held, ofTheElement, true);
@@ -424,7 +443,7 @@ final class Pullback {
      * <p>Off the same readings the arithmetic and a stopped reading are read by everywhere a
      * comparison is, so what it states here is what a border on it is drawn at.
      */
-    private Proposition compared(StatedComparison comparison, InputReads reads) {
+    private Proposition compared(StatedComparison comparison, boolean fixed, InputReads reads) {
         InputTruth truth = InputTruth.compared(comparison, true, reads, read.rules().symbols(),
                 read.rules().newtypes());
         if (truth != null) {
@@ -436,7 +455,7 @@ final class Pullback {
                 LinearForm<NumericTerm> against =
                         affine.form().minus(LinearForm.constant(affine.cut())).orNull();
                 if (against == null) {
-                    yield unreadPart(new OnTheWay.Why.ComparisonNotRepresentedAsACut(), false);
+                    yield unreadPart(new OnTheWay.Why.ComparisonNotRepresentedAsACut(), fixed);
                 }
                 Rel proposition = states.orItsDenial();
                 yield new Proposition.Compared(new Relation.Affine(
@@ -445,11 +464,11 @@ final class Pullback {
             case AffineReading.OfAComparison.CutsNothing constant ->
                     new Proposition.Always(constant.holds(comparison.claim().statedRelation()));
             case AffineReading.OfAComparison.NotHeld _ ->
-                    unreadPart(new OnTheWay.Why.ComparisonNotRepresentedAsACut(), false);
+                    unreadPart(new OnTheWay.Why.ComparisonNotRepresentedAsACut(), fixed);
             case AffineReading.OfAComparison.Stopped _ -> {
                 ComparedLine drawn = ComparedLine.asWritten(comparison, read, reads);
                 if (drawn == null) {
-                    yield unreadPart(new OnTheWay.Why.ComparisonNotRepresentedAsACut(), false);
+                    yield unreadPart(new OnTheWay.Why.ComparisonNotRepresentedAsACut(), fixed);
                 }
                 Rel states = drawn.claim().statedRelation();
                 Rel proposition = states.orItsDenial();
@@ -462,16 +481,47 @@ final class Pullback {
 
     /** {@code part}, kept with the expression it was read off. */
     private Proposition leaf(Proposition part, Core from, InputReads reads) {
+        return leaf(part, new Denotation(from, reads));
+    }
+
+    private Proposition leaf(Proposition part, Denotation from) {
         if (!(part instanceof Proposition.Always)) {
-            leaves.add(new Leaf(part, new Denotation(from, reads)));
+            leaves.add(new Leaf(part, from));
         }
         return part;
     }
 
+    /** {@code reading}, with whether a container holds anything asked at {@code where}. */
+    private Proposition asking(Denotation where, Supplier<Proposition> reading) {
+        Denotation outer = askedAt;
+        askedAt = where;
+        try {
+            return reading.get();
+        } finally {
+            askedAt = outer;
+        }
+    }
+
     /** {@code e}, which nothing here reads the meaning of. */
     private Proposition unread(Core e, InputReads reads, OnTheWay.Why why) {
-        return leaf(unreadPart(why, reads.writtenOut(e, read.rules().symbols(),
-                read.rules().newtypes())), e, reads);
+        return leaf(unreadPart(why, fixed(e, reads)), e, reads);
+    }
+
+    /**
+     * Whether {@code e} is the same whatever the input, as far as what it is made of says: a value
+     * written out, or an operator or an operation applied to values written out.
+     */
+    private boolean fixed(Core standing, InputReads reads) {
+        Core e = Core.withoutStanding(standing);
+        if (reads.writtenOut(e, read.rules().symbols(), read.rules().newtypes())) {
+            return true;
+        }
+        if (e instanceof Core.Binary binary) {
+            return fixed(binary.left(), reads) && fixed(binary.right(), reads);
+        }
+        AnOperationApplied applied = AnOperationApplied.of(e);
+        return applied != null && applied.args().stream().allMatch(arg -> reads.writtenOut(arg,
+                read.rules().symbols(), read.rules().newtypes()));
     }
 
     private Proposition unreadPart(OnTheWay.Why why, boolean fixed) {

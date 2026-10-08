@@ -269,10 +269,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.Pullback.truth",
                     "the composition of what a condition states, joined as the proposition the"
                             + " two halves make"),
-            new Held("souther.compiler.partition.TruthOutcomes.Reading.truth",
-                    "the composition inside an operation's predicate and arguments, where a"
-                            + " condition's shape stops, combined as the answers each side can"
-                            + " give"),
             new Held("souther.compiler.partition.ClauseStatements.walk",
                     "walks into both halves, and stops where the connective composes either of"
                             + " them because what such a rule states is neither of its sides"),

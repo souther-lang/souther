@@ -161,8 +161,7 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
                                      SideAnswered result,
                                      SideAnswered ofTheClosure,
                                      DeclaredArgument container,
-                                     DeclaredArgument closure,
-                                     int elementParam)
+                                     DeclaredArgument closure)
             implements OneAboutAnOperation {}
 
     /** The predicate is stated over a projection of each element, and {@code projection} is where

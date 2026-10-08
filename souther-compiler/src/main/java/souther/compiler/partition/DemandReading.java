@@ -182,7 +182,7 @@ final class DemandReading {
     private static List<Read> settled(Core value, InputReads reads, InputReading read,
                                       boolean holding) {
         TruthOutcomes.Outcomes outcomes = TruthOutcomes.ofTheTruth(value,
-                WhatNamesStandFor.in(reads, read), read.rules().symbols());
+                WhatNamesStandFor.in(reads, read));
         return outcomes.always(holding) || outcomes.always(!holding)
                 ? List.of(new Read.Settled(outcomes.always(holding))) : null;
     }

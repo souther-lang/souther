@@ -8101,8 +8101,8 @@
           "obligationId" : {
             "behavior" : "送料を出す",
             "conditions" : [ {
-              "kind" : "not_read",
-              "condition" : "condition 3 of `送料を出す`",
+              "kind" : "comparison",
+              "condition" : "GE LinearForm[constant=-12, coefs={Time.hour(指示.集荷時刻)=1}]",
               "outcome" : "held"
             }, {
               "kind" : "case",
@@ -8111,14 +8111,13 @@
             } ]
           },
           "taken" : false,
-          "requirement" : "unsettled",
-          "because" : "a_composed_row_was_short_of_the_way"
+          "requirement" : "required"
         }, {
           "obligationId" : {
             "behavior" : "送料を出す",
             "conditions" : [ {
-              "kind" : "not_read",
-              "condition" : "condition 3 of `送料を出す`",
+              "kind" : "comparison",
+              "condition" : "GE LinearForm[constant=-12, coefs={Time.hour(指示.集荷時刻)=1}]",
               "outcome" : "denied"
             }, {
               "kind" : "case",
@@ -8131,8 +8130,8 @@
           "obligationId" : {
             "behavior" : "送料を出す",
             "conditions" : [ {
-              "kind" : "not_read",
-              "condition" : "condition 3 of `送料を出す`",
+              "kind" : "comparison",
+              "condition" : "GE LinearForm[constant=-12, coefs={Time.hour(指示.集荷時刻)=1}]",
               "outcome" : "held"
             }, {
               "kind" : "case",
@@ -8145,8 +8144,8 @@
           "obligationId" : {
             "behavior" : "送料を出す",
             "conditions" : [ {
-              "kind" : "not_read",
-              "condition" : "condition 3 of `送料を出す`",
+              "kind" : "comparison",
+              "condition" : "GE LinearForm[constant=-12, coefs={Time.hour(指示.集荷時刻)=1}]",
               "outcome" : "denied"
             }, {
               "kind" : "case",
@@ -8160,8 +8159,8 @@
           "obligationId" : {
             "behavior" : "送料を出す",
             "conditions" : [ {
-              "kind" : "not_read",
-              "condition" : "condition 3 of `送料を出す`",
+              "kind" : "comparison",
+              "condition" : "GE LinearForm[constant=-12, coefs={Time.hour(指示.集荷時刻)=1}]",
               "outcome" : "held"
             }, {
               "kind" : "case",
@@ -8170,14 +8169,13 @@
             } ]
           },
           "taken" : false,
-          "requirement" : "unsettled",
-          "because" : "a_composed_row_was_short_of_the_way"
+          "requirement" : "required"
         }, {
           "obligationId" : {
             "behavior" : "送料を出す",
             "conditions" : [ {
-              "kind" : "not_read",
-              "condition" : "condition 3 of `送料を出す`",
+              "kind" : "comparison",
+              "condition" : "GE LinearForm[constant=-12, coefs={Time.hour(指示.集荷時刻)=1}]",
               "outcome" : "denied"
             }, {
               "kind" : "case",
@@ -8730,13 +8728,47 @@
         "obligationId" : {
           "behavior" : "送料を出す",
           "conditions" : [ {
-            "kind" : "not_read",
-            "condition" : "condition 3 of `送料を出す`",
+            "kind" : "comparison",
+            "condition" : "GE LinearForm[constant=-12, coefs={Time.hour(指示.集荷時刻)=1}]",
+            "outcome" : "held"
+          }, {
+            "kind" : "case",
+            "condition" : "指示.区分",
+            "outcome" : "通常"
+          } ]
+        },
+        "code" : "E1935"
+      }, {
+        "kind" : "decision_rule_uncovered",
+        "disposition" : "refused",
+        "subject" : "送料を出す",
+        "obligationId" : {
+          "behavior" : "送料を出す",
+          "conditions" : [ {
+            "kind" : "comparison",
+            "condition" : "GE LinearForm[constant=-12, coefs={Time.hour(指示.集荷時刻)=1}]",
             "outcome" : "denied"
           }, {
             "kind" : "case",
             "condition" : "指示.区分",
             "outcome" : "速達"
+          } ]
+        },
+        "code" : "E1935"
+      }, {
+        "kind" : "decision_rule_uncovered",
+        "disposition" : "refused",
+        "subject" : "送料を出す",
+        "obligationId" : {
+          "behavior" : "送料を出す",
+          "conditions" : [ {
+            "kind" : "comparison",
+            "condition" : "GE LinearForm[constant=-12, coefs={Time.hour(指示.集荷時刻)=1}]",
+            "outcome" : "held"
+          }, {
+            "kind" : "case",
+            "condition" : "指示.区分",
+            "outcome" : "冷蔵"
           } ]
         },
         "code" : "E1935"
