@@ -155,6 +155,41 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation answers a map every key of which is a key {@code map} was keyed by — the same
+     * value, filed under in the answer as it was there.
+     *
+     * <p>Its own statement and not something a reader works out from the elements. What
+     * {@link BuildsItsResultFrom} says is where the values came from, and a map whose values a
+     * closure rewrote keeps every key it had ({@code Map.mapValues}), while an answer holding the
+     * very values of a map may hold them under keys it did not have. So which keys an answer has is
+     * said here, of the operations that keep them, and a key is followed into an answer only where
+     * this says so.
+     */
+    record KeepsTheKeysOf(ArgumentRef map) implements OperationFact {
+
+        public KeepsTheKeysOf {
+            Objects.requireNonNull(map, "this one names the map the keys were kept from");
+        }
+    }
+
+    /**
+     * The operation answers a list of what {@code map} holds: its keys, its values, or its entries
+     * as pairs of a key and the value filed under it.
+     *
+     * <p>Which part is what a reader of an element of the answer needs, and it is not the elements
+     * of the map: a map's element is its value, and a list of its keys holds none of those. So this
+     * is its own statement rather than a {@link BuildsItsResultFrom}, which says an answer holds an
+     * argument's elements.
+     */
+    record ListsAPartOf(ArgumentRef map, MapPart part) implements OperationFact {
+
+        public ListsAPartOf {
+            Objects.requireNonNull(map, "this one names the map listed");
+            Objects.requireNonNull(part, "and which of what it holds");
+        }
+    }
+
+    /**
      * The operation answers what {@code container} holds accumulated: started from an identity and
      * carried through one step over what it has so far and an element, both of the type it answers.
      *

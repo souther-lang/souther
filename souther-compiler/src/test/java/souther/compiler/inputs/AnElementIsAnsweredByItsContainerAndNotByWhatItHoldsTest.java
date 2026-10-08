@@ -153,7 +153,8 @@ class AnElementIsAnsweredByItsContainerAndNotByWhatItHoldsTest {
 
     /** {@code ELEMENT} handed an element of {@code container}, and nothing else recorded. */
     private static ElementBindings handedAnElementOf(Core container) {
-        return new ElementBindings(Map.of(ELEMENT, List.of(container)), Map.of(),
+        return new ElementBindings(
+                Map.of(ELEMENT, List.of(new HeldIn(container, HeldIn.Part.ELEMENT))), Map.of(),
                 ElementProvenance.NONE, Map.of());
     }
 }

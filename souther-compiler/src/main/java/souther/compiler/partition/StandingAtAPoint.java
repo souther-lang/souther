@@ -80,7 +80,7 @@ public final class StandingAtAPoint {
          *
          * @param why   what the readings that were made came to nothing by, which is empty where
          *              every one of them was read and the search is what stopped
-         * @param tried whether every reading the row's steps allow was one this tried
+         * @param tried whether every reading the row's containers allow was one this tried
          */
         record CouldNotTell(Set<ReadingGap> why, ReadingsTried tried) implements Met {
 
@@ -107,7 +107,7 @@ public final class StandingAtAPoint {
     }
 
     /**
-     * Whether every reading a row's steps allow was one a point was tried against.
+     * Whether every reading a row's containers allow was one a point was tried against.
      *
      * <p>What a bounded search may conclude turns on this. A reading standing at the point settles
      * the point however few were tried — one is what the question asks for — and a point no reading
@@ -116,16 +116,16 @@ public final class StandingAtAPoint {
      * tells the two apart.
      *
      * <p><b>Said by the walk that stopped.</b> Which figure a walk stopped at is the walk's own
-     * answer and nothing downstream can work it out: a reading count short of the steps is short
-     * for whatever reason, and a reader deriving the reason from the shortfall names a figure
+     * answer and nothing downstream can work it out: a reading count short of the containers is
+     * short for whatever reason, and a reader deriving the reason from the shortfall names a figure
      * wherever a walk fell short of one it never reached. So this is built where the readings are
      * and travels from there, the way a decision reading says it stopped at a figure rather than
      * leaving its length to be read.
      */
     public sealed interface ReadingsTried {
 
-        /** Every reading the steps allow was tried, so what none of them stands at, none stands
-         *  at. */
+        /** Every reading the containers allow was tried, so what none of them stands at, none
+         *  stands at. */
         record EveryOne() implements ReadingsTried {}
 
         /**
@@ -170,8 +170,8 @@ public final class StandingAtAPoint {
             // is one element standing there. Asked for one value, such a row answered with none and
             // every point on such a line came back undecided — a measurement that could not look,
             // said of a row that wrote the values plainly.
-            // The first run of the row says which steps the line's positions take, and the readings
-            // are tried under each choice those steps allow.
+            // The first run of the row says which containers the line's positions are inside, and
+            // the readings are tried under each choice of an element of each.
             boolean stands = false;
             Set<ReadingGap> stopped = new LinkedHashSet<>();
             Readings readings = readings(where, one, quantity);
@@ -382,7 +382,7 @@ public final class StandingAtAPoint {
          *
          * <p>No choosing and nothing recorded to choose between. A number taken over a run is over
          * all of them, so there is no element for a reading to have picked and no second reading to
-         * try — which is why this is one answer for both walks and names no step.
+         * try — which is why this is one answer for both walks and names no container.
          *
          * <p>An empty run is a row that wrote no element, and a total over nothing is what the walk
          * starts from rather than a value nobody could read. So the row is not marked as having
@@ -399,20 +399,21 @@ public final class StandingAtAPoint {
     /**
      * The walk a row's readings are found by.
      *
-     * <p>How many elements each step holds is what says how many readings of the row there are, and
-     * only reading the row says it: which positions a line is over is the quantity's to name as it
-     * asks. So the row is walked once choosing nothing, and what it met at each step is this walk's
-     * answer — settled when the walk is over, and no reading made from it writes to it.
+     * <p>How many elements each container holds is what says how many readings of the row there
+     * are, and only reading the row says it: which positions a line is over is the quantity's to
+     * name as it asks. So the row is walked once choosing nothing, and what it met in each container
+     * is this walk's answer — settled when the walk is over, and no reading made from it writes to
+     * it.
      *
      * <p>Choosing nothing, the value it takes at a position is the first the row wrote there. That
-     * makes it the reading of the row wherever the positions take no steps; where they take steps
-     * it is a walk made to find them and none of the readings it finds.
+     * makes it the reading of the row wherever the positions are inside no container; where they are
+     * inside one it is a walk made to find them and none of the readings it finds.
      */
     private static final class DiscoveringRow extends WalkOfARow {
 
-        /** How many elements each step was found to hold, in the order the walk met them, which is
-         *  the order the readings are taken in. */
-        private final Map<TermPath, Integer> steps = new LinkedHashMap<>();
+        /** How many elements each container was found to hold, in the order the walk met them,
+         *  which is the order the readings are taken in. */
+        private final Map<TermPath, Integer> containers = new LinkedHashMap<>();
 
         DiscoveringRow(BehaviorInputs where, ObservedInputs observedInputs) {
             super(where, observedInputs);
@@ -420,44 +421,45 @@ public final class StandingAtAPoint {
 
         @Override
         ObservationAtPoint standingAmong(List<BehaviorInputs.Occurrence> values) {
-            // Each occurrence's steps outermost first, so that the order the steps are first met in
-            // is the order they nest in and the readings built over them are tried in one order.
+            // Each occurrence's containers outermost first, so that the order the containers are
+            // first met in is the order they nest in and the readings built over them are tried in
+            // one order.
             for (BehaviorInputs.Occurrence each : values) {
                 for (ElementsTaken.Taken taken : each.at().outermostFirst()) {
-                    steps.merge(taken.step(), taken.element() + 1, Math::max);
+                    containers.merge(taken.container(), taken.element() + 1, Math::max);
                 }
             }
             // Nothing is chosen, so nothing here is ruled out and the first of them is the answer.
-            // Where there is more than one the position is inside a container, the steps are not
-            // empty, and this walk is no reading of the row: which of them it took is read by
+            // Where there is more than one the position is inside a container, the containers are
+            // not empty, and this walk is no reading of the row: which of them it took is read by
             // nobody.
             return new ObservationAtPoint.Value(values.getFirst().value());
         }
 
-        /** What the steps hold, as of a walk that is over. */
-        Map<TermPath, Integer> steps() {
-            return Collections.unmodifiableMap(new LinkedHashMap<>(steps));
+        /** What the containers hold, as of a walk that is over. */
+        Map<TermPath, Integer> containers() {
+            return Collections.unmodifiableMap(new LinkedHashMap<>(containers));
         }
     }
 
     /**
-     * One row's values under one reading of it: an element chosen at each step inside a container
-     * the line's positions take.
+     * One row's values under one reading of it: an element chosen in each container the line's
+     * positions are inside.
      *
      * <p>A row standing at a point is one of its readings standing there, and a reading has to be
      * one: two positions under one person are that person's two values, and offering the first
      * person's age beside the second person's status would have a row stand at a point neither
-     * element is at. So an element is chosen per step and every position takes the one chosen for
-     * the steps it shares — the same rule a pair of classes is read by, since it is the same
-     * question.
+     * element is at. So an element is chosen per container and every position takes the one chosen
+     * for the containers it is inside — the same rule a pair of classes is read by, since it is the
+     * same question. A map's key and its value are inside the same map, so they take one entry.
      *
      * <p>Which readings there are is not known before the quantity has asked, since which positions
      * a line is over is its to say. So {@link DiscoveringRow} asks it once and every choice the
-     * steps it found allow is a reading made here, tried until one stands or they are used up.
+     * containers it found allow is a reading made here, tried until one stands or they are used up.
      */
     private static final class OneReadingOfARow extends WalkOfARow {
 
-        /** The element chosen at each step, for this reading. */
+        /** The element chosen in each container, for this reading. */
         private final Map<TermPath, Integer> chosen;
 
         OneReadingOfARow(BehaviorInputs where, ObservedInputs observedInputs,
@@ -493,36 +495,37 @@ public final class StandingAtAPoint {
     /**
      * The readings of one row a point is tried against.
      *
-     * <p>The row is read before the readings of it are known: which steps the line's positions take
-     * is the quantity's to say as it reads them, so it says so by reading the row once. Every choice
-     * those steps allow follows, and the steps are spent here: what a caller has after this is the
-     * readings and what the walk that built them says, neither of which is the steps again.
+     * <p>The row is read before the readings of it are known: which containers the line's positions
+     * are inside is the quantity's to say as it reads them, so it says so by reading the row once.
+     * Every choice those containers allow follows, and the containers are spent here: what a caller
+     * has after this is the readings and what the walk that built them says, neither of which is the
+     * containers again.
      *
      * <p>Read and asked nothing, because reading the row is the whole of what that run is for. What
      * it read is kept and handed back with the readings: a reading of a row answers both what its
-     * numbers are and whether they stand where a line is, so the walk made to find the steps is a
-     * walk neither question has to make again.
+     * numbers are and whether they stand where a line is, so the walk made to find the containers is
+     * a walk neither question has to make again.
      */
     static Readings readings(BehaviorInputs where, ObservedInputs observed,
                              BorderQuantity quantity) {
         DiscoveringRow discovering = new DiscoveringRow(where, observed);
         QuantityReading discovery = quantity.read(discovering);
-        Map<TermPath, Integer> steps = discovering.steps();
+        Map<TermPath, Integer> containers = discovering.containers();
         List<OneReadingOfARow> out = new ArrayList<>();
-        for (Map<TermPath, Integer> choice : readingsOver(steps)) {
+        for (Map<TermPath, Integer> choice : readingsOver(containers)) {
             out.add(new OneReadingOfARow(where, observed, choice));
         }
-        // The reading the steps were found by, where it is also a reading the point is tried
-        // against. Where the row's positions take no steps there is one choice and it is the empty
-        // one, which is the choice this was read under — the same row, the same quantity, the same
-        // elements chosen — so it is the reading of it. Where they take steps, every choice names an
-        // element and a reading that names one is not the reading that names none.
-        List<QuantityReading> made = steps.isEmpty() ? List.of(discovery) : List.of();
+        // The reading the containers were found by, where it is also a reading the point is tried
+        // against. Where the row's positions are inside no container there is one choice and it is
+        // the empty one, which is the choice this was read under — the same row, the same quantity,
+        // the same elements chosen — so it is the reading of it. Where they are inside one, every
+        // choice names an element and a reading that names one is not the reading that names none.
+        List<QuantityReading> made = containers.isEmpty() ? List.of(discovery) : List.of();
         // Said by the walk that stopped, which is the only thing that knows it stopped. Worked out
-        // afterwards from how many readings came back, a walk that was cut short and one the steps
-        // never had more than are one answer, and whichever word is chosen for the pair is wrong
-        // about the other.
-        return new Readings(quantity, out, made, stepsAllowMoreThan(steps, MOST_READINGS)
+        // afterwards from how many readings came back, a walk that was cut short and one the
+        // containers never had more than are one answer, and whichever word is chosen for the pair
+        // is wrong about the other.
+        return new Readings(quantity, out, made, containersAllowMoreThan(containers, MOST_READINGS)
                 ? new ReadingsTried.StoppedAtTheLimit(MOST_READINGS)
                 : ReadingsTried.EVERY_ONE);
     }
@@ -534,7 +537,7 @@ public final class StandingAtAPoint {
      *                asked of it are not two things a caller holds and has to keep together
      * @param tried   the readings, in the order the choices were taken
      * @param made    what has already been read, for the first of {@code tried} and in its order,
-     *                and empty where the reading the steps were found by is not one of them
+     *                and empty where the reading the containers were found by is not one of them
      * @param whether what the walk that built them says about itself
      */
     record Readings(BorderQuantity of, List<OneReadingOfARow> tried, List<QuantityReading> made,
@@ -548,21 +551,21 @@ public final class StandingAtAPoint {
     }
 
     /**
-     * Every reading of a row over the steps its positions were found to take.
+     * Every reading of a row over the containers its positions were found to be inside.
      *
-     * <p>One choice per step, in every combination — which is a product and not a zip, because two
-     * steps a row's positions do not take together are two independent choices. Bounded, since a
-     * row holding several long lists has more readings than a measure is worth.
+     * <p>One choice per container, in every combination — which is a product and not a zip, because
+     * two containers a row's positions are not inside together are two independent choices.
+     * Bounded, since a row holding several long lists has more readings than a measure is worth.
      */
-    private static List<Map<TermPath, Integer>> readingsOver(Map<TermPath, Integer> steps) {
+    private static List<Map<TermPath, Integer>> readingsOver(Map<TermPath, Integer> containers) {
         List<Map<TermPath, Integer>> out = new ArrayList<>();
         out.add(Map.of());
-        for (Map.Entry<TermPath, Integer> step : steps.entrySet()) {
+        for (Map.Entry<TermPath, Integer> container : containers.entrySet()) {
             List<Map<TermPath, Integer>> wider = new ArrayList<>();
             for (Map<TermPath, Integer> each : out) {
-                for (int i = 0; i < step.getValue() && wider.size() < MOST_READINGS; i++) {
+                for (int i = 0; i < container.getValue() && wider.size() < MOST_READINGS; i++) {
                     Map<TermPath, Integer> deeper = new LinkedHashMap<>(each);
-                    deeper.put(step.getKey(), i);
+                    deeper.put(container.getKey(), i);
                     wider.add(deeper);
                 }
             }
@@ -572,17 +575,19 @@ public final class StandingAtAPoint {
     }
 
     /**
-     * Whether the steps a row's positions take allow more readings of it than {@code howMany}.
+     * Whether the containers a row's positions are inside allow more readings of it than
+     * {@code howMany}.
      *
-     * <p>Asked with the figure one point is tried against, so that whether a walk over the steps
-     * will be cut short is the walk's own answer and not something read off how many readings came
-     * back. A product coming to exactly the number asked about is not more than it: a walk that
-     * built as many readings as it is allowed to built either all of them or all it could, and
-     * nothing it holds tells those apart; the steps are what know how many there are.
+     * <p>Asked with the figure one point is tried against, so that whether a walk over the
+     * containers will be cut short is the walk's own answer and not something read off how many
+     * readings came back. A product coming to exactly the number asked about is not more than it: a
+     * walk that built as many readings as it is allowed to built either all of them or all it could,
+     * and nothing it holds tells those apart; the containers are what know how many there are.
      */
-    private static boolean stepsAllowMoreThan(Map<TermPath, Integer> steps, int howMany) {
+    private static boolean containersAllowMoreThan(Map<TermPath, Integer> containers,
+                                                   int howMany) {
         long there = 1;
-        for (int cardinality : steps.values()) {
+        for (int cardinality : containers.values()) {
             // Asked before the multiplication rather than after it. A product that runs past what a
             // long holds answers this by wrapping round to a number that says the opposite.
             if (cardinality != 0 && there > howMany / cardinality) {

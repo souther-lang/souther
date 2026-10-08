@@ -93,14 +93,26 @@ public sealed interface StructuralInspection {
          * what is read of them is read once; how many of them a row has to put in a class is settled
          * where the class is and not here.
          *
-         * <p>The values a container hands a walk over it one at a time: what a list or a set holds,
-         * and a map's values. A map's key is the other thing a closure over it is handed, and is not
-         * what this position is — the element a program's walk over a map is credited with is the
-         * value ({@link souther.compiler.types.Type}), and this is the same element.
+         * <p>What a list or a set holds. A map holds two things at each entry and is
+         * {@link Entries}.
          *
          * @param element what the container holds, as the signature wrote it
          */
         record Elements(Type element) implements Continuation {}
+
+        /**
+         * The position is a map, whose keys are one position and whose values are another.
+         *
+         * <p>Two positions because a key and the value filed under it are values of two types, with
+         * rules of their own, and a closure over a map is handed both and may decide on either. Each
+         * is read the way {@link Elements} reads what a list holds, once for however many entries
+         * there are; that the key and the value of one entry go together is a fact about a row and
+         * is said where a row is read, not here.
+         *
+         * @param key   what the map is keyed by, as the signature wrote it
+         * @param value what the map holds under each key, as the signature wrote it
+         */
+        record Entries(Type key, Type value) implements Continuation {}
 
         /**
          * The position is one of these, and each of them continues differently.
@@ -210,10 +222,10 @@ public sealed interface StructuralInspection {
             // optional holds is at no name of its own, so the position under it is `x@Some`.
             case Shape.Optional _ ->
                     new Retained(new Continuation.Branches(branchesOf(shape, declared)));
-            // What a map holds is one position the same way, at its values: the values are what a
-            // walk over it hands on one at a time, and the map goes on standing beside them with a
-            // size of its own.
-            case Shape.Mapping mapping -> new Retained(new Continuation.Elements(mapping.value()));
+            // A map's keys are one position and its values another, and the map goes on standing
+            // beside them with a size of its own.
+            case Shape.Mapping mapping ->
+                    new Retained(new Continuation.Entries(mapping.key(), mapping.value()));
             // Nothing was interpreted, so there is nothing to be made of. A report is written about
             // a model carrying one, which is why this is answered rather than refused.
             case Shape.Unresolved _ -> stoppedAt(new BlockReason.TypeUnresolved());

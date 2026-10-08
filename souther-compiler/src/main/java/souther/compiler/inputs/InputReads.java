@@ -677,9 +677,13 @@ public final class InputReads {
             return new ReadMeaning.OneOf(narrowed);
         }
         return switch (names.roleOf(read.binding())) {
-            case BindingRole.Element(var container) -> {
-                java.util.List<Denotation> written =
-                        writtenElementsOf(new Denotation(container, this), symbols, newtypes, met);
+            // What a container written out in the body holds is the values it was written with. A
+            // map's keys are not among those this walk writes out, so a key is a key of the map and
+            // which one is not said.
+            case BindingRole.Element(var held) -> {
+                java.util.List<Denotation> written = held.part() != HeldIn.Part.ELEMENT ? null
+                        : writtenElementsOf(new Denotation(held.container(), this), symbols,
+                                newtypes, met);
                 yield written == null ? new ReadMeaning.Element() : new ReadMeaning.OneOf(written);
             }
             // An element of more than one container is an element, and what it may be is not the

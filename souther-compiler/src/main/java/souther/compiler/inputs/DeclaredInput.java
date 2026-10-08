@@ -259,10 +259,10 @@ public final class DeclaredInput {
      * What one step of a path stands at, or null where the declarations put nothing there.
      *
      * <p><b>Exhaustive over the kinds of step, with no {@code default}.</b> A path goes into a
-     * field, into what a container holds, or nowhere at all while narrowing which values may stand
-     * where it already is ({@link Refinement}) — three, and a reading that answered one of them and
-     * let the rest fall to null would lose a line the model draws for every path carrying one. A
-     * fourth kind is a compile error here rather than a fourth quiet absence.
+     * field, into what a container holds, into a map's keys, or nowhere at all while narrowing
+     * which values may stand where it already is ({@link Refinement}) — and a reading that answered
+     * some of them and let the rest fall to null would lose a line the model draws for every path
+     * carrying one. Another kind is a compile error here rather than a quiet absence.
      */
     private static Type under(Type type, TermPath.Step step, RuleReadingSource source) {
         // Asked of the shape rather than through the proof a position is made with. What is under a
@@ -285,9 +285,20 @@ public final class DeclaredInput {
             case TermPath.Step.Field field -> under instanceof StructuralInspection.Decomposed made
                     ? made.under().get(field.name())
                     : ReadableFields.of(shape).declaredFields().get(field.name());
+            // What a list or a set holds, or the values a map holds under its keys.
             case TermPath.Step.Element _ -> under instanceof StructuralInspection.Retained on
-                    && on.continuation() instanceof StructuralInspection.Continuation.Elements held
-                    ? held.element() : null;
+                    ? switch (on.continuation()) {
+                        case StructuralInspection.Continuation.Elements held -> held.element();
+                        case StructuralInspection.Continuation.Entries entries -> entries.value();
+                        case StructuralInspection.Continuation.None _,
+                             StructuralInspection.Continuation.Branches _,
+                             StructuralInspection.Continuation.Blocked _ -> null;
+                    }
+                    : null;
+            // A map's keys, which only a map has.
+            case TermPath.Step.Key _ -> under instanceof StructuralInspection.Retained on
+                    && on.continuation() instanceof StructuralInspection.Continuation.Entries entries
+                    ? entries.key() : null;
             // The same position, read as the case it turned out to be. Null where the case puts
             // nothing there, which is a case that is the whole of a value — and where it turned
             // out to be one of several, which no one declaration is: what is under each of them is

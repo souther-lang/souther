@@ -244,6 +244,22 @@ public final class OperationFacts {
                             new ElementLineage.Source<>(CONTAINER, 1)), SizeAgainstItsSource.AT_MOST))),
             about("Set", "map", maps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
 
+            // Which keys a map an operation answers is keyed by, where they are keys of a map it
+            // was given. A rewrite of the values keeps every key, and taking entries out keeps the
+            // keys of the ones left; putting one in does not, since the key put in was no key of
+            // the map.
+            about("Map", "filterEntries", keepsTheKeysOf(CONTAINER)),
+            about("Map", "mapValues", keepsTheKeysOf(CONTAINER)),
+            about("Map", "updateIfPresent", keepsTheKeysOf(CONTAINER)),
+            about("Map", "remove", keepsTheKeysOf(at(1))),
+            about("Map", "intersection", keepsTheKeysOf(at(0))),
+            about("Map", "difference", keepsTheKeysOf(at(0))),
+
+            // A list of what a map holds, and which part of it.
+            about("Map", "keys", lists(at(0), MapPart.KEYS)),
+            about("Map", "values", lists(at(0), MapPart.VALUES)),
+            about("Map", "toList", lists(at(0), MapPart.ENTRIES)),
+
             // Which side of an answer the closure decides, said and not read off a size. That a
             // filter answers at most as many as it walked is the size fact above; that the
             // closure's truth is why it answers fewer is this one, and a take or a distinct shows
@@ -430,6 +446,16 @@ public final class OperationFacts {
 
     private static OperationFact noSmallerThan(ArgumentRef container) {
         return new OperationFact.ResultIsNoSmallerThan(container);
+    }
+
+    /** The answer is keyed by keys {@code map} was keyed by. */
+    private static OperationFact keepsTheKeysOf(ArgumentRef map) {
+        return new OperationFact.KeepsTheKeysOf(map);
+    }
+
+    /** The answer is a list of {@code part} of {@code map}. */
+    private static OperationFact lists(ArgumentRef map, MapPart part) {
+        return new OperationFact.ListsAPartOf(map, part);
     }
 
     private static OperationFact reads(ArgumentRef container, ElementShape... through) {

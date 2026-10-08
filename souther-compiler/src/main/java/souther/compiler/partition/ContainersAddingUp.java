@@ -1257,6 +1257,7 @@ final class ContainersAddingUp {
             out = switch (steps.get(i)) {
                 case TermPath.Step.Field(String name) -> out.then(name);
                 case TermPath.Step.Element _ -> out.element();
+                case TermPath.Step.Key _ -> out.key();
                 case TermPath.Step.Refine(CasesLeft already) -> out.refine(already);
             };
         }
@@ -1278,6 +1279,7 @@ final class ContainersAddingUp {
             out = switch (step) {
                 case TermPath.Step.Field(String name) -> out.then(name);
                 case TermPath.Step.Element _ -> out.element();
+                case TermPath.Step.Key _ -> out.key();
                 case TermPath.Step.Refine(CasesLeft already) -> out.refine(already);
             };
         }

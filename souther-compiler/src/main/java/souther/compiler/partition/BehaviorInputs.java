@@ -325,6 +325,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                     ? product.fields().get(named.name()) : null;
             case TermPath.Step.Element _ -> shape instanceof Shape.Container container
                     ? container.element() : null;
+            case TermPath.Step.Key _ -> shape instanceof Shape.Mapping map ? map.key() : null;
             // What a sum's case holds is the value the sum held, and what an optional holds is at
             // no name of its own — so both narrow the type at this position and nothing is
             // descended into. A value is written as one case, so a position left several of them
@@ -421,12 +422,27 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                     if (held == null) {
                         return false;
                     }
-                    // Keyed by the step, which is this path with the step taken. Two positions
-                    // that took it took the same one or they are not one reading of the row.
+                    // Keyed by the container. Two positions that took an element of it took the
+                    // same one or they are not one reading of the row.
                     TermPath inside = reached.element();
                     for (int i = 0; i < held.size(); i++) {
                         out.add(new Standing(held.get(i), container.element(), inside,
-                                at.and(inside, i)));
+                                at.and(reached, i)));
+                    }
+                }
+                // Every key the row wrote, each taken at the entry it keys — the same entry the
+                // value beside it is taken at, which is what keeps a key and a value of two
+                // different entries from being read as one reading of the row. Only a map has keys,
+                // and a value written as anything else is not one.
+                case TermPath.Step.Key _ -> {
+                    if (!(view.shape() instanceof Shape.Mapping map)
+                            || !(here instanceof ObservedValue.Mapping written)) {
+                        return false;
+                    }
+                    TermPath keyed = reached.key();
+                    for (int i = 0; i < written.entries().size(); i++) {
+                        out.add(new Standing(written.entries().get(i).key(), map.key(), keyed,
+                                at.and(reached, i)));
                     }
                 }
                 // The value stays where it is and what may stand there narrows. A row whose value

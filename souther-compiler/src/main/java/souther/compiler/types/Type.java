@@ -208,6 +208,18 @@ public sealed interface Type extends SettledAnswer permits Type.Leaf, Type.Compo
     }
 
     /**
+     * What a container of this type files each thing it holds under, or null where it files them
+     * under nothing: a map's key, and nothing else has one.
+     *
+     * <p>Beside {@link #elementOf} and not folded into it. A closure over a map is handed the key
+     * and the value as two parameters, and which is which is the whole of what a reader of the
+     * closure needs.
+     */
+    static Type keyOf(Type t) {
+        return t instanceof MapOf map ? map.key() : null;
+    }
+
+    /**
      * What a container of this type holds many of, or null where it is no container: a list's or a
      * set's element, and a map's value.
      *

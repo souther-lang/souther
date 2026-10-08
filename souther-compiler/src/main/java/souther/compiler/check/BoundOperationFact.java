@@ -8,6 +8,7 @@ import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.ElementShape;
+import souther.compiler.semantics.MapPart;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.SideAnswered;
@@ -89,6 +90,15 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     /** The operation builds a container out of another, and this says where its elements came from
      *  and how many of them there are. */
     record BuildsItsResultFrom(DeclaredOperation operation, BuiltFrom<DeclaredArgument> built)
+            implements OneAboutAnOperation {}
+
+    /** The operation answers a map keyed by keys {@code map} was keyed by, each the same value. */
+    record KeepsTheKeysOf(DeclaredOperation operation, DeclaredArgument map)
+            implements OneAboutAnOperation {}
+
+    /** The operation answers a list of {@code part} of what {@code map} holds. */
+    record ListsAPartOf(DeclaredOperation operation, DeclaredArgument map,
+                        MapPart part)
             implements OneAboutAnOperation {}
 
     /**
