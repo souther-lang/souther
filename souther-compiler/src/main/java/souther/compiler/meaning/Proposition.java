@@ -62,6 +62,8 @@ public sealed interface Proposition {
                     .anyMatch(part -> part.mayTurnOnAnElementOf(container));
             case Any any -> any.parts().stream()
                     .anyMatch(part -> part.mayTurnOnAnElementOf(container));
+            case OnAnApplication applications -> applications.each().stream()
+                    .anyMatch(one -> one.mayTurnOnAnElementOf(container));
             case Some some -> isAnElementOf(some.container(), container)
                     || some.ofTheElement().mayTurnOnAnElementOf(container);
         };
@@ -346,6 +348,54 @@ public sealed interface Proposition {
         public Proposition denied() {
             return new Unread(where, ordinal, why, fixed, !holds);
         }
+    }
+
+    /**
+     * What a condition inside a closure states on one application of it, where each application
+     * hands the closure one of the values a container was written with: {@code each} is what it
+     * states on each of them. Made through {@link #onAnApplication}.
+     *
+     * <p>Neither a disjunction nor a conjunction of them. A run meets the condition on an
+     * application, and what holds there is that application's statement — and where the condition
+     * fails, that statement's denial, on the same application. So it is denied statement by
+     * statement, and whether it can hold is whether some statement can, as whether it can fail is
+     * whether some denial can.
+     *
+     * @param key spelled from the statements' own when it is made, whatever is handed in
+     */
+    record OnAnApplication(List<Proposition> each, String key) implements Proposition {
+
+        public OnAnApplication(List<Proposition> each) {
+            this(each, null);
+        }
+
+        public OnAnApplication {
+            each = List.copyOf(each);
+            if (each.size() < 2) {
+                throw new IllegalArgumentException(
+                        "a condition read on its applications states two or more things");
+            }
+            key = "on an application" + each.stream().map(Proposition::key).toList();
+        }
+
+        @Override
+        public Proposition denied() {
+            return onAnApplication(each.stream().map(Proposition::denied).toList());
+        }
+    }
+
+    /**
+     * What a condition states on one of the applications {@code each} is read on, each statement
+     * kept once in one order, and one statement where every application states it.
+     */
+    static Proposition onAnApplication(List<Proposition> each) {
+        SortedMap<String, Proposition> kept = new TreeMap<>();
+        each.forEach(one -> kept.putIfAbsent(one.key(), one));
+        if (kept.isEmpty()) {
+            throw new IllegalArgumentException("a condition is read on some application");
+        }
+        return kept.size() == 1 ? kept.firstEntry().getValue()
+                : new OnAnApplication(List.copyOf(kept.values()));
     }
 
     /**

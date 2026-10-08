@@ -304,23 +304,43 @@ public sealed interface Derivation {
     }
 
     /**
-     * Some element of a container written out making a closure answer some way: what the closure's
-     * body states of any one of them, or nothing where none is written.
+     * Some element of a container written out making a closure answer some way: some one of what
+     * the closure's body states of each element, read on the application that hands it that
+     * element — and nothing where none is written.
      */
-    record OverElementsWrittenOut(Optional<Derivation> ofAnElement, boolean holds)
-            implements Derivation {
+    record OverElementsWrittenOut(List<Derivation> ofEach, boolean holds) implements Derivation {
 
         public OverElementsWrittenOut {
-            Objects.requireNonNull(ofAnElement, "an element is read, or there is none");
+            ofEach = List.copyOf(ofEach);
         }
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            if (ofAnElement.isEmpty()) {
-                return new Proposition.Always(false);
+            List<Proposition> each = new ArrayList<>();
+            for (Derivation one : ofEach) {
+                Proposition answered = numbering.of(one);
+                each.add(holds ? answered : answered.denied());
             }
-            Proposition answered = numbering.of(ofAnElement.get());
-            return holds ? answered : answered.denied();
+            return Proposition.any(each);
+        }
+    }
+
+    /**
+     * A condition inside a closure applied to each of the values a container was written with, read
+     * on each application: what it states on the one a run meets it on.
+     */
+    record OnEachApplication(List<Derivation> each) implements Derivation {
+
+        public OnEachApplication {
+            each = List.copyOf(each);
+            if (each.isEmpty()) {
+                throw new IllegalArgumentException("a condition is read on some application");
+            }
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return Proposition.onAnApplication(each.stream().map(numbering::of).toList());
         }
     }
 

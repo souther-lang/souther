@@ -13,6 +13,8 @@ import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -63,6 +65,24 @@ public final class MeaningsOfABodyReading {
     }
 
     private void walk(Core e, InputReads reads) {
+        // A closure applied to each of the values a container was written with is read once per
+        // application, each handing its parameter one of them, and what a site in it states is
+        // what it states on the application a run meets it on.
+        if (Core.withoutStanding(e) instanceof Core.Block block
+                && reads.applicationsOf(block, symbols, newtypes)
+                        instanceof List<InputReads> applications) {
+            List<MeaningsOfABody> each = new ArrayList<>();
+            for (InputReads application : applications) {
+                MeaningsOfABodyReading inside =
+                        new MeaningsOfABodyReading(reading, symbols, newtypes);
+                inside.read = read;
+                inside.walk(block.body(), application);
+                read = inside.read;
+                each.add(inside.filed.filed());
+            }
+            filed.metOnEachApplication(each);
+            return;
+        }
         switch (Core.withoutStanding(e)) {
             case Core.If iff -> asked(iff.place().occurrence(), MeaningsOfABody.Part.CONDITION,
                     iff.cond(), reads);

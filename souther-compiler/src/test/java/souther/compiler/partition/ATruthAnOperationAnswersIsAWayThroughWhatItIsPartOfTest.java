@@ -119,13 +119,14 @@ class ATruthAnOperationAnswersIsAWayThroughWhatItIsPartOfTest {
 
     /**
      * A predicate over a list written out that reads nothing but its element answers the same
-     * every time, and is no way out the other way round; one that reads the input beside its
-     * element still varies with the input, which `either` holds.
+     * every time, and which answer is read off the values written: some mark above three is
+     * there, so the fork is taken whatever the flag. One that reads the input beside its element
+     * still varies with the input, which `either` holds.
      */
     @Test
     void aPredicateOverAWrittenListReadingOnlyItsElementIsTheSameEveryTime() {
-        assertEquals(2, DecisionReadings.readToTheEnd(MODEL, "writtenMarks").size(),
-                "neither way of the fixed part is a rule, and the way past it is one");
+        assertEquals(1, DecisionReadings.readToTheEnd(MODEL, "writtenMarks").size(),
+                "the written part holds every time, and the flag is never asked");
         assertEquals(3, DecisionReadings.readToTheEnd(MODEL, "writtenMarksAgainstTheInput")
                         .size(),
                 "an element written out set against the input varies with the input");
@@ -133,15 +134,16 @@ class ATruthAnOperationAnswersIsAWayThroughWhatItIsPartOfTest {
 
     /**
      * What a predicate over a list written out applies an operation to is a written value, so the
-     * operation's answer is the same every time — read in the tree where the operation stands, the
-     * one this is asked of.
+     * operation's answer is the same every time and is read off that value — in the tree where the
+     * operation stands, the one this is asked of.
      */
     @Test
     void anOperationAppliedToAWrittenElementIsTheSameEveryTime() {
         assertEquals(2, DecisionReadings.readToTheEnd(MODEL, "writtenWords").size(),
-                "what a written word contains is the same every time");
-        assertEquals(2, DecisionReadings.readToTheEnd(MODEL, "writtenLists").size(),
-                "and so is whether a written list is empty");
+                "what a written word contains is the same every time, and which answer is not"
+                        + " read: neither way of it is a rule, and the way past it is one");
+        assertEquals(1, DecisionReadings.readToTheEnd(MODEL, "writtenLists").size(),
+                "and one of the written lists is empty, every time");
     }
 
     /** How many rules, and how many of them turn on the flag. */

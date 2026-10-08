@@ -40,10 +40,8 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.AnswerAspect;
-import souther.compiler.semantics.ArgumentsStand;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ConditionJoin;
-import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.SideAnswered;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
@@ -120,11 +118,23 @@ final class Pullback {
          * answer and not a question. Some element meeting a part turns on that part, and on whether
          * there is an element only through it: what no element decides was taken out of the
          * quantifier where it was made, so the container is a part wherever it is one.
+         *
+         * <p>One expression stating one part is one part, however many times it was met: a closure
+         * read on each of its applications meets the same comparison once on each, and an author
+         * wrote it once.
          */
         List<Leaf> turnsOn() {
             Set<String> parts = new HashSet<>();
             partsOf(proposition(), parts);
-            return leaves.stream().filter(leaf -> parts.contains(leaf.part().key())).toList();
+            List<Leaf> out = new ArrayList<>();
+            for (Leaf leaf : leaves) {
+                if (parts.contains(leaf.part().key()) && out.stream().noneMatch(kept ->
+                        kept.from().value() == leaf.from().value()
+                                && kept.part().key().equals(leaf.part().key()))) {
+                    out.add(leaf);
+                }
+            }
+            return List.copyOf(out);
         }
 
         /** The spelling of each part {@code stated} turns on, either way round, into {@code into}. */
@@ -134,6 +144,8 @@ final class Pullback {
                 case Proposition.Unread unread when unread.fixed() -> { }
                 case Proposition.All all -> all.parts().forEach(part -> partsOf(part, into));
                 case Proposition.Any any -> any.parts().forEach(part -> partsOf(part, into));
+                case Proposition.OnAnApplication applications ->
+                        applications.each().forEach(each -> partsOf(each, into));
                 case Proposition.Some some -> partsOf(some.ofTheElement(), into);
                 default -> {
                     into.add(stated.key());
@@ -568,15 +580,23 @@ final class Pullback {
         }
         Denotation container = reads.standing(over, read.rules().symbols(),
                 read.rules().newtypes());
-        // A container the source wrote out has no element where it is empty. Otherwise what the
-        // closure is handed is one of the written values, which is how the reading of the input
-        // reads its parameter ({@code ReadMeaning.OneOf}) for every reader of the closure: what it
-        // states of the input is what it states of any of them.
+        // A container the source wrote out has no element where it is empty. Otherwise each
+        // application of the closure hands it one of the written values, and what some element
+        // meets is what the body states on one of those applications. Where which value one of
+        // them hands cannot be said, the body is read once with the parameter standing for all of
+        // them ({@code ReadMeaning.OneOf}), which states of the input only what they agree on.
         if (Core.withoutStanding(container.value()) instanceof Core.ListLit list) {
-            return new Derivation.OverElementsWrittenOut(list.elements().isEmpty()
-                    ? Optional.empty()
-                    : Optional.of(observe(block.body(), witness.aspect(), closure.at())),
-                    witness.holds());
+            if (list.elements().isEmpty()) {
+                return new Derivation.OverElementsWrittenOut(List.of(), witness.holds());
+            }
+            List<InputReads> applications = closure.at().applicationsOf(block,
+                    read.rules().symbols(), read.rules().newtypes());
+            List<Derivation> ofEach = new ArrayList<>();
+            for (InputReads application
+                    : applications != null ? applications : List.of(closure.at())) {
+                ofEach.add(observe(block.body(), witness.aspect(), application));
+            }
+            return new Derivation.OverElementsWrittenOut(ofEach, witness.holds());
         }
         if (!(reads.pathOf(over, read.rules().newtypes()) instanceof PathResolution.At(
                 TermPath held))) {
@@ -761,6 +781,12 @@ final class Pullback {
                     return answered == null ? null
                             : LinearForm.atom(new DecisionAtom.OfAnAnswer(answered));
                 }
+                // A binding whose value turns on which application this is holds another value on
+                // the next, and its name would name them alike.
+                if (at.turnsOnAnApplication(name, read.rules().symbols(),
+                        read.rules().newtypes())) {
+                    return null;
+                }
                 return switch (at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())) {
                     case ReadMeaning.Element _, ReadMeaning.OneOf _, ReadMeaning.Position _ -> null;
                     case ReadMeaning.Through _, ReadMeaning.Unknown _ -> LinearForm.atom(
@@ -939,8 +965,8 @@ final class Pullback {
      * the comparison of what that case answers — or null where neither side is such a value.
      *
      * <p>The cases are the language's — an {@code if}, a {@code match} — and the library's, where an
-     * operation answers one of its arguments by how its arguments stand ({@link
-     * BoundOperationFacts#isDefinedByCases}). What a case answers is compared with the other side
+     * operation answers one of its arguments by how its arguments stand — the arms of one
+     * {@link Choice} either way. What a case answers is compared with the other side
      * wherever each was read, so a case reached through a name given the choice is compared with a
      * side read where the comparison stands ({@link #overQuantities}).
      */
@@ -977,29 +1003,21 @@ final class Pullback {
     private Denotation chosenAt(Denotation side) {
         Denotation stands = side.at().standing(side.value(), read.rules().symbols(),
                 read.rules().newtypes());
-        return switch (Core.withoutStanding(stands.value())) {
-            case Core.If _, Core.Match _ -> stands;
-            case Core e when AnOperationApplied.of(e) instanceof AnOperationApplied applied
-                    && casesOf(applied) != null -> stands;
-            default -> null;
-        };
-    }
-
-    /**
-     * The cases the library writes {@code applied}'s definition in, or null where it writes it in
-     * none or an argument a case is about is not one this call was handed.
-     */
-    private static List<DefinitionCase<DeclaredArgument>> casesOf(AnOperationApplied applied) {
-        List<DefinitionCase<DeclaredArgument>> cases =
-                DefaultBoundOperationFacts.get().isDefinedByCases(applied.operation());
-        for (DefinitionCase<DeclaredArgument> each : cases) {
-            if (applied.argument(each.answers()) == null || each.given().stream().anyMatch(
-                    stands -> applied.argument(stands.left()) == null
-                            || applied.argument(stands.right()) == null)) {
-                return null;
-            }
+        Choice choice = Choice.of(Core.withoutStanding(stands.value()));
+        if (choice == null) {
+            return null;
         }
-        return cases.isEmpty() ? null : cases;
+        return switch (choice.kind()) {
+            case A_CONDITION, A_CASE -> stands;
+            // A case is about values the call was given, and one it was not given is no value to
+            // compare.
+            case THE_ARGUMENTS -> choice.arms().stream().allMatch(arm -> arm.answers() != null
+                    && relationsDeciding(arm).stream().allMatch(
+                            each -> each.left() != null && each.right() != null))
+                    ? stands : null;
+            // Whether an attempt's invariant held is no condition this reading reads.
+            case AN_ATTEMPT -> null;
+        };
     }
 
     /**
@@ -1023,28 +1041,29 @@ final class Pullback {
                     compared.apply(new Denotation(iff.els(), where)));
             case Core.Match match -> armsOf(match, where,
                     (body, inside) -> compared.apply(new Denotation(body, inside)));
-            case Core e -> ofAnOperationsCases(AnOperationApplied.of(e), where, at, compared);
+            case Core e -> ofAnOperationsCases(e, Choice.of(e), where, at, compared);
         };
     }
 
     /**
-     * The cases the library writes {@code applied}'s definition in, each reached where its
-     * arguments stand as the case says and none before it does, with {@code compared} read of the
-     * argument that case answers.
+     * The cases the library writes the definition of the operation {@code call} applies in, as the
+     * arms of its choice ({@link Choice}): each reached where the values the call was given stand as
+     * the case says and none before it does, with {@code compared} read of the value that case
+     * answers.
      */
-    private Derivation ofAnOperationsCases(AnOperationApplied applied, InputReads where,
+    private Derivation ofAnOperationsCases(Core call, Choice choice, InputReads where,
                                            Denotation at,
                                            Function<Denotation, Derivation> compared) {
-        if (!(applied.operation() instanceof ValueName.Stdlib operation)) {
+        if (!(AnOperationApplied.of(call) instanceof AnOperationApplied applied
+                && applied.operation() instanceof ValueName.Stdlib operation)) {
             return null;
         }
         List<Derivation.MatchArms.Arm> cases = new ArrayList<>();
-        for (DefinitionCase<DeclaredArgument> each : casesOf(applied)) {
+        for (Choice.Arm arm : choice.arms()) {
             Derivation reached = null;
-            for (ArgumentsStand<DeclaredArgument> stands : each.given()) {
-                Derivation one = comparedCase(
-                        new Denotation(applied.argument(stands.left()), where),
-                        new Denotation(applied.argument(stands.right()), where), stands.rel(), at);
+            for (Choice.ArgumentRelation stands : relationsDeciding(arm)) {
+                Derivation one = comparedCase(new Denotation(stands.left(), where),
+                        new Denotation(stands.right(), where), stands.rel(), at);
                 reached = reached == null ? one
                         : new Derivation.Joined(ConditionJoin.BOTH, reached, one);
             }
@@ -1055,9 +1074,29 @@ final class Pullback {
                         + " standing of its arguments");
             }
             cases.add(new Derivation.MatchArms.Arm(reached,
-                    compared.apply(new Denotation(applied.argument(each.answers()), where))));
+                    compared.apply(new Denotation(arm.answers(), where))));
         }
         return new Derivation.AnOperationsCases(operation, cases);
+    }
+
+    /**
+     * How the values a call was given stand where {@code arm} of the case the library defines it in
+     * is taken. Every way an arm is decided is named: a call is chosen by its values standing, and
+     * an arm decided any other way is no arm of one.
+     */
+    private static List<Choice.ArgumentRelation> relationsDeciding(Choice.Arm arm) {
+        return switch (arm.decidedBy()) {
+            case Choice.Decides.ByArgumentRelations by -> by.relations();
+            case Choice.Decides.ACondition other -> noArmOfACall(other);
+            case Choice.Decides.ACase other -> noArmOfACall(other);
+            case Choice.Decides.ItWasBuilt other -> noArmOfACall(other);
+            case Choice.Decides.ItDeparted other -> noArmOfACall(other);
+        };
+    }
+
+    private static List<Choice.ArgumentRelation> noArmOfACall(Choice.Decides decidedBy) {
+        throw new IllegalStateException("a call is chosen by how the values it was given stand,"
+                + " and " + decidedBy + " is not that");
     }
 
     /**

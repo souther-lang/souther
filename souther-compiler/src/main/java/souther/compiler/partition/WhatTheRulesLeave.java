@@ -47,6 +47,9 @@ public final class WhatTheRulesLeave {
             case Proposition.Any any -> want
                     ? any.parts().stream().anyMatch(part -> admits(part, true, rules))
                     : any.parts().stream().allMatch(part -> admits(part, false, rules));
+            // On some application, either way: each statement is denied where it stands.
+            case Proposition.OnAnApplication applications -> applications.each().stream()
+                    .anyMatch(each -> admits(each, want, rules));
             default -> true;
         };
     }

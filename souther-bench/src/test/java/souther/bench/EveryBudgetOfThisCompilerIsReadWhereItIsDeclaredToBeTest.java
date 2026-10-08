@@ -240,7 +240,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.DecisionReading#of("
                             + "Ljava/lang/String;Lsouther/compiler/check/AnalysisBody;"
                             + "Lsouther/compiler/inputs/InputReading;"
-                            + "Lsouther/compiler/inputs/InputReads;Ljava/util/Set;)"
+                            + "Lsouther/compiler/inputs/InputReads;)"
                             + "Lsouther/compiler/partition/DecisionReading;",
                     "hands the figure to the reading of the ways, and says which it reached"),
 

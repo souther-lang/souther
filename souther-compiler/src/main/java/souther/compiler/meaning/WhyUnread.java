@@ -154,7 +154,9 @@ public sealed interface WhyUnread {
 
             /**
              * A comparison over one of several values the source wrote out, each of which the name
-             * stands for on some application.
+             * stands for on some application, where which value an application hands cannot be said
+             * where the condition is read: one naming a binding of the place it was written, and
+             * standing at no position.
              */
             VALUES_WRITTEN_OUT,
 

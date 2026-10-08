@@ -493,6 +493,11 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                         + " choice find it one step down and replace it there, under the Widen");
         row(out, c + "check/Clauses", "readsOf", "(" + core + "Ljava/util/function/Consumer;)V", 1,
                 COUNTS_THROUGH_IT);
+        row(out, c + "inputs/InputReads", "walkNames",
+                "(" + core + "Ljava/util/Set;Ljava/util/Set;)V", 1, COUNTS_THROUGH_IT);
+        row(out, c + "inputs/InputReads", "readsAnApplied", "(" + core + "L" + c
+                + "check/Symbols;L" + c + "check/DeclarationNewtypes;Ljava/util/Set;)Z", 1,
+                COUNTS_THROUGH_IT);
         row(out, c + "check/Clauses", "substituted",
                 "(" + core + "Ljava/util/Map;)" + core, 1, REWRITES_UNDER_IT);
         row(out, c + "check/Elaborator", "attempted",

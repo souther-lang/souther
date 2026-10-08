@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.core.Core;
 import souther.compiler.meaning.Proposition;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -114,6 +115,18 @@ final class TruthOutcomes {
         Outcomes or(Outcomes other) {
             return denied().and(other.denied()).denied();
         }
+
+        /**
+         * What comes out on whichever of several applications a run meets it on, each giving
+         * {@code each}: every answer one of them gives. Where one is fixed at an answer nobody
+         * named, another may be fixed at the other, so nothing is stood behind.
+         */
+        static Outcomes onSomeApplication(List<Outcomes> each) {
+            if (each.stream().anyMatch(one -> one == FIXED_UNNAMED || one == UNKNOWN)) {
+                return UNKNOWN;
+            }
+            return each.stream().distinct().count() == 1 ? each.getFirst() : EITHER;
+        }
     }
 
     /**
@@ -146,6 +159,8 @@ final class TruthOutcomes {
                     .reduce(Outcomes.ONLY_TRUE, Outcomes::and);
             case Proposition.Any any -> any.parts().stream().map(TruthOutcomes::of)
                     .reduce(Outcomes.ONLY_FALSE, Outcomes::or);
+            case Proposition.OnAnApplication applications -> Outcomes.onSomeApplication(
+                    applications.each().stream().map(TruthOutcomes::of).toList());
             case Proposition.Some some -> {
                 Outcomes found = switch (of(some.ofTheElement())) {
                     case ONLY_FALSE -> Outcomes.ONLY_FALSE;

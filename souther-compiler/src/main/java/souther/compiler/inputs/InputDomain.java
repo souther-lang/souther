@@ -1,6 +1,5 @@
 package souther.compiler.inputs;
 
-import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.NumberAt;
 import souther.compiler.check.RuleReadingContext;
@@ -184,7 +183,7 @@ public final class InputDomain {
      * The behaviors a row stands in for: what one of them answers arrives at a row as a position's
      * value does, from what the row was written with ({@link #dependencies()}).
      */
-    private final Membership<ValueName.Behavior> dependencies;
+    private final souther.compiler.carrier.Membership<ValueName.Behavior> dependencies;
 
     /**
      * What {@link #hashCode} came to, worked out at the first asking; zero until then.
@@ -201,7 +200,7 @@ public final class InputDomain {
                         NameReach reach, List<PlacementSeed> placed,
                         List<ClauseWithoutAnEnd> clauses, List<CasesRead> cases,
                         DeclarationReadings machines,
-                        Membership<ValueName.Behavior> dependencies) {
+                        souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
         this.machines = Objects.requireNonNull(machines, "a reading says where it borrows from");
         this.dependencies = Objects.requireNonNull(dependencies,
                 "a reading says what a row stands in for, if only nothing");
@@ -281,7 +280,7 @@ public final class InputDomain {
     /** Every position of an input, in the order the parameters are declared and descended into, of
      *  something no row stands a dependency in for. */
     public static InputDomain of(List<Parameter> parameters, RuleReadingContext reading) {
-        return of(parameters, reading, InputDemand.NONE, Membership.none());
+        return of(parameters, reading, InputDemand.NONE, souther.compiler.carrier.Membership.none());
     }
 
     /**
@@ -308,7 +307,7 @@ public final class InputDomain {
      *                     #dependencies()})
      */
     public static InputDomain of(List<Parameter> parameters, RuleReadingContext reading,
-                                 InputDemand demand, Membership<ValueName.Behavior> dependencies) {
+                                 InputDemand demand, souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
         List<Position> found = new ArrayList<>();
         List<RuleRoot> roots = new ArrayList<>();
         Map<BindingId, String> read = new LinkedHashMap<>();
@@ -407,7 +406,7 @@ public final class InputDomain {
     public static InputDomain of(DeclaredSig declared,
                                  List<SpecImplementation.ParameterBinding.AnInput> arriving,
                                  RuleReadingContext reading, InputDemand demand,
-                                 Membership<ValueName.Behavior> dependencies) {
+                                 souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
         Map<Integer, BindingId> bindings = new LinkedHashMap<>();
         for (SpecImplementation.ParameterBinding.AnInput input : arriving) {
             bindings.put(input.at(), input.written().binder().binding());
@@ -430,7 +429,7 @@ public final class InputDomain {
      * read, nothing a row stands in for is asked about.
      */
     public static InputDomain of(DeclaredSig declared, RuleReadingContext reading) {
-        return of(declared, List.of(), reading, InputDemand.NONE, Membership.none());
+        return of(declared, List.of(), reading, InputDemand.NONE, souther.compiler.carrier.Membership.none());
     }
 
     /** The positions, in the order they were read. */
@@ -847,7 +846,7 @@ public final class InputDomain {
      * that knew only the first would read a fork on a dependency's answer as a value the model
      * computes.
      */
-    public Membership<ValueName.Behavior> dependencies() {
+    public souther.compiler.carrier.Membership<ValueName.Behavior> dependencies() {
         return dependencies;
     }
 

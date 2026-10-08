@@ -2,7 +2,6 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.carrier.Membership;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
@@ -193,5 +192,5 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
 
     private static final InputReads NOWHERE =
             InputReads.ofParameters(Map.of(), DeclaredInput.NONE, ElementBindings.NONE,
-                    Membership.none());
+                    souther.compiler.carrier.Membership.none());
 }
