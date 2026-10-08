@@ -87,6 +87,21 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
     }
 
     /**
+     * A sign an order answered, compared with a number, is the comparison of the arguments it is
+     * the order of; and one every answer comes out the same against is that answer.
+     */
+    @Test
+    void aSignOfAnOrderStatesWhatItsArgumentsDoOrWhatItsBoundsSettle() {
+        ValueName.Stdlib compare = new ValueName.Stdlib.Operation("Decimal", "compare");
+        assertEquals(truth(A), concluded(new Derivation.AnOrderOfItsArguments(compare,
+                truthAt(A))));
+        assertEquals(new Proposition.Always(false),
+                concluded(new Derivation.ASignItsBoundsSettle(compare, false)));
+        assertEquals(new Proposition.Always(true),
+                concluded(new Derivation.ASignItsBoundsSettle(compare, true)));
+    }
+
+    /**
      * What no element decides comes out of the quantifier, and whether the container holds anything
      * is a part only where the conclusion has it as one.
      */

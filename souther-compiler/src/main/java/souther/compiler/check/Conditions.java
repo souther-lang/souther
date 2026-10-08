@@ -1,13 +1,8 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
-import souther.compiler.numeric.CanonicalOrder;
-import souther.compiler.numeric.Granularity;
-import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
-import souther.compiler.numeric.Rel;
-import souther.compiler.semantics.ConstantArguments;
-import souther.compiler.semantics.ResultRange;
 import souther.compiler.types.ApplicationDerivationCause;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.BinOp;
@@ -159,8 +154,10 @@ final class Conditions {
             implements ClauseReading<List<NumericConstraint>, Denotations> {
 
         /**
-         * Every reading of one part, because each of them holds of the values: an arm read without
-         * one of them is an arm bounded by less than what choosing it settles.
+         * Every reading of one part that holds where the part comes out as the arm took it: an arm
+         * read without one of them is an arm bounded by less than what choosing it settles, and one
+         * read with what the part only proves where it holds, taken where it fails, is bounded by
+         * something that is not so.
          *
          * <p>Read through the same normalisation a guard is, which is where it belongs: an
          * emptiness check is the comparison it means, and what that comparison composes is nothing,
@@ -172,7 +169,7 @@ final class Conditions {
             List<NumericConstraint> out = new ArrayList<>();
             for (StatedComparison stated
                     : comparisonsStatedBy(terms, asSizeComparison(part.of()), at)
-                            .inReadingOrder()) {
+                            .holdingWhere(positive)) {
                 LinearForm<FactSubject> left = terms.affineOf(stated.left(), at);
                 LinearForm<FactSubject> right = terms.affineOf(stated.right(), at);
                 LinearForm<FactSubject> between = Terms.add(left, right, true);
@@ -230,9 +227,9 @@ final class Conditions {
         if (placed == null) {
             return ComparisonReadings.none();
         }
-        List<StatedComparison> readings = new ArrayList<>();
-        readings.add(placed.stated());
-        for (StatedComparison composed = orderStatedBy(terms, readings.getLast(), at);
+        List<ComparisonReadings.Reading> readings = new ArrayList<>();
+        readings.add(new ComparisonReadings.Reading(placed.stated(), true));
+        for (ComparisonReadings.Reading composed = orderStatedBy(terms, readings.getLast(), at);
                 composed != null;
                 composed = orderStatedBy(terms, readings.getLast(), at)) {
             readings.add(composed);
@@ -245,22 +242,10 @@ final class Conditions {
      * The comparison of the two values an order is of, where {@code stated} compares what an
      * operation answering that order answered — or null where it states nothing about them.
      *
-     * <p>What such an operation answers is a sign ({@link DischargeRules#orderStatedBy}), so a
-     * condition that settles which side of nought the answer falls on is a condition about the two
-     * arguments. One account: the relation is the one the sign is left standing to nought, taken
-     * between the argument a positive answer says is the greater and the other one, so the six
-     * relations and the two sides of the comparison are all read from the row the library's
-     * operation has rather than from a case for each.
-     *
-     * <p><b>Which side of nought is worked out and not matched.</b> This read a written zero, on the
-     * reasoning that a sign compared with anything else bounds how far the answer is from nought
-     * rather than saying which way it falls. That stopped being true the day the comparisons were
-     * declared to answer one of three numbers: {@code Int.compare(a, b) >= 1} leaves the answer at
-     * one, and {@code > -1} leaves it at nought or one, and both settle a side. Read by the shape of
-     * what was written, the two canonical facts about one operation — the order it states and where
-     * its answer runs — could not be put together, which is the division this whole change is about
-     * (#1016). So the condition and the declared bounds are composed, and what the composition
-     * leaves is asked which way it stands.
+     * <p>What it states of them is {@link TheSignOfAnOrder}'s answer, the one every reader of a
+     * condition takes; what is this check's own is the environment it reads in ({@link #sides}).
+     * A comparison every answer comes out the same against states no order, and that the arm is
+     * never entered is said by what reads reachability rather than by an order nobody can stand on.
      *
      * <p>And only where both values are ones this check can name. The sign is a number the domain
      * carries whatever it is the order of, so a comparison of two values it cannot name is less than
@@ -268,93 +253,65 @@ final class Conditions {
      * on that count, and rewriting it into a comparison of two dates the check cannot relate would
      * leave the clause unreadable — a construction dropped from the check where it had been reported.
      * Reading a predicate never takes a reading away.
+     *
+     * <p>The order of the two values is the condition only where the sign standing that way to
+     * nought is all the comparison of it says, and where {@code from} was the condition:
+     * {@code daysBetween(a, b) > 1} proves {@code b > a} and is not where it holds, and what is read
+     * off a reading that only follows from the condition only follows from it too.
      */
-    private static StatedComparison orderStatedBy(Terms terms, StatedComparison stated,
-                                                  Denotations at) {
-        boolean callFirst = Core.withoutStanding(stated.left()) instanceof Core.PreservedCall;
-        Core side = callFirst ? stated.left() : stated.right();
-        Core against = callFirst ? stated.right() : stated.left();
-        if (!(Core.withoutStanding(side) instanceof Core.PreservedCall call)
-                || call.args().size() != 2) {
+    private static ComparisonReadings.Reading orderStatedBy(Terms terms,
+                                                            ComparisonReadings.Reading from,
+                                                            Denotations at) {
+        if (!(TheSignOfAnOrder.read(from.stated(), at, sides(terms))
+                instanceof TheSignOfAnOrder.Read.OfTheArguments<Denotations> ordered)) {
             return null;
         }
-        BoundOperationFact.StatesTheOrderOfItsArguments positive =
-                DischargeRules.orderStatedBy(call.operation());
-        if (positive == null
-                || terms.bodyKey(call.args().get(0), at) == null
-                || terms.bodyKey(call.args().get(1), at) == null) {
+        StatedComparison arguments = ordered.arguments();
+        if (terms.bodyKey(arguments.left(), ordered.at()) == null
+                || terms.bodyKey(arguments.right(), ordered.at()) == null) {
             return null;
         }
-        // The relation the source wrote, read from the sign's side of the comparison: `call rel x`
-        // however the two were written round.
-        Rel written = (callFirst ? stated.claim() : stated.claim().turned()).statedRelation();
-        Rel stands = standsToNought(terms, call, written, against, at);
-        return stands == null ? null
-                : new StatedComparison(ComparisonClaim.stating(stands),
-                        CallArguments.of(positive.greater(), call),
-                        CallArguments.of(positive.lesser(), call),
-                        // Two arguments of the operation that orders them, each standing as what
-                        // it was passed as, and the order is the one over that type.
-                        Core.BinaryReading.AS_THEY_STAND);
+        return new ComparisonReadings.Reading(arguments,
+                from.isTheCondition() && ordered.isTheCondition());
     }
 
     /**
-     * Which way {@code call}'s answer stands to nought, given that a condition puts it {@code rel}
-     * what {@code against} reads as — or null where that leaves both sides open.
+     * What this check answers about its environment for a comparison of a sign: a name is what it
+     * was given, as everywhere a value is read here ({@link Terms#readThrough}), and the number
+     * against it is read and not matched, so {@code compare(a, b) > zero} under {@code let zero = 0}
+     * is the condition it looks like.
      *
-     * <p>Composed in the numeric domain rather than decided here, so that what a step is worth is
-     * the step the domain knows about: over whole numbers {@code > -1} is {@code >= 0}, and this
-     * would either have to say so a second time or answer as though a sign could fall between the
-     * two. The rules taken in are the two there are — what the operation declares of its answer
-     * ({@code semantics}) and what the condition says — and the tightest relation to nought the two
-     * prove together is the answer.
-     *
-     * <p>The number the condition stands against is read and not matched, for the reason every
-     * argument a fact names is: a name given a constant is that constant, so {@code compare(a, b) >
-     * zero} under {@code let zero = 0} is the condition it looks like.
-     *
-     * <p>Nothing where the two leave both sides open, and nothing where they leave nothing at all: a
-     * condition no answer satisfies states no order, and that the arm is never entered is said by
-     * what reads reachability rather than by an order nobody can stand on.
+     * <p>Where a name was given is where its value is read, which for this check is the environment
+     * at the comparison: a binding tells itself from every other, so nothing bound later answers
+     * for a name the arguments hold.
      */
-    private static Rel standsToNought(Terms terms, Core.PreservedCall call, Rel rel, Core against,
-                                      Denotations at) {
-        LinearForm<FactSubject> read = terms.affineOf(against, at);
-        if (rel == null || read == null || !read.coefs().isEmpty()) {
-            return null;
-        }
-        // One atom, standing for the number this call answered. Nothing else is in this domain: what
-        // is asked is what the operation and the condition prove between them, and a rule about
-        // anything else would be a rule about a value that is not the sign.
-        Object sign = new Object();
-        java.util.Map<Object, Granularity> spacing =
-                java.util.Map.of(sign, terms.granularityOf(call.type()));
-        LinearForm<Object> answered = LinearForm.atom(sign);
-        // One position, so the order is total on the domain by there being nothing to put in an
-        // order. Two of them reaching it would be a second position in a domain written to have
-        // one, and it says so rather than choosing between them.
-        CanonicalOrder<Object> order = (one, other) -> {
-            if (one == other) {
-                return 0;
+    private static TheSignOfAnOrder.Sides<Denotations> sides(Terms terms) {
+        return new TheSignOfAnOrder.Sides<>() {
+
+            @Override
+            public AffineForms.ReadThrough<Denotations> standing(Core e, Denotations at) {
+                Core value = e;
+                Denotations in = at;
+                while (Core.withoutStanding(value) instanceof Core.Read name
+                        && terms.readThrough(name, in)
+                                instanceof AffineForms.ReadThrough<Denotations> through) {
+                    value = through.value();
+                    in = through.at();
+                }
+                return new AffineForms.ReadThrough<>(value, in);
             }
-            throw new IllegalStateException("this domain stands for one number and was asked to"
-                    + " walk two: " + one + " and " + other);
+
+            @Override
+            public ExactRatio constant(Core e, Denotations at) {
+                LinearForm<FactSubject> read = terms.affineOf(e, at);
+                return read == null || !read.coefs().isEmpty() ? null : read.constant();
+            }
+
+            @Override
+            public DeclarationAccess declarations() {
+                return terms.declarations();
+            }
         };
-        NumericDomain<Object> known = NumericDomain.top(order)
-                .assuming(sign, ResultRange.of(DefaultBoundOperationFacts.get()
-                        .boundsOnTheResult(call.operation()), ConstantArguments.none()), spacing)
-                .assume(answered.minus(LinearForm.constant(read.constant())), rel, spacing);
-        if (known.isBottom()) {
-            return null;
-        }
-        // Tightest first: a sign held at nought is an equality and not two half-statements, and one
-        // held above it says more than one held at or above it.
-        for (Rel each : List.of(Rel.EQ, Rel.GT, Rel.LT, Rel.GE, Rel.LE, Rel.NE)) {
-            if (known.entails(answered, each)) {
-                return each;
-            }
-        }
-        return null;
     }
 
     /**

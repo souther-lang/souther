@@ -763,15 +763,18 @@ final class Predicates {
     /** What one part of a clause owes, read as the comparison it states. */
     private Owed owing(Core inv, Denotations at, Set<FactSubject> unnamed,
                        boolean positive, boolean decidesFalse, Discharge discharge) {
-        ComparisonReadings readings = Conditions.comparisonsStatedBy(terms, inv, at);
-        if (readings.inReadingOrder().isEmpty()) {
+        // What is owed is the clause, so only the readings that are it: one that only follows from
+        // it, established, would discharge a clause that asks more.
+        List<StatedComparison> readings =
+                Conditions.comparisonsStatedBy(terms, inv, at).theCondition();
+        if (readings.isEmpty()) {
             return owedBy(inv, at, unnamed, positive, decidesFalse);
         }
         // The first reading this construction can be read against is the one taken, which is what
         // the reading order is for. Reading a predicate never takes a reading away, so a reading
         // that came to nothing leaves the next one to answer rather than answering for it.
         Owed answer = null;
-        for (StatedComparison stated : readings.inReadingOrder()) {
+        for (StatedComparison stated : readings) {
             answer = owedBy(stated, inv, at, unnamed, positive, decidesFalse, discharge);
             if (!answer.unreadable()) {
                 return answer;
@@ -1060,10 +1063,11 @@ final class Predicates {
     /**
      * What taking one part of a condition as holding comes to.
      *
-     * <p>Every reading of the comparison it states, because each of them holds of the same values:
-     * the order a call decides, and the bound on the sign that decides it. Which one a clause is
-     * read against is settled where the clause is read, so a guard states each of them rather than
-     * choosing here.
+     * <p>Every reading of the comparison it states that holds where the part comes out this way:
+     * the order a call decides, and the bound on the sign that decides it. Where the part fails,
+     * an order it only proves where it holds is not among them. Which one a clause is read against
+     * is settled where the clause is read, so a guard states each of them rather than choosing
+     * here.
      */
     private Assumed taking(ClauseExpr.Part part, Known k, Denotations at) {
         boolean positive = part.positive();
@@ -1075,7 +1079,7 @@ final class Predicates {
             return taking(cond, join.writtenHalves(), k, at, positive);
         }
         List<StatedComparison> readings =
-                Conditions.comparisonsStatedBy(terms, cond, at).inReadingOrder();
+                Conditions.comparisonsStatedBy(terms, cond, at).holdingWhere(positive);
         if (readings.isEmpty()) {
             return taking(cond, List.of(), k, at, positive);
         }

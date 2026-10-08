@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.Choice;
@@ -12,6 +13,7 @@ import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.TheSignOfAnOrder;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Denotation;
@@ -32,6 +34,7 @@ import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
@@ -341,8 +344,10 @@ final class Pullback {
      * <p>A size held where it parts nought from every size above it is whether the container holds
      * anything; and every comparison is the relation it states — about a truth of the input, as a
      * cut on the input's arithmetic, as a line on an order that arithmetic does not count, or over
-     * values the body bound. More than one of them takes some comparisons, and the one tried first
-     * is not the one kept where it leaves a part unread and one after it reads all of it.
+     * values the body bound — and a comparison of the sign an operation answers the order of its
+     * arguments by is the comparison of those arguments, read by the same rules. More than one of
+     * them takes some comparisons, and the one tried first is not the one kept where it leaves a
+     * part unread and one after it reads all of it.
      *
      * @param at    where the comparison is a part of a larger condition, kept as a part met there;
      *              null where the comparison is itself what is read
@@ -367,6 +372,7 @@ final class Pullback {
                 () -> partOf(at, truthCompared(stated, reads)),
                 () -> partOf(at, asACut(stated, arithmetic.get(), fixed)),
                 () -> partOf(at, onAnOrder(stated, arithmetic.get(), reads)),
+                () -> partOf(at, ofItsArguments(stated, fixed, reads)),
                 () -> partOf(at, ofBoundValues(stated, fixed, reads)));
     }
 
@@ -806,6 +812,68 @@ final class Pullback {
                 states == proposition);
     }
 
+    /**
+     * A comparison of the number an operation answering the order of its two arguments answered, as
+     * the comparison of those two arguments it states — or null where neither side is such a number,
+     * or the other side is no number the same on every run.
+     *
+     * <p>What it states of them is {@link TheSignOfAnOrder}'s answer, the one the check reads such a
+     * comparison by; what is this reading's own is the environment ({@link #sides}). The arguments
+     * are read where the operation was applied, which is not where the comparison stands when a
+     * name was given the answer, and by the rules for a comparison, as any comparison is: over the
+     * input, on an order, or over values the body bound.
+     */
+    private Derivation ofItsArguments(StatedComparison comparison, boolean fixed,
+                                      InputReads reads) {
+        return switch (TheSignOfAnOrder.read(comparison, reads, sides())) {
+            case null -> null;
+            // What the comparison means, so only where the order of the two is all it states: one
+            // that only proves an order is a rule about the number, which is no order's to read.
+            case TheSignOfAnOrder.Read.OfTheArguments<InputReads> ordered
+                    when !ordered.isTheCondition() -> null;
+            case TheSignOfAnOrder.Read.OfTheArguments<InputReads> ordered
+                    when ordered.operation() instanceof ValueName.Stdlib operation ->
+                    new Derivation.AnOrderOfItsArguments(operation, firstThatReadsIt(
+                            rulesFor(ordered.arguments(), null, fixed, ordered.at())));
+            case TheSignOfAnOrder.Read.Settled<InputReads> settled
+                    when settled.operation() instanceof ValueName.Stdlib operation ->
+                    new Derivation.ASignItsBoundsSettle(operation, settled.holds());
+            // An order the library declares is of one of its own operations.
+            case TheSignOfAnOrder.Read.OfTheArguments<InputReads> _,
+                 TheSignOfAnOrder.Read.Settled<InputReads> _ -> null;
+        };
+    }
+
+    /**
+     * What this reading answers about its environment for a comparison of a sign: a name is what
+     * it stands for where it was given it, and the number against the sign is read as any number
+     * here is ({@link #quantities}).
+     */
+    private TheSignOfAnOrder.Sides<InputReads> sides() {
+        return new TheSignOfAnOrder.Sides<>() {
+
+            @Override
+            public AffineForms.ReadThrough<InputReads> standing(Core e, InputReads at) {
+                Denotation stands = at.standing(e, read.rules().symbols(),
+                        read.rules().newtypes());
+                return new AffineForms.ReadThrough<>(stands.value(), stands.at());
+            }
+
+            @Override
+            public ExactRatio constant(Core e, InputReads at) {
+                return AffineForms.outcome(e, at, quantities())
+                        instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                                LinearForm<Quantity> number)
+                        && number.coefs().isEmpty() ? number.constant() : null;
+            }
+
+            @Override
+            public DeclarationAccess declarations() {
+                return read.rules().declarations();
+            }
+        };
+    }
+
     /** A value worked out by the first rule that asks for it, and not before or again. */
     private static final class Once<T> {
 
@@ -942,10 +1010,6 @@ final class Pullback {
                     WhyUnread.NotYetComposed.Step.A_DEPENDENCYS_ANSWER);
             case ValueName.Helper _ -> new WhyUnread.WhatARecursiveHelperAnswers();
             case ValueName.Stdlib operation -> {
-                if (facts.statesTheOrderOfItsArguments().contains(operation)) {
-                    yield new WhyUnread.NotYetComposed(
-                            WhyUnread.NotYetComposed.Step.AN_ORDER_OF_ITS_ARGUMENTS);
-                }
                 if (!facts.isDefinedByCases(operation).isEmpty()) {
                     yield new WhyUnread.NotYetComposed(
                             WhyUnread.NotYetComposed.Step.A_CHOICE_BY_CASES);
