@@ -518,10 +518,17 @@ final class Pullback {
                 break;
             }
         }
-        return Core.withoutStanding(at) instanceof Core.Read name
-                ? LinearForm.<Quantity>atom(new Quantity.OfABinding(name.binding(), steps,
-                        side.type()))
-                : null;
+        // One value by its binding, and only where the name is one value on a run. A name handed
+        // each element of a container, or one that can be any of several values, stands for a
+        // different value each time it is read, so a relation over it relates nothing.
+        if (!(Core.withoutStanding(at) instanceof Core.Read name)) {
+            return null;
+        }
+        ReadMeaning stands = reads.meaningOf(name, read.rules().symbols(), read.rules().newtypes());
+        if (stands instanceof ReadMeaning.Element || stands instanceof ReadMeaning.OneOf) {
+            return null;
+        }
+        return LinearForm.atom(new Quantity.OfABinding(name.binding(), steps, side.type()));
     }
 
     /** A form over the input's numbers, as one over the quantities a relation is written over. */

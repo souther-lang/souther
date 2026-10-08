@@ -409,6 +409,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "coverage/CoverageSites$Walk", "reads", "(" + core + "L" + c
                 + "types/BindingId;)Z", Reading.STRUCTURE, BINDINGS);
+        row(out, c + "coverage/CoverageSites$Walk", "readsABindingOf", "(" + core + "L" + c
+                + "types/BindingOwner;)Z", Reading.STRUCTURE, BINDINGS);
+        row(out, c + "check/PathReachability", "gatherPositions", "(" + core + reads
+                + "Ljava/util/Map;)V", Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         // Whether an answer a body can come to is the same on every run, asked of the body a run
         // goes through.
         row(out, c + "coverage/CoverageSites$Walk", "sameOnEveryRun", "(" + core + ")Z",

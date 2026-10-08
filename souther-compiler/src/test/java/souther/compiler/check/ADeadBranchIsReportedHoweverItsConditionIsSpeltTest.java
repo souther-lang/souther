@@ -73,6 +73,51 @@ class ADeadBranchIsReportedHoweverItsConditionIsSpeltTest {
                 "a denial written as an operation is the comparison written with an operator");
     }
 
+    /**
+     * A value a case narrows to, or an element a closure is handed, is still the value it is.
+     *
+     * <p>Under a guard that holds it above ten, a second guard holding it above five has an arm
+     * nothing reaches, whichever way the value came: read off a field, bound by an arm, or handed to
+     * a function value. What it is called in the proposition — a position under a narrowing, or an
+     * element of a container — is no reason to stop knowing which value a condition is about.
+     */
+    @Test
+    void aValueANarrowingOrAClosureBindsIsStillThatValue() {
+        Map<String, Boolean> dead = new TreeMap<>();
+        dead.put("field", deadBranch("""
+                module probe
+                data Box = { n: Int }
+                behavior f : (x: Box) -> Int
+                let f (x) = if x.n > 10 then (if x.n > 5 then 1 else 2) else 3
+                """));
+        dead.put("optional", deadBranch("""
+                module probe
+                data Box = { d: Option<Int> }
+                behavior f : (x: Box) -> Int
+                let f (x) = match x.d with
+                    | Some v -> if v > 10 then (if v > 5 then 1 else 2) else 3
+                    | None -> 0
+                """));
+        dead.put("case", deadBranch("""
+                module probe
+                data Held = { n: Int }
+                data Missing
+                data Answer = Held | Missing
+                behavior f : (a: Answer) -> Int
+                let f (a) = match a with
+                    | Held as h -> if h.n > 10 then (if h.n > 5 then 1 else 2) else 3
+                    | Missing -> 0
+                """));
+        dead.put("element", deadBranch("""
+                module probe
+                data Box = { xs: List<Int> }
+                behavior f : (x: Box) -> List<Int>
+                let f (x) = List.map((e) -> if e > 10 then (if e > 5 then 1 else 2) else 3, x.xs)
+                """));
+        assertEquals(Map.of("field", true, "optional", true, "case", true, "element", true), dead,
+                "the inner guard's other arm is dead however the value was named");
+    }
+
     @Test
     void aWitnessTheRuleProvidesSettlesTheFork() {
         String[] spellings = {"List.any(e -> true, x.xs)", "List.length(x.xs) >= 1"};

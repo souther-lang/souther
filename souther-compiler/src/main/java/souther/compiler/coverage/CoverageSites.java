@@ -1128,6 +1128,9 @@ public final class CoverageSites {
          *  because every node below such a place is one, which is what makes it a state of the walk
          *  and not a property of the call. */
         private boolean repeating;
+        /** The bindings a copy of one of the language's operations opens with that hold a value it
+         *  was handed, as the walk passes them. */
+        private final Set<BindingId> handed = new HashSet<>();
         /** The outcomes that carry nothing of their own. What each of them means is settled with
          *  the construct beside it, so one instance stands for every occurrence. */
         private static final SourceOutcome.Arm HELD =
@@ -1567,11 +1570,35 @@ public final class CoverageSites {
          * {@code Int.max} compares its two arguments, is a way the model's rows go through and
          * stays owed.
          */
-        private static boolean restatesWhatItWasHanded(Core fork) {
-            return Core.withoutStanding(fork) instanceof Core.If iff
-                    && Core.withoutStanding(iff.cond()) instanceof Core.Read read
-                    && read.binding().owner() instanceof BindingOwner.Expansion copy
-                    && copy.expanded() instanceof ValueName.Stdlib.Operation;
+        private boolean restatesWhatItWasHanded(Core fork) {
+            if (!(Core.withoutStanding(fork) instanceof Core.If iff)
+                    || ModelOccurrence.statedAt(iff.occurrence()).isPresent()
+                    || !(iff.occurrence().lineage() instanceof OccurrenceLineage.Expansion copy
+                            && copy.expanded() instanceof ValueName.Stdlib.Operation)) {
+                return false;
+            }
+            // What the operation was handed: a binding its copy opens with, of a value from
+            // outside it. A value the copy works out itself, or one its own closures are handed,
+            // is a line it draws.
+            return Core.withoutStanding(iff.cond()) instanceof Core.Read read
+                    && handed.contains(read.binding());
+        }
+
+        /** Whether {@code let} binds a value an operation's copy was handed: one that reads nothing
+         *  the copy itself binds. */
+        private static boolean handsInWhatTheCopyWasGiven(Core.LetIn let) {
+            return opensACopyOfAnOperation(let)
+                    && !readsABindingOf(let.value(), let.binder().binding().owner());
+        }
+
+        private static boolean readsABindingOf(Core e, BindingOwner owner) {
+            if (Core.withoutStanding(e) instanceof Core.Read read
+                    && read.binding().owner().equals(owner)) {
+                return true;
+            }
+            boolean[] found = {false};
+            Core.forEachChild(e, child -> found[0] |= readsABindingOf(child, owner));
+            return found[0];
         }
 
         /**
@@ -1857,6 +1884,9 @@ public final class CoverageSites {
                 }
                 case Core.LetIn li -> {
                     walk(structural.take(new CoreStructure.Edge.LetValue(), li.value()), inside);
+                    if (handsInWhatTheCopyWasGiven(li)) {
+                        handed.add(li.binder().binding());
+                    }
                     walk(structural.take(new CoreStructure.Edge.LetBody(), li.body()), inside);
                 }
                 // A function value, and its arms are arms: what is written here runs when whatever

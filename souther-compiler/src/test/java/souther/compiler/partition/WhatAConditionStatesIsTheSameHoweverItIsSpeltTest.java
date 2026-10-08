@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -142,6 +143,21 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
         Proposition.Some outer = assertInstanceOf(Proposition.Some.class, nested);
         assertInstanceOf(Proposition.Unread.class, outer.ofTheElement(),
                 "the inner element is not read as the outer one");
+    }
+
+    /**
+     * A closure's parameter is a different value for each element it is handed, so a relation
+     * over it is no relation between two values of one run — and some element meeting it and every
+     * element meeting it are not one statement.
+     */
+    @Test
+    void aClosuresParameterIsNoOneValue() {
+        for (String over : List.of("List.any", "List.all")) {
+            Proposition stated = stated(over
+                    + "(v -> { let y = Int.abs(b.x)\n v > y }, [1, 5])");
+            assertFalse(stated.toString().contains("Affine"),
+                    () -> over + " relates no two values: " + stated);
+        }
     }
 
     /** What the library does not say answers as many, or answers by a witness, is not carried. */

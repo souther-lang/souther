@@ -29,6 +29,7 @@ import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -238,7 +239,8 @@ public final class PathReachability {
      */
     public static Answers of(Core body, SpecImplementation.Implemented implemented,
                              CoverageSites.Plan plan, InputDomain read,
-                             RuleReadingContext ruleReading, MeaningsOfABody meanings) {
+                             RuleReadingContext ruleReading, MeaningsOfABody meanings,
+                             ElementBindings elements) {
         Objects.requireNonNull(read, "a reachability reading is made against an input that was read");
         if (implemented == null) {
             return Answers.NONE;
@@ -252,7 +254,7 @@ public final class PathReachability {
             params = params.with(input.written().binder(),
                     TypeOps.successType(input.declared().type()));
         }
-        return of(body, params, plan, read, ruleReading, meanings);
+        return of(body, params, plan, read, ruleReading, meanings, elements);
     }
 
     /**
@@ -268,7 +270,8 @@ public final class PathReachability {
      * the path goes on through it and takes nothing in.
      */
     public static Answers of(Core body, Scope params, CoverageSites.Plan plan, InputDomain read,
-                             RuleReadingContext ruleReading, MeaningsOfABody meanings) {
+                             RuleReadingContext ruleReading, MeaningsOfABody meanings,
+                             ElementBindings elements) {
         Objects.requireNonNull(read, "a reachability reading is made against an input that was read");
         if (body == null) {
             return Answers.NONE;
@@ -288,13 +291,12 @@ public final class PathReachability {
                 new PathReachability(engine, plan, read, ruleReading.source().symbols(),
                         ruleReading.source().newtypes(), out,
                         arriving, meanings, new MeaningAssumptions.InputPlaces(parameters,
-                                path -> read.typeAt(path, ruleReading.source())));
+                                path -> read.typeAt(path, ruleReading.source()), Map.of()));
         reading.entry = in.known();
         reading.entered = in.at();
         reading.walk(body, in.known(), in.at(),
                         InputReads.ofParameters(read.parameterReads(),
-                                read.declared(ruleReading.source()),
-                                ElementBindings.NONE),
+                                read.declared(ruleReading.source()), elements),
                         List.of(), true);
         // A walk that ran to the end and made none of the answers it is written to produce. Its own
         // limit and said as one: the analysis this borrows is open about what it reads, so a
@@ -454,7 +456,8 @@ public final class PathReachability {
      * there. One the reading of the model has nothing filed for is read as it stands here.
      */
     private Predicates.Assumed assuming(ConstructOccurrence at, MeaningsOfABody.Part part,
-                                        Core cond, Known k, Denotations in, boolean positive) {
+                                        Core cond, Known k, Denotations in, InputReads reads,
+                                        boolean positive) {
         Optional<ModelOccurrence> construct = ModelOccurrence.statedAt(at);
         if (construct.isEmpty()) {
             return new Predicates.Assumed(k, false, true);
@@ -462,13 +465,41 @@ public final class PathReachability {
         Optional<Proposition> stated =
                 meanings.at(new MeaningsOfABody.Site(construct.get(), part));
         if (stated.isPresent()) {
-            return engine.assuming(stated.get(), cond, k, in, positive, places);
+            return engine.assuming(stated.get(), cond, k, in, positive,
+                    places.readBy(positionsReadBy(cond, reads)));
         }
         // A body with no analysis to read it off has its conditions read as they stand here,
         // which is the one reading such a body has. A body that has one and files nothing at a
         // site takes nothing in there: what its conditions mean is not read twice.
         return meanings == MeaningsOfABody.NONE ? engine.assuming(cond, k, in, positive)
                 : new Predicates.Assumed(k, false, false);
+    }
+
+    /**
+     * The expression of {@code cond} that reads each position of the input, where {@code reads}
+     * places one: what a proposition about that position is about, in this tree.
+     *
+     * <p>Only what is read where the condition stands. Under a binding the condition makes, a name
+     * is one the bindings in force here say nothing of, so nothing below one is taken.
+     */
+    private Map<TermPath, Core> positionsReadBy(Core cond, InputReads reads) {
+        Map<TermPath, Core> out = new HashMap<>();
+        gatherPositions(cond, reads, out);
+        return out;
+    }
+
+    private void gatherPositions(Core standing, InputReads reads, Map<TermPath, Core> out) {
+        Core e = Core.withoutStanding(standing);
+        for (Core each : Core.subexpressionsAt(e)) {
+            if (reads.pathOf(each, newtypes) instanceof PathResolution.At(TermPath at)) {
+                out.putIfAbsent(at, each);
+            }
+        }
+        if (e instanceof Core.LetIn || e instanceof Core.Block || e instanceof Core.Match
+                || e instanceof Core.IfConstructed) {
+            return;
+        }
+        Core.forEachChild(e, child -> gatherPositions(child, reads, out));
     }
 
     /**
@@ -518,7 +549,7 @@ public final class PathReachability {
                 // against conditions nothing on the way to it established.
                 boolean reachedWhen = binary.op().rightRunsWhenLeftIs();
                 Predicates.Assumed reaching = assuming(binary.occurrence(),
-                        MeaningsOfABody.Part.LEFT, binary.left(), k, at, reachedWhen);
+                        MeaningsOfABody.Part.LEFT, binary.left(), k, at, reads, reachedWhen);
                 walk(binary.right(), reaching.known(), at, reads,
                         with(decided, reaching, binary.left().pos(), reachedWhen), nothingAbove);
             }
@@ -661,7 +692,7 @@ public final class PathReachability {
                 continue;
             }
             Predicates.Assumed taken = assuming(comparison.occurrence(),
-                    MeaningsOfABody.Part.ITSELF, comparison, k, at, result);
+                    MeaningsOfABody.Part.ITSELF, comparison, k, at, reads, result);
             out.put(where.get(), taken.known().reachesNothing()
                     ? new Reachability.Unreachable(Proof.conditionsThatCannotAllHold(
                             with(decided, taken, comparison.pos(), result)))
@@ -714,7 +745,7 @@ public final class PathReachability {
                       List<PathDecision> under, InputReads reads) {
         Core cond = iff.cond();
         if (assuming(iff.place().occurrence(), MeaningsOfABody.Part.CONDITION, cond, entry,
-                entered, holds).known().reachesNothing()) {
+                entered, reads, holds).known().reachesNothing()) {
             TermPath position = comparedPositionIn(cond, reads);
             NumericDomain.Bounds admits = position == null ? null : valueBoundsAt(position);
             if (admits != null && !under.isEmpty()) {
@@ -840,7 +871,7 @@ public final class PathReachability {
                           Known k, Denotations at, InputReads reads, List<PathDecision> decided,
                           boolean holds) {
         Predicates.Assumed taken = assuming(iff.place().occurrence(),
-                MeaningsOfABody.Part.CONDITION, iff.cond(), k, at, holds);
+                MeaningsOfABody.Part.CONDITION, iff.cond(), k, at, reads, holds);
         Known inside = taken.known();
         List<PathDecision> under = with(decided, taken, iff.cond().pos(), holds);
         if (arms != null && index < arms.length) {

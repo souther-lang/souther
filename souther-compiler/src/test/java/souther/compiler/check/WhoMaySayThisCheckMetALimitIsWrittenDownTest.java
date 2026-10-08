@@ -122,7 +122,8 @@ class WhoMaySayThisCheckMetALimitIsWrittenDownTest {
                     + "Lsouther/compiler/coverage/CoverageSites$Plan;"
                     + "Lsouther/compiler/inputs/InputDomain;"
                     + "Lsouther/compiler/check/RuleReadingContext;"
-                    + "Lsouther/compiler/meaning/MeaningsOfABody;)",
+                    + "Lsouther/compiler/meaning/MeaningsOfABody;"
+                    + "Lsouther/compiler/check/ElementBindings;)",
                     "reads which of a plan's comparisons the walk settled nothing about"));
 
     @Test

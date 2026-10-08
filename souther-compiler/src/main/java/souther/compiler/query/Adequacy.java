@@ -1081,7 +1081,9 @@ public final class Adequacy {
                 out.put(spec.name(), souther.compiler.check.PathReachability.of(
                         both.emitted(), SpecImplementation.align(spec, fn), plan, read,
                         ruleReading, meaningsOf(both.analysis(), read,
-                                () -> readingOf(db, read, reading.value()), reading.value())));
+                                () -> readingOf(db, read, reading.value()), reading.value()),
+                        checked.value().elementBindings()
+                                .getOrDefault(spec.name(), ElementBindings.NONE)));
             }
             return Answer.of(Ordered.map(out));
         }

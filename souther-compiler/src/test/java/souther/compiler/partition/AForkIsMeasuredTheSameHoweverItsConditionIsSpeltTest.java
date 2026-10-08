@@ -89,6 +89,34 @@ class AForkIsMeasuredTheSameHoweverItsConditionIsSpeltTest {
                 "List.length(x.xs) >= 1");
     }
 
+    /**
+     * A denial handed a name, which the copy of {@code Bool.not} takes as the caller wrote it
+     * rather than through a binding of its own, owes what the comparison with false owes.
+     */
+    @Test
+    void aDenialOfANameIsTheComparisonWithFalse() {
+        String flagged = """
+                module probe
+
+                data Box = { ok: Bool }
+
+                behavior f : (x: Box) -> Int
+                let f (x) = {
+                    let ok = x.ok
+                    if %s then 2 else 1
+                }
+
+                example f
+                    | (Box { ok = true }) -> 1
+                """;
+        assertEquals(owed(flagged.formatted("ok == false")),
+                owed(flagged.formatted("Bool.not(ok)")),
+                "the copy forks on the caller's own value, which is the fork above it");
+        assertEquals(owed(flagged.formatted("x.ok == false")),
+                owed(flagged.formatted("Bool.not(x.ok)")),
+                "and so it does where what it is handed is read off a field");
+    }
+
     @Test
     void aWitnessTheRuleProvidesSettlesTheFork() {
         sameForEach("an element the closure holds of exists wherever an element does", 2,

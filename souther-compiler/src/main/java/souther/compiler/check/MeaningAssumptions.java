@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.core.Core;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -48,14 +49,31 @@ final class MeaningAssumptions {
     /**
      * Where the positions a proposition names stand in the tree a reader walks.
      *
+     * <p>A position that is a chain of fields from a parameter stands there whatever is in force.
+     * One under a narrowing or inside a container stands where the walk's own tree reads it — a
+     * name an arm bound, an element a closure was handed — so it is found among what the condition
+     * itself reads, and the value is the one that expression names.
+     *
      * @param parameters the binding each parameter of the behavior is, by the name a position's
      *                   path starts with
      * @param typeAt     what stands at a position, or null where nothing is known to
+     * @param standing   the expression of the condition that reads each position, in the tree the
+     *                   reader walks
      */
-    record InputPlaces(Map<String, BindingId> parameters, Function<TermPath, Type> typeAt) {
+    record InputPlaces(Map<String, BindingId> parameters, Function<TermPath, Type> typeAt,
+                       Map<TermPath, Core> standing) {
 
         /** Where nothing stands: no proposition names a place here. */
-        static final InputPlaces NONE = new InputPlaces(Map.of(), path -> null);
+        static final InputPlaces NONE = new InputPlaces(Map.of(), path -> null, Map.of());
+
+        InputPlaces {
+            standing = Map.copyOf(standing);
+        }
+
+        /** The same places, with what a condition reads standing at each position it reads. */
+        InputPlaces readBy(Map<TermPath, Core> condition) {
+            return new InputPlaces(parameters, typeAt, condition);
+        }
     }
 
     private final Terms terms;
@@ -196,11 +214,17 @@ final class MeaningAssumptions {
                 terms.kindsOf(LinearForm.atom(atom)));
     }
 
-    /** The place a position is in this tree: a chain of fields from a parameter, or null. */
-    private FactSubject placeOf(TermPath at) {
-        BindingId parameter = places.parameters().get(at.head());
-        RuleKey fields = at.ruleKey();
-        return parameter == null || fields == null ? null
-                : terms.under(terms.placeSubject(parameter), fields);
+    /**
+     * The place a position is in this tree: a chain of fields from a parameter, or what the
+     * expression of the condition that reads it names — or null where neither stands for it.
+     */
+    private FactSubject placeOf(TermPath position) {
+        BindingId parameter = places.parameters().get(position.head());
+        RuleKey fields = position.ruleKey();
+        if (parameter != null && fields != null) {
+            return terms.under(terms.placeSubject(parameter), fields);
+        }
+        Core reading = places.standing().get(position);
+        return reading == null ? null : terms.subjectOf(reading, at);
     }
 }
