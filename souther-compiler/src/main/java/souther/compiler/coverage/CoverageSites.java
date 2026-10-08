@@ -1537,7 +1537,8 @@ public final class CoverageSites {
             // The arm is made either way. Whether a run through it can be recorded is the second
             // question and only the probe turns on it — an arm nothing could record is still an arm,
             // and the readings that judge one need to be able to name it.
-            if (!(reachable && answers(arm) && answering.mayEnter(owner, part))) {
+            if (!(reachable && answers(arm) && answering.mayEnter(owner, part))
+                    || restatesWhatItWasHanded(owner)) {
                 return new DraftArm(which, java.util.OptionalInt.empty(), anchor);
             }
             // Asked before the place is numbered, so that a tree nothing wrote is refused for being
@@ -1553,6 +1554,24 @@ public final class CoverageSites {
             sites.add(new DraftArmSite(draft, behavior, outcome, ordinal++,
                     new Obligation(behavior, origin, part, decided)));
             return draft;
+        }
+
+        /**
+         * Whether {@code fork} is an operation of the language forking on the truth it was handed,
+         * which is no way of its own.
+         *
+         * <p>{@code Bool.not} is written as a fork on its argument. Each way through it is a way
+         * the truth handed to it came out, which is the caller's truth and is owed where the
+         * caller decides by it — so {@code Bool.not(p)} and {@code p == false} are one condition
+         * and owe the same arms. A fork an operation draws a line of its own at, as
+         * {@code Int.max} compares its two arguments, is a way the model's rows go through and
+         * stays owed.
+         */
+        private static boolean restatesWhatItWasHanded(Core fork) {
+            return Core.withoutStanding(fork) instanceof Core.If iff
+                    && Core.withoutStanding(iff.cond()) instanceof Core.Read read
+                    && read.binding().owner() instanceof BindingOwner.Expansion copy
+                    && copy.expanded() instanceof ValueName.Stdlib.Operation;
         }
 
         /**

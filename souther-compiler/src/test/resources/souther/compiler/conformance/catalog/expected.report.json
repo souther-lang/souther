@@ -5531,7 +5531,7 @@
                   "declaredIn" : "conformance.shipping",
                   "definition" : "出荷する",
                   "behavior" : "出荷する",
-                  "ordinal" : 11,
+                  "ordinal" : 12,
                   "lowered" : 0
                 }
               },
@@ -5587,7 +5587,7 @@
                   "declaredIn" : "conformance.shipping",
                   "definition" : "出荷する",
                   "behavior" : "出荷する",
-                  "ordinal" : 11,
+                  "ordinal" : 12,
                   "lowered" : 0
                 }
               },
@@ -5600,7 +5600,7 @@
             }
           },
           "axis" : "出荷する/指示.重量",
-          "origin" : "comparison@2:88:17",
+          "origin" : "comparison@2:93:17",
           "kind" : "at_value",
           "value" : "30000",
           "items" : [ {
@@ -5832,7 +5832,7 @@
                     "declaredIn" : "conformance.shipping",
                     "definition" : "出荷する",
                     "behavior" : "出荷する",
-                    "ordinal" : 11,
+                    "ordinal" : 12,
                     "lowered" : 0
                   }
                 },
@@ -5878,7 +5878,7 @@
                   "declaredIn" : "conformance.shipping",
                   "definition" : "出荷する",
                   "behavior" : "出荷する",
-                  "ordinal" : 11,
+                  "ordinal" : 12,
                   "lowered" : 0
                 }
               },
@@ -5901,13 +5901,13 @@
             }
           },
           "point" : "on",
-          "rule" : "comparison@2:88:17",
+          "rule" : "comparison@2:93:17",
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "definition" : "出荷する",
             "behavior" : "出荷する",
-            "ordinal" : 11,
+            "ordinal" : 12,
             "lowered" : 0
           },
           "relation" : "=",
@@ -5934,7 +5934,7 @@
                   "declaredIn" : "conformance.shipping",
                   "definition" : "出荷する",
                   "behavior" : "出荷する",
-                  "ordinal" : 11,
+                  "ordinal" : 12,
                   "lowered" : 0
                 }
               },
@@ -5958,13 +5958,13 @@
             }
           },
           "point" : "off",
-          "rule" : "comparison@2:88:17",
+          "rule" : "comparison@2:93:17",
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "definition" : "出荷する",
             "behavior" : "出荷する",
-            "ordinal" : 11,
+            "ordinal" : 12,
             "lowered" : 0
           },
           "relation" : "=",
@@ -5991,7 +5991,7 @@
                   "declaredIn" : "conformance.shipping",
                   "definition" : "出荷する",
                   "behavior" : "出荷する",
-                  "ordinal" : 11,
+                  "ordinal" : 12,
                   "lowered" : 0
                 }
               },
@@ -6024,13 +6024,13 @@
             }
           },
           "point" : "in",
-          "rule" : "comparison@2:88:17",
+          "rule" : "comparison@2:93:17",
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "definition" : "出荷する",
             "behavior" : "出荷する",
-            "ordinal" : 11,
+            "ordinal" : 12,
             "lowered" : 0
           },
           "relation" : "in",
@@ -6057,7 +6057,7 @@
                   "declaredIn" : "conformance.shipping",
                   "definition" : "出荷する",
                   "behavior" : "出荷する",
-                  "ordinal" : 11,
+                  "ordinal" : 12,
                   "lowered" : 0
                 }
               },
@@ -6085,13 +6085,13 @@
             }
           },
           "point" : "out",
-          "rule" : "comparison@2:88:17",
+          "rule" : "comparison@2:93:17",
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "definition" : "出荷する",
             "behavior" : "出荷する",
-            "ordinal" : 11,
+            "ordinal" : 12,
             "lowered" : 0
           },
           "relation" : "in",
@@ -6400,7 +6400,7 @@
           "obligationId" : {
             "module" : "conformance.shipping",
             "definition" : "出荷する",
-            "construct" : 10,
+            "construct" : 11,
             "lowered" : 0,
             "part" : 0,
             "decidedBy" : "the_declaration"
@@ -6410,7 +6410,7 @@
           "construct" : "guard",
           "at" : {
             "sourceId" : "2",
-            "line" : 88,
+            "line" : 93,
             "column" : 5,
             "writtenAt" : {
               "kind" : "here"
@@ -6456,50 +6456,6 @@
             "column" : 5,
             "writtenAt" : {
               "kind" : "here"
-            }
-          },
-          "disposition" : "met"
-        }, {
-          "obligationId" : {
-            "module" : "souther.bool",
-            "definition" : "not",
-            "construct" : 0,
-            "lowered" : 0,
-            "part" : 0,
-            "decidedBy" : "the_declaration"
-          },
-          "label" : "then",
-          "kind" : "then",
-          "construct" : "if",
-          "at" : {
-            "sourceId" : "2",
-            "line" : 89,
-            "column" : 11,
-            "writtenAt" : {
-              "kind" : "outOfSight",
-              "declaration" : "Bool.not"
-            }
-          },
-          "disposition" : "met"
-        }, {
-          "obligationId" : {
-            "module" : "souther.bool",
-            "definition" : "not",
-            "construct" : 0,
-            "lowered" : 0,
-            "part" : 1,
-            "decidedBy" : "the_declaration"
-          },
-          "label" : "else",
-          "kind" : "else",
-          "construct" : "if",
-          "at" : {
-            "sourceId" : "2",
-            "line" : 89,
-            "column" : 11,
-            "writtenAt" : {
-              "kind" : "outOfSight",
-              "declaration" : "Bool.not"
             }
           },
           "disposition" : "met"
@@ -6507,7 +6463,7 @@
           "obligationId" : {
             "module" : "conformance.shipping",
             "definition" : "出荷する",
-            "construct" : 5,
+            "construct" : 6,
             "lowered" : 0,
             "part" : 0,
             "decidedBy" : "the_declaration"
@@ -6517,7 +6473,7 @@
           "construct" : "guard",
           "at" : {
             "sourceId" : "2",
-            "line" : 89,
+            "line" : 94,
             "column" : 5,
             "writtenAt" : {
               "kind" : "here"
@@ -6528,7 +6484,7 @@
           "obligationId" : {
             "module" : "conformance.shipping",
             "definition" : "出荷する",
-            "construct" : 4,
+            "construct" : 5,
             "lowered" : 0,
             "part" : 0,
             "decidedBy" : "the_declaration"
@@ -6538,7 +6494,7 @@
           "construct" : "match",
           "at" : {
             "sourceId" : "2",
-            "line" : 90,
+            "line" : 95,
             "column" : 5,
             "writtenAt" : {
               "kind" : "here"
@@ -6549,7 +6505,7 @@
           "obligationId" : {
             "module" : "conformance.shipping",
             "definition" : "出荷する",
-            "construct" : 4,
+            "construct" : 5,
             "lowered" : 0,
             "part" : 1,
             "decidedBy" : "the_declaration"
@@ -6559,7 +6515,7 @@
           "construct" : "match",
           "at" : {
             "sourceId" : "2",
-            "line" : 90,
+            "line" : 95,
             "column" : 5,
             "writtenAt" : {
               "kind" : "here"
@@ -6610,9 +6566,53 @@
           "disposition" : "met"
         }, {
           "obligationId" : {
+            "module" : "souther.int",
+            "definition" : "max",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "then",
+          "kind" : "then",
+          "construct" : "if",
+          "at" : {
+            "sourceId" : "2",
+            "line" : 90,
+            "column" : 26,
+            "writtenAt" : {
+              "kind" : "outOfSight",
+              "declaration" : "Int.max"
+            }
+          },
+          "disposition" : "unmet"
+        }, {
+          "obligationId" : {
+            "module" : "souther.int",
+            "definition" : "max",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "else",
+          "kind" : "else",
+          "construct" : "if",
+          "at" : {
+            "sourceId" : "2",
+            "line" : 90,
+            "column" : 26,
+            "writtenAt" : {
+              "kind" : "outOfSight",
+              "declaration" : "Int.max"
+            }
+          },
+          "disposition" : "met"
+        }, {
+          "obligationId" : {
             "module" : "conformance.shipping",
             "definition" : "出荷する",
-            "construct" : 5,
+            "construct" : 6,
             "lowered" : 0,
             "part" : 1,
             "decidedBy" : "the_declaration"
@@ -6622,7 +6622,7 @@
           "construct" : "guard",
           "at" : {
             "sourceId" : "2",
-            "line" : 89,
+            "line" : 94,
             "column" : 5,
             "writtenAt" : {
               "kind" : "here"
@@ -6633,7 +6633,7 @@
           "obligationId" : {
             "module" : "conformance.shipping",
             "definition" : "出荷する",
-            "construct" : 10,
+            "construct" : 11,
             "lowered" : 0,
             "part" : 1,
             "decidedBy" : "the_declaration"
@@ -6643,7 +6643,7 @@
           "construct" : "guard",
           "at" : {
             "sourceId" : "2",
-            "line" : 88,
+            "line" : 93,
             "column" : 5,
             "writtenAt" : {
               "kind" : "here"
@@ -6758,7 +6758,7 @@
             "rewrite" : "arm_as_sibling",
             "module" : "conformance.shipping",
             "definition" : "出荷する",
-            "construct" : 10,
+            "construct" : 11,
             "lowered" : 0,
             "part" : 0,
             "with" : 1
@@ -6793,34 +6793,9 @@
           "obligationId" : {
             "behavior" : "出荷する",
             "rewrite" : "arm_as_sibling",
-            "module" : "souther.bool",
-            "definition" : "not",
-            "construct" : 0,
-            "lowered" : 0,
-            "part" : 0,
-            "with" : 1
-          },
-          "disposition" : "noticed"
-        }, {
-          "obligationId" : {
-            "behavior" : "出荷する",
-            "rewrite" : "arm_as_sibling",
-            "module" : "souther.bool",
-            "definition" : "not",
-            "construct" : 0,
-            "lowered" : 0,
-            "part" : 1,
-            "with" : 0
-          },
-          "disposition" : "undecided",
-          "undecidedBecause" : [ "nothing_was_composed" ]
-        }, {
-          "obligationId" : {
-            "behavior" : "出荷する",
-            "rewrite" : "arm_as_sibling",
             "module" : "conformance.shipping",
             "definition" : "出荷する",
-            "construct" : 5,
+            "construct" : 6,
             "lowered" : 0,
             "part" : 0,
             "with" : 1
@@ -6854,9 +6829,9 @@
           "obligationId" : {
             "behavior" : "出荷する",
             "rewrite" : "arm_as_sibling",
-            "module" : "conformance.shipping",
-            "definition" : "出荷する",
-            "construct" : 5,
+            "module" : "souther.int",
+            "definition" : "max",
+            "construct" : 0,
             "lowered" : 0,
             "part" : 1,
             "with" : 0
@@ -6868,7 +6843,19 @@
             "rewrite" : "arm_as_sibling",
             "module" : "conformance.shipping",
             "definition" : "出荷する",
-            "construct" : 10,
+            "construct" : 6,
+            "lowered" : 0,
+            "part" : 1,
+            "with" : 0
+          },
+          "disposition" : "noticed"
+        }, {
+          "obligationId" : {
+            "behavior" : "出荷する",
+            "rewrite" : "arm_as_sibling",
+            "module" : "conformance.shipping",
+            "definition" : "出荷する",
+            "construct" : 11,
             "lowered" : 0,
             "part" : 1,
             "with" : 0
@@ -6879,7 +6866,7 @@
       "findings" : [ {
         "kind" : "domain_point_uncovered",
         "disposition" : "refused",
-        "subject" : "OUT point of comparison@2:88:17",
+        "subject" : "OUT point of comparison@2:93:17",
         "obligationId" : {
           "line" : {
             "which" : {
@@ -6889,7 +6876,7 @@
                 "declaredIn" : "conformance.shipping",
                 "definition" : "出荷する",
                 "behavior" : "出荷する",
-                "ordinal" : 11,
+                "ordinal" : 12,
                 "lowered" : 0
               }
             },
@@ -7047,6 +7034,28 @@
           "behavior" : "出荷する",
           "ordinal" : 3,
           "lowered" : 0
+        }
+      }, {
+        "kind" : "arm_unreached",
+        "disposition" : "refused",
+        "subject" : "then",
+        "obligationId" : {
+          "module" : "souther.int",
+          "definition" : "max",
+          "construct" : 0,
+          "lowered" : 0,
+          "part" : 0,
+          "decidedBy" : "the_declaration"
+        },
+        "code" : "E1918",
+        "at" : {
+          "sourceId" : "2",
+          "line" : 90,
+          "column" : 26,
+          "writtenAt" : {
+            "kind" : "outOfSight",
+            "declaration" : "Int.max"
+          }
         }
       }, {
         "kind" : "pair_uncovered",
@@ -8006,50 +8015,6 @@
           "disposition" : "met"
         }, {
           "obligationId" : {
-            "module" : "souther.bool",
-            "definition" : "not",
-            "construct" : 0,
-            "lowered" : 0,
-            "part" : 0,
-            "decidedBy" : "the_declaration"
-          },
-          "label" : "then",
-          "kind" : "then",
-          "construct" : "if",
-          "at" : {
-            "sourceId" : "2",
-            "line" : 61,
-            "column" : 31,
-            "writtenAt" : {
-              "kind" : "outOfSight",
-              "declaration" : "Bool.not"
-            }
-          },
-          "disposition" : "met"
-        }, {
-          "obligationId" : {
-            "module" : "souther.bool",
-            "definition" : "not",
-            "construct" : 0,
-            "lowered" : 0,
-            "part" : 1,
-            "decidedBy" : "the_declaration"
-          },
-          "label" : "else",
-          "kind" : "else",
-          "construct" : "if",
-          "at" : {
-            "sourceId" : "2",
-            "line" : 61,
-            "column" : 31,
-            "writtenAt" : {
-              "kind" : "outOfSight",
-              "declaration" : "Bool.not"
-            }
-          },
-          "disposition" : "met"
-        }, {
-          "obligationId" : {
             "module" : "conformance.shipping",
             "definition" : "夜間割増",
             "construct" : 0,
@@ -8469,30 +8434,6 @@
             "lowered" : 0,
             "part" : 2,
             "with" : 1
-          },
-          "disposition" : "noticed"
-        }, {
-          "obligationId" : {
-            "behavior" : "送料を出す",
-            "rewrite" : "arm_as_sibling",
-            "module" : "souther.bool",
-            "definition" : "not",
-            "construct" : 0,
-            "lowered" : 0,
-            "part" : 0,
-            "with" : 1
-          },
-          "disposition" : "noticed"
-        }, {
-          "obligationId" : {
-            "behavior" : "送料を出す",
-            "rewrite" : "arm_as_sibling",
-            "module" : "souther.bool",
-            "definition" : "not",
-            "construct" : 0,
-            "lowered" : 0,
-            "part" : 1,
-            "with" : 0
           },
           "disposition" : "noticed"
         }, {
