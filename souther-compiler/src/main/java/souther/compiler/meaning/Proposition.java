@@ -361,6 +361,14 @@ public sealed interface Proposition {
      * statement, and whether it can hold is whether some statement can, as whether it can fail is
      * whether some denial can.
      *
+     * <p><b>The applications a closure may be handed, and not the ones a run makes.</b> An
+     * operation that stops at an answer hands what comes after it nothing — {@code List.any} stops
+     * at the first element that holds — so a statement here may be of an application no run
+     * reaches. Read for what can hold, that is a statement too many and never one too few; read for
+     * what must, it would be a claim about a run that never happens. So a reader takes this only
+     * for what can come out, and one that needs what must — what a path assumes, what a row is
+     * asked for — declines it.
+     *
      * @param key spelled from the statements' own when it is made, whatever is handed in
      */
     record OnAnApplication(List<Proposition> each, String key) implements Proposition {

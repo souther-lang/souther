@@ -9,12 +9,14 @@ import java.util.Objects;
 /**
  * Why part of a condition was read as nothing.
  *
- * <p>Two kinds, kept apart because they are owed different things. Most say what the domain the
+ * <p>Three kinds, kept apart because they are owed different things. Most say what the domain the
  * reading is over has no words for at the place it stopped, and nothing written in this reading
  * would read the part. {@link NotYetComposed} says the opposite: the part follows from what the
  * language and the library already say, and the step that would take it is not written. That one
  * is an obligation of this compiler's and not a fact about the model, and naming the step is what
- * lets it be counted and closed.
+ * lets it be counted and closed. And one says neither: that the part could be read and this compiler
+ * declined the work at a figure it holds itself to ({@link MoreReadingsThanAreMade}), which is
+ * lifted by raising the figure and by nothing written in the model.
  *
  * <p>Only the reading of what a condition means says one of these. That a reader of the proposition
  * has no demand for a part it was handed is that reader's to say in its own words, and putting it
@@ -122,6 +124,13 @@ public sealed interface WhyUnread {
      * through.
      */
     record WhatARecursiveHelperAnswers() implements WhyUnread {}
+
+    /**
+     * A part that would be read once for each application of the closures it is in, or each case
+     * of what it compares, more times than the reading of what a condition means makes. A figure
+     * of this compiler's work was reached, and nothing is said of the model.
+     */
+    record MoreReadingsThanAreMade() implements WhyUnread {}
 
     /**
      * A part that follows from what the language and the library already say, through a step this

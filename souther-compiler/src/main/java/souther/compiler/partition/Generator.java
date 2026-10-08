@@ -733,6 +733,9 @@ public final class Generator {
                              VALUES_A_POINT_IS_TRIED_WITH,
                              DEPTH_A_CONSTRUCTION_PLAN_DESCENDS,
                              PATHS_OF_A_DECISION_READ,
+                             // It stops a reading of what a condition means, and what it stopped
+                             // is carried as a part nothing read, naming it.
+                             READINGS_OF_ONE_CONDITION,
                              // What it stops is the looking for a way past a guard, beside a row
                              // already found, and what it stopped is carried beside that row.
                              RUNS_REPAIRING_A_ROW -> throw new IllegalArgumentException(

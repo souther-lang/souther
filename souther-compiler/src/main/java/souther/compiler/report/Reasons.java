@@ -171,6 +171,8 @@ final class Reasons {
                 case DEPTH_A_CONSTRUCTION_PLAN_DESCENDS -> "how deep a value is built";
                 case PATHS_OF_A_DECISION_READ ->
                         "how many paths through one body a decision is read for";
+                case READINGS_OF_ONE_CONDITION ->
+                        "how many times one condition is read, once per value or case";
                 case NUMBERS_OF_A_SET_TRIED ->
                         "how many of the numbers a class admits are tried";
                 case RUNS_REPAIRING_A_ROW ->

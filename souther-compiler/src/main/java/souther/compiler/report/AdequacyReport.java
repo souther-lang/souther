@@ -3910,6 +3910,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                  WhyUnread.ANumberOfWhatAnOperationAnswers _ -> NO_CUT;
             case WhyUnread.TwoElementsOfOneContainer _, WhyUnread.NoLawFor _,
                  WhyUnread.WhatARecursiveHelperAnswers _ -> NEITHER_A_COMPARISON_NOR_A_COMBINATION;
+            // Its own words: nothing the author wrote is wanting, and raising a figure lifts it.
+            case WhyUnread.MoreReadingsThanAreMade _ -> "a condition that would be read once for each"
+                    + " of more values or cases than this compiler reads one by one";
             case WhyUnread.NotYetComposed(WhyUnread.NotYetComposed.Step step) -> switch (step) {
                 case A_SIZE_AN_OPERATION_KEEPS, A_CHOICE_BY_CASES, VALUES_WRITTEN_OUT -> NO_CUT;
                 case A_DEPENDENCY_ASKED_ABOUT_A_COMPUTED_VALUE, A_BEHAVIOR_CALLED_BY_NAME,

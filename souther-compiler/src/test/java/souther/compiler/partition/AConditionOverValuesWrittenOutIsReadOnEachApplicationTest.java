@@ -11,16 +11,21 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A closure applied to each of the values a container was written with is read on each application,
@@ -77,6 +82,102 @@ class AConditionOverValuesWrittenOutIsReadOnEachApplicationTest {
                 Proposition.OnAnApplication.class, inside.denied());
         assertEquals(List.of(stated("w.first.days <= 3"), stated("w.second.days <= 3")),
                 failing.each());
+    }
+
+    /**
+     * An application an operation stops before is still among the statements: {@code List.any}
+     * stops at the first element that holds, so the second is never handed to it. What the
+     * statements say can come out includes everything a run gives, which is all they are read for.
+     */
+    @Test
+    void anApplicationNoRunMakesIsAStatementTooManyAndNeverOneTooFew() {
+        Proposition inside = theOneConditionIn("List.any(m -> m.days == 1, [w.first, w.second])");
+        assertInstanceOf(Proposition.OnAnApplication.class, inside);
+        assertTrue(TruthOutcomes.of(inside).allows(true) && TruthOutcomes.of(inside).allows(false),
+                "either way, since either element may be the one a run is on");
+        Proposition settled = theOneConditionIn("List.any(x -> x == 1, [1, 2])");
+        assertTrue(TruthOutcomes.of(settled).allows(true),
+                () -> "the run holds on its first application and stops: " + settled);
+        assertEquals(new Proposition.Always(true),
+                stated("List.any(x -> x == 1, [1, 2])"), "what some element meets is exact");
+    }
+
+    /**
+     * Past how many readings of one condition are made, a closure's applications are not read
+     * one by one, and what is read in their place says that this compiler declined the work.
+     */
+    @Test
+    void moreApplicationsThanAreReadAreDeclinedAndSaySo() {
+        int most = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
+        assertInstanceOf(Proposition.Any.class,
+                stated("List.any(x -> w.n == x, " + values(most) + ")"),
+                "as many applications as are read are read one by one");
+        Proposition.Unread past = assertInstanceOf(Proposition.Unread.class,
+                stated("List.any(x -> w.n == x, " + values(most + 1) + ")"));
+        assertEquals(new WhyUnread.MoreReadingsThanAreMade(), past.why());
+        Proposition.Unread inside = assertInstanceOf(Proposition.Unread.class,
+                theOneConditionIn("List.any(x -> w.n == x, " + values(most + 1) + ")"));
+        assertEquals(new WhyUnread.MoreReadingsThanAreMade(), inside.why(),
+                "and a condition in the body is filed as declined, not read on fewer of them");
+    }
+
+    /** What multiplies is the nesting, and it is counted down the tree, outer applications and
+     *  all. */
+    @Test
+    void nestedApplicationsAreCountedTogether() {
+        int side = (int) Math.sqrt(CompositionBudget.READINGS_OF_ONE_CONDITION.maximum());
+        String within = "List.any(x -> List.any(y -> w.n == x + y, " + values(side) + "), "
+                + values(side) + ")";
+        assertFalse(unreadIn(stated(within)), () -> "within the figure: " + stated(within));
+        String past = "List.any(x -> List.any(y -> w.n == x + y, " + values(side + 1) + "), "
+                + values(side + 1) + ")";
+        assertTrue(unreadIn(stated(past)), "each closure alone is within the figure, and the"
+                + " two together are past it");
+    }
+
+    /** The cases of each side of a comparison are compared with each other's, and counted so. */
+    @Test
+    void casesComparedWithCasesAreCountedTogether() {
+        int side = (int) Math.sqrt(CompositionBudget.READINGS_OF_ONE_CONDITION.maximum());
+        Proposition within = stated(choices("w.n", side) + " > " + choices("w.first.days", side));
+        assertFalse(unreadIn(within), () -> "within the figure: " + within);
+        Proposition past = stated(choices("w.n", side + 1) + " > "
+                + choices("w.first.days", side + 1));
+        assertEquals(List.of(new WhyUnread.MoreReadingsThanAreMade()), whysIn(past));
+    }
+
+    /** {@code [0, 1, ..., count - 1]}. */
+    private static String values(int count) {
+        return IntStream.range(0, count).mapToObj(String::valueOf)
+                .collect(Collectors.joining(", ", "[", "]"));
+    }
+
+    /** A value chosen by {@code count} cases of {@code subject}. */
+    private static String choices(String subject, int count) {
+        StringBuilder out = new StringBuilder("(");
+        for (int at = 1; at < count; at++) {
+            out.append("if ").append(subject).append(" == ").append(at).append(" then ")
+                    .append(at).append(" else ");
+        }
+        return out.append("0)").toString();
+    }
+
+    private static boolean unreadIn(Proposition stated) {
+        return !whysIn(stated).isEmpty();
+    }
+
+    private static List<WhyUnread> whysIn(Proposition stated) {
+        return switch (stated) {
+            case Proposition.Unread unread -> List.of(unread.why());
+            case Proposition.All all -> all.parts().stream().flatMap(p -> whysIn(p).stream())
+                    .toList();
+            case Proposition.Any any -> any.parts().stream().flatMap(p -> whysIn(p).stream())
+                    .toList();
+            case Proposition.OnAnApplication on -> on.each().stream()
+                    .flatMap(p -> whysIn(p).stream()).toList();
+            case Proposition.Some some -> whysIn(some.ofTheElement());
+            default -> List.of();
+        };
     }
 
     @Test

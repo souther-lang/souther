@@ -6,6 +6,7 @@ import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationAccess;
+import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementWitness;
@@ -495,6 +496,21 @@ final class Pullback {
                 : unread(e, reads, unreadAs(applied, AnswerAspect.PRESENCE, reads));
     }
 
+    /**
+     * How many readings of one condition are made
+     * ({@link CompositionBudget#READINGS_OF_ONE_CONDITION}), read here and nowhere else.
+     */
+    private static final CompositionBudget READINGS = CompositionBudget.READINGS_OF_ONE_CONDITION;
+
+    /**
+     * {@code block}'s body read on each of its applications in {@code at}, held to how many readings
+     * of one condition are made — for every reader of a closure over values written out.
+     */
+    static InputReads.Applications applicationsOf(Core.Block block, InputReads at,
+                                                  Symbols symbols, DeclarationNewtypes newtypes) {
+        return at.applicationsOf(block, symbols, newtypes, READINGS.maximum());
+    }
+
     /** The one of {@code rules} an expression is read by ({@link RuleChoice}). */
     private Derivation firstThatReadsIt(List<Supplier<Derivation>> rules) {
         return RuleChoice.firstThatReadsIt(rules, met, trying);
@@ -592,11 +608,18 @@ final class Pullback {
             if (list.elements().isEmpty()) {
                 return new Derivation.OverElementsWrittenOut(List.of(), witness.holds());
             }
-            List<InputReads> applications = closure.at().applicationsOf(block,
-                    read.rules().symbols(), read.rules().newtypes());
+            List<InputReads> applications = switch (applicationsOf(block, closure.at(),
+                    read.rules().symbols(), read.rules().newtypes())) {
+                case InputReads.Applications.Each(var each) -> each;
+                case InputReads.Applications.NoneHanded _, InputReads.Applications.Unsaid _ ->
+                        List.of(closure.at());
+                case InputReads.Applications.MoreThanAreRead _ -> null;
+            };
+            if (applications == null) {
+                return unread(e, reads, new WhyUnread.MoreReadingsThanAreMade());
+            }
             List<Derivation> ofEach = new ArrayList<>();
-            for (InputReads application
-                    : applications != null ? applications : List.of(closure.at())) {
+            for (InputReads application : applications) {
                 ofEach.add(observe(block.body(), witness.aspect(), application));
             }
             return new Derivation.OverElementsWrittenOut(ofEach, witness.holds());
@@ -982,6 +1005,13 @@ final class Pullback {
                 || (chosenAt(left) == null && chosenAt(right) == null)) {
             return null;
         }
+        // Each case of one side is compared with each of the other's, on every application this
+        // reading is one of: counted before any is made.
+        long most = READINGS.maximum();
+        if (reads.readings() * readingsOf(left, most) * readingsOf(right, most) > most) {
+            return partOf(at, new Derivation.Stopped(new WhyUnread.MoreReadingsThanAreMade(),
+                    false));
+        }
         return new Derivation.AComparisonOfAChoice(
                 comparedCase(left, right, stated.claim().statedRelation(), at));
     }
@@ -998,6 +1028,40 @@ final class Pullback {
         }
         Derivation byRight = byItsCases(right, at, side -> comparedCase(left, side, states, at));
         return byRight != null ? byRight : partOf(at, overQuantities(left, right, states));
+    }
+
+    /**
+     * How many comparisons {@code side} is split into where a comparison over it is read as its
+     * cases ({@link #comparedCase}): one where it is chosen by none, and otherwise one for what
+     * each case answers and one for each relation of the values a library operation's case is
+     * reached under — or one more than {@code most}, where it is more than that.
+     */
+    private long readingsOf(Denotation side, long most) {
+        Denotation chosen = chosenAt(side);
+        if (chosen == null) {
+            return 1;
+        }
+        Choice choice = Choice.of(Core.withoutStanding(chosen.value()));
+        long readings = 0;
+        for (Choice.Arm arm : choice.arms()) {
+            InputReads inside = chosen.at().choosing(arm.decidedBy(), read.rules().symbols(),
+                    read.rules().newtypes());
+            readings += readingsOf(new Denotation(arm.answers(), inside), most);
+            List<Choice.ArgumentRelation> reachedUnder = switch (choice.kind()) {
+                case THE_ARGUMENTS -> relationsDeciding(arm);
+                // An arm a condition or a case decides is reached by reading that once, and not
+                // by comparisons split on its own.
+                case A_CONDITION, A_CASE, AN_ATTEMPT -> List.of();
+            };
+            for (Choice.ArgumentRelation stands : reachedUnder) {
+                readings += readingsOf(new Denotation(stands.left(), inside), most)
+                        * readingsOf(new Denotation(stands.right(), inside), most);
+            }
+            if (readings > most) {
+                return most + 1;
+            }
+        }
+        return readings;
     }
 
     /**
