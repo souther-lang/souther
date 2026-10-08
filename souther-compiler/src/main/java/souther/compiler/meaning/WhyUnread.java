@@ -2,6 +2,7 @@ package souther.compiler.meaning;
 
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.Unsayable;
 import souther.compiler.types.ValueName;
 
 import java.util.Objects;
@@ -88,13 +89,31 @@ public sealed interface WhyUnread {
     record TwoElementsOfOneContainer() implements WhyUnread {}
 
     /**
-     * An operation the library declares no law of, for how its answer comes out on {@code aspect}.
+     * An operation the library declares no law of, for how its answer comes out on {@code aspect}:
+     * one whose declaration does not give its answer that side, such as a walk answering whatever
+     * its step does. Every operation whose declared answer has the side is settled, by a law or by
+     * {@link NoWordsFor}.
      */
     record NoLawFor(ValueName.Stdlib operation, AnswerAspect aspect) implements WhyUnread {
 
         public NoLawFor {
             Objects.requireNonNull(operation, "a law is of an operation");
             Objects.requireNonNull(aspect, "a law is about one side of what it answers");
+        }
+    }
+
+    /**
+     * How {@code operation}'s answer comes out on {@code aspect} comes to {@code proposition}, which
+     * the domain has no words for: what it states is known, and no proposition over the input says
+     * it.
+     */
+    record NoWordsFor(ValueName.Stdlib operation, AnswerAspect aspect, Unsayable proposition)
+            implements WhyUnread {
+
+        public NoWordsFor {
+            Objects.requireNonNull(operation, "a closing is of an operation");
+            Objects.requireNonNull(aspect, "about one side of what it answers");
+            Objects.requireNonNull(proposition, "and names what that comes to");
         }
     }
 
@@ -147,12 +166,6 @@ public sealed interface WhyUnread {
          * left to write and nothing else.
          */
         public enum Step {
-
-            /**
-             * The size of what an operation answers where the library says it answers as many as it
-             * was handed, read as the size of what it was handed.
-             */
-            A_SIZE_AN_OPERATION_KEEPS,
 
             /**
              * A value chosen by cases where the choice is not a side of a comparison of numbers:

@@ -1,9 +1,11 @@
 package souther.compiler.check;
 
+import souther.compiler.semantics.OperationLaw;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -282,6 +284,85 @@ enum Question {
         @Override
         Set<ValueName> deliberatelyUnanswered() {
             return Set.of();
+        }
+    },
+
+    /**
+     * What its answer holding anything comes to over its arguments ({@link
+     * BoundOperationFacts#settled}). Asked of an operation answering a container or a string: that
+     * is what holding something is asked of, and a reading of a condition carrying the question
+     * across a call has to find it answered — by a law, declared or read off what the operation
+     * builds, or by a closing that names what the domain has no words for.
+     */
+    HOLDING_SOMETHING("what its answer holding anything comes to") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            return signature.result() != null && hasASize(signature.result());
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return byALaw(operation, OperationLaw.Observed.EMPTINESS);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return settledBy(OperationLaw.Observed.EMPTINESS, true);
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            return settledBy(OperationLaw.Observed.EMPTINESS, false);
+        }
+    },
+
+    /** What its answer holding a value comes to over its arguments. Asked of an operation answering
+     *  an optional, and settled as {@link #HOLDING_SOMETHING} is. */
+    HOLDING_A_VALUE("what its answer holding a value comes to") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            return signature.result() instanceof Type.OptionOf;
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return byALaw(operation, OperationLaw.Observed.PRESENCE);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return settledBy(OperationLaw.Observed.PRESENCE, true);
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            return settledBy(OperationLaw.Observed.PRESENCE, false);
+        }
+    },
+
+    /** What its answer coming out true comes to over its arguments. Asked of a walk with a closure
+     *  answering a truth that answers one itself: how its answer comes out is what its closure's
+     *  answers make of it. Settled as {@link #HOLDING_SOMETHING} is. */
+    TRUTH_OF_A_WALK("what its answer coming out true comes to") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            return signature.result() == Type.Prim.BOOL && signature.params().stream().anyMatch(
+                    t -> t instanceof Type.FnOf fn && fn.result() == Type.Prim.BOOL);
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return byALaw(operation, OperationLaw.Observed.TRUTH);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return settledBy(OperationLaw.Observed.TRUTH, true);
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            return settledBy(OperationLaw.Observed.TRUTH, false);
         }
     },
 
@@ -745,10 +826,12 @@ enum Question {
     /**
      * The operations this is asked of and answers nothing for, each named with the reason.
      *
-     * <p>Held by the question and not by the facts the compiler reads. What a name here records is
-     * that the question was considered for that operation and closed; the reason is about the
-     * operation, but nothing in the compiler reads a closed question as a proposition, and what
-     * would have to be true for one of these to gain a rule is argued in the comment beside it.
+     * <p>Held by the question and not by the facts the compiler reads, where nothing in the
+     * compiler reads the closing. What a name here records is that the question was considered for
+     * that operation and closed, and what would have to be true for one of these to gain a rule is
+     * argued in the comment beside it. The questions about an observation of an answer are the
+     * exception, and read their closings off the facts: the reading of a condition stops on one
+     * with the proposition it names, so the closing is a statement the compiler reads.
      */
     abstract Set<ValueName> deliberatelyUnanswered();
 
@@ -812,6 +895,29 @@ enum Question {
 
     private static ValueName op(String alias, String name) {
         return ValueName.Stdlib.operation(alias, name);
+    }
+
+    /** Whether {@code observed} of {@code operation}'s answer is settled by a law. */
+    private static boolean byALaw(ValueName operation, OperationLaw.Observed observed) {
+        return DefaultBoundOperationFacts.get().settled(operation, observed)
+                instanceof BoundOperationFacts.Settled.ByALaw;
+    }
+
+    /**
+     * The operations {@code observed} of whose answer is settled by a law, where {@code byALaw}, or
+     * closed with what the domain has no words for. A closing is held by the facts the compiler
+     * reads and not here, since the reading of a condition stops on it with its reason.
+     */
+    private static Set<ValueName> settledBy(OperationLaw.Observed observed, boolean byALaw) {
+        Set<ValueName> out = new LinkedHashSet<>();
+        DefaultBoundOperationFacts.get().settled().forEach((operation, settled) -> {
+            BoundOperationFacts.Settled settling = settled.get(observed);
+            if (settling != null
+                    && (settling instanceof BoundOperationFacts.Settled.ByALaw) == byALaw) {
+                out.add(operation);
+            }
+        });
+        return out;
     }
 
     @Override

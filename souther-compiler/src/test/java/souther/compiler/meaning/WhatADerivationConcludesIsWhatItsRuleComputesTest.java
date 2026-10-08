@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ConditionJoin;
-import souther.compiler.semantics.SideAnswered;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
@@ -75,15 +74,20 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
     }
 
     @Test
-    void aWitnessLawStatesSomeElementOrItsDenialAsTheLawSays() {
+    void aLawStatesWhatItsArgumentsWereReadAsOnTheSideItNames() {
         Derivation some = new Derivation.SomeElementMeeting(XS, truthAt(XS.element()), true,
                 Optional.empty());
         Proposition someElement = new Proposition.Some(XS, truth(XS.element()), true);
         ValueName.Stdlib any = new ValueName.Stdlib.Operation("List", "any");
-        assertEquals(someElement, concluded(new Derivation.AWitnessLaw(any,
-                new SideAnswered(AnswerAspect.TRUTH, true), some)));
-        assertEquals(someElement.denied(), concluded(new Derivation.AWitnessLaw(any,
-                new SideAnswered(AnswerAspect.TRUTH, false), some)));
+        assertEquals(someElement, concluded(new Derivation.ByALaw(any, AnswerAspect.TRUTH, some)));
+        assertEquals(someElement.denied(), concluded(new Derivation.ByALaw(any,
+                AnswerAspect.TRUTH, new Derivation.OnTheSideALawNames(some, false))));
+        assertEquals(new Proposition.Always(true),
+                concluded(new Derivation.ALawSettles(true)));
+        assertEquals(Proposition.any(List.of(truth(A), truth(B))), concluded(
+                new Derivation.ALawJoins(List.of(truthAt(A), truthAt(B)), false)));
+        assertEquals(Proposition.all(List.of(truth(A), truth(B))), concluded(
+                new Derivation.ALawJoins(List.of(truthAt(A), truthAt(B)), true)));
     }
 
     /**

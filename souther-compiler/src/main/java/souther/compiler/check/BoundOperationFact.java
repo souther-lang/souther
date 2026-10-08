@@ -10,7 +10,8 @@ import souther.compiler.semantics.ElementShape;
 import souther.compiler.semantics.MapPart;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.ResultBound;
-import souther.compiler.semantics.SideAnswered;
+import souther.compiler.semantics.OperationLaw;
+import souther.compiler.semantics.Unsayable;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
@@ -95,9 +96,22 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     record KeepsTheKeysOf(DeclaredOperation operation, DeclaredArgument map)
             implements OneAboutAnOperation {}
 
-    /** The operation answers a container holding something exactly when {@code source} does. */
-    record KeepsWhetherItHoldsAnything(DeclaredOperation operation, DeclaredArgument source)
-            implements OneAboutAnOperation {}
+    /**
+     * What an observation of the operation's answer comes to over its arguments, every argument it
+     * names held to the declaration.
+     *
+     * <p>Several to an operation, one to each observation: a filter's answer has a law of whether
+     * it holds anything and one of how many it holds, and two laws of one observation would be two
+     * answers to one question, refused where these are collected.
+     */
+    record HasALaw(DeclaredOperation operation, OperationLaw<DeclaredArgument> law)
+            implements SeveralAboutAnOperation {}
+
+    /** What the observation {@code observed} of the operation's answer comes to is {@code why},
+     *  which no statement over the arguments can say. */
+    record LeavesUnsaid(DeclaredOperation operation, OperationLaw.Observed observed,
+                        Unsayable why)
+            implements SeveralAboutAnOperation {}
 
     /** The operation answers a list of {@code part} of what {@code map} holds. */
     record ListsAPartOf(DeclaredOperation operation, DeclaredArgument map,
@@ -154,20 +168,6 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     /** The operation answers whether the container it reads holds an element equal to what stands
      *  at {@code value}, which is of the type that container holds. */
     record AsksWhetherItsContainerHolds(DeclaredOperation operation, DeclaredArgument value)
-            implements OneAboutAnOperation {}
-
-    /**
-     * What the operation answers comes out as {@code result} exactly where some element of
-     * {@code container}, handed to {@code closure}, answers as {@code ofTheClosure}.
-     *
-     * <p>The container and the closure are the ones the signature says the operation walks and
-     * applies, resolved here so that a reader holds the arguments and not a word for them.
-     */
-    record ResultHasAnElementWitness(DeclaredOperation operation,
-                                     SideAnswered result,
-                                     SideAnswered ofTheClosure,
-                                     DeclaredArgument container,
-                                     DeclaredArgument closure)
             implements OneAboutAnOperation {}
 
     /** The predicate is stated over a projection of each element, and {@code projection} is where

@@ -144,7 +144,8 @@ final class MeaningAssumptions {
             FactSubject atom = switch (each.getKey()) {
                 case DecisionAtom.OfTheInput(NumericTerm term) -> atomOf(term);
                 case Quantity.OfABinding bound -> boundAtom(bound);
-                case DecisionAtom.OfAnAnswer _ -> null;
+                // A count of elements meeting something is no number of one place of the tree.
+                case DecisionAtom.OfAnAnswer _, Quantity.HowManyMeet _ -> null;
             };
             if (atom == null || coefs.putIfAbsent(atom, each.getValue()) != null) {
                 return null;

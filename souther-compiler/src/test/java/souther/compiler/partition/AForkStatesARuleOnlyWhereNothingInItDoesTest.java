@@ -348,8 +348,8 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
      * about what it turns on, and what a rule inside the mapping decides is which values it is
      * asked among — so the fork is owed a rule of its own.
      *
-     * <p>The fact read here is the one that says how the answer comes out by the element that
-     * witnesses it ({@link souther.compiler.semantics.OperationFact.ResultHasAnElementWitness}).
+     * <p>The fact read here is the law that says how the answer comes out by the element that
+     * witnesses it ({@link souther.compiler.semantics.OperationFact.HasALaw}).
      */
     @Test
     void aRuleReachesAForkAlongWhatTheAnswerTurnsOn() {

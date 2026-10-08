@@ -40,7 +40,7 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
     private static final String INPUT = """
             data Item = { price: Int, tag: String? }
             data Box = { xs: List<Int>, items: List<Item>, open: Bool, x: Int, y: Int,
-                         m: Map<String, Int> }
+                         m: Map<String, Int>, s: String }
             """;
 
     @Test
@@ -201,20 +201,21 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
         }
     }
 
-    /** What the library does not say answers as many, or answers by a witness, is not carried. */
+    /** What the domain has no words for is not carried, whichever way it is asked. */
     @Test
-    void whatTheLibraryDoesNotSayIsNotCarried() {
-        assertInstanceOf(Proposition.Unread.class, stated("List.isEmpty(List.take(1, b.xs))"));
+    void whatTheDomainHasNoWordsForIsNotCarried() {
+        assertInstanceOf(Proposition.Unread.class, stated("String.isEmpty(String.trim(b.s))"));
         assertInstanceOf(Proposition.Unread.class,
-                stated("List.length(List.filter(v -> v > 0, b.xs)) >= 2"));
+                stated("String.length(String.trim(b.s)) >= 1"));
         assertInstanceOf(Proposition.Unread.class,
-                stated("List.length(List.filter(v -> v > 0, b.xs)) == 1"));
+                stated("List.isEmpty(String.words(b.s))"));
     }
 
     /** Two parts nothing read are two parts. */
     @Test
     void twoUnreadPartsAreNotOne() {
-        Proposition two = stated("List.isEmpty(List.take(1, b.xs)) && List.isEmpty(List.drop(1, b.xs))");
+        Proposition two = stated("String.isEmpty(String.trim(b.s))"
+                + " && List.isEmpty(String.words(b.s))");
         Proposition.All all = assertInstanceOf(Proposition.All.class, two);
         assertEquals(2, all.parts().size());
     }

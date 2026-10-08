@@ -18,10 +18,11 @@ import java.util.Objects;
  * <p><b>A kind is here because a reader in the compiler takes it as a proposition.</b> Whether the
  * statement is that something holds or that it does not is beside the point; what earns a kind its
  * place is that something below the binding reads its value as a statement about the operation and
- * acts on it. That a question about an operation was considered and closed without a rule is not
- * such a statement. Its reason may well be about the operation, but no reader here interprets the
- * closing, so it belongs to the completeness check that asks the question and is not declared,
- * bound or filed here.
+ * acts on it. That a question about an operation was considered and closed without a rule is such a
+ * statement only where a reader acts on the closing: what an observation of an answer comes to,
+ * closed with the proposition the domain has no words for, is what the reading of a condition stops
+ * on and says ({@link LeavesUnsaid}). A closing nothing here reads belongs to the completeness check
+ * that asks the question, and is not declared, bound or filed here.
  *
  * <p><b>The authoring vocabulary, and nothing below the binding reads it.</b> An argument is named
  * here as {@link ArgumentRef}, a word; another operation as a {@link souther.compiler.types.ValueName},
@@ -173,19 +174,40 @@ public sealed interface OperationFact {
     }
 
     /**
-     * The operation answers a container that holds something exactly when {@code source} does.
+     * What an observation of the operation's answer comes to over its arguments ({@link
+     * OperationLaw}).
      *
-     * <p>Its own statement and not a size. {@code Set.map} may answer fewer elements than it was
-     * handed, where two map to one, and {@code Set.fromList} one of each repeated element — so
-     * neither is the same size as its source, and a filter is at most its source too. What these
-     * keep is only whether there is anything, which is what a check of emptiness asks of them and
-     * so what a reader can carry back to the source. An operation that can empty what it was handed
-     * ({@code List.take}, {@code String.trim}) says nothing of the kind.
+     * <p>One kind for every observation, because each is the same statement: a side of the answer,
+     * or how many it holds, is a proposition or a number of what the operation was handed. That a
+     * filter holds something where some element was kept, that a take holds something where it was
+     * asked for some and handed some, and that a list of a map's keys holds something where the map
+     * does are three laws of one shape, and a reader carries each across a call by one rule.
+     *
+     * <p>Not every observation of every answer has one declared. Where what the operation is
+     * declared to build already says it — an answer as many as its one source is empty where that
+     * source is — the law is derived there and declaring it again is refused, so the two cannot
+     * disagree.
      */
-    record KeepsWhetherItHoldsAnything(ArgumentRef source) implements OperationFact {
+    record HasALaw(OperationLaw<ArgumentRef> law) implements OperationFact {
 
-        public KeepsWhetherItHoldsAnything {
-            Objects.requireNonNull(source, "this one names what the answer was made from");
+        public HasALaw {
+            Objects.requireNonNull(law, "this one states a law");
+        }
+    }
+
+    /**
+     * The observation {@code observed} of the operation's answer comes to {@code why}, which no
+     * statement over the arguments can say.
+     *
+     * <p>Read by the reading of a condition, which stops there on a fact about the domain rather
+     * than on a law nobody wrote: what a trimmed string being empty comes to is known, and is a
+     * proposition this compiler has no words for.
+     */
+    record LeavesUnsaid(OperationLaw.Observed observed, Unsayable why) implements OperationFact {
+
+        public LeavesUnsaid {
+            Objects.requireNonNull(observed, "this one names an observation");
+            Objects.requireNonNull(why, "and what it comes to");
         }
     }
 
@@ -258,46 +280,6 @@ public sealed interface OperationFact {
 
         public AsksWhetherItsContainerHolds {
             Objects.requireNonNull(value, "this one names the value asked for");
-        }
-    }
-
-    /**
-     * What the operation answers comes out as {@code result} exactly where, for some element of the
-     * container it walks, what its closure answers comes out as {@code ofTheClosure}.
-     *
-     * <p>An equivalence, and the whole of what the operation's answer is on that side: the result
-     * comes out the other way exactly where no element is such a witness. So a statement about the
-     * result is a statement about the elements, either way round, and a reader carrying one across
-     * says nothing the operation does not.
-     *
-     * <p><b>One quantifier for all of them.</b> {@code List.filter} holds something where some
-     * element's answer is true; {@code List.filterMap} where some element's answer holds a value;
-     * {@code List.flatMap} where some element's answer holds something; {@code List.any} is true
-     * where some element's answer is true. {@code List.all} is the same statement turned round: it
-     * is false where some element's answer is false. Said that way, every one is "some element is a
-     * witness", and what an empty container answers — nothing kept, {@code any} false,
-     * {@code all} true — follows from there being no element and is not a case of its own.
-     *
-     * <p><b>Not a dependency.</b> That the closure's answer decides a side of the result is weaker:
-     * an operation could turn on its closure and answer by some other rule than this one. What is
-     * declared here is the rule, so a reader carrying a statement across it says what the operation
-     * does and not what it might.
-     *
-     * <p><b>Silence is the answer for everything else.</b> An operation with no such law is one a
-     * reader cannot carry a statement through, and it stops there rather than guessing — which is
-     * the safe way round: a rule credited to nobody leaves a measure open, and one credited to the
-     * wrong owner reports a model nothing read as one read to the end.
-     *
-     * <p>Which argument is the container and which the closure, and which of the closure's
-     * parameters an element arrives on, is what the operation's signature says
-     * ({@link Combinator}), and is not said again here.
-     */
-    record ResultHasAnElementWitness(SideAnswered result, SideAnswered ofTheClosure)
-            implements OperationFact {
-
-        public ResultHasAnElementWitness {
-            Objects.requireNonNull(result, "this one says how the result comes out");
-            Objects.requireNonNull(ofTheClosure, "and how a witness's answer does");
         }
     }
 

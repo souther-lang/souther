@@ -2,15 +2,22 @@ package souther.compiler.check;
 
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.Accumulation;
+import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.DefinitionCase;
+import souther.compiler.semantics.LawNumber;
+import souther.compiler.semantics.LawProposition;
+import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.MapPart;
 import souther.compiler.semantics.NumericResult;
+import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.ResultBound;
+import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
+import souther.compiler.semantics.Unsayable;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.ValueName;
 
@@ -72,6 +79,7 @@ public final class BoundOperationFacts {
     private final Map<ValueName, List<DeclaredArgument>> noSmallerThan;
     private final Map<ValueName, List<DefinitionCase<DeclaredArgument>>> cases;
     private final Map<BinOp, List<ValueName>> writtenAs;
+    private final Map<ValueName, Map<OperationLaw.Observed, Settled>> settled;
 
     /** Made by the binder and by nothing else: what these are is what a binding came to, and a
      *  set of facts gathered anywhere else would say so of facts nothing bound. Counted from the
@@ -103,6 +111,7 @@ public final class BoundOperationFacts {
         cases = projected(BoundOperationFact.IsDefinedByCases.class,
                 BoundOperationFact.IsDefinedByCases::one);
         writtenAs = writtenAs();
+        settled = settle();
     }
 
     /** Which operation computes what each operator computes, read off the arithmetic each of them
@@ -243,30 +252,102 @@ public final class BoundOperationFacts {
     }
 
     /**
-     * The container {@code operation}'s answer holds something exactly when, or null where it
-     * says nothing of the kind.
+     * How the observation {@code observed} of {@code operation}'s answer is settled, or null where
+     * nothing settles it.
      *
-     * <p>The one place this is asked. An operation that says so outright answers here, and so
-     * does one that builds its answer as many as a single source it was handed: what is the same
-     * size is empty when its source is. Read anywhere else as one of the two, an operation that
-     * said the other would stop a reading this one carries on.
+     * <p>The one place this is asked, and one answer to it: a law declared, a law derived from what
+     * the operation is declared to build, or a closing. An answer as many as the one source it was
+     * built from holds something where that source does and is as many as it — and so is a list of
+     * what a map holds — so those laws are read off that declaration, and one declared beside it is
+     * refused where these are collected, as is a law beside a closing.
      */
-    public DeclaredArgument keepsWhetherItHoldsAnything(ValueName operation) {
-        BoundOperationFact.KeepsWhetherItHoldsAnything held =
-                one(BoundOperationFact.KeepsWhetherItHoldsAnything.class, operation);
-        if (held != null) {
-            return held.source();
-        }
-        BuiltFrom<DeclaredArgument> built = buildsItsResultFrom(operation);
-        return built == null || built.outputs().size() != 1
-                || built.size() != SizeAgainstItsSource.SAME
-                ? null : built.lineage().source().argument();
+    public Settled settled(ValueName operation, OperationLaw.Observed observed) {
+        Map<OperationLaw.Observed, Settled> of = operation == null ? null : settled.get(operation);
+        return of == null ? null : of.get(observed);
     }
 
-    /** The operations that say outright their answer holds something exactly when a container
-     *  they were handed does. */
-    public Set<ValueName> keepsWhetherItHoldsAnything() {
-        return ones(BoundOperationFact.KeepsWhetherItHoldsAnything.class);
+    /** The operations some observation of whose answer is settled, each with how. */
+    public Map<ValueName, Map<OperationLaw.Observed, Settled>> settled() {
+        return settled;
+    }
+
+    /** How an observation of an operation's answer is settled. */
+    public sealed interface Settled {
+
+        /** By {@code law}, which was read off what the operation builds where {@code derived}. */
+        record ByALaw(OperationLaw<DeclaredArgument> law, boolean derived) implements Settled {}
+
+        /** By a closing: it comes to {@code why}, which no statement over the arguments says. */
+        record Unsaid(Unsayable why) implements Settled {}
+    }
+
+    /** Every settling, read once off the facts: what is declared, and what is derived where
+     *  nothing is. */
+    private Map<ValueName, Map<OperationLaw.Observed, Settled>> settle() {
+        Map<ValueName, Map<OperationLaw.Observed, Settled>> out = new LinkedHashMap<>();
+        for (BoundOperationFact fact : held) {
+            Settled settling;
+            OperationLaw.Observed observed;
+            switch (fact) {
+                case BoundOperationFact.HasALaw stated -> {
+                    settling = new Settled.ByALaw(stated.law(), false);
+                    observed = stated.law().observed();
+                }
+                case BoundOperationFact.LeavesUnsaid unsaid -> {
+                    settling = new Settled.Unsaid(unsaid.why());
+                    observed = unsaid.observed();
+                }
+                default -> {
+                    continue;
+                }
+            }
+            if (out.computeIfAbsent(fact.operation().operation(), _ -> new LinkedHashMap<>())
+                    .put(observed, settling) != null) {
+                throw new IllegalStateException(fact.operation().operation() + " settles what "
+                        + observed + " of its answer comes to twice");
+            }
+        }
+        for (BoundOperationFact fact : held) {
+            DeclaredArgument source = soleSource(fact);
+            if (source == null) {
+                continue;
+            }
+            ValueName operation = fact.operation().operation();
+            Map<OperationLaw.Observed, Settled> of =
+                    out.computeIfAbsent(operation, _ -> new LinkedHashMap<>());
+            LawSubject<DeclaredArgument> it = new LawSubject.Argument<>(source);
+            Map<OperationLaw.Observed, Settled> derived = Map.of(
+                    OperationLaw.Observed.EMPTINESS, new Settled.ByALaw(
+                            new OperationLaw.Observation<>(AnswerAspect.EMPTINESS,
+                                    new LawProposition.Observed<>(it,
+                                            new SideAnswered(AnswerAspect.EMPTINESS, true))), true),
+                    OperationLaw.Observed.SIZE, new Settled.ByALaw(new OperationLaw.Size<>(
+                            LinearForm.atom(new LawNumber.SizeOf<>(it))), true));
+            for (OperationLaw.Observed observed : List.of(OperationLaw.Observed.EMPTINESS,
+                    OperationLaw.Observed.SIZE)) {
+                if (of.put(observed, derived.get(observed)) != null) {
+                    throw new IllegalStateException(operation + " is built as many as one source,"
+                            + " which says what " + observed + " of its answer comes to, and"
+                            + " settles it again");
+                }
+            }
+        }
+        Map<ValueName, Map<OperationLaw.Observed, Settled>> fixed = new LinkedHashMap<>();
+        out.forEach((operation, of) -> fixed.put(operation, Collections.unmodifiableMap(of)));
+        return Collections.unmodifiableMap(fixed);
+    }
+
+    /** The one argument {@code fact} says the answer is as many as, or null where it says no
+     *  such thing: a building of exactly as many from one source, or a list of a map's parts. */
+    private static DeclaredArgument soleSource(BoundOperationFact fact) {
+        return switch (fact) {
+            case BoundOperationFact.BuildsItsResultFrom builds ->
+                    builds.built().outputs().size() == 1
+                            && builds.built().size() == SizeAgainstItsSource.SAME
+                            ? builds.built().lineage().source().argument() : null;
+            case BoundOperationFact.ListsAPartOf lists -> lists.map();
+            default -> null;
+        };
     }
 
     /** The containers {@code operation}'s result is never smaller than, in the order declared. */
@@ -296,20 +377,6 @@ public final class BoundOperationFacts {
     /** The operations that ask whether their container holds a value. */
     public Set<ValueName> asksWhetherItsContainerHolds() {
         return ones(BoundOperationFact.AsksWhetherItsContainerHolds.class);
-    }
-
-    /** The element that witnesses how {@code operation}'s answer comes out, or null where the
-     *  library states no such law of it. */
-    public ElementWitness resultHasAnElementWitness(ValueName operation) {
-        BoundOperationFact.ResultHasAnElementWitness held =
-                one(BoundOperationFact.ResultHasAnElementWitness.class, operation);
-        return held == null ? null : new ElementWitness(held.result(), held.ofTheClosure(),
-                held.container(), held.closure());
-    }
-
-    /** The operations whose answer has an element that witnesses it. */
-    public Set<ValueName> resultHasAnElementWitness() {
-        return ones(BoundOperationFact.ResultHasAnElementWitness.class);
     }
 
     /** Where {@code operation}'s predicate is stated over a projection, or null where it is stated

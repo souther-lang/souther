@@ -1,17 +1,21 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.types.BinOp;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
 
 /**
- * An application of one of the language's operations, in either shape a tree gives one: the
- * operation standing as itself, or a call to what its name reached.
+ * An application of one of the language's operations, in any shape a tree gives one: the operation
+ * standing as itself, a call to what its name reached, or the operator the library declares it as.
  *
- * <p>One reading of both. A reader that knew one shape answered for an operation in that shape
- * and said nothing — or something else — of the same operation in the other, and two readers of
- * one application that knew different shapes read it two ways.
+ * <p>One reading of all of them. A reader that knew one shape answered for an operation in that
+ * shape and said nothing — or something else — of the same operation in the other, and two readers
+ * of one application that knew different shapes read it two ways. {@code a ++ b} is
+ * {@code List.append(a, b)} over lists and {@code String.append(a, b)} over strings, so what either
+ * operation says is said of the operator too.
  *
  * @param operation which operation is applied
  * @param args      what it is handed, in the order the declaration takes them
@@ -25,6 +29,11 @@ public record AnOperationApplied(ValueName operation, List<Core> args) {
                     new AnOperationApplied(kept.declared().operation(), kept.args());
             case Core.Call call when call.fn() instanceof Core.Reached reached ->
                     new AnOperationApplied(reached.denotes(), call.args());
+            // The operator takes two strings or two lists and nothing else, so what is no string
+            // is a list.
+            case Core.Binary joined when joined.op() == BinOp.CONCAT -> new AnOperationApplied(
+                    ValueName.Stdlib.operation(Type.STRING.equals(joined.type()) ? "String" : "List",
+                            "append"), List.of(joined.left(), joined.right()));
             case null, default -> null;
         };
     }

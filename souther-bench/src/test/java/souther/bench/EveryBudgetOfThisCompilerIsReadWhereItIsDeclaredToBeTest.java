@@ -253,6 +253,14 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/meaning/Derivation;",
                     "counts the cases a comparison is split into, and past the figure carries"
                             + " the comparison out as a part nothing read, naming it"),
+            Map.entry("souther.compiler.partition.Pullback$ALawRead#ofEachWrittenOut("
+                            + "Lsouther/compiler/check/DeclaredArgument;"
+                            + "Lsouther/compiler/core/Core$ListLit;"
+                            + "Lsouther/compiler/inputs/InputReads;"
+                            + "Lsouther/compiler/semantics/LawProposition;)"
+                            + "Lsouther/compiler/partition/Pullback$WrittenOutRead;",
+                    "counts the values a law is read of one by one, and past the figure carries"
+                            + " the law out as a part nothing read, naming it"),
             Map.entry("souther.compiler.partition.DecisionReading#<clinit>()V",
                     "how many paths through one body a decision is read for"),
             Map.entry("souther.compiler.partition.DecisionReading#of("
