@@ -130,6 +130,28 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
                 new SideAnswered(AnswerAspect.TRUTH, false)));
     }
 
+    /**
+     * Whether an answer holds anything is asked of the answer and of what it was made from, so an
+     * operation answering no container, or handed none where the statement names one, is refused.
+     */
+    @Test
+    void whatHoldsSomethingWhenItsSourceDoesIsAContainerMadeFromOne() {
+        IllegalStateException answer = assertThrows(IllegalStateException.class,
+                () -> bindKept("List.length", new ArgumentRef.At(0)));
+        assertTrue(answer.getMessage().contains("what holds something exactly when a container"
+                + " does"), answer.getMessage());
+        IllegalStateException source = assertThrows(IllegalStateException.class,
+                () -> bindKept("List.take", new ArgumentRef.At(0)));
+        assertTrue(source.getMessage().contains("not a container"), source.getMessage());
+        assertDoesNotThrow(() -> bindKept("Set.fromList", new ArgumentRef.At(0)));
+    }
+
+    private static void bindKept(String operation, ArgumentRef source) {
+        CompleteSignature declaration = declared(operation);
+        OperationFactBinder.holdKept(declaration, declaration.declaring(),
+                new OperationFact.KeepsWhetherItHoldsAnything(source));
+    }
+
     @Test
     void anArgumentTheDeclarationDoesNotHave() {
         IllegalStateException e = assertThrows(IllegalStateException.class,

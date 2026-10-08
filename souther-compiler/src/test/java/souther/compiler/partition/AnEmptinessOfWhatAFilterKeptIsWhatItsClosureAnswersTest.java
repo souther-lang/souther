@@ -213,6 +213,71 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
     }
 
     /**
+     * An operation that holds something exactly when what it was handed does is seen through to the
+     * filter, in every spelling of the check.
+     *
+     * <p>A set mapped may hold fewer than it was handed, where two elements map to one, and a set
+     * made from a list holds one of each element repeated — but neither is empty unless what it was
+     * made from is, so what the check asks of either is what it asks of the filter.
+     */
+    @Test
+    void anOperationThatKeepsWhetherItHoldsAnythingIsSeenThrough() {
+        String set = """
+                behavior pick : (xs: Set<Int>) -> Int
+                let pick (xs) = if %s then 1 else 0
+                """;
+        String list = """
+                behavior pick : (xs: List<Int>) -> Int
+                let pick (xs) = if %s then 1 else 0
+                """;
+        String setFiltered = "Set.filter(x -> x > 0, xs)";
+        String listFiltered = "List.filter(x -> x > 0, xs)";
+        for (List<String> kept : List.of(
+                List.of(set, "Set", setFiltered, "Set.map(x -> x + 1, " + setFiltered + ")"),
+                List.of(list, "Set", listFiltered, "Set.fromList(" + listFiltered + ")"),
+                List.of(list, "List", listFiltered, "List.map(x -> x + 1, " + listFiltered + ")"),
+                List.of(list, "List", listFiltered, "List.reverse(" + listFiltered + ")"),
+                List.of(list, "List", listFiltered, "List.sort(" + listFiltered + ")"))) {
+            String model = kept.get(0);
+            String library = kept.get(1);
+            String filter = kept.get(2);
+            String through = kept.get(3);
+            String filterLibrary = filter.substring(0, filter.indexOf('.'));
+            assertTheSame(model.formatted(filterLibrary + ".isEmpty(" + filter + ")"),
+                    model.formatted(library + ".isEmpty(" + through + ")"));
+            String size = library.equals("List") ? "List.length(" : library + ".size(";
+            assertTheSame(model.formatted(filterLibrary + ".isEmpty(" + filter + ")"),
+                    model.formatted(size + through + ") == 0"));
+            assertTheSame(model.formatted("Bool.not(" + filterLibrary + ".isEmpty(" + filter + "))"),
+                    model.formatted(size + through + ") >= 1"));
+        }
+    }
+
+    /**
+     * And an operation that can empty what it was handed, or that says nothing either way, stops
+     * the reading where it is.
+     */
+    @Test
+    void anOperationThatCanEmptyWhatItWasHandedIsNotSeenThrough() {
+        String list = """
+                behavior pick : (xs: List<Int>, n: Int) -> Int
+                let pick (xs, n) = if List.isEmpty(%s) then 1 else 0
+                """;
+        assertEquals(List.of("n RULE_ABOUT_A_DERIVED_VALUE", "xs[*] RULE_ABOUT_A_DERIVED_VALUE",
+                        "xs RULE_ABOUT_A_DERIVED_VALUE"),
+                notRead(measured(compiled(list.formatted(
+                        "List.take(n, List.filter(x -> x > 0, xs))")))),
+                "taking none of what was kept is empty whatever was kept");
+        String text = """
+                behavior pick : (s: String) -> Int
+                let pick (s) = if String.isEmpty(String.trim(s)) then 1 else 0
+                """;
+        assertEquals(List.of("s RULE_ABOUT_A_DERIVED_VALUE"),
+                notRead(measured(compiled(text))),
+                "a string of spaces trims to nothing");
+    }
+
+    /**
      * How many were kept is no answer the closure gives, and is not read as one — nor is a
      * comparison that does not part nought from every size above it.
      */

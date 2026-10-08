@@ -244,6 +244,12 @@ public final class OperationFacts {
                             new ElementLineage.Source<>(CONTAINER, 1)), SizeAgainstItsSource.AT_MOST))),
             about("Set", "map", maps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
 
+            // Whether the answer holds anything, where that is whether what it was made from does
+            // and its size is not. An operation whose size is its source's keeps this too, and is
+            // not written again here (BoundOperationFacts.keepsWhetherItHoldsAnything).
+            about("Set", "map", new OperationFact.KeepsWhetherItHoldsAnything(CONTAINER)),
+            about("Set", "fromList", new OperationFact.KeepsWhetherItHoldsAnything(at(0))),
+
             // Which keys a map an operation answers is keyed by, where they are keys of a map it
             // was given. A rewrite of the values keeps every key, and taking entries out keeps the
             // keys of the ones left; putting one in does not, since the key put in was no key of

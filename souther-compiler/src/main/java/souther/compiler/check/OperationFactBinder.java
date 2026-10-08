@@ -166,6 +166,8 @@ final class OperationFactBinder {
                         "a map keyed by the keys of that map");
                 yield new BoundOperationFact.KeepsTheKeysOf(operation, map);
             }
+            case OperationFact.KeepsWhetherItHoldsAnything kept ->
+                    holdKept(declaration, operation, kept);
             // A list of a part of a map is a list of values of that part's type.
             case OperationFact.ListsAPartOf lists -> {
                 DeclaredArgument map = holdToTheDeclaration(declaration, lists.map(),
@@ -898,6 +900,20 @@ final class OperationFactBinder {
 
     private OperationFactBinder() {}
 
+
+    /**
+     * That an answer holds something exactly when a container it was handed does, held to the
+     * declaration: whether something is held is asked of both, so both are containers.
+     */
+    static BoundOperationFact holdKept(CompleteSignature declaration, DeclaredOperation operation,
+                                       OperationFact.KeepsWhetherItHoldsAnything kept) {
+        holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
+                "what holds something exactly when a container does");
+        return new BoundOperationFact.KeepsWhetherItHoldsAnything(operation,
+                holdToTheDeclaration(declaration, kept.source(), new ArgumentRef.TheContainer(),
+                        TypeRequirement.CONTAINER,
+                        "the container the answer holds something exactly when"));
+    }
 
     /**
      * A witness law, held to the declaration on every side it names.

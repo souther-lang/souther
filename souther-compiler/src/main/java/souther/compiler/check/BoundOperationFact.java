@@ -95,6 +95,10 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     record KeepsTheKeysOf(DeclaredOperation operation, DeclaredArgument map)
             implements OneAboutAnOperation {}
 
+    /** The operation answers a container holding something exactly when {@code source} does. */
+    record KeepsWhetherItHoldsAnything(DeclaredOperation operation, DeclaredArgument source)
+            implements OneAboutAnOperation {}
+
     /** The operation answers a list of {@code part} of what {@code map} holds. */
     record ListsAPartOf(DeclaredOperation operation, DeclaredArgument map,
                         MapPart part)

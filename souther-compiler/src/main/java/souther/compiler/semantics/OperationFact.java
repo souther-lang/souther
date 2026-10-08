@@ -173,6 +173,23 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation answers a container that holds something exactly when {@code source} does.
+     *
+     * <p>Its own statement and not a size. {@code Set.map} may answer fewer elements than it was
+     * handed, where two map to one, and {@code Set.fromList} one of each repeated element — so
+     * neither is the same size as its source, and a filter is at most its source too. What these
+     * keep is only whether there is anything, which is what a check of emptiness asks of them and
+     * so what a reader can carry back to the source. An operation that can empty what it was handed
+     * ({@code List.take}, {@code String.trim}) says nothing of the kind.
+     */
+    record KeepsWhetherItHoldsAnything(ArgumentRef source) implements OperationFact {
+
+        public KeepsWhetherItHoldsAnything {
+            Objects.requireNonNull(source, "this one names what the answer was made from");
+        }
+    }
+
+    /**
      * The operation answers a list of what {@code map} holds: its keys, its values, or its entries
      * as pairs of a key and the value filed under it.
      *

@@ -8,6 +8,7 @@ import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.MapPart;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.ResultBound;
+import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BinOp;
@@ -239,6 +240,33 @@ public final class BoundOperationFacts {
         BoundOperationFact.KeepsTheKeysOf held =
                 one(BoundOperationFact.KeepsTheKeysOf.class, operation);
         return held == null ? null : held.map();
+    }
+
+    /**
+     * The container {@code operation}'s answer holds something exactly when, or null where it
+     * says nothing of the kind.
+     *
+     * <p>The one place this is asked. An operation that says so outright answers here, and so
+     * does one that builds its answer as many as a single source it was handed: what is the same
+     * size is empty when its source is. Read anywhere else as one of the two, an operation that
+     * said the other would stop a reading this one carries on.
+     */
+    public DeclaredArgument keepsWhetherItHoldsAnything(ValueName operation) {
+        BoundOperationFact.KeepsWhetherItHoldsAnything held =
+                one(BoundOperationFact.KeepsWhetherItHoldsAnything.class, operation);
+        if (held != null) {
+            return held.source();
+        }
+        BuiltFrom<DeclaredArgument> built = buildsItsResultFrom(operation);
+        return built == null || built.outputs().size() != 1
+                || built.size() != SizeAgainstItsSource.SAME
+                ? null : built.lineage().source().argument();
+    }
+
+    /** The operations that say outright their answer holds something exactly when a container
+     *  they were handed does. */
+    public Set<ValueName> keepsWhetherItHoldsAnything() {
+        return ones(BoundOperationFact.KeepsWhetherItHoldsAnything.class);
     }
 
     /** The containers {@code operation}'s result is never smaller than, in the order declared. */

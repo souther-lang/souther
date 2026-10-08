@@ -28,10 +28,8 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.AnswerAspect;
-import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.SideAnswered;
-import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -267,7 +265,9 @@ final class Pullback {
             if (witnessed != null) {
                 return witnessed;
             }
-            Core source = asManyAsItWasHanded(applied);
+            DeclaredArgument kept = DefaultBoundOperationFacts.get()
+                    .keepsWhetherItHoldsAnything(applied.operation());
+            Core source = kept == null ? null : applied.argument(kept);
             if (source != null) {
                 return observe(source, AnswerAspect.EMPTINESS, reads);
             }
@@ -446,20 +446,6 @@ final class Pullback {
                 new DecisionSubject.AnInput(held.element()), new DecisionSubject.AnInput(value),
                 true), e, reads);
         return new Proposition.Some(held, same, true);
-    }
-
-    /**
-     * The argument {@code applied} answers exactly as many elements of — whose holding something is
-     * the result's — or null where the library says nothing of the kind.
-     */
-    private static Core asManyAsItWasHanded(AnOperationApplied applied) {
-        BuiltFrom<DeclaredArgument> built =
-                DefaultBoundOperationFacts.get().buildsItsResultFrom(applied.operation());
-        if (built == null || built.outputs().size() != 1
-                || built.size() != SizeAgainstItsSource.SAME) {
-            return null;
-        }
-        return applied.argument(built.lineage().source().argument());
     }
 
     /** That the container at {@code held} holds something, as its size above nought — or null
