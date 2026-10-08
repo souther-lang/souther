@@ -133,9 +133,9 @@ class WhoCrossesABindingInAConditionAndWhoDoesNotTest {
 
         assertEquals(List.of(1, 0), List.of(
                         Conditions.comparisonsStatedBy(terms, rule(subject()), rootAt())
-                                .inReadingOrder().size(),
+                                .holdingWhere(true).size(),
                         Conditions.comparisonsStatedBy(terms, named(), rootAt())
-                                .inReadingOrder().size()),
+                                .holdingWhere(true).size()),
                 "how many comparisons each spelling states");
     }
 
@@ -155,9 +155,9 @@ class WhoCrossesABindingInAConditionAndWhoDoesNotTest {
 
         assertEquals(List.of(1, 0), List.of(
                         Conditions.comparisonsStatedBy(terms, named.body(), inside)
-                                .inReadingOrder().size(),
+                                .holdingWhere(true).size(),
                         Conditions.comparisonsStatedBy(terms, named, inside)
-                                .inReadingOrder().size()),
+                                .holdingWhere(true).size()),
                 "what is under the binding, and the binding handed whole to the same reader");
     }
 

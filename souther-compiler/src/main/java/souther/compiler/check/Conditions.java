@@ -154,8 +154,10 @@ final class Conditions {
             implements ClauseReading<List<NumericConstraint>, Denotations> {
 
         /**
-         * Every reading of one part, because each of them holds of the values: an arm read without
-         * one of them is an arm bounded by less than what choosing it settles.
+         * Every reading of one part that holds where the part comes out as the arm took it: an arm
+         * read without one of them is an arm bounded by less than what choosing it settles, and one
+         * read with what the part only proves where it holds, taken where it fails, is bounded by
+         * something that is not so.
          *
          * <p>Read through the same normalisation a guard is, which is where it belongs: an
          * emptiness check is the comparison it means, and what that comparison composes is nothing,
@@ -167,7 +169,7 @@ final class Conditions {
             List<NumericConstraint> out = new ArrayList<>();
             for (StatedComparison stated
                     : comparisonsStatedBy(terms, asSizeComparison(part.of()), at)
-                            .inReadingOrder()) {
+                            .holdingWhere(positive)) {
                 LinearForm<FactSubject> left = terms.affineOf(stated.left(), at);
                 LinearForm<FactSubject> right = terms.affineOf(stated.right(), at);
                 LinearForm<FactSubject> between = Terms.add(left, right, true);
@@ -225,9 +227,9 @@ final class Conditions {
         if (placed == null) {
             return ComparisonReadings.none();
         }
-        List<StatedComparison> readings = new ArrayList<>();
-        readings.add(placed.stated());
-        for (StatedComparison composed = orderStatedBy(terms, readings.getLast(), at);
+        List<ComparisonReadings.Reading> readings = new ArrayList<>();
+        readings.add(new ComparisonReadings.Reading(placed.stated(), true));
+        for (ComparisonReadings.Reading composed = orderStatedBy(terms, readings.getLast(), at);
                 composed != null;
                 composed = orderStatedBy(terms, readings.getLast(), at)) {
             readings.add(composed);
@@ -263,9 +265,17 @@ final class Conditions {
      * on that count, and rewriting it into a comparison of two dates the check cannot relate would
      * leave the clause unreadable — a construction dropped from the check where it had been reported.
      * Reading a predicate never takes a reading away.
+     *
+     * <p>The order of the two values is the condition only where the sign standing that way to
+     * nought is all the condition says ({@link TheSignOfAnOrder.Stands.Between#exactly()}), and where
+     * {@code from} was the condition: {@code daysBetween(a, b) > 1} proves {@code b > a} and is not
+     * where it holds, and what is read off a reading that only follows from the condition only
+     * follows from it too.
      */
-    private static StatedComparison orderStatedBy(Terms terms, StatedComparison stated,
-                                                  Denotations at) {
+    private static ComparisonReadings.Reading orderStatedBy(Terms terms,
+                                                            ComparisonReadings.Reading from,
+                                                            Denotations at) {
+        StatedComparison stated = from.stated();
         boolean callFirst = Core.withoutStanding(stated.left()) instanceof Core.PreservedCall;
         Core side = callFirst ? stated.left() : stated.right();
         Core against = callFirst ? stated.right() : stated.left();
@@ -283,14 +293,15 @@ final class Conditions {
         // The relation the source wrote, read from the sign's side of the comparison: `call rel x`
         // however the two were written round.
         Rel written = (callFirst ? stated.claim() : stated.claim().turned()).statedRelation();
-        Rel stands = standsToNought(terms, call, written, against, at);
-        return stands == null ? null
-                : new StatedComparison(ComparisonClaim.stating(stands),
+        TheSignOfAnOrder.Stands.Between stands = standsToNought(terms, call, written, against, at);
+        return stands == null ? null : new ComparisonReadings.Reading(
+                new StatedComparison(ComparisonClaim.stating(stands.relation()),
                         CallArguments.of(positive.greater(), call),
                         CallArguments.of(positive.lesser(), call),
                         // Two arguments of the operation that orders them, each standing as what
                         // it was passed as, and the order is the one over that type.
-                        Core.BinaryReading.AS_THEY_STAND);
+                        Core.BinaryReading.AS_THEY_STAND),
+                from.isTheCondition() && stands.exactly());
     }
 
     /**
@@ -308,14 +319,16 @@ final class Conditions {
      * condition no answer satisfies states no order, and that the arm is never entered is said by
      * what reads reachability rather than by an order nobody can stand on.
      */
-    private static Rel standsToNought(Terms terms, Core.PreservedCall call, Rel rel, Core against,
-                                      Denotations at) {
+    private static TheSignOfAnOrder.Stands.Between standsToNought(Terms terms,
+                                                                  Core.PreservedCall call,
+                                                                  Rel rel, Core against,
+                                                                  Denotations at) {
         LinearForm<FactSubject> read = terms.affineOf(against, at);
         if (rel == null || read == null || !read.coefs().isEmpty()) {
             return null;
         }
         return TheSignOfAnOrder.of(call.operation(), terms.granularityOf(call.type()), rel,
-                read.constant()) instanceof TheSignOfAnOrder.Stands.Between(Rel between, var _)
+                read.constant()) instanceof TheSignOfAnOrder.Stands.Between between
                 ? between : null;
     }
 
