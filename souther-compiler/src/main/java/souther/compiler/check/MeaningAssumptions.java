@@ -153,8 +153,9 @@ final class MeaningAssumptions {
             // What a path knows is facts that all hold, and which of several holds, or which
             // element, is no fact of it.
             case Proposition.Any _, Proposition.OnAnApplication _, Proposition.Some _ ->
-                    notTaken(new WhyNotTaken.OutsideDomain(
-                            WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES));
+                    WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(
+                            WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES), asked)
+                            .forEach(this::notTaken);
             case Proposition.Unread unread ->
                     notTaken(new WhyNotTaken.MeaningUnread(unread.why()));
             case Proposition.Compared(Relation.Ordered _, boolean _, var _) ->

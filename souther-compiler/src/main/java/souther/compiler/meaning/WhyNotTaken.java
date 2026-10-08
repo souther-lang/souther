@@ -47,6 +47,21 @@ public sealed interface WhyNotTaken {
     }
 
     /**
+     * Why a reader declined all of {@code declined} without asking its parts: {@code because}, and
+     * what stopped the meaning of every part of it nothing read.
+     *
+     * <p>Two scopes. Where the meaning stopped is the proposition's and not the reader's, so it is
+     * said by whoever declines it, however far down the part stands. What the reader would have
+     * said of a part is the reader's, and of a part it never asked it is not made up.
+     */
+    static List<WhyNotTaken> declinedWhole(WhyNotTaken because, Proposition declined) {
+        Set<WhyNotTaken> out = new LinkedHashSet<>();
+        out.add(because);
+        Proposition.stopsIn(declined).forEach(why -> out.add(new MeaningUnread(why)));
+        return List.copyOf(out);
+    }
+
+    /**
      * What the condition means was not read, for a reason the reading gives — carried as it gave
      * it. What it takes is a rule of the reading, and nothing a reader of it does.
      */

@@ -68,7 +68,9 @@ public final class WhatTheRulesLeave {
             case Proposition.InCases _ -> incomplete(WhyNotTaken.Shape.THE_CASE_OF_A_SUBJECT);
             case Proposition.Present _ -> incomplete(WhyNotTaken.Shape.A_VALUE_BEING_THERE);
             case Proposition.SameValue _ -> incomplete(WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE);
-            case Proposition.Some _ -> incomplete(WhyNotTaken.Shape.SOME_ELEMENT_ASKED_OF_THE_RULES);
+            case Proposition.Some some -> new AWayThrough.NotRuledOut(WhyNotTaken.declinedWhole(
+                    new WhyNotTaken.ProjectionIncomplete(
+                            WhyNotTaken.Shape.SOME_ELEMENT_ASKED_OF_THE_RULES), some));
         };
     }
 
