@@ -1807,11 +1807,29 @@ final class Terms {
             // The rules are about how the container was built, so they are read of the expression
             // that built it — and in the environment that expression's own names mean something in,
             // which is not the one the name was read in where a binding stands between them.
-            Given built = given(container, at);
-            carrying(atom, IntrinsicNumericFacts.ofSize(size,
-                    DischargeRules.sizeSource(built.value()), atom, built.at(), this));
+            Given built = sizedBy(container, at);
+            carrying(atom, IntrinsicNumericFacts.ofSize(size, built.value(), atom, built.at(),
+                    this));
         }
         return atom;
+    }
+
+    /**
+     * The value whose size {@code container}'s is, where it stands: through each name to the value
+     * it was given, and through each building as many as its source to that source, until neither
+     * leads further.
+     *
+     * <p>Both, and in turn, because the atom is named through both: a size of
+     * {@code List.reverse(xs)} is the size of {@code xs}, and {@code xs} may be a name for a value
+     * built some other way. Stopping at the first of them would read a name where the atom is named
+     * after the value behind it, and one atom would carry what the value says and, named the other
+     * way, what a name says.
+     */
+    private Given sizedBy(Core container, Denotations at) {
+        Given given = given(container, at);
+        Core source = DischargeRules.sizeSource(given.value());
+        return source == Core.withoutStanding(given.value()) ? new Given(source, given.at())
+                : sizedBy(source, given.at());
     }
 
     /**

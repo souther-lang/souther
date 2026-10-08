@@ -3910,11 +3910,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                  WhyUnread.ANumberOfWhatAnOperationAnswers _ -> NO_CUT;
             case WhyUnread.TwoElementsOfOneContainer _, WhyUnread.NoLawFor _,
                  WhyUnread.WhatARecursiveHelperAnswers _ -> NEITHER_A_COMPARISON_NOR_A_COMBINATION;
+            // Its own words: what the condition comes to is known, and it is the domain that has
+            // no words for it.
+            case WhyUnread.NoWordsFor(var operation, var _, var proposition) ->
+                    "a condition on what " + operation.qualified() + " answers, which comes to "
+                            + proposition.proposition() + " — no condition here says that";
             // Its own words: nothing the author wrote is wanting, and raising a figure lifts it.
             case WhyUnread.MoreReadingsThanAreMade _ -> "a condition that would be read once for each"
                     + " of more values or cases than this compiler reads one by one";
             case WhyUnread.NotYetComposed(WhyUnread.NotYetComposed.Step step) -> switch (step) {
-                case A_SIZE_AN_OPERATION_KEEPS, A_CHOICE_BY_CASES, VALUES_WRITTEN_OUT -> NO_CUT;
+                case A_CHOICE_BY_CASES, VALUES_WRITTEN_OUT -> NO_CUT;
                 case A_DEPENDENCY_ASKED_ABOUT_A_COMPUTED_VALUE, A_BEHAVIOR_CALLED_BY_NAME,
                      A_CLOSURE_BY_NAME -> NEITHER_A_COMPARISON_NOR_A_COMBINATION;
             };

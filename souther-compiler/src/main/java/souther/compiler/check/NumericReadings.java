@@ -163,14 +163,14 @@ final class NumericReadings {
                      BoundOperationFact.ShiftsBy _,
                      BoundOperationFact.BuildsItsResultFrom _,
                      BoundOperationFact.KeepsTheKeysOf _,
-                     BoundOperationFact.KeepsWhetherItHoldsAnything _,
+                     BoundOperationFact.HasALaw _,
+                     BoundOperationFact.LeavesUnsaid _,
                      BoundOperationFact.ListsAPartOf _,
                      BoundOperationFact.ResultIsNoSmallerThan _,
                      BoundOperationFact.ReadsItsContainer _,
                      BoundOperationFact.AsksWhetherItsContainerHolds _,
                      BoundOperationFact.IsStatedOverAProjection _,
                      BoundOperationFact.StatesItsPredicateOfEveryElement _,
-                     BoundOperationFact.ResultHasAnElementWitness _,
                      BoundOperationFact.MeansTheSameAsASizeOfNought _,
                      BoundOperationFact.EveryAnswerItCanGiveHasASourceValue _ -> { }
             }

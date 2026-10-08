@@ -22,6 +22,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.Unsayable;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
@@ -45,7 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class EveryRuleThatReadsAComparisonInFullStatesOneThingTest {
 
     private static final String INPUT = """
-            data Box = { xs: List<Int>, tags: Set<String>, m: Map<String, Int> }
+            data Box = { xs: List<Int>, tags: Set<String>, m: Map<String, Int>, s: String }
             """;
 
     private static final List<String> SIZES_AGAINST_NOUGHT = List.of(
@@ -81,7 +82,7 @@ class EveryRuleThatReadsAComparisonInFullStatesOneThingTest {
      */
     @Test
     void whatARuleSetAsideMetIsNoPartOfWhatIsStated() {
-        String condition = "List.length(List.take(1, b.xs)) > 0";
+        String condition = "String.length(String.trim(b.s)) > 0";
         Reading reading = reading(condition);
         List<Proposition> byEach = Pullback.byEachRule(reading.comparison(), reading.reads(),
                 reading.read());
@@ -93,8 +94,8 @@ class EveryRuleThatReadsAComparisonInFullStatesOneThingTest {
                 "where no rule reads it all, the first that takes it is kept");
         Proposition.Unread unread = assertInstanceOf(Proposition.Unread.class,
                 pulled.proposition());
-        assertEquals(new WhyUnread.NoLawFor(new ValueName.Stdlib.Operation("List", "take"),
-                        AnswerAspect.EMPTINESS), unread.why());
+        assertEquals(new WhyUnread.NoWordsFor(new ValueName.Stdlib.Operation("String", "trim"),
+                AnswerAspect.EMPTINESS, Unsayable.EVERY_CHARACTER_IS_WHITESPACE), unread.why());
         assertEquals(List.of(unread), pulled.leaves().stream().map(Pullback.Leaf::part).toList(),
                 "the one part met is the kept rule's");
     }

@@ -10,7 +10,6 @@ import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
-import souther.compiler.check.ElementWitness;
 import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.StatedComparison;
@@ -42,15 +41,20 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.AnswerAspect;
-import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ConditionJoin;
-import souther.compiler.semantics.SideAnswered;
+import souther.compiler.semantics.LawNumber;
+import souther.compiler.semantics.LawProposition;
+import souther.compiler.semantics.LawSubject;
+import souther.compiler.semantics.OperationLaw;
+import souther.compiler.semantics.TakenAs;
+import souther.compiler.semantics.Unsayable;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -77,10 +81,11 @@ import java.util.function.Supplier;
  * round. A conjunction, a disjunction, an {@code if} and a {@code match} are what their parts state,
  * joined the way the construct joins them. A size held against a number that parts nought from every
  * size above it asks whether the container holds anything ({@link AnEmptinessCheck#checked}).
- * An operation walking a container with a closure comes out the way some element witnesses
- * ({@link ElementWitness}), and one that answers as many as it was handed holds something exactly
- * where what it was handed does. What is left is a comparison, a truth, a case or a value being there
- * at a subject a row controls — the parts a proposition is made of.
+ * An operation's answer comes out as its law says of its arguments ({@link OperationLaw}): a filter
+ * holds something where some element was kept, a take where it was asked for some and handed some,
+ * and how many a filter keeps is how many elements its closure holds of. What is left is a
+ * comparison, a truth, a case or a value being there at a subject a row controls — the parts a
+ * proposition is made of.
  *
  * <p><b>Each step is a {@link Derivation}.</b> What is built here is how the condition was read, a
  * rule at a time; what it states is what that concludes, worked out once at the end. So nothing here
@@ -184,6 +189,12 @@ final class Pullback {
      * reader of it.
      */
     private Denotation askedAt;
+    /**
+     * The counts of elements the comparison being read names, as they are read, so the relation
+     * holds how each was read ({@link Derivation.AComparisonRead#counts}) — or null where what is
+     * read is no comparison that keeps them, and a count is not read there.
+     */
+    private List<Derivation.AComparisonRead.Counted> counting;
 
     private Pullback(InputReading read, Optional<ModelOccurrence> where) {
         this.read = read;
@@ -328,7 +339,7 @@ final class Pullback {
                 },
                 () -> BooleanMeaning.asAComparison(e).map(stated -> comparison(stated,
                         new Denotation(e, reads), fixed(e, reads), reads)).orElse(null),
-                () -> applied == null ? null : witnessed(applied, e, AnswerAspect.TRUTH, reads),
+                () -> byALaw(applied, e, AnswerAspect.TRUTH, reads, new Denotation(e, reads)),
                 () -> applied == null ? null : membership(applied, e, reads)));
         return taken != null ? taken
                 : unread(e, reads, unreadAs(applied, AnswerAspect.TRUTH, reads));
@@ -448,9 +459,7 @@ final class Pullback {
         Denotation asked = askedAt != null ? askedAt : new Denotation(e, reads);
         Derivation taken = firstThatReadsIt(List.of(
                 () -> writtenOut(e, AnswerAspect.EMPTINESS),
-                () -> applied == null ? null
-                        : witnessed(applied, e, AnswerAspect.EMPTINESS, reads),
-                () -> applied == null ? null : kept(applied, reads),
+                () -> byALaw(applied, e, AnswerAspect.EMPTINESS, reads, asked),
                 () -> {
                     if (!(reads.pathOf(e, read.rules().newtypes())
                             instanceof PathResolution.At(TermPath held))) {
@@ -464,18 +473,6 @@ final class Pullback {
                 unreadAs(applied, AnswerAspect.EMPTINESS, reads), fixed(e, reads)), asked);
     }
 
-    /** What {@code applied} was handed, where it holds something exactly where that does. */
-    private Derivation kept(AnOperationApplied applied, InputReads reads) {
-        DeclaredArgument kept = DefaultBoundOperationFacts.get()
-                .keepsWhetherItHoldsAnything(applied.operation());
-        Core source = kept == null ? null : applied.argument(kept);
-        if (source == null || !(applied.operation() instanceof ValueName.Stdlib operation)) {
-            return null;
-        }
-        return new Derivation.KeepsWhetherItHoldsAnything(operation,
-                observe(source, AnswerAspect.EMPTINESS, reads));
-    }
-
     /**
      * How an optional that is no binding, name or choice holding a value was read, chosen as
      * {@link #truth} chooses.
@@ -485,8 +482,7 @@ final class Pullback {
         AnOperationApplied applied = AnOperationApplied.of(e);
         Derivation taken = firstThatReadsIt(List.of(
                 () -> writtenOut(e, AnswerAspect.PRESENCE),
-                () -> applied == null ? null
-                        : witnessed(applied, e, AnswerAspect.PRESENCE, reads),
+                () -> byALaw(applied, e, AnswerAspect.PRESENCE, reads, new Denotation(e, reads)),
                 () -> {
                     DecisionSubject subject = reads.pathOf(e, read.rules().newtypes())
                             instanceof PathResolution.At(TermPath at)
@@ -568,92 +564,434 @@ final class Pullback {
     }
 
     /**
-     * How {@code applied} coming out on {@code aspect} was read where the library declares the
-     * element that witnesses it — or null where it declares none on that side.
+     * How {@code applied} coming out on {@code aspect} was read by what settles that side of its
+     * answer: its law, read over the arguments it was handed, or the closing that names what the
+     * domain has no words for, stopped at {@code stopsAt} — or null where nothing settles it.
      */
-    private Derivation witnessed(AnOperationApplied applied, Core e, AnswerAspect aspect,
-                                 InputReads reads) {
-        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
-        ElementWitness law = facts.resultHasAnElementWitness(applied.operation());
-        if (law == null || law.result().aspect() != aspect
-                || !(applied.operation() instanceof ValueName.Stdlib operation)) {
+    private Derivation byALaw(AnOperationApplied applied, Core e, AnswerAspect aspect,
+                              InputReads reads, Denotation stopsAt) {
+        if (applied == null || !(applied.operation() instanceof ValueName.Stdlib operation)) {
             return null;
         }
-        Core over = applied.argument(law.container());
-        Core handed = applied.argument(law.closure());
-        if (over == null || handed == null) {
-            return null;
-        }
-        return new Derivation.AWitnessLaw(operation, law.result(),
-                someElement(over, handed, law.ofTheClosure(), e, reads));
+        return switch (DefaultBoundOperationFacts.get().settled(operation,
+                OperationLaw.Observed.of(aspect))) {
+            case null -> null;
+            case BoundOperationFacts.Settled.Unsaid(Unsayable why) -> leaf(new Derivation.Stopped(
+                    new WhyUnread.NoWordsFor(operation, aspect, why), fixed(e, reads)), stopsAt);
+            case BoundOperationFacts.Settled.ByALaw(
+                    OperationLaw.Observation<DeclaredArgument> law, var _) ->
+                    new Derivation.ByALaw(operation, aspect,
+                            new ALawRead(applied, e, reads).of(law.equivalentTo()));
+            case BoundOperationFacts.Settled.ByALaw(OperationLaw.Size<DeclaredArgument> _, var _) ->
+                    throw new IllegalStateException(operation + " settles a side of its answer"
+                            + " with how many it holds");
+        };
     }
 
     /**
-     * How some element of {@code over}, handed to the closure at {@code handed}, making it answer
-     * as {@code witness} was read.
+     * How many {@code value}, read in {@code at}, holds, as a number of the quantities a condition
+     * is read over: the size of a position, or the size an operation's law says its answer has.
      */
-    private Derivation someElement(Core over, Core handed, SideAnswered witness, Core e,
-                                   InputReads reads) {
-        Denotation closure = reads.denotes(handed, read.rules().symbols(), read.rules().newtypes());
-        if (!(Core.withoutStanding(closure.value()) instanceof Core.Block block)) {
-            return unread(e, reads,
-                    new WhyUnread.NotYetComposed(WhyUnread.NotYetComposed.Step.A_CLOSURE_BY_NAME));
-        }
-        Denotation container = reads.standing(over, read.rules().symbols(),
-                read.rules().newtypes());
-        // A container the source wrote out has no element where it is empty. Otherwise each
-        // application of the closure hands it one of the written values, and what some element
-        // meets is what the body states on one of those applications. Where which value one of
-        // them hands cannot be said, the body is read once with the parameter standing for all of
-        // them ({@code ReadMeaning.OneOf}), which states of the input only what they agree on.
-        if (Core.withoutStanding(container.value()) instanceof Core.ListLit list) {
-            if (list.elements().isEmpty()) {
-                return new Derivation.OverElementsWrittenOut(List.of(), witness.holds());
-            }
-            List<InputReads> applications = switch (applicationsOf(block, closure.at(),
-                    read.rules().symbols(), read.rules().newtypes())) {
-                case InputReads.Applications.Each(var each) -> each;
-                case InputReads.Applications.NoneHanded _, InputReads.Applications.Unsaid _ ->
-                        List.of(closure.at());
-                case InputReads.Applications.MoreThanAreRead _ -> null;
-            };
-            if (applications == null) {
-                return unread(e, reads, new WhyUnread.MoreReadingsThanAreMade());
-            }
-            List<Derivation> ofEach = new ArrayList<>();
-            for (InputReads application : applications) {
-                ofEach.add(observe(block.body(), witness.aspect(), application));
-            }
-            return new Derivation.OverElementsWrittenOut(ofEach, witness.holds());
-        }
-        if (!(reads.pathOf(over, read.rules().newtypes()) instanceof PathResolution.At(
-                TermPath held))) {
-            return unread(over, reads,
-                    new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
-        }
-        // The element is what stands at the container's element inside the closure, so the same
-        // container quantified inside itself would name two elements one subject.
-        if (!quantifying.add(held)) {
-            return unread(e, reads, new WhyUnread.TwoElementsOfOneContainer());
-        }
-        Derivation answered;
-        try {
-            answered = observe(block.body(), witness.aspect(), closure.at());
-        } finally {
-            quantifying.remove(held);
-        }
-        Proposition element = trying.of(answered);
-        boolean asked = Derivation.SomeElementMeeting.asksWhetherItHoldsAnything(held,
-                witness.holds() ? element : element.denied());
-        Optional<Derivation> holdsSomething = Optional.empty();
-        if (asked) {
-            Derivation some = holdsSomethingAt(held);
-            holdsSomething = Optional.of(some != null
-                    ? leaf(some, askedAt != null ? askedAt : new Denotation(e, reads))
-                    : unread(over, reads, new WhyUnread.NoMeasureOfItsSize()));
-        }
-        return new Derivation.SomeElementMeeting(held, answered, witness.holds(), holdsSomething);
+    private sealed interface Sized {
+
+        record AsAForm(LinearForm<Quantity> form) implements Sized {}
+
+        record NotSized(WhyUnread why) implements Sized {}
     }
+
+    private Sized sizeOf(Core value, InputReads at) {
+        if (at.pathOf(value, read.rules().newtypes()) instanceof PathResolution.At(TermPath held)) {
+            NumericTerm.TakenOf size = sizeAt(held);
+            return size == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
+                    : new Sized.AsAForm(LinearForm.atom(new DecisionAtom.OfTheInput(size)));
+        }
+        Denotation made = at.standing(value, read.rules().symbols(), read.rules().newtypes());
+        if (!(AnOperationApplied.of(Core.withoutStanding(made.value()))
+                instanceof AnOperationApplied applied
+                && applied.operation() instanceof ValueName.Stdlib operation)) {
+            return new Sized.NotSized(
+                    new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT));
+        }
+        if (!(DefaultBoundOperationFacts.get().settled(operation, OperationLaw.Observed.SIZE)
+                instanceof BoundOperationFacts.Settled.ByALaw(
+                        OperationLaw.Size<DeclaredArgument> law, var _))) {
+            ValueName.Stdlib measure = NumericMeasures.takenOf(value.type(), read.rules().inners());
+            return new Sized.NotSized(measure == null
+                    ? new WhyUnread.NoMeasureOfItsSize()
+                    : new WhyUnread.ANumberOfWhatAnOperationAnswers(measure, operation));
+        }
+        return new ALawRead(applied, Core.withoutStanding(made.value()), made.at())
+                .number(law.equalTo());
+    }
+
+    /** The number a size of the container at {@code held} is, or null where no type measures it. */
+    private NumericTerm.TakenOf sizeAt(TermPath held) {
+        Type container = read.domain().typeAt(held, read.rules());
+        ValueName.Stdlib size = container == null ? null
+                : NumericMeasures.takenOf(container, read.rules().inners());
+        return size == null ? null : NumericTerm.TakenOf.of(size, held, container,
+                read.rules().inners(), read.rules().symbols());
+    }
+
+    /**
+     * A law of {@code applied}, read over the arguments it was handed where it stands at {@code e}
+     * in {@code reads}.
+     *
+     * <p>Each word of the law is read by the rule the reading of a condition already has for it:
+     * an argument observed is that argument observed, a number of the arguments is what the
+     * arithmetic reads, some element is the quantifier over the container's element. So a law says
+     * only what the operation does, and every part of what it comes to is read where it stands.
+     */
+    private final class ALawRead {
+
+        private final AnOperationApplied applied;
+        private final Core e;
+        private final InputReads reads;
+        /** The containers a statement about some element of each is being read inside, and where
+         *  each stands. */
+        private final Map<DeclaredArgument, TermPath> elements = new HashMap<>();
+        /** Where the closure's body is read, where one application of it is: a container written
+         *  out hands it one value at a time. */
+        private InputReads application;
+
+        ALawRead(AnOperationApplied applied, Core e, InputReads reads) {
+            this.applied = applied;
+            this.e = e;
+            this.reads = reads;
+        }
+
+        Derivation of(LawProposition<DeclaredArgument> law) {
+            return switch (law) {
+                case LawProposition.Always<DeclaredArgument>(boolean holds) ->
+                        new Derivation.ALawSettles(holds);
+                case LawProposition.All<DeclaredArgument> all ->
+                        new Derivation.ALawJoins(all.parts().stream().map(this::of).toList(), true);
+                case LawProposition.Any<DeclaredArgument> any ->
+                        new Derivation.ALawJoins(any.parts().stream().map(this::of).toList(),
+                                false);
+                case LawProposition.Observed<DeclaredArgument> observed ->
+                        new Derivation.OnTheSideALawNames(
+                                observed(observed.of(), observed.side().aspect()),
+                                observed.side().holds());
+                case LawProposition.Compared<DeclaredArgument> compared ->
+                        compared(compared.form(), compared.states());
+                case LawProposition.SomeElement<DeclaredArgument> some -> some(some);
+                case LawProposition.Same<DeclaredArgument> same -> {
+                    DecisionSubject one = subject(same.one());
+                    DecisionSubject other = subject(same.other());
+                    yield one == null || other == null
+                            ? unread(e, reads,
+                                    new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.VALUE))
+                            : leaf(new Derivation.TheSameValue(one, other, same.holds()), e, reads);
+                }
+            };
+        }
+
+        /** How {@code subject} coming out on {@code aspect}'s holding side was read. */
+        private Derivation observed(LawSubject<DeclaredArgument> subject, AnswerAspect aspect) {
+            return switch (subject) {
+                case LawSubject.Argument<DeclaredArgument>(DeclaredArgument at) ->
+                        observe(applied.argument(at), aspect, reads);
+                case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at) -> {
+                    TermPath element = elements.get(at).element();
+                    yield switch (aspect) {
+                        case TRUTH -> leaf(new Derivation.ATruthOfASubject(
+                                new DecisionSubject.AnInput(element), true), e, reads);
+                        case PRESENCE -> leaf(new Derivation.PresentInASubject(
+                                new DecisionSubject.AnInput(element)), e, reads);
+                        case EMPTINESS -> {
+                            NumericTerm.TakenOf size = sizeAt(element);
+                            yield leaf(size != null ? new Derivation.SizeAboveNought(size)
+                                    : new Derivation.Stopped(new WhyUnread.NoMeasureOfItsSize(),
+                                            false), e, reads);
+                        }
+                    };
+                }
+                case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(DeclaredArgument at) -> {
+                    Denotation closure = reads.denotes(applied.argument(at),
+                            read.rules().symbols(), read.rules().newtypes());
+                    yield Core.withoutStanding(closure.value()) instanceof Core.Block block
+                            ? observe(block.body(), aspect,
+                                    application != null ? application : closure.at())
+                            : unread(e, reads, new WhyUnread.NotYetComposed(
+                                    WhyUnread.NotYetComposed.Step.A_CLOSURE_BY_NAME));
+                }
+            };
+        }
+
+        /** The subject a row controls {@code subject} is, or null where it is none. */
+        private DecisionSubject subject(LawSubject<DeclaredArgument> subject) {
+            return switch (subject) {
+                case LawSubject.Argument<DeclaredArgument>(DeclaredArgument at) -> {
+                    Core value = applied.argument(at);
+                    yield reads.pathOf(value, read.rules().newtypes())
+                            instanceof PathResolution.At(TermPath held)
+                            ? new DecisionSubject.AnInput(held) : answerAt(value, reads);
+                }
+                case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at) ->
+                        new DecisionSubject.AnInput(elements.get(at).element());
+                case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _ -> null;
+            };
+        }
+
+        /**
+         * Some element of a container meeting a statement, read as the quantifier over the
+         * container's element where it stands, or element by element where it was written out.
+         */
+        private Derivation some(LawProposition.SomeElement<DeclaredArgument> some) {
+            Core over = applied.argument(some.container());
+            Derivation meeting = meeting(over, some);
+            return some.holds() ? meeting : new Derivation.OnTheSideALawNames(meeting, false);
+        }
+
+        private Derivation meeting(Core over, LawProposition.SomeElement<DeclaredArgument> some) {
+            Denotation container = reads.standing(over, read.rules().symbols(),
+                    read.rules().newtypes());
+            // A container the source wrote out has no element where it is empty. Otherwise each
+            // application of the closure hands it one of the written values, and what some element
+            // meets is what the body states on one of those applications. Where which value one of
+            // them hands cannot be said, the body is read once with the parameter standing for all
+            // of them ({@code ReadMeaning.OneOf}), which states of the input only what they agree
+            // on.
+            if (Core.withoutStanding(container.value()) instanceof Core.ListLit list) {
+                if (list.elements().isEmpty()) {
+                    return new Derivation.OverElementsWrittenOut(List.of(), true);
+                }
+                if (namesTheElement(some.ofTheElement(), some.container())) {
+                    return unread(over, reads,
+                            new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
+                }
+                DeclaredArgument named = closureIn(some.ofTheElement());
+                Denotation closure = named == null ? null : reads.denotes(applied.argument(named),
+                        read.rules().symbols(), read.rules().newtypes());
+                if (closure == null
+                        || !(Core.withoutStanding(closure.value()) instanceof Core.Block block)) {
+                    return unread(e, reads, new WhyUnread.NotYetComposed(
+                            WhyUnread.NotYetComposed.Step.A_CLOSURE_BY_NAME));
+                }
+                List<InputReads> applications = switch (applicationsOf(block, closure.at(),
+                        read.rules().symbols(), read.rules().newtypes())) {
+                    case InputReads.Applications.Each(var each) -> each;
+                    case InputReads.Applications.NoneHanded _, InputReads.Applications.Unsaid _ ->
+                            List.of(closure.at());
+                    case InputReads.Applications.MoreThanAreRead _ -> null;
+                };
+                if (applications == null) {
+                    return unread(e, reads, new WhyUnread.MoreReadingsThanAreMade());
+                }
+                List<Derivation> ofEach = new ArrayList<>();
+                InputReads outer = application;
+                try {
+                    for (InputReads one : applications) {
+                        application = one;
+                        ofEach.add(of(some.ofTheElement()));
+                    }
+                } finally {
+                    application = outer;
+                }
+                return new Derivation.OverElementsWrittenOut(ofEach, true);
+            }
+            if (!(reads.pathOf(over, read.rules().newtypes()) instanceof PathResolution.At(
+                    TermPath held))) {
+                return unread(over, reads,
+                        new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
+            }
+            Derivation answered = aboutAnElement(some.container(), held, some.ofTheElement());
+            if (answered == null) {
+                return unread(e, reads, new WhyUnread.TwoElementsOfOneContainer());
+            }
+            Proposition element = trying.of(answered);
+            Optional<Derivation> holdsSomething = Optional.empty();
+            if (Derivation.SomeElementMeeting.asksWhetherItHoldsAnything(held, element)) {
+                NumericTerm.TakenOf size = sizeAt(held);
+                holdsSomething = Optional.of(size != null
+                        ? leaf(new Derivation.SizeAboveNought(size),
+                                askedAt != null ? askedAt : new Denotation(e, reads))
+                        : unread(over, reads, new WhyUnread.NoMeasureOfItsSize()));
+            }
+            return new Derivation.SomeElementMeeting(held, answered, true, holdsSomething);
+        }
+
+        /**
+         * {@code ofTheElement} read of the element of {@code container}, which stands at
+         * {@code held} — or null where that container is already quantified over: the element is
+         * what stands at the container's element, so the same container quantified inside itself
+         * would name two elements one subject.
+         */
+        private Derivation aboutAnElement(DeclaredArgument container, TermPath held,
+                                          LawProposition<DeclaredArgument> ofTheElement) {
+            if (!quantifying.add(held)) {
+                return null;
+            }
+            elements.put(container, held);
+            try {
+                return of(ofTheElement);
+            } finally {
+                elements.remove(container);
+                quantifying.remove(held);
+            }
+        }
+
+
+        /**
+         * {@code form states 0}, over numbers of the arguments, read as a relation over the
+         * quantities a condition is read over.
+         */
+        private Derivation compared(LinearForm<LawNumber<DeclaredArgument>> form, Rel states) {
+            List<Derivation.AComparisonRead.Counted> outer = counting;
+            counting = new ArrayList<>();
+            try {
+                Sized sized = number(form);
+                return switch (sized) {
+                    case Sized.NotSized(WhyUnread why) ->
+                            leaf(new Derivation.Stopped(why, false), e, reads);
+                    case Sized.AsAForm(LinearForm<Quantity> read) -> read.coefs().isEmpty()
+                            ? new Derivation.ACutThatCutsNothing(
+                                    states.holds(read.constant().signum()))
+                            : leaf(aRelation(Derivation.ComparisonReading.BY_A_LAW, read, states,
+                                    counting), e, reads);
+                };
+            } finally {
+                counting = outer;
+            }
+        }
+
+        /** {@code form}, a number of the arguments, as a form over the quantities a condition is
+         *  read over. */
+        Sized number(LinearForm<LawNumber<DeclaredArgument>> form) {
+            LinearForm<Quantity> out = LinearForm.constant(form.constant());
+            for (Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> term : form.coefs().entrySet()) {
+                Sized part = atom(term.getKey());
+                if (!(part instanceof Sized.AsAForm(LinearForm<Quantity> each))) {
+                    return part;
+                }
+                ExactAnswer<LinearForm<Quantity>> sum = each.times(term.getValue())
+                        instanceof ExactAnswer.Held<LinearForm<Quantity>>(var scaled)
+                        ? out.plus(scaled) : null;
+                if (!(sum instanceof ExactAnswer.Held<LinearForm<Quantity>>(var held))) {
+                    return new Sized.NotSized(new WhyUnread.OutsideTheLinearFragment());
+                }
+                out = held;
+            }
+            return new Sized.AsAForm(out);
+        }
+
+        private Sized atom(LawNumber<DeclaredArgument> number) {
+            return switch (number) {
+                case LawNumber.AnArgument<DeclaredArgument>(DeclaredArgument at) ->
+                        switch (AffineForms.outcome(applied.argument(at), reads, quantities())) {
+                            case AffineForms.Outcome.Composed<Quantity, InputReads>(var form) ->
+                                    new Sized.AsAForm(form);
+                            case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped ->
+                                    new Sized.NotSized(noFormOf(stopped));
+                        };
+                case LawNumber.SizeOf<DeclaredArgument>(LawSubject<DeclaredArgument> of) ->
+                        switch (of) {
+                            case LawSubject.Argument<DeclaredArgument>(DeclaredArgument at) ->
+                                    sizeOf(applied.argument(at), reads);
+                            case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at) -> {
+                                NumericTerm.TakenOf size = sizeAt(elements.get(at).element());
+                                yield size == null
+                                        ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
+                                        : new Sized.AsAForm(LinearForm.atom(
+                                                new DecisionAtom.OfTheInput(size)));
+                            }
+                            case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _ ->
+                                    new Sized.NotSized(new WhyUnread.AtNoPosition(
+                                            WhyUnread.AtNoPosition.Place.SUBJECT));
+                        };
+                case LawNumber.HowManyMeet<DeclaredArgument> counted -> count(counted);
+            };
+        }
+
+        /** How many elements of a container meet a statement, as one count of the quantities a
+         *  relation is written over. */
+        private Sized count(LawNumber.HowManyMeet<DeclaredArgument> counted) {
+            Core over = applied.argument(counted.container());
+            if (counting == null || !(reads.pathOf(over, read.rules().newtypes())
+                    instanceof PathResolution.At(TermPath held))) {
+                return new Sized.NotSized(
+                        new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
+            }
+            Derivation answered = aboutAnElement(counted.container(), held,
+                    counted.ofTheElement());
+            if (answered == null) {
+                return new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer());
+            }
+            Proposition element = trying.of(answered);
+            WhyUnread stopped = Proposition.firstStopIn(element);
+            if (stopped != null) {
+                return new Sized.NotSized(stopped);
+            }
+            // What is the same for every element counts all of them or none.
+            if (!element.mayTurnOnAnElementOf(held)) {
+                if (element instanceof Proposition.Always(boolean holds)) {
+                    NumericTerm.TakenOf size = sizeAt(held);
+                    return !holds ? new Sized.AsAForm(LinearForm.constant(ExactRatio.ZERO))
+                            : size == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
+                            : new Sized.AsAForm(LinearForm.atom(new DecisionAtom.OfTheInput(size)));
+                }
+                return new Sized.NotSized(new WhyUnread.OutsideTheLinearFragment());
+            }
+            counting.add(new Derivation.AComparisonRead.Counted(held, answered));
+            return new Sized.AsAForm(LinearForm.atom(new Quantity.HowManyMeet(held, element)));
+        }
+    }
+
+    /** The closure {@code law} names what it answers of, or null where it names none. */
+    private static DeclaredArgument closureIn(LawProposition<DeclaredArgument> law) {
+        return switch (law) {
+            case LawProposition.Always<DeclaredArgument> _,
+                 LawProposition.Compared<DeclaredArgument> _,
+                 LawProposition.Same<DeclaredArgument> _ -> null;
+            case LawProposition.All<DeclaredArgument> all -> closureIn(all.parts());
+            case LawProposition.Any<DeclaredArgument> any -> closureIn(any.parts());
+            case LawProposition.Observed<DeclaredArgument> observed ->
+                    observed.of() instanceof LawSubject.WhatTheClosureAnswers<DeclaredArgument>(
+                            DeclaredArgument closure) ? closure : null;
+            case LawProposition.SomeElement<DeclaredArgument> some ->
+                    closureIn(some.ofTheElement());
+        };
+    }
+
+    private static DeclaredArgument closureIn(List<LawProposition<DeclaredArgument>> parts) {
+        for (LawProposition<DeclaredArgument> part : parts) {
+            DeclaredArgument closure = closureIn(part);
+            if (closure != null) {
+                return closure;
+            }
+        }
+        return null;
+    }
+
+    /** Whether {@code law} names an element of {@code container} anywhere in it. */
+    private static boolean namesTheElement(LawProposition<DeclaredArgument> law,
+                                           DeclaredArgument container) {
+        return switch (law) {
+            case LawProposition.Always<DeclaredArgument> _ -> false;
+            case LawProposition.All<DeclaredArgument> all -> all.parts().stream()
+                    .anyMatch(part -> namesTheElement(part, container));
+            case LawProposition.Any<DeclaredArgument> any -> any.parts().stream()
+                    .anyMatch(part -> namesTheElement(part, container));
+            case LawProposition.Observed<DeclaredArgument> observed ->
+                    observed.of().equals(new LawSubject.ElementOf<>(container));
+            case LawProposition.Compared<DeclaredArgument> compared -> compared.form().coefs()
+                    .keySet().stream().anyMatch(number -> switch (number) {
+                        case LawNumber.AnArgument<DeclaredArgument> _ -> false;
+                        case LawNumber.SizeOf<DeclaredArgument>(var of) ->
+                                of.equals(new LawSubject.ElementOf<>(container));
+                        case LawNumber.HowManyMeet<DeclaredArgument> inner ->
+                                namesTheElement(inner.ofTheElement(), container);
+                    });
+            case LawProposition.SomeElement<DeclaredArgument> some ->
+                    namesTheElement(some.ofTheElement(), container);
+            case LawProposition.Same<DeclaredArgument> same ->
+                    same.one().equals(new LawSubject.ElementOf<>(container))
+                            || same.other().equals(new LawSubject.ElementOf<>(container));
+        };
+    }
+
+
 
     /**
      * How a container holding the value {@code applied} asks about was read: some element the same
@@ -683,11 +1021,7 @@ final class Pullback {
     /** That the container at {@code held} holds something, as its size above nought — or null
      *  where its size is no term of this input. */
     private Derivation holdsSomethingAt(TermPath held) {
-        Type container = read.domain().typeAt(held, read.rules());
-        ValueName.Stdlib size = container == null ? null
-                : NumericMeasures.takenOf(container, read.rules().inners());
-        NumericTerm.TakenOf count = size == null ? null : NumericTerm.TakenOf.of(size, held,
-                container, read.rules().inners(), read.rules().symbols());
+        NumericTerm.TakenOf count = sizeAt(held);
         return count == null ? null : new Derivation.SizeAboveNought(count);
     }
 
@@ -726,6 +1060,16 @@ final class Pullback {
      * was read.
      */
     private Derivation overQuantities(Denotation left, Denotation right, Rel states) {
+        List<Derivation.AComparisonRead.Counted> outer = counting;
+        counting = new ArrayList<>();
+        try {
+            return overQuantitiesCounting(left, right, states);
+        } finally {
+            counting = outer;
+        }
+    }
+
+    private Derivation overQuantitiesCounting(Denotation left, Denotation right, Rel states) {
         List<LinearForm<Quantity>> sides = new ArrayList<>();
         for (Denotation side : List.of(left, right)) {
             switch (AffineForms.outcome(side.value(), side.at(), quantities())) {
@@ -745,7 +1089,7 @@ final class Pullback {
         if (form.coefs().isEmpty()) {
             return new Derivation.ACutThatCutsNothing(states.holds(form.constant().signum()));
         }
-        return aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, form, states);
+        return aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, form, states, counting);
     }
 
     /** {@code form states 0}, read by {@code by}, written the one way every writing of a relation
@@ -755,6 +1099,25 @@ final class Pullback {
         Relation.OneWay<Quantity> one = Relation.OneWay.of(form, states);
         return new Derivation.AComparisonRead(by,
                 new Relation.Affine(one.form(), one.proposition()), one.holds());
+    }
+
+    /**
+     * The same, holding how each count it names was read: the ones of {@code read} it still names,
+     * once each — a count written on both sides comes to nought and names none.
+     */
+    private Derivation aRelation(Derivation.ComparisonReading by, LinearForm<Quantity> form,
+                                 Rel states, List<Derivation.AComparisonRead.Counted> read) {
+        Relation.OneWay<Quantity> one = Relation.OneWay.of(form, states);
+        Map<Quantity, Derivation.AComparisonRead.Counted> named = new LinkedHashMap<>();
+        for (Derivation.AComparisonRead.Counted count : read) {
+            Quantity counted = count.counted(trying);
+            if (one.form().coefs().containsKey(counted)) {
+                named.putIfAbsent(counted, count);
+            }
+        }
+        return new Derivation.AComparisonRead(by,
+                new Relation.Affine(one.form(), one.proposition()), one.holds(),
+                List.copyOf(named.values()));
     }
 
     /**
@@ -785,6 +1148,15 @@ final class Pullback {
                 NumericTerm term = InputNumber.of(node, read.domain(), at, read.rules());
                 if (term != null) {
                     return LinearForm.atom(new DecisionAtom.OfTheInput(term));
+                }
+                // How many an operation's answer holds, as its law says of its arguments.
+                if (AnOperationApplied.of(Core.withoutStanding(node)) instanceof AnOperationApplied
+                        measured && measured.operation() instanceof ValueName.Stdlib measure
+                        && DefaultBoundOperationFacts.get().takenAs(measure)
+                                instanceof TakenAs.HowManyItHolds
+                        && measured.args().size() == 1) {
+                    return sizeOf(measured.args().getFirst(), at)
+                            instanceof Sized.AsAForm(LinearForm<Quantity> form) ? form : null;
                 }
                 List<TermPath.Step> steps = new ArrayList<>();
                 Core under = Core.withoutStanding(node);
@@ -1385,18 +1757,15 @@ final class Pullback {
      * handed — or does, by a step not taken yet.
      */
     private WhyUnread noNumberOf(ValueName.Stdlib measure, Core measured, InputReads reads) {
+        if (DefaultBoundOperationFacts.get().takenAs(measure) instanceof TakenAs.HowManyItHolds
+                && sizeOf(measured, reads) instanceof Sized.NotSized(WhyUnread why)) {
+            return why;
+        }
         Core made = Core.withoutStanding(reads.standing(measured, read.rules().symbols(),
                 read.rules().newtypes()).value());
         if (!(AnOperationApplied.of(made) instanceof AnOperationApplied applied
                 && applied.operation() instanceof ValueName.Stdlib madeBy)) {
             return new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
-        }
-        // As many as what it was handed, so its size is that one's.
-        BuiltFrom<DeclaredArgument> built = DefaultBoundOperationFacts.get()
-                .buildsItsResultFrom(madeBy);
-        if (built != null && built.mapsEachElementOf() != null) {
-            return new WhyUnread.NotYetComposed(
-                    WhyUnread.NotYetComposed.Step.A_SIZE_AN_OPERATION_KEEPS);
         }
         return new WhyUnread.ANumberOfWhatAnOperationAnswers(measure, madeBy);
     }

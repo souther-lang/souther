@@ -16,7 +16,51 @@ import java.util.List;
  * is. Not knowing what a value is computed from is not the same as not knowing which value it is,
  * and only the second leaves a comparison over it with nothing to say.
  */
-public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding {
+public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
+        Quantity.HowManyMeet {
+
+    /**
+     * How many elements of the container at {@code container} meet {@code ofTheElement}: never
+     * fewer than none, never more than the container holds, and none exactly where no element
+     * meets it.
+     *
+     * <p>A number with a statement inside, and not a value of the input: what it is turns on every
+     * element, so held against nought it is that statement quantified ({@link
+     * Proposition#compared}), and held against any other number it says how many, which is kept
+     * as the relation. What it is about is the element where it stands, so two counts written with
+     * their elements named differently are one count.
+     *
+     * <p>Only of a statement that may come out one way for one element and the other way for
+     * another, and only of a statement read through: a count of what is the same for every element
+     * is the container's size or none, and a count of what nobody read is no number anything can be
+     * said of.
+     */
+    record HowManyMeet(TermPath container, Proposition ofTheElement) implements Quantity {
+
+        public HowManyMeet {
+            if (container == null || ofTheElement == null) {
+                throw new IllegalArgumentException("a count is of the elements of some container");
+            }
+            if (!ofTheElement.mayTurnOnAnElementOf(container)) {
+                throw new IllegalArgumentException("a count of " + ofTheElement
+                        + " is the same for every element of " + container);
+            }
+            if (Proposition.leavesSomethingUnread(ofTheElement)) {
+                throw new IllegalArgumentException("a count is of a statement read through, and "
+                        + ofTheElement + " was not");
+            }
+        }
+
+        @Override
+        public String spelled() {
+            return "#" + container + " [" + ofTheElement.key() + "]";
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
 
     /**
      * What this quantity is, as an identity spells it.

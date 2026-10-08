@@ -31,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AnExpressionIsReadByTheFirstRuleThatReadsAllOfItTest {
 
     private static final WhyUnread OWED =
-            new WhyUnread.NotYetComposed(WhyUnread.NotYetComposed.Step.A_SIZE_AN_OPERATION_KEEPS);
+            new WhyUnread.NotYetComposed(WhyUnread.NotYetComposed.Step.A_CHOICE_BY_CASES);
 
     private static final Derivation READ = new Derivation.ATruthOfASubject(
             new DecisionSubject.AnInput(TermPath.of("a")), true);

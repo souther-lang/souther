@@ -6,7 +6,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.ConditionJoin;
-import souther.compiler.semantics.SideAnswered;
+import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ValueName;
 
@@ -229,39 +229,83 @@ public sealed interface Derivation {
     // The steps a law the library declares licenses.
 
     /**
-     * An operation whose answer comes out as {@code result} exactly where some element of its
-     * container makes its closure answer as the law says.
+     * An operation whose answer comes out on {@code aspect}'s holding side exactly where its law
+     * says of the arguments, read as {@code ofTheArguments}.
      */
-    record AWitnessLaw(ValueName.Stdlib operation, SideAnswered result, Derivation someElement)
+    record ByALaw(ValueName.Stdlib operation, AnswerAspect aspect, Derivation ofTheArguments)
             implements Derivation {
 
-        public AWitnessLaw {
+        public ByALaw {
             Objects.requireNonNull(operation, "a law is of an operation");
-            Objects.requireNonNull(result, "a witness law says which side of the answer it is about");
-            Objects.requireNonNull(someElement, "a witness law is about some element");
+            Objects.requireNonNull(aspect, "a law is about one side of what it answers");
+            Objects.requireNonNull(ofTheArguments, "and comes to something of its arguments");
         }
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            Proposition some = numbering.of(someElement);
-            return result.holds() ? some : some.denied();
+            return numbering.of(ofTheArguments);
         }
     }
 
-    /** An operation that holds something exactly where what it was handed does. */
-    record KeepsWhetherItHoldsAnything(ValueName.Stdlib operation, Derivation source)
-            implements Derivation {
+    /** A law that says the same thing whatever the arguments are. */
+    record ALawSettles(boolean holds) implements Derivation {
 
-        public KeepsWhetherItHoldsAnything {
-            Objects.requireNonNull(operation, "a law is of an operation");
-            Objects.requireNonNull(source, "what is kept is whether the source holds anything");
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return new Proposition.Always(holds);
+        }
+    }
+
+    /** A law that states every one of {@code parts}, or at least one where not {@code every}. */
+    record ALawJoins(List<Derivation> parts, boolean every) implements Derivation {
+
+        public ALawJoins {
+            parts = List.copyOf(parts);
+            if (parts.size() < 2) {
+                throw new IllegalArgumentException("a law joins two statements or more");
+            }
         }
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            return numbering.of(source);
+            List<Proposition> each = new ArrayList<>(parts.size());
+            parts.forEach(part -> each.add(numbering.of(part)));
+            return every ? Proposition.all(each) : Proposition.any(each);
         }
     }
+
+    /**
+     * A law that states a value comes out on the side {@code observed} was read as holding, or on
+     * the other one where not {@code holds}.
+     */
+    record OnTheSideALawNames(Derivation observed, boolean holds) implements Derivation {
+
+        public OnTheSideALawNames {
+            Objects.requireNonNull(observed, "a side is of something read");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            Proposition read = numbering.of(observed);
+            return holds ? read : read.denied();
+        }
+    }
+
+    /** A law that states two subjects are one value, or not where not {@code holds}. */
+    record TheSameValue(DecisionSubject one, DecisionSubject other, boolean holds)
+            implements Derivation {
+
+        public TheSameValue {
+            Objects.requireNonNull(one, "a sameness is of two subjects");
+            Objects.requireNonNull(other, "a sameness is of two subjects");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return new Proposition.SameValue(one, other, holds);
+        }
+    }
+
 
     /**
      * The number an operation answering the order of its two arguments answered, compared with a
@@ -527,18 +571,57 @@ public sealed interface Derivation {
     /**
      * A comparison read as the relation it states, by the reading named — what the relation is is
      * that reading's answer, and this is where it entered.
+     *
+     * <p>A count of elements among its quantities was read too, and is held here as how: each count
+     * the relation names is one of {@code counts}, concluded from the reading of what its elements
+     * meet, and a count the relation names that none of these reads is refused where it is
+     * concluded.
      */
-    record AComparisonRead(ComparisonReading by, Relation relation, boolean holds)
+    record AComparisonRead(ComparisonReading by, Relation relation, boolean holds,
+                           List<Counted> counts)
             implements Derivation {
+
+        public AComparisonRead(ComparisonReading by, Relation relation, boolean holds) {
+            this(by, relation, holds, List.of());
+        }
 
         public AComparisonRead {
             Objects.requireNonNull(by, "a comparison is read by something");
             Objects.requireNonNull(relation, "a comparison states a relation");
+            counts = List.copyOf(counts);
         }
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            return new Proposition.Compared(relation, holds);
+            List<Quantity> read = new ArrayList<>(counts.size());
+            counts.forEach(count -> read.add(count.counted(numbering)));
+            List<Quantity> named = switch (relation) {
+                case Relation.Affine affine -> affine.form().coefs().keySet().stream()
+                        .filter(quantity -> quantity instanceof Quantity.HowManyMeet).toList();
+                case Relation.Ordered _ -> List.of();
+            };
+            if (!read.containsAll(named) || !named.containsAll(read)) {
+                throw new IllegalStateException("a relation over " + named
+                        + " is read from counts of " + read);
+            }
+            return Proposition.compared(relation, holds);
+        }
+
+        /**
+         * How many elements of the container at {@code container} meet what {@code ofTheElement}
+         * was read as.
+         */
+        public record Counted(TermPath container, Derivation ofTheElement) {
+
+            public Counted {
+                Objects.requireNonNull(container, "a count is of a container");
+                Objects.requireNonNull(ofTheElement, "of the elements meeting something");
+            }
+
+            /** The count this reads. */
+            public Quantity.HowManyMeet counted(Conclusion numbering) {
+                return new Quantity.HowManyMeet(container, numbering.of(ofTheElement));
+            }
         }
     }
 
@@ -552,7 +635,10 @@ public sealed interface Derivation {
         ON_AN_ORDER,
 
         /** A form over numbers of values the body bound. */
-        OVER_BOUND_VALUES
+        OVER_BOUND_VALUES,
+
+        /** A form over numbers of an operation's arguments, which its law states a comparison of. */
+        BY_A_LAW
     }
 
     /** A {@code Bool} a row controls compared with a truth the source settles. */

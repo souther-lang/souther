@@ -2,6 +2,10 @@ package souther.compiler.meaning;
 
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.List;
@@ -75,6 +79,8 @@ public sealed interface Proposition {
         return switch (quantity) {
             case DecisionAtom.OfTheInput(var term) -> isAnElementOf(term.subjectPath(), container);
             case DecisionAtom.OfAnAnswer _, Quantity.OfABinding _ -> true;
+            case Quantity.HowManyMeet(TermPath counted, Proposition each) ->
+                    isAnElementOf(counted, container) || each.mayTurnOnAnElementOf(container);
         };
     }
 
@@ -119,6 +125,10 @@ public sealed interface Proposition {
         public Compared {
             if (relation == null) {
                 throw new IllegalArgumentException("a comparison states some relation");
+            }
+            if (ofACount(relation) != null) {
+                throw new IllegalArgumentException("a count held against nought is whether some"
+                        + " element meets what is counted, and is written as that: " + relation);
             }
             key = (holds ? "" : "!") + relation;
         }
@@ -404,6 +414,86 @@ public sealed interface Proposition {
         }
         return kept.size() == 1 ? kept.firstEntry().getValue()
                 : new OnAnApplication(List.copyOf(kept.values()));
+    }
+
+    /**
+     * Whether some part of {@code stated} is one nothing read. A count holds none
+     * ({@link Quantity.HowManyMeet}), so a comparison is read through wherever it was made.
+     */
+    static boolean leavesSomethingUnread(Proposition stated) {
+        return firstStopIn(stated) != null;
+    }
+
+    /** Why the first part of {@code stated} nothing read stopped, in the order its parts are
+     *  kept, or null where every part was read. */
+    static WhyUnread firstStopIn(Proposition stated) {
+        return switch (stated) {
+            case Unread unread -> unread.why();
+            case All all -> firstStopIn(all.parts());
+            case Any any -> firstStopIn(any.parts());
+            case OnAnApplication applications -> firstStopIn(applications.each());
+            case Some some -> firstStopIn(some.ofTheElement());
+            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _ -> null;
+        };
+    }
+
+    private static WhyUnread firstStopIn(List<Proposition> parts) {
+        for (Proposition part : parts) {
+            WhyUnread why = firstStopIn(part);
+            if (why != null) {
+                return why;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * {@code relation} held or failing as {@code holds}, written as what it comes to where it holds
+     * a count of elements against nought ({@link #ofACount}).
+     */
+    static Proposition compared(Relation relation, boolean holds) {
+        Proposition counted = ofACount(relation);
+        Proposition held = counted != null ? counted : new Compared(relation, true);
+        return holds ? held : held.denied();
+    }
+
+    /**
+     * What a relation over one count of elements meeting something says, where that is whether
+     * some element meets it, or the same whatever is counted — or null where it says how many.
+     *
+     * <p>A count is never fewer than none and comes to none exactly where no element meets what is
+     * counted. So {@code count >= 1}, {@code count > 0} and {@code count /= 0} are some element
+     * meeting it, {@code count == 0} and {@code count < 1} none doing so, and {@code count >= 0}
+     * every row: one statement each, made one proposition whichever was written, and the same one
+     * the element that witnesses a filter's answer holding something is read as. A relation that
+     * says how many beyond that — exactly one, two or more — is kept as the relation.
+     */
+    private static Proposition ofACount(Relation relation) {
+        if (!(relation instanceof Relation.Affine(LinearForm<Quantity> form, Rel rel))
+                || form.coefs().size() != 1
+                || !(form.coefs().keySet().iterator().next()
+                        instanceof Quantity.HowManyMeet(TermPath container, Proposition each))) {
+            return null;
+        }
+        // a·count + k rel 0 with a positive, as a relation is written: count rel t.
+        ExactRatio by = form.coefs().values().iterator().next();
+        ExactAnswer<ExactRatio> at = form.constant().negated().dividedBy(by);
+        if (!(at instanceof ExactAnswer.Held<ExactRatio>(ExactRatio t))) {
+            return null;
+        }
+        Proposition some = new Some(container, each, true);
+        int againstNought = t.signum();
+        boolean atMostOne = t.compareTo(ExactRatio.ONE) <= 0;
+        boolean belowOne = t.compareTo(ExactRatio.ONE) < 0;
+        return switch (rel) {
+            case GE -> againstNought <= 0 ? new Always(true) : atMostOne ? some : null;
+            case GT -> againstNought < 0 ? new Always(true)
+                    : belowOne ? some : null;
+            case EQ -> againstNought < 0 || !t.isWhole() ? new Always(false)
+                    : againstNought == 0 ? some.denied() : null;
+            case LE, LT, NE -> throw new IllegalStateException(
+                    "a relation is written under the canonical one of it and its denial");
+        };
     }
 
     /**
