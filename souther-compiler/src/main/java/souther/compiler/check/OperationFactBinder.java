@@ -10,6 +10,7 @@ import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.Combinator;
 import souther.compiler.semantics.DefinitionCase;
+import souther.compiler.semantics.MapPart;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.OperationFact;
 import souther.compiler.semantics.OperationFacts;
@@ -24,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.SequencedSet;
+import java.util.function.UnaryOperator;
 
 /**
  * Holds what is declared of the language's operations to what the library declares, and answers
@@ -154,11 +156,37 @@ final class OperationFactBinder {
             case OperationFact.BuildsItsResultFrom builds ->
                     new BoundOperationFact.BuildsItsResultFrom(operation,
                             holdBuilding(declaration, builds));
-            case OperationFact.ResultIsNoSmallerThan bounded ->
-                    new BoundOperationFact.ResultIsNoSmallerThan(operation,
-                            holdToTheDeclaration(declaration, bounded.container(),
-                                    new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
-                                    "a container the result is no smaller than"));
+            // A key kept is the same key, so the answer is a map keyed by what the map named is.
+            case OperationFact.KeepsTheKeysOf kept -> {
+                DeclaredArgument map = holdToTheDeclaration(declaration, kept.map(),
+                        new ArgumentRef.TheContainer(), TypeRequirement.KEYED,
+                        "the map the keys were kept from");
+                holdTheAnswerTo(declaration, map, Type::keyOf, Type::keyOf,
+                        "a map keyed by the keys of that map");
+                yield new BoundOperationFact.KeepsTheKeysOf(operation, map);
+            }
+            // A list of a part of a map is a list of values of that part's type.
+            case OperationFact.ListsAPartOf lists -> {
+                DeclaredArgument map = holdToTheDeclaration(declaration, lists.map(),
+                        new ArgumentRef.TheContainer(), TypeRequirement.KEYED, "the map listed");
+                holdTheAnswerTo(declaration, map, UnaryOperator.identity(),
+                        held -> Type.list(partOf(held, lists.part())),
+                        "a list of the " + switch (lists.part()) {
+                            case KEYS -> "keys";
+                            case VALUES -> "values";
+                            case ENTRIES -> "entries";
+                        } + " of that map");
+                yield new BoundOperationFact.ListsAPartOf(operation, map, lists.part());
+            }
+            // What is no smaller than a container is one: a size is what the two are compared by.
+            case OperationFact.ResultIsNoSmallerThan bounded -> {
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
+                        "what is no smaller than a container");
+                yield new BoundOperationFact.ResultIsNoSmallerThan(operation,
+                        holdToTheDeclaration(declaration, bounded.container(),
+                                new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
+                                "a container the result is no smaller than"));
+            }
             case OperationFact.ReadsItsContainer reads ->
                     new BoundOperationFact.ReadsItsContainer(operation,
                             holdToTheDeclaration(declaration, reads.container(),
@@ -411,9 +439,19 @@ final class OperationFactBinder {
     private static BuiltFrom<DeclaredArgument> holdBuilding(
             CompleteSignature declaration, OperationFact.BuildsItsResultFrom builds) {
         Map<ArgumentRef, DeclaredArgument> held = new HashMap<>();
-        return builds.built().withArguments(named -> held.computeIfAbsent(named,
-                each -> holdToTheDeclaration(declaration, each, new ArgumentRef.TheContainer(),
-                        TypeRequirement.CONTAINER, "the container something is built from")));
+        BuiltFrom<DeclaredArgument> built = builds.built().withArguments(named ->
+                held.computeIfAbsent(named,
+                        each -> holdToTheDeclaration(declaration, each,
+                                new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
+                                "the container something is built from")));
+        // An answer holding the very elements of an argument holds values of their type. This is
+        // what a reader walking back from an element of the answer to the argument relies on.
+        DeclaredArgument same = built.holdsTheElementsOf();
+        if (same != null) {
+            holdTheAnswerTo(declaration, same, Type::elementOfAContainer,
+                    Type::elementOfAContainer, "a container of the elements that argument holds");
+        }
+        return built;
     }
 
     /**
@@ -672,6 +710,44 @@ final class OperationFactBinder {
             }
         }
         return true;
+    }
+
+    /**
+     * That what the operation answers holds, where {@code answered} reads it, values of the type
+     * {@code given} reads off the argument the fact names — or refused where it does not.
+     *
+     * <p>A fact relating the answer to an argument states that relation of the two, and holding
+     * each position to a requirement of its own says nothing about it: a list and a map pass every
+     * such requirement and are related in no way. So the relation is asked of the pair, by reading
+     * the same kind of thing off each — what a container holds, the key a map files it under — and
+     * comparing them. Where either has no such part, the two are not related as the fact says.
+     */
+    private static void holdTheAnswerTo(CompleteSignature declaration, DeclaredArgument argument,
+                                        UnaryOperator<Type> answered, UnaryOperator<Type> given,
+                                        String relation) {
+        Type ofTheAnswer = answered.apply(declaration.result());
+        Type ofTheArgument = given.apply(argument.stands());
+        if (ofTheAnswer == null || !ofTheAnswer.equals(ofTheArgument)) {
+            throw new IllegalStateException("what "
+                    + ((ValueName.Stdlib) declaration.declaring().operation()).qualified()
+                    + " answers is " + Type.show(declaration.result()) + " and argument "
+                    + (argument.position() + 1) + " is " + Type.show(argument.stands())
+                    + ", which are not " + relation);
+        }
+    }
+
+    /**
+     * The type {@code part} of a map of type {@code map} is, one of which a list of that part holds.
+     *
+     * <p>Exhaustive over the parts, with no {@code default}: a part added is one this has to say the
+     * type of before a fact naming it can be held.
+     */
+    private static Type partOf(Type map, MapPart part) {
+        return switch (part) {
+            case KEYS -> Type.keyOf(map);
+            case VALUES -> Type.elementOf(map);
+            case ENTRIES -> Type.tuple(List.of(Type.keyOf(map), Type.elementOf(map)));
+        };
     }
 
     /**

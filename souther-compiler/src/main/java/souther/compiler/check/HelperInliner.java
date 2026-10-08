@@ -716,10 +716,20 @@ public final class HelperInliner {
      * two bindings hold are the same values and a rule about one is a rule about the other; where it
      * answers what a closure made of them, the values came from there and are not those values, and
      * only the first may be walked through.
+     *
+     * <p>And which keys a map it answers is keyed by, where it keeps a map's keys. That is the
+     * operation's own fact beside the other two, and is written whatever they say: a rewrite of a
+     * map's values keeps every key while making new values.
      */
     private void elementsCameFrom(Hir.Binder binding, Hir.Expr argument) {
         if (!(argument instanceof Hir.Expansion expansion)) {
             return;
+        }
+        DeclaredArgument keptKeys =
+                DefaultBoundOperationFacts.get().keepsTheKeysOf(expansion.callee());
+        BindingId keyedBy = keptKeys == null ? null : boundFor(expansion, keptKeys);
+        if (keyedBy != null) {
+            provenance.keepsTheKeysOf(binding.id(), keyedBy);
         }
         BuiltFrom<DeclaredArgument> built =
                 DefaultBoundOperationFacts.get().buildsItsResultFrom(expansion.callee());

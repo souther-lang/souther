@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.inputs.ElementQuestion;
 import souther.compiler.inputs.ElementStep;
+import souther.compiler.inputs.HeldIn;
 import souther.compiler.types.BindingId;
 
 import java.util.LinkedHashMap;
@@ -23,7 +24,9 @@ import java.util.Objects;
  * narrower one — it says the answers and the elements correspond, which is what a number over the
  * whole run needs and what a walk keeping some of what it was given does not have.
  * {@link #projectedFrom} is that, and the operation it was proved of is gone by the time anything
- * reads the tree, so it too is proved where the operation stands and carried by binding.
+ * reads the tree, so it too is proved where the operation stands and carried by binding. And which
+ * keys a map an expansion wrote is keyed by is a third, kept beside the edges for the reason
+ * {@link #keys} gives.
  *
  * <p><b>An edge is never handed out.</b> What one licenses is not a property of the edge but of the
  * question being asked, and a reader holding one could answer that for itself — beside the one place
@@ -70,20 +73,35 @@ public final class ElementProvenance {
         DERIVES_FROM,
         /** The first binding is the closure parameter of a walk answering one per element of the
          *  second. */
-        PROJECTS_EACH_ELEMENT_OF
+        PROJECTS_EACH_ELEMENT_OF,
+        /** The first binding is a map keyed by the keys the second was keyed by. */
+        KEEPS_THE_KEYS_OF
     }
 
     /** Nothing was expanded, which is what a body calling no such operation comes to. */
     public static final ElementProvenance NONE =
-            new ElementProvenance(Map.of(), Map.of());
+            new ElementProvenance(Map.of(), Map.of(), Map.of());
 
     private final Map<BindingId, ElementEdge> edges;
     private final Map<BindingId, BindingId> projections;
 
+    /**
+     * Each map an expansion wrote, against the map whose keys it is keyed by.
+     *
+     * <p>Beside the edges and not among them. An edge says what a binding's elements are, and which
+     * keys a map is filed under is another fact about the same operation: a rewrite of a map's
+     * values makes new values under the keys it had. One table for both would have to say of
+     * {@code Map.mapValues} that its elements are made from the map's and are the same as the map's
+     * at once.
+     */
+    private final Map<BindingId, BindingId> keys;
+
     private ElementProvenance(Map<BindingId, ElementEdge> edges,
-                              Map<BindingId, BindingId> projections) {
+                              Map<BindingId, BindingId> projections,
+                              Map<BindingId, BindingId> keys) {
         this.edges = Map.copyOf(edges);
         this.projections = Map.copyOf(projections);
+        this.keys = Map.copyOf(keys);
     }
 
     /**
@@ -114,28 +132,61 @@ public final class ElementProvenance {
                         "two bodies both say what " + binding + " projects");
             }
         });
-        return new ElementProvenance(joinedEdges, joinedProjections);
+        Map<BindingId, BindingId> joinedKeys = new LinkedHashMap<>(keys);
+        other.keys.forEach((binding, of) -> {
+            if (joinedKeys.put(binding, of) != null) {
+                throw new IllegalStateException(
+                        "two bodies both say what the keys of " + binding + " are");
+            }
+        });
+        return new ElementProvenance(joinedEdges, joinedProjections, joinedKeys);
     }
 
     /**
-     * What a walk asking {@code question} may do at {@code binding} ({@link ElementStep}).
+     * What a walk asking {@code question} about {@code part} of what {@code binding} holds may do
+     * there ({@link ElementStep}).
      *
      * <p>The one place an edge is read. Answered per question and never by asking whether this is
      * one of them: a question added here is one nobody has said what the edges mean for, and read as
      * "not that one" it would follow whichever edges the last question happened to leave — the
-     * answer arrived at by not being asked.
+     * answer arrived at by not being asked. And per part, for the same reason: what an edge says of
+     * the elements is not what it says of the keys.
      *
      * <p>And an edge this question does not cross is told from an edge nobody wrote. Both leave the
      * walk with no binding to go on to and they license opposite things, so what comes back says
      * which of the two it is rather than leaving a caller to read a missing binding as leave to look
      * elsewhere.
      */
-    public ElementStep stepFrom(BindingId binding, ElementQuestion question) {
+    public ElementStep stepFrom(BindingId binding, ElementQuestion question, HeldIn.Part part) {
         // Asked before the edge is looked up, so that reading one without naming a question is
         // refused whatever was written there. Read after, the two edges that answer alike would go
         // through without a question having been asked, and only the one that consults it would
         // notice — which is the licence being decided by which edge happened to be there.
         Objects.requireNonNull(question, "an edge is read for a question");
+        return switch (part) {
+            case ELEMENT -> elementStepFrom(binding, question);
+            case KEY -> keyStepFrom(binding);
+        };
+    }
+
+    /**
+     * Where the keys of the map at {@code binding} are keys of another.
+     *
+     * <p>The same keys whichever question is asked: a key kept is the value that was the key there,
+     * not one made from it. Where an expansion wrote what the binding's elements came from and said
+     * nothing of its keys, the operation keeps none, and that is a stop rather than an absence — the
+     * binding is accounted for, and not by the map it read.
+     */
+    private ElementStep keyStepFrom(BindingId binding) {
+        BindingId kept = binding == null ? null : keys.get(binding);
+        if (kept != null) {
+            return new ElementStep.Through(kept);
+        }
+        return binding != null && edges.containsKey(binding) ? new ElementStep.Refused()
+                : new ElementStep.NoEdge();
+    }
+
+    private ElementStep elementStepFrom(BindingId binding, ElementQuestion question) {
         return switch (binding == null ? null : edges.get(binding)) {
             case null -> new ElementStep.NoEdge();
             // The two bindings hold the same values, so either question goes on through.
@@ -170,24 +221,25 @@ public final class ElementProvenance {
     }
 
     public boolean isEmpty() {
-        return edges.isEmpty() && projections.isEmpty();
+        return edges.isEmpty() && projections.isEmpty() && keys.isEmpty();
     }
 
     @Override
     public boolean equals(Object other) {
         return this == other
                 || (other instanceof ElementProvenance that && edges.equals(that.edges)
-                        && projections.equals(that.projections));
+                        && projections.equals(that.projections) && keys.equals(that.keys));
     }
 
     @Override
     public int hashCode() {
-        return edges.hashCode() * 31 + projections.hashCode();
+        return (edges.hashCode() * 31 + projections.hashCode()) * 31 + keys.hashCode();
     }
 
     @Override
     public String toString() {
-        return "ElementProvenance[edges=" + edges + ", projections=" + projections + "]";
+        return "ElementProvenance[edges=" + edges + ", projections=" + projections + ", keys="
+                + keys + "]";
     }
 
     /** What an expansion writes down as it goes. */
@@ -195,6 +247,7 @@ public final class ElementProvenance {
 
         private final Map<BindingId, ElementEdge> edges = new LinkedHashMap<>();
         private final Map<BindingId, BindingId> projections = new LinkedHashMap<>();
+        private final Map<BindingId, BindingId> keys = new LinkedHashMap<>();
 
         void holdsTheSameAs(BindingId binding, BindingId container) {
             putEdge(binding, new ElementEdge.TheSameAs(container));
@@ -202,6 +255,20 @@ public final class ElementProvenance {
 
         void derivesFrom(BindingId binding, BindingId container) {
             putEdge(binding, new ElementEdge.MadeFrom(container));
+        }
+
+        /**
+         * {@code binding} is a map keyed by the keys {@code map} was keyed by.
+         *
+         * <p>Written once, as an edge is: the same fact again changes nothing, and a binding said to
+         * be keyed by two maps is one whose keys nothing can say.
+         */
+        void keepsTheKeysOf(BindingId binding, BindingId map) {
+            BindingId already = keys.putIfAbsent(binding, map);
+            if (already != null && !already.equals(map)) {
+                throw new IllegalStateException("the keys of " + binding + " are the keys of "
+                        + already + " and of " + map);
+            }
         }
 
         /** {@code parameter} is the closure parameter of a walk answering one per element of
@@ -268,6 +335,7 @@ public final class ElementProvenance {
             }
             Map<BindingId, ElementEdge> inducedEdges = new LinkedHashMap<>();
             Map<BindingId, BindingId> inducedProjections = new LinkedHashMap<>();
+            Map<BindingId, BindingId> inducedKeys = new LinkedHashMap<>();
             renaming.forEach((of, here) -> {
                 ElementEdge edge = edges.get(of);
                 BindingId movedEnd = edge == null ? null : renaming.get(edge.container());
@@ -288,9 +356,17 @@ public final class ElementProvenance {
                             ? inducedProjections.get(here) : projections.get(here), movedWalked);
                     inducedProjections.put(here, movedWalked);
                 }
+                BindingId keyedBy = keys.get(of);
+                BindingId movedKeyedBy = keyedBy == null ? null : renaming.get(keyedBy);
+                if (movedKeyedBy != null) {
+                    refuseSecond(here, inducedKeys.containsKey(here)
+                            ? inducedKeys.get(here) : keys.get(here), movedKeyedBy);
+                    inducedKeys.put(here, movedKeyedBy);
+                }
             });
             inducedEdges.forEach(this::putEdge);
             projections.putAll(inducedProjections);
+            keys.putAll(inducedKeys);
         }
 
         private static void refuseSecond(BindingId here, Object already, Object saying) {
@@ -301,7 +377,7 @@ public final class ElementProvenance {
         }
 
         ElementProvenance built() {
-            ElementProvenance built = new ElementProvenance(edges, projections);
+            ElementProvenance built = new ElementProvenance(edges, projections, keys);
             return built.isEmpty() ? NONE : built;
         }
     }

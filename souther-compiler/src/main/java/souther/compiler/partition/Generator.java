@@ -3986,7 +3986,8 @@ public final class Generator {
      * <p>A field of a field is not written. A spread is over a value a row can name, and the record
      * a field holds is named by nothing — reaching it would mean binding it first, which is a row
      * that names values this has not been asked whether it can name. Nor is a case of a sum, which
-     * a spread over the sum does not choose. Such a parameter keeps what the classes composed for
+     * a spread over the sum does not choose, nor a map's key, which an edit made to every entry
+     * would write as one key filed many times. Such a parameter keeps what the classes composed for
      * it, which says the same thing and says it in full.
      *
      * <p><b>Every value of each class, and not its first.</b> A class stands for its values through
@@ -4052,8 +4053,7 @@ public final class Generator {
             Map<TermPath, FixtureTemplate> written = new LinkedHashMap<>();
             written.put(TermPath.of(subject.parameters().get(p)), way);
             for (Moves leaf : leaves) {
-                if (leaf.path.steps().stream()
-                        .noneMatch(step -> step instanceof TermPath.Step.Element)) {
+                if (!leaf.path.insideAContainer()) {
                     written.put(leaf.path, leaf.chosen);
                 }
             }
@@ -4149,7 +4149,9 @@ public final class Generator {
                         }
                         yield at.elements;
                     }
-                    case TermPath.Step.Refine _ -> null;
+                    // A value moved under every key of a map is one key written as many times, and
+                    // the map those entries make holds one of them.
+                    case TermPath.Step.Key _, TermPath.Step.Refine _ -> null;
                 };
                 if (at == null) {
                     return false;

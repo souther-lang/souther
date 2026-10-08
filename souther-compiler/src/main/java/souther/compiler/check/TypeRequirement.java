@@ -36,6 +36,9 @@ enum TypeRequirement {
     /** A construction holding elements a rule can speak of ({@link Type#elementOfAContainer}). */
     CONTAINER("a container"),
 
+    /** A container that files what it holds under keys ({@link Type#keyOf}): a map. */
+    KEYED("a map"),
+
     /** A function, which is what a rule about a projection or a step is written over. */
     CLOSURE("a closure"),
 
@@ -62,6 +65,7 @@ enum TypeRequirement {
             case NUMBER -> NumericAnswers.isANumber(type);
             case COUNTED -> Carrier.countsToANumber(type);
             case CONTAINER -> Type.elementOfAContainer(type) != null;
+            case KEYED -> Type.keyOf(type) != null;
             case CLOSURE -> type instanceof Type.FnOf;
             case ANY -> true;
         };

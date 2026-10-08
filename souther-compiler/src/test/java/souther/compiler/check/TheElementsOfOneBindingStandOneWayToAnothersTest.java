@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.ElementQuestion;
 import souther.compiler.inputs.ElementStep;
+import souther.compiler.inputs.HeldIn;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 
@@ -35,6 +36,9 @@ class TheElementsOfOneBindingStandOneWayToAnothersTest {
     private static final BindingId ELEMENTS = new BindingId(OWNER, 0);
     private static final BindingId CONTAINER = new BindingId(OWNER, 1);
     private static final BindingId ANOTHER = new BindingId(OWNER, 2);
+
+    private static final HeldIn.Part VALUES = HeldIn.Part.ELEMENT;
+    private static final HeldIn.Part KEYS = HeldIn.Part.KEY;
 
     /** The same fact written twice is the same fact. */
     @Test
@@ -101,18 +105,62 @@ class TheElementsOfOneBindingStandOneWayToAnothersTest {
         ElementProvenance provenance = builder.built();
 
         assertEquals(new ElementStep.Through(CONTAINER),
-                provenance.stepFrom(ELEMENTS, ElementQuestion.NAMED_POSITION),
+                provenance.stepFrom(ELEMENTS, ElementQuestion.NAMED_POSITION, VALUES),
                 "the two hold the same values, so a rule about one is a rule about the other");
         assertEquals(new ElementStep.Through(CONTAINER),
-                provenance.stepFrom(ELEMENTS, ElementQuestion.VALUE_ORIGIN),
+                provenance.stepFrom(ELEMENTS, ElementQuestion.VALUE_ORIGIN, VALUES),
                 "and they came from there as well");
 
         assertEquals(new ElementStep.Refused(),
-                provenance.stepFrom(ANOTHER, ElementQuestion.NAMED_POSITION),
+                provenance.stepFrom(ANOTHER, ElementQuestion.NAMED_POSITION, VALUES),
                 "what is made from a position is not that position, and there is no way round it");
         assertEquals(new ElementStep.Through(CONTAINER),
-                provenance.stepFrom(ANOTHER, ElementQuestion.VALUE_ORIGIN),
+                provenance.stepFrom(ANOTHER, ElementQuestion.VALUE_ORIGIN, VALUES),
                 "and it is where it came from");
+    }
+
+    /**
+     * Which keys a map is filed under is said apart from where its values came from.
+     *
+     * <p>A map whose values a closure rewrote is keyed by the keys it had, so a rule about its keys
+     * is a rule about the other map's whichever question is asked, while its values stop the walk
+     * after a position. And a map an expansion said where the values came from, and said nothing of
+     * the keys of, is one whose keys are no other map's: that is a stop and not a binding nothing was
+     * said of.
+     */
+    @Test
+    void theKeysOfAMapAreItsOwnFactBesideItsValues() {
+        ElementProvenance.Builder builder = new ElementProvenance.Builder();
+        builder.derivesFrom(ELEMENTS, CONTAINER);
+        builder.keepsTheKeysOf(ELEMENTS, CONTAINER);
+        builder.holdsTheSameAs(ANOTHER, CONTAINER);
+        ElementProvenance provenance = builder.built();
+
+        assertEquals(new ElementStep.Refused(),
+                provenance.stepFrom(ELEMENTS, ElementQuestion.NAMED_POSITION, VALUES),
+                "the values were rewritten, so they are not the other map's values");
+        for (ElementQuestion question : ElementQuestion.values()) {
+            assertEquals(new ElementStep.Through(CONTAINER),
+                    provenance.stepFrom(ELEMENTS, question, KEYS),
+                    () -> "and the keys are the other map's keys, asked " + question);
+        }
+        assertEquals(new ElementStep.Refused(),
+                provenance.stepFrom(ANOTHER, ElementQuestion.NAMED_POSITION, KEYS),
+                "the same values said of a map that kept no keys keys it otherwise");
+        assertEquals(new ElementStep.NoEdge(),
+                ElementProvenance.NONE.stepFrom(ELEMENTS, ElementQuestion.NAMED_POSITION, KEYS),
+                "and a map nothing was said of is left to what it holds");
+    }
+
+    /** A map keyed by the keys of two maps is refused rather than resolved by which came first. */
+    @Test
+    void aMapIsKeyedByTheKeysOfOneMap() {
+        ElementProvenance.Builder builder = new ElementProvenance.Builder();
+        builder.keepsTheKeysOf(ELEMENTS, CONTAINER);
+        builder.keepsTheKeysOf(ELEMENTS, CONTAINER);
+        assertThrows(IllegalStateException.class,
+                () -> builder.keepsTheKeysOf(ELEMENTS, ANOTHER),
+                "a map whose keys are two maps' keys has keys nothing can say");
     }
 
     /**
@@ -132,11 +180,13 @@ class TheElementsOfOneBindingStandOneWayToAnothersTest {
         made.derivesFrom(ELEMENTS, CONTAINER);
 
         assertThrows(NullPointerException.class,
-                () -> ElementProvenance.NONE.stepFrom(ELEMENTS, null),
+                () -> ElementProvenance.NONE.stepFrom(ELEMENTS, null, VALUES),
                 "a binding nothing was said of is still read for a question");
-        assertThrows(NullPointerException.class, () -> same.built().stepFrom(ELEMENTS, null),
+        assertThrows(NullPointerException.class,
+                () -> same.built().stepFrom(ELEMENTS, null, VALUES),
                 "and an edge either question crosses is not one no question reads");
-        assertThrows(NullPointerException.class, () -> made.built().stepFrom(ELEMENTS, null),
+        assertThrows(NullPointerException.class,
+                () -> made.built().stepFrom(ELEMENTS, null, VALUES),
                 "and the one that consults the question is not the only one that must have it");
     }
 
@@ -149,8 +199,8 @@ class TheElementsOfOneBindingStandOneWayToAnothersTest {
     @Test
     void aBindingNothingWasSaidOfIsNotOneThatWasRefused() {
         assertEquals(new ElementStep.NoEdge(),
-                ElementProvenance.NONE.stepFrom(ELEMENTS, ElementQuestion.NAMED_POSITION));
+                ElementProvenance.NONE.stepFrom(ELEMENTS, ElementQuestion.NAMED_POSITION, VALUES));
         assertEquals(new ElementStep.NoEdge(),
-                ElementProvenance.NONE.stepFrom(ELEMENTS, ElementQuestion.VALUE_ORIGIN));
+                ElementProvenance.NONE.stepFrom(ELEMENTS, ElementQuestion.VALUE_ORIGIN, VALUES));
     }
 }

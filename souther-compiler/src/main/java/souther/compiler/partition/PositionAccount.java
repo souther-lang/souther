@@ -91,6 +91,7 @@ public record PositionAccount(String behavior, TermPath path, Type type, Reading
             // not one of these, for the reason it is not reported twice: the descent is the cause.
             case StructuralInspection.Continuation.None _,
                  StructuralInspection.Continuation.Elements _,
+                 StructuralInspection.Continuation.Entries _,
                  StructuralInspection.Continuation.Branches _ -> residue.rulesLeftUnread().stream()
                             .anyMatch(souther.compiler.inputs.RulesLeftUnread
                                     .ClauseOfThisReadingWasUnread.class::isInstance)

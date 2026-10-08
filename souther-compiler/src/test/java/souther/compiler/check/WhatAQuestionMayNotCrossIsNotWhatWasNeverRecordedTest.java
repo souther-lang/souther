@@ -6,6 +6,7 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.DeclaredInput;
+import souther.compiler.inputs.HeldIn;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
@@ -60,7 +61,7 @@ class WhatAQuestionMayNotCrossIsNotWhatWasNeverRecordedTest {
     /** The names, with {@code provenance} said of the container. */
     private static InputReads reads(ElementProvenance provenance) {
         ElementBindings elements = new ElementBindings(
-                Map.of(ELEMENT, List.of(read("xs", CONTAINER))),
+                Map.of(ELEMENT, List.of(new HeldIn(read("xs", CONTAINER), HeldIn.Part.ELEMENT))),
                 Map.of(CONTAINER, read("held", HELD)),
                 provenance, Map.of());
         return InputReads.ofParameters(Map.of(HELD, "held", MADE_FROM, "made"),

@@ -49,34 +49,34 @@ sealed interface BindingRole {
     }
 
     /**
-     * An operation of the language handed the binding an element of {@code container}.
+     * An operation of the language handed the binding something a container holds: an element of
+     * it, or the key a map files one under.
      *
      * <p>Read from what was recorded where the operation still stood. The tree that runs has no
      * operation left in it, so nothing in it says which container an element came from, and a walk
      * that worked it out from the shape a rewrite happens to leave would answer for whichever shapes
      * that rewrite currently produces.
      */
-    record Element(Core container) implements BindingRole {
+    record Element(HeldIn held) implements BindingRole {
 
         public Element {
-            Objects.requireNonNull(container, "an element came from a container");
+            Objects.requireNonNull(held, "an element came from a container");
         }
     }
 
     /**
-     * Operations of the language handed the binding an element of each of {@code containers}.
+     * Operations of the language handed the binding something each of several containers holds.
      *
-     * <p>One block handed to two walks. The binding has one name and takes an element of a
-     * different container on each run, so it is an element and no one container's — and both halves
-     * of that are said here, because a reader told only the second would have a name that came from
-     * nowhere and a reader told only the first would be sent to whichever container turned up
-     * first.
+     * <p>One block handed to two walks. The binding has one name and takes from a different
+     * container on each run, so it is an element and no one container's — and both halves of that
+     * are said here, because a reader told only the second would have a name that came from nowhere
+     * and a reader told only the first would be sent to whichever container turned up first.
      */
-    record ElementOfSeveral(List<Core> containers) implements BindingRole {
+    record ElementOfSeveral(List<HeldIn> held) implements BindingRole {
 
         public ElementOfSeveral {
-            containers = List.copyOf(containers);
-            if (containers.size() < 2) {
+            held = List.copyOf(held);
+            if (held.size() < 2) {
                 throw new IllegalArgumentException(
                         "an element of several came from more than one container");
             }

@@ -1110,25 +1110,17 @@ public final class InputDomain {
             // a depth this walk stops at both leave the rules under it read by nobody.
             case StructuralInspection.Continuation.None _,
                  StructuralInspection.Continuation.Blocked _ -> { }
-            case StructuralInspection.Continuation.Elements elements -> {
-                TermPath at = path.element();
-                Reach on = reach.into(at, stopped);
-                if (!on.enters()) {
-                    break;
-                }
-                // Not where the reading stopped here. What a demand reaches past a stop is reached
-                // by the demand, and saying the rules were passed on would have the ledger record a
-                // recipient for an obligation this reading never discharged.
-                if (!stopped) {
-                    handoffs.passesTo(placed.root(), path, List.of(at));
-                }
-                // Nothing crosses into what a container holds: what a clause of the value out here
-                // says is written about the container, and an element is a value with a declaration
-                // of its own.
-                takeTheRulesOver(placed.root(), path, at, elements.element(), ancestry, reading,
-                        found, roots, java.util.Set.of(), handoffs, observed, null,
-                        new RootOpening.Inside(placed.root(), path), account, on);
-            }
+            case StructuralInspection.Continuation.Elements elements ->
+                    inside(List.of(new Held(path.element(), elements.element())), path, ancestry,
+                            reading, placed, found, roots, handoffs, observed, account, reach,
+                            stopped);
+            // The keys first, which is the order a map is written in: a row writes each entry as
+            // its key and then the value under it.
+            case StructuralInspection.Continuation.Entries entries ->
+                    inside(List.of(new Held(path.key(), entries.key()),
+                                    new Held(path.element(), entries.value())), path, ancestry,
+                            reading, placed, found, roots, handoffs, observed, account, reach,
+                            stopped);
             case StructuralInspection.Continuation.Branches branches -> {
                 // Asked where the branches are, which is the only place a name can cross one.
                 List<String> shared = sharedAt(input);
@@ -1193,6 +1185,50 @@ public final class InputDomain {
                     crossed(observed, crossing, found, before);
                 }
             }
+        }
+    }
+
+    /** One position inside a container: where it is, and what stands there. */
+    private record Held(TermPath at, Type type) {}
+
+    /**
+     * The positions inside the container at {@code container}, opened.
+     *
+     * <p>Whichever parts of the container they are — what a list holds, a map's keys and its values
+     * — they are opened the one way, and only the path and the type say which. So what is decided
+     * about entering one, handing the rules to it and what its rules hold under is decided once for
+     * all of them, and the rules are handed to every part entered in one handoff, since the ledger
+     * keeps one per container.
+     */
+    private static void inside(List<Held> parts, TermPath container,
+                               ExpansionTrace ancestry, RuleReadingContext reading,
+                               PlacedRules placed, List<Position> found, List<RuleRoot> roots,
+                               RuleHandoffs handoffs, NameReach.Observed observed,
+                               Gathered account, Reach reach, boolean stopped) {
+        List<Held> entered = new ArrayList<>();
+        List<Reach> ons = new ArrayList<>();
+        for (Held part : parts) {
+            Reach on = reach.into(part.at(), stopped);
+            if (on.enters()) {
+                entered.add(part);
+                ons.add(on);
+            }
+        }
+        if (entered.isEmpty()) {
+            return;
+        }
+        // Not where the reading stopped here. What a demand reaches past a stop is reached by the
+        // demand, and saying the rules were passed on would have the ledger record a recipient for
+        // an obligation this reading never discharged.
+        if (!stopped) {
+            handoffs.passesTo(placed.root(), container, entered.stream().map(Held::at).toList());
+        }
+        // Nothing crosses into what a container holds: what a clause of the value out here says is
+        // written about the container, and what it holds is a value with a declaration of its own.
+        for (int i = 0; i < entered.size(); i++) {
+            takeTheRulesOver(placed.root(), container, entered.get(i).at(), entered.get(i).type(),
+                    ancestry, reading, found, roots, Set.of(), handoffs, observed, null,
+                    new RootOpening.Inside(placed.root(), container), account, ons.get(i));
         }
     }
 

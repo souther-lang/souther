@@ -6,6 +6,7 @@ import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.DefinitionCase;
+import souther.compiler.semantics.MapPart;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.TakenArguments;
@@ -221,6 +222,24 @@ public final class BoundOperationFacts {
     /** The operations that build a container out of another. */
     public Set<ValueName> buildsItsResultFrom() {
         return ones(BoundOperationFact.BuildsItsResultFrom.class);
+    }
+
+    /** Which part of which map {@code operation} answers a list of, or null where it lists no
+     *  map's. */
+    public Listed listsAPartOf(ValueName operation) {
+        BoundOperationFact.ListsAPartOf held =
+                one(BoundOperationFact.ListsAPartOf.class, operation);
+        return held == null ? null : new Listed(held.map(), held.part());
+    }
+
+    /** A map an operation answers a list of what it holds, and which part of it. */
+    public record Listed(DeclaredArgument map, MapPart part) {}
+
+    /** The map whose keys {@code operation} answers a map keyed by, or null where it keeps none. */
+    public DeclaredArgument keepsTheKeysOf(ValueName operation) {
+        BoundOperationFact.KeepsTheKeysOf held =
+                one(BoundOperationFact.KeepsTheKeysOf.class, operation);
+        return held == null ? null : held.map();
     }
 
     /** The containers {@code operation}'s result is never smaller than, in the order declared. */

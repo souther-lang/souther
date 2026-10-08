@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.NewtypeInners;
+import souther.compiler.check.Shape;
 import souther.compiler.check.SumCases;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
@@ -168,7 +169,7 @@ final class ConstructionPlan {
 
     /**
      * A container composed out of what it is asked to hold, rather than chosen whole — a list, a
-     * set, or a map at its values.
+     * set, or a map.
      *
      * <p>Only where something is asked of what it holds: a class put at its element, or values the
      * caller hands over to be written into it or kept out of it ({@link ContentsComposed}). A
@@ -183,22 +184,30 @@ final class ConstructionPlan {
      * can be and still meet all of them. How many that is is worked out where the values are in
      * hand ({@link Witnesses#holding}), since two values handed over to a set may be one.
      *
+     * <p>A map is asked part by part. A class at its values is placed at a value under some key, a
+     * class at its keys at a key over some value the rules admit, and a class at both at one entry
+     * holding the two — since an entry is what a row writes.
+     *
      * @param worn     {@link Node#worn}: every name the position wears, since what is composed
      *                 here is bare
-     * @param under    the element's own position, where a class is put there
+     * @param under    the element's own position, where a class is put there; empty where only a
+     *                 map's key is asked something
+     * @param key      the position of the key the element is filed under, where a map's keys are
+     *                 asked something; empty for a list or a set, and for a map nothing asks of
+     *                 its keys
      * @param holds    from how few to how many the rules let it hold
      * @param handed   whether the caller hands over values to write into it or keep out of it,
      *                 which is asked of the caller when it is composed and of nobody otherwise
      */
     record Held(TermPath at, Type type, List<TypeSymbol> worn, Optional<Node> under,
-                DeclaredBounds.CountRange holds, boolean handed)
+                Optional<Node> key, DeclaredBounds.CountRange holds, boolean handed)
             implements Node {
 
         Held {
             worn = List.copyOf(worn);
-            if (under.isEmpty() && !handed) {
-                throw new IllegalArgumentException("a list built rather than chosen is built to"
-                        + " hold something asked of it: " + at);
+            if (under.isEmpty() && key.isEmpty() && !handed) {
+                throw new IllegalArgumentException("a container built rather than chosen is built"
+                        + " to hold something asked of it: " + at);
             }
         }
     }
@@ -597,6 +606,13 @@ final class ConstructionPlan {
                 .anyMatch(each -> !each.equals(here) && each.isAtOrUnder(here));
     }
 
+    /** Whether the caller asked anything at {@code here} itself or below it. */
+    private static boolean anythingIsAskedAtOrUnder(TermPath here, Set<TermPath> decided,
+                                                    Requirements required) {
+        return whatTheCallerAsked(decided, required).stream()
+                .anyMatch(each -> each.isAtOrUnder(here));
+    }
+
     /**
      * The position of the plan at {@code at}, or null where the plan holds none there — a path
      * inside a value chosen whole, or under an element.
@@ -631,7 +647,11 @@ final class ConstructionPlan {
         switch (node) {
             case Slot slot -> out.add(slot);
             case Built built -> built.under().values().forEach(each -> collect(each, out));
-            case Held held -> held.under().ifPresent(element -> collect(element, out));
+            // The key before the value, the order an entry is written in.
+            case Held held -> {
+                held.key().ifPresent(key -> collect(key, out));
+                held.under().ifPresent(element -> collect(element, out));
+            }
             // Not a position a value is chosen at: the requirement settled it, so there is nothing
             // here for the search to offer and nothing for it to be refused at.
             case Exact _ -> { }
@@ -688,7 +708,14 @@ final class ConstructionPlan {
             // value at, and values handed over to be written into it or kept out of it are no
             // position at all — what stands at the element of a list holding nothing equal to a
             // value is whatever the rules leave, and a position chosen there would make it hold one.
-            boolean elementAsked = anythingIsAskedUnder(here, decided, required);
+            //
+            // And what is placed in it is asked part by part. A map holds a value under a key, and
+            // a class at one is no demand on the other: a key asked for is filed over whatever
+            // value the rules admit, and nothing about the value's own structure is planned for it.
+            boolean valueAsked = anythingIsAskedAtOrUnder(here.element(), decided, required);
+            boolean keyAsked = container instanceof Shape.Mapping
+                    && anythingIsAskedAtOrUnder(here.key(), decided, required);
+            boolean elementAsked = valueAsked || keyAsked;
             boolean handed = contents.handedTo(here);
             boolean demanded = elementAsked || handed;
             // How many it may hold, off one reading, and whether something has to be placed in it.
@@ -713,24 +740,44 @@ final class ConstructionPlan {
                 return givenUpAt(descent, here, building, settled.outer(), demanded);
             }
             if (!elementAsked && handed) {
-                return new NodeResult.Made(
-                        new Held(here, building, worn, Optional.empty(), holds, true));
+                return new NodeResult.Made(new Held(here, building, worn, Optional.empty(),
+                        Optional.empty(), holds, true));
             }
-            NodeResult inside = node(container.element(), here.element(), inners, symbols,
-                    kinds, sums,
-                    depth + 1, decided, required, contents, howMany);
-            if (!(inside instanceof NodeResult.Made(Node element))) {
-                return inside;
+            // What stands at its element, where something is asked there — and where nothing is
+            // asked anywhere inside it, so that a walk giving up part-way below is told from one
+            // that found nothing to place. Not where only a map's key is asked: the value under it
+            // is then a value the rules admit and no position.
+            Optional<Node> element = Optional.empty();
+            if (valueAsked || !keyAsked) {
+                NodeResult inside = node(container.element(), here.element(), inners, symbols,
+                        kinds, sums,
+                        depth + 1, decided, required, contents, howMany);
+                if (!(inside instanceof NodeResult.Made(Node made))) {
+                    return inside;
+                }
+                element = Optional.of(made);
+            }
+            // The key the element is filed under, where something is asked of a map's keys. Only
+            // then: a map nothing asks a key of is keyed by whatever keeps its entries apart, and a
+            // position chosen there would be one more thing for the search to choose.
+            Optional<Node> key = Optional.empty();
+            if (keyAsked && container instanceof Shape.Mapping map) {
+                NodeResult keyed = node(map.key(), here.key(), inners, symbols, kinds, sums,
+                        depth + 1, decided, required, contents, howMany);
+                if (!(keyed instanceof NodeResult.Made(Node filedUnder))) {
+                    return keyed;
+                }
+                key = Optional.of(filedUnder);
             }
             if (demanded) {
-                return new NodeResult.Made(
-                        new Held(here, building, worn, Optional.of(element), holds, handed));
+                return new NodeResult.Made(new Held(here, building, worn, element, key, holds,
+                        handed));
             }
             // Nothing was asked for inside it, so the list is chosen whole — but where the walk
             // that would have found something gave up part-way, that is not the same answer. Read
             // as "no class is placed in here", a plan that never reached the class says there is
             // none.
-            Set<CompositionBudget> cutBy = cutBy(element);
+            Set<CompositionBudget> cutBy = cutBy(element.orElseThrow());
             if (!cutBy.isEmpty()) {
                 return new NodeResult.Made(new Slot(here, building, settled.outer(),
                         new Leaf.Beneath(cutBy)));
@@ -1018,7 +1065,12 @@ final class ConstructionPlan {
                 case Leaf.Beneath(Set<CompositionBudget> cutBy) -> cutBy;
             };
             case Built built -> across(built.under().values());
-            case Held held -> held.under().map(ConstructionPlan::cutBy).orElse(Set.of());
+            case Held held -> {
+                Set<CompositionBudget> out = new LinkedHashSet<>();
+                held.key().ifPresent(key -> out.addAll(cutBy(key)));
+                held.under().ifPresent(element -> out.addAll(cutBy(element)));
+                yield out;
+            }
             case Exact _ -> Set.of();
         };
     }

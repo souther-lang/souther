@@ -161,18 +161,20 @@ class ALeafIsNotAnAbsenceTest {
      * {@code guard List.length(items) < 3} draws a line on, so it stays a position to be answered
      * for and what it holds is read beside it.
      *
-     * <p>A map the same way, at its values: those are what a walk over it is handed one at a time,
-     * and its size is a number a rule is written about as surely as a list's length is.
+     * <p>A map the same way, at its keys and at its values: a closure over it is handed both, and
+     * its size is a number a rule is written about as surely as a list's length is.
      */
     @Test
     void aSequenceHoldsAPositionAndIsStillOne() {
-        for (Type carrier : List.of(Type.list(named("Slot")), Type.set(named("Slot")),
-                Type.map(Type.STRING, named("Slot")))) {
+        for (Type carrier : List.of(Type.list(named("Slot")), Type.set(named("Slot")))) {
             assertEquals(retained(new StructuralInspection.Continuation.Elements(named("Slot"))),
                     under(carrier));
             assertInstanceOf(StructuralInspection.Retained.class, under(carrier),
                     () -> "and is still to be answered for: " + carrier);
         }
+        assertEquals(retained(new StructuralInspection.Continuation.Entries(Type.STRING,
+                        named("Slot"))),
+                under(Type.map(Type.STRING, named("Slot"))));
     }
 
     /**
