@@ -187,7 +187,10 @@ final class DemandReading {
                 all.parts().forEach(part -> out.addAll(projected(part, read)));
                 yield List.copyOf(out);
             }
-            case Proposition.Any _ -> List.of(new Read.Unread(new OnTheWay.Why.OneOfTwoThings()));
+            // One of several statements as a disjunction is: which one a row is asked for turns on
+            // which application a run meets the condition on, and naming none of them is the same.
+            case Proposition.Any _, Proposition.OnAnApplication _ ->
+                    List.of(new Read.Unread(new OnTheWay.Why.OneOfTwoThings()));
             case Proposition.Some some -> ofSomeElement(some, read);
         };
     }

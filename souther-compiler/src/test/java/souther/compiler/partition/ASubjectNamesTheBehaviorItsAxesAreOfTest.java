@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -42,7 +43,8 @@ class ASubjectNamesTheBehaviorItsAxesAreOfTest {
             declared.add(new souther.compiler.inputs.InputDomain.Parameter(each, null, Type.INT));
         }
         return souther.compiler.inputs.InputDomain.of(declared,
-                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES)).reading(SYMBOLS);
+                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES),
+                Membership.none()).reading(SYMBOLS);
     }
 
     /** A behavior with no divided position, which is where reading the name off an axis ran out. */

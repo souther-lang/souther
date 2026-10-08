@@ -92,7 +92,8 @@ final class ConformanceSnapshot {
                 MeaningsOfABody meanings = MeaningsOfABodyReading.of(analysis, () -> reading,
                         InputReads.ofParametersWhereCallsStand(input.parameterReads(),
                                 input.declared(rules),
-                                ElementBindings.of(analysis, rules.newtypes())),
+                                ElementBindings.of(analysis, rules.newtypes()),
+                                input.dependencies()),
                         rules.symbols(), rules.newtypes());
                 meanings.stated().forEach((site, meaning) -> unreadIn(meaning.states(),
                         unread -> lines.add(module + "." + behavior + " " + site + " #"
@@ -111,6 +112,8 @@ final class ConformanceSnapshot {
             case Proposition.Unread unread -> into.accept(unread);
             case Proposition.All all -> all.parts().forEach(part -> unreadIn(part, into));
             case Proposition.Any any -> any.parts().forEach(part -> unreadIn(part, into));
+            case Proposition.OnAnApplication applications ->
+                    applications.each().forEach(each -> unreadIn(each, into));
             case Proposition.Some some -> unreadIn(some.ofTheElement(), into);
             default -> { }
         }

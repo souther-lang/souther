@@ -180,6 +180,12 @@ public final class InputDomain {
     private final DeclarationReadings machines;
 
     /**
+     * The behaviors a row stands in for: what one of them answers arrives at a row as a position's
+     * value does, from what the row was written with ({@link #dependencies()}).
+     */
+    private final souther.compiler.carrier.Membership<ValueName.Behavior> dependencies;
+
+    /**
      * What {@link #hashCode} came to, worked out at the first asking; zero until then.
      *
      * <p>Kept because this is a key: every measure of a behavior asks the revision for the reading
@@ -193,8 +199,11 @@ public final class InputDomain {
                         List<Parameter> parameters, List<RuleRoot> roots, ReadingPolicy policy,
                         NameReach reach, List<PlacementSeed> placed,
                         List<ClauseWithoutAnEnd> clauses, List<CasesRead> cases,
-                        DeclarationReadings machines) {
+                        DeclarationReadings machines,
+                        souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
         this.machines = Objects.requireNonNull(machines, "a reading says where it borrows from");
+        this.dependencies = Objects.requireNonNull(dependencies,
+                "a reading says what a row stands in for, if only nothing");
         this.cases = List.copyOf(cases);
         this.placed = List.copyOf(placed);
         this.clauses = List.copyOf(clauses);
@@ -237,14 +246,16 @@ public final class InputDomain {
                 && roots.equals(that.roots)
                 && java.util.Objects.equals(policy, that.policy)
                 && reach.equals(that.reach)
-                && placed.equals(that.placed);
+                && placed.equals(that.placed)
+                && dependencies.equals(that.dependencies);
     }
 
     @Override
     public int hashCode() {
         int known = hash;
         if (known == 0) {
-            known = Objects.hash(positions, read, parameters, roots, policy, reach, placed);
+            known = Objects.hash(positions, read, parameters, roots, policy, reach, placed,
+                    dependencies);
             hash = known;
         }
         return known;
@@ -266,9 +277,18 @@ public final class InputDomain {
      */
     public record Parameter(String name, BindingId binding, Type type) {}
 
-    /** Every position of an input, in the order the parameters are declared and descended into. */
-    public static InputDomain of(List<Parameter> parameters, RuleReadingContext reading) {
-        return of(parameters, reading, InputDemand.NONE);
+    /**
+     * Every position of an input, in the order the parameters are declared and descended into, where
+     * no body names a path the enumeration does not.
+     *
+     * <p>What a row stands in for is asked of every caller and supplied by none: an input read
+     * without its behavior's own account of its dependencies would read a fork on one of their
+     * answers as a value the model computes, and nothing would say so.
+     */
+    public static InputDomain of(
+            List<Parameter> parameters, RuleReadingContext reading,
+            souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
+        return of(parameters, reading, InputDemand.NONE, dependencies);
     }
 
     /**
@@ -290,9 +310,13 @@ public final class InputDomain {
      * declaration this opens borrows what somebody has already made of it. What outlives the walk
      * is the policy and the lender alone, kept here for the readers of those same declarations
      * that come after the walk ({@link #machines}).
+     *
+     * @param dependencies the behaviors a row of this behavior stands in for ({@link
+     *                     #dependencies()})
      */
-    public static InputDomain of(List<Parameter> parameters, RuleReadingContext reading,
-                                 InputDemand demand) {
+    public static InputDomain of(
+            List<Parameter> parameters, RuleReadingContext reading, InputDemand demand,
+            souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
         List<Position> found = new ArrayList<>();
         List<RuleRoot> roots = new ArrayList<>();
         Map<BindingId, String> read = new LinkedHashMap<>();
@@ -337,7 +361,8 @@ public final class InputDomain {
         // it reached. Answered with a value standing for no reading at all, an input nobody could
         // read would be the same value as an input there was nothing to read.
         return new InputDomain(settled, read, parameters, roots, reading.policy(), observed.reach(),
-                account.placed(), account.clauses(), observed.cases(), reading.retainedReadings());
+                account.placed(), account.clauses(), observed.cases(), reading.retainedReadings(),
+                dependencies);
     }
 
     /**
@@ -384,10 +409,13 @@ public final class InputDomain {
      * <p>That reading is a comparison and this one is not. A binder may be missing, or stand where
      * the declaration asks for nothing, which is why {@code arriving} says at which position each
      * one landed; the declaration's own parameters and their types were never two things to line up.
+     *
+     * <p>Those behaviors are what {@code dependencies} names ({@link #dependencies()}).
      */
     public static InputDomain of(DeclaredSig declared,
                                  List<SpecImplementation.ParameterBinding.AnInput> arriving,
-                                 RuleReadingContext reading, InputDemand demand) {
+                                 RuleReadingContext reading, InputDemand demand,
+                                 souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
         Map<Integer, BindingId> bindings = new LinkedHashMap<>();
         for (SpecImplementation.ParameterBinding.AnInput input : arriving) {
             bindings.put(input.at(), input.written().binder().binding());
@@ -397,7 +425,7 @@ public final class InputDomain {
         for (DeclaredSig.Input input : declared.inputs()) {
             parameters.add(new Parameter(input.name(), bindings.get(at++), input.type()));
         }
-        return of(parameters, reading, demand);
+        return of(parameters, reading, demand, dependencies);
     }
 
     /**
@@ -406,10 +434,13 @@ public final class InputDomain {
      * <p>The positions are the same either way — what a behavior takes is what it declares — and
      * what is absent is the means to tell one of its parameters from a name a body binds under the
      * same spelling. So this is the reading for a caller with no body in hand, and a caller with one
-     * that used it would find every claim and every comparison naming nothing.
+     * that used it would find every claim and every comparison naming nothing. What a row stands in
+     * for is still the caller's to say, as it is for every reading of an input.
      */
-    public static InputDomain of(DeclaredSig declared, RuleReadingContext reading) {
-        return of(declared, List.of(), reading, InputDemand.NONE);
+    public static InputDomain of(
+            DeclaredSig declared, RuleReadingContext reading,
+            souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
+        return of(declared, List.of(), reading, InputDemand.NONE, dependencies);
     }
 
     /** The positions, in the order they were read. */
@@ -815,6 +846,19 @@ public final class InputDomain {
      */
     public Map<BindingId, String> parameterReads() {
         return read;
+    }
+
+    /**
+     * The behaviors a row of this behavior stands in for, which are the ones it declares it depends
+     * on.
+     *
+     * <p>Beside the positions because a row controls both. What it writes at a position and what it
+     * stands a dependency in with are the two things it is composed of, and a reading of the body
+     * that knew only the first would read a fork on a dependency's answer as a value the model
+     * computes.
+     */
+    public souther.compiler.carrier.Membership<ValueName.Behavior> dependencies() {
+        return dependencies;
     }
 
     /**

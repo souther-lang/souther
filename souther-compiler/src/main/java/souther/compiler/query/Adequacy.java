@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.carrier.Lookup;
+import souther.compiler.carrier.Membership;
 import souther.compiler.execute.BoundaryValues;
 import souther.compiler.execute.ExampleExecution;
 import souther.compiler.execute.RowTrials;
@@ -811,7 +812,8 @@ public final class Adequacy {
                     // looked one up would answer a question differently depending on what had been
                     // asked before it.
                     demandOf(db, module, spec.value(), implemented, scope.value(), stated.value(),
-                            DeclaredInput.of(declared.value(), reading.value()))));
+                            DeclaredInput.of(declared.value(), reading.value())),
+                    dependenciesOf(spec.value())));
         }
     }
 
@@ -859,8 +861,15 @@ public final class Adequacy {
             }
         }
         return souther.compiler.inputs.InputDemand.of(checked.body(),
-                InputReads.ofParameters(parameters, declared, checked.elements()),
+                InputReads.ofParameters(parameters, declared, checked.elements(),
+                        dependenciesOf(spec)),
                 symbols, Shapes.declarationNewtypes(db));
+    }
+
+    /** The behaviors a row of {@code spec} stands in for, which are the ones it declares it
+     *  depends on. */
+    private static Membership<ValueName.Behavior> dependenciesOf(Hir.SpecBehavior spec) {
+        return Membership.built(add -> spec.dependsOnBehaviors().forEach(add::add));
     }
 
     /**
@@ -980,7 +989,8 @@ public final class Adequacy {
         }
         return MeaningsOfABodyReading.of(analysis, reading,
                 InputReads.ofParametersWhereCallsStand(read.parameterReads(),
-                        read.declared(source), ElementBindings.of(analysis, source.newtypes())),
+                        read.declared(source), ElementBindings.of(analysis, source.newtypes()),
+                        read.dependencies()),
                 source.symbols(), source.newtypes());
     }
 
@@ -1135,8 +1145,8 @@ public final class Adequacy {
                         analysis, readingOf(db, read, reading.value()),
                         InputReads.ofParametersWhereCallsStand(read.parameterReads(),
                                 read.declared(reading.value()),
-                                ElementBindings.of(analysis, reading.value().newtypes())),
-                        spec.dependsOnBehaviors()));
+                                ElementBindings.of(analysis, reading.value().newtypes()),
+                                read.dependencies())));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -2829,7 +2839,9 @@ public final class Adequacy {
         }
         souther.compiler.inputs.InputReading read = souther.compiler.inputs.InputDomain.of(
                 List.of(new souther.compiler.inputs.InputDomain.Parameter(ANSWER, null, answers)),
-                RuleReadingContext.of(reading, policy, beside.machines())).reading(reading);
+                RuleReadingContext.of(reading, policy, beside.machines()),
+                // An answer, which no row stands anything in for.
+                Membership.none()).reading(reading);
         return souther.compiler.partition.MeasuredInput.of(ANSWER, read,
                 souther.compiler.partition.Partitions.of(ANSWER, read, policy));
     }

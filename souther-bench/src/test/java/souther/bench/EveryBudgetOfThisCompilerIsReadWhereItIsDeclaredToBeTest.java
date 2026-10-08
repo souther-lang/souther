@@ -235,12 +235,30 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // The reading of what a body decides. The figure is what the reading of the ways will
             // hold apart, and where it will not, the rules are none of the body's rather than some
             // of them -- so what is carried out is the figure itself.
+            Map.entry("souther.compiler.partition.Pullback#<clinit>()V",
+                    "how many readings of one condition the reading of what it means makes"),
+            Map.entry("souther.compiler.partition.Pullback#applicationsOf("
+                            + "Lsouther/compiler/core/Core$Block;"
+                            + "Lsouther/compiler/inputs/InputReads;"
+                            + "Lsouther/compiler/check/Symbols;"
+                            + "Lsouther/compiler/check/DeclarationNewtypes;)"
+                            + "Lsouther/compiler/inputs/InputReads$Applications;",
+                    "hands the figure to the counting of a closure's applications, which answers"
+                            + " that there are more than are read; every reader of that answer"
+                            + " carries it out as a part nothing read, naming the figure"),
+            Map.entry("souther.compiler.partition.Pullback#ofAChoice("
+                            + "Lsouther/compiler/check/StatedComparison;"
+                            + "Lsouther/compiler/inputs/Denotation;"
+                            + "Lsouther/compiler/inputs/InputReads;)"
+                            + "Lsouther/compiler/meaning/Derivation;",
+                    "counts the cases a comparison is split into, and past the figure carries"
+                            + " the comparison out as a part nothing read, naming it"),
             Map.entry("souther.compiler.partition.DecisionReading#<clinit>()V",
                     "how many paths through one body a decision is read for"),
             Map.entry("souther.compiler.partition.DecisionReading#of("
                             + "Ljava/lang/String;Lsouther/compiler/check/AnalysisBody;"
                             + "Lsouther/compiler/inputs/InputReading;"
-                            + "Lsouther/compiler/inputs/InputReads;Ljava/util/Set;)"
+                            + "Lsouther/compiler/inputs/InputReads;)"
                             + "Lsouther/compiler/partition/DecisionReading;",
                     "hands the figure to the reading of the ways, and says which it reached"),
 

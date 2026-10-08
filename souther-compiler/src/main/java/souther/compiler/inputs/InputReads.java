@@ -9,11 +9,15 @@ import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -68,19 +72,49 @@ import java.util.Set;
  * <p>What an arm narrowed is this reading's own and not the environment's. It is a fact about where
  * a walk is in the tree rather than about where a binding came from — read under one arm and not
  * under the next — so it is held beside the environment and put to it here.
+ *
+ * <p>And which of the behaviors a body calls a row stands in for. A call to one of them is a value a
+ * row supplies, as a position's is, and a call to any other is one the model computes; which it is
+ * is a fact about the body being read and not about the call, so a rule a declaration states, which
+ * nothing stands a dependency in for, is read where none is.
  */
 public final class InputReads {
 
     private final BindingEnvironment names;
     private final Map<BindingId, java.util.List<Denotation>> alternatives;
     private final DeclaredInput declared;
+    private final souther.compiler.carrier.Membership<ValueName.Behavior> dependencies;
+    private final Applied applied;
+
+    /**
+     * The applications of closures a reading here is on.
+     *
+     * @param handed   the names an application handed one of the values written out, on the way
+     *                 here ({@link #handing})
+     * @param readings how many readings of one condition reading it here is one of: the product of
+     *                 how many values each closure on the way down is applied to
+     */
+    private record Applied(Set<BindingId> handed, long readings) {
+
+        static final Applied NONE = new Applied(Set.of(), 1);
+
+        Applied {
+            handed = Set.copyOf(handed);
+        }
+    }
 
     private InputReads(BindingEnvironment names,
                        Map<BindingId, java.util.List<Denotation>> alternatives,
-                       DeclaredInput declared) {
+                       DeclaredInput declared,
+                       souther.compiler.carrier.Membership<ValueName.Behavior> dependencies,
+                       Applied applied) {
         this.names = names;
         this.alternatives = Map.copyOf(alternatives);
         this.declared = declared;
+        this.dependencies = Objects.requireNonNull(dependencies,
+                "a body says which calls a row stands in for, if none");
+        this.applied = Objects.requireNonNull(applied,
+                "a reading is on some applications, if none");
     }
 
     /**
@@ -98,11 +132,14 @@ public final class InputReads {
      * <p>{@code elements} is what the operations that handed their closures the contents of
      * containers were read to say, since the tree this walks has none of them left in it. Given
      * nothing, every name inside a closure names no position.
+     *
+     * <p>{@code dependencies} is what a row stands in for ({@link InputDomain#dependencies}).
      */
-    public static InputReads ofParameters(Map<BindingId, String> parameters,
-                                          DeclaredInput declared, ElementBindings elements) {
+    public static InputReads ofParameters(
+            Map<BindingId, String> parameters, DeclaredInput declared, ElementBindings elements,
+            souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
         return new InputReads(new BindingEnvironment(BindingEnvironment.rooted(parameters),
-                Map.of(), elements, false), Map.of(), declared);
+                Map.of(), elements, false), Map.of(), declared, dependencies, Applied.NONE);
     }
 
     /**
@@ -120,9 +157,10 @@ public final class InputReads {
      * be reported as this compiler failing to expand something.
      */
     public static InputReads ofParametersWhereCallsStand(
-            Map<BindingId, String> parameters, DeclaredInput declared, ElementBindings elements) {
+            Map<BindingId, String> parameters, DeclaredInput declared, ElementBindings elements,
+            souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
         return new InputReads(new BindingEnvironment(BindingEnvironment.rooted(parameters),
-                Map.of(), elements, true), Map.of(), declared);
+                Map.of(), elements, true), Map.of(), declared, dependencies, Applied.NONE);
     }
 
     /**
@@ -135,7 +173,8 @@ public final class InputReads {
     public static InputReads ofWhatIsDeclared(Map<BindingId, String> roots,
                                               DeclaredInput declared) {
         return new InputReads(new BindingEnvironment(BindingEnvironment.rooted(roots), Map.of(),
-                ElementBindings.NONE, true), Map.of(), declared);
+                ElementBindings.NONE, true), Map.of(), declared,
+                souther.compiler.carrier.Membership.none(), Applied.NONE);
     }
 
     /**
@@ -154,7 +193,8 @@ public final class InputReads {
     public static InputReads ofADeclaredClause(Map<BindingId, TermPath> roots,
                                                DeclaredInput declared) {
         return new InputReads(new BindingEnvironment(roots, Map.of(),
-                ElementBindings.NONE, true), Map.of(), declared);
+                ElementBindings.NONE, true), Map.of(), declared,
+                souther.compiler.carrier.Membership.none(), Applied.NONE);
     }
 
     /**
@@ -168,7 +208,197 @@ public final class InputReads {
     static InputReads written(Map<BindingId, TermPath> roots, Map<BindingId, Core> bound,
                               ElementBindings elements) {
         return new InputReads(new BindingEnvironment(roots, bound, elements, false), Map.of(),
-                DeclaredInput.NONE);
+                DeclaredInput.NONE, souther.compiler.carrier.Membership.none(), Applied.NONE);
+    }
+
+    /**
+     * The same, on the application of a closure that hands {@code binding} {@code value}, one of the
+     * values a container was written with — or null where it cannot be said here which value that
+     * is.
+     *
+     * <p>Where an application reads a condition is where the name is one value and not the set of
+     * them ({@link ReadMeaning.OneOf}), which is a fact about where a reading is, as an arm's
+     * narrowing is. A value at a position is that position, as an arm's is. One that names nothing
+     * is itself wherever it is read. One that names a binding of where it was written and stands at
+     * no position is neither, and handed here its names would be read among these.
+     */
+    public InputReads handing(BindingId binding, Denotation value, DeclarationNewtypes newtypes) {
+        Map<BindingId, List<Denotation>> narrower = new LinkedHashMap<>(alternatives);
+        narrower.remove(binding);
+        Set<BindingId> handed = new HashSet<>(applied.handed());
+        handed.add(binding);
+        Applied wider = new Applied(handed, applied.readings());
+        if (value.at().pathOf(value.value(), newtypes) instanceof PathResolution.At(TermPath at)) {
+            return new InputReads(names.naming(binding, at), narrower, declared, dependencies,
+                    wider);
+        }
+        if (namesSomething(value.value())) {
+            return null;
+        }
+        return new InputReads(names.handing(binding, value.value()), narrower, declared,
+                dependencies, wider);
+    }
+
+    /**
+     * Whether what {@code name} stands for turns on which application of a closure this reading is
+     * on: whether it reads a name an application handed one of the values written out, itself or
+     * through the names it was given.
+     *
+     * <p>Such a name is one value on each application and another on the next, so it is not one
+     * value however it is read: a reader naming a value by its binding would name values of
+     * different applications alike.
+     */
+    public boolean turnsOnAnApplication(Core.Read name, Symbols symbols,
+                                        DeclarationNewtypes newtypes) {
+        return !applied.handed().isEmpty()
+                && readsAnApplied(name, symbols, newtypes, new HashSet<>());
+    }
+
+    private boolean readsAnApplied(Core e, Symbols symbols, DeclarationNewtypes newtypes,
+                                   Set<BindingId> met) {
+        if (e instanceof Core.Read read) {
+            if (applied.handed().contains(read.binding())) {
+                return true;
+            }
+            if (!met.add(read.binding())) {
+                return false;
+            }
+            return meaningOf(read, symbols, newtypes) instanceof ReadMeaning.Through through
+                    && through.denotes().at().readsAnApplied(through.denotes().value(), symbols,
+                            newtypes, met);
+        }
+        boolean[] found = {false};
+        Core.forEachChild(e, child -> found[0] = found[0]
+                || readsAnApplied(child, symbols, newtypes, met));
+        return found[0];
+    }
+
+    /** How many readings of one condition reading it here is one of ({@link Applied#readings}). */
+    public long readings() {
+        return applied.readings();
+    }
+
+    /**
+     * What reading {@code block}'s body on each application of it that hands a parameter one of the
+     * values a container was written with comes to.
+     *
+     * <p>Read here, at the closure, and not where a condition in its body is: a name the body binds
+     * on the way to the condition is read where it was bound, which is inside an application and
+     * after the parameter was handed its value.
+     *
+     * <p>Counted before anything is made. How many applications there are is the product of how
+     * many values each parameter is handed, times the readings this one is already one of; past
+     * {@code most}, none of them is made, so a closure nested in closures costs what the figure
+     * allows and not what the nesting would.
+     */
+    public Applications applicationsOf(Core.Block block, Symbols symbols,
+                                       DeclarationNewtypes newtypes, int most) {
+        List<Core.Binder> handed = new ArrayList<>();
+        List<List<Denotation>> valuesOf = new ArrayList<>();
+        long readings = applied.readings();
+        for (int at = 0; at < block.params().size(); at++) {
+            Core.Binder param = block.params().get(at);
+            if (param == null || param.binding() == null) {
+                continue;
+            }
+            Core.Read read = new Core.Read(param.name(), param.binding(),
+                    block.paramTypes().get(at), block.pos());
+            if (meaningOf(read, symbols, newtypes) instanceof ReadMeaning.OneOf(var values)) {
+                handed.add(param);
+                valuesOf.add(values);
+                readings *= values.size();
+                if (readings > most) {
+                    return new Applications.MoreThanAreRead();
+                }
+            }
+        }
+        if (handed.isEmpty()) {
+            return new Applications.NoneHanded();
+        }
+        List<InputReads> applications = List.of(this);
+        for (int at = 0; at < handed.size(); at++) {
+            List<InputReads> wider = new ArrayList<>();
+            for (InputReads each : applications) {
+                for (Denotation value : valuesOf.get(at)) {
+                    InputReads one = each.handing(handed.get(at).binding(), value, newtypes);
+                    if (one == null) {
+                        return new Applications.Unsaid();
+                    }
+                    wider.add(one);
+                }
+            }
+            applications = wider;
+        }
+        long counted = readings;
+        return new Applications.Each(applications.stream()
+                .map(each -> each.readAs(counted)).toList());
+    }
+
+    /** The same, as one of {@code readings} readings of one condition. */
+    private InputReads readAs(long readings) {
+        return new InputReads(names, alternatives, declared, dependencies,
+                new Applied(applied.handed(), readings));
+    }
+
+    /** What reading a closure's body on each of its applications comes to ({@link
+     *  #applicationsOf}). */
+    public sealed interface Applications {
+
+        /** One environment per application, in the order the values were written. */
+        record Each(List<InputReads> each) implements Applications {
+
+            public Each {
+                each = List.copyOf(each);
+            }
+        }
+
+        /** No parameter is handed values written out: the body is read once, as it stands. */
+        record NoneHanded() implements Applications {}
+
+        /** A value handed names a binding of where it was written, at no position, so which value
+         *  an application hands cannot be said here ({@link #handing}). */
+        record Unsaid() implements Applications {}
+
+        /** More applications than a condition is read on, counting the ones this reading is
+         *  already one of. */
+        record MoreThanAreRead() implements Applications {}
+    }
+
+    /** Whether {@code e} reads a binding it does not make itself. */
+    private static boolean namesSomething(Core e) {
+        Set<BindingId> made = new HashSet<>();
+        Set<BindingId> read = new HashSet<>();
+        walkNames(e, made, read);
+        read.removeAll(made);
+        return !read.isEmpty();
+    }
+
+    /**
+     * The bindings {@code e} reads and the ones it makes. A binder this does not know of leaves the
+     * name it makes read and not made, which says the value names something — the answer that hands
+     * nothing, and never a wrong one.
+     */
+    private static void walkNames(Core e, Set<BindingId> made, Set<BindingId> read) {
+        switch (e) {
+            case Core.Read r -> read.add(r.binding());
+            case Core.LetIn let -> madeBy(let.binder(), made);
+            case Core.Block block -> block.params().forEach(each -> madeBy(each, made));
+            case Core.Match match -> match.cases().forEach(arm -> madeBy(arm.binder(), made));
+            case Core.IfConstructed fork -> madeBy(fork.binder(), made);
+            default -> { }
+        }
+        Core.forEachChild(e, child -> walkNames(child, made, read));
+    }
+
+    private static void madeBy(Core.Binder binder, Set<BindingId> made) {
+        if (binder != null && binder.binding() != null) {
+            made.add(binder.binding());
+        }
+    }
+
+    /** Whether a call to {@code behavior} is a value a row stands in for, read here. */
+    public boolean standsIn(ValueName.Behavior behavior) {
+        return dependencies.contains(behavior);
     }
 
     /**
@@ -254,7 +484,7 @@ public final class InputReads {
         // only the first here is what breaks that circle, and the cost of asking it alone is a name
         // that stands for a place no row reaches — which the reading refuses when it is asked.
         return new InputReads(names.naming(arm.binder().binding(), narrowed), alternatives,
-                declared);
+                declared, dependencies, applied);
     }
 
     /**
@@ -304,7 +534,7 @@ public final class InputReads {
         }
         Map<BindingId, java.util.List<Denotation>> wider = new LinkedHashMap<>(alternatives);
         wider.put(arm.binder().binding(), left);
-        return new InputReads(names, wider, declared);
+        return new InputReads(names, wider, declared, dependencies, applied);
     }
 
     /**
@@ -498,7 +728,8 @@ public final class InputReads {
     /** The same, inside what {@code binder} binds. */
     public InputReads and(Core.Binder binder, Core value) {
         BindingEnvironment inside = names.inside(binder, value);
-        return inside == names ? this : new InputReads(inside, alternatives, declared);
+        return inside == names ? this
+                : new InputReads(inside, alternatives, declared, dependencies, applied);
     }
 
     /**
@@ -847,12 +1078,14 @@ public final class InputReads {
         return this == other
                 || (other instanceof InputReads that && names.equals(that.names)
                         && alternatives.equals(that.alternatives)
-                        && declared.equals(that.declared));
+                        && declared.equals(that.declared)
+                        && dependencies.equals(that.dependencies)
+                        && applied.equals(that.applied));
     }
 
     @Override
     public int hashCode() {
-        return (names.hashCode() * 31 + alternatives.hashCode()) * 31 + declared.hashCode();
+        return Objects.hash(names, alternatives, declared, dependencies, applied);
     }
 
     @Override

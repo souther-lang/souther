@@ -80,7 +80,11 @@ class AReaderOfHowAnArmWasDecidedNamesEveryWayThereIsTest {
                     + " condition, and an attempt's arm is a column that says it cannot be read",
             "souther.compiler.reading.CoverageNaming#forkArm", "how a way into the arm is written"
                     + " for the reading a row is composed against: the position a condition is on"
-                    + " where it is on one, and the arm itself where it is not"));
+                    + " where it is on one, and the arm itself where it is not",
+            "souther.compiler.partition.Pullback#relationsDeciding", "what choosing a case of a"
+                    + " library operation states, in the vocabulary of what a condition means: the"
+                    + " same question Conditions#settledBy answers as constraints over the check's"
+                    + " terms, asked of the one reading of what a condition means over the input"));
 
     @Test
     void everyReaderOfHowAnArmWasDecidedNamesEveryWayThereIs() throws IOException {

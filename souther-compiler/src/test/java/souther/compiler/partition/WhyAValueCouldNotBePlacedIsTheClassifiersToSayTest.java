@@ -110,7 +110,8 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
         Core body = checked.behaviorBodies().get("submit");
         CoverageSites.Plan plan = checked.plan();
         InputDomain read = InputDomain.of(sigs.get("submit"), RuleReadingContext.unshared(rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                souther.compiler.carrier.Membership.none());
         Partitions.Partitioning partitioning = ThresholdFixtures.withThresholds(
                 Partitions.of("submit", read.reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 read.quantities(rules),

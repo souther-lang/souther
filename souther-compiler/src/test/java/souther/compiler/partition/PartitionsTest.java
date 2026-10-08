@@ -41,7 +41,8 @@ class PartitionsTest {
         assertNotNull(sigs);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return Partitions.of(behavior, InputDomain.of(sigs.get(behavior),
-                        RuleReadingContext.unshared(rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES))
+                        RuleReadingContext.unshared(rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                        souther.compiler.carrier.Membership.none())
                 .reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 

@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Choice;
@@ -42,14 +43,12 @@ import souther.compiler.coverage.Arrivals;
 import souther.compiler.flow.ValueArrivals;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
-import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
-import java.util.Set;
 
 /**
  * The values a behavior's body compares its inputs against.
@@ -157,16 +156,15 @@ public final class GuardThresholds {
      * reader of that body, because an address means a place only under something that says which
      * addresses were being handed out.
      *
-     * <p>{@code dependencies} are the behaviors this one declares it depends on. A comparison over
-     * what one of them answered is a column of the decision table and no line here
-     * ({@link ComparisonAssessment.OnADependencysAnswer}). */
+     * <p>A comparison over what a dependency answered is a column of the decision table and no line
+     * here ({@link ComparisonAssessment.OnADependencysAnswer}); which behaviors those are is the
+     * input's ({@link InputDomain#dependencies}). */
     public static Guards of(String behavior, AnalysisBody states, Core emitted,
                             CoverageSites.Plan plan,
                             InputReading read,
                             ElementBindings elements,
                             PathReachability.Answers arrives,
-                            RuleReachNumbering reaches,
-                            Set<ValueName.Behavior> dependencies) {
+                            RuleReachNumbering reaches) {
         // A behavior with no representation for the analysis to read leaves nothing to read. This
         // reading is of that tree — where the language's operations stand — so where there is none
         // there are no rules to be had from it, and the answer is the same one a behavior with no
@@ -204,11 +202,12 @@ public final class GuardThresholds {
         // and the other one's answer would be about bindings this tree does not have.
         ComparisonReadings comparisons = ComparisonReadings.of(behavior, states, read,
                 InputReads.ofParametersWhereCallsStand(inputs.parameterReads(), read.declared(),
-                        elements),
+                        elements, inputs.dependencies()),
                 // What a value states is read where nothing of the behavior's inputs is in force: a
-                // value takes none and names none.
-                InputReads.ofParametersWhereCallsStand(Map.of(), DeclaredInput.NONE, elements),
-                WhatAnAnswerTakesUp.of(read, dependencies));
+                // value takes none and names none, and stands nothing in.
+                InputReads.ofParametersWhereCallsStand(Map.of(), DeclaredInput.NONE, elements,
+                        Membership.none()),
+                WhatAnAnswerTakesUp.of(read));
         // And what the tree that runs says about each of them, joined on the construct of the model
         // the two readings agree about.
         ComparisonEmissionIndex index =

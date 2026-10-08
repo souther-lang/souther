@@ -245,6 +245,7 @@ class AFixedValueIsPartOfTheRegionEveryQuestionIsAnsweredAgainstTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return new Read(InputDomain.of(sigs.get("read"),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES)), rules);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
+                souther.compiler.carrier.Membership.none()), rules);
     }
 }

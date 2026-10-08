@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.coverage.Numberings;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.numeric.Towards;
@@ -430,7 +431,8 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
         souther.compiler.inputs.InputDomain domain =
                 souther.compiler.inputs.InputDomain.of(sigs.get(behavior),
                         RuleReadingContext.unshared(rules,
-                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                        Membership.none());
         Partitions.Partitioning partitioning = Partitions.of(behavior, domain.reading(rules),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Axis axis = partitioning.axes().stream()

@@ -17,7 +17,6 @@ import souther.compiler.values.Allowance;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -75,7 +74,7 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
                 checked.elementBindings().get("pick"),
                 Allowance.of(new PatternPlan.Budget(1000, 1000, 1_000_000_000L)),
                 guardsOf(declaration).forks(),
-                new RuleReachNumbering(module, "pick"), Set.of());
+                new RuleReachNumbering(module, "pick"));
         List<String> found = new ArrayList<>();
         sets.forks().forEach(each -> each.filed().forEach((at, why) ->
                 found.add(((RuleRef.Written) each.cited().rule()).whatItIs() + " at " + at + " "
@@ -124,7 +123,7 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
                 inputs.reading(rules), inputs.parameterReads(),
                 checked.elementBindings().get("pick"),
                 Allowance.of(new PatternPlan.Budget(1000, 1000, 1_000_000_000L)), guards.forks(),
-                new RuleReachNumbering(module, "pick"), Set.of());
+                new RuleReachNumbering(module, "pick"));
         return new Read(guards.thresholds().size(), sets.forks().size(),
                 guards.noLine().reported().size() + guards.noLine().unclassified().size());
     }

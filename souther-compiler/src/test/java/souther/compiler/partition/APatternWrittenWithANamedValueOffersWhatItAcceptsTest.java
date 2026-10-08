@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -127,7 +128,7 @@ class APatternWrittenWithANamedValueOffersWhatItAcceptsTest {
         assertNotNull(sigs, "the model did not compile");
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain domain = InputDomain.of(sigs.get("take"),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES), Membership.none());
         Partitions.Partitioning partitioning =
                 Partitions.of("take", domain.reading(rules), ReadAs.THE_COMPILATION_DOES);
         MeasuredInput subject = MeasuredInput.of("take", domain.reading(rules), partitioning);

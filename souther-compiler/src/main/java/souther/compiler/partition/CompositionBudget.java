@@ -188,6 +188,23 @@ public enum CompositionBudget {
     PATHS_OF_A_DECISION_READ(4096),
 
     /**
+     * How many readings of one condition the reading of what it means makes: one per application
+     * of a closure handed one of the values a container was written with, and one per case of a
+     * value chosen by cases that a comparison is split into.
+     *
+     * <p>Counted down the tree and not across it. Each reading is of one condition, read once for
+     * every application of every closure it is in and for every case of each side it compares, so
+     * what multiplies is the nesting and what is counted is the product along one way down — and
+     * so what one condition comes to does not turn on how many others beside it were read first.
+     *
+     * <p><b>Reaching it gives the part up and says so.</b> A part that would be read more times
+     * than this is not read one by one at all, and is carried out as a part nothing read, naming
+     * this as why ({@link souther.compiler.meaning.WhyUnread.MoreReadingsThanAreMade}): a reader is
+     * told that the compiler declined the work, and never that the model states nothing there.
+     */
+    READINGS_OF_ONE_CONDITION(256),
+
+    /**
      * How deep a construction plan descends.
      *
      * <p><b>Reaching it stops no search: what it shortens is the plan.</b> The composing runs
@@ -296,8 +313,9 @@ public enum CompositionBudget {
                  ASSIGNMENTS_A_SEARCH_COMPOSES, VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                  LEVELS_A_SIDE_IS_ASKED_AT, TIMES_THE_RULES_ARE_ASKED_AGAIN,
                  VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT, VALUES_A_POINT_IS_TRIED_WITH,
-                 PATHS_OF_A_DECISION_READ, DEPTH_A_CONSTRUCTION_PLAN_DESCENDS,
-                 NUMBERS_OF_A_SET_TRIED, RUNS_REPAIRING_A_ROW -> null;
+                 PATHS_OF_A_DECISION_READ, READINGS_OF_ONE_CONDITION,
+                 DEPTH_A_CONSTRUCTION_PLAN_DESCENDS, NUMBERS_OF_A_SET_TRIED,
+                 RUNS_REPAIRING_A_ROW -> null;
         };
     }
 }

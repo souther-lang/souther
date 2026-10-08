@@ -66,6 +66,8 @@ final class RuleChoice {
             case Proposition.Unread _ -> true;
             case Proposition.All all -> all.parts().stream().anyMatch(RuleChoice::stopsAnywhere);
             case Proposition.Any any -> any.parts().stream().anyMatch(RuleChoice::stopsAnywhere);
+            case Proposition.OnAnApplication applications -> applications.each().stream()
+                    .anyMatch(RuleChoice::stopsAnywhere);
             case Proposition.Some some -> stopsAnywhere(some.ofTheElement());
             default -> false;
         };

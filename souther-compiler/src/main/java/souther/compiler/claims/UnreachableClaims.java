@@ -87,7 +87,7 @@ public final class UnreachableClaims {
         }
         List<Claim> found = new ArrayList<>();
         claimedUnder(body, InputReads.ofParameters(read.parameterReads(), read.declared(source),
-                        ElementBindings.NONE),
+                        ElementBindings.NONE, read.dependencies()),
                 symbols, source.newtypes(), plan, NormalReturn.ofBody(body), true, found);
         return found.isEmpty() ? NONE
                 : new UnreachableClaims(found, Optional.of(plan.identity()));

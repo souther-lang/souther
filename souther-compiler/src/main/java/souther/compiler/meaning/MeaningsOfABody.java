@@ -4,6 +4,8 @@ import souther.compiler.types.ModelOccurrence;
 
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -116,6 +118,34 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous) {
             Meaning before = stated.putIfAbsent(site, meaning);
             if (before != null && !before.states().equals(meaning.states())) {
                 ambiguous.add(site);
+            }
+        }
+
+        /**
+         * What a closure's body states on each of its applications ({@code each}, one reading of the
+         * body per application), met as what each site in it states on the application a run meets
+         * it on ({@link Derivation.OnEachApplication}).
+         *
+         * <p>Not as copies of the site. A copy is the same construct met at another place, and two
+         * copies stating different things are a site that says nothing; applications are one place
+         * met with one value and then another, and stating different things on each is what such a
+         * site does. A site with copies on some application is still a site with copies.
+         */
+        public void metOnEachApplication(List<MeaningsOfABody> each) {
+            Set<Site> sites = new LinkedHashSet<>();
+            each.forEach(one -> {
+                sites.addAll(one.stated().keySet());
+                sites.addAll(one.ambiguous());
+            });
+            for (Site site : sites) {
+                if (each.stream().anyMatch(one -> one.ambiguous().contains(site))) {
+                    ambiguous.add(site);
+                    continue;
+                }
+                List<Derivation> how = each.stream().map(one -> one.stated().get(site))
+                        .filter(Objects::nonNull).map(Meaning::how).toList();
+                met(site, new Conclusion(Optional.of(site.construct()))
+                        .meaningOf(new Derivation.OnEachApplication(how)));
             }
         }
 

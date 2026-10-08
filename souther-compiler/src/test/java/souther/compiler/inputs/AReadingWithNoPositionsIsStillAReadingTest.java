@@ -49,7 +49,8 @@ class AReadingWithNoPositionsIsStillAReadingTest {
     @Test
     void aWalkOverNoParametersIsAReadingOfAnInputWithNoPositions() {
         ReadingPolicy policy = ReadAs.THE_COMPILATION_DOES;
-        InputDomain read = InputDomain.of(List.of(), RuleReadingContext.unshared(rules(), policy));
+        InputDomain read = InputDomain.of(List.of(), RuleReadingContext.unshared(rules(), policy),
+                souther.compiler.carrier.Membership.none());
 
         assertNotNull(read, "a walk answers with a reading");
         assertEquals(List.of(), read.positions(), "and it found no positions");
@@ -70,6 +71,7 @@ class AReadingWithNoPositionsIsStillAReadingTest {
         ReadingPolicy policy = ReadAs.THE_COMPILATION_DOES;
 
         assertSame(policy,
-                InputDomain.of(List.of(), RuleReadingContext.unshared(rules(), policy)).policy());
+                InputDomain.of(List.of(), RuleReadingContext.unshared(rules(), policy),
+                        souther.compiler.carrier.Membership.none()).policy());
     }
 }

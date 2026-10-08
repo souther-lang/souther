@@ -32,7 +32,7 @@ class ACopyIsOneStatementWhereItStatesOneThingTest {
             MeaningsOfABody.Part.CONDITION);
 
     private static final Derivation DIRECTLY =
-            new Derivation.ATruthAtAPosition(TermPath.of("flag"), true);
+            new Derivation.ATruthOfASubject(new DecisionSubject.AnInput(TermPath.of("flag")), true);
 
     private static final Derivation TWICE_DENIED = new Derivation.UnderADenial(
             new Derivation.UnderADenial(DIRECTLY, true), true);

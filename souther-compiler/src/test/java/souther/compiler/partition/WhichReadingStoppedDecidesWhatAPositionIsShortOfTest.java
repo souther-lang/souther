@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -114,7 +115,8 @@ class WhichReadingStoppedDecidesWhatAPositionIsShortOfTest {
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return Partitions.of("check",
                         InputDomain.of(sigs.get("check"),
-                                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES))
+                                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
+                                Membership.none())
                                 .reading(rules), ReadAs.THE_COMPILATION_DOES)
                 .undivided().stream()
                 .map(each -> each.at() + "=" + each.why().getClass().getSimpleName())

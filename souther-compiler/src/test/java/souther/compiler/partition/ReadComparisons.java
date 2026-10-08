@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementProvenance;
 import souther.compiler.check.RuleReadingSource;
@@ -13,7 +14,6 @@ import souther.compiler.query.Compilation;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -47,10 +47,11 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
                 new AnalysisBody(checked.behaviorBodies().get(behavior), ElementProvenance.NONE,
                         ValueTemplates.NONE),
                 inputs.reading(rules), InputReads.ofParameters(inputs.parameterReads(),
-                        inputs.declared(rules), checked.elementBindings().get(behavior)),
+                        inputs.declared(rules), checked.elementBindings().get(behavior),
+                        inputs.dependencies()),
                 InputReads.ofParameters(Map.of(), DeclaredInput.NONE,
-                        checked.elementBindings().get(behavior)),
-                WhatAnAnswerTakesUp.of(inputs.reading(rules), Set.of())).comparisons(),
+                        checked.elementBindings().get(behavior), Membership.none()),
+                WhatAnAnswerTakesUp.of(inputs.reading(rules))).comparisons(),
                 inputs, rules);
     }
 

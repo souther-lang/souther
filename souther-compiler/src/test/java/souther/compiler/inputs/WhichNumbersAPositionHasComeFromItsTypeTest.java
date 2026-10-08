@@ -103,7 +103,8 @@ class WhichNumbersAPositionHasComeFromItsTypeTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain inputs = InputDomain.of(sigs.get("take"),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
+                souther.compiler.carrier.Membership.none());
         return inputs.at(TermPath.of("n")).numbers().stream().map(Object::toString).toList();
     }
 }

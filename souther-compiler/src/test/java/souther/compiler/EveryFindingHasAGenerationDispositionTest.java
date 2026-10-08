@@ -4,6 +4,7 @@ import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -929,7 +930,8 @@ class EveryFindingHasAGenerationDispositionTest {
                 souther.compiler.check.Symbols.none(DefaultStdlib.get()));
         return souther.compiler.partition.MeasuredInput.of("pick",
                 souther.compiler.inputs.InputDomain.of(List.of(), RuleReadingContext.unshared(rules,
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES)).reading(rules),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                        Membership.none()).reading(rules),
                 souther.compiler.partition.AxesATestWrote.asAMeasurement("pick", List.of()));
     }
 

@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.carrier.Membership;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.Numberings;
 import souther.compiler.check.RuleReadingContext;
@@ -224,7 +225,8 @@ class TwoRunsOfOnePlanThatDisagreeAboutWhatTheyReadAreRefusedTest {
                 List.of());
         MeasuredInput subject = MeasuredInput.of("fee",
                 InputDomain.of(List.of(new InputDomain.Parameter("days", null, Type.INT)),
-                        RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES))
+                        RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES),
+                        Membership.none())
                         .reading(SYMBOLS),
                 AxesATestWrote.asAMeasurement("fee", List.of(days)));
         return GenerationPlan.of(subject, classes, List.of(), List.of(), List.of());

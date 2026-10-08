@@ -316,6 +316,7 @@ public final class PublicationOrders {
                     // stops is the looking for a row that goes further than one already found.
                     CompositionBudget.RUNS_REPAIRING_A_ROW,
                     CompositionBudget.PATHS_OF_A_DECISION_READ,
+                    CompositionBudget.READINGS_OF_ONE_CONDITION,
                     CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS));
 
     /**

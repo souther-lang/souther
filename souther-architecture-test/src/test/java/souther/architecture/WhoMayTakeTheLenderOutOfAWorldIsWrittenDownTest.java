@@ -107,7 +107,8 @@ class WhoMayTakeTheLenderOutOfAWorldIsWrittenDownTest {
                             + "DeclarationReading;")
                     + " -> " + OWNER + "#" + THE_LENDER,
             AMethod.of(INPUTS + "InputDomain", "of",
-                    "(Ljava/util/List;" + A_WORLD + "L" + INPUTS + "InputDemand;)L" + INPUTS
+                    "(Ljava/util/List;" + A_WORLD + "L" + INPUTS
+                            + "InputDemand;Lsouther/compiler/carrier/Membership;)L" + INPUTS
                             + "InputDomain;")
                     + " -> " + OWNER + "#" + KEPT_PAST_THE_WALK,
             AMethod.of(INPUTS + "PlacedRules", "of",

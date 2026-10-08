@@ -152,6 +152,7 @@ class OneReadingTakesBothRoadsToAPositionTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return InputDomain.of(sigs.get(behavior), List.of(),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES), demand);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES), demand,
+                souther.compiler.carrier.Membership.none());
     }
 }

@@ -17,6 +17,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.Relation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -123,48 +124,16 @@ record DecisionComparison(InputDomain inputs, RuleReadingSource rules, DecisionS
      * each other negated, and a table with both admits an assignment where one proposition holds
      * and does not.
      *
-     * <p>So the quantity is turned until its first coefficient is positive, taken in the order the
-     * atoms name themselves, and the relation turns with it. Which atom is first does not depend on
-     * how the comparison was written, so neither does the answer.
+     * <p>So the quantity is written the one way every writing of a relation comes to ({@link
+     * Relation.OneWay}), which is the way the reading of what a condition means writes it too.
      */
     private DecidedCondition stated(LinearForm<DecisionAtom> whole, ComparisonClaim written,
                                     boolean held) {
-        boolean turned = facesTheOtherWay(whole);
-        LinearForm<DecisionAtom> form = turned ? whole.negate() : whole;
-        Rel states = (turned ? written.turned() : written).statedRelation();
-        Rel rel = held ? states : states.denied();
-        Rel proposition = rel.orItsDenial();
+        Rel states = written.statedRelation();
+        Relation.OneWay<DecisionAtom> one =
+                Relation.OneWay.of(whole, held ? states : states.denied());
         return new DecidedCondition.Compared(
-                new DecisionCondition.AComparison(form, proposition), rel == proposition);
-    }
-
-    /**
-     * Whether the quantity is the one this reading writes negated.
-     *
-     * <p>The first coefficient by the atoms' own order, which is what makes this total: settled by
-     * every coefficient being negative, a quantity with one of each sign would face neither way and
-     * two spellings of it would stay two columns.
-     */
-    private static boolean facesTheOtherWay(LinearForm<DecisionAtom> whole) {
-        return ordered(whole).getFirst().getValue().signum() < 0;
-    }
-
-    /** The quantity's atoms by what each of them is, so that which one is first does not depend on
-     *  how the comparison was written. */
-    private static List<Map.Entry<DecisionAtom, ExactRatio>> ordered(
-            LinearForm<DecisionAtom> form) {
-        List<Map.Entry<DecisionAtom, ExactRatio>> walked = form.coefs().entrySet().stream()
-                .sorted(java.util.Comparator.comparing(each -> each.getKey().spelled())).toList();
-        for (int at = 1; at < walked.size(); at++) {
-            DecisionAtom before = walked.get(at - 1).getKey();
-            DecisionAtom here = walked.get(at).getKey();
-            if (before.spelled().equals(here.spelled()) && !before.equals(here)) {
-                throw new IllegalStateException("two atoms of one quantity are spelled alike: "
-                        + before + " and " + here + "; what puts them in an order would leave which"
-                        + " of them comes first to how the comparison was written");
-            }
-        }
-        return walked;
+                new DecisionCondition.AComparison(one.form(), one.proposition()), one.holds());
     }
 
     /**

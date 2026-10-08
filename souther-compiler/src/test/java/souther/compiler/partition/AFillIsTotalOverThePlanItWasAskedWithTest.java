@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.Numberings;
 
@@ -283,7 +284,8 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
                 souther.compiler.inputs.InputDomain.of(
                         List.of(new souther.compiler.inputs.InputDomain.Parameter("days", null,
                                 Type.INT)),
-                        RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES))
+                        RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES),
+                        Membership.none())
                         .reading(SYMBOLS),
                 AxesATestWrote.asAMeasurement("fee", List.of(days)));
         return GenerationPlan.of(subject, classes, arms, List.of(), List.of());

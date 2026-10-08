@@ -290,6 +290,7 @@ class AFixingIsSettledOverTheRulesOfEveryValueTogetherTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         return InputDomain.of(sigs.get("read"),
                 RuleReadingContext.unshared(RuleReadings.of(compilation, module),
-                        ReadAs.THE_COMPILATION_DOES));
+                        ReadAs.THE_COMPILATION_DOES),
+                souther.compiler.carrier.Membership.none());
     }
 }

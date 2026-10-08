@@ -94,7 +94,8 @@ class ReadingsOfOneInputWorkOutOneQuestionOnceTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain read = InputDomain.of(sigs.get("read"),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
+                souther.compiler.carrier.Membership.none());
         return (ReadQuantities) read.quantities(rules);
     }
 

@@ -53,6 +53,9 @@ final class BindingEnvironment {
     private record Layer(BindingId binding, Core value, Layer older, int depth) {}
 
     private final Map<BindingId, TermPath> roots;
+    /** What one application of a closure handed a parameter: one of the values written out, which
+     *  names nothing, so it is read the same wherever it is read. */
+    private final Map<BindingId, Core> handed;
     private final Map<BindingId, Core> table;
     private final Layer newest;
     private final ElementBindings elements;
@@ -61,12 +64,14 @@ final class BindingEnvironment {
 
     BindingEnvironment(Map<BindingId, TermPath> roots, Map<BindingId, Core> bound,
                        ElementBindings elements, boolean callsStand) {
-        this(Map.copyOf(roots), Map.copyOf(bound), null, elements, callsStand);
+        this(Map.copyOf(roots), Map.of(), Map.copyOf(bound), null, elements, callsStand);
     }
 
-    private BindingEnvironment(Map<BindingId, TermPath> roots, Map<BindingId, Core> table,
-                               Layer newest, ElementBindings elements, boolean callsStand) {
+    private BindingEnvironment(Map<BindingId, TermPath> roots, Map<BindingId, Core> handed,
+                               Map<BindingId, Core> table, Layer newest, ElementBindings elements,
+                               boolean callsStand) {
         this.roots = roots;
+        this.handed = handed;
         this.table = table;
         this.newest = newest;
         this.elements = elements;
@@ -119,6 +124,12 @@ final class BindingEnvironment {
         TermPath root = roots.get(binding);
         if (root != null) {
             return new BindingRole.Root(root);
+        }
+        // The element an application handed it, before the container it is an element of: on this
+        // application the name is that one value.
+        Core given = handed.get(binding);
+        if (given != null) {
+            return new BindingRole.Alias(given);
         }
         List<HeldIn> containers = elements.containersOf(binding);
         if (containers.size() == 1) {
@@ -189,18 +200,30 @@ final class BindingEnvironment {
         // A name given a build of a value holds what the value is.
         Layer inner = new Layer(binder.binding(), elements.dereferenced(value), newest, depth);
         if (depth <= KEPT_APART) {
-            return new BindingEnvironment(roots, table, inner, elements, callsStand);
+            return new BindingEnvironment(roots, handed, table, inner, elements, callsStand);
         }
-        BindingEnvironment written = new BindingEnvironment(roots, table, inner, elements,
+        BindingEnvironment written = new BindingEnvironment(roots, handed, table, inner, elements,
                 callsStand);
-        return new BindingEnvironment(roots, written.bound(), null, elements, callsStand);
+        return new BindingEnvironment(roots, handed, written.bound(), null, elements, callsStand);
     }
 
     /** The same, with {@code binding} standing at {@code path}. */
     BindingEnvironment naming(BindingId binding, TermPath path) {
         Map<BindingId, TermPath> wider = new LinkedHashMap<>(roots);
         wider.put(binding, path);
-        return new BindingEnvironment(Map.copyOf(wider), table, newest, elements, callsStand);
+        return new BindingEnvironment(Map.copyOf(wider), handed, table, newest, elements,
+                callsStand);
+    }
+
+    /**
+     * The same, on the application of a closure that hands {@code binding} {@code value}: one of
+     * the values a container was written with, naming no binding of its own.
+     */
+    BindingEnvironment handing(BindingId binding, Core value) {
+        Map<BindingId, Core> wider = new LinkedHashMap<>(handed);
+        wider.put(binding, value);
+        return new BindingEnvironment(roots, Map.copyOf(wider), table, newest, elements,
+                callsStand);
     }
 
     /** The parameters as positions, which is what a name in a tree stands for. */
@@ -216,18 +239,19 @@ final class BindingEnvironment {
                 || (other instanceof BindingEnvironment that
                         && callsStand == that.callsStand
                         && roots.equals(that.roots)
+                        && handed.equals(that.handed)
                         && bound().equals(that.bound())
                         && elements.equals(that.elements));
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(roots, bound(), elements, callsStand);
+        return java.util.Objects.hash(roots, handed, bound(), elements, callsStand);
     }
 
     @Override
     public String toString() {
-        return "BindingEnvironment[roots=" + roots + ", bound=" + bound() + ", elements=" + elements
-                + ", callsStand=" + callsStand + "]";
+        return "BindingEnvironment[roots=" + roots + ", handed=" + handed + ", bound=" + bound()
+                + ", elements=" + elements + ", callsStand=" + callsStand + "]";
     }
 }

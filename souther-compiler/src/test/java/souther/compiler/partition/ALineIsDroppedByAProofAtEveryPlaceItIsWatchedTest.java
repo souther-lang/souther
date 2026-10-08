@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.DeclaredSig;
@@ -135,6 +136,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return new Read(InputDomain.of(sigs.get("read"),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES)), rules);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
+                Membership.none()), rules);
     }
 }

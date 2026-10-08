@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.test.RepositoryLayout;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -92,7 +93,8 @@ class AConstructionPositionIsNotAnInputPositionTest {
 
     private static InputDomain reading(Read read) {
         return InputDomain.of(read.sig(),
-                RuleReadingContext.unshared(read.rules(), ReadAs.THE_COMPILATION_DOES));
+                RuleReadingContext.unshared(read.rules(), ReadAs.THE_COMPILATION_DOES),
+                Membership.none());
     }
 
     /** The plan for the behavior's one parameter, with nothing decided and the given

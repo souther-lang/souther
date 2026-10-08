@@ -118,7 +118,7 @@ class WhatAMapHoldsIsAPositionOfTheInputTest {
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value()
                 .get("popular");
         InputReads reads = InputReads.ofParameters(inputs.parameterReads(), inputs.declared(rules),
-                checked.elementBindings().get("popular"));
+                checked.elementBindings().get("popular"), inputs.dependencies());
         return InputDemand.of(body, reads, rules.symbols(), rules.newtypes()).paths();
     }
 
@@ -141,7 +141,8 @@ class WhatAMapHoldsIsAPositionOfTheInputTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return new Read(InputDomain.of(sigs.get("take"),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES)), rules,
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
+                souther.compiler.carrier.Membership.none()), rules,
                 sigs.get("take"));
     }
 }

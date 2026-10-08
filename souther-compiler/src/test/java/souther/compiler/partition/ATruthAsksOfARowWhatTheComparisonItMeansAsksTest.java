@@ -310,7 +310,8 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
             RuleReadingSource rules = RuleReadings.of(compilation, module);
             InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get(name);
             InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
-                    inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()));
+                    inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
+                    inputs.dependencies());
             return new Read(analysis.core(), inputs.reading(rules), reads, rules, module, name);
         });
     }

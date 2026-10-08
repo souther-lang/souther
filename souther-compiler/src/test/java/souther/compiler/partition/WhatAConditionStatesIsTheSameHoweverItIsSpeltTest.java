@@ -11,6 +11,7 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Relation;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -167,17 +168,36 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
     }
 
     /**
-     * A closure's parameter is a different value for each element it is handed, so a relation
-     * over it is no relation between two values of one run — and some element meeting it and every
-     * element meeting it are not one statement.
+     * A closure's parameter is a different value for each element it is handed: on each
+     * application it is the one handed, and some element meeting it and every element meeting it
+     * are some and every one of those.
      */
     @Test
-    void aClosuresParameterIsNoOneValue() {
+    void aClosuresParameterIsTheValueEachApplicationHandsIt() {
+        Proposition.Any some = assertInstanceOf(Proposition.Any.class,
+                stated("List.any(v -> { let y = Int.abs(b.x)\n v > y }, [1, 5])"));
+        Proposition.All every = assertInstanceOf(Proposition.All.class,
+                stated("List.all(v -> { let y = Int.abs(b.x)\n v > y }, [1, 5])"));
+        for (List<Proposition> parts : List.of(some.parts(), every.parts())) {
+            assertEquals(2, parts.size(), () -> "one statement per value written: " + parts);
+            assertEquals(1, parts.stream()
+                    .map(part -> ((Relation.Affine) ((Proposition.Compared) part).relation())
+                            .form().coefs().keySet())
+                    .distinct().count(), () -> "each about the one value y is: " + parts);
+        }
+    }
+
+    /**
+     * A value the body works out from the parameter is another value on each application, so it is
+     * no one value to relate: its binding names all of them alike.
+     */
+    @Test
+    void aValueWorkedOutFromTheParameterIsNoOneValue() {
         for (String over : List.of("List.any", "List.all")) {
             Proposition stated = stated(over
-                    + "(v -> { let y = Int.abs(b.x)\n v > y }, [1, 5])");
+                    + "(v -> { let y = Int.abs(v - b.x)\n y > 3 }, [1, 5])");
             assertFalse(stated.toString().contains("Affine"),
-                    () -> over + " relates no two values: " + stated);
+                    () -> over + " relates no value of one application to another's: " + stated);
         }
     }
 
@@ -215,7 +235,8 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("demo")).value().get("f");
         InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
-                inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()));
+                inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
+                inputs.dependencies());
         Core.If fork = assertInstanceOf(Core.If.class, Core.withoutStanding(analysis.core()),
                 "the body is the fork");
         return Pullback.ofATruth(fork.cond(), reads, inputs.reading(rules), Optional.empty())

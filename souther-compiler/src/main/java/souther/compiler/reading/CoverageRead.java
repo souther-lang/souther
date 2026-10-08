@@ -256,7 +256,7 @@ public final class CoverageRead {
         RuleReadingSource source = input.rules();
         Symbols symbols = source.symbols();
         InputReads reads = InputReads.ofParameters(input.domain().parameterReads(),
-                input.declared(), ElementBindings.NONE);
+                input.declared(), ElementBindings.NONE, input.domain().dependencies());
         // One reading of this body's comparisons, handed to both readers of them. What a way is
         // admitted by and what a decision is said of are two questions about one comparison, and
         // each reading it for itself is how they came to be about different numbers.
@@ -270,7 +270,8 @@ public final class CoverageRead {
         MeaningsOfABody meanings = run.analysis()
                 .map(analysis -> MeaningsOfABodyReading.of(analysis, () -> input,
                         InputReads.ofParametersWhereCallsStand(input.domain().parameterReads(),
-                                input.declared(), ElementBindings.of(analysis, source.newtypes())),
+                                input.declared(), ElementBindings.of(analysis, source.newtypes()),
+                                input.domain().dependencies()),
                         symbols, source.newtypes()))
                 .orElse(MeaningsOfABody.NONE);
         Meetings meetings = new Meetings(plan);

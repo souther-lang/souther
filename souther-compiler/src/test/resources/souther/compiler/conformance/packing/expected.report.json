@@ -3212,8 +3212,8 @@
             "behavior" : "bookSlot",
             "conditions" : [ {
               "kind" : "comparison",
-              "condition" : "GT LinearForm[constant=-8, coefs={from=-1, until=1}]",
-              "outcome" : "denied"
+              "condition" : "GE LinearForm[constant=8, coefs={from=1, until=-1}]",
+              "outcome" : "held"
             } ]
           },
           "taken" : true
@@ -3222,8 +3222,8 @@
             "behavior" : "bookSlot",
             "conditions" : [ {
               "kind" : "comparison",
-              "condition" : "GT LinearForm[constant=-8, coefs={from=-1, until=1}]",
-              "outcome" : "held"
+              "condition" : "GE LinearForm[constant=8, coefs={from=1, until=-1}]",
+              "outcome" : "denied"
             } ]
           },
           "taken" : true

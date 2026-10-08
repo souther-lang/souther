@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -71,7 +72,8 @@ class AnOpenPositionIsWhatThisReadingFoundTest {
         return InputDomain.of(
                         List.of(new InputDomain.Parameter("x", null, Type.ref(named(type)))),
                         RuleReadingContext.unshared(rules,
-                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES))
+                                souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                        Membership.none())
                 .at(TermPath.of("x"));
     }
 

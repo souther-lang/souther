@@ -18,7 +18,6 @@ import souther.compiler.types.BindingId;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -83,7 +82,7 @@ class WhatAComparisonIsARuleAboutTest {
         return ComparisonAssessment.of("f", comparison.stated(), Citation.of(binary.pos()),
                 inputs.reading(rules),
                 InputReads.ofWhatIsDeclared(roots, inputs.declared(rules)), rule.value(),
-                WhatAnAnswerTakesUp.of(inputs.reading(rules), Set.of()),
+                WhatAnAnswerTakesUp.of(inputs.reading(rules)),
                 souther.compiler.coverage.Arrivals.inTheTree(read), false);
     }
 

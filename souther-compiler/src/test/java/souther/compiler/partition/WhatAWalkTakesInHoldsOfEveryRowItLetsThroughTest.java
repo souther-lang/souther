@@ -13,6 +13,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.types.ValueName;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiPredicate;
@@ -62,6 +63,9 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
             behavior withACall : (p: Pair) -> Bool
             let withACall (p) = p.x > 0 && Int.max(p.y, 3) > 10
 
+            behavior withAnUnreadCall : (p: Pair) -> Bool
+            let withAnUnreadCall (p) = p.x > 0 && Int.floorMod(p.y, 3) > 1
+
             behavior product : (p: Pair) -> Bool
             let product (p) = p.x * p.y > 4
 
@@ -79,6 +83,7 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
             "either", (x, y) -> x > 0 || y > 10,
             "affineSum", (x, y) -> x + 2 * y <= 7,
             "withACall", (x, y) -> x > 0 && Math.max(y, 3) > 10,
+            "withAnUnreadCall", (x, y) -> x > 0 && Math.floorMod(y, 3) > 1,
             "product", (x, y) -> x * y > 4,
             "productThroughACall", (x, y) -> x * y > 4,
             "nested", (x, y) -> (x > 0 || y > 1) && y < 5);
@@ -101,7 +106,7 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
         souther.compiler.inputs.InputDomain inputs =
                 compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
         InputReads reads = InputReads.ofParameters(inputs.parameterReads(), inputs.declared(rules),
-                checked.elementBindings().get(behavior));
+                checked.elementBindings().get(behavior), inputs.dependencies());
         return ReachingCuts.stating(Condition.of(body, reads, rules.symbols(), rules.newtypes(),
                 new ConditionNumbering(module, behavior)), inputs.reading(rules), holding);
     }
@@ -221,10 +226,11 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
                 whys("productThroughACall", true));
         // The affine operand is taken in beside it: a conjunction coming out true says both, and
         // one of them being unreadable is no reason to lose the other.
-        assertEquals(List.of(new OnTheWay.Why.TheMeaningWasNotRead(new WhyUnread.NotYetComposed(
-                        WhyUnread.NotYetComposed.Step.A_CHOICE_BY_CASES))),
-                whys("withACall", true));
-        assertEquals(1, stating("withACall", true).stream()
+        assertEquals(List.of(new OnTheWay.Why.TheMeaningWasNotRead(
+                        new WhyUnread.NoFormOfWhatItAnswers(
+                                new ValueName.Stdlib.Operation("Int", "floorMod")))),
+                whys("withAnUnreadCall", true));
+        assertEquals(1, stating("withAnUnreadCall", true).stream()
                 .filter(each -> each instanceof OnTheWay.TakenIn).count());
     }
 

@@ -131,7 +131,8 @@ class ATruthIsOneDemandHoweverItIsSpelledTest {
         AnalysisBody analysis = analysis(behavior);
         InputReading reading = reading(behavior);
         InputReads reads = InputReads.ofParametersWhereCallsStand(inputs(behavior).parameterReads(),
-                reading.declared(), ElementBindings.of(analysis, rules().newtypes()));
+                reading.declared(), ElementBindings.of(analysis, rules().newtypes()),
+                inputs(behavior).dependencies());
         List<OnTheWay> stated = ReachingCuts.stating(Condition.of(analysis.core(), reads,
                         rules().symbols(), rules().newtypes(),
                         new ConditionNumbering(module(), behavior)),

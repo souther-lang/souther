@@ -120,6 +120,63 @@ public sealed interface Derivation {
         }
     }
 
+    /**
+     * A comparison of a value chosen by cases: the choice, with the comparison of what each case
+     * answers in that case's place. A value is what the case taken answers, so a comparison of it
+     * holds exactly where the comparison of that answer does.
+     */
+    record AComparisonOfAChoice(Derivation byItsCases) implements Derivation {
+
+        public AComparisonOfAChoice {
+            Objects.requireNonNull(byItsCases, "a choice is made by its cases");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.of(byItsCases);
+        }
+    }
+
+    /**
+     * The cases the library writes {@code operation}'s definition in: a case is taken where its
+     * arguments stand as it says and none before it, and what is stated is what the case taken
+     * states. The library's cases cover everything the operation can be given, which is what makes
+     * the choice between them the operation.
+     */
+    record AnOperationsCases(ValueName.Stdlib operation, List<MatchArms.Arm> cases)
+            implements Derivation {
+
+        public AnOperationsCases {
+            Objects.requireNonNull(operation, "cases are an operation's");
+            if (cases == null || cases.isEmpty()) {
+                throw new IllegalArgumentException("an operation defined by cases has a case");
+            }
+            cases = List.copyOf(cases);
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return new MatchArms(cases).conclusion(numbering);
+        }
+    }
+
+    /**
+     * A truth held against a truth the source settles: {@code x == true} holding is {@code x}
+     * holding, and {@code x == false} holding is {@code x} not holding.
+     */
+    record HeldAgainstAWrittenTruth(Derivation truth, boolean held) implements Derivation {
+
+        public HeldAgainstAWrittenTruth {
+            Objects.requireNonNull(truth, "a truth is held against one written out");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            Proposition stated = numbering.of(truth);
+            return held ? stated : stated.denied();
+        }
+    }
+
     /** A denial: what is under it, the other way round where it denies. */
     record UnderADenial(Derivation part, boolean denies) implements Derivation {
 
@@ -264,23 +321,43 @@ public sealed interface Derivation {
     }
 
     /**
-     * Some element of a container written out making a closure answer some way: what the closure's
-     * body states of any one of them, or nothing where none is written.
+     * Some element of a container written out making a closure answer some way: some one of what
+     * the closure's body states of each element, read on the application that hands it that
+     * element — and nothing where none is written.
      */
-    record OverElementsWrittenOut(Optional<Derivation> ofAnElement, boolean holds)
-            implements Derivation {
+    record OverElementsWrittenOut(List<Derivation> ofEach, boolean holds) implements Derivation {
 
         public OverElementsWrittenOut {
-            Objects.requireNonNull(ofAnElement, "an element is read, or there is none");
+            ofEach = List.copyOf(ofEach);
         }
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            if (ofAnElement.isEmpty()) {
-                return new Proposition.Always(false);
+            List<Proposition> each = new ArrayList<>();
+            for (Derivation one : ofEach) {
+                Proposition answered = numbering.of(one);
+                each.add(holds ? answered : answered.denied());
             }
-            Proposition answered = numbering.of(ofAnElement.get());
-            return holds ? answered : answered.denied();
+            return Proposition.any(each);
+        }
+    }
+
+    /**
+     * A condition inside a closure applied to each of the values a container was written with, read
+     * on each application: what it states on the one a run meets it on.
+     */
+    record OnEachApplication(List<Derivation> each) implements Derivation {
+
+        public OnEachApplication {
+            each = List.copyOf(each);
+            if (each.isEmpty()) {
+                throw new IllegalArgumentException("a condition is read on some application");
+            }
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return Proposition.onAnApplication(each.stream().map(numbering::of).toList());
         }
     }
 
@@ -381,43 +458,46 @@ public sealed interface Derivation {
         }
     }
 
-    /** A {@code Bool} at a position of the input, holding {@code held}. */
-    record ATruthAtAPosition(TermPath at, boolean held) implements Derivation {
+    /**
+     * A {@code Bool} a row controls, holding {@code held}: one at a position of the input, or one a
+     * dependency answered.
+     */
+    record ATruthOfASubject(DecisionSubject of, boolean held) implements Derivation {
 
-        public ATruthAtAPosition {
-            Objects.requireNonNull(at, "a truth stands somewhere");
+        public ATruthOfASubject {
+            Objects.requireNonNull(of, "a truth is some subject's");
         }
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            return new Proposition.Truth(new DecisionSubject.AnInput(at), held);
+            return new Proposition.Truth(of, held);
         }
     }
 
-    /** An optional at a position of the input holding a value. */
-    record PresentAtAPosition(TermPath at) implements Derivation {
+    /** An optional a row controls holding a value. */
+    record PresentInASubject(DecisionSubject of) implements Derivation {
 
-        public PresentAtAPosition {
-            Objects.requireNonNull(at, "an optional stands somewhere");
+        public PresentInASubject {
+            Objects.requireNonNull(of, "an optional is some subject's");
         }
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            return new Proposition.Present(new DecisionSubject.AnInput(at), true);
+            return new Proposition.Present(of, true);
         }
     }
 
-    /** Whether the value at a position of the input is one of the cases an arm selects. */
-    record CasesAtAPosition(TermPath at, CasesLeft cases) implements Derivation {
+    /** Whether a value a row controls is one of the cases an arm selects. */
+    record CasesOfASubject(DecisionSubject of, CasesLeft cases) implements Derivation {
 
-        public CasesAtAPosition {
-            Objects.requireNonNull(at, "a value stands somewhere");
+        public CasesOfASubject {
+            Objects.requireNonNull(of, "a value is some subject's");
             Objects.requireNonNull(cases, "an arm selects some cases");
         }
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            return new Proposition.InCases(new DecisionSubject.AnInput(at), cases, true);
+            return new Proposition.InCases(of, cases, true);
         }
     }
 
@@ -475,16 +555,16 @@ public sealed interface Derivation {
         OVER_BOUND_VALUES
     }
 
-    /** A {@code Bool} at a position of the input compared with a truth the source settles. */
-    record ATruthCompared(TermPath at, boolean held) implements Derivation {
+    /** A {@code Bool} a row controls compared with a truth the source settles. */
+    record ATruthCompared(DecisionSubject of, boolean held) implements Derivation {
 
         public ATruthCompared {
-            Objects.requireNonNull(at, "a truth stands somewhere");
+            Objects.requireNonNull(of, "a truth is some subject's");
         }
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
-            return new Proposition.Truth(new DecisionSubject.AnInput(at), held);
+            return new Proposition.Truth(of, held);
         }
     }
 

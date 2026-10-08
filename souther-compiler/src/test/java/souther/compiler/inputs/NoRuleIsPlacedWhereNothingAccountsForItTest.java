@@ -263,7 +263,8 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
             RuleReadingSource rules = RuleReadings.of(compilation, module);
             for (DeclaredSig declared : sigs.values()) {
                 out.add(InputDomain.of(declared, RuleReadingContext.of(rules,
-                        ReadAs.THE_COMPILATION_DOES, RepositoryModels.knownTo(compilation))));
+                        ReadAs.THE_COMPILATION_DOES, RepositoryModels.knownTo(compilation)),
+                        souther.compiler.carrier.Membership.none()));
             }
         }
     }

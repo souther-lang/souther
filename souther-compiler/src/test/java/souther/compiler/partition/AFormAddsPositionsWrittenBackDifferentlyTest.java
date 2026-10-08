@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -245,7 +246,8 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return InputDomain.of(sigs.get("take"),
-                        RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES))
+                        RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
+                        Membership.none())
                 .quantities(rules).region();
     }
 }
