@@ -1597,7 +1597,7 @@ public final class CoverageSites {
                 return true;
             }
             boolean[] found = {false};
-            Core.forEachChild(e, child -> found[0] |= readsABindingOf(child, owner));
+            Core.forEachChild(e, child -> found[0] = found[0] || readsABindingOf(child, owner));
             return found[0];
         }
 

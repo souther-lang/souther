@@ -3415,7 +3415,7 @@ public final class Bodies {
             Hir.FnDef fn = db.ask(new SettledFn(module, spec.name())).value();
             out.put(spec.name(), Claims.of(
                     UnreachableClaims.of(body, read, scope.value(), ruleReading.source(), plan),
-                    PathReachability.of(body,
+                    () -> PathReachability.of(body,
                             fn == null ? null : SpecImplementation.align(spec, fn),
                             plan, read, ruleReading, Adequacy.meaningsOf(
                                     analysed.get(spec.name()), read,

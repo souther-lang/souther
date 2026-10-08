@@ -243,11 +243,10 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
             String filter = kept.get(2);
             String through = kept.get(3);
             String filterLibrary = filter.substring(0, filter.indexOf('.'));
-            assertTheSame(model.formatted(filterLibrary + ".isEmpty(" + filter + ")"),
-                    model.formatted(library + ".isEmpty(" + through + ")"));
+            Compilation empty = compiled(model.formatted(filterLibrary + ".isEmpty(" + filter + ")"));
+            assertTheSame(empty, model.formatted(library + ".isEmpty(" + through + ")"));
             String size = library.equals("List") ? "List.length(" : library + ".size(";
-            assertTheSame(model.formatted(filterLibrary + ".isEmpty(" + filter + ")"),
-                    model.formatted(size + through + ") == 0"));
+            assertTheSame(empty, model.formatted(size + through + ") == 0"));
             assertTheSame(model.formatted("Bool.not(" + filterLibrary + ".isEmpty(" + filter + "))"),
                     model.formatted(size + through + ") >= 1"));
         }
@@ -391,7 +390,10 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
 
     /** Both spellings read every rule alike, tell the same apart and come to one verdict. */
     private static void assertTheSame(String one, String other) {
-        Compilation first = compiled(one);
+        assertTheSame(compiled(one), other);
+    }
+
+    private static void assertTheSame(Compilation first, String other) {
         Compilation second = compiled(other);
         assertEquals(List.of(), measured(first).notRead());
         assertEquals(notRead(measured(first)), notRead(measured(second)));
