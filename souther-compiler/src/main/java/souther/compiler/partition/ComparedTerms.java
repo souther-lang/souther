@@ -1,10 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
-import souther.compiler.check.StatedComparison;
-import souther.compiler.check.ComparisonClaim;
-import souther.compiler.inputs.InputReading;
-import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermOrders;
@@ -67,34 +63,6 @@ record ComparedTerms(TermOrders on, TermOrders against, Count stepsApart) {
     /** The position at one end, or null where those orders are of no single position. */
     private static NumericTerm.FromOnePosition onTerm(TermOrders orders) {
         return orders == null ? null : orders.term().atOnePosition();
-    }
-
-    /**
-     * The two positions {@code comparison} names, or null where it names no such pair.
-     *
-     * <p>Only where the comparison orders its two sides. This reading is reached where the
-     * arithmetic stopped, and an equality between two things it could not read is a comparison
-     * nothing here has taken apart at all — the canonical form is what says a pair is a pair, and
-     * it had no answer.
-     */
-    static ComparedTerms asWritten(StatedComparison comparison,
-                                   InputReading read, InputReads reads) {
-        // A distance is what an order between the two sides states. A rule that names a value
-        // orders nothing, and what tells the two apart is the claim the comparison carries — an
-        // operator list of this reading's own would be a second answer to that.
-        if (comparison.claim() instanceof ComparisonClaim.Cut) {
-            GuardThresholds.Named on =
-                    GuardThresholds.namedBy(comparison.left(), read, reads);
-            GuardThresholds.Named against =
-                    GuardThresholds.namedBy(comparison.right(), read, reads);
-            if (on != null && against != null && aDistanceRuns(on.orders(), against.orders())) {
-                // The subject is the one the author wrote on the left, which the canonical form
-                // keeps too. Which of the two a line is named by is not something to derive where
-                // the source settles it: `charge > ceiling` is a line about the charge.
-                return new ComparedTerms(on.orders(), against.orders(), Count.ZERO);
-            }
-        }
-        return null;
     }
 
     /**

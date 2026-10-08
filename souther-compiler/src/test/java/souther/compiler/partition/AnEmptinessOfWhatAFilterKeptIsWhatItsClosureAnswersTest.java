@@ -301,8 +301,8 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
      *
      * <p>Refusing every element keeps nothing, whatever the order holds, so the fork turns on
      * nothing. Keeping every element keeps what the order holds, and the fork turns on whether the
-     * filter's container holds anything — a value made from the lines, the same whichever way the
-     * check is written.
+     * filter's container holds anything — which is whether the lines hold anything, read to the end
+     * and the same whichever way the check is written.
      */
     @Test
     void aClosureThatAnswersTheSameLeavesItToTheContainer() {
@@ -322,9 +322,9 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
         }
         assertEquals(List.of(), notRead(measured(compiled(lines.formatted(
                 "List.isEmpty(List.filter(l -> false, o.lines))")))), "nothing is ever kept");
-        assertEquals(List.of("o.lines RULE_ABOUT_A_DERIVED_VALUE"), notRead(measured(compiled(
+        assertEquals(List.of(), notRead(measured(compiled(
                 lines.formatted("List.isEmpty(List.filter(l -> true, o.lines))")))),
-                "what is kept is what the lines hold");
+                "what is kept is what the lines hold, and whether they hold anything is read");
     }
 
     /**

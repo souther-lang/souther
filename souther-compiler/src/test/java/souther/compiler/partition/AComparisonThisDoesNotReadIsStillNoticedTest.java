@@ -321,16 +321,16 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     /**
      * A position whose carrier is fine, against a right-hand side this does not read.
      *
-     * <p>`+Int.min(1, 2)+` is not a form a threshold is read out of, and that is the whole of what
-     * stopped the line. Nothing is wrong with `+p.x+`: it is an `+Int+`, a carrier lines are drawn
-     * on all through this file. Read off the side that did name a position, the answer becomes the
-     * carrier and sends a reader after a domain that is already there.
+     * <p>`+Int.multiply(p.x, p.x)+` is not a form a threshold is read out of, and that is the whole
+     * of what stopped the line. Nothing is wrong with `+p.x+`: it is an `+Int+`, a carrier lines are
+     * drawn on all through this file. Read off the side that did name a position, the answer becomes
+     * the carrier and sends a reader after a domain that is already there.
      */
     @Test
     void aReadableCarrierAgainstAnUnreadableSideIsNotACarrierProblem() {
         assertEquals(List.of(Said.named(TermPath.of("p").then("x"),
                         new BlockReason.UnreadComparisonForm())),
-                said(read("p: Pair", "p.x < Int.min(1, 2)")));
+                said(read("p: Pair", "p.x < Int.multiply(p.x, p.x)")));
     }
 
     /**

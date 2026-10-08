@@ -225,6 +225,24 @@ final class Pullback {
     }
 
     /**
+     * What a comparison states, and what the arithmetic over the input made of it on the way.
+     *
+     * @param arithmetic read where a rule asked for it and not again, so a reader that needs to know
+     *                   where that arithmetic stopped asks this rather than reading the comparison a
+     *                   second time
+     */
+    record OnTheInput(Pulled stated, Supplier<AffineReading.OfAComparison> arithmetic) {}
+
+    /** The same, with the arithmetic it was read through. */
+    static OnTheInput ofAComparisonOnTheInput(StatedComparison comparison, InputReads reads,
+                                              InputReading read) {
+        Pullback reading = new Pullback(read, Optional.empty());
+        Once<AffineReading.OfAComparison> arithmetic = reading.arithmeticOf(comparison, reads);
+        return new OnTheInput(reading.pulled(reading.firstThatReadsIt(
+                reading.rulesFor(comparison, null, false, reads, arithmetic))), arithmetic);
+    }
+
+    /**
      * Whether what a written comparison states was carried past it to the input — so that what it
      * states is the parts it was carried to, and not a rule the comparison draws of its own.
      *
@@ -401,9 +419,20 @@ final class Pullback {
     /** The rules that take a comparison the source wrote, in the order they are tried. */
     private List<Supplier<Derivation>> rulesFor(StatedComparison stated, Denotation at,
                                                 boolean fixed, InputReads reads) {
+        return rulesFor(stated, at, fixed, reads, arithmeticOf(stated, reads));
+    }
+
+    /** The arithmetic over the input {@code stated} is read through, when a rule asks for it. */
+    private Once<AffineReading.OfAComparison> arithmeticOf(StatedComparison stated,
+                                                          InputReads reads) {
+        return new Once<>(() -> AffineReading.read(stated, read.domain(), reads, read.rules()));
+    }
+
+    /** The same, read through {@code arithmetic}. */
+    private List<Supplier<Derivation>> rulesFor(StatedComparison stated, Denotation at,
+                                                boolean fixed, InputReads reads,
+                                                Once<AffineReading.OfAComparison> arithmetic) {
         AnEmptinessCheck.Checked checked = AnEmptinessCheck.checked(stated);
-        Once<AffineReading.OfAComparison> arithmetic = new Once<>(
-                () -> AffineReading.read(stated, read.domain(), reads, read.rules()));
         return List.of(
                 () -> checked == null ? null : new Derivation.AnEmptinessCheck(at == null
                         ? observe(checked.container(), AnswerAspect.EMPTINESS, reads)
@@ -1384,7 +1413,7 @@ final class Pullback {
             }
             case AffineReading.OfAComparison.CutsNothing constant ->
                     new Derivation.ACutThatCutsNothing(
-                            constant.holds(comparison.claim().statedRelation()));
+                            constant.holds(comparison.claim().statedRelation()), constant.read());
             case AffineReading.OfAComparison.NotHeld _, AffineReading.OfAComparison.Stopped _ ->
                     null;
         };
@@ -1661,7 +1690,7 @@ final class Pullback {
     }
 
     /** A value worked out by the first rule that asks for it, and not before or again. */
-    private static final class Once<T> {
+    static final class Once<T> implements Supplier<T> {
 
         private final Supplier<T> making;
         private T made;
@@ -1670,7 +1699,8 @@ final class Pullback {
             this.making = making;
         }
 
-        T get() {
+        @Override
+        public T get() {
             if (made == null) {
                 made = making.get();
             }

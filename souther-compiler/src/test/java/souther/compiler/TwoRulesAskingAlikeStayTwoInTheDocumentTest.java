@@ -45,8 +45,8 @@ class TwoRulesAskingAlikeStayTwoInTheDocumentTest {
             data Missing
 
             behavior f : (r: R) -> Found | Missing
-                ensures Found -> r.a <= Int.min(20, 30)
-                ensures Found -> r.a >= Int.min(40, 50)
+                ensures Found -> r.a * r.a <= 400
+                ensures Found -> r.a * r.a >= 1600
             let f (r) = Missing
 
             example f
@@ -62,7 +62,7 @@ class TwoRulesAskingAlikeStayTwoInTheDocumentTest {
             data Y
 
             behavior f : (r: R) -> X | Y
-            let f (r) = if r.a <= Int.min(20, 30) && r.a >= Int.min(40, 50) then X else Y
+            let f (r) = if r.a * r.a <= 400 && r.a * r.a >= 1600 then X else Y
 
             example f
                 | "one" : (R { a = 1 }) -> Y

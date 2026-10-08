@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * How what a condition states was arrived at: the rule each step applied and what it was applied to.
@@ -632,8 +633,23 @@ public sealed interface Derivation {
         }
     }
 
-    /** A comparison whose answer the arithmetic settles whatever the input. */
-    record ACutThatCutsNothing(boolean holds) implements Derivation {
+    /**
+     * A comparison whose answer the arithmetic settles whatever the input.
+     *
+     * @param named the numbers of the input the comparison was read over, whether or not they
+     *              survived the cancelling: {@code a - a <= 0} is about {@code a} and cuts nothing.
+     *              Empty where the reading named none of the input's own
+     */
+    record ACutThatCutsNothing(boolean holds, Set<NumericTerm> named) implements Derivation {
+
+        public ACutThatCutsNothing {
+            named = Set.copyOf(named);
+        }
+
+        /** The same, over numbers none of which is the input's. */
+        public ACutThatCutsNothing(boolean holds) {
+            this(holds, Set.of());
+        }
 
         @Override
         public Proposition conclusion(Conclusion numbering) {

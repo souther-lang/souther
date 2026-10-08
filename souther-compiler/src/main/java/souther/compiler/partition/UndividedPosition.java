@@ -246,6 +246,15 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         UNRESOLVED_CASE_PAIRING,
         /**
+         * What the rule states was read, and it is several lines held together, where the input is
+         * divided one line to a rule.
+         *
+         * <p>Its own word and not one saying the rule went unread: {@code Int.max(a, b) > 5} is read
+         * as {@code a > 5} or {@code b > 5}, and what is missing is a division by a statement made
+         * of several lines.
+         */
+        SEVERAL_LINES_IN_ONE_RULE,
+        /**
          * The comparison relates two positions rather than dividing one.
          *
          * <p>`+x < y+` says where one position stands against another, and a class here is a set of

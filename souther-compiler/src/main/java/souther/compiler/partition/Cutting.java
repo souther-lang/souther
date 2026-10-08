@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -18,11 +19,17 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Towards;
+import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.reach.ComparisonArrival;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * What one comparison cuts, and where — the one place that decides it.
@@ -34,13 +41,12 @@ import java.util.Optional;
  * so read no form at all. That is the shape this whole reading was written to stop, one level up
  * from where it was found.
  *
- * <p><b>The arithmetic first, and how it was written only where the arithmetic stopped.</b> The
- * canonical form says which quantity the rule cuts; what is left to decide is whether this compiler
- * can realize a line on the order that quantity is on. A reading of the operands is reached only
- * where the arithmetic had no answer at all — a date against a written date, a case of an
- * enumeration — so a spelling never settles a question the form has already settled. Tried first,
- * it did: {@code a <= a} came back a distance between two positions while the form had already
- * cancelled them, and the tautology was owed a row where the two hold one count.
+ * <p><b>What the comparison states, and never how it was written.</b> The statement read once
+ * ({@link Pullback#ofAComparison}) says which quantity the rule cuts — a form over the input's
+ * numbers, or one number against a place on the order it stands on, which is how a date against a
+ * written date and a case of an enumeration are stated — and what is left to decide here is whether
+ * this compiler can realize a line on the order that quantity is on. {@code a <= a} states nothing
+ * that varies, so it cuts nothing, however its operands are written.
  *
  * <p>Which levels the order has a place at is the order's own answer ({@link LevelSpace#canCutAt}).
  * Asked of the carrier instead — "do these values count" — two strings, which stand no measurable
@@ -185,41 +191,86 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     /**
      * The same, said as which of the four it is.
      *
+     * <p><b>What the comparison states, put on the input space, and nothing else.</b> What a
+     * comparison states is read once ({@link Pullback#ofAComparison}), and a line is drawn only
+     * where that statement is one line over the input's own numbers: a form of them against a
+     * threshold, or one of them against a place on the order it stands on. Nothing here reads the
+     * operands for a line of its own, so a line is never drawn where the statement is something
+     * else — and where the statement is read further than the operands are, through what an
+     * operation's law says its answer comes to, the line is drawn there too.
+     *
+     * <p>A statement of several lines held together is read and not drawn
+     * ({@link BlockReason.SeveralLinesInOneRule}): the input is divided one line to a rule.
+     *
      * <p>The reason a reading stopped is settled here, where it stopped, and not asked for
-     * afterwards by whoever met the absence. Worked out later, the reason came from a second walk
-     * over the comparison and answered about the shape rather than about what this reading could do
-     * with it.
+     * afterwards by whoever met the absence.
      */
     static Read read(String behavior, StatedComparison comparison,
                      InputReading read, InputReads reads,
                      souther.compiler.coverage.Arrivals answering) {
-        AffineReading.OfAComparison canonical =
-                AffineReading.read(comparison, read.domain(), reads, read.rules());
-        return switch (canonical) {
-            // Nothing was missing: the form was read from end to end, and the quantity in it is
-            // empty. Unconditional, and before anything about how the comparison was spelled —
-            // `a <= a` names one position on either side and the arithmetic has already said the
-            // two are one, so a reading of the operands finding a distance there is that reading
-            // being wrong about the rule.
-            case AffineReading.OfAComparison.CutsNothing over ->
-                    new Read.CutsNothing(over.read());
-            // Read from end to end, each side as a form, and the difference of the two is a number
-            // no ratio holds. The rule states a line and the line has no place here — the same
-            // answer a line placed at such a number gets, and for the same reason: nothing about
-            // the order fell short.
-            case AffineReading.OfAComparison.NotHeld notHeld ->
-                    new Read.NumberNoRatioHolds(AffineReading.filedAt(notHeld.read()));
-            // The quantity is what the arithmetic says it is, and the realization is the only thing
-            // left to try. Read the other way round, a spelling that produced a line took the
-            // comparison before the canonical form was consulted at all.
-            case AffineReading.OfAComparison.Cuts cuts ->
-                    realized(behavior, cuts.read(), read.quantities());
-            // And only here does how it was written decide anything. The arithmetic stopped, which
-            // is what a date against a written date and a case of an enumeration do: the values are
-            // ones it cannot count, and the comparison still states a line.
-            case AffineReading.OfAComparison.Stopped stopped ->
-                    asWritten(behavior, comparison, stopped, read, reads, answering);
+        Pullback.OnTheInput onTheInput = Pullback.ofAComparisonOnTheInput(comparison, reads, read);
+        Pullback.Pulled stated = onTheInput.stated();
+        return switch (stated.proposition()) {
+            // Read to the end, and the same answer for every row. What it is about is what the
+            // reading named, which is how a report says where it cuts nothing.
+            case Proposition.Always _ -> new Read.CutsNothing(
+                    stated.meaning().how() instanceof Derivation.ACutThatCutsNothing cut
+                            ? cut.named() : Set.of());
+            case Proposition.Compared(Relation.Affine affine, boolean holds, String _)
+                    when WhatTheRulesLeave.ofTheInput(affine.form()) != null ->
+                    realized(behavior, AffineReading.stating(
+                            WhatTheRulesLeave.ofTheInput(affine.form()),
+                            holds ? affine.proposition() : affine.proposition().denied(),
+                            comparison.left(), reads, read.rules()), read.quantities());
+            case Proposition.Compared(Relation.Ordered(
+                    DecisionAtom.OfTheInput(NumericTerm term), Place at, Rel proposition),
+                    boolean holds, String _) when term.atOnePosition() != null ->
+                    onAnOrder(behavior, term.atOnePosition(), at,
+                            holds ? proposition : proposition.denied(), read.quantities());
+            // A number the statement names has no representation, which is a line placed at a
+            // number nothing holds: nothing about the order fell short.
+            case Proposition.Unread unread when unread.why() instanceof WhyUnread.ANumberNotHeld ->
+                    new Read.NumberNoRatioHolds(
+                            GuardThresholds.filedAt(comparison, read, reads, answering));
+            case Proposition.All _, Proposition.Any _, Proposition.OnAnApplication _
+                    when !Proposition.leavesSomethingUnread(stated.proposition()) ->
+                    new Read.Stopped(ComparisonAssessment.atEachOf(
+                            GuardThresholds.filedAt(comparison, read, reads, answering),
+                            new BlockReason.SeveralLinesInOneRule()));
+            default -> notALine(comparison, onTheInput.arithmetic().get(), read, reads, answering);
         };
+    }
+
+    /**
+     * The line a statement of one term against a place on its order draws, or the refusal to place
+     * it: a date against a written date, a case of an enumeration.
+     */
+    private static Read onAnOrder(String behavior, NumericTerm.FromOnePosition term, Place at,
+                                  Rel stated, Quantities quantities) {
+        Cutting drawn = atAPosition(behavior, new ComparedLine(term, at, quantities.ordersOf(term),
+                ComparisonClaim.stating(stated)), quantities);
+        if (drawn == null) {
+            throw new IllegalStateException("a statement on the order " + term + " stands on placed"
+                    + " a line the order has no place for: " + at);
+        }
+        return cutsOrRefused(drawn);
+    }
+
+    /**
+     * What a comparison whose statement is no line on the input leaves at each place it is filed
+     * at: where the arithmetic over the input stopped, and why there.
+     *
+     * @param arithmetic what the arithmetic the statement was read through made of the comparison
+     */
+    private static Read notALine(StatedComparison comparison,
+                                 AffineReading.OfAComparison arithmetic, InputReading read,
+                                 InputReads reads, souther.compiler.coverage.Arrivals answering) {
+        if (!(arithmetic instanceof AffineReading.OfAComparison.Stopped stopped)) {
+            throw new IllegalStateException("a comparison the arithmetic over the input read states"
+                    + " something that is no line on it: " + comparison);
+        }
+        return new Read.Stopped(GuardThresholds.whatEachPlaceIsLeftWith(
+                comparison, stopped, read, reads, answering));
     }
 
     /**
@@ -445,34 +496,6 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     + read.form() + " at " + read.cut());
         }
         return drawn;
-    }
-
-    /**
-     * The line the comparison draws as it was written, where the arithmetic could not read it.
-     *
-     * <p>The two readings that reach carriers the arithmetic cannot: a date against a written date,
-     * a case of an enumeration, one string against another. Reached only from a reading that
-     * stopped, so a spelling never answers a question the canonical form has already answered.
-     */
-    private static Read asWritten(String behavior, StatedComparison comparison,
-                                  AffineReading.OfAComparison.Stopped canonical,
-                                  InputReading read, InputReads reads,
-                                  souther.compiler.coverage.Arrivals answering) {
-        Quantities quantities = read.quantities();
-        Cutting drawn = atAPosition(behavior,
-                ComparedLine.asWritten(comparison, read, reads), quantities);
-        if (drawn == null) {
-            // What the rule placed, carried from where the comparison was recognised. Read off the
-            // operator again here, this reading would be a second answer to a question the value in
-            // hand already answers.
-            drawn = apart(behavior, ComparedTerms.asWritten(comparison, read, reads),
-                    comparison.claim(), quantities);
-        }
-        if (drawn != null) {
-            return cutsOrRefused(drawn);
-        }
-        return new Read.Stopped(GuardThresholds.whatEachPlaceIsLeftWith(
-                comparison, canonical, read, reads, answering));
     }
 
     /** One position's own values, cut where the reading found the line, or null where that reading

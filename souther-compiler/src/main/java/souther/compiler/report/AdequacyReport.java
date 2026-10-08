@@ -2729,6 +2729,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     + " compiler could not write out";
             case UNRESOLVED_CASE_PAIRING -> "it reaches case-specific positions on both sides, and "
                     + "how those positions pair up is not worked out";
+            case SEVERAL_LINES_IN_ONE_RULE -> "what it states was read, and it is several lines"
+                    + " held together, which this compiler does not yet divide the input by";
             case UNSUPPORTED_PARTITION_SHAPE ->
                     "it relates two positions rather than dividing one";
             case RULE_ABOUT_A_RUN ->

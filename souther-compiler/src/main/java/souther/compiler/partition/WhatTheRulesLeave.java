@@ -128,8 +128,9 @@ public final class WhatTheRulesLeave {
         };
     }
 
-    /** {@code form} as one over numbers of the input, or null where a quantity is something else. */
-    private static LinearForm<NumericTerm> ofTheInput(LinearForm<Quantity> form) {
+    /** {@code form} as one over numbers of the input, or null where a quantity is something else.
+     *  The one place a statement's form is put on the input space, for every reader that does. */
+    static LinearForm<NumericTerm> ofTheInput(LinearForm<Quantity> form) {
         Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
             if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term))) {

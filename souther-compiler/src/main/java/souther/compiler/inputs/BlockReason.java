@@ -242,6 +242,7 @@ public sealed interface BlockReason {
                 case ValueRuleLeftOpenByAChoice _ -> 11;
                 case LineAtANumberNoRatioHolds _ -> 12;
                 case LineSideNotWorkedOut _ -> 13;
+                case SeveralLinesInOneRule _ -> 14;
             };
         }
 
@@ -281,7 +282,8 @@ public sealed interface BlockReason {
                      RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
-                     ValueRuleRelatingTwoPositions _, CasePairingNotDetermined _ -> true;
+                     ValueRuleRelatingTwoPositions _, CasePairingNotDetermined _,
+                     SeveralLinesInOneRule _ -> true;
             };
         }
 
@@ -296,18 +298,20 @@ public sealed interface BlockReason {
                 // into, and the machines that say where the strings it admits stop. A run allowed
                 // more of either need not stop at the same rule.
                 case PatternTooCostly _, OrderedExtentTooCostly _ -> RunSensitivity.MAY_CHANGE;
-                // And eight where nothing was compared against anything. A form nothing takes
-                // apart, values no line can be drawn on, a rule about a value made from this one, a
-                // rule about an element of one of several containers, a relation between two
-                // positions and a pairing nothing worked out are all met again by a run allowed
-                // more of everything. So is an end a choice left open: what the reading of ends
-                // stops on is a form it does not enter, and there is no figure it stopped at.
+                // And every other, where nothing was compared against anything. A form nothing
+                // takes apart, values no line can be drawn on, a rule about a value made from this
+                // one, a rule about an element of one of several containers, a relation between two
+                // positions, a pairing nothing worked out and a rule of several lines are all met
+                // again by a run allowed more of everything. So is an end a choice left open: what
+                // the reading of ends stops on is a form it does not enter, and there is no figure
+                // it stopped at.
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                      RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
                      ValueRuleRelatingTwoPositions _, EndLeftOpenByAChoice _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
-                     CasePairingNotDetermined _ -> RunSensitivity.UNAFFECTED;
+                     CasePairingNotDetermined _, SeveralLinesInOneRule _ ->
+                        RunSensitivity.UNAFFECTED;
             };
         }
     }
@@ -865,6 +869,19 @@ public sealed interface BlockReason {
      * another way to write a comparison it reads perfectly well.
      */
     record CasePairingNotDetermined() implements RuleReadingStopped {}
+
+    /**
+     * What the rule states was read in full, and it is several lines held together — either of two
+     * comparisons, both of them, one under one condition and another under the other — where a
+     * partition of the input is drawn one line to a rule.
+     *
+     * <p>Not a rule whose meaning went unread. {@code Int.max(a, b) > 5} states that {@code a > 5}
+     * or {@code b > 5}, and nothing about that is unknown; what this compiler does not yet do is
+     * divide the input by a statement made of several lines, so no line of it is drawn. Said as a
+     * form nothing took apart, an author would go looking for another way to write a rule whose
+     * meaning was read perfectly well.
+     */
+    record SeveralLinesInOneRule() implements RuleReadingStopped {}
 
     /**
      * The comparison was read to the end and cuts no quantity at all.

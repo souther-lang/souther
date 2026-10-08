@@ -257,6 +257,8 @@ public final class ReportedReason {
             // between, which is a question about the model and not about the form it was written in.
             case BlockReason.CasePairingNotDetermined _ ->
                     UndividedPosition.Reason.UNRESOLVED_CASE_PAIRING;
+            case BlockReason.SeveralLinesInOneRule _ ->
+                    UndividedPosition.Reason.SEVERAL_LINES_IN_ONE_RULE;
             case BlockReason.ComparisonBetweenPositions _ ->
                     UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE;
             // Its own word, because what a reader does about it is different. A rule between two

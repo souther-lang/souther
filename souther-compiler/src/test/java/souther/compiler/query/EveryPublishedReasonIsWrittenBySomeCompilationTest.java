@@ -275,6 +275,14 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 behavior f : (p: P) -> Answer
                 let f (p) = if p.lo < p.hi then Yes else No
                 """.formatted(ANSWER)));
+        // What the rule states is read through what the operation answers in each of its cases,
+        // and comes to one line or another: several lines in one rule.
+        out.put(UndividedPosition.Reason.SEVERAL_LINES_IN_ONE_RULE, of("""
+                module m
+                %s
+                behavior f : (a: Int, b: Int) -> Answer
+                let f (a, b) = if Int.max(a, b) > 5 then Yes else No
+                """.formatted(ANSWER)));
         // A line between two positions, which divides neither.
         out.put(UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE, of("""
                 module m

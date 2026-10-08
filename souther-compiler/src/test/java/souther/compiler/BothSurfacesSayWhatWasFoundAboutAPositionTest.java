@@ -93,8 +93,9 @@ class BothSurfacesSayWhatWasFoundAboutAPositionTest {
         // reason alone, two rules stopped alike here were one entry and the document could not say
         // which of them a reader was being told about.
         //
-        // One entry, about the guard the author wrote. `Int.clamp` answers a number nothing states
-        // anything about, so the comparison against it is a rule about a value an operation made.
+        // One entry, about the guard the author wrote. What it states is read through what
+        // `Int.clamp` answers in each of its cases, so it is several lines held together, and the
+        // input is divided one line to a rule.
         //
         // The reading this is made over keeps that operation standing, so the comparisons inside
         // `Int.clamp` are not here. They were: the call was spliced in, its own first comparison
@@ -102,7 +103,7 @@ class BothSurfacesSayWhatWasFoundAboutAPositionTest {
         // draws — so the document carried an entry about a rule the author never wrote, at a number
         // their model never mentions. Those comparisons are that operation's implementation, and a
         // caller owes rows for what a caller wrote.
-        assertEquals(List.of("n:rule_about_a_derived_value:comparison@0:11:32"),
+        assertEquals(List.of("n:several_lines_in_one_rule:comparison@0:11:32"),
                 documentSaysNotRead(MEASURED_AND_UNREAD),
                 "the document says what the report said");
     }
