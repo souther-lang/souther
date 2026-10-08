@@ -207,13 +207,13 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
      */
     @Test
     void aComparisonItCouldNotTurnIntoACutSaysThatAndNoMore() {
-        assertEquals(List.of(new OnTheWay.Why.TheMeaningWasNotRead(new WhyUnread.NotYetComposed(
-                        WhyUnread.NotYetComposed.Step.A_FORM_OVER_BOUND_VALUES))),
+        assertEquals(List.of(new OnTheWay.Why.TheMeaningWasNotRead(
+                        new WhyUnread.OutsideTheLinearFragment())),
                 whys("product", true));
         // The affine operand is taken in beside it: a conjunction coming out true says both, and
         // one of them being unreadable is no reason to lose the other.
         assertEquals(List.of(new OnTheWay.Why.TheMeaningWasNotRead(new WhyUnread.NotYetComposed(
-                        WhyUnread.NotYetComposed.Step.A_FORM_OVER_BOUND_VALUES))),
+                        WhyUnread.NotYetComposed.Step.A_CHOICE_BY_CASES))),
                 whys("withACall", true));
         assertEquals(1, stating("withACall", true).stream()
                 .filter(each -> each instanceof OnTheWay.TakenIn).count());

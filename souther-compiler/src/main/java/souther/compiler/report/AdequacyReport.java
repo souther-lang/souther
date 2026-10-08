@@ -3905,11 +3905,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case WhyUnread.NoMeasureOfItsSize _ ->
                     "a condition about what a container holds that comes to how many it holds,"
                             + " which is no number this reading measures";
-            case WhyUnread.OutsideTheLinearFragment _ -> NO_CUT;
+            case WhyUnread.OutsideTheLinearFragment _, WhyUnread.NoFormOfWhatItAnswers _,
+                 WhyUnread.ANumberOfWhatAnOperationAnswers _ -> NO_CUT;
             case WhyUnread.TwoElementsOfOneContainer _, WhyUnread.NoLawFor _,
                  WhyUnread.WhatARecursiveHelperAnswers _ -> NEITHER_A_COMPARISON_NOR_A_COMBINATION;
             case WhyUnread.NotYetComposed(WhyUnread.NotYetComposed.Step step) -> switch (step) {
-                case A_FORM_OVER_BOUND_VALUES, AN_ORDER_OF_ITS_ARGUMENTS, A_CHOICE_BY_CASES,
+                case A_SIZE_AN_OPERATION_KEEPS, AN_ORDER_OF_ITS_ARGUMENTS, A_CHOICE_BY_CASES,
                      VALUES_WRITTEN_OUT -> NO_CUT;
                 case A_DEPENDENCYS_ANSWER, A_CLOSURE_BY_NAME ->
                         NEITHER_A_COMPARISON_NOR_A_COMBINATION;

@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AnExpressionIsReadByTheFirstRuleThatReadsAllOfItTest {
 
     private static final WhyUnread OWED =
-            new WhyUnread.NotYetComposed(WhyUnread.NotYetComposed.Step.A_FORM_OVER_BOUND_VALUES);
+            new WhyUnread.NotYetComposed(WhyUnread.NotYetComposed.Step.A_SIZE_AN_OPERATION_KEEPS);
 
     private static final Derivation READ = new Derivation.ATruthAtAPosition(TermPath.of("a"), true);
 

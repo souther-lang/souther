@@ -75,6 +75,27 @@ public sealed interface WhyUnread {
         }
     }
 
+    /** A number an operation answers, of which the library states no form over its arguments. */
+    record NoFormOfWhatItAnswers(ValueName.Stdlib operation) implements WhyUnread {
+
+        public NoFormOfWhatItAnswers {
+            Objects.requireNonNull(operation, "a number is answered by an operation");
+        }
+    }
+
+    /**
+     * A number {@code measure} takes of what {@code madeBy} answers, which stands at no position and
+     * of which the library says nothing in terms of what {@code madeBy} was handed.
+     */
+    record ANumberOfWhatAnOperationAnswers(ValueName.Stdlib measure, ValueName.Stdlib madeBy)
+            implements WhyUnread {
+
+        public ANumberOfWhatAnOperationAnswers {
+            Objects.requireNonNull(measure, "a number is taken by an operation");
+            Objects.requireNonNull(madeBy, "of what an operation answered");
+        }
+    }
+
     /**
      * What a helper answers where the helper calls itself, so its body is not one expression to read
      * through.
@@ -98,11 +119,10 @@ public sealed interface WhyUnread {
         public enum Step {
 
             /**
-             * A comparison over values the body bound, read as the arithmetic the language composes
-             * them by: through a binding, a sum, a scaled value, a number written out, a newtype,
-             * and beside a position of the input.
+             * The size of what an operation answers where the library says it answers as many as it
+             * was handed, read as the size of what it was handed.
              */
-            A_FORM_OVER_BOUND_VALUES,
+            A_SIZE_AN_OPERATION_KEEPS,
 
             /**
              * A number an operation answers whose sign the library says states which of its

@@ -1,17 +1,21 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.AffineForms;
 import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.Choice;
+import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementWitness;
 import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.StatedComparison;
+import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.InputTruth;
@@ -26,10 +30,10 @@ import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhyUnread;
-import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.SideAnswered;
 import souther.compiler.types.ModelOccurrence;
@@ -530,13 +534,14 @@ final class Pullback {
     }
 
     /**
-     * A comparison over values the body bound, as the relation it states over them — or unread
-     * where it is over anything else.
+     * A comparison the arithmetic of the input did not read to a line, read as a relation over the
+     * quantities a condition is read over: numbers of the input, and numbers of values the body
+     * bound — or unread where some part of it is neither.
      *
-     * <p>Asked where the arithmetic of the input read nothing, which is where what a value is
-     * computed from is unknown: a dependency's answer, what an attempt built. Which value it is is
-     * still known, by the binding that names it, and two comparisons over one name are about one
-     * number. A comparison mixing such a value with a position of the input is not read here.
+     * <p>Asked where what a value is computed from is unknown: a dependency's answer, what an attempt
+     * built. Which value it is is still known, by the binding that names it, and two comparisons over
+     * one name are about one number. The arithmetic is {@link AffineForms}'s, the one walk every
+     * reader of a number in this compiler composes by; this says only what its atoms are.
      */
     private Derivation ofBoundValues(StatedComparison comparison, boolean fixed,
                                      InputReads reads) {
@@ -547,58 +552,109 @@ final class Pullback {
             return new Derivation.Stopped(new WhyUnread.NotYetComposed(
                     WhyUnread.NotYetComposed.Step.VALUES_WRITTEN_OUT), true);
         }
-        LinearForm<Quantity> left = boundForm(comparison.left(), reads);
-        LinearForm<Quantity> right = boundForm(comparison.right(), reads);
-        if (left == null || right == null) {
-            return new Derivation.Stopped(
-                    noFormOf(left == null ? comparison.left() : comparison.right(), reads), false);
+        List<LinearForm<Quantity>> sides = new ArrayList<>();
+        for (Core side : List.of(comparison.left(), comparison.right())) {
+            switch (AffineForms.outcome(side, reads, quantities())) {
+                case AffineForms.Outcome.Composed<Quantity, InputReads>(var form) -> sides.add(form);
+                case AffineForms.Outcome.StoppedAt<Quantity, InputReads>(var node, var at) -> {
+                    return new Derivation.Stopped(noFormOf(node, at), false);
+                }
+            }
         }
-        LinearForm<Quantity> form = left.minus(right).orNull();
-        if (form == null || form.coefs().isEmpty()) {
-            return new Derivation.Stopped(new WhyUnread.NotYetComposed(
-                    WhyUnread.NotYetComposed.Step.A_FORM_OVER_BOUND_VALUES), false);
-        }
+        LinearForm<Quantity> form = sides.get(0).minus(sides.get(1)).orNull();
         Rel states = comparison.claim().statedRelation();
+        if (form == null) {
+            return new Derivation.Stopped(new WhyUnread.OutsideTheLinearFragment(), false);
+        }
+        if (form.coefs().isEmpty()) {
+            return new Derivation.ACutThatCutsNothing(states.holds(form.constant().signum()));
+        }
         Rel proposition = states.orItsDenial();
         return new Derivation.AComparisonRead(Derivation.ComparisonReading.OVER_BOUND_VALUES,
                 new Relation.Affine(form, proposition), states == proposition);
     }
 
-    /** {@code side} as a number written out or a number of a value the body bound, or null. */
-    private LinearForm<Quantity> boundForm(Core side, InputReads reads) {
-        Core e = Core.withoutStanding(side);
-        if (e instanceof Core.Int written) {
-            return LinearForm.constant(ExactRatio.of(written.value()));
-        }
-        if (reads.pathOf(e, read.rules().newtypes()) instanceof PathResolution.At) {
-            return null;
-        }
-        List<TermPath.Step> steps = new ArrayList<>();
-        Core at = Core.withoutStanding(e);
-        while (true) {
-            if (at instanceof Core.FieldProjection projection) {
-                at = Core.withoutStanding(projection.lastAccess());
-            } else if (at instanceof Core.FieldAccess access) {
-                if (Location.isStep(access.target().type(), access.field(),
-                        read.rules().newtypes())) {
-                    steps.addFirst(new TermPath.Step.Field(access.field()));
-                }
-                at = Core.withoutStanding(access.target());
-            } else {
-                break;
+    /**
+     * What this reading calls an atom of a number: a number of the input where the expression is
+     * one, and otherwise a number of a value the body bound, named by its binding and the fields
+     * read off it.
+     *
+     * <p>A name is one value only where it is one on a run. A name handed each element of a
+     * container, or one that can be any of several values, stands for a different value each time
+     * it is read, so a relation over it relates nothing and it is no atom.
+     */
+    private AffineForms.Reading<Quantity, InputReads> quantities() {
+        return new AffineForms.Reading<>() {
+
+            @Override
+            public Symbols symbols() {
+                return read.rules().symbols();
             }
-        }
-        // One value by its binding, and only where the name is one value on a run. A name handed
-        // each element of a container, or one that can be any of several values, stands for a
-        // different value each time it is read, so a relation over it relates nothing.
-        if (!(Core.withoutStanding(at) instanceof Core.Read name)) {
-            return null;
-        }
-        ReadMeaning stands = reads.meaningOf(name, read.rules().symbols(), read.rules().newtypes());
-        if (stands instanceof ReadMeaning.Element || stands instanceof ReadMeaning.OneOf) {
-            return null;
-        }
-        return LinearForm.atom(new Quantity.OfABinding(name.binding(), steps, side.type()));
+
+            @Override
+            public DeclarationAccess declarations() {
+                return read.rules().declarations();
+            }
+
+            @Override
+            public LinearForm<Quantity> leafOf(Core node, InputReads at) {
+                NumericTerm term = InputNumber.of(node, read.domain(), at, read.rules());
+                if (term != null) {
+                    return LinearForm.atom(new DecisionAtom.OfTheInput(term));
+                }
+                List<TermPath.Step> steps = new ArrayList<>();
+                Core under = Core.withoutStanding(node);
+                while (true) {
+                    if (under instanceof Core.FieldProjection projection) {
+                        under = Core.withoutStanding(projection.lastAccess());
+                    } else if (under instanceof Core.FieldAccess access) {
+                        if (Location.isStep(access.target().type(), access.field(),
+                                read.rules().newtypes())) {
+                            steps.addFirst(new TermPath.Step.Field(access.field()));
+                        }
+                        under = Core.withoutStanding(access.target());
+                    } else {
+                        break;
+                    }
+                }
+                if (!(under instanceof Core.Read name)) {
+                    return null;
+                }
+                return switch (at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())) {
+                    case ReadMeaning.Element _, ReadMeaning.OneOf _, ReadMeaning.Position _ -> null;
+                    case ReadMeaning.Through _, ReadMeaning.Unknown _ -> LinearForm.atom(
+                            new Quantity.OfABinding(name.binding(), steps, node.type()));
+                };
+            }
+
+            @Override
+            public InputReads inside(Core.LetIn li, InputReads at) {
+                return at.and(li.binder(), li.value());
+            }
+
+            @Override
+            public AffineForms.ReadThrough<InputReads> readThrough(Core.Read name, InputReads at) {
+                return NameAnswers.denoting(name, at, read.rules().symbols(),
+                        read.rules().newtypes());
+            }
+
+            @Override
+            public List<AffineForms.ReadThrough<InputReads>> alternativesOf(Core.Read name,
+                                                                           InputReads at) {
+                return NameAnswers.alternativesOf(name, at, read.rules().symbols(),
+                        read.rules().newtypes());
+            }
+
+            @Override
+            public boolean readsThrough(Core.FieldAccess fa, InputReads at) {
+                // A field of a value that stands nowhere is arithmetic's to walk into, as it is for
+                // the reading of the input's own numbers ({@link AffineReading}).
+                boolean stands = !(at.pathOf(fa.target(), read.rules().newtypes())
+                        instanceof PathResolution.NotAPosition);
+                return !stands && !Location.isStep(fa.target().type(), fa.field(),
+                        read.rules().newtypes());
+            }
+        };
     }
 
     /** A form over the input's numbers, as one over the quantities a relation is written over. */
@@ -697,11 +753,15 @@ final class Pullback {
     }
 
     /**
-     * Why {@code side} of a comparison is no form over values the body bound: what stands at the end
-     * of the accesses it is made of.
+     * Why the arithmetic stopped at {@code stopped}, read in {@code reads}: what stands at the end of
+     * the accesses it is made of.
+     *
+     * <p>Said of the expression {@link AffineForms} could not compose and named no atom for, which is
+     * the most particular one; the walk is what knows the arithmetic, so what it stopped at is no
+     * form whatever this would say of it.
      */
-    private WhyUnread noFormOf(Core side, InputReads reads) {
-        Core e = Core.withoutStanding(side);
+    private WhyUnread noFormOf(Core stopped, InputReads reads) {
+        Core e = Core.withoutStanding(stopped);
         while (true) {
             if (e instanceof Core.FieldProjection projection) {
                 e = Core.withoutStanding(projection.lastAccess());
@@ -717,24 +777,33 @@ final class Pullback {
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER);
                 case ReadMeaning.OneOf _ -> new WhyUnread.NotYetComposed(
                         WhyUnread.NotYetComposed.Step.VALUES_WRITTEN_OUT);
-                case ReadMeaning.Unknown _ ->
+                case ReadMeaning.Unknown _, ReadMeaning.Position _, ReadMeaning.Through _ ->
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
-                case ReadMeaning.Position _, ReadMeaning.Through _ -> new WhyUnread.NotYetComposed(
-                        WhyUnread.NotYetComposed.Step.A_FORM_OVER_BOUND_VALUES);
             };
+        }
+        switch (e) {
+            // Arithmetic the walk has a rule for and could not compose: a product of two values
+            // neither of which is written out, a quotient by one that is not.
+            case Core.Binary _, Core.Neg _ -> {
+                return new WhyUnread.OutsideTheLinearFragment();
+            }
+            // A choice between values, where what is chosen is one of the arms.
+            case Core.If _, Core.IfConstructed _, Core.Match _ -> {
+                return new WhyUnread.NotYetComposed(
+                        WhyUnread.NotYetComposed.Step.A_CHOICE_BY_CASES);
+            }
+            default -> { }
         }
         AnOperationApplied applied = AnOperationApplied.of(e);
         if (applied == null) {
-            return new WhyUnread.NotYetComposed(
-                    WhyUnread.NotYetComposed.Step.A_FORM_OVER_BOUND_VALUES);
+            return new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
         }
         BoundOperationFacts facts = DefaultBoundOperationFacts.get();
-        ValueName operation = applied.operation();
-        return switch (operation) {
+        return switch (applied.operation()) {
             case ValueName.Behavior _ -> new WhyUnread.NotYetComposed(
                     WhyUnread.NotYetComposed.Step.A_DEPENDENCYS_ANSWER);
             case ValueName.Helper _ -> new WhyUnread.WhatARecursiveHelperAnswers();
-            default -> {
+            case ValueName.Stdlib operation -> {
                 if (facts.statesTheOrderOfItsArguments().contains(operation)) {
                     yield new WhyUnread.NotYetComposed(
                             WhyUnread.NotYetComposed.Step.AN_ORDER_OF_ITS_ARGUMENTS);
@@ -743,10 +812,35 @@ final class Pullback {
                     yield new WhyUnread.NotYetComposed(
                             WhyUnread.NotYetComposed.Step.A_CHOICE_BY_CASES);
                 }
-                yield new WhyUnread.NotYetComposed(
-                        WhyUnread.NotYetComposed.Step.A_FORM_OVER_BOUND_VALUES);
+                if (facts.takenAs(operation) != null && !applied.args().isEmpty()) {
+                    yield noNumberOf(operation, applied.args().getFirst(), reads);
+                }
+                yield new WhyUnread.NoFormOfWhatItAnswers(operation);
             }
+            default -> new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
         };
+    }
+
+    /**
+     * Why a number {@code measure} takes of {@code measured} is no number of the input: what stands
+     * there is no position, and what made it says nothing of that number in terms of what it was
+     * handed — or does, by a step not taken yet.
+     */
+    private WhyUnread noNumberOf(ValueName.Stdlib measure, Core measured, InputReads reads) {
+        Core made = Core.withoutStanding(reads.standing(measured, read.rules().symbols(),
+                read.rules().newtypes()).value());
+        if (!(AnOperationApplied.of(made) instanceof AnOperationApplied applied
+                && applied.operation() instanceof ValueName.Stdlib madeBy)) {
+            return new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
+        }
+        // As many as what it was handed, so its size is that one's.
+        BuiltFrom<DeclaredArgument> built = DefaultBoundOperationFacts.get()
+                .buildsItsResultFrom(madeBy);
+        if (built != null && built.mapsEachElementOf() != null) {
+            return new WhyUnread.NotYetComposed(
+                    WhyUnread.NotYetComposed.Step.A_SIZE_AN_OPERATION_KEEPS);
+        }
+        return new WhyUnread.ANumberOfWhatAnOperationAnswers(measure, madeBy);
     }
 
     /**

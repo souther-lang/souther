@@ -454,8 +454,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.STRUCTURE, BINDINGS);
         row(out, c + "partition/MeaningsOfABodyReading", "walk", "(" + core + reads + ")V",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
-        row(out, c + "partition/Pullback", "boundForm", "(" + core + reads + ")L" + c
+        row(out, c + "partition/Pullback$1", "leafOf", "(" + core + reads + ")L" + c
                 + "numeric/LinearForm;", Reading.NAMES, READS_THE_NAMES);
+        row(out, c + "partition/Pullback$1", "readsThrough",
+                "(L" + CORE + "$FieldAccess;" + reads + ")Z", Reading.ONE_ACCESS, ONE);
         row(out, c + "partition/Pullback", "noFormOf", "(" + core + reads + ")L" + c
                 + "meaning/WhyUnread;", Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/PredicateReadings", "walk", "(" + core + "Ljava/lang/String;L" + c
