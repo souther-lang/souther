@@ -4,49 +4,31 @@ import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.core.Core;
-import souther.compiler.inputs.Denotation;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Rel;
-import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultRange;
 import souther.compiler.types.ValueName;
 
-import java.util.Optional;
-
 /**
- * Whether a comparison is read back to what the library says it turns on, before it is read as a
- * rule of its own.
+ * Whether a comparison is a size held against a number that parts nought from every size above it
+ * — which is asking whether the container holds anything, however it is spelt.
  *
- * <p>One case and no more: the size of a container held against a number that parts nought from
- * every size above it, the way the checker reads an emptiness check
- * ({@link souther.compiler.check.BooleanMeaning#asAComparison}), over a container an operation
- * built whose emptiness the library says turns on a closure
- * ({@link souther.compiler.semantics.OperationFact.TurnsOnWhetherAnArgumentHolds}). There, whether
- * the container holds anything is whether some element met the closure, and that is a statement
- * about the input where the size of the container is not: {@code List.filter(p, xs)} is not a
- * position, and its size is a number nothing in the input holds.
- *
- * <p>Which comparisons part nought from the rest is worked out from the relation, not listed.
- * {@code == 0} and {@code /= 0} are the check by the library's own word and need nothing else.
- * An ordering needs where the library says a size starts: a size is a count no lower than nought,
- * so {@code <= 0} and {@code < 1} hold exactly where the container is empty, and {@code > 0} and
- * {@code >= 1} exactly where it is not.
- *
- * <p>Everything else is the comparison's own. A size held against nought over a position is a line
- * on how many it holds; over a value this cannot read back, it is a rule about a value made from the
- * input, which the comparison's reading says. And a size held against a number that parts sizes
- * above nought counts the elements the closure kept, which no answer of the closure states — so
- * {@code List.length(List.filter(p, xs)) >= 2} is a comparison and not read back.
+ * <p>Which comparisons do is worked out from the relation, not listed. {@code == 0} and
+ * {@code /= 0} are the check by the library's own word and need nothing else. An ordering needs
+ * where the library says a size starts: a size is a count no lower than nought, so {@code <= 0}
+ * and {@code < 1} hold exactly where the container is empty, and {@code > 0} and {@code >= 1}
+ * exactly where it is not. A size held against a number that parts sizes above nought —
+ * {@code >= 2}, {@code == 1} — counts what the container holds and is the comparison it is.
  *
  * <p>The spelling is spent before this is asked. {@code List.isEmpty(ys)} and
- * {@code List.length(ys) == 0} reach here as the one statement, and {@code List.length(ys) >= 1}
- * is read as its denial here, so they are read back alike or none is.
+ * {@code List.length(ys) == 0} reach here as the one statement ({@link
+ * souther.compiler.check.BooleanMeaning#asAComparison}).
  */
-final class WhatAnEmptinessTurnsOn {
+final class AnEmptinessCheck {
 
-    private WhatAnEmptinessTurnsOn() {}
+    private AnEmptinessCheck() {}
 
     /**
      * What a comparison says of whether a container holds anything.
@@ -57,21 +39,11 @@ final class WhatAnEmptinessTurnsOn {
     record Checked(Core container, boolean emptyWhereItHolds) {}
 
     /**
-     * A comparison read back to the closure that decides it.
-     *
-     * @param container what the comparison takes the size of, read where it stands
-     * @param decidedBy what the closure deciding whether it holds anything answers with, read where
-     *                  it stands
-     */
-    record ReadBack(Denotation container, Denotation decidedBy) {}
-
-    /**
      * The emptiness {@code stated} checks, or null where it is no size held against a number that
      * parts nought from every size above it.
      */
     static Checked checked(StatedComparison stated) {
-        StatedComparison.Numbered<AnOperationApplied> size =
-                stated.at(WhatAnEmptinessTurnsOn::aSize);
+        StatedComparison.Numbered<AnOperationApplied> size = stated.at(AnEmptinessCheck::aSize);
         if (size == null
                 || !(Core.withoutStanding(size.other()) instanceof Core.Int against)) {
             return null;
@@ -116,32 +88,6 @@ final class WhatAnEmptinessTurnsOn {
         Endpoint least = ResultRange.of(DefaultBoundOperationFacts.get().boundsOnTheResult(operation),
                 ConstantArguments.none()).min();
         return least != null && least.inclusive() && least.at().compareTo(Count.ZERO) == 0;
-    }
-
-    /**
-     * {@code stated} read back to the closure that decides the emptiness it checks — or empty where
-     * it is to be read as the comparison it is.
-     */
-    static Optional<ReadBack> of(StatedComparison stated, WhatNamesStandFor names) {
-        Checked checked = checked(stated);
-        if (checked == null) {
-            return Optional.empty();
-        }
-        Denotation container = names.standing(checked.container());
-        AnOperationApplied built = AnOperationApplied.of(container.value());
-        if (built == null) {
-            return Optional.empty();
-        }
-        var turns = DefaultBoundOperationFacts.get()
-                .turnsOnWhetherAnArgumentHolds(built.operation(), AnswerAspect.EMPTINESS);
-        Core handed = turns == null ? null : built.argument(turns.argument());
-        if (handed == null) {
-            return Optional.empty();
-        }
-        Denotation closure = names.in(container.at()).standing(handed);
-        return Core.withoutStanding(closure.value()) instanceof Core.Block block
-                ? Optional.of(new ReadBack(container, new Denotation(block.body(), closure.at())))
-                : Optional.empty();
     }
 
     /**

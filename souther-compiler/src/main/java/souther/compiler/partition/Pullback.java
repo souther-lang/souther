@@ -55,7 +55,7 @@ import java.util.function.Supplier;
  * <p><b>The steps.</b> A name or a {@code let} is what it stands for. A denial asks the other way
  * round. A conjunction, a disjunction, an {@code if} and a {@code match} are what their parts state,
  * joined the way the construct joins them. A size held against a number that parts nought from every
- * size above it asks whether the container holds anything ({@link WhatAnEmptinessTurnsOn#checked}).
+ * size above it asks whether the container holds anything ({@link AnEmptinessCheck#checked}).
  * An operation walking a container with a closure comes out the way some element witnesses
  * ({@link ElementWitness}), and one that answers as many as it was handed holds something exactly
  * where what it was handed does. What is left is a comparison, a truth, a case or a value being there
@@ -122,7 +122,7 @@ final class Pullback {
     static Pulled ofAComparison(StatedComparison comparison, InputReads reads, InputReading read,
                                 Optional<ModelOccurrence> where) {
         Pullback reading = new Pullback(read, where);
-        WhatAnEmptinessTurnsOn.Checked checked = WhatAnEmptinessTurnsOn.checked(comparison);
+        AnEmptinessCheck.Checked checked = AnEmptinessCheck.checked(comparison);
         Proposition stated;
         if (checked != null) {
             Proposition some = reading.observe(checked.container(), AnswerAspect.EMPTINESS, reads);
@@ -131,6 +131,25 @@ final class Pullback {
             stated = reading.compared(comparison, false, reads);
         }
         return new Pulled(stated, List.copyOf(reading.leaves));
+    }
+
+    /**
+     * Whether what a written comparison states was carried past it to the input — so that what it
+     * states is the parts it was carried to, and not a rule the comparison draws of its own.
+     *
+     * <p>Only an emptiness check is carried anywhere: any other comparison is the relation it
+     * states. And one is carried past only where the container it asks about is no position of its
+     * own and every part it was carried to was read — one that stopped on the way is a rule about a
+     * value made from the input, which the comparison still is.
+     */
+    static boolean carriesPast(StatedComparison comparison, InputReads reads, InputReading read) {
+        if (AnEmptinessCheck.checked(comparison) == null) {
+            return false;
+        }
+        Pulled pulled = ofAComparison(comparison, reads, read, Optional.empty());
+        return !(pulled.proposition() instanceof Proposition.Compared)
+                && pulled.leaves().stream().noneMatch(leaf ->
+                        leaf.part() instanceof Proposition.Unread unread && !unread.fixed());
     }
 
     /** What {@code container} holding something states. */
@@ -204,7 +223,7 @@ final class Pullback {
         }
         Optional<StatedComparison> stated = BooleanMeaning.asAComparison(e);
         if (stated.isPresent()) {
-            WhatAnEmptinessTurnsOn.Checked checked = WhatAnEmptinessTurnsOn.checked(stated.get());
+            AnEmptinessCheck.Checked checked = AnEmptinessCheck.checked(stated.get());
             if (checked != null) {
                 Proposition some = asking(new Denotation(e, reads),
                         () -> observe(checked.container(), AnswerAspect.EMPTINESS, reads));
@@ -393,7 +412,7 @@ final class Pullback {
                 return ofTheElement;
             }
             Proposition some = holdsSomethingAt(held);
-            return some != null ? leaf(some, new Denotation(e, reads))
+            return some != null ? leaf(some, askedAt != null ? askedAt : new Denotation(e, reads))
                     : unread(over, reads, new OnTheWay.Why.SizeOfTheContainerNotStated());
         }
         return new Proposition.Some(held, ofTheElement, true);

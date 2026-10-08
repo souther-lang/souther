@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.core.DeclaredOperation;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.Accumulation;
-import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.DefinitionCase;
@@ -151,13 +150,6 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     /** The operation answers whether the container it reads holds an element equal to what stands
      *  at {@code value}, which is of the type that container holds. */
     record AsksWhetherItsContainerHolds(DeclaredOperation operation, DeclaredArgument value)
-            implements OneAboutAnOperation {}
-
-    /** What {@code argument} answers decides {@code aspect} of what the operation answers, which is
-     *  the edge a rule written inside that argument reaches the call along. */
-    record TurnsOnWhetherAnArgumentHolds(DeclaredOperation operation,
-                                        AnswerAspect aspect,
-                                        DeclaredArgument argument)
             implements OneAboutAnOperation {}
 
     /**
