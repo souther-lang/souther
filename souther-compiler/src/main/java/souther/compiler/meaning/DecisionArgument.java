@@ -1,4 +1,4 @@
-package souther.compiler.partition;
+package souther.compiler.meaning;
 
 import souther.compiler.numeric.ExactRatio;
 

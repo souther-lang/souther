@@ -24,9 +24,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * as what the closure answered, the fork is about the positions the closure reads — and over a list
  * written out, about the rules the closure states for each element written there.
  *
- * <p>The emptiness check and the size against nought are one statement, so each is held to the
- * other. A size held against any other number counts what was kept, which no answer of the closure
- * states, and is still a rule about a value made from the input.
+ * <p>The emptiness check and the size against nought are one statement, and so is the size held
+ * at least one, so each is held to the others. A size held against a number that does not part
+ * nought from every size above it counts what was kept, which no answer of the closure states,
+ * and is still a rule about a value made from the input.
  */
 class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
 
@@ -94,6 +95,25 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
                         "List.length(reasons) /= 0 then 2 else 1"));
     }
 
+    /**
+     * A size is never below nought, so every comparison that holds at nought and nowhere above it,
+     * or above it and not at it, is the same statement as the check.
+     */
+    @Test
+    void aSizeHeldWhereItPartsNoughtFromTheRestIsTheSameStatement() {
+        for (String empty : List.of("List.length(reasons) <= 0", "List.length(reasons) < 1",
+                "0 >= List.length(reasons)")) {
+            assertTheSame(THE_REASONS_A_HELPER_BUILT,
+                    THE_REASONS_A_HELPER_BUILT.replace("List.isEmpty(reasons)", empty));
+        }
+        String some = THE_REASONS_A_HELPER_BUILT.replace("List.isEmpty(reasons) then 1 else 2",
+                "Bool.not(List.isEmpty(reasons)) then 2 else 1");
+        for (String held : List.of("List.length(reasons) >= 1", "List.length(reasons) > 0",
+                "1 <= List.length(reasons)")) {
+            assertTheSame(some, some.replace("Bool.not(List.isEmpty(reasons))", held));
+        }
+    }
+
     /** However many helpers the author put between the fork and the closure. */
     @Test
     void theHelpersBetweenAreNoPartOfWhatItMeans() {
@@ -137,17 +157,142 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
                 toldApart(empty), "as the quantifier the check denies is");
     }
 
-    /** How many were kept is no answer the closure gives, and is not read as one. */
+    /**
+     * A list of numbers handed in, asked whether a filter of it kept at least one, is asked whether
+     * some number meets the closure — the line {@code List.any} draws, and the rows that meet the
+     * one meet the other.
+     */
+    @Test
+    void atLeastOneKeptOfAListHandedInIsWhetherAnyMet() {
+        String pick = """
+                behavior pick : (xs: List<Int>) -> Int
+                let pick (xs) = if %s then 1 else 0
+                example pick
+                    | "one positive" : ([1]) -> 1
+                    | "zero is not positive" : ([0]) -> 0
+                    | "negative" : ([-1]) -> 0
+                    | "mixed" : ([-1, 3]) -> 1
+                    | "none" : ([]) -> 0
+                """;
+        assertTheSame(pick.formatted("List.any(x -> x > 0, xs)"),
+                pick.formatted("List.length(List.filter(x -> x > 0, xs)) >= 1"));
+        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, AdequacyReport.of(compiled(
+                pick.formatted("List.length(List.filter(x -> x > 0, xs)) >= 1"))).adequacy());
+    }
+
+    /**
+     * Which library's filter it is decides nothing: each says its emptiness turns on its closure
+     * and each size starts at nought, so every spelling reads back alike for a set and a map.
+     */
+    @Test
+    void aSetOrAMapFilteredIsReadAsAListIs() {
+        String set = """
+                behavior pick : (xs: Set<Int>) -> Int
+                let pick (xs) = if %s then 1 else 0
+                """;
+        String map = """
+                behavior pick : (m: Map<String, Int>) -> Int
+                let pick (m) = if %s then 1 else 0
+                """;
+        for (List<String> spelt : List.of(
+                List.of(set, "Set.isEmpty(Set.filter(x -> x > 0, xs))",
+                        "Set.size(Set.filter(x -> x > 0, xs))"),
+                List.of(map, "Map.isEmpty(Map.filterEntries((k, v) -> v > 0, m))",
+                        "Map.size(Map.filterEntries((k, v) -> v > 0, m))"))) {
+            String model = spelt.get(0);
+            String check = spelt.get(1);
+            String size = spelt.get(2);
+            for (String empty : List.of(" == 0", " <= 0", " < 1")) {
+                assertTheSame(model.formatted(check), model.formatted(size + empty));
+            }
+            for (String some : List.of(" /= 0", " > 0", " >= 1")) {
+                assertTheSame(model.formatted("Bool.not(" + check + ")"),
+                        model.formatted(size + some));
+            }
+        }
+    }
+
+    /**
+     * An operation that holds something exactly when what it was handed does is seen through to the
+     * filter, in every spelling of the check.
+     *
+     * <p>A set mapped may hold fewer than it was handed, where two elements map to one, and a set
+     * made from a list holds one of each element repeated — but neither is empty unless what it was
+     * made from is, so what the check asks of either is what it asks of the filter.
+     */
+    @Test
+    void anOperationThatKeepsWhetherItHoldsAnythingIsSeenThrough() {
+        String set = """
+                behavior pick : (xs: Set<Int>) -> Int
+                let pick (xs) = if %s then 1 else 0
+                """;
+        String list = """
+                behavior pick : (xs: List<Int>) -> Int
+                let pick (xs) = if %s then 1 else 0
+                """;
+        String setFiltered = "Set.filter(x -> x > 0, xs)";
+        String listFiltered = "List.filter(x -> x > 0, xs)";
+        for (List<String> kept : List.of(
+                List.of(set, "Set", setFiltered, "Set.map(x -> x + 1, " + setFiltered + ")"),
+                List.of(list, "Set", listFiltered, "Set.fromList(" + listFiltered + ")"),
+                List.of(list, "List", listFiltered, "List.map(x -> x + 1, " + listFiltered + ")"),
+                List.of(list, "List", listFiltered, "List.reverse(" + listFiltered + ")"),
+                List.of(list, "List", listFiltered, "List.sort(" + listFiltered + ")"))) {
+            String model = kept.get(0);
+            String library = kept.get(1);
+            String filter = kept.get(2);
+            String through = kept.get(3);
+            String filterLibrary = filter.substring(0, filter.indexOf('.'));
+            Compilation empty = compiled(model.formatted(filterLibrary + ".isEmpty(" + filter + ")"));
+            assertTheSame(empty, model.formatted(library + ".isEmpty(" + through + ")"));
+            String size = library.equals("List") ? "List.length(" : library + ".size(";
+            assertTheSame(empty, model.formatted(size + through + ") == 0"));
+            assertTheSame(model.formatted("Bool.not(" + filterLibrary + ".isEmpty(" + filter + "))"),
+                    model.formatted(size + through + ") >= 1"));
+        }
+    }
+
+    /**
+     * And an operation that can empty what it was handed, or that says nothing either way, stops
+     * the reading where it is.
+     */
+    @Test
+    void anOperationThatCanEmptyWhatItWasHandedIsNotSeenThrough() {
+        String list = """
+                behavior pick : (xs: List<Int>, n: Int) -> Int
+                let pick (xs, n) = if List.isEmpty(%s) then 1 else 0
+                """;
+        assertEquals(List.of("n RULE_ABOUT_A_DERIVED_VALUE", "xs[*] RULE_ABOUT_A_DERIVED_VALUE",
+                        "xs RULE_ABOUT_A_DERIVED_VALUE"),
+                notRead(measured(compiled(list.formatted(
+                        "List.take(n, List.filter(x -> x > 0, xs))")))),
+                "taking none of what was kept is empty whatever was kept");
+        String text = """
+                behavior pick : (s: String) -> Int
+                let pick (s) = if String.isEmpty(String.trim(s)) then 1 else 0
+                """;
+        assertEquals(List.of("s RULE_ABOUT_A_DERIVED_VALUE"),
+                notRead(measured(compiled(text))),
+                "a string of spaces trims to nothing");
+    }
+
+    /**
+     * How many were kept is no answer the closure gives, and is not read as one — nor is a
+     * comparison that does not part nought from every size above it.
+     */
     @Test
     void howManyWereKeptIsAValueMadeFromTheInput() {
-        PartitionEvidence counted = measured(compiled(TRIP + APPLIES + """
-                let submit (t) =
-                    if List.length(List.filter(r -> applies(t, r), [High, Abroad])) >= 2
-                    then 2 else 1
-                """));
-        assertEquals(List.of("t.cost RULE_ABOUT_A_DERIVED_VALUE",
-                        "t.abroad RULE_ABOUT_A_DERIVED_VALUE"),
-                counted.notRead().stream().map(each -> each.at() + " " + each.reason()).toList());
+        for (String count : List.of(">= 2", "== 1", "<= 1", "/= 1")) {
+            PartitionEvidence counted = measured(compiled(TRIP + APPLIES + """
+                    let submit (t) =
+                        if List.length(List.filter(r -> applies(t, r), [High, Abroad])) %s
+                        then 2 else 1
+                    """.formatted(count)));
+            assertEquals(List.of("t.cost RULE_ABOUT_A_DERIVED_VALUE",
+                            "t.abroad RULE_ABOUT_A_DERIVED_VALUE"),
+                    counted.notRead().stream().map(each -> each.at() + " " + each.reason())
+                            .toList(), count);
+        }
     }
 
     /**
@@ -245,7 +390,10 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
 
     /** Both spellings read every rule alike, tell the same apart and come to one verdict. */
     private static void assertTheSame(String one, String other) {
-        Compilation first = compiled(one);
+        assertTheSame(compiled(one), other);
+    }
+
+    private static void assertTheSame(Compilation first, String other) {
         Compilation second = compiled(other);
         assertEquals(List.of(), measured(first).notRead());
         assertEquals(notRead(measured(first)), notRead(measured(second)));

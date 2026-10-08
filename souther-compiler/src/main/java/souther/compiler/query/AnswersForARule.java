@@ -11,7 +11,7 @@ import souther.compiler.partition.CompositionAccount;
 import souther.compiler.partition.DemandGap;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.Generator;
-import souther.compiler.partition.InjectedAnswer;
+import souther.compiler.meaning.InjectedAnswer;
 import souther.compiler.partition.StandInAttempt;
 import souther.compiler.partition.StoodInAnswer;
 import souther.compiler.types.TypeSymbol;

@@ -35,12 +35,19 @@ public final class BooleanMeaning {
     /**
      * What {@code truth}, asserted where {@code positive}, says of the value under its denials — or
      * empty where nothing denies it, or where it is a connective rather than one value.
+     *
+     * <p>A denial of what a binding answers is a denial of that binding: {@code Bool.not} handed a
+     * helper's body denies the body, names and all. So what comes back there is the binding, and
+     * the asker reads it in the names it binds.
      */
     public static Optional<UnderADenial> underADenial(Core truth, boolean positive) {
-        return ClauseExpr.of(truth, positive) instanceof ClauseExpr.Leaf leaf
-                && leaf.spelled().size() > 1
-                ? Optional.of(new UnderADenial(leaf.of(), leaf.positive()))
-                : Optional.empty();
+        return switch (ClauseExpr.of(truth, positive)) {
+            case ClauseExpr.Leaf leaf when leaf.spelled().size() > 1 ->
+                    Optional.of(new UnderADenial(leaf.of(), leaf.positive()));
+            case ClauseExpr.Scoped scoped when scoped.spelled().size() > 1 ->
+                    Optional.of(new UnderADenial(scoped.spelled().getLast(), scoped.positive()));
+            default -> Optional.empty();
+        };
     }
 
     /**

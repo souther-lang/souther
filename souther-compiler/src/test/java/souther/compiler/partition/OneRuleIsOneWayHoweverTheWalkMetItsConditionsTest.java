@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 

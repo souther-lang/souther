@@ -1,4 +1,4 @@
-package souther.compiler.partition;
+package souther.compiler.meaning;
 
 import souther.compiler.inputs.TermPath;
 
@@ -33,9 +33,9 @@ public sealed interface DecisionSubject {
     /**
      * A position of the behavior's input, where a row writes a value.
      *
-     * <p>The position before any arm narrows it, the way {@link DecisionCondition.APosition} says:
-     * what the arms of one fork answer is one question about one position, and a subject carrying
-     * the narrowing would be a subject apiece for each answer.
+     * <p>The position before any arm narrows it: what the arms of one fork answer is one question
+     * about one position, and a subject carrying the narrowing would be a subject apiece for each
+     * answer.
      */
     record AnInput(TermPath at) implements DecisionSubject {
 

@@ -578,8 +578,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * <p>Asked of the node as it stands and not through what it stands as, so a comparison held as
      * another type is met once, where it is, and not again at its wrapper.
      *
-     * <p>And none where what it compares is read back to the closure that decides it
-     * ({@link WhatAnEmptinessTurnsOn}): the rules there are the closure's, and the fork around it
+     * <p>And none where what it states is carried past it to the input ({@link
+     * Pullback#carriesPast}): the rules there are the ones it was carried to, and the fork around it
      * is what turns on them. The names are asked for only there: this is asked at every node a
      * walk meets, and nearly all of them are no construct that states one.
      */
@@ -593,7 +593,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             return null;
         }
         return BooleanMeaning.asAComparison(e)
-                .filter(statement -> WhatAnEmptinessTurnsOn.of(statement, names.get()).isEmpty())
+                .filter(statement -> !Pullback.carriesPast(statement, names.get().reads(),
+                        names.get().read()))
                 .map(statement -> new StatedAt(written, statement)).orElse(null);
     }
 

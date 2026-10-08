@@ -409,6 +409,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "coverage/CoverageSites$Walk", "reads", "(" + core + "L" + c
                 + "types/BindingId;)Z", Reading.STRUCTURE, BINDINGS);
+        row(out, c + "coverage/CoverageSites$Walk", "readsABindingOf", "(" + core + "L" + c
+                + "types/BindingOwner;)Z", Reading.STRUCTURE, BINDINGS);
+        row(out, c + "check/PathReachability", "gatherPositions", "(" + core + reads
+                + "Ljava/util/Map;)V", Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         // Whether an answer a body can come to is the same on every run, asked of the body a run
         // goes through.
         row(out, c + "coverage/CoverageSites$Walk", "sameOnEveryRun", "(" + core + ")Z",
@@ -445,9 +449,13 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "partition/DecisionComparison$1", "readsThrough",
                 "(L" + CORE + "$FieldAccess;" + reads + ")Z", Reading.ONE_ACCESS, ONE);
         row(out, c + "partition/DecisionSubjects", "of", "(" + core + reads + ")L" + c
-                + "partition/DecisionSubject;", Reading.NAMES, READS_THE_NAMES);
+                + "meaning/DecisionSubject;", Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/LiveFlow", "walk", "(" + core + "Ljava/util/Set;)V",
                 Reading.STRUCTURE, BINDINGS);
+        row(out, c + "partition/MeaningsOfABodyReading", "walk", "(" + core + reads + ")V",
+                Reading.STRUCTURE, CHOICES_AND_CALLS);
+        row(out, c + "partition/Pullback", "boundForm", "(" + core + reads + ")L" + c
+                + "numeric/LinearForm;", Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/PredicateReadings", "walk", "(" + core + "Ljava/lang/String;L" + c
                 + "inputs/InputReading;" + reads + "L" + c + "partition/LiveFlow;ZLjava/util/List;L"
                 + c + "partition/RuleReachNumbering;Ljava/util/Set;L" + c

@@ -7,6 +7,7 @@ import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.OperationFact;
+import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.types.ValueName;
 
@@ -55,76 +56,100 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
                 "the container something is built from");
     }
 
-    /** A rule saying a side of the answer turns on whether an argument holds, bound to the
-     *  declaration it is about. */
-    private static void bindTurnsOn(String operation,
-                                    AnswerAspect aspect,
-                                    ArgumentRef argument) {
+    /**
+     * A key decides how many {@code List.distinctBy} answers and never whether it answers any, and
+     * it answers whichever value it projects rather than a truth — so no element is a witness of
+     * its answer by its key holding, and a law saying so is refused where it meets the signature.
+     * Read as one, a rule inside the key would be credited with deciding whether the answer is
+     * empty, and a model nothing read would come back read.
+     */
+    @Test
+    void aKeyIsNoWitness() {
+        IllegalStateException key = assertThrows(IllegalStateException.class,
+                () -> bindWitness("List.distinctBy", new SideAnswered(AnswerAspect.EMPTINESS, true),
+                        new SideAnswered(AnswerAspect.TRUTH, true)));
+        assertTrue(key.getMessage().contains("has no TRUTH"), key.getMessage());
+    }
+
+    /** A witness law, bound to the declaration it is about. */
+    private static void bindWitness(String operation, SideAnswered result,
+                                    SideAnswered ofTheClosure) {
         CompleteSignature declaration = declared(operation);
-        OperationFactBinder.holdTurnsOn(declaration, declaration.declaring(),
-                new OperationFact.TurnsOnWhetherAnArgumentHolds(
-                        aspect, argument));
+        OperationFactBinder.holdWitness(declaration, declaration.declaring(),
+                new OperationFact.ResultHasAnElementWitness(result, ofTheClosure));
+    }
+
+    /** An operation walking no container with a closure has no element to witness anything. */
+    @Test
+    void aWitnessOfAnOperationThatWalksNothingIsRefused() {
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> bindWitness("List.reverse", new SideAnswered(AnswerAspect.EMPTINESS, true),
+                        new SideAnswered(AnswerAspect.TRUTH, true)));
+        assertTrue(e.getMessage().contains("hands no closure the elements of a container"),
+                e.getMessage());
     }
 
     /**
-     * A closure that answers something other than a truth decides no "whether it holds".
-     *
-     * <p>The two the library has are the ones this compiler must not credit. {@code List.distinctBy}
-     * answers fewer where its key sends two elements to one, so the key does decide a count — and a
-     * key answers whichever value it projects rather than holding or not. {@code List.filterMap}
-     * answers fewer where its closure answered nothing, and what decides that is whether a value is
-     * there, which is not a truth either.
-     *
-     * <p>Written as this fact, both would be followed as one: a rule inside such a closure would be
-     * credited with deciding whether the answer is empty, and a model nothing read would come back
-     * read. So they are refused where the fact meets the signature.
+     * A side the result does not have, or a side the closure's answer does not have, is a law about
+     * something that is not there — read anyway, it would carry a statement back to one the model
+     * never made.
      */
     @Test
-    void aClosureAnsweringSomethingOtherThanATruthIsRefused() {
-        IllegalStateException key = assertThrows(IllegalStateException.class,
-                () -> bindTurnsOn("List.distinctBy",
-                        AnswerAspect.EMPTINESS,
-                        new ArgumentRef.TheClosure()));
-        assertTrue(key.getMessage().contains("whether it holds is not something to read"),
-                key.getMessage());
+    void aWitnessOnASideThatIsNotThereIsRefused() {
+        IllegalStateException result = assertThrows(IllegalStateException.class,
+                () -> bindWitness("List.filter", new SideAnswered(AnswerAspect.TRUTH, true),
+                        new SideAnswered(AnswerAspect.TRUTH, true)));
+        assertTrue(result.getMessage().contains("what List.filter answers is"),
+                result.getMessage());
 
-        IllegalStateException optional = assertThrows(IllegalStateException.class,
-                () -> bindTurnsOn("List.filterMap",
-                        AnswerAspect.EMPTINESS,
-                        new ArgumentRef.TheClosure()));
-        assertTrue(optional.getMessage().contains("whether it holds is not something to read"),
-                optional.getMessage());
-    }
+        IllegalStateException present = assertThrows(IllegalStateException.class,
+                () -> bindWitness("List.filter", new SideAnswered(AnswerAspect.EMPTINESS, true),
+                        new SideAnswered(AnswerAspect.PRESENCE, true)));
+        assertTrue(present.getMessage().contains("has no PRESENCE"), present.getMessage());
 
-    /** And a side of the answer the answer does not have. */
-    @Test
-    void aSideTheAnswerDoesNotHaveIsRefused() {
         IllegalStateException truth = assertThrows(IllegalStateException.class,
-                () -> bindTurnsOn("List.filter",
-                        AnswerAspect.TRUTH,
-                        new ArgumentRef.TheClosure()));
-        assertTrue(truth.getMessage().contains("no truth for an argument to decide"),
-                truth.getMessage());
-
-        IllegalStateException empty = assertThrows(IllegalStateException.class,
-                () -> bindTurnsOn("List.any",
-                        AnswerAspect.EMPTINESS,
-                        new ArgumentRef.TheClosure()));
-        assertTrue(empty.getMessage().contains("holds nothing for an argument to decide"),
-                empty.getMessage());
+                () -> bindWitness("List.filterMap", new SideAnswered(AnswerAspect.EMPTINESS, true),
+                        new SideAnswered(AnswerAspect.TRUTH, true)));
+        assertTrue(truth.getMessage().contains("has no TRUTH"), truth.getMessage());
     }
 
-    /** And the ones the library really does state, which bind. */
+    /** And the laws the library states, which bind. */
     @Test
-    void theOnesTheLibraryStatesBind() {
-        assertDoesNotThrow(() -> bindTurnsOn("List.filter",
-                AnswerAspect.EMPTINESS,
-                new ArgumentRef.TheClosure()));
-        assertDoesNotThrow(() -> bindTurnsOn("List.any",
-                AnswerAspect.TRUTH,
-                new ArgumentRef.TheClosure()));
-        assertDoesNotThrow(() -> bindTurnsOn("Bool.not",
-                AnswerAspect.TRUTH, new ArgumentRef.At(0)));
+    void theWitnessesTheLibraryStatesBind() {
+        assertDoesNotThrow(() -> bindWitness("List.filterMap",
+                new SideAnswered(AnswerAspect.EMPTINESS, true),
+                new SideAnswered(AnswerAspect.PRESENCE, true)));
+        assertDoesNotThrow(() -> bindWitness("List.flatMap",
+                new SideAnswered(AnswerAspect.EMPTINESS, true),
+                new SideAnswered(AnswerAspect.EMPTINESS, true)));
+        assertDoesNotThrow(() -> bindWitness("Map.filterEntries",
+                new SideAnswered(AnswerAspect.EMPTINESS, true),
+                new SideAnswered(AnswerAspect.TRUTH, true)));
+        assertDoesNotThrow(() -> bindWitness("List.all",
+                new SideAnswered(AnswerAspect.TRUTH, false),
+                new SideAnswered(AnswerAspect.TRUTH, false)));
+    }
+
+    /**
+     * Whether an answer holds anything is asked of the answer and of what it was made from, so an
+     * operation answering no container, or handed none where the statement names one, is refused.
+     */
+    @Test
+    void whatHoldsSomethingWhenItsSourceDoesIsAContainerMadeFromOne() {
+        IllegalStateException answer = assertThrows(IllegalStateException.class,
+                () -> bindKept("List.length", new ArgumentRef.At(0)));
+        assertTrue(answer.getMessage().contains("what holds something exactly when a container"
+                + " does"), answer.getMessage());
+        IllegalStateException source = assertThrows(IllegalStateException.class,
+                () -> bindKept("List.take", new ArgumentRef.At(0)));
+        assertTrue(source.getMessage().contains("not a container"), source.getMessage());
+        assertDoesNotThrow(() -> bindKept("Set.fromList", new ArgumentRef.At(0)));
+    }
+
+    private static void bindKept(String operation, ArgumentRef source) {
+        CompleteSignature declaration = declared(operation);
+        OperationFactBinder.holdKept(declaration, declaration.declaring(),
+                new OperationFact.KeepsWhetherItHoldsAnything(source));
     }
 
     @Test

@@ -244,6 +244,12 @@ public final class OperationFacts {
                             new ElementLineage.Source<>(CONTAINER, 1)), SizeAgainstItsSource.AT_MOST))),
             about("Set", "map", maps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
 
+            // Whether the answer holds anything, where that is whether what it was made from does
+            // and its size is not. An operation whose size is its source's keeps this too, and is
+            // not written again here (BoundOperationFacts.keepsWhetherItHoldsAnything).
+            about("Set", "map", new OperationFact.KeepsWhetherItHoldsAnything(CONTAINER)),
+            about("Set", "fromList", new OperationFact.KeepsWhetherItHoldsAnything(at(0))),
+
             // Which keys a map an operation answers is keyed by, where they are keys of a map it
             // was given. A rewrite of the values keeps every key, and taking entries out keeps the
             // keys of the ones left; putting one in does not, since the key put in was no key of
@@ -260,35 +266,33 @@ public final class OperationFacts {
             about("Map", "values", lists(at(0), MapPart.VALUES)),
             about("Map", "toList", lists(at(0), MapPart.ENTRIES)),
 
-            // Which side of an answer the closure decides, said and not read off a size. That a
-            // filter answers at most as many as it walked is the size fact above; that the
-            // closure's truth is why it answers fewer is this one, and a take or a distinct shows
-            // they are different statements — both answer at most as many, and neither of those
-            // asks a closure anything about it. So the edge is written for the operations whose
-            // answer the closure really does decide, and everything else says nothing.
+            // How each of the operations that walk a container with a closure comes out, as the
+            // element that witnesses it. A filter holds something where some element was kept, a
+            // filterMap where some element's answer held a value, a flatMap where some element's
+            // answer held something; `any` is true where some element's answer is, and `all` is
+            // false where some element's answer is false.
             //
-            // A mapping is the case this is for. `List.map` answers one per element whatever the
-            // closure said, so a rule written inside it decides what the answers are and not
-            // whether there are any.
+            // Said, and not read off a size. That a filter answers at most as many as it walked is
+            // the size fact above; that an element kept is one the closure held of is this, and a
+            // take or a distinct shows they are different statements — both answer at most as
+            // many, and neither asks a closure anything about it.
             //
-            // `List.distinctBy` is the case beside it. Its key does change how many it answers —
-            // two elements it sends to one key are one element of the answer — and never whether
-            // it answers any, since the first element of what it walked is always kept. So it says
-            // nothing here: what it decides is the count, and the count is not what a fork on
-            // emptiness reads.
-            //
-            // `List.filterMap` decides emptiness, and by whether the closure answered a value
-            // rather than by whether it holds. Nothing here can say that yet, so it says nothing
-            // rather than saying the nearest thing.
-            about("List", "filter", turnsOn(AnswerAspect.EMPTINESS)),
-            about("Set", "filter", turnsOn(AnswerAspect.EMPTINESS)),
-            about("Map", "filterEntries", turnsOn(AnswerAspect.EMPTINESS)),
-            // And the two whose whole answer is what the closure said of the elements.
-            about("List", "any", turnsOn(AnswerAspect.TRUTH)),
-            about("List", "all", turnsOn(AnswerAspect.TRUTH)),
-            // And a negation, whose whole answer is the truth of what it was given. Not a closure,
-            // which is why the fact names an argument rather than one kind of one.
-            about("Bool", "not", turnsOn(AnswerAspect.TRUTH, at(0))),
+            // A mapping has none. `List.map` answers one per element whatever the closure said,
+            // so whether it holds anything is what it was handed holding anything, which the size
+            // fact says already. `List.distinctBy` has none either: its key changes how many it
+            // answers and never whether it answers any, since the first element of what it walked
+            // is always kept.
+            about("List", "filter", witnessed(holdsSomething(true), holds(true))),
+            about("Set", "filter", witnessed(holdsSomething(true), holds(true))),
+            about("Map", "filterEntries", witnessed(holdsSomething(true), holds(true))),
+            about("List", "filterMap", witnessed(holdsSomething(true),
+                    new SideAnswered(AnswerAspect.PRESENCE, true))),
+            about("List", "flatMap", witnessed(holdsSomething(true), holdsSomething(true))),
+            about("List", "any", witnessed(holds(true), holds(true))),
+            about("List", "all", witnessed(holds(false), holds(false))),
+            // And `find`, which answers a value exactly where some element's answer is true.
+            about("List", "find", witnessed(new SideAnswered(AnswerAspect.PRESENCE, true),
+                    holds(true))),
 
             // The containers a construction's result is never smaller than. A union answers one of
             // what both sides hold and an insert of something already there adds nothing, so
@@ -462,14 +466,18 @@ public final class OperationFacts {
         return new OperationFact.MeansTheSameAsASizeOfNought(ValueName.Stdlib.operation(module, size));
     }
 
-    /** What an argument decides, for the operations whose answer turns on it. */
-    private static OperationFact turnsOn(AnswerAspect aspect) {
-        return new OperationFact.TurnsOnWhetherAnArgumentHolds(aspect, new ArgumentRef.TheClosure());
+    /** The result comes out as {@code result} exactly where some element's answer comes out as
+     *  {@code ofTheClosure}. */
+    private static OperationFact witnessed(SideAnswered result, SideAnswered ofTheClosure) {
+        return new OperationFact.ResultHasAnElementWitness(result, ofTheClosure);
     }
 
-    /** The same, where the argument is not a closure. */
-    private static OperationFact turnsOn(AnswerAspect aspect, ArgumentRef argument) {
-        return new OperationFact.TurnsOnWhetherAnArgumentHolds(aspect, argument);
+    private static SideAnswered holds(boolean holds) {
+        return new SideAnswered(AnswerAspect.TRUTH, holds);
+    }
+
+    private static SideAnswered holdsSomething(boolean holds) {
+        return new SideAnswered(AnswerAspect.EMPTINESS, holds);
     }
 
     /** The answer holds the very elements {@code source} held. */

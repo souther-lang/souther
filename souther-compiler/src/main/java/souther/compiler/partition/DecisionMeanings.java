@@ -5,6 +5,8 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;

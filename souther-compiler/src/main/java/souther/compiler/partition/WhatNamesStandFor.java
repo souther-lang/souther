@@ -36,6 +36,9 @@ interface WhatNamesStandFor {
     /** The reading these names are read in. */
     InputReads reads();
 
+    /** The reading of the input the names are read against. */
+    InputReading read();
+
     /** What {@code e} stands for, through every name that is one value, and the reading it stands
      *  in there; itself, here, where it is none. */
     Denotation denotes(Core e);

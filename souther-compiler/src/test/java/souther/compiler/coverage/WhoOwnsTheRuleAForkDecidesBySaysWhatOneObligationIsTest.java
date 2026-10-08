@@ -608,6 +608,10 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
      * language implements some of its own and writes others as sugar over one another. Answered
      * "this call rests on none of its arguments" where nothing was read, the rule reaching the fork
      * through one was not followed — so the rules two call sites wrote were counted as one.
+     *
+     * <p>Each closure answers by its argument, so neither copy of the helper's fork is settled
+     * whatever it was handed: a closure answering one string every time would make one arm of its
+     * copy one nothing reaches, and the count would no longer tell the copies apart from one.
      */
     @Test
     void aRuleReachingTheForkThroughACallNothingWasReadAboutIsStillTheCallers() {
@@ -625,15 +629,16 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
                 behavior twice : (a: Int, b: Int) -> Count
                     constructs Count
                 let twice (a, b) =
-                    Count((if decide(n -> "x", a) == Yes then 1 else 0)
-                        + (if decide(m -> "", b) == Yes then 1 else 0))
+                    Count((if decide(n -> if n > 0 then "x" else "", a) == Yes then 1 else 0)
+                        + (if decide(m -> if m > 1 then "y" else "", b) == Yes then 1 else 0))
 
                 example twice
                     | "one each" : (1, 1) -> Count(1)
                 """, "twice");
 
-        assertEquals(8, twice.arms().counted(),
-                "the helper's fork is one obligation per rule handed to it, beside the two here");
+        assertEquals(12, twice.arms().counted(),
+                "the helper's fork is one obligation per rule handed to it, beside the two here"
+                        + " and the two closures' own");
     }
 
     /** And so is one reaching it through a name the body bound a function to. */

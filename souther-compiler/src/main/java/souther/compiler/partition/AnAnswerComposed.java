@@ -4,6 +4,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import java.util.ArrayList;

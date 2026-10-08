@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.WhyUnread;
 
 import java.util.List;
 
@@ -205,7 +206,7 @@ public sealed interface OnTheWay {
      * answer belongs to whatever decided — {@link AffineReading}, which returns nothing and says
      * nothing about why — and it is not invented at this end from the shape of what it was given.
      */
-    sealed interface Why {
+    sealed interface Why extends WhyUnread {
 
         /** A condition that is neither a comparison nor a combination of them, so nothing was read
          *  of it. */

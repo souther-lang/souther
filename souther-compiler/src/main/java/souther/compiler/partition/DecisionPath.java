@@ -1,5 +1,9 @@
 package souther.compiler.partition;
 
+import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.InjectedAnswer;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;

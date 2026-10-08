@@ -3,6 +3,7 @@ package souther.compiler.flow;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.core.Core;
 
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -45,6 +46,18 @@ public interface ComparisonWays {
      * scrutinee, which is one value however many arms there are.
      */
     Predicate<Core.Case> mayTake(Core.Match match);
+
+    /**
+     * Whether the condition of {@code fork} can come out {@code want}, as what it states says — or
+     * empty where nothing is stated of it to this reading, and the ways of its parts answer.
+     *
+     * <p>Asked of the fork and not of its parts. Which arm a run can enter is what the condition
+     * means, and a reading that has that meaning in hand answers it once, however the condition is
+     * spelt and whatever the parts it is spelt in come to in the tree being read.
+     */
+    default Optional<Boolean> stated(Core.If fork, boolean want) {
+        return Optional.empty();
+    }
 
     /**
      * The same, in a child of the node being read, {@code step} being the way into it.

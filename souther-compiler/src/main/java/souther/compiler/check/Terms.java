@@ -1777,6 +1777,32 @@ final class Terms {
         return atom;
     }
 
+    /**
+     * The value at {@code place}, of type {@code type}, as the atom a rule reading it names — or null
+     * where it is no number the domain carries.
+     *
+     * <p>For a reader that holds a place and not the expression that reads it: what a proposition
+     * read off another tree says of a position. Named the way {@link #atomOfIdentity} names one, so
+     * the atom a guard here names and the atom such a proposition names are one.
+     */
+    FactSubject atomAt(FactSubject place, Type type) {
+        Carrier carrier = place == null ? null : Carrier.ofValue(type, declarations());
+        if (carrier == null || !carrier.counts()) {
+            return null;
+        }
+        FactSubject atom = named(place, granularityOf(type));
+        if (atom != null) {
+            atomExtents.putIfAbsent(atom, extentOf(type));
+        }
+        return atom;
+    }
+
+    /** The size {@code size} takes of what stands at {@code place}, named as {@link #sizeKeyOf}
+     *  names it, so a guard on the size here and a proposition about it are about one atom. */
+    FactSubject sizeAtPlace(ValueName size, FactSubject place) {
+        return place == null ? null : sizeKeyOf(size, place.identity());
+    }
+
     /** The size {@code size} takes of {@code container}, named as the whole number it is. A size
      * counts elements, so there is nothing to decide about how its values are spaced. It is the call
      * that takes it and nothing besides, which is the term a clause reading one builds and the term a

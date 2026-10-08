@@ -1,4 +1,4 @@
-package souther.compiler.partition;
+package souther.compiler.meaning;
 
 import souther.compiler.inputs.NumericTerm;
 
@@ -12,7 +12,7 @@ import souther.compiler.inputs.NumericTerm;
  * assume about the input and what a row may pin a dependency to are different licences, and a type
  * that carried both would hand each reader the other's.
  */
-public sealed interface DecisionAtom {
+public sealed interface DecisionAtom extends Quantity {
 
     /**
      * What this quantity is, as the identity of a column spells it.

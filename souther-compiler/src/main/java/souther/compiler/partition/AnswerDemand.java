@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.InjectedAnswer;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 

@@ -39,6 +39,10 @@ class NoReaderTakesTheRootOfAnAnalysisBodyWithoutItsTemplatesTest {
             "reads the root, and then each template once under what every build of it has in common",
             "souther/compiler/partition/PredicateReadings",
             "reads the root, and then each template once, live where any build of it is",
+            "souther/compiler/partition/MeaningsOfABodyReading",
+            "reads the root alone: it files what a condition states for a reader of the tree that"
+                    + " runs, and that tree builds a value by calling it, so no condition such a"
+                    + " reader asks is inside a template",
             "souther/compiler/partition/DecisionReading",
             "reads the root, and answers a build by what its template does; what is inside a template"
                     + " is no way of the body, since a value takes no input");

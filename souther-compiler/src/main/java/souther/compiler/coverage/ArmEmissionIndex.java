@@ -3,9 +3,11 @@ package souther.compiler.coverage;
 import souther.compiler.core.Core;
 import souther.compiler.types.ModelOccurrence;
 
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Where a run through each arm the model states is recorded.
@@ -97,5 +99,19 @@ public final class ArmEmissionIndex {
      */
     public List<ControlPlace.Arm> madeFor(ArmOfTheModel arm) {
         return emitted.getOrDefault(arm, List.of());
+    }
+
+    /**
+     * Every materialisation of the other arms of {@code arm}'s fork: where a run is recorded going
+     * some other way at the same fork of the model.
+     */
+    public Set<ControlPlace.Arm> besides(ArmOfTheModel arm) {
+        Set<ControlPlace.Arm> out = new HashSet<>();
+        emitted.forEach((each, made) -> {
+            if (each.fork().equals(arm.fork()) && each.part() != arm.part()) {
+                out.addAll(made);
+            }
+        });
+        return Set.copyOf(out);
     }
 }

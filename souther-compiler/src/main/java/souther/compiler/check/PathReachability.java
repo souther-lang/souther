@@ -21,11 +21,15 @@ import souther.compiler.reach.Proof;
 import souther.compiler.reach.Reachability;
 import souther.compiler.reach.Witness;
 import souther.compiler.reach.WhyUnsettled;
+import souther.compiler.meaning.MeaningsOfABody;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -235,7 +239,8 @@ public final class PathReachability {
      */
     public static Answers of(Core body, SpecImplementation.Implemented implemented,
                              CoverageSites.Plan plan, InputDomain read,
-                             RuleReadingContext ruleReading) {
+                             RuleReadingContext ruleReading, MeaningsOfABody meanings,
+                             ElementBindings elements) {
         Objects.requireNonNull(read, "a reachability reading is made against an input that was read");
         if (implemented == null) {
             return Answers.NONE;
@@ -249,7 +254,7 @@ public final class PathReachability {
             params = params.with(input.written().binder(),
                     TypeOps.successType(input.declared().type()));
         }
-        return of(body, params, plan, read, ruleReading);
+        return of(body, params, plan, read, ruleReading, meanings, elements);
     }
 
     /**
@@ -258,9 +263,15 @@ public final class PathReachability {
      * <p>Fail-open throughout. A condition of a shape the rules have no word for narrows nothing,
      * so the arms under it come out unsettled rather than proven either way; a walk that falls over
      * answers about what it had reached and no more.
+     *
+     * <p>What a condition of the model states is {@code meanings}' — read once, off the tree where
+     * the language's operations stand — and is what a path takes in where it passes one. A
+     * condition inside a copy of one of the language's operations is no condition of the model:
+     * the path goes on through it and takes nothing in.
      */
     public static Answers of(Core body, Scope params, CoverageSites.Plan plan, InputDomain read,
-                             RuleReadingContext ruleReading) {
+                             RuleReadingContext ruleReading, MeaningsOfABody meanings,
+                             ElementBindings elements) {
         Objects.requireNonNull(read, "a reachability reading is made against an input that was read");
         if (body == null) {
             return Answers.NONE;
@@ -274,16 +285,18 @@ public final class PathReachability {
             in = engine.enter(new Core.Read(p.getValue().name(), p.getKey(),
                     p.getValue().type(), body.pos()), in.known(), in.at());
         }
+        Map<String, BindingId> parameters = new LinkedHashMap<>();
+        read.parameterReads().forEach((binding, name) -> parameters.put(name, binding));
         PathReachability reading =
                 new PathReachability(engine, plan, read, ruleReading.source().symbols(),
                         ruleReading.source().newtypes(), out,
-                        arriving);
+                        arriving, meanings, new MeaningAssumptions.InputPlaces(parameters,
+                                path -> read.typeAt(path, ruleReading.source()), Map.of()));
         reading.entry = in.known();
         reading.entered = in.at();
         reading.walk(body, in.known(), in.at(),
                         InputReads.ofParameters(read.parameterReads(),
-                                read.declared(ruleReading.source()),
-                                ElementBindings.NONE),
+                                read.declared(ruleReading.source()), elements),
                         List.of(), true);
         // A walk that ran to the end and made none of the answers it is written to produce. Its own
         // limit and said as one: the analysis this borrows is open about what it reads, so a
@@ -408,12 +421,18 @@ public final class PathReachability {
      */
     private Known entry;
     private Denotations entered = Denotations.none();
+    /** What each condition of the model this body is states, read off the tree its operations
+     *  stand in. */
+    private final MeaningsOfABody meanings;
+    /** Where the positions those statements name stand in this tree. */
+    private final MeaningAssumptions.InputPlaces places;
 
     private PathReachability(PathEngine engine, CoverageSites.Plan plan, InputDomain read,
                              Symbols symbols, DeclarationNewtypes newtypes,
                              Map<ControlPlace, Reachability> out,
                              Map<ConstructOccurrence,
-                                     souther.compiler.reach.ComparisonArrival> arriving) {
+                                     souther.compiler.reach.ComparisonArrival> arriving,
+                             MeaningsOfABody meanings, MeaningAssumptions.InputPlaces places) {
         this.engine = engine;
         this.entry = engine.nothingKnown();
         this.plan = plan;
@@ -424,6 +443,63 @@ public final class PathReachability {
         this.newtypes = newtypes;
         this.out = out;
         this.arriving = arriving;
+        this.meanings = Objects.requireNonNull(meanings);
+        this.places = places;
+    }
+
+    /**
+     * What {@code k} comes to once {@code cond} — {@code part} of the construct {@code at} is one
+     * of — comes out {@code positive}.
+     *
+     * <p>What a condition of the model states is read off {@link #meanings}. One inside a copy of
+     * one of the language's operations is no condition of the model, and the path takes nothing in
+     * there. One the reading of the model has nothing filed for is read as it stands here.
+     */
+    private Predicates.Assumed assuming(ConstructOccurrence at, MeaningsOfABody.Part part,
+                                        Core cond, Known k, Denotations in, InputReads reads,
+                                        boolean positive) {
+        Optional<ModelOccurrence> construct = ModelOccurrence.statedAt(at);
+        if (construct.isEmpty()) {
+            return new Predicates.Assumed(k, false, true);
+        }
+        Optional<Proposition> stated =
+                meanings.at(new MeaningsOfABody.Site(construct.get(), part));
+        if (stated.isPresent()) {
+            return engine.assuming(stated.get(), cond, k, in, positive,
+                    places.readBy(positionsReadBy(cond, reads)));
+        }
+        // A body with no analysis to read it off has its conditions read as they stand here,
+        // which is the one reading such a body has. A body that has one and files nothing at a
+        // site takes nothing in there: what its conditions mean is not read twice.
+        return meanings == MeaningsOfABody.NONE ? engine.assuming(cond, k, in, positive)
+                : new Predicates.Assumed(k, false, false);
+    }
+
+    /**
+     * The expression of {@code cond} that reads each position of the input, where {@code reads}
+     * places one: what a proposition about that position is about, in this tree.
+     *
+     * <p>Only what is read where the condition stands. Under a binding the condition makes, a name
+     * is one the bindings in force here say nothing of, so nothing below one is taken.
+     */
+    private Map<TermPath, Core> positionsReadBy(Core cond, InputReads reads) {
+        Map<TermPath, Core> out = new HashMap<>();
+        gatherPositions(cond, reads, out);
+        return out;
+    }
+
+    private void gatherPositions(Core standing, InputReads reads, Map<TermPath, Core> out) {
+        Core e = Core.withoutStanding(standing);
+        for (Core each : Core.subexpressionsAt(e)) {
+            if (reads.pathOf(each, newtypes) instanceof PathResolution.At(TermPath at)) {
+                out.putIfAbsent(at, each);
+            }
+        }
+        if (e instanceof Core.LetIn || e instanceof Core.Block || e instanceof Core.Match
+                || e instanceof Core.IfConstructed) {
+            return;
+        }
+        Core.forEachChild(e, child -> gatherPositions(child, reads, out));
     }
 
     /**
@@ -472,7 +548,8 @@ public final class PathReachability {
                 // Read the other way round, a comparison guarded by its neighbour would be read
                 // against conditions nothing on the way to it established.
                 boolean reachedWhen = binary.op().rightRunsWhenLeftIs();
-                Predicates.Assumed reaching = engine.assuming(binary.left(), k, at, reachedWhen);
+                Predicates.Assumed reaching = assuming(binary.occurrence(),
+                        MeaningsOfABody.Part.LEFT, binary.left(), k, at, reads, reachedWhen);
                 walk(binary.right(), reaching.known(), at, reads,
                         with(decided, reaching, binary.left().pos(), reachedWhen), nothingAbove);
             }
@@ -614,7 +691,8 @@ public final class PathReachability {
             if (where.isEmpty()) {
                 continue;
             }
-            Predicates.Assumed taken = engine.assuming(comparison, k, at, result);
+            Predicates.Assumed taken = assuming(comparison.occurrence(),
+                    MeaningsOfABody.Part.ITSELF, comparison, k, at, reads, result);
             out.put(where.get(), taken.known().reachesNothing()
                     ? new Reachability.Unreachable(Proof.conditionsThatCannotAllHold(
                             with(decided, taken, comparison.pos(), result)))
@@ -663,9 +741,11 @@ public final class PathReachability {
      * domain went empty: what is wanted is whether the guards above did any of the work, and that
      * is a question about those two states and not about how either was reached.
      */
-    private Proof why(Core cond, boolean holds,
+    private Proof why(Core.If iff, boolean holds,
                       List<PathDecision> under, InputReads reads) {
-        if (engine.assuming(cond, entry, entered, holds).known().reachesNothing()) {
+        Core cond = iff.cond();
+        if (assuming(iff.place().occurrence(), MeaningsOfABody.Part.CONDITION, cond, entry,
+                entered, reads, holds).known().reachesNothing()) {
             TermPath position = comparedPositionIn(cond, reads);
             NumericDomain.Bounds admits = position == null ? null : valueBoundsAt(position);
             if (admits != null && !under.isEmpty()) {
@@ -790,13 +870,14 @@ public final class PathReachability {
     private void enterArm(ControlPlace.Arm[] arms, int index, Core.If iff, Core arm,
                           Known k, Denotations at, InputReads reads, List<PathDecision> decided,
                           boolean holds) {
-        Predicates.Assumed taken = engine.assuming(iff.cond(), k, at, holds);
+        Predicates.Assumed taken = assuming(iff.place().occurrence(),
+                MeaningsOfABody.Part.CONDITION, iff.cond(), k, at, reads, holds);
         Known inside = taken.known();
         List<PathDecision> under = with(decided, taken, iff.cond().pos(), holds);
         if (arms != null && index < arms.length) {
             out.put(arms[index], inside.reachesNothing()
                     ? new Reachability.Unreachable(
-                            why(iff.cond(), holds, under, reads))
+                            why(iff, holds, under, reads))
                     : new Reachability.Unsettled(whyNot(taken, iff.cond())));
         }
         walk(arm, inside, at,

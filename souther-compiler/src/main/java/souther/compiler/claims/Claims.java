@@ -5,6 +5,7 @@ import souther.compiler.reach.Reachability;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * A behavior's claims, held against the reading of its input.
@@ -58,11 +59,15 @@ public final class Claims {
      * <p>A claim naming a position the reading has none of is unproven rather than anything else:
      * what would settle it was never read, and a target nothing resolves is a fact about how far
      * this compiler walks rather than about the model.
+     *
+     * <p>The reading is asked for only where there is a claim to judge. It walks every path of the
+     * body under its rules, and most bodies claim nothing.
      */
-    public static Claims of(UnreachableClaims claims, PathReachability.Answers arrives) {
+    public static Claims of(UnreachableClaims claims, Supplier<PathReachability.Answers> reading) {
         if (claims.isEmpty()) {
             return NONE;
         }
+        PathReachability.Answers arrives = reading.get();
         // The claims name arms of one plan and the reading answers about the places of one plan, so
         // the two are held to being the same plan's here, where they are put together. Read against
         // another module's, every arm would be one the reading has nothing filed under — which is

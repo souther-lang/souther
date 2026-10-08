@@ -253,11 +253,11 @@ class AReadingAnswersAboutThePlacesOfOnePlanTest {
 
         UnreachableClaims claims = declared.claims();
         assertFalse(claims.isEmpty(), "the body declares that a case cannot arrive");
-        assertEquals(claims.all().size(), Claims.of(claims, declared.arrives).all().size(),
+        assertEquals(claims.all().size(), Claims.of(claims, () -> declared.arrives).all().size(),
                 "read against its own plan, every claim it makes is judged");
 
         IllegalArgumentException refusal = assertThrows(IllegalArgumentException.class,
-                () -> Claims.of(claims, refused.arrives));
+                () -> Claims.of(claims, () -> refused.arrives));
 
         assertTrue(refusal.getMessage().contains("was made under"),
                 () -> "the refusal names the two numberings: " + refusal.getMessage());

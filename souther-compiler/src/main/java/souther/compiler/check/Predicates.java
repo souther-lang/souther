@@ -11,6 +11,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.core.Core;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import java.util.ArrayList;
@@ -977,6 +978,21 @@ final class Predicates {
      * outside the affine fragment, leave {@code k} unchanged (sound). */
     Assumed assumeCond(Core rawCond, Known k, Denotations at, boolean positive) {
         return new Assuming(this).read(rawCond, positive, at, terms::inside).from(k);
+    }
+
+    /**
+     * Refines {@code k} by what {@code stated} — what {@code cond} states — coming out
+     * {@code positive} makes certain ({@link MeaningAssumptions}), and by {@code cond} itself having
+     * come out that way: the expression is what a guard settling it again would settle, whatever it
+     * states.
+     */
+    Assumed assumeMeaning(Proposition stated, Core cond, Known k, Denotations at, boolean positive,
+                          MeaningAssumptions.InputPlaces places) {
+        Assumed meant = MeaningAssumptions.assumed(stated, positive, k, terms, places, at);
+        FactSubject key = terms.subjectOf(cond, at);
+        return key == null ? meant
+                : new Assumed(meant.known().taking(key, positive, Known.Held.ON_THE_PATH), true,
+                        meant.shapeRead());
     }
 
     /**

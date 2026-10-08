@@ -173,6 +173,23 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation answers a container that holds something exactly when {@code source} does.
+     *
+     * <p>Its own statement and not a size. {@code Set.map} may answer fewer elements than it was
+     * handed, where two map to one, and {@code Set.fromList} one of each repeated element — so
+     * neither is the same size as its source, and a filter is at most its source too. What these
+     * keep is only whether there is anything, which is what a check of emptiness asks of them and
+     * so what a reader can carry back to the source. An operation that can empty what it was handed
+     * ({@code List.take}, {@code String.trim}) says nothing of the kind.
+     */
+    record KeepsWhetherItHoldsAnything(ArgumentRef source) implements OperationFact {
+
+        public KeepsWhetherItHoldsAnything {
+            Objects.requireNonNull(source, "this one names what the answer was made from");
+        }
+    }
+
+    /**
      * The operation answers a list of what {@code map} holds: its keys, its values, or its entries
      * as pairs of a key and the value filed under it.
      *
@@ -245,37 +262,42 @@ public sealed interface OperationFact {
     }
 
     /**
-     * What the closure answered decides {@code aspect} of what the operation answers.
+     * What the operation answers comes out as {@code result} exactly where, for some element of the
+     * container it walks, what its closure answers comes out as {@code ofTheClosure}.
      *
-     * <p><b>Said, and never read off a size.</b> That {@code List.filter} answers at most as many
-     * as it walked is one fact ({@link BuiltFrom}); that the closure's truth is <em>why</em> it
-     * answers fewer is another, and the first does not state the second. An operation whose result
-     * is smaller for a reason of its own — a take, a distinct — is one whose closure decides
-     * nothing, and a reading that took the size for the cause would say a rule inside such a call
-     * decides what the call comes to.
+     * <p>An equivalence, and the whole of what the operation's answer is on that side: the result
+     * comes out the other way exactly where no element is such a witness. So a statement about the
+     * result is a statement about the elements, either way round, and a reader carrying one across
+     * says nothing the operation does not.
      *
-     * <p>Which is what a reader wants it for. A rule written inside a closure reaches what the call
-     * answers only along an edge declared here: {@code List.any(p, xs)} turns on what {@code p}
-     * answered, and so does whether {@code List.filter(p, xs)} holds anything — while whether
-     * {@code List.map(p, xs)} does not, since the mapping answers one per element whatever the
-     * closure said, and a rule inside it says nothing about whether the answer is empty.
+     * <p><b>One quantifier for all of them.</b> {@code List.filter} holds something where some
+     * element's answer is true; {@code List.filterMap} where some element's answer holds a value;
+     * {@code List.flatMap} where some element's answer holds something; {@code List.any} is true
+     * where some element's answer is true. {@code List.all} is the same statement turned round: it
+     * is false where some element's answer is false. Said that way, every one is "some element is a
+     * witness", and what an empty container answers — nothing kept, {@code any} false,
+     * {@code all} true — follows from there being no element and is not a case of its own.
      *
-     * <p><b>Nothing here is about the type of what stands there.</b> What is stated is about the
-     * answer, and a closure and a truth are both things that answer; which argument may carry the
-     * fact is what naming it holds it to.
+     * <p><b>Not a dependency.</b> That the closure's answer decides a side of the result is weaker:
+     * an operation could turn on its closure and answer by some other rule than this one. What is
+     * declared here is the rule, so a reader carrying a statement across it says what the operation
+     * does and not what it might.
      *
-     * <p><b>Silence is the answer for everything else.</b> An operation with no such fact is one
-     * this compiler cannot follow to the answer, and a reader stops there rather than
-     * guessing — which leaves a fork stating a rule of its own, and is the safe way round: a rule
-     * credited to nobody leaves a measure open, and one credited to the wrong owner reports a model
-     * nothing read as one read to the end.
+     * <p><b>Silence is the answer for everything else.</b> An operation with no such law is one a
+     * reader cannot carry a statement through, and it stops there rather than guessing — which is
+     * the safe way round: a rule credited to nobody leaves a measure open, and one credited to the
+     * wrong owner reports a model nothing read as one read to the end.
+     *
+     * <p>Which argument is the container and which the closure, and which of the closure's
+     * parameters an element arrives on, is what the operation's signature says
+     * ({@link Combinator}), and is not said again here.
      */
-    record TurnsOnWhetherAnArgumentHolds(AnswerAspect aspect, ArgumentRef argument)
+    record ResultHasAnElementWitness(SideAnswered result, SideAnswered ofTheClosure)
             implements OperationFact {
 
-        public TurnsOnWhetherAnArgumentHolds {
-            Objects.requireNonNull(aspect, "this one names a side of the answer");
-            Objects.requireNonNull(argument, "this one names an argument");
+        public ResultHasAnElementWitness {
+            Objects.requireNonNull(result, "this one says how the result comes out");
+            Objects.requireNonNull(ofTheClosure, "and how a witness's answer does");
         }
     }
 

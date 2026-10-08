@@ -46,7 +46,7 @@ final class AnOperationsTruthComesOutAsItCan implements ComparisonWays {
     @Override
     public boolean comesOut(Core e, boolean want, Function<Core.Read, Core> settledBy) {
         TruthOutcomes.Outcomes outcomes = TruthOutcomes.ofTheTruth(e,
-                WhatNamesStandFor.in(reads, read), read.rules().symbols());
+                WhatNamesStandFor.in(reads, read));
         if (outcomes.always(true) || outcomes.always(false)) {
             return outcomes.allows(want);
         }

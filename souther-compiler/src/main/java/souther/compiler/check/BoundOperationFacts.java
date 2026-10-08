@@ -2,13 +2,13 @@ package souther.compiler.check;
 
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.Accumulation;
-import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.MapPart;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.ResultBound;
+import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BinOp;
@@ -242,6 +242,33 @@ public final class BoundOperationFacts {
         return held == null ? null : held.map();
     }
 
+    /**
+     * The container {@code operation}'s answer holds something exactly when, or null where it
+     * says nothing of the kind.
+     *
+     * <p>The one place this is asked. An operation that says so outright answers here, and so
+     * does one that builds its answer as many as a single source it was handed: what is the same
+     * size is empty when its source is. Read anywhere else as one of the two, an operation that
+     * said the other would stop a reading this one carries on.
+     */
+    public DeclaredArgument keepsWhetherItHoldsAnything(ValueName operation) {
+        BoundOperationFact.KeepsWhetherItHoldsAnything held =
+                one(BoundOperationFact.KeepsWhetherItHoldsAnything.class, operation);
+        if (held != null) {
+            return held.source();
+        }
+        BuiltFrom<DeclaredArgument> built = buildsItsResultFrom(operation);
+        return built == null || built.outputs().size() != 1
+                || built.size() != SizeAgainstItsSource.SAME
+                ? null : built.lineage().source().argument();
+    }
+
+    /** The operations that say outright their answer holds something exactly when a container
+     *  they were handed does. */
+    public Set<ValueName> keepsWhetherItHoldsAnything() {
+        return ones(BoundOperationFact.KeepsWhetherItHoldsAnything.class);
+    }
+
     /** The containers {@code operation}'s result is never smaller than, in the order declared. */
     public List<DeclaredArgument> resultIsNoSmallerThan(ValueName operation) {
         return operation == null ? List.of() : noSmallerThan.getOrDefault(operation, List.of());
@@ -271,13 +298,18 @@ public final class BoundOperationFacts {
         return ones(BoundOperationFact.AsksWhetherItsContainerHolds.class);
     }
 
-    /** Which argument {@code aspect} of {@code operation}'s answer turns on, or null where the
-     *  library says nothing about what decides it. */
-    public BoundOperationFact.TurnsOnWhetherAnArgumentHolds turnsOnWhetherAnArgumentHolds(
-            ValueName operation, AnswerAspect aspect) {
-        BoundOperationFact.TurnsOnWhetherAnArgumentHolds held =
-                one(BoundOperationFact.TurnsOnWhetherAnArgumentHolds.class, operation);
-        return held == null || held.aspect() != aspect ? null : held;
+    /** The element that witnesses how {@code operation}'s answer comes out, or null where the
+     *  library states no such law of it. */
+    public ElementWitness resultHasAnElementWitness(ValueName operation) {
+        BoundOperationFact.ResultHasAnElementWitness held =
+                one(BoundOperationFact.ResultHasAnElementWitness.class, operation);
+        return held == null ? null : new ElementWitness(held.result(), held.ofTheClosure(),
+                held.container(), held.closure());
+    }
+
+    /** The operations whose answer has an element that witnesses it. */
+    public Set<ValueName> resultHasAnElementWitness() {
+        return ones(BoundOperationFact.ResultHasAnElementWitness.class);
     }
 
     /** Where {@code operation}'s predicate is stated over a projection, or null where it is stated

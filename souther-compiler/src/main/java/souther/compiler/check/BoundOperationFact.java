@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.core.DeclaredOperation;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.Accumulation;
-import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.DefinitionCase;
@@ -11,6 +10,7 @@ import souther.compiler.semantics.ElementShape;
 import souther.compiler.semantics.MapPart;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.ResultBound;
+import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
@@ -95,6 +95,10 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     record KeepsTheKeysOf(DeclaredOperation operation, DeclaredArgument map)
             implements OneAboutAnOperation {}
 
+    /** The operation answers a container holding something exactly when {@code source} does. */
+    record KeepsWhetherItHoldsAnything(DeclaredOperation operation, DeclaredArgument source)
+            implements OneAboutAnOperation {}
+
     /** The operation answers a list of {@code part} of what {@code map} holds. */
     record ListsAPartOf(DeclaredOperation operation, DeclaredArgument map,
                         MapPart part)
@@ -152,11 +156,18 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     record AsksWhetherItsContainerHolds(DeclaredOperation operation, DeclaredArgument value)
             implements OneAboutAnOperation {}
 
-    /** What {@code argument} answers decides {@code aspect} of what the operation answers, which is
-     *  the edge a rule written inside that argument reaches the call along. */
-    record TurnsOnWhetherAnArgumentHolds(DeclaredOperation operation,
-                                        AnswerAspect aspect,
-                                        DeclaredArgument argument)
+    /**
+     * What the operation answers comes out as {@code result} exactly where some element of
+     * {@code container}, handed to {@code closure}, answers as {@code ofTheClosure}.
+     *
+     * <p>The container and the closure are the ones the signature says the operation walks and
+     * applies, resolved here so that a reader holds the arguments and not a word for them.
+     */
+    record ResultHasAnElementWitness(DeclaredOperation operation,
+                                     SideAnswered result,
+                                     SideAnswered ofTheClosure,
+                                     DeclaredArgument container,
+                                     DeclaredArgument closure)
             implements OneAboutAnOperation {}
 
     /** The predicate is stated over a projection of each element, and {@code projection} is where
