@@ -181,8 +181,7 @@ final class DemandReading {
                  Proposition.SameValue _ ->
                     List.of(new Read.Unread(new OnTheWay.Why.NoWordsForTheShape()));
             case Proposition.Unread unread -> List.of(new Read.Unread(
-                    unread.why() instanceof OnTheWay.Why why ? why
-                            : new OnTheWay.Why.NoWordsForTheShape()));
+                    new OnTheWay.Why.TheMeaningWasNotRead(unread.why())));
             case Proposition.All all -> {
                 List<Read> out = new ArrayList<>();
                 all.parts().forEach(part -> out.addAll(projected(part, read)));

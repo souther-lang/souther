@@ -206,11 +206,17 @@ public sealed interface OnTheWay {
      * answer belongs to whatever decided — {@link AffineReading}, which returns nothing and says
      * nothing about why — and it is not invented at this end from the shape of what it was given.
      */
-    sealed interface Why extends WhyUnread {
+    sealed interface Why {
 
         /** A condition that is neither a comparison nor a combination of them, so nothing was read
          *  of it. */
         record NoWordsForTheShape() implements Why {}
+
+        /**
+         * Part of what the condition means was not read, for a reason about the domain the reading
+         * is over — said in the reading's words and carried as they are.
+         */
+        record TheMeaningWasNotRead(WhyUnread why) implements Why {}
 
         /**
          * A comparison this reading did not turn into a cut.
@@ -255,27 +261,6 @@ public sealed interface OnTheWay {
          * reach this arm, so they arrive here as one word.
          */
         record ForkArmNotReadAsANarrowing() implements Why {}
-
-        /**
-         * A condition about what a container holds, over a container this reading could not
-         * follow to a position of the input.
-         *
-         * <p>What such a condition asks of a row is something of the container's elements, and an
-         * element is somewhere only where the container is: with no position for the container
-         * there is nowhere for what is asked of its elements to be written.
-         */
-        record ContainerAtNoPosition() implements Why {}
-
-        /**
-         * A condition about whether a container holds a value, where the value stands at no
-         * position of the input.
-         *
-         * <p>Read and not of a shape this has no words for: the container is at a position and
-         * what is asked of it is plain. What is missing is somewhere to read the value from — a
-         * value written in the source, or one a helper builds — and what a row would hold is
-         * that value, which nothing here writes into the container yet.
-         */
-        record ValueAtNoPosition() implements Why {}
 
         /**
          * A condition every element of a container has to meet, which says something of more than

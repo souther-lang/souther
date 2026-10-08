@@ -2,7 +2,10 @@ package souther.compiler.meaning;
 
 import souther.compiler.types.ModelOccurrence;
 
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -16,10 +19,15 @@ import java.util.Set;
  * the copies here state different things the site is ambiguous and answers nothing, so no reader
  * takes one copy's statement for another's.
  *
- * @param stated    what is stated at each site read to one statement
+ * <p>Two copies are compared by what they state and not by how it was derived. Two expansions of
+ * one helper can reach one proposition by different rules, and that makes the site no less one
+ * statement. How the first was derived is the one kept, and it is part of what this is equal by:
+ * a reader explaining a fork from it would otherwise be handed an account a revision ago.
+ *
+ * @param stated    what is stated at each site read to one statement, and how
  * @param ambiguous the sites whose copies state different things
  */
-public record MeaningsOfABody(Map<Site, Proposition> stated, Set<Site> ambiguous) {
+public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous) {
 
     /** A body nothing was read of. */
     public static final MeaningsOfABody NONE = new MeaningsOfABody(Map.of(), Set.of());
@@ -47,9 +55,54 @@ public record MeaningsOfABody(Map<Site, Proposition> stated, Set<Site> ambiguous
      */
     public record Site(ModelOccurrence construct, Part part) {}
 
+    /**
+     * What a site states, and how that was derived.
+     *
+     * @param states what holds where the truth asked there does
+     * @param how    the derivation it was concluded from
+     */
+    public record Meaning(Proposition states, Derivation how) {
+
+        public Meaning {
+            Objects.requireNonNull(states, "a site states something");
+            Objects.requireNonNull(how, "what a site states was derived");
+        }
+    }
+
+    /**
+     * What is stated at each site, filed as copies of it are met.
+     *
+     * <p>A site met again is compared by what the copy states: the same proposition derived another
+     * way is the same statement and leaves the first derivation where it is, and another proposition
+     * makes the site ambiguous.
+     */
+    public static final class Filing {
+
+        private final Map<Site, Meaning> stated = new LinkedHashMap<>();
+        private final Set<Site> ambiguous = new HashSet<>();
+
+        /** {@code meaning}, met at {@code site}. */
+        public void met(Site site, Meaning meaning) {
+            Meaning before = stated.putIfAbsent(site, meaning);
+            if (before != null && !before.states().equals(meaning.states())) {
+                ambiguous.add(site);
+            }
+        }
+
+        /** What was filed. */
+        public MeaningsOfABody filed() {
+            return new MeaningsOfABody(stated, ambiguous);
+        }
+    }
+
     /** What is stated at {@code site}, or empty where nothing was read there or its copies state
      *  different things. */
     public Optional<Proposition> at(Site site) {
+        return meaningAt(site).map(Meaning::states);
+    }
+
+    /** What is stated at {@code site} and how, or empty as {@link #at} is. */
+    public Optional<Meaning> meaningAt(Site site) {
         return ambiguous.contains(site) ? Optional.empty() : Optional.ofNullable(stated.get(site));
     }
 }

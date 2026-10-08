@@ -74,6 +74,8 @@ class TheAnswersAboutEachConformanceCorpusAreTheOnesCheckedInTest {
                     ConformanceSnapshot.diagnostics(analysed)));
             out.add(new Document(corpus.name(), corpus.name() + "/expected.generated.txt",
                     ConformanceSnapshot.generated(analysed)));
+            out.add(new Document(corpus.name(), corpus.name() + "/expected.unread.txt",
+                    ConformanceSnapshot.unread(analysed)));
         }
         return out;
     }

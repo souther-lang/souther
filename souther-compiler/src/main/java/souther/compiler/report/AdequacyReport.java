@@ -42,6 +42,7 @@ import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.DecidedCondition;
 import souther.compiler.partition.DecisionCondition;
 import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.DomainPoint;
@@ -3874,12 +3875,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     "an outcome that states one of two things";
             case OnTheWay.Why.ForkArmNotReadAsANarrowing _ ->
                     "an arm of a fork this reading could not read as a narrowing of a position";
-            case OnTheWay.Why.ContainerAtNoPosition _ ->
-                    "a condition about what a container holds, over a container that stands at no"
-                            + " position";
-            case OnTheWay.Why.ValueAtNoPosition _ ->
-                    "a condition about whether a container holds a value, where the value stands"
-                            + " at no position";
+            case OnTheWay.Why.TheMeaningWasNotRead(WhyUnread unread) -> whyNotRead(unread);
             case OnTheWay.Why.MoreThanEachElement _ ->
                     "a condition every element has to meet that is about more than the element";
             case OnTheWay.Why.SizeOfTheContainerNotStated _ ->
@@ -3887,6 +3883,44 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             + " which is no number this reading measures";
         };
     }
+
+    /**
+     * What stopped the reading of what a condition means, as a noun phrase beside the ones above.
+     *
+     * <p>Said by the shape of the condition the reading stopped at, which is what an author can
+     * find in what they wrote. Which law or which step of composing it was missing is the
+     * compiler's own account and is not said here.
+     */
+    private static String whyNotRead(WhyUnread why) {
+        return switch (why) {
+            case WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place what) -> switch (what) {
+                case CONTAINER -> "a condition about what a container holds, over a container that"
+                        + " stands at no position";
+                case VALUE -> "a condition about whether a container holds a value, where the value"
+                        + " stands at no position";
+                case SCRUTINEE ->
+                        "an arm of a fork this reading could not read as a narrowing of a position";
+                case SUBJECT -> NEITHER_A_COMPARISON_NOR_A_COMBINATION;
+            };
+            case WhyUnread.NoMeasureOfItsSize _ ->
+                    "a condition about what a container holds that comes to how many it holds,"
+                            + " which is no number this reading measures";
+            case WhyUnread.OutsideTheLinearFragment _ -> NO_CUT;
+            case WhyUnread.TwoElementsOfOneContainer _, WhyUnread.NoLawFor _,
+                 WhyUnread.WhatARecursiveHelperAnswers _ -> NEITHER_A_COMPARISON_NOR_A_COMBINATION;
+            case WhyUnread.NotYetComposed(WhyUnread.NotYetComposed.Step step) -> switch (step) {
+                case A_FORM_OVER_BOUND_VALUES, AN_ORDER_OF_ITS_ARGUMENTS, A_CHOICE_BY_CASES,
+                     VALUES_WRITTEN_OUT -> NO_CUT;
+                case A_DEPENDENCYS_ANSWER, A_CLOSURE_BY_NAME ->
+                        NEITHER_A_COMPARISON_NOR_A_COMBINATION;
+            };
+        };
+    }
+
+    private static final String NO_CUT = "a comparison this reading could not turn into a cut";
+
+    private static final String NEITHER_A_COMPARISON_NOR_A_COMBINATION =
+            "a condition that is neither a comparison nor a combination of them";
 
     /** The category a search came back with, where the class it was about said nothing itself. */
     private static String whyUnresolved(Generator.UnresolvedCombination why) {

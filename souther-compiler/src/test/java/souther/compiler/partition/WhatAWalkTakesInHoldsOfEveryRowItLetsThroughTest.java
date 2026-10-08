@@ -8,6 +8,7 @@ import souther.compiler.core.Core;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -206,11 +207,13 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
      */
     @Test
     void aComparisonItCouldNotTurnIntoACutSaysThatAndNoMore() {
-        assertEquals(List.of(new OnTheWay.Why.ComparisonNotRepresentedAsACut()),
+        assertEquals(List.of(new OnTheWay.Why.TheMeaningWasNotRead(new WhyUnread.NotYetComposed(
+                        WhyUnread.NotYetComposed.Step.A_FORM_OVER_BOUND_VALUES))),
                 whys("product", true));
         // The affine operand is taken in beside it: a conjunction coming out true says both, and
         // one of them being unreadable is no reason to lose the other.
-        assertEquals(List.of(new OnTheWay.Why.ComparisonNotRepresentedAsACut()),
+        assertEquals(List.of(new OnTheWay.Why.TheMeaningWasNotRead(new WhyUnread.NotYetComposed(
+                        WhyUnread.NotYetComposed.Step.A_FORM_OVER_BOUND_VALUES))),
                 whys("withACall", true));
         assertEquals(1, stating("withACall", true).stream()
                 .filter(each -> each instanceof OnTheWay.TakenIn).count());

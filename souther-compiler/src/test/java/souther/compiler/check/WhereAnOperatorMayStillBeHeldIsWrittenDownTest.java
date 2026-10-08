@@ -270,7 +270,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "where a short-circuit's left operand is the truth a reader of the tree that"
                             + " runs takes in before its right one, which is a site to file what"
                             + " the operand states at"),
-            new Held("souther.compiler.partition.Pullback.truth",
+            new Held("souther.compiler.partition.Pullback.joined",
                     "the composition of what a condition states, joined as the proposition the"
                             + " two halves make"),
             new Held("souther.compiler.partition.ClauseStatements.walk",
