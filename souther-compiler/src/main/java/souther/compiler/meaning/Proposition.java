@@ -4,12 +4,10 @@ import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.ModelOccurrence;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
 /**
  * What a condition states, about the subjects it is finally about.
@@ -329,8 +327,9 @@ public sealed interface Proposition {
     }
 
     private static Proposition joined(List<Proposition> parts, boolean every) {
-        Set<String> seen = new LinkedHashSet<>();
-        List<Proposition> kept = new ArrayList<>();
+        // In the order of their spellings, each spelled once: a spelling is built afresh each time
+        // it is asked for, and a relation's spells out its whole form.
+        SortedMap<String, Proposition> kept = new TreeMap<>();
         for (Proposition part : parts) {
             List<Proposition> flat = switch (part) {
                 case All all when every -> all.parts();
@@ -344,16 +343,14 @@ public sealed interface Proposition {
                     }
                     continue;
                 }
-                if (seen.add(one.key())) {
-                    kept.add(one);
-                }
+                kept.putIfAbsent(one.key(), one);
             }
         }
-        kept.sort(Comparator.comparing(Proposition::key));
         return switch (kept.size()) {
             case 0 -> new Always(every);
-            case 1 -> kept.getFirst();
-            default -> every ? new All(kept) : new Any(kept);
+            case 1 -> kept.firstEntry().getValue();
+            default -> every ? new All(List.copyOf(kept.values()))
+                    : new Any(List.copyOf(kept.values()));
         };
     }
 }

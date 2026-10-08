@@ -21,16 +21,42 @@ import java.util.Optional;
 public final class Conclusion {
 
     private final Optional<ModelOccurrence> where;
+    private final boolean reusing;
     private final Map<Derivation, Proposition> concluded = new IdentityHashMap<>();
     private int unread;
 
     /** A concluding of a condition at {@code where}, where the reader knows it. */
     public Conclusion(Optional<ModelOccurrence> where) {
+        this(where, false);
+    }
+
+    private Conclusion(Optional<ModelOccurrence> where, boolean reusing) {
         this.where = where;
+        this.reusing = reusing;
+    }
+
+    /**
+     * A concluding that concludes each step once, however many derivations it is asked of hold it.
+     *
+     * <p>For asking what the candidates for one expression state while a reading tries them, where
+     * each candidate holds the steps of the parts under it and those were concluded when the parts
+     * were read: a derivation is a value, so what a step concludes does not change. The parts left
+     * unread are numbered here as they are first met and not again, which is no numbering of a
+     * condition — what such a concluding is good for is what is stated, and not which number a part
+     * nothing read is given.
+     */
+    public static Conclusion reusing() {
+        return new Conclusion(Optional.empty(), true);
     }
 
     /** What {@code step} concludes. */
     public Proposition of(Derivation step) {
+        if (reusing) {
+            Proposition before = concluded.get(step);
+            if (before != null) {
+                return before;
+            }
+        }
         Proposition out = step.conclusion(this);
         concluded.put(step, out);
         return out;

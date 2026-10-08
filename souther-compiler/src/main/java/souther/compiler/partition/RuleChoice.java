@@ -5,7 +5,6 @@ import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Proposition;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
@@ -31,30 +30,33 @@ final class RuleChoice {
      * left unread; or, where none does, the first that took the expression at all; or null where
      * none did. A rule answers null where it does not take the expression.
      *
-     * @param met what each rule adds to as it meets a part, left holding what the rule chosen met
-     *            and nothing a rule set aside met
+     * <p>What a candidate states is asked of {@code trying}, one concluding for every choice of one
+     * reading. A candidate holds the steps of the parts under it, which were concluded when the
+     * choice for each part was made; concluded again here, every expression would be concluded once
+     * for each expression it stands under.
+     *
+     * @param met    what each rule adds to as it meets a part, left holding what the rule chosen
+     *               met and nothing a rule set aside met
+     * @param trying a concluding that concludes each step once ({@link Conclusion#reusing})
      */
-    static <M> Derivation firstThatReadsIt(List<Supplier<Derivation>> rules, List<M> met) {
+    static <M> Derivation firstThatReadsIt(List<Supplier<Derivation>> rules, List<M> met,
+                                           Conclusion trying) {
         int before = met.size();
         Derivation first = null;
-        List<M> metByFirst = List.of();
         for (Supplier<Derivation> rule : rules) {
+            int start = met.size();
             Derivation tried = rule.get();
-            List<M> metHere = List.copyOf(met.subList(before, met.size()));
-            met.subList(before, met.size()).clear();
-            if (tried == null) {
-                continue;
-            }
-            if (!stopsAnywhere(new Conclusion(Optional.empty()).of(tried))) {
-                met.addAll(metHere);
+            if (tried != null && !stopsAnywhere(trying.of(tried))) {
+                // What the first rule kept met stands between this one's and what came before.
+                met.subList(before, start).clear();
                 return tried;
             }
-            if (first == null) {
+            if (tried != null && first == null) {
                 first = tried;
-                metByFirst = metHere;
+            } else {
+                met.subList(start, met.size()).clear();
             }
         }
-        met.addAll(metByFirst);
         return first;
     }
 

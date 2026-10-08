@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.Conclusion;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
@@ -47,6 +48,11 @@ class AnExpressionIsReadByTheFirstRuleThatReadsAllOfItTest {
         return null;
     }
 
+    /** The rule {@code rules} are read by, as one reading chooses it. */
+    private static Derivation choose(List<Supplier<Derivation>> rules, List<String> met) {
+        return RuleChoice.firstThatReadsIt(rules, met, Conclusion.reusing());
+    }
+
     private static Proposition concluded(Derivation derivation) {
         return derivation.concludes(Optional.empty());
     }
@@ -58,13 +64,13 @@ class AnExpressionIsReadByTheFirstRuleThatReadsAllOfItTest {
     @Test
     void aStepOwedIsReadOnceARuleTakesIt() {
         List<String> met = new ArrayList<>();
-        Derivation before = RuleChoice.firstThatReadsIt(
+        Derivation before = choose(
                 List.of(meeting(met, "owed", new Derivation.Stopped(OWED, false))), met);
         assertTrue(concluded(before) instanceof Proposition.Unread unread
                 && unread.why().equals(OWED), "the part is left unread, owed the step it is owed");
 
         met.clear();
-        Derivation after = RuleChoice.firstThatReadsIt(List.of(
+        Derivation after = choose(List.of(
                 meeting(met, "owed", new Derivation.Stopped(OWED, false)),
                 meeting(met, "read", READ)), met);
         assertSame(READ, after, "the rule that took it is the one it is derived by");
@@ -78,7 +84,7 @@ class AnExpressionIsReadByTheFirstRuleThatReadsAllOfItTest {
     void whereNoRuleReadsAllOfItTheFirstThatTookItIsKept() {
         List<String> met = new ArrayList<>(List.of("before"));
         Derivation first = new Derivation.Stopped(OWED, false);
-        Derivation chosen = RuleChoice.firstThatReadsIt(List.of(
+        Derivation chosen = choose(List.of(
                 AnExpressionIsReadByTheFirstRuleThatReadsAllOfItTest::takingNothing,
                 meeting(met, "first", first),
                 meeting(met, "second", new Derivation.Stopped(OWED, true))), met);
@@ -90,7 +96,7 @@ class AnExpressionIsReadByTheFirstRuleThatReadsAllOfItTest {
     @Test
     void whereNoRuleTakesItThereIsNothing() {
         List<String> met = new ArrayList<>(List.of("before"));
-        assertNull(RuleChoice.firstThatReadsIt(List.of(
+        assertNull(choose(List.of(
                 AnExpressionIsReadByTheFirstRuleThatReadsAllOfItTest::takingNothing,
                 AnExpressionIsReadByTheFirstRuleThatReadsAllOfItTest::takingNothing), met));
         assertEquals(List.of("before"), met);
@@ -105,7 +111,7 @@ class AnExpressionIsReadByTheFirstRuleThatReadsAllOfItTest {
         List<String> met = new ArrayList<>();
         Derivation settled = new Derivation.Joined(ConditionJoin.BOTH,
                 new Derivation.WrittenOut(false), new Derivation.Stopped(OWED, false));
-        Derivation chosen = RuleChoice.firstThatReadsIt(List.of(
+        Derivation chosen = choose(List.of(
                 meeting(met, "settled", settled), meeting(met, "read", READ)), met);
         assertSame(settled, chosen, "false beside anything is read in full");
         assertEquals(new Proposition.Always(false), concluded(chosen));
@@ -118,9 +124,9 @@ class AnExpressionIsReadByTheFirstRuleThatReadsAllOfItTest {
         Derivation twiceDenied = new Derivation.UnderADenial(
                 new Derivation.UnderADenial(READ, true), true);
         List<String> met = new ArrayList<>();
-        Derivation oneWay = RuleChoice.firstThatReadsIt(List.of(
+        Derivation oneWay = choose(List.of(
                 meeting(met, "denied", twiceDenied), meeting(met, "read", READ)), met);
-        Derivation otherWay = RuleChoice.firstThatReadsIt(List.of(
+        Derivation otherWay = choose(List.of(
                 meeting(met, "read", READ), meeting(met, "denied", twiceDenied)), met);
         assertEquals(concluded(oneWay), concluded(otherWay));
     }

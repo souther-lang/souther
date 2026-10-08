@@ -141,6 +141,8 @@ final class Pullback {
     private final InputReading read;
     private final Optional<ModelOccurrence> where;
     private final List<Met> met = new ArrayList<>();
+    /** What the candidates for each expression state, concluded once a step ({@link RuleChoice}). */
+    private final Conclusion trying = Conclusion.reusing();
     private final Set<TermPath> quantifying = new HashSet<>();
     /**
      * Where whether a container holds anything was asked, while what it holds is being read.
@@ -446,7 +448,7 @@ final class Pullback {
 
     /** The one of {@code rules} an expression is read by ({@link RuleChoice}). */
     private Derivation firstThatReadsIt(List<Supplier<Derivation>> rules) {
-        return RuleChoice.firstThatReadsIt(rules, met);
+        return RuleChoice.firstThatReadsIt(rules, met, trying);
     }
 
     /**
@@ -547,7 +549,7 @@ final class Pullback {
         } finally {
             quantifying.remove(held);
         }
-        Proposition element = new Conclusion(where).of(answered);
+        Proposition element = trying.of(answered);
         boolean asked = Derivation.SomeElementMeeting.asksWhetherItHoldsAnything(held,
                 witness.holds() ? element : element.denied());
         Optional<Derivation> holdsSomething = Optional.empty();
