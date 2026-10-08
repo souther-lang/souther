@@ -58,14 +58,44 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous) {
     /**
      * What a site states, and how that was derived.
      *
-     * @param states what holds where the truth asked there does
-     * @param how    the derivation it was concluded from
+     * <p>Made by concluding the derivation and no other way ({@link Conclusion#meaningOf}), so what
+     * is stated is always what the derivation beside it concludes. Two values alike in both are
+     * equal.
      */
-    public record Meaning(Proposition states, Derivation how) {
+    public static final class Meaning {
 
-        public Meaning {
-            Objects.requireNonNull(states, "a site states something");
-            Objects.requireNonNull(how, "what a site states was derived");
+        private final Proposition states;
+        private final Derivation how;
+
+        Meaning(Proposition states, Derivation how) {
+            this.states = Objects.requireNonNull(states, "a site states something");
+            this.how = Objects.requireNonNull(how, "what a site states was derived");
+        }
+
+        /** What holds where the truth asked there does. */
+        public Proposition states() {
+            return states;
+        }
+
+        /** The derivation it was concluded from. */
+        public Derivation how() {
+            return how;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Meaning that && states.equals(that.states)
+                    && how.equals(that.how);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(states, how);
+        }
+
+        @Override
+        public String toString() {
+            return "Meaning[states=" + states + ", how=" + how + "]";
         }
     }
 

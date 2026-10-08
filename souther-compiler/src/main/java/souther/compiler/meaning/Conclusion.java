@@ -36,6 +36,11 @@ public final class Conclusion {
         return out;
     }
 
+    /** What {@code how} concludes, beside {@code how}: the one way a meaning is made. */
+    public MeaningsOfABody.Meaning meaningOf(Derivation how) {
+        return new MeaningsOfABody.Meaning(of(how), how);
+    }
+
     /** What {@code step} concluded the last time it was concluded here, or null where it was not. */
     public Proposition concludedAt(Derivation step) {
         return concluded.get(step);

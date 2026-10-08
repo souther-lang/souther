@@ -41,6 +41,19 @@ class APropositionIsMadeOnlyWhereARuleConcludesItTest {
         assertEquals(Set.of(), outside("any"), "parts disjoined here are disjoined by no rule");
     }
 
+    /**
+     * A meaning is a derivation concluded, and nothing else makes one: what it states beside how it
+     * was derived is what that derivation concludes, by construction rather than by every maker
+     * taking care.
+     */
+    @Test
+    void aMeaningIsMadeOnlyByConcludingItsDerivation() {
+        assertEquals(Set.of(Conclusion.class.getName()),
+                WhatWasCompiled.callersOf(MeaningsOfABody.Meaning.class, "<init>"),
+                "a meaning made elsewhere can pair a proposition with a derivation it is not the"
+                        + " conclusion of");
+    }
+
     /** And the rules do build them, so the census above counted something. */
     @Test
     void theRulesBuildThem() {

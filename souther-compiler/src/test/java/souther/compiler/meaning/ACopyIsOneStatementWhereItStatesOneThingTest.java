@@ -38,7 +38,7 @@ class ACopyIsOneStatementWhereItStatesOneThingTest {
             new Derivation.UnderADenial(DIRECTLY, true), true);
 
     private static MeaningsOfABody.Meaning meaning(Derivation how) {
-        return new MeaningsOfABody.Meaning(how.concludes(Optional.empty()), how);
+        return new Conclusion(Optional.empty()).meaningOf(how);
     }
 
     @Test

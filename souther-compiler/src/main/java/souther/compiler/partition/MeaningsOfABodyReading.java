@@ -84,7 +84,6 @@ public final class MeaningsOfABodyReading {
             return;
         }
         MeaningsOfABody.Site site = new MeaningsOfABody.Site(construct.get(), part);
-        Pullback.Pulled pulled = Pullback.ofATruth(truth, reads, read(), construct);
-        filed.met(site, new MeaningsOfABody.Meaning(pulled.proposition(), pulled.derivation()));
+        filed.met(site, Pullback.ofATruth(truth, reads, read(), construct).meaning());
     }
 }

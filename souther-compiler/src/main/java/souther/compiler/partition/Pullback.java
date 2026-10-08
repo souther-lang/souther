@@ -26,6 +26,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Conclusion;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.MeaningsOfABody.Meaning;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
@@ -90,11 +91,15 @@ final class Pullback {
     /**
      * What a condition states, how that was derived, and the parts it was read from.
      *
-     * @param proposition what holds where the condition does
-     * @param derivation  how it was read, a rule at a time
-     * @param leaves      every part met, in the order met — a part met twice is here twice
+     * @param meaning what holds where the condition does, and how it was read a rule at a time
+     * @param leaves  every part met, in the order met — a part met twice is here twice
      */
-    record Pulled(Proposition proposition, Derivation derivation, List<Leaf> leaves) {
+    record Pulled(Meaning meaning, List<Leaf> leaves) {
+
+        /** What holds where the condition does. */
+        Proposition proposition() {
+            return meaning.states();
+        }
 
         /**
          * The parts the truth of {@link #proposition} turns on, each with where it was read off.
@@ -108,7 +113,7 @@ final class Pullback {
          */
         List<Leaf> turnsOn() {
             Set<String> parts = new HashSet<>();
-            partsOf(proposition, parts);
+            partsOf(proposition(), parts);
             return leaves.stream().filter(leaf -> parts.contains(leaf.part().key())).toList();
         }
 
@@ -168,13 +173,7 @@ final class Pullback {
     static Pulled ofAComparison(StatedComparison comparison, InputReads reads, InputReading read,
                                 Optional<ModelOccurrence> where) {
         Pullback reading = new Pullback(read, where);
-        AnEmptinessCheck.Checked checked = AnEmptinessCheck.checked(comparison);
-        Derivation stated = checked != null
-                ? new Derivation.AnEmptinessCheck(
-                        reading.observe(checked.container(), AnswerAspect.EMPTINESS, reads),
-                        checked.emptyWhereItHolds())
-                : reading.compared(comparison, false, reads);
-        return reading.pulled(stated);
+        return reading.pulled(reading.comparison(comparison, null, false, reads));
     }
 
     /**
@@ -203,19 +202,29 @@ final class Pullback {
         return reading.pulled(reading.observe(container, AnswerAspect.EMPTINESS, reads));
     }
 
-    /** What {@code stated} concludes, with every part met as what it came to. */
+    /**
+     * What {@code stated} concludes, with every part met as what it came to.
+     *
+     * <p>A part is a step of {@code stated}: one this concluding reached. A step met by a rule that
+     * was not kept is in no derivation concluded here, so whatever was met on the way, the parts
+     * are the derivation's own.
+     */
     private Pulled pulled(Derivation stated) {
         Conclusion conclusion = new Conclusion(where);
-        Proposition proposition = conclusion.of(stated);
+        Meaning meaning = conclusion.meaningOf(stated);
         List<Leaf> leaves = new ArrayList<>();
         for (Met each : met) {
+            Proposition concluded = conclusion.concludedAt(each.step());
+            if (concluded == null) {
+                continue;
+            }
             Proposition part = each.step() instanceof Derivation.AMembership membership
-                    ? membership.sameValue() : conclusion.concludedAt(each.step());
-            if (part != null && !(part instanceof Proposition.Always)) {
+                    ? membership.sameValue() : concluded;
+            if (!(part instanceof Proposition.Always)) {
                 leaves.add(new Leaf(part, each.from()));
             }
         }
-        return new Pulled(proposition, stated, List.copyOf(leaves));
+        return new Pulled(meaning, List.copyOf(leaves));
     }
 
     /**
@@ -272,8 +281,8 @@ final class Pullback {
                     return position == null ? null
                             : leaf(new Derivation.ATruthAtAPosition(position, true), e, reads);
                 },
-                () -> BooleanMeaning.asAComparison(e).map(stated -> comparison(stated, e, reads))
-                        .orElse(null),
+                () -> BooleanMeaning.asAComparison(e).map(stated -> comparison(stated,
+                        new Denotation(e, reads), fixed(e, reads), reads)).orElse(null),
                 () -> applied == null ? null : witnessed(applied, e, AnswerAspect.TRUTH, reads),
                 () -> applied == null ? null : membership(applied, e, reads)));
         return taken != null ? taken : unread(e, reads, unreadAs(applied, AnswerAspect.TRUTH));
@@ -313,15 +322,67 @@ final class Pullback {
         }).orElse(null);
     }
 
-    /** A comparison the source wrote: whether a container holds anything, or the relation. */
-    private Derivation comparison(StatedComparison stated, Core e, InputReads reads) {
+    /**
+     * How a comparison the source wrote was read, by the first of the rules for one that reads all
+     * of it ({@link RuleChoice}).
+     *
+     * <p>A size held where it parts nought from every size above it is whether the container holds
+     * anything; and every comparison is the relation it states — about a truth of the input, as a
+     * cut on the input's arithmetic, as a line on an order that arithmetic does not count, or over
+     * values the body bound. More than one of them takes some comparisons, and the one tried first
+     * is not the one kept where it leaves a part unread and one after it reads all of it.
+     *
+     * @param at    where the comparison is a part of a larger condition, kept as a part met there;
+     *              null where the comparison is itself what is read
+     * @param fixed whether its answer is the same on every run
+     */
+    private Derivation comparison(StatedComparison stated, Denotation at, boolean fixed,
+                                  InputReads reads) {
+        return firstThatReadsIt(rulesFor(stated, at, fixed, reads));
+    }
+
+    /** The rules that take a comparison the source wrote, in the order they are tried. */
+    private List<Supplier<Derivation>> rulesFor(StatedComparison stated, Denotation at,
+                                                boolean fixed, InputReads reads) {
         AnEmptinessCheck.Checked checked = AnEmptinessCheck.checked(stated);
-        if (checked != null) {
-            Derivation some = asking(new Denotation(e, reads),
-                    () -> observe(checked.container(), AnswerAspect.EMPTINESS, reads));
-            return new Derivation.AnEmptinessCheck(some, checked.emptyWhereItHolds());
+        Once<AffineReading.OfAComparison> arithmetic = new Once<>(
+                () -> AffineReading.read(stated, read.domain(), reads, read.rules()));
+        return List.of(
+                () -> checked == null ? null : new Derivation.AnEmptinessCheck(at == null
+                        ? observe(checked.container(), AnswerAspect.EMPTINESS, reads)
+                        : asking(at, () -> observe(checked.container(), AnswerAspect.EMPTINESS,
+                                reads)), checked.emptyWhereItHolds()),
+                () -> partOf(at, truthCompared(stated, reads)),
+                () -> partOf(at, asACut(stated, arithmetic.get(), fixed)),
+                () -> partOf(at, onAnOrder(stated, arithmetic.get(), reads)),
+                () -> partOf(at, ofBoundValues(stated, fixed, reads)));
+    }
+
+    /**
+     * What each rule that takes {@code comparison} concludes, each read on its own and in the order
+     * they are tried; a rule that does not take it is left out.
+     *
+     * <p>For holding the rules to one another: two of them that read all of one comparison have to
+     * state one thing, or which was tried first would decide what the model says.
+     */
+    static List<Proposition> byEachRule(StatedComparison comparison, InputReads reads,
+                                        InputReading read) {
+        int rules = new Pullback(read, Optional.empty())
+                .rulesFor(comparison, null, false, reads).size();
+        List<Proposition> out = new ArrayList<>();
+        for (int i = 0; i < rules; i++) {
+            Pullback alone = new Pullback(read, Optional.empty());
+            Derivation taken = alone.rulesFor(comparison, null, false, reads).get(i).get();
+            if (taken != null) {
+                out.add(alone.pulled(taken).proposition());
+            }
         }
-        return leaf(compared(stated, fixed(e, reads), reads), e, reads);
+        return out;
+    }
+
+    /** {@code step}, kept as a part met at {@code at} where there is one. */
+    private Derivation partOf(Denotation at, Derivation step) {
+        return step == null || at == null ? step : leaf(step, at);
     }
 
     /**
@@ -534,12 +595,12 @@ final class Pullback {
     }
 
     /**
-     * A comparison the arithmetic of the input did not read to a line, read as a relation over the
-     * quantities a condition is read over: numbers of the input, and numbers of values the body
-     * bound — or unread where some part of it is neither.
+     * A comparison read as a relation over the quantities a condition is read over: numbers of the
+     * input, and numbers of values the body bound — or unread where some part of it is neither.
      *
-     * <p>Asked where what a value is computed from is unknown: a dependency's answer, what an attempt
-     * built. Which value it is is still known, by the binding that names it, and two comparisons over
+     * <p>The last rule for a comparison, and the one that takes every comparison: what reads the
+     * input alone is tried before it. It reads what those cannot, where what a value is computed
+     * from is unknown: a dependency's answer, what an attempt built. Which value it is is still known, by the binding that names it, and two comparisons over
      * one name are about one number. The arithmetic is {@link AffineForms}'s, the one walk every
      * reader of a number in this compiler composes by; this says only what its atoms are.
      */
@@ -663,18 +724,25 @@ final class Pullback {
     }
 
     /**
-     * A comparison as the relation it states over this input's quantities.
-     *
-     * <p>Off the same readings the arithmetic and a stopped reading are read by everywhere a
-     * comparison is, so what it states here is what a border on it is drawn at.
+     * A comparison of a truth of the input against a truth written out, or null where it is no
+     * such comparison.
      */
-    private Derivation compared(StatedComparison comparison, boolean fixed, InputReads reads) {
+    private Derivation truthCompared(StatedComparison comparison, InputReads reads) {
         InputTruth truth = InputTruth.compared(comparison, true, reads, read.rules().symbols(),
                 read.rules().newtypes());
-        if (truth != null) {
-            return new Derivation.ATruthCompared(truth.at(), truth.held());
-        }
-        return switch (AffineReading.read(comparison, read.domain(), reads, read.rules())) {
+        return truth == null ? null : new Derivation.ATruthCompared(truth.at(), truth.held());
+    }
+
+    /**
+     * A comparison as the cut the arithmetic of the input reads it to, or as one that cuts nothing —
+     * or null where that arithmetic read it to neither.
+     *
+     * <p>Off the same reading a border on it is drawn from everywhere a comparison is, so what it
+     * states here is what a border on it is drawn at.
+     */
+    private static Derivation asACut(StatedComparison comparison,
+                                     AffineReading.OfAComparison arithmetic, boolean fixed) {
+        return switch (arithmetic) {
             case AffineReading.OfAComparison.Cuts(var affine) -> {
                 Rel states = affine.claim().statedRelation();
                 LinearForm<NumericTerm> against =
@@ -691,20 +759,52 @@ final class Pullback {
             case AffineReading.OfAComparison.CutsNothing constant ->
                     new Derivation.ACutThatCutsNothing(
                             constant.holds(comparison.claim().statedRelation()));
-            case AffineReading.OfAComparison.NotHeld _ -> ofBoundValues(comparison, fixed, reads);
-            case AffineReading.OfAComparison.Stopped _ -> {
-                ComparedLine drawn = ComparedLine.asWritten(comparison, read, reads);
-                if (drawn == null) {
-                    yield ofBoundValues(comparison, fixed, reads);
-                }
-                Rel states = drawn.claim().statedRelation();
-                Rel proposition = states.orItsDenial();
-                yield new Derivation.AComparisonRead(Derivation.ComparisonReading.ON_AN_ORDER,
-                        new Relation.Ordered(new DecisionAtom.OfTheInput(drawn.term()),
-                                drawn.value(), proposition),
-                        states == proposition);
-            }
+            case AffineReading.OfAComparison.NotHeld _, AffineReading.OfAComparison.Stopped _ ->
+                    null;
         };
+    }
+
+    /**
+     * A comparison as a line on an order the arithmetic of the input stopped at, or null where it
+     * did not stop or no line is drawn on what it stopped at.
+     *
+     * <p>Only where it stopped: a date against a written date and a case of an enumeration are
+     * values it does not count, and the comparison still states a line on their order. A comparison
+     * the arithmetic read is that arithmetic's, which is the reading a border is drawn by.
+     */
+    private Derivation onAnOrder(StatedComparison comparison,
+                                 AffineReading.OfAComparison arithmetic, InputReads reads) {
+        if (!(arithmetic instanceof AffineReading.OfAComparison.Stopped)) {
+            return null;
+        }
+        ComparedLine drawn = ComparedLine.asWritten(comparison, read, reads);
+        if (drawn == null) {
+            return null;
+        }
+        Rel states = drawn.claim().statedRelation();
+        Rel proposition = states.orItsDenial();
+        return new Derivation.AComparisonRead(Derivation.ComparisonReading.ON_AN_ORDER,
+                new Relation.Ordered(new DecisionAtom.OfTheInput(drawn.term()), drawn.value(),
+                        proposition),
+                states == proposition);
+    }
+
+    /** A value worked out by the first rule that asks for it, and not before or again. */
+    private static final class Once<T> {
+
+        private final Supplier<T> making;
+        private T made;
+
+        Once(Supplier<T> making) {
+            this.making = making;
+        }
+
+        T get() {
+            if (made == null) {
+                made = making.get();
+            }
+            return made;
+        }
     }
 
     /** {@code step}, kept as a part met at the expression it was read off. */
