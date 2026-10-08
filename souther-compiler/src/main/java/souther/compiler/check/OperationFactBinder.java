@@ -921,7 +921,7 @@ final class OperationFactBinder {
         holdTheSide(witnessed.ofTheClosure(), applied.result(),
                 "what the closure " + library.qualified() + " applies answers");
         return new BoundOperationFact.ResultHasAnElementWitness(operation, witnessed.result(),
-                witnessed.ofTheClosure(), container, closure);
+                witnessed.ofTheClosure(), container, closure, walks.elementParam());
     }
 
     /** Refuses {@code side} where {@code answers} has no such side. */

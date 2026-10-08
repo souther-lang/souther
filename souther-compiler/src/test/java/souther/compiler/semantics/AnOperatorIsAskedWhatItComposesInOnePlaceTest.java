@@ -49,6 +49,9 @@ class AnOperatorIsAskedWhatItComposesInOnePlaceTest {
             new Licence("souther.compiler.check.ClauseExpr.of", 1,
                     "the same for a clause, with the denial the tree is read under applied as the"
                             + " shape is made"),
+            new Licence("souther.compiler.partition.Pullback.truth", 1,
+                    "the one reading of what a condition states, which joins the propositions the"
+                            + " two halves state the way the connective composes them"),
             new Licence("souther.compiler.partition.TruthOutcomes.Reading.truth", 1,
                     "which answers a truth an operation answers can give, read inside the one"
                             + " node a condition's shape stops at: the predicate an operation is"

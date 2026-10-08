@@ -266,6 +266,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " else about them is read off the shape it leaves"),
             new Held("souther.compiler.partition.Condition.of",
                     "the composition, which the shape it makes carries"),
+            new Held("souther.compiler.partition.Pullback.truth",
+                    "the composition of what a condition states, joined as the proposition the"
+                            + " two halves make"),
             new Held("souther.compiler.partition.TruthOutcomes.Reading.truth",
                     "the composition inside an operation's predicate and arguments, where a"
                             + " condition's shape stops, combined as the answers each side can"

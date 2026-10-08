@@ -267,7 +267,7 @@ public final class BoundOperationFacts {
         BoundOperationFact.ResultHasAnElementWitness held =
                 one(BoundOperationFact.ResultHasAnElementWitness.class, operation);
         return held == null ? null : new ElementWitness(held.result(), held.ofTheClosure(),
-                held.container(), held.closure());
+                held.container(), held.closure(), held.elementParam());
     }
 
     /** The operations whose answer has an element that witnesses it. */

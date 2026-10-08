@@ -24,9 +24,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * as what the closure answered, the fork is about the positions the closure reads — and over a list
  * written out, about the rules the closure states for each element written there.
  *
- * <p>The emptiness check and the size against nought are one statement, so each is held to the
- * other. A size held against any other number counts what was kept, which no answer of the closure
- * states, and is still a rule about a value made from the input.
+ * <p>The emptiness check and the size against nought are one statement, and so is the size held
+ * at least one, so each is held to the others. A size held against a number that does not part
+ * nought from every size above it counts what was kept, which no answer of the closure states,
+ * and is still a rule about a value made from the input.
  */
 class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
 
@@ -94,6 +95,25 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
                         "List.length(reasons) /= 0 then 2 else 1"));
     }
 
+    /**
+     * A size is never below nought, so every comparison that holds at nought and nowhere above it,
+     * or above it and not at it, is the same statement as the check.
+     */
+    @Test
+    void aSizeHeldWhereItPartsNoughtFromTheRestIsTheSameStatement() {
+        for (String empty : List.of("List.length(reasons) <= 0", "List.length(reasons) < 1",
+                "0 >= List.length(reasons)")) {
+            assertTheSame(THE_REASONS_A_HELPER_BUILT,
+                    THE_REASONS_A_HELPER_BUILT.replace("List.isEmpty(reasons)", empty));
+        }
+        String some = THE_REASONS_A_HELPER_BUILT.replace("List.isEmpty(reasons) then 1 else 2",
+                "Bool.not(List.isEmpty(reasons)) then 2 else 1");
+        for (String held : List.of("List.length(reasons) >= 1", "List.length(reasons) > 0",
+                "1 <= List.length(reasons)")) {
+            assertTheSame(some, some.replace("Bool.not(List.isEmpty(reasons))", held));
+        }
+    }
+
     /** However many helpers the author put between the fork and the closure. */
     @Test
     void theHelpersBetweenAreNoPartOfWhatItMeans() {
@@ -137,17 +157,78 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
                 toldApart(empty), "as the quantifier the check denies is");
     }
 
-    /** How many were kept is no answer the closure gives, and is not read as one. */
+    /**
+     * A list of numbers handed in, asked whether a filter of it kept at least one, is asked whether
+     * some number meets the closure — the line {@code List.any} draws, and the rows that meet the
+     * one meet the other.
+     */
+    @Test
+    void atLeastOneKeptOfAListHandedInIsWhetherAnyMet() {
+        String pick = """
+                behavior pick : (xs: List<Int>) -> Int
+                let pick (xs) = if %s then 1 else 0
+                example pick
+                    | "one positive" : ([1]) -> 1
+                    | "zero is not positive" : ([0]) -> 0
+                    | "negative" : ([-1]) -> 0
+                    | "mixed" : ([-1, 3]) -> 1
+                    | "none" : ([]) -> 0
+                """;
+        assertTheSame(pick.formatted("List.any(x -> x > 0, xs)"),
+                pick.formatted("List.length(List.filter(x -> x > 0, xs)) >= 1"));
+        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, AdequacyReport.of(compiled(
+                pick.formatted("List.length(List.filter(x -> x > 0, xs)) >= 1"))).adequacy());
+    }
+
+    /**
+     * Which library's filter it is decides nothing: each says its emptiness turns on its closure
+     * and each size starts at nought, so every spelling reads back alike for a set and a map.
+     */
+    @Test
+    void aSetOrAMapFilteredIsReadAsAListIs() {
+        String set = """
+                behavior pick : (xs: Set<Int>) -> Int
+                let pick (xs) = if %s then 1 else 0
+                """;
+        String map = """
+                behavior pick : (m: Map<String, Int>) -> Int
+                let pick (m) = if %s then 1 else 0
+                """;
+        for (List<String> spelt : List.of(
+                List.of(set, "Set.isEmpty(Set.filter(x -> x > 0, xs))",
+                        "Set.size(Set.filter(x -> x > 0, xs))"),
+                List.of(map, "Map.isEmpty(Map.filterEntries((k, v) -> v > 0, m))",
+                        "Map.size(Map.filterEntries((k, v) -> v > 0, m))"))) {
+            String model = spelt.get(0);
+            String check = spelt.get(1);
+            String size = spelt.get(2);
+            for (String empty : List.of(" == 0", " <= 0", " < 1")) {
+                assertTheSame(model.formatted(check), model.formatted(size + empty));
+            }
+            for (String some : List.of(" /= 0", " > 0", " >= 1")) {
+                assertTheSame(model.formatted("Bool.not(" + check + ")"),
+                        model.formatted(size + some));
+            }
+        }
+    }
+
+    /**
+     * How many were kept is no answer the closure gives, and is not read as one — nor is a
+     * comparison that does not part nought from every size above it.
+     */
     @Test
     void howManyWereKeptIsAValueMadeFromTheInput() {
-        PartitionEvidence counted = measured(compiled(TRIP + APPLIES + """
-                let submit (t) =
-                    if List.length(List.filter(r -> applies(t, r), [High, Abroad])) >= 2
-                    then 2 else 1
-                """));
-        assertEquals(List.of("t.cost RULE_ABOUT_A_DERIVED_VALUE",
-                        "t.abroad RULE_ABOUT_A_DERIVED_VALUE"),
-                counted.notRead().stream().map(each -> each.at() + " " + each.reason()).toList());
+        for (String count : List.of(">= 2", "== 1", "<= 1", "/= 1")) {
+            PartitionEvidence counted = measured(compiled(TRIP + APPLIES + """
+                    let submit (t) =
+                        if List.length(List.filter(r -> applies(t, r), [High, Abroad])) %s
+                        then 2 else 1
+                    """.formatted(count)));
+            assertEquals(List.of("t.cost RULE_ABOUT_A_DERIVED_VALUE",
+                            "t.abroad RULE_ABOUT_A_DERIVED_VALUE"),
+                    counted.notRead().stream().map(each -> each.at() + " " + each.reason())
+                            .toList(), count);
+        }
     }
 
     /**

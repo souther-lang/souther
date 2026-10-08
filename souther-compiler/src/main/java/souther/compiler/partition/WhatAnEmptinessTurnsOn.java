@@ -5,8 +5,12 @@ import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.ConstantArguments;
+import souther.compiler.semantics.ResultRange;
 import souther.compiler.types.ValueName;
 
 import java.util.Optional;
@@ -15,23 +19,30 @@ import java.util.Optional;
  * Whether a comparison is read back to what the library says it turns on, before it is read as a
  * rule of its own.
  *
- * <p>One case and no more: the size of a container held equal or unequal to nought, the way the
- * checker reads an emptiness check ({@link souther.compiler.check.BooleanMeaning#asAComparison}),
- * over a container an operation built whose emptiness the library says turns on a closure
+ * <p>One case and no more: the size of a container held against a number that parts nought from
+ * every size above it, the way the checker reads an emptiness check
+ * ({@link souther.compiler.check.BooleanMeaning#asAComparison}), over a container an operation
+ * built whose emptiness the library says turns on a closure
  * ({@link souther.compiler.semantics.OperationFact.TurnsOnWhetherAnArgumentHolds}). There, whether
  * the container holds anything is whether some element met the closure, and that is a statement
  * about the input where the size of the container is not: {@code List.filter(p, xs)} is not a
  * position, and its size is a number nothing in the input holds.
  *
+ * <p>Which comparisons part nought from the rest is worked out from the relation, not listed.
+ * {@code == 0} and {@code /= 0} are the check by the library's own word and need nothing else.
+ * An ordering needs where the library says a size starts: a size is a count no lower than nought,
+ * so {@code <= 0} and {@code < 1} hold exactly where the container is empty, and {@code > 0} and
+ * {@code >= 1} exactly where it is not.
+ *
  * <p>Everything else is the comparison's own. A size held against nought over a position is a line
  * on how many it holds; over a value this cannot read back, it is a rule about a value made from the
- * input, which the comparison's reading says. And a size held against any other number counts the
- * elements the closure kept, which no answer of the closure states — so {@code List.length(
- * List.filter(p, xs)) >= 2} is a comparison and not read back.
+ * input, which the comparison's reading says. And a size held against a number that parts sizes
+ * above nought counts the elements the closure kept, which no answer of the closure states — so
+ * {@code List.length(List.filter(p, xs)) >= 2} is a comparison and not read back.
  *
  * <p>The spelling is spent before this is asked. {@code List.isEmpty(ys)} and
- * {@code List.length(ys) == 0} reach here as the one statement, so the two are read back alike or
- * neither is.
+ * {@code List.length(ys) == 0} reach here as the one statement, and {@code List.length(ys) >= 1}
+ * is read as its denial here, so they are read back alike or none is.
  */
 final class WhatAnEmptinessTurnsOn {
 
@@ -55,22 +66,56 @@ final class WhatAnEmptinessTurnsOn {
     record ReadBack(Denotation container, Denotation decidedBy) {}
 
     /**
-     * The emptiness {@code stated} checks, or null where it is no size held equal or unequal to
-     * nought.
+     * The emptiness {@code stated} checks, or null where it is no size held against a number that
+     * parts nought from every size above it.
      */
     static Checked checked(StatedComparison stated) {
-        StatedComparison.Numbered<Core> size = stated.at(WhatAnEmptinessTurnsOn::sizedContainer);
+        StatedComparison.Numbered<AnOperationApplied> size =
+                stated.at(WhatAnEmptinessTurnsOn::aSize);
         if (size == null
-                || !(Core.withoutStanding(size.other()) instanceof Core.Int nought)
-                || nought.value() != 0) {
+                || !(Core.withoutStanding(size.other()) instanceof Core.Int against)) {
             return null;
         }
         Rel relation = size.claim().statedRelation();
-        return switch (relation) {
-            case EQ -> new Checked(size.number(), true);
-            case NE -> new Checked(size.number(), false);
-            case GE, GT, LE, LT -> null;
-        };
+        boolean atNought = relation.holds(Long.compare(0, against.value()));
+        boolean above = relation.holds(1);
+        if (atNought == above) {
+            return null;
+        }
+        // Held equal or unequal to nought, the comparison is the check the library says it means,
+        // whatever else is known of the size: it comes out one way at nought and the other way on
+        // either side of it.
+        boolean noughtAlone = against.value() == 0 && relation.holds(-1) == above;
+        return noughtAlone || partsNoughtFromEverySizeAbove(relation, against.value(),
+                        size.number().operation())
+                ? new Checked(size.number().args().getFirst(), atNought) : null;
+    }
+
+    /**
+     * Whether {@code relation} against {@code against} comes out the same at every size above
+     * nought, where {@code operation} answers no size below it.
+     *
+     * <p>Only there does an ordering part nought from the rest: {@code >= 1} is {@code /= 0} for
+     * a count and for nothing that can be negative. Above nought a size is one or more. Far enough
+     * above, every size is above what it is held against; nearer, it may stand at it or below it,
+     * and the comparison has to come out the same there too.
+     */
+    private static boolean partsNoughtFromEverySizeAbove(Rel relation, long against,
+                                                        ValueName operation) {
+        boolean above = relation.holds(1);
+        return (against < 1 || relation.holds(0) == above)
+                && (against < 2 || relation.holds(-1) == above)
+                && startsAtNought(operation);
+    }
+
+    /**
+     * Whether the least a size {@code operation} answers is nought, as the library bounds its
+     * result — the one value an emptiness check is the size standing at.
+     */
+    private static boolean startsAtNought(ValueName operation) {
+        Endpoint least = ResultRange.of(DefaultBoundOperationFacts.get().boundsOnTheResult(operation),
+                ConstantArguments.none()).min();
+        return least != null && least.inclusive() && least.at().compareTo(Count.ZERO) == 0;
     }
 
     /**
@@ -100,13 +145,13 @@ final class WhatAnEmptinessTurnsOn {
     }
 
     /**
-     * The container {@code e} takes the size of, or null where it is no size an emptiness check is
-     * read as.
+     * {@code e} as the size of the one container it is handed, or null where it is no size an
+     * emptiness check is read as.
      *
      * <p>Which operations those are is the library's: the sizes its emptiness checks mean, and no
      * others.
      */
-    private static Core sizedContainer(Core e) {
+    private static AnOperationApplied aSize(Core e) {
         AnOperationApplied applied = AnOperationApplied.of(e);
         if (applied == null || applied.args().size() != 1) {
             return null;
@@ -115,7 +160,7 @@ final class WhatAnEmptinessTurnsOn {
         for (ValueName check : facts.meansTheSameAsASizeOfNought()) {
             if (facts.meansTheSameAsASizeOfNought(check).size().operation()
                     .equals(applied.operation())) {
-                return applied.args().getFirst();
+                return applied;
             }
         }
         return null;

@@ -14,6 +14,8 @@ import souther.compiler.semantics.SideAnswered;
  * @param ofTheClosure how a witness's answer comes out
  * @param container    the argument whose elements are the witnesses
  * @param closure      the argument each element is handed to
+ * @param elementParam which of the closure's parameters an element arrives on
  */
 public record ElementWitness(SideAnswered result, SideAnswered ofTheClosure,
-                             DeclaredArgument container, DeclaredArgument closure) {}
+                             DeclaredArgument container, DeclaredArgument closure,
+                             int elementParam) {}
