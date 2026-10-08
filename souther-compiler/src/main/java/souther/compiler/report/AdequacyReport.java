@@ -3177,6 +3177,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         case NO_RECOGNISABLE_RULE_MATCHES ->
                                 "a row was composed and run, and this reading found no rule the"
                                         + " run did all of";
+                        case A_CONDITION_CAME_OUT_BOTH_WAYS ->
+                                "a row was composed and run, and it answered a condition of this"
+                                        + " body both ways, so it went down more than one rule";
                         case MORE_THAN_ONE_RULE_MATCHES ->
                                 "a row was composed and run, and this reading placed it at more"
                                         + " than one rule, which one run cannot have taken";

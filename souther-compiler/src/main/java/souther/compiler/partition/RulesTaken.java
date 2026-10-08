@@ -12,8 +12,10 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Which rule of a body's decision each run took.
@@ -23,9 +25,17 @@ import java.util.Optional;
  * is recorded where they are expanded; what the two agree about is the construct of the model, and
  * the plan says where the emitter numbered each one.
  *
+ * <p>Two things apart, and joined only here. Where a run through a condition of a rule is recorded
+ * is a fact about the body and the plan ({@link ColumnWitness}); what one run was recorded doing at
+ * those places is a fact about the run ({@link ExecutionEvidence}). Neither is worked out from the
+ * other.
+ *
  * <p><b>A rule is taken where every condition on its path was seen coming out the way the rule
- * says.</b> Not where some of them were: the conditions of a path are what makes it that path, and
- * a run that matched all but one took a different one.
+ * says, and no other way.</b> Not where some of them were: the conditions of a path are what makes
+ * it that path, and a run that matched all but one took a different one. And a condition a run was
+ * recorded answering both ways — a fork it passed more than once — is not a value of that run: the
+ * run went down more than one path through it, and which one this row stands in is not something
+ * the records say.
  *
  * <p><b>And a rule no run can be recognised at is not refuted by any run.</b> A path carrying a
  * condition with no construct of the model to be seen at, or one the emitter numbered no site for,
@@ -64,42 +74,73 @@ public final class RulesTaken {
             NO_RULE_IS_RECOGNISABLE,
             /** The rules that can be recognised were each missing something the run did not do. */
             NO_RECOGNISABLE_RULE_MATCHES,
+            /** A rule would have matched but for a condition the run was recorded answering both
+             *  ways, which says it went down more than one path there. */
+            A_CONDITION_CAME_OUT_BOTH_WAYS,
             /** More than one rule matched, which one run cannot have done. */
             MORE_THAN_ONE_RULE_MATCHES
         }
     }
 
     /**
-     * One rule and what a run through it has to be seen doing.
+     * What one run was recorded doing at the places one condition of a rule is seen at.
      *
-     * <p>Each condition of the path is one thing to have been seen, and a condition materialised
-     * more than once in the tree that runs is seen at whichever of them the run passed — a helper
-     * carrying a fork is expanded per call site, and a row through any of those copies went through
-     * the arm the model states.
+     * <p>Four answers and not a yes or a no. A condition the run answered the other way and one it
+     * never reached both leave the rule untaken, and they are different things to have seen; one it
+     * answered both ways is the run having gone down more than one path, which is neither.
      */
-    private record Recognised(DecisionRule rule, List<Seen> conditions) {
+    enum ExecutionEvidence {
+        AS_THE_RULE_SAYS,
+        THE_OTHER_WAY,
+        BOTH_WAYS,
+        UNOBSERVED;
 
-        boolean satisfiedBy(AlignedObservation seen) {
-            for (Seen each : conditions) {
-                if (!each.satisfiedBy(seen)) {
-                    return false;
-                }
+        static ExecutionEvidence of(boolean asTheRuleSays, boolean theOtherWay) {
+            if (asTheRuleSays) {
+                return theOtherWay ? BOTH_WAYS : AS_THE_RULE_SAYS;
             }
-            return true;
+            return theOtherWay ? THE_OTHER_WAY : UNOBSERVED;
         }
     }
 
-    /** What a run through one condition of a rule has to be seen doing. */
-    private sealed interface Seen {
+    /**
+     * Where a run through one condition of a rule is recorded, both the way the rule takes it and
+     * the other ways it could go.
+     *
+     * <p>Each condition is seen at every materialisation of the construct of the model it is: a
+     * helper carrying a fork is expanded per call site, and a row through any of those copies went
+     * through the arm the model states. The ways it did not take are held beside the way it did, so
+     * that a run that went both ways is told from one that went the rule's way.
+     */
+    private sealed interface ColumnWitness {
 
-        boolean satisfiedBy(AlignedObservation seen);
+        ExecutionEvidence in(AlignedObservation seen);
 
-        /** Recorded at one of these: each a materialisation of the one place. */
-        record AtAnyOf(List<ControlClaim> alternatives) implements Seen {
+        /** A construct answering a truth, at each place it is recorded. */
+        record AtOutcomes(Set<ConditionOutcomeSite> sites, boolean held) implements ColumnWitness {
 
             @Override
-            public boolean satisfiedBy(AlignedObservation seen) {
-                for (ControlClaim each : alternatives) {
+            public ExecutionEvidence in(AlignedObservation seen) {
+                boolean asTheRuleSays = false;
+                boolean theOtherWay = false;
+                for (ConditionOutcomeSite each : sites) {
+                    asTheRuleSays |= seen.saw(each, held);
+                    theOtherWay |= seen.saw(each, !held);
+                }
+                return ExecutionEvidence.of(asTheRuleSays, theOtherWay);
+            }
+        }
+
+        /** An arm of a fork, at each materialisation of it, beside every other arm of the fork. */
+        record AtArms(Set<ControlClaim> arm, Set<ControlClaim> besides) implements ColumnWitness {
+
+            @Override
+            public ExecutionEvidence in(AlignedObservation seen) {
+                return ExecutionEvidence.of(anyOf(arm, seen), anyOf(besides, seen));
+            }
+
+            private static boolean anyOf(Set<ControlClaim> claims, AlignedObservation seen) {
+                for (ControlClaim each : claims) {
                     if (each.satisfiedBy(seen)) {
                         return true;
                     }
@@ -109,25 +150,39 @@ public final class RulesTaken {
         }
 
         /**
-         * Down one of the materialisations of an arm, and at none of the places an operand is
-         * recorded at — every materialisation of it, since a run that reached any copy of the
-         * operand is one this cannot say stopped short of it.
+         * Down an arm, and at none of the places an operand is recorded at — every materialisation
+         * of it, since a run that reached any copy of the operand is one this cannot say stopped
+         * short of it.
          */
-        record DownAnArmShortOf(List<ControlClaim> arm, List<ConditionOutcomeSite> notReached)
-                implements Seen {
+        record DownAnArmShortOf(AtArms arm, Set<ConditionOutcomeSite> notReached)
+                implements ColumnWitness {
 
             @Override
-            public boolean satisfiedBy(AlignedObservation seen) {
-                if (!new AtAnyOf(arm).satisfiedBy(seen)) {
-                    return false;
+            public ExecutionEvidence in(AlignedObservation seen) {
+                ExecutionEvidence down = arm.in(seen);
+                if (down != ExecutionEvidence.AS_THE_RULE_SAYS) {
+                    return down;
                 }
                 for (ConditionOutcomeSite each : notReached) {
                     if (seen.reached(each)) {
-                        return false;
+                        return ExecutionEvidence.THE_OTHER_WAY;
                     }
                 }
-                return true;
+                return ExecutionEvidence.AS_THE_RULE_SAYS;
             }
+        }
+    }
+
+    /** One rule and where each condition of its path is recorded. */
+    private record Recognised(DecisionRule rule, List<ColumnWitness> conditions) {
+
+        /** What {@code seen} shows of each condition, in the order of the path. */
+        List<ExecutionEvidence> in(AlignedObservation seen) {
+            List<ExecutionEvidence> out = new ArrayList<>();
+            for (ColumnWitness each : conditions) {
+                out.add(each.in(seen));
+            }
+            return out;
         }
     }
 
@@ -170,10 +225,10 @@ public final class RulesTaken {
             if (!ruled.whole()) {
                 continue;
             }
-            List<Seen> conditions = new ArrayList<>();
+            List<ColumnWitness> conditions = new ArrayList<>();
             boolean everyOne = true;
             for (ShownBy each : ruled.shownBy()) {
-                Optional<Seen> seen = seenAs(each, comparisons, answers, arms, plan);
+                Optional<ColumnWitness> seen = witnessOf(each, comparisons, answers, arms, plan);
                 everyOne &= seen.isPresent();
                 seen.ifPresent(conditions::add);
             }
@@ -185,80 +240,87 @@ public final class RulesTaken {
     }
 
     /**
-     * What a run through one condition of a path is seen doing, or empty where this compiler
-     * cannot recognise a run through it.
+     * Where a run through one condition of a path is recorded, or empty where this compiler cannot
+     * recognise a run through it.
      *
      * <p>Empty is one answer over several causes: the condition has no construct of the model, the
      * emitted tree holds no materialisation of that construct, and the plan numbered no site for the
      * ones it holds. None of them is anything about the model, so they arrive here as one.
      */
-    private static Optional<Seen> seenAs(ShownBy shown, ComparisonEmissionIndex comparisons,
-                                         AnswerEmissionIndex answers, ArmEmissionIndex arms,
-                                         CoverageSites.Plan plan) {
+    private static Optional<ColumnWitness> witnessOf(ShownBy shown,
+                                                     ComparisonEmissionIndex comparisons,
+                                                     AnswerEmissionIndex answers,
+                                                     ArmEmissionIndex arms,
+                                                     CoverageSites.Plan plan) {
         return switch (shown) {
-            case ShownBy.AtAnOutcome at -> some(new Seen.AtAnyOf(
-                    outcomes(at.construct(), at.held(), comparisons, answers, plan)));
-            case ShownBy.AtAnArm at -> some(new Seen.AtAnyOf(armOf(at.fork(), at.part(), arms)));
-            // Short of the operand at every place it is recorded, each copy of it both ways: a copy
-            // the plan records no run through is one a run may have reached, and with it this
-            // cannot say the run stopped short.
+            case ShownBy.AtAnOutcome at -> {
+                Set<ConditionOutcomeSite> sites =
+                        outcomes(at.construct(), comparisons, answers, plan);
+                yield sites.isEmpty() ? Optional.empty()
+                        : Optional.of(new ColumnWitness.AtOutcomes(sites, at.held()));
+            }
+            case ShownBy.AtAnArm at ->
+                    armOf(at.fork(), at.part(), arms).map(ColumnWitness.class::cast);
+            // Short of the operand at every place it is recorded: a copy the plan records no run
+            // through is one a run may have reached, and with it this cannot say the run stopped
+            // short.
             case ShownBy.AtAnArmShortOf at -> {
-                List<ControlClaim> arm = armOf(at.fork(), at.part(), arms);
-                List<ConditionOutcomeSite> sites = new ArrayList<>();
+                Optional<ColumnWitness.AtArms> arm = armOf(at.fork(), at.part(), arms);
+                Set<ConditionOutcomeSite> sites =
+                        outcomes(at.notReached(), comparisons, answers, plan);
                 int copies = comparisons.madeFor(at.notReached()).size()
                         + answers.madeFor(at.notReached()).size();
-                for (ControlClaim each : outcomes(at.notReached(), true, comparisons, answers,
-                        plan)) {
-                    if (each.at() instanceof ControlPlace.Outcome outcome) {
-                        sites.add(outcome.at());
-                    }
-                }
                 yield arm.isEmpty() || sites.isEmpty() || sites.size() != copies
                         ? Optional.empty()
-                        : Optional.of(new Seen.DownAnArmShortOf(arm, List.copyOf(sites)));
+                        : Optional.of(new ColumnWitness.DownAnArmShortOf(arm.get(), sites));
             }
             case ShownBy.ShortOf _, ShownBy.NothingIsRecorded _ -> Optional.empty();
         };
     }
 
-    /** {@code seen}, where it has a place to be seen at. */
-    private static Optional<Seen> some(Seen.AtAnyOf seen) {
-        return seen.alternatives().isEmpty() ? Optional.empty() : Optional.of(seen);
+    /**
+     * Where {@code construct} answering is recorded, one site per materialisation the emitter
+     * numbered.
+     *
+     * <p>A construct of the model is a comparison or an application and never both, so it is
+     * looked for among the copies of each and found among one. Asked of the plan, which is the one
+     * maker of a place a construct comes out one way; a site is the same place whichever way it
+     * came out there.
+     */
+    private static Set<ConditionOutcomeSite> outcomes(ModelOccurrence construct,
+                                                      ComparisonEmissionIndex comparisons,
+                                                      AnswerEmissionIndex answers,
+                                                      CoverageSites.Plan plan) {
+        Set<ConditionOutcomeSite> out = new HashSet<>();
+        for (ComparisonEmissionIndex.EmittedComparison made : comparisons.madeFor(construct)) {
+            plan.outcomeOf(made.occurrence(), true).map(ControlPlace.Outcome::at)
+                    .ifPresent(out::add);
+        }
+        for (CoverageSites.AnswerSite made : answers.madeFor(construct)) {
+            plan.outcomeOf(made.application(), true).map(ControlPlace.Outcome::at)
+                    .ifPresent(out::add);
+        }
+        return Set.copyOf(out);
     }
 
     /**
-     * Where {@code construct} coming out {@code held} is recorded, one entry per materialisation
-     * the emitter numbered.
-     *
-     * <p>A construct of the model is a comparison or an application and never both, so it is
-     * looked for among the copies of each and found among one.
+     * Where a run down arm {@code part} of {@code fork} is recorded, beside where a run down any
+     * other arm of it is, or empty where no materialisation of the arm has a place to be seen at.
      */
-    private static List<ControlClaim> outcomes(ModelOccurrence construct, boolean held,
-                                               ComparisonEmissionIndex comparisons,
-                                               AnswerEmissionIndex answers,
-                                               CoverageSites.Plan plan) {
-        List<ControlClaim> out = new ArrayList<>();
-        for (ComparisonEmissionIndex.EmittedComparison made : comparisons.madeFor(construct)) {
-            // Asked of the plan, which is the one maker of a place a comparison comes out one
-            // way: it takes the address for the comparison being asked about, so the two are one
-            // answer rather than a pair assembled here.
-            plan.outcomeOf(made.occurrence(), held).flatMap(ControlClaim::of).ifPresent(out::add);
-        }
-        for (CoverageSites.AnswerSite made : answers.madeFor(construct)) {
-            plan.outcomeOf(made.application(), held).flatMap(ControlClaim::of)
-                    .ifPresent(out::add);
-        }
-        return List.copyOf(out);
+    private static Optional<ColumnWitness.AtArms> armOf(ModelOccurrence fork, int part,
+                                                       ArmEmissionIndex arms) {
+        ArmEmissionIndex.ArmOfTheModel which = new ArmEmissionIndex.ArmOfTheModel(fork, part);
+        Set<ControlClaim> arm = claims(arms.madeFor(which));
+        return arm.isEmpty() ? Optional.empty()
+                : Optional.of(new ColumnWitness.AtArms(arm, claims(arms.besides(which))));
     }
 
-    /** Where a run down arm {@code part} of {@code fork} is recorded, one entry per
-     *  materialisation. */
-    private static List<ControlClaim> armOf(ModelOccurrence fork, int part, ArmEmissionIndex arms) {
-        List<ControlClaim> out = new ArrayList<>();
-        for (ControlPlace.Arm arm : arms.madeFor(new ArmEmissionIndex.ArmOfTheModel(fork, part))) {
-            ControlClaim.of(arm).ifPresent(out::add);
+    private static Set<ControlClaim> claims(Iterable<ControlPlace.Arm> places) {
+        Set<ControlClaim> out = new HashSet<>();
+        for (ControlPlace.Arm each : places) {
+            ControlClaim.of(each).ifPresent(out::add);
         }
-        return List.copyOf(out);
+        return Set.copyOf(out);
     }
 
     /** Which rule {@code seen} took. */
@@ -267,17 +329,24 @@ public final class RulesTaken {
             return new WhichRule.CouldNotTell(WhichRule.Why.NO_RULE_IS_RECOGNISABLE);
         }
         DecisionRule took = null;
+        boolean butForBothWays = false;
         for (Recognised each : recognisable) {
-            if (!each.satisfiedBy(seen)) {
-                continue;
+            List<ExecutionEvidence> evidence = each.in(seen);
+            if (evidence.stream().allMatch(ExecutionEvidence.AS_THE_RULE_SAYS::equals)) {
+                if (took != null) {
+                    return new WhichRule.CouldNotTell(WhichRule.Why.MORE_THAN_ONE_RULE_MATCHES);
+                }
+                took = each.rule();
+            } else if (evidence.stream().allMatch(it -> it == ExecutionEvidence.AS_THE_RULE_SAYS
+                    || it == ExecutionEvidence.BOTH_WAYS)) {
+                butForBothWays = true;
             }
-            if (took != null) {
-                return new WhichRule.CouldNotTell(WhichRule.Why.MORE_THAN_ONE_RULE_MATCHES);
-            }
-            took = each.rule();
         }
-        return took == null
-                ? new WhichRule.CouldNotTell(WhichRule.Why.NO_RECOGNISABLE_RULE_MATCHES)
-                : new WhichRule.TookThis(took);
+        if (took != null) {
+            return new WhichRule.TookThis(took);
+        }
+        return new WhichRule.CouldNotTell(butForBothWays
+                ? WhichRule.Why.A_CONDITION_CAME_OUT_BOTH_WAYS
+                : WhichRule.Why.NO_RECOGNISABLE_RULE_MATCHES);
     }
 }

@@ -588,14 +588,16 @@ public final class PublicationOrders {
      * Where one of the ways a run's rule could not be told is said among the others.
      *
      * <p>From the reading having nothing to recognise a run by, through a run it recognised and no
-     * rule matched, to one that matched more than one. The same decision as the order above and
+     * rule matched, to one that went down more than one path at a condition and one that matched
+     * more than one rule. The same decision as the order above and
      * held the same way.
      */
     public static int positionOf(RulesTaken.WhichRule.Why why) {
         return switch (why) {
             case NO_RULE_IS_RECOGNISABLE -> 0;
             case NO_RECOGNISABLE_RULE_MATCHES -> 1;
-            case MORE_THAN_ONE_RULE_MATCHES -> 2;
+            case A_CONDITION_CAME_OUT_BOTH_WAYS -> 2;
+            case MORE_THAN_ONE_RULE_MATCHES -> 3;
         };
     }
 }
