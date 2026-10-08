@@ -1,16 +1,15 @@
 package souther.compiler;
 
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.AdequacyReport;
-import souther.compiler.report.GeneratedRows;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -53,17 +52,18 @@ class AMapsValuesAreElementsOfTheInputTest {
         List<String> unmet = unmetOf(before);
         assertEquals(2, unmet.size(), () -> "the line's two points are owed: " + report(before));
 
-        String block = block(before);
-        assertTrue(block.contains("counts = [(\"x\", 0)], atLeast = 0"),
-                () -> "a row is offered on the line, as a map holding the value: " + block);
-        assertTrue(block.contains("counts = [(\"x\", -1)], atLeast = 0"),
-                () -> "and one beside it: " + block);
+        List<String> written = offeredInputs(before);
+        assertTrue(written.contains("Usage { counts = [(\"x\", 0)], atLeast = 0 }"),
+                () -> "a row is offered on the line, as a map holding the value: " + written);
+        assertTrue(written.contains("Usage { counts = [(\"x\", -1)], atLeast = 0 }"),
+                () -> "and one beside it: " + written);
 
         Compilation after = measured(MODEL + ANSWERED);
         assertEquals(List.of(), unmetOf(after),
                 () -> "the rows that were offered meet the line: " + report(after));
-        assertFalse(block(after).contains("counts = [(\"x\", 0)]"),
-                () -> "and nothing is offered for it a second time: " + block(after));
+        List<String> again = offeredInputs(after);
+        assertFalse(again.contains("Usage { counts = [(\"x\", 0)], atLeast = 0 }"),
+                () -> "and nothing is offered for it a second time: " + again);
     }
 
     private static List<String> unmetOf(Compilation compilation) {
@@ -73,12 +73,18 @@ class AMapsValuesAreElementsOfTheInputTest {
                 .toList();
     }
 
-    private static String block(Compilation compilation) {
-        return GeneratedRows.of(
-                Adequacy.offeredFor(compilation.db(),
-                        OfferingRequest.overTheModule("example.popular")),
-                Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+    /**
+     * What each row offered for {@code popular} writes as its inputs, asked of the offering rather
+     * than of the block it is written into — where a class nothing could be composed for is named
+     * too, and a spelling found there is no row.
+     */
+    private static List<String> offeredInputs(Compilation compilation) {
+        return Adequacy.offeredFor(compilation.db(),
+                        OfferingRequest.overTheModule("example.popular"))
+                .rowsByBehavior().getOrDefault("popular", List.of()).stream()
+                .map(row -> String.join(", ",
+                        row.inputs().stream().map(FixtureTemplate::text).toList()))
+                .toList();
     }
 
     private static String report(Compilation compilation) {

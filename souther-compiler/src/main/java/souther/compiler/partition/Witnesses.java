@@ -435,8 +435,10 @@ final class Witnesses {
                 }
             }
             if (under < 0) {
-                throw new IllegalStateException("a key was chosen for a value the map is not"
-                        + " built to hold: " + filed.value().text());
+                throw new IllegalStateException(filed.value() == null
+                        ? "a key was chosen and the map was built holding no value to file it over"
+                        : "a key was chosen for a value the map is not built to hold: "
+                                + filed.value().text());
             }
         }
         Set<String> written = new LinkedHashSet<>();

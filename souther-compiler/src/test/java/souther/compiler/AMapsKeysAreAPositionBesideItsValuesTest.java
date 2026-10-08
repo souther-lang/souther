@@ -1,16 +1,17 @@
 package souther.compiler;
 
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.partition.FixtureTemplate;
+import souther.compiler.partition.Generator;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.OfferedRow;
 import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.AdequacyReport;
-import souther.compiler.report.GeneratedRows;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -52,9 +53,10 @@ class AMapsKeysAreAPositionBesideItsValuesTest {
         assertTrue(report(before).contains("no row is in `South` at u.counts[key]"),
                 () -> "the case no key was written as is owed at the keys: " + report(before));
 
-        String block = block(before, "example.region");
-        assertTrue(block.contains("counts = [(South, 0)]"),
-                () -> "a row is offered with a key in that case: " + block);
+        List<OfferedRow> forTheKeys =
+                composedForAClassAt(before, "example.region", "northern", "u.counts[key]");
+        assertEquals(List.of("Usage { counts = [(South, 0)] }"), writtenBy(forTheKeys),
+                () -> "a row is offered with a key in that case: " + forTheKeys);
 
         Compilation after = measured(BY_REGION + """
                     | "south" : (Usage { counts = [(South, 0)] }) -> []
@@ -105,9 +107,11 @@ class AMapsKeysAreAPositionBesideItsValuesTest {
         Compilation compilation = measured(A_DEEP_VALUE);
         assertTrue(report(compilation).contains("no row is in `South` at u.counts[key]"),
                 () -> "the case is owed at the keys: " + report(compilation));
-        String block = block(compilation, "example.deep");
-        assertTrue(block.contains("u.counts[key]=South"),
-                () -> "and a row is offered for it: " + block);
+        List<OfferedRow> forTheKeys =
+                composedForAClassAt(compilation, "example.deep", "northern", "u.counts[key]");
+        assertEquals(1, forTheKeys.size(), () -> "and a row is offered for it: " + forTheKeys);
+        assertTrue(writtenBy(forTheKeys).getFirst().startsWith("Usage { counts = [(South, L1 {"),
+                () -> "keyed in that case, over a value of the map's: " + forTheKeys);
     }
 
     /** A body comparing what a key measures against a field beside the map. */
@@ -134,11 +138,11 @@ class AMapsKeysAreAPositionBesideItsValuesTest {
         List<String> unmet = gapsOf(before, Adequacy.Kind.BOUNDARY_UNMET);
         assertFalse(unmet.isEmpty(), () -> "the line is owed rows: " + report(before));
 
-        String block = block(before, "example.names");
-        assertTrue(block.contains("counts = [(\"\", 0)], atLeast = 0"),
-                () -> "a row is offered on the line, with the key the line is about: " + block);
-        assertTrue(block.contains("counts = [(\"\", 0)], atLeast = 1"),
-                () -> "and one beside it: " + block);
+        List<String> written = writtenBy(offered(before, "example.names", "popular"));
+        assertTrue(written.contains("Usage { counts = [(\"\", 0)], atLeast = 0 }"),
+                () -> "a row is offered on the line, with the key the line is about: " + written);
+        assertTrue(written.contains("Usage { counts = [(\"\", 0)], atLeast = 1 }"),
+                () -> "and one beside it: " + written);
 
         Compilation after = measured(LONG_NAMES + """
                     | "on" : (Usage { counts = [("", 0)], atLeast = 0 }) -> [("", 0)]
@@ -307,11 +311,35 @@ class AMapsKeysAreAPositionBesideItsValuesTest {
                 .toList();
     }
 
-    private static String block(Compilation compilation, String module) {
-        return GeneratedRows.of(
-                Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule(module)),
-                Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
-                compilation.db()).text();
+    /**
+     * The rows offered for {@code behavior}, as offered and not as written out.
+     *
+     * <p>Asked of the offering rather than of the block it is written into. The block says of a
+     * class nothing could be composed for that nothing was, under the class's own name, so a name
+     * found in the text is no row.
+     */
+    private static List<OfferedRow> offered(Compilation compilation, String module,
+                                            String behavior) {
+        return Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule(module))
+                .rowsByBehavior().getOrDefault(behavior, List.of());
+    }
+
+    /** The rows offered for {@code behavior} that were composed for a class at {@code term}. */
+    private static List<OfferedRow> composedForAClassAt(Compilation compilation, String module,
+                                                        String behavior, String term) {
+        return offered(compilation, module, behavior).stream()
+                .filter(row -> row.namedFor().stream().anyMatch(purpose ->
+                        purpose instanceof Generator.Purpose.ForAClass forAClass
+                                && forAClass.at().term().equals(term)))
+                .toList();
+    }
+
+    /** What each row writes as the behavior's inputs, in the order they are taken. */
+    private static List<String> writtenBy(List<OfferedRow> rows) {
+        return rows.stream()
+                .map(row -> String.join(", ",
+                        row.inputs().stream().map(FixtureTemplate::text).toList()))
+                .toList();
     }
 
     private static String report(Compilation compilation) {
