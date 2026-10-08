@@ -355,9 +355,10 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
      * and where it is, the proof names it.
      *
      * <p>The two questions this reading answers came apart when every value got an identity. A guard
-     * over an answer nothing may share is a condition whose shape runs out — there is no reading of
-     * what {@code opaque()} computes — and it narrows the state all the same, through the subject the
-     * answer is. So it is not among the reasons and among them at once: not read, and taken in.
+     * over a value the body bound from something no form reads is a condition whose shape runs out —
+     * there is no reading of what {@code Int.floorMod} answers — and it narrows the state all the
+     * same, through the subject the binding is. So it is not among the reasons and among them at
+     * once: not read, and taken in.
      *
      * <p>Answered from the wrong one of the two, this proof said the readable guard cannot hold, and
      * that guard can hold perfectly well. A proof is a claim about the program; a limit of this
@@ -372,13 +373,10 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
                 data Free
                 data Charged = { yen: Int }
 
-                behavior opaque : () -> Int
-
                 behavior charge : (a: Amount) -> Free | Charged
                     constructs Charged
-                    depends on opaque
-                let charge (a, opaque) = {
-                    let x = opaque()
+                let charge (a) = {
+                    let x = Int.floorMod(a.value, 7)
                     guard a.value < 900 else Free
                     guard x < 5 else Free
                     guard x < 6 else Free

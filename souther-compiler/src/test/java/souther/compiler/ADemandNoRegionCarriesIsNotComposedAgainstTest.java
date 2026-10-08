@@ -54,7 +54,10 @@ class ADemandNoRegionCarriesIsNotComposedAgainstTest {
 
             behavior decidesOnRecords : (at: Int) -> Answer
                 depends on look
-            let decidesOnRecords (at, look) = if look(at).k == look(at).j then Yes else No
+            let decidesOnRecords (at, look) = {
+                let found = look(at)
+                if found.k == found.j then Yes else No
+            }
             """;
 
     private static final String BEHAVIOR = "decidesOnRecords";

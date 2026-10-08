@@ -62,7 +62,7 @@ class AConditionOnADependencysAnswerIsTheColumnTheTableHoldsTest {
         Proposition.Truth truth = assertInstanceOf(Proposition.Truth.class, stated(fork));
         DecisionSubject.AnAnswer answer =
                 assertInstanceOf(DecisionSubject.AnAnswer.class, truth.of());
-        assertEquals("demo.exists(d.title)", answer.spelled());
+        assertTrue(answer.spelled().matches("demo\\.exists\\(d\\.title\\)#\\d+"), answer.spelled());
         assertEquals(Set.of(answer), columnsOf(fork),
                 "the table holds a column for the answer the fork states something of");
     }
@@ -81,23 +81,23 @@ class AConditionOnADependencysAnswerIsTheColumnTheTableHoldsTest {
                         | Missing -> false) then 1 else 0""");
         assertTrue(subjectsIn(stated).stream()
                         .anyMatch(each -> each instanceof DecisionSubject.AnAnswer answer
-                                && answer.spelled().equals("demo.lookup(d.title)")),
+                                && answer.spelled().matches("demo\\.lookup\\(d\\.title\\)#\\d+")),
                 () -> "which case the answer is is a part of what is stated: " + stated);
     }
 
     /**
-     * A number a dependency answered is the answer where the call is written, and the value of the
-     * binding where a name holds it — the identity a reader walking the tree follows.
+     * A number a dependency answered is the answer, whether the call is written where it is
+     * compared or a name holds it: the name is the evaluation it was given.
      */
     @Test
-    void aNumberAnsweredIsTheAnswerOrTheBindingThatHoldsIt() {
+    void aNumberAnsweredIsTheAnswerWhereverItIsNamed() {
         assertTrue(atomsOf(stated("if scoreOf(d.title) > 5 then 1 else 0")).stream()
                 .allMatch(DecisionAtom.OfAnAnswer.class::isInstance));
         assertTrue(atomsOf(stated("""
                 {
                     let s = scoreOf(d.title)
                     if s > 5 then 1 else 0
-                }""")).stream().allMatch(Quantity.OfABinding.class::isInstance));
+                }""")).stream().allMatch(DecisionAtom.OfAnAnswer.class::isInstance));
     }
 
     @Test

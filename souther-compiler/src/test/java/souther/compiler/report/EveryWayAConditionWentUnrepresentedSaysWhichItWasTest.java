@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import souther.compiler.inputs.Evaluations;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
@@ -150,12 +151,11 @@ class EveryWayAConditionWentUnrepresentedSaysWhichItWasTest {
 
     /** A demand to hang a way on, which these sentences say nothing about. */
     private static AnswerDemand demand() {
-        return new AnswerDemand.AComparison(
-                new InjectedAnswer(new ValueName.Behavior("m", "look"), List.of()),
-                where(),
-                LinearForm.atom(new DecisionAtom.OfAnAnswer(new DecisionSubject.AnAnswer(
-                        new InjectedAnswer(new ValueName.Behavior("m", "look"), List.of()),
-                        List.of()))),
+        InjectedAnswer look = new InjectedAnswer(
+                Evaluations.of(new ValueName.Behavior("m", "look"), 0), List.of());
+        return new AnswerDemand.AComparison(look, where(),
+                LinearForm.atom(new DecisionAtom.OfAnAnswer(
+                        new DecisionSubject.AnAnswer(look, List.of()))),
                 Rel.GE);
     }
 

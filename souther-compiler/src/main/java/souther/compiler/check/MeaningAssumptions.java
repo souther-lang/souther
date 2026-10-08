@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.inputs.AnEvaluation;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.TermPath;
@@ -62,20 +63,41 @@ final class MeaningAssumptions {
      * @param typeAt     what stands at a position, or null where nothing is known to
      * @param standing   the expression of the condition that reads each position, in the tree the
      *                   reader walks
+     * @param answering  the expression of the condition that is each place in an answer a
+     *                   dependency gave, in the tree the reader walks: the call, or a name it was
+     *                   given, with the fields read off it
      */
     record InputPlaces(Map<String, BindingId> parameters, Function<TermPath, Type> typeAt,
-                       Map<TermPath, Core> standing) {
+                       Map<TermPath, Core> standing, Map<AnswerPlace, Core> answering) {
 
         /** Where nothing stands: no proposition names a place here. */
-        static final InputPlaces NONE = new InputPlaces(Map.of(), path -> null, Map.of());
+        static final InputPlaces NONE =
+                new InputPlaces(Map.of(), path -> null, Map.of(), Map.of());
 
         InputPlaces {
             standing = Map.copyOf(standing);
+            answering = Map.copyOf(answering);
         }
 
-        /** The same places, with what a condition reads standing at each position it reads. */
-        InputPlaces readBy(Map<TermPath, Core> condition) {
-            return new InputPlaces(parameters, typeAt, condition);
+        /** The same places, with what a condition reads standing at each position it reads and
+         *  each place in an answer it reads. */
+        InputPlaces readBy(Map<TermPath, Core> condition, Map<AnswerPlace, Core> answers) {
+            return new InputPlaces(parameters, typeAt, condition, answers);
+        }
+    }
+
+    /**
+     * A place in what one evaluation of a dependency answered: the evaluation, and the fields read
+     * off it in the order they are written.
+     *
+     * <p>What a proposition about an answer and the tree a reader walks agree on. The arguments the
+     * call was handed are not part of it: they are what the evaluation was asked, and the evaluation
+     * says which call it is.
+     */
+    record AnswerPlace(AnEvaluation evaluation, List<TermPath.Step> steps) {
+
+        AnswerPlace {
+            steps = List.copyOf(steps);
         }
     }
 
@@ -160,8 +182,17 @@ final class MeaningAssumptions {
                     notTaken(new WhyNotTaken.MeaningUnread(unread.why()));
             case Proposition.Compared(Relation.Ordered _, boolean _, var _) ->
                     incomplete(WhyNotTaken.Shape.A_PLACE_ON_AN_ORDER);
-            case Proposition.Truth(DecisionSubject.AnAnswer _, boolean _, var _),
-                 Proposition.InCases(DecisionSubject.AnAnswer _, var _, boolean _, var _),
+            case Proposition.Truth(DecisionSubject.AnAnswer answer, boolean holds, var _) -> {
+                Core standing = answering(answer);
+                if (standing != null) {
+                    known = known.taking(terms.subjectOf(standing, at), holds,
+                            Known.Held.ON_THE_PATH);
+                    taken = true;
+                } else {
+                    incomplete(WhyNotTaken.Shape.WHAT_A_DEPENDENCY_ANSWERED);
+                }
+            }
+            case Proposition.InCases(DecisionSubject.AnAnswer _, var _, boolean _, var _),
                  Proposition.Present(DecisionSubject.AnAnswer _, boolean _, var _) ->
                     incomplete(WhyNotTaken.Shape.WHAT_A_DEPENDENCY_ANSWERED);
             case Proposition.InCases _ -> incomplete(WhyNotTaken.Shape.THE_CASE_OF_A_SUBJECT);
@@ -176,9 +207,10 @@ final class MeaningAssumptions {
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
             FactSubject atom = switch (each.getKey()) {
                 case DecisionAtom.OfTheInput(NumericTerm term) -> atomOf(term);
+                case DecisionAtom.OfAnAnswer(DecisionSubject.AnAnswer answer) -> answerAtom(answer);
                 case Quantity.OfABinding bound -> boundAtom(bound);
                 // Not asked: what no row writes was said before a form was made of it.
-                case DecisionAtom.OfAnAnswer _, Quantity.HowManyMeet _ -> null;
+                case Quantity.HowManyMeet _ -> null;
             };
             if (atom == null || coefs.putIfAbsent(atom, each.getValue()) != null) {
                 return null;
@@ -210,6 +242,26 @@ final class MeaningAssumptions {
             }
             default -> null;
         };
+    }
+
+    /**
+     * The atom a number a dependency answered is here, or null where the condition this reader
+     * stands on reads no such place.
+     *
+     * <p>The evaluation the walk is at: the call, or the name it was given, as this tree has it
+     * ({@link InputPlaces#answering}), named as this reader names any expression's atom. So a fact
+     * about the answer taken in one condition is a fact about the same value in the next, however
+     * each condition names it.
+     */
+    private FactSubject answerAtom(DecisionSubject.AnAnswer answer) {
+        Core standing = answering(answer);
+        return standing == null ? null : terms.atomOf(standing, at);
+    }
+
+    /** The expression this tree reads {@code answer} at, or null where the condition reads none. */
+    private Core answering(DecisionSubject.AnAnswer answer) {
+        return places.answering().get(
+                new AnswerPlace(answer.answered().evaluation(), answer.steps()));
     }
 
     /**
