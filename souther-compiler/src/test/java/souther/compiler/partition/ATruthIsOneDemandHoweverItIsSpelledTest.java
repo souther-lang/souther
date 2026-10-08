@@ -136,7 +136,7 @@ class ATruthIsOneDemandHoweverItIsSpelledTest {
         List<OnTheWay> stated = ReachingCuts.stating(Condition.of(analysis.core(), reads,
                         rules().symbols(), rules().newtypes(),
                         new ConditionNumbering(module(), behavior)),
-                reading, holding);
+                reading, holding, new WhatConditionsState(reading));
         assertEquals(1, stated.size(), () -> "one condition: " + stated);
         return stated.getFirst();
     }

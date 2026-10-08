@@ -68,7 +68,8 @@ class AnArrangementThatDidNotStandIsNotTheOneOfferedAgainTest {
     void andTheFirstArrangementIsOneThatDoesNotStand() {
         String page = human(A_FORM_UNDER_A_CONDITION_NOTHING_PLACED);
 
-        assertTrue(page.contains("an outcome that states one of two things"),
+        assertTrue(page.contains("not yet asked of a row: an outcome that states one of several"
+                        + " things"),
                 () -> "the row is composed without the condition above the line: " + page);
     }
 

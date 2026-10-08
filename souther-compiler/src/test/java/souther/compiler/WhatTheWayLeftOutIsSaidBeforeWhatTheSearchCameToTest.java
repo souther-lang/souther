@@ -159,7 +159,8 @@ class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
                         "a condition on positions nothing here composed a value at"),
                 () -> only(POSITIONS_NOTHING_COMPOSED_A_VALUE_AT));
         assertTrue(only(A_SHAPE_THE_WALK_HAS_NO_WORDS_FOR).contains(
-                        "a condition that is neither a comparison nor a combination of them"),
+                        "a condition on what String.startsWith answers, which comes to one string"
+                                + " standing inside another — no condition here says that"),
                 () -> only(A_SHAPE_THE_WALK_HAS_NO_WORDS_FOR));
     }
 

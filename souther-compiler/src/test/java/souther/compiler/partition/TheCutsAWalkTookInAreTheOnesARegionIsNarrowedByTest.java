@@ -7,6 +7,7 @@ import souther.compiler.inputs.EmptyInput;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.PlacesApart;
@@ -143,9 +144,11 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
         Recording region = new Recording();
 
         WayToTheBorder way = new WayToTheBorder(List.of(
-                new OnTheWay.Declined(met(1), somewhere(1), new OnTheWay.Why.NoWordsForTheShape()),
+                new OnTheWay.Declined(met(1), somewhere(1),
+                        new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE)),
                 new OnTheWay.TakenIn(somewhere(2), new RowDemand.Relational(only)),
-                new OnTheWay.Declined(met(3), somewhere(3), new OnTheWay.Why.OneOfTwoThings())));
+                new OnTheWay.Declined(met(3), somewhere(3),
+                        new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.ONE_OF_SEVERAL_THINGS))));
         way.narrowing(region);
 
         assertEquals(List.of(only), region.told, "a decline is a record and not a cut");

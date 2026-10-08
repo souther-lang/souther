@@ -395,6 +395,29 @@ public final class OperationFacts {
             about("Map", "intersection", unsaid(AnswerAspect.EMPTINESS, Unsayable.A_KEY_OF_A_MAP)),
             about("Map", "difference", unsaid(AnswerAspect.EMPTINESS, Unsayable.A_KEY_OF_A_MAP)),
 
+            // What every operation answering a truth comes out true for. A container holding a
+            // value is some element being it, and a denial is the other answer of its argument;
+            // an emptiness check is read off the size it means, and is not written again here.
+            about("List", "contains", law(AnswerAspect.TRUTH, some(at(1),
+                    new LawProposition.Same<>(new LawSubject.ElementOf<>(at(1)),
+                            new LawSubject.Argument<>(at(0)), true)))),
+            about("Set", "contains", law(AnswerAspect.TRUTH, some(at(1),
+                    new LawProposition.Same<>(new LawSubject.ElementOf<>(at(1)),
+                            new LawSubject.Argument<>(at(0)), true)))),
+            about("Bool", "not", law(AnswerAspect.TRUTH, new LawProposition.Observed<>(
+                    new LawSubject.Argument<>(at(0)), new SideAnswered(AnswerAspect.TRUTH, false)))),
+            about("Map", "containsKey", unsaid(AnswerAspect.TRUTH, Unsayable.A_KEY_OF_A_MAP)),
+            about("String", "contains", unsaid(AnswerAspect.TRUTH,
+                    Unsayable.A_STRING_INSIDE_ANOTHER)),
+            about("String", "startsWith", unsaid(AnswerAspect.TRUTH,
+                    Unsayable.A_STRING_INSIDE_ANOTHER)),
+            about("String", "endsWith", unsaid(AnswerAspect.TRUTH,
+                    Unsayable.A_STRING_INSIDE_ANOTHER)),
+            about("String", "matches", unsaid(AnswerAspect.TRUTH,
+                    Unsayable.A_STRING_MATCHING_A_PATTERN)),
+            about("List", "allDistinctBy", unsaid(AnswerAspect.TRUTH,
+                    Unsayable.NO_TWO_ELEMENTS_ALIKE)),
+
             // The containers a construction's result is never smaller than. A union answers one of
             // what both sides hold and an insert of something already there adds nothing, so
             // neither answers the sum of what it read; appending does, and stating it for that one
@@ -436,8 +459,6 @@ public final class OperationFacts {
             about("List", "contains", reads(at(1), ElementShape.PERMUTES)),
             about("Set", "contains", reads(at(1), ElementShape.PERMUTES)),
             about("Map", "containsKey", reads(at(1), ElementShape.PERMUTES)),
-            about("List", "contains", new OperationFact.AsksWhetherItsContainerHolds(at(0))),
-            about("Set", "contains", new OperationFact.AsksWhetherItsContainerHolds(at(0))),
 
             about("List", "allDistinctBy",
                     new OperationFact.IsStatedOverAProjection(new ArgumentRef.TheClosure())),

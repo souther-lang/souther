@@ -453,12 +453,16 @@ class WhatDropsALineIsWhatReachesItsComparisonTest {
      *
      * <p>A helper's comparison is a site per call, and what has been established on the way to each
      * call is the caller's own. Keyed on the comparison a person wrote, the guard above one call
-     * would take the line away from the other — so the answer here is exactly one dropped line and
-     * not none or two.
+     * would take the line away from the other — so the helper's line is dropped where it is reached
+     * through {@code a} and still drawn where it is reached through {@code b}.
+     *
+     * <p>The guard over the helper's answer for {@code a} states {@code a < 6000}, read through
+     * what the helper answers in each case, and nothing arrives at that line either: it is the
+     * other line dropped here, and it is the guard's own.
      */
     @Test
     void oneComparisonReachedTwiceIsTwoArrivals() {
-        assertEquals(1, droppedForNothingArriving("""
+        String report = reportOf("""
                 module d
 
                 data Amount = Int invariant value >= 0 && value <= 1000000
@@ -476,6 +480,16 @@ class WhatDropsALineIsWhatReachesItsComparisonTest {
                     guard over(b.value) == 0 else Free
                     Charged { yen = 500 }
                 }
-                """));
+                """);
+        List<String> dropped = report.lines().filter(each -> each.contains(NOTHING_ARRIVES))
+                .toList();
+        assertTrue(dropped.stream().anyMatch(each -> each.contains("comparison@7:31")
+                        && each.endsWith("about `a`")),
+                () -> "the helper's line, reached through a, is dropped: " + report);
+        assertTrue(report.contains("ON point (comparison@7:31)"),
+                () -> "and reached through b it is still drawn: " + report);
+        assertTrue(dropped.stream().anyMatch(each -> each.contains("comparison@14:25")),
+                () -> "the guard over what the helper answers for a states a < 6000: " + report);
+        assertEquals(2, dropped.size(), () -> "and nothing else is dropped: " + dropped);
     }
 }

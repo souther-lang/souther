@@ -12,6 +12,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.core.Core;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import java.util.ArrayList;
@@ -967,12 +968,24 @@ final class Predicates {
      *
      * @param taken     whether any of these domains took the condition in
      * @param shapeRead whether a rule here read the shape it is written in at all
+     * @param notTaken  why a part of what the condition states was not taken in, each once, where
+     *                  what it states was read ({@link MeaningAssumptions}); empty where every part
+     *                  was, or where the condition was read as it stands
      */
-    record Assumed(Known known, boolean taken, boolean shapeRead) {
+    record Assumed(Known known, boolean taken, boolean shapeRead, List<WhyNotTaken> notTaken) {
+
+        Assumed(Known known, boolean taken, boolean shapeRead) {
+            this(known, taken, shapeRead, List.of());
+        }
+
+        Assumed {
+            notTaken = List.copyOf(new LinkedHashSet<>(notTaken));
+        }
 
         Assumed alsoRead(boolean moreTaken, boolean moreShape) {
             return (moreTaken && !taken) || (moreShape && !shapeRead)
-                    ? new Assumed(known, taken || moreTaken, shapeRead || moreShape) : this;
+                    ? new Assumed(known, taken || moreTaken, shapeRead || moreShape, notTaken)
+                    : this;
         }
     }
 
@@ -995,7 +1008,7 @@ final class Predicates {
         FactSubject key = terms.subjectOf(cond, at);
         return key == null ? meant
                 : new Assumed(meant.known().taking(key, positive, Known.Held.ON_THE_PATH), true,
-                        meant.shapeRead());
+                        meant.shapeRead(), meant.notTaken());
     }
 
     /**

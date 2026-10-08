@@ -8,8 +8,10 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.StatedContract;
 import souther.compiler.core.Core;
+import souther.compiler.coverage.Arrivals;
 import souther.compiler.diag.Citation;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -79,11 +81,13 @@ class WhatAComparisonIsARuleAboutTest {
         for (Contract.Param param : stated.params()) {
             roots.putIfAbsent(param.binding(), param.name());
         }
+        InputReading reading = inputs.reading(rules);
         return ComparisonAssessment.of("f", comparison.stated(), Citation.of(binary.pos()),
-                inputs.reading(rules),
+                reading,
                 InputReads.ofWhatIsDeclared(roots, inputs.declared(rules)), rule.value(),
-                WhatAnAnswerTakesUp.of(inputs.reading(rules)),
-                souther.compiler.coverage.Arrivals.inTheTree(read), false);
+                WhatAnAnswerTakesUp.of(reading),
+                Arrivals.inTheTree(read), false,
+                new WhatConditionsState(reading));
     }
 
     /** The same over two {@code Int} positions, which is what most of the table is written over. */

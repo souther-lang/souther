@@ -7,6 +7,7 @@ import souther.compiler.check.Location;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.types.Type;
+import souther.compiler.coverage.Arrivals;
 import souther.compiler.diag.Citation;
 import souther.compiler.inputs.ClauseWithoutAnEnd;
 import souther.compiler.inputs.InputReading;
@@ -81,7 +82,8 @@ public final class DeclaredThresholds {
                 Citation.of(clause.wrote()), read,
                 InputReads.ofADeclaredClause(roots, read.declared()), null,
                 WhatAnAnswerTakesUp.of(read),
-                souther.compiler.coverage.Arrivals.inTheTree(clause.readOutOf()), true);
+                Arrivals.inTheTree(clause.readOutOf()), true,
+                new WhatConditionsState(read));
         // Only the quantity that is on no position. Why this drew no line where it drew none is not
         // said here: the reading of ends already answered for this clause at each position it names,
         // and a second sentence about one rule is two answers to one question.

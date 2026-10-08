@@ -1,11 +1,14 @@
 package souther.compiler.partition;
 
+import souther.compiler.flow.AWayThrough;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
@@ -14,7 +17,9 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -25,52 +30,114 @@ import java.util.Map;
  * values the rules leave the number, and a way stands where some value of that run falls on the
  * side the way needs.
  *
- * <p><b>No is a proof and yes is not.</b> A way is ruled out only where the rules leave no value
- * behind it. Everything else is answered yes: a part nothing read, a quantity of something other
- * than the input, a statement about which case a value is, an element of a container. A
- * conjunction is ruled out where one of its parts is, and a disjunction where every part is — each
- * part asked on its own, which is weaker than asking them together and never wrong the other way.
+ * <p><b>Ruled out is a proof and nothing else is.</b> A way is ruled out only where the rules leave
+ * no value behind it. Everything else is not ruled out, and says which parts were not asked of the
+ * rules at all: a part nothing read, a quantity of something other than the input, a statement
+ * about which case a value is, an element of a container. A conjunction is ruled out where one of
+ * its parts is, and a disjunction where every part is — each part asked on its own, which is weaker
+ * than asking them together and never wrong the other way. Not ruled out is never a witness that a
+ * run takes the way ({@link AWayThrough}).
  */
 public final class WhatTheRulesLeave {
 
     private WhatTheRulesLeave() {}
 
+    private static final AWayThrough LEFT = new AWayThrough.NotRuledOut(List.of());
+
     /** Whether the rules leave some input on which {@code stated} comes out {@code want}. */
-    public static boolean admits(Proposition stated, boolean want, Quantities rules) {
+    public static AWayThrough admits(Proposition stated, boolean want, Quantities rules) {
         return switch (stated) {
-            case Proposition.Always always -> always.holds() == want;
+            case Proposition.Always always -> always.holds() == want ? LEFT
+                    : new AWayThrough.RuledOut();
             case Proposition.Compared compared ->
                     leaves(compared.relation(), compared.holds() == want, rules);
-            case Proposition.All all -> want
-                    ? all.parts().stream().allMatch(part -> admits(part, true, rules))
-                    : all.parts().stream().anyMatch(part -> admits(part, false, rules));
-            case Proposition.Any any -> want
-                    ? any.parts().stream().anyMatch(part -> admits(part, true, rules))
-                    : any.parts().stream().allMatch(part -> admits(part, false, rules));
+            case Proposition.All all -> want ? every(all.parts(), true, rules)
+                    : some(all.parts(), false, rules);
+            case Proposition.Any any -> want ? some(any.parts(), true, rules)
+                    : every(any.parts(), false, rules);
             // On some application, either way: each statement is denied where it stands.
-            case Proposition.OnAnApplication applications -> applications.each().stream()
-                    .anyMatch(each -> admits(each, want, rules));
-            default -> true;
+            case Proposition.OnAnApplication applications ->
+                    some(applications.each(), want, rules);
+            case Proposition.Unread unread ->
+                    notAsked(new WhyNotTaken.MeaningUnread(unread.why()));
+            case Proposition.Truth(DecisionSubject.AnAnswer _, boolean _, var _),
+                 Proposition.InCases(DecisionSubject.AnAnswer _, var _, boolean _, var _),
+                 Proposition.Present(DecisionSubject.AnAnswer _, boolean _, var _) ->
+                    incomplete(WhyNotTaken.Shape.WHAT_A_DEPENDENCY_ANSWERED);
+            case Proposition.Truth _ -> incomplete(WhyNotTaken.Shape.A_TRUTH_ASKED_OF_THE_RULES);
+            case Proposition.InCases _ -> incomplete(WhyNotTaken.Shape.THE_CASE_OF_A_SUBJECT);
+            case Proposition.Present _ -> incomplete(WhyNotTaken.Shape.A_VALUE_BEING_THERE);
+            case Proposition.SameValue _ -> incomplete(WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE);
+            case Proposition.Some some -> new AWayThrough.NotRuledOut(WhyNotTaken.declinedWhole(
+                    new WhyNotTaken.ProjectionIncomplete(
+                            WhyNotTaken.Shape.SOME_ELEMENT_ASKED_OF_THE_RULES), some));
         };
+    }
+
+    /** Every one of {@code parts} coming out {@code want}: ruled out where one of them is. */
+    private static AWayThrough every(List<Proposition> parts, boolean want, Quantities rules) {
+        List<WhyNotTaken> notAsked = new ArrayList<>();
+        for (Proposition part : parts) {
+            switch (admits(part, want, rules)) {
+                case AWayThrough.RuledOut out -> {
+                    return out;
+                }
+                case AWayThrough.NotRuledOut(List<WhyNotTaken> whys) -> notAsked.addAll(whys);
+            }
+        }
+        return left(notAsked);
+    }
+
+    /** Not ruled out, with what was not asked: the one answer where nothing was left unasked. */
+    private static AWayThrough left(List<WhyNotTaken> notAsked) {
+        return notAsked.isEmpty() ? LEFT : new AWayThrough.NotRuledOut(notAsked);
+    }
+
+    /** Some one of {@code parts} coming out {@code want}: ruled out where every one is. */
+    private static AWayThrough some(List<Proposition> parts, boolean want, Quantities rules) {
+        List<WhyNotTaken> notAsked = new ArrayList<>();
+        boolean somePartLeft = false;
+        for (Proposition part : parts) {
+            if (admits(part, want, rules) instanceof AWayThrough.NotRuledOut(var whys)) {
+                somePartLeft = true;
+                notAsked.addAll(whys);
+            }
+        }
+        return somePartLeft ? left(notAsked) : new AWayThrough.RuledOut();
+    }
+
+    private static AWayThrough notAsked(WhyNotTaken why) {
+        return new AWayThrough.NotRuledOut(List.of(why));
+    }
+
+    private static AWayThrough incomplete(WhyNotTaken.Shape shape) {
+        return notAsked(new WhyNotTaken.ProjectionIncomplete(shape));
     }
 
     /** Whether the rules leave a value at which {@code relation} holds, or fails where
      *  {@code holds} is false. */
-    private static boolean leaves(Relation relation, boolean holds, Quantities rules) {
+    private static AWayThrough leaves(Relation relation, boolean holds, Quantities rules) {
         Rel asked = holds ? relation.proposition() : relation.proposition().denied();
         return switch (relation) {
-            case Relation.Ordered ordered -> !(ordered.term() instanceof DecisionAtom.OfTheInput(
-                    NumericTerm term))
-                    || someValue(rules.runsBetween(term), asked, ordered.at());
+            case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), var at, Rel _) ->
+                    someValue(rules.runsBetween(term), asked, at) ? LEFT
+                            : new AWayThrough.RuledOut();
+            case Relation.Ordered _ -> incomplete(WhyNotTaken.Shape.A_NUMBER_A_DEPENDENCY_ANSWERED);
             case Relation.Affine affine -> {
                 LinearForm<NumericTerm> form = ofTheInput(affine.form());
-                yield form == null || someValue(rules.runsBetween(form), asked, Count.ZERO);
+                if (form == null) {
+                    yield new AWayThrough.NotRuledOut(
+                            WhyNotTaken.quantitiesNoRowWrites(affine.form()));
+                }
+                yield someValue(rules.runsBetween(form), asked, Count.ZERO) ? LEFT
+                        : new AWayThrough.RuledOut();
             }
         };
     }
 
-    /** {@code form} as one over numbers of the input, or null where a quantity is something else. */
-    private static LinearForm<NumericTerm> ofTheInput(LinearForm<Quantity> form) {
+    /** {@code form} as one over numbers of the input, or null where a quantity is something else.
+     *  The one place a statement's form is put on the input space, for every reader that does. */
+    static LinearForm<NumericTerm> ofTheInput(LinearForm<Quantity> form) {
         Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
             if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term))) {

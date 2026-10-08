@@ -3,10 +3,13 @@ package souther.compiler.partition;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 
 import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -180,15 +183,24 @@ public sealed interface DecisionCondition {
      * every distinction on its path.
      *
      * @param met which condition of the reading it is
-     * @param why what stopped it, in the walk's own words
+     * @param whys what stopped it, in the walk's own words, each once
      */
-    record AConditionNotRead(ConditionOccurrence met, OnTheWay.Why why)
+    record AConditionNotRead(ConditionOccurrence met, List<WhyNotTaken> whys)
             implements DecisionCondition {
 
+        public AConditionNotRead(ConditionOccurrence met, WhyNotTaken why) {
+            this(met, List.of(why));
+        }
+
         public AConditionNotRead {
-            if (met == null || why == null) {
+            if (met == null) {
                 throw new IllegalArgumentException(
                         "a condition nothing read is one some reading met, for a reason");
+            }
+            whys = List.copyOf(new LinkedHashSet<>(whys));
+            if (whys.isEmpty()) {
+                throw new IllegalArgumentException("a condition nothing read is unread for some"
+                        + " reason");
             }
         }
     }

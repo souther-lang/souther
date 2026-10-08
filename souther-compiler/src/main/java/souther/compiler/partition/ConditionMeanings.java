@@ -54,7 +54,7 @@ record ConditionMeanings(souther.compiler.inputs.InputReading read) {
 
     /** What {@code condition} coming out {@code held} states, and where it states nothing, that. */
     List<OnTheWay> stating(Condition condition, boolean held) {
-        return ReachingCuts.stating(condition, read, held);
+        return ReachingCuts.stating(condition, read, held, new WhatConditionsState(read));
     }
 
     /**

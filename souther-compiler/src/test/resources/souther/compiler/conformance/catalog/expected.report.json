@@ -1451,7 +1451,11 @@
             "conditions" : [ {
               "kind" : "not_read",
               "condition" : "condition 0 of `discount`",
-              "outcome" : "held"
+              "outcome" : "held",
+              "notRead" : [ {
+                "kind" : "projection_incomplete",
+                "reason" : "number_the_body_bound"
+              } ]
             } ]
           },
           "taken" : true
@@ -1461,7 +1465,11 @@
             "conditions" : [ {
               "kind" : "not_read",
               "condition" : "condition 0 of `discount`",
-              "outcome" : "denied"
+              "outcome" : "denied",
+              "notRead" : [ {
+                "kind" : "projection_incomplete",
+                "reason" : "number_the_body_bound"
+              } ]
             } ]
           },
           "taken" : true
@@ -2772,7 +2780,11 @@
             }, {
               "kind" : "not_read",
               "condition" : "condition 0 of `apportion`",
-              "outcome" : "held"
+              "outcome" : "held",
+              "notRead" : [ {
+                "kind" : "projection_incomplete",
+                "reason" : "number_the_body_bound"
+              } ]
             } ]
           },
           "taken" : true
@@ -2786,7 +2798,11 @@
             }, {
               "kind" : "not_read",
               "condition" : "condition 0 of `apportion`",
-              "outcome" : "denied"
+              "outcome" : "denied",
+              "notRead" : [ {
+                "kind" : "projection_incomplete",
+                "reason" : "number_the_body_bound"
+              } ]
             } ]
           },
           "taken" : false,
@@ -3814,11 +3830,19 @@
             }, {
               "kind" : "not_read",
               "condition" : "condition 0 of `apportionExactly`",
-              "outcome" : "held"
+              "outcome" : "held",
+              "notRead" : [ {
+                "kind" : "projection_incomplete",
+                "reason" : "number_the_body_bound"
+              } ]
             }, {
               "kind" : "not_read",
               "condition" : "condition 1 of `apportionExactly`",
-              "outcome" : "held"
+              "outcome" : "held",
+              "notRead" : [ {
+                "kind" : "projection_incomplete",
+                "reason" : "arm_read_as_written"
+              } ]
             } ]
           },
           "taken" : true
@@ -3832,11 +3856,19 @@
             }, {
               "kind" : "not_read",
               "condition" : "condition 0 of `apportionExactly`",
-              "outcome" : "denied"
+              "outcome" : "denied",
+              "notRead" : [ {
+                "kind" : "projection_incomplete",
+                "reason" : "number_the_body_bound"
+              } ]
             }, {
               "kind" : "not_read",
               "condition" : "condition 1 of `apportionExactly`",
-              "outcome" : "held"
+              "outcome" : "held",
+              "notRead" : [ {
+                "kind" : "projection_incomplete",
+                "reason" : "arm_read_as_written"
+              } ]
             } ]
           },
           "taken" : false,
@@ -3852,7 +3884,11 @@
             }, {
               "kind" : "not_read",
               "condition" : "condition 2 of `apportionExactly`",
-              "outcome" : "held"
+              "outcome" : "held",
+              "notRead" : [ {
+                "kind" : "projection_incomplete",
+                "reason" : "arm_read_as_written"
+              } ]
             } ]
           },
           "taken" : true
@@ -6667,7 +6703,14 @@
             }, {
               "kind" : "not_read",
               "condition" : "condition 4 of `出荷する`",
-              "outcome" : "held"
+              "outcome" : "held",
+              "notRead" : [ {
+                "kind" : "projection_incomplete",
+                "reason" : "one_of_several_things"
+              }, {
+                "kind" : "meaning_unread",
+                "reason" : "no_form_of_what_it_answers"
+              } ]
             }, {
               "kind" : "case",
               "condition" : "conformance.shipping.台帳へ書く(指示)",
@@ -6689,7 +6732,14 @@
             }, {
               "kind" : "not_read",
               "condition" : "condition 4 of `出荷する`",
-              "outcome" : "held"
+              "outcome" : "held",
+              "notRead" : [ {
+                "kind" : "projection_incomplete",
+                "reason" : "one_of_several_things"
+              }, {
+                "kind" : "meaning_unread",
+                "reason" : "no_form_of_what_it_answers"
+              } ]
             }, {
               "kind" : "case",
               "condition" : "conformance.shipping.台帳へ書く(指示)",
@@ -6711,7 +6761,14 @@
             }, {
               "kind" : "not_read",
               "condition" : "condition 4 of `出荷する`",
-              "outcome" : "held"
+              "outcome" : "held",
+              "notRead" : [ {
+                "kind" : "projection_incomplete",
+                "reason" : "one_of_several_things"
+              }, {
+                "kind" : "meaning_unread",
+                "reason" : "no_form_of_what_it_answers"
+              } ]
             }, {
               "kind" : "case",
               "condition" : "conformance.shipping.台帳へ書く(指示)",
@@ -6733,7 +6790,11 @@
             }, {
               "kind" : "not_read",
               "condition" : "condition 5 of `出荷する`",
-              "outcome" : "denied"
+              "outcome" : "denied",
+              "notRead" : [ {
+                "kind" : "meaning_unread",
+                "reason" : "no_form_of_what_it_answers"
+              } ]
             } ]
           },
           "taken" : true

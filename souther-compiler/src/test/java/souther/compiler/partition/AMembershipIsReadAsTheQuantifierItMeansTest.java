@@ -11,6 +11,7 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -156,18 +157,25 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
     }
 
     /**
-     * A value written in the source stands at no position, and the membership is declined as
-     * that — read, and short of somewhere to read the value from — rather than as a shape this
-     * has no words for.
+     * A value written in the source stands at no position, and what is asked of an element is
+     * declined as that — read, and short of somewhere to read the value from — rather than as a
+     * shape this has no words for. The container holding the value is still the container holding
+     * something, which is asked: some element being it needs some element.
      */
     @Test
     void aValueAtNoPositionIsDeclinedAsThat() {
-        for (boolean holding : List.of(true, false)) {
-            OnTheWay.Declined declined = assertInstanceOf(OnTheWay.Declined.class,
-                    stated("written", holding));
-            assertEquals(new OnTheWay.Why.TheMeaningWasNotRead(
-                    new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.VALUE)), declined.why());
-        }
+        WhyNotTaken atNoPosition = new WhyNotTaken.MeaningUnread(
+                new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.VALUE));
+        List<OnTheWay> holding = statedAll("written", true);
+        assertEquals(2, holding.size(), () -> "the value, and something held: " + holding);
+        assertEquals(List.of(atNoPosition),
+                assertInstanceOf(OnTheWay.Declined.class, holding.get(0)).whys());
+        RowDemand.Relational held = assertInstanceOf(RowDemand.Relational.class,
+                assertInstanceOf(OnTheWay.TakenIn.class, holding.get(1)).demand());
+        assertEquals("Set.size(lead.campaigns)",
+                held.constraint().terms().iterator().next().toString());
+        assertEquals(List.of(atNoPosition), assertInstanceOf(OnTheWay.Declined.class,
+                stated("written", false)).whys());
     }
 
     /** A container built out of another asks nothing of the other. */
@@ -176,9 +184,9 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
         for (boolean holding : List.of(true, false)) {
             OnTheWay.Declined declined = assertInstanceOf(OnTheWay.Declined.class,
                     stated("filtered", holding));
-            assertEquals(new OnTheWay.Why.TheMeaningWasNotRead(
-                    new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER)),
-                    declined.why());
+            assertEquals(List.of(new WhyNotTaken.MeaningUnread(
+                    new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER))),
+                    declined.whys());
         }
     }
 
@@ -186,8 +194,16 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
         return assertInstanceOf(OnTheWay.TakenIn.class, stated(behavior, holding)).demand();
     }
 
-    /** What {@code behavior}'s body asks of a row coming out {@code holding}. */
+    /** What {@code behavior}'s body asks of a row coming out {@code holding}, which is one
+     *  thing. */
     private static OnTheWay stated(String behavior, boolean holding) {
+        List<OnTheWay> stated = statedAll(behavior, holding);
+        assertEquals(1, stated.size(), () -> "one condition: " + stated);
+        return stated.getFirst();
+    }
+
+    /** Everything {@code behavior}'s body asks of a row coming out {@code holding}. */
+    private static List<OnTheWay> statedAll(String behavior, boolean holding) {
         Bodies.Elaborated checked =
                 COMPILATION.db().ask(new Bodies.Checked(module())).value();
         assertNotNull(checked, () -> "the model under test compiles: "
@@ -206,9 +222,8 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
         List<OnTheWay> stated = ReachingCuts.stating(Condition.of(analysis.core(), reads,
                         rules().symbols(), rules().newtypes(),
                         new ConditionNumbering(module(), behavior)),
-                reading, holding);
-        assertEquals(1, stated.size(), () -> "one condition: " + stated);
-        return stated.getFirst();
+                reading, holding, new WhatConditionsState(reading));
+        return stated;
     }
 
     private static final Compilation COMPILATION = compiled();

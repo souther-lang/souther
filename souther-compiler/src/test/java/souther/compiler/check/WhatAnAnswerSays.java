@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.Unsettlement;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.reach.PathDecision;
 import souther.compiler.reach.Proof;
@@ -121,7 +122,7 @@ final class WhatAnAnswerSays {
             }
 
             @Override
-            public Boolean aConditionWasNotRead(SourcePos at) {
+            public Boolean aConditionWasNotRead(SourcePos at, List<WhyNotTaken> why) {
                 return true;
             }
 

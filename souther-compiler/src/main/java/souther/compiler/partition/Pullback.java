@@ -57,6 +57,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -225,6 +226,24 @@ final class Pullback {
     }
 
     /**
+     * What a comparison states, and what the arithmetic over the input made of it on the way.
+     *
+     * @param arithmetic read where a rule asked for it and not again, so a reader that needs to know
+     *                   where that arithmetic stopped asks this rather than reading the comparison a
+     *                   second time
+     */
+    record OnTheInput(Pulled stated, Supplier<AffineReading.OfAComparison> arithmetic) {}
+
+    /** The same, with the arithmetic it was read through. */
+    static OnTheInput ofAComparisonOnTheInput(StatedComparison comparison, InputReads reads,
+                                              InputReading read) {
+        Pullback reading = new Pullback(read, Optional.empty());
+        Once<AffineReading.OfAComparison> arithmetic = reading.arithmeticOf(comparison, reads);
+        return new OnTheInput(reading.pulled(reading.firstThatReadsIt(
+                reading.rulesFor(comparison, null, false, reads, arithmetic))), arithmetic);
+    }
+
+    /**
      * Whether what a written comparison states was carried past it to the input — so that what it
      * states is the parts it was carried to, and not a rule the comparison draws of its own.
      *
@@ -234,13 +253,17 @@ final class Pullback {
      * value made from the input, which the comparison still is.
      */
     static boolean carriesPast(StatedComparison comparison, InputReads reads, InputReading read) {
-        if (!mayBeCarriedPast(comparison)) {
-            return false;
-        }
-        Pulled pulled = ofAComparison(comparison, reads, read, Optional.empty());
-        return !(pulled.proposition() instanceof Proposition.Compared)
-                && pulled.turnsOn().stream()
-                        .noneMatch(leaf -> leaf.part() instanceof Proposition.Unread);
+        return mayBeCarriedPast(comparison)
+                && carriesPast(ofAComparison(comparison, reads, read, Optional.empty()));
+    }
+
+    /** The same, of what an emptiness check was read to state. */
+    static boolean carriesPast(Pulled read) {
+        // Unread anywhere in what is stated, and not among the parts it turns on: a part nothing
+        // read that is the same on every run turns on nothing, and is still not read.
+        Proposition stated = read.proposition();
+        return !(stated instanceof Proposition.Compared)
+                && !Proposition.leavesSomethingUnread(stated);
     }
 
     /**
@@ -274,10 +297,8 @@ final class Pullback {
             if (concluded == null) {
                 continue;
             }
-            Proposition part = each.step() instanceof Derivation.AMembership membership
-                    ? membership.sameValue() : concluded;
-            if (!(part instanceof Proposition.Always)) {
-                leaves.add(new Leaf(part, each.from()));
+            if (!(concluded instanceof Proposition.Always)) {
+                leaves.add(new Leaf(concluded, each.from()));
             }
         }
         return new Pulled(meaning, List.copyOf(leaves));
@@ -339,8 +360,7 @@ final class Pullback {
                 },
                 () -> BooleanMeaning.asAComparison(e).map(stated -> comparison(stated,
                         new Denotation(e, reads), fixed(e, reads), reads)).orElse(null),
-                () -> byALaw(applied, e, AnswerAspect.TRUTH, reads, new Denotation(e, reads)),
-                () -> applied == null ? null : membership(applied, e, reads)));
+                () -> byALaw(applied, e, AnswerAspect.TRUTH, reads, new Denotation(e, reads))));
         return taken != null ? taken
                 : unread(e, reads, unreadAs(applied, AnswerAspect.TRUTH, reads));
     }
@@ -403,9 +423,20 @@ final class Pullback {
     /** The rules that take a comparison the source wrote, in the order they are tried. */
     private List<Supplier<Derivation>> rulesFor(StatedComparison stated, Denotation at,
                                                 boolean fixed, InputReads reads) {
+        return rulesFor(stated, at, fixed, reads, arithmeticOf(stated, reads));
+    }
+
+    /** The arithmetic over the input {@code stated} is read through, when a rule asks for it. */
+    private Once<AffineReading.OfAComparison> arithmeticOf(StatedComparison stated,
+                                                          InputReads reads) {
+        return new Once<>(() -> AffineReading.read(stated, read.domain(), reads, read.rules()));
+    }
+
+    /** The same, read through {@code arithmetic}. */
+    private List<Supplier<Derivation>> rulesFor(StatedComparison stated, Denotation at,
+                                                boolean fixed, InputReads reads,
+                                                Once<AffineReading.OfAComparison> arithmetic) {
         AnEmptinessCheck.Checked checked = AnEmptinessCheck.checked(stated);
-        Once<AffineReading.OfAComparison> arithmetic = new Once<>(
-                () -> AffineReading.read(stated, read.domain(), reads, read.rules()));
         return List.of(
                 () -> checked == null ? null : new Derivation.AnEmptinessCheck(at == null
                         ? observe(checked.container(), AnswerAspect.EMPTINESS, reads)
@@ -905,13 +936,14 @@ final class Pullback {
             Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> outer = counting;
             counting = new LinkedHashMap<>();
             try {
-                Sized sized = number(form);
+                List<LinearForm<Quantity>> parts = new ArrayList<>();
+                Sized sized = number(form, parts);
                 return switch (sized) {
                     case Sized.NotSized(WhyUnread why) ->
                             leaf(new Derivation.Stopped(why, fixed(e, reads)), e, reads);
                     case Sized.AsAForm(LinearForm<Quantity> read) -> read.coefs().isEmpty()
                             ? new Derivation.ACutThatCutsNothing(
-                                    states.holds(read.constant().signum()))
+                                    states.holds(read.constant().signum()), ofTheInputIn(parts))
                             : leaf(aRelation(Derivation.ComparisonReading.BY_A_LAW, read, states,
                                     counting), e, reads);
                 };
@@ -923,12 +955,20 @@ final class Pullback {
         /** {@code form}, a number of the arguments, as a form over the quantities a condition is
          *  read over. */
         Sized number(LinearForm<LawNumber<DeclaredArgument>> form) {
+            return number(form, new ArrayList<>());
+        }
+
+        /** The same, with what each number of it was read as put in {@code parts}, before any of
+         *  them cancels. */
+        private Sized number(LinearForm<LawNumber<DeclaredArgument>> form,
+                             List<LinearForm<Quantity>> parts) {
             LinearForm<Quantity> out = LinearForm.constant(form.constant());
             for (Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> term : form.coefs().entrySet()) {
                 Sized part = atom(term.getKey());
                 if (!(part instanceof Sized.AsAForm(LinearForm<Quantity> each))) {
                     return part;
                 }
+                parts.add(each);
                 ExactAnswer<LinearForm<Quantity>> sum = each.times(term.getValue())
                         instanceof ExactAnswer.Held<LinearForm<Quantity>>(var scaled)
                         ? out.plus(scaled) : null;
@@ -1088,31 +1128,6 @@ final class Pullback {
 
 
 
-    /**
-     * How a container holding the value {@code applied} asks about was read: some element the same
-     * as it — or null where {@code applied} asks no such thing.
-     */
-    private Derivation membership(AnOperationApplied applied, Core e, InputReads reads) {
-        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
-        DeclaredArgument asked = facts.asksWhetherItsContainerHolds(applied.operation());
-        var reads0 = facts.readsItsContainer(applied.operation());
-        if (asked == null || reads0 == null
-                || !(applied.operation() instanceof ValueName.Stdlib operation)) {
-            return null;
-        }
-        Core over = applied.argument(reads0.container());
-        if (!(reads.pathOf(over, read.rules().newtypes()) instanceof PathResolution.At(
-                TermPath held))) {
-            return unread(over, reads,
-                    new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
-        }
-        if (!(reads.pathOf(applied.argument(asked), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath value))) {
-            return unread(e, reads, new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.VALUE));
-        }
-        return leaf(new Derivation.AMembership(operation, held, value), e, reads);
-    }
-
     /** That the container at {@code held} holds something, as its size above nought — or null
      *  where its size is no term of this input. */
     private Derivation holdsSomethingAt(TermPath held) {
@@ -1164,6 +1179,20 @@ final class Pullback {
         }
     }
 
+    /** The numbers of the input {@code forms} are over, which is what a comparison read through
+     *  them names however much of it cancels. */
+    private static Set<NumericTerm> ofTheInputIn(List<LinearForm<Quantity>> forms) {
+        Set<NumericTerm> out = new LinkedHashSet<>();
+        for (LinearForm<Quantity> form : forms) {
+            for (Quantity atom : form.coefs().keySet()) {
+                if (atom instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
+                    out.add(term);
+                }
+            }
+        }
+        return out;
+    }
+
     private Derivation overQuantitiesCounting(Denotation left, Denotation right, Rel states) {
         List<LinearForm<Quantity>> sides = new ArrayList<>();
         for (Denotation side : List.of(left, right)) {
@@ -1182,7 +1211,8 @@ final class Pullback {
             }
         }
         if (form.coefs().isEmpty()) {
-            return new Derivation.ACutThatCutsNothing(states.holds(form.constant().signum()));
+            return new Derivation.ACutThatCutsNothing(states.holds(form.constant().signum()),
+                    ofTheInputIn(sides));
         }
         return aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, form, states, counting);
     }
@@ -1411,7 +1441,7 @@ final class Pullback {
             }
             case AffineReading.OfAComparison.CutsNothing constant ->
                     new Derivation.ACutThatCutsNothing(
-                            constant.holds(comparison.claim().statedRelation()));
+                            constant.holds(comparison.claim().statedRelation()), constant.read());
             case AffineReading.OfAComparison.NotHeld _, AffineReading.OfAComparison.Stopped _ ->
                     null;
         };
@@ -1688,7 +1718,7 @@ final class Pullback {
     }
 
     /** A value worked out by the first rule that asks for it, and not before or again. */
-    private static final class Once<T> {
+    static final class Once<T> implements Supplier<T> {
 
         private final Supplier<T> making;
         private T made;
@@ -1697,7 +1727,8 @@ final class Pullback {
             this.making = making;
         }
 
-        T get() {
+        @Override
+        public T get() {
             if (made == null) {
                 made = making.get();
             }

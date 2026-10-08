@@ -1,9 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.NumericMeasures;
-import souther.compiler.check.StatedComparison;
 import souther.compiler.inputs.InputReading;
-import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
@@ -12,6 +10,7 @@ import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -20,10 +19,10 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * What one condition coming out one way asks of a row, and nothing about where it stood.
@@ -61,23 +60,37 @@ final class DemandReading {
          */
         record Settled(boolean thisWay) implements Read {}
 
-        /** None, and what stopped it. */
-        record Unread(OnTheWay.Why why) implements Read {}
+        /** None, and everything that stopped it, each once. */
+        record Unread(List<WhyNotTaken> whys) implements Read {
+
+            Unread(WhyNotTaken why) {
+                this(List.of(why));
+            }
+
+            public Unread {
+                whys = List.copyOf(new LinkedHashSet<>(whys));
+                if (whys.isEmpty()) {
+                    throw new IllegalArgumentException("what stopped a condition is something");
+                }
+            }
+        }
+    }
+
+    private static Read.Unread incomplete(WhyNotTaken.Shape shape) {
+        return new Read.Unread(new WhyNotTaken.ProjectionIncomplete(shape));
+    }
+
+    private static Read.Unread aSizeNothingMeasures() {
+        return new Read.Unread(new WhyNotTaken.OutsideDomain(
+                WhyNotTaken.DomainLimit.A_SIZE_NOTHING_MEASURES));
     }
 
     /** One thing a condition asks, and which condition of the shape asks it. */
     record Stated(Condition where, Read read) {}
 
     /**
-     * What a condition coming out {@code holding} asks of a row, one entry for each thing it asks.
-     */
-    static List<Read> of(Condition condition, InputReading read, boolean holding) {
-        return stated(condition, read, holding).stream().map(Stated::read).toList();
-    }
-
-    /**
-     * The same, each with the condition of the shape it was read off — the one a report about it
-     * is sent to.
+     * What a condition coming out {@code holding} asks of a row, one entry for each thing it asks,
+     * each with the condition of the shape it was read off — the one a report about it is sent to.
      *
      * <p>A conjunction coming out the way that gives both halves asks both. The other way it says
      * one of two things, and that asks neither — {@code A && B} failing names no half that failed —
@@ -86,40 +99,89 @@ final class DemandReading {
      * is {@link Condition#of}'s answer, the one place a condition becomes a shape, and taken as it
      * gave it; and this is the one place what a conjunction asks is composed, so a way on to a
      * border and a predicate asked of each element read one connective one way.
+     *
+     * @param conditions what each part states, read once for every reader of the same reading
      */
-    static List<Stated> stated(Condition condition, InputReading read, boolean holding) {
+    static List<Stated> stated(Condition condition, InputReading read, boolean holding,
+                               WhatConditionsState conditions) {
         return switch (condition) {
             case Condition.Joined joined -> {
-                List<Stated> left = stated(joined.left(), read, holding);
-                List<Stated> right = stated(joined.right(), read, holding);
+                List<Stated> left = stated(joined.left(), read, holding, conditions);
+                List<Stated> right = stated(joined.right(), read, holding, conditions);
                 if (joined.how().under(holding) == ConditionJoin.BOTH) {
-                    List<Stated> both = new ArrayList<>(left);
-                    both.addAll(right);
-                    yield List.copyOf(both);
+                    yield List.copyOf(both(left, right));
                 }
-                Settling l = Settling.of(left);
-                Settling r = Settling.of(right);
-                if (l == Settling.THIS_WAY || r == Settling.THIS_WAY) {
-                    yield List.of(new Stated(joined, new Read.Settled(true)));
-                }
-                if (l == Settling.NEVER) {
-                    yield right;
-                }
-                if (r == Settling.NEVER) {
-                    yield left;
-                }
-                yield List.of(new Stated(joined,
-                        new Read.Unread(new OnTheWay.Why.OneOfTwoThings())));
+                yield oneOf(List.of(left, right), Stated::read, each -> new Stated(joined, each));
             }
-            case Condition.Compares one -> ofAComparison(one.comparison().stated(), one.reads(),
-                    read, holding).stream()
+            // What a comparison states, read as what it states: a size held against a number that
+            // parts nought from every size above it asks what the container holding something
+            // asks, and any other comparison is the relation it states.
+            case Condition.Compares one -> projected(holdingAs(conditions.comparison(
+                    one.comparison().stated(), one.reads(), read).stated().proposition(),
+                    holding), read).stream()
                     .map(each -> new Stated(one, each))
                     .toList();
-            case Condition.Truth truth -> projected(holdingAs(Pullback.ofATruth(truth.value(),
-                    truth.reads(), read, Optional.empty()).proposition(), holding), read).stream()
+            case Condition.Truth truth -> projected(holdingAs(conditions.truth(truth.value(),
+                    truth.reads(), read).proposition(), holding), read).stream()
                     .map(each -> new Stated(truth, each))
                     .toList();
         };
+    }
+
+    private static List<Stated> both(List<Stated> left, List<Stated> right) {
+        List<Stated> out = new ArrayList<>(left);
+        out.addAll(right);
+        return out;
+    }
+
+    /**
+     * What one of several things asks, each given as everything it asks — the one rule for a
+     * disjunction, however it was written, so a condition written with {@code ||} and the same
+     * condition written as a denied conjunction say the same.
+     *
+     * <p>Settled where one of them always comes out the way asked, and the one left where every
+     * other never does. Otherwise it names none of them ({@link #namingNone}).
+     *
+     * @param readOf what an entry of a part is read as
+     * @param asWhole an entry standing for what the whole asks
+     */
+    private static <T> List<T> oneOf(List<List<T>> parts, Function<T, Read> readOf,
+                                     Function<Read, T> asWhole) {
+        List<List<Read>> open = new ArrayList<>();
+        List<T> lastOpen = parts.getLast();
+        for (List<T> part : parts) {
+            List<Read> asked = part.stream().map(readOf).toList();
+            switch (Settling.of(asked)) {
+                case THIS_WAY -> {
+                    return List.of(asWhole.apply(new Read.Settled(true)));
+                }
+                case NEVER -> { }
+                case OPEN -> {
+                    open.add(asked);
+                    lastOpen = part;
+                }
+            }
+        }
+        return open.size() <= 1 ? lastOpen : List.of(asWhole.apply(namingNone(open)));
+    }
+
+    /**
+     * One of several things, none of them named, and whatever stopped each of them besides — a part
+     * whose meaning went unread is still unread when the parts are asked as one, and a part this
+     * reading has no words for still has none. Only the parts that could be what holds: one that
+     * never comes out the way asked is not why a row was not asked for.
+     */
+    private static Read.Unread namingNone(List<List<Read>> open) {
+        List<WhyNotTaken> whys = new ArrayList<>();
+        whys.add(new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.ONE_OF_SEVERAL_THINGS));
+        for (List<Read> part : open) {
+            for (Read each : part) {
+                if (each instanceof Read.Unread(List<WhyNotTaken> stopped)) {
+                    whys.addAll(stopped);
+                }
+            }
+        }
+        return new Read.Unread(whys);
     }
 
     /**
@@ -131,10 +193,10 @@ final class DemandReading {
     private enum Settling {
         THIS_WAY, NEVER, OPEN;
 
-        static Settling of(List<Stated> read) {
+        static Settling of(List<Read> read) {
             boolean every = true;
-            for (Stated each : read) {
-                if (each.read() instanceof Read.Settled(boolean thisWay)) {
+            for (Read each : read) {
+                if (each instanceof Read.Settled(boolean thisWay)) {
                     if (!thisWay) {
                         return NEVER;
                     }
@@ -146,19 +208,6 @@ final class DemandReading {
         }
     }
 
-    /**
-     * What {@code comparison} coming out {@code holding} asks of a row.
-     *
-     * <p>Read as what it states ({@link Pullback#ofAComparison}): a size held against a number that
-     * parts nought from every size above it asks what the container holding something asks, and
-     * any other comparison is the relation it states.
-     */
-    static List<Read> ofAComparison(StatedComparison comparison, InputReads reads,
-                                    InputReading read, boolean holding) {
-        return projected(holdingAs(Pullback.ofAComparison(comparison, reads, read,
-                Optional.empty()).proposition(), holding), read);
-    }
-
     private static Proposition holdingAs(Proposition stated, boolean holding) {
         return holding ? stated : stated.denied();
     }
@@ -166,9 +215,9 @@ final class DemandReading {
     /**
      * What a proposition asks of a row, one entry for each thing it asks.
      *
-     * <p>Every part of a conjunction is asked; a disjunction asks one of its parts and names none
-     * of them; a relation is asked where a region can carry it, and a truth where it stands at a
-     * position. What some element meets, and what every element meets, are asked of the container
+     * <p>Every part of a conjunction is asked; a disjunction is asked as {@link #oneOf} asks one
+     * written with {@code ||}; a relation is asked where a region can carry it, and a truth where
+     * it stands at a position. What some element meets, and what every element meets, are asked of the container
      * the elements are in ({@link #ofSomeElement}).
      */
     private static List<Read> projected(Proposition stated, InputReading read) {
@@ -177,20 +226,36 @@ final class DemandReading {
             case Proposition.Compared compared -> List.of(ofARelation(compared, read));
             case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds, var _) ->
                     List.of(new Read.Demands(new RowDemand.ATruth(at, holds)));
-            case Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
-                 Proposition.SameValue _ ->
-                    List.of(new Read.Unread(new OnTheWay.Why.NoWordsForTheShape()));
+            case Proposition.Truth(DecisionSubject.AnAnswer _, boolean _, var _),
+                 Proposition.InCases(DecisionSubject.AnAnswer _, var _, boolean _, var _),
+                 Proposition.Present(DecisionSubject.AnAnswer _, boolean _, var _) ->
+                    List.of(incomplete(WhyNotTaken.Shape.WHAT_A_DEPENDENCY_ANSWERED));
+            case Proposition.InCases _ -> List.of(incomplete(WhyNotTaken.Shape.THE_CASE_OF_A_SUBJECT));
+            case Proposition.Present _ -> List.of(incomplete(WhyNotTaken.Shape.A_VALUE_BEING_THERE));
+            case Proposition.SameValue _ ->
+                    List.of(incomplete(WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE));
             case Proposition.Unread unread -> List.of(new Read.Unread(
-                    new OnTheWay.Why.TheMeaningWasNotRead(unread.why())));
+                    new WhyNotTaken.MeaningUnread(unread.why())));
             case Proposition.All all -> {
                 List<Read> out = new ArrayList<>();
                 all.parts().forEach(part -> out.addAll(projected(part, read)));
                 yield List.copyOf(out);
             }
-            // One of several statements as a disjunction is: which one a row is asked for turns on
-            // which application a run meets the condition on, and naming none of them is the same.
-            case Proposition.Any _, Proposition.OnAnApplication _ ->
-                    List.of(new Read.Unread(new OnTheWay.Why.OneOfTwoThings()));
+            case Proposition.Any any -> oneOf(any.parts().stream()
+                    .map(part -> projected(part, read)).toList(), each -> each, each -> each);
+            // One of several statements, which one turning on which application a run meets the
+            // condition on: named as none of them, as a disjunction is, and never settled by one
+            // statement, since an application a closure may be handed is not one a run makes.
+            case Proposition.OnAnApplication applications -> {
+                List<List<Read>> open = new ArrayList<>();
+                for (Proposition each : applications.each()) {
+                    List<Read> asked = projected(each, read);
+                    if (Settling.of(asked) != Settling.NEVER) {
+                        open.add(asked);
+                    }
+                }
+                yield List.of(namingNone(open));
+            }
             case Proposition.Some some -> ofSomeElement(some, read);
         };
     }
@@ -238,7 +303,7 @@ final class DemandReading {
                     case Read.Settled _ -> noElementMeetsIt = true;
                     case Read.Demands(RowDemand.Relational relation)
                             when everyElement && !aboutOnly(relation, element) ->
-                            out.add(new Read.Unread(new OnTheWay.Why.MoreThanEachElement()));
+                            out.add(incomplete(WhyNotTaken.Shape.EVERY_ELEMENT_AND_MORE));
                     // About the element and nothing beside it, or about some element: what some
                     // element meets, the parts of it about nothing of the element hold of the row
                     // whichever element it is, so those are relations of the row like any other.
@@ -249,11 +314,11 @@ final class DemandReading {
                     // A quantifier inside a quantifier asks of an element's own elements, which is
                     // nothing a single relation of the outer element says.
                     case Read.Demands(RowDemand.Exists _), Read.Demands(RowDemand.ForAll _) ->
-                            out.add(new Read.Unread(new OnTheWay.Why.NoWordsForTheShape()));
+                            out.add(incomplete(WhyNotTaken.Shape.A_QUANTIFIER_WITHIN_ONE));
                     // A truth of the element is a value written into one element, which nothing
                     // that composes a container's elements writes.
                     case Read.Demands(RowDemand.ATruth _) ->
-                            out.add(new Read.Unread(new OnTheWay.Why.NoWordsForTheShape()));
+                            out.add(incomplete(WhyNotTaken.Shape.A_TRUTH_OF_AN_ELEMENT));
                 }
             }
         }
@@ -262,8 +327,7 @@ final class DemandReading {
             // else of the predicate is asked of an element that is not there.
             if (noElementMeetsIt) {
                 RowDemand.Relational none = sizeAgainst(held, read, false);
-                return List.of(none != null ? new Read.Demands(none)
-                        : new Read.Unread(new OnTheWay.Why.SizeOfTheContainerNotStated()));
+                return List.of(none != null ? new Read.Demands(none) : aSizeNothingMeasures());
             }
             if (!ofTheElement.isEmpty()) {
                 out.add(new Read.Demands(new RowDemand.ForAll(held, ofTheElement,
@@ -285,8 +349,7 @@ final class DemandReading {
             out.add(new Read.Demands(new RowDemand.Exists(held, ofTheElement, holdingOne)));
         } else {
             out.add(holdingOne.<Read>map(Read.Demands::new)
-                    .orElseGet(() -> new Read.Unread(
-                            new OnTheWay.Why.SizeOfTheContainerNotStated())));
+                    .orElseGet(DemandReading::aSizeNothingMeasures));
         }
         return List.copyOf(out);
     }
@@ -358,9 +421,9 @@ final class DemandReading {
         Rel met = compared.holds() ? proposition : proposition.denied();
         return switch (compared.relation()) {
             case Relation.Affine(LinearForm<Quantity> form, Rel _) -> {
-                LinearForm<NumericTerm> against = ofTheInput(form);
+                LinearForm<NumericTerm> against = WhatTheRulesLeave.ofTheInput(form);
                 if (against == null) {
-                    yield new Read.Unread(new OnTheWay.Why.ComparisonNotRepresentedAsACut());
+                    yield new Read.Unread(WhyNotTaken.quantitiesNoRowWrites(form));
                 }
                 yield switch (read.quantities().region().assuming(against, met)) {
                     case SearchRegion.Assumption.Taken _ -> new Read.Demands(
@@ -374,22 +437,10 @@ final class DemandReading {
                     new Read.Demands(new RowDemand.Relational(TakenConstraint.Ordered.isABound(met)
                             ? new TakenConstraint.Ordered(term, at, met)
                             : new TakenConstraint.AwayFrom(term, at)));
-            case Relation.Ordered _ ->
-                    new Read.Unread(new OnTheWay.Why.ComparisonNotRepresentedAsACut());
+            case Relation.Ordered(DecisionAtom.OfAnAnswer _, var _, Rel _) ->
+                    incomplete(WhyNotTaken.Shape.A_NUMBER_A_DEPENDENCY_ANSWERED);
+            case Relation.Ordered _ -> incomplete(WhyNotTaken.Shape.AN_ORDER_OF_NO_ONE_POSITION);
         };
-    }
-
-    /** The form over the input's own numbers, or null where it is over anything else — a value
-     *  the body bound is one no row writes at. */
-    private static LinearForm<NumericTerm> ofTheInput(LinearForm<Quantity> form) {
-        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
-        for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
-            if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term))) {
-                return null;
-            }
-            coefs.put(term, each.getValue());
-        }
-        return new LinearForm<>(form.constant(), coefs);
     }
 
     /**
@@ -400,10 +451,10 @@ final class DemandReading {
      * author is to make of a condition that narrowed nothing. Written as one, either the region
      * would be naming conditions or the report would be reading terms.
      */
-    private static OnTheWay.Why whyDeclined(SearchRegion.Refusal why) {
+    private static WhyNotTaken whyDeclined(SearchRegion.Refusal why) {
         return switch (why) {
             case SearchRegion.Refusal.NoOrderUnderATerm _ ->
-                    new OnTheWay.Why.QuantityStandsOnNoOrder();
+                    new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER);
         };
     }
 }

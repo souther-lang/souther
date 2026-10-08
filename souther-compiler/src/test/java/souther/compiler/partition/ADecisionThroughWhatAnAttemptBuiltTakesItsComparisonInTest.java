@@ -47,14 +47,14 @@ class ADecisionThroughWhatAnAttemptBuiltTakesItsComparisonInTest {
                 .toList();
 
         assertEquals(List.of(
-                "[Declined ForkArmNotReadAsANarrowing, TakenIn]",
-                "[Declined ForkArmNotReadAsANarrowing, TakenIn]",
-                "[Declined ForkArmNotReadAsANarrowing]"), onTheWay);
+                "[Declined [ProjectionIncomplete[shape=AN_ARM_AN_INVARIANT_DECIDES]], TakenIn]",
+                "[Declined [ProjectionIncomplete[shape=AN_ARM_AN_INVARIANT_DECIDES]], TakenIn]",
+                "[Declined [ProjectionIncomplete[shape=AN_ARM_AN_INVARIANT_DECIDES]]]"), onTheWay);
     }
 
     private static String said(OnTheWay each) {
         return each instanceof OnTheWay.Declined declined
-                ? "Declined " + declined.why().getClass().getSimpleName()
+                ? "Declined " + declined.whys()
                 : each.getClass().getSimpleName();
     }
 }

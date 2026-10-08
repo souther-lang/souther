@@ -55,7 +55,7 @@ public interface ComparisonWays {
      * means, and a reading that has that meaning in hand answers it once, however the condition is
      * spelt and whatever the parts it is spelt in come to in the tree being read.
      */
-    default Optional<Boolean> stated(Core.If fork, boolean want) {
+    default Optional<AWayThrough> stated(Core.If fork, boolean want) {
         return Optional.empty();
     }
 

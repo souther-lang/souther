@@ -23,6 +23,7 @@ import souther.compiler.reach.Witness;
 import souther.compiler.reach.WhyUnsettled;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
@@ -463,17 +464,19 @@ public final class PathReachability {
         if (construct.isEmpty()) {
             return new Predicates.Assumed(k, false, true);
         }
-        Optional<Proposition> stated =
-                meanings.at(new MeaningsOfABody.Site(construct.get(), part));
+        MeaningsOfABody.Site site = new MeaningsOfABody.Site(construct.get(), part);
+        Optional<Proposition> stated = meanings.at(site);
         if (stated.isPresent()) {
             return engine.assuming(stated.get(), cond, k, in, positive,
                     places.readBy(positionsReadBy(cond, reads)));
         }
         // A body with no analysis to read it off has its conditions read as they stand here,
         // which is the one reading such a body has. A body that has one and files nothing at a
-        // site takes nothing in there: what its conditions mean is not read twice.
+        // site takes nothing in there, for the reason nothing is filed: what its conditions mean
+        // is not read twice.
         return meanings == MeaningsOfABody.NONE ? engine.assuming(cond, k, in, positive)
-                : new Predicates.Assumed(k, false, false);
+                : new Predicates.Assumed(k, false, false, List.of(
+                        new WhyNotTaken.MeaningUnread(meanings.whyNothingAt(site))));
     }
 
     /**
@@ -835,7 +838,7 @@ public final class PathReachability {
      */
     private static WhyUnsettled whyNot(Predicates.Assumed taken, Core cond) {
         return taken.shapeRead() ? WhyUnsettled.noWitness()
-                : WhyUnsettled.aConditionWasNotRead(cond.pos());
+                : WhyUnsettled.aConditionWasNotRead(cond.pos(), taken.notTaken());
     }
 
     /**

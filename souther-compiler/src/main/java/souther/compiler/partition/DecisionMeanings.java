@@ -7,6 +7,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
@@ -83,7 +84,7 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
         return List.of(new Read(oneRelation(asked) && (!(condition instanceof Condition.Truth)
                 || oneRelation(asked(states.stating(condition, !held))))
                 ? answerOf(condition, asked.getFirst(), held)
-                : asOneColumn(condition, held), stated));
+                : asOneColumn(condition, held, asked), stated));
     }
 
     /** What was stated less what the source settles this way, which asks nothing of a row and is
@@ -119,13 +120,27 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
      * <p>One, because it is one condition: every element of a list meeting two things is two
      * relations a row is composed against and one distinction the body draws. No relation of them
      * is the column, so it is the condition's own where what it is about is a subject a row
-     * controls, and otherwise one this reading has no column for.
+     * controls, and otherwise one this reading has no column for — for that reason, and for
+     * whatever stopped a part of it on the way, each kept.
      */
-    private DecidedCondition asOneColumn(Condition condition, boolean held) {
+    private DecidedCondition asOneColumn(Condition condition, boolean held, List<OnTheWay> asked) {
         DecidedCondition read = ofASubject(condition, held);
-        return read != null ? read
-                : new DecidedCondition.Unread(new DecisionCondition.AConditionNotRead(
-                        condition.occurrence(), new OnTheWay.Why.NoWordsForTheShape()), held);
+        if (read != null) {
+            return read;
+        }
+        List<WhyNotTaken> whys = new ArrayList<>();
+        whys.add(new WhyNotTaken.ProjectionIncomplete(asked.size() == 1
+                && asked.getFirst() instanceof OnTheWay.TakenIn(var _, var demand)
+                && (demand instanceof RowDemand.Exists || demand instanceof RowDemand.ForAll)
+                ? WhyNotTaken.Shape.A_QUANTIFIER_AS_A_COLUMN
+                : WhyNotTaken.Shape.SEVERAL_DEMANDS_IN_ONE_COLUMN));
+        asked.forEach(each -> {
+            if (each instanceof OnTheWay.Declined declined) {
+                whys.addAll(declined.whys());
+            }
+        });
+        return new DecidedCondition.Unread(new DecisionCondition.AConditionNotRead(
+                condition.occurrence(), whys), held);
     }
 
     /**
@@ -144,7 +159,8 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
             // reading has no column for. Only a condition the body asks is read this way, so there
             // is one to ask.
             case OnTheWay.TakenIn(var _, RowDemand.Exists _),
-                 OnTheWay.TakenIn(var _, RowDemand.ForAll _) -> asOneColumn(condition, held);
+                 OnTheWay.TakenIn(var _, RowDemand.ForAll _) ->
+                    asOneColumn(condition, held, List.of(one));
             // Which of two values stands at a position: the truth of that position, whichever
             // spelling asked it, read off the demand and not off the condition again. And what
             // came out is the position's value and not the condition's — `f == false` holding is
@@ -181,7 +197,7 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
                 DecidedCondition read = condition == null ? null : ofASubject(condition, held);
                 yield read != null ? read
                         : new DecidedCondition.Unread(new DecisionCondition.AConditionNotRead(
-                                declined.condition(), declined.why()), held);
+                                declined.condition(), declined.whys()), held);
             }
             // A condition the source settles is no distinction, and is taken off before a column
             // is asked for, the condition's ({@link #deciding}) and the arm's ({@link #entering})
@@ -259,7 +275,8 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
         return new Read(switch (onTheWay) {
             case OnTheWay.Settled settled -> new DecidedCondition.Unread(
                     new DecisionCondition.AConditionNotRead(settled.condition(),
-                            new OnTheWay.Why.ForkArmNotReadAsANarrowing()), true);
+                            new WhyNotTaken.ProjectionIncomplete(
+                                    WhyNotTaken.Shape.AN_ARM_READ_AS_WRITTEN)), true);
             case OnTheWay.Declined _, OnTheWay.Narrowed _, OnTheWay.TakenIn _ ->
                     answerOf(null, onTheWay, true);
         }, List.of(onTheWay));

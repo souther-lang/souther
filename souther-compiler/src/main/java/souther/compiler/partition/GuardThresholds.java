@@ -271,9 +271,11 @@ public final class GuardThresholds {
         // And every truth a fork's condition asks, under the construct of the model that answers
         // it, which is the construct a run is seen coming out of. A truth asked of a name the body
         // was handed is answered by no construct, and no run is seen at it.
+        WhatConditionsState conditions = new WhatConditionsState(read);
         for (ComparisonReadings.TruthMet each : comparisons.truths()) {
-            List<OnTheWay> holding = ReachingCuts.stating(each.condition(), read, true);
-            List<OnTheWay> failing = ReachingCuts.stating(each.condition(), read, false);
+            List<OnTheWay> holding = ReachingCuts.stating(each.condition(), read, true, conditions);
+            List<OnTheWay> failing =
+                    ReachingCuts.stating(each.condition(), read, false, conditions);
             Optional<ModelOccurrence> answeredBy = DecisionNaming.answeredAt(each.condition());
             if (answeredBy.isPresent()) {
                 cuts.answered(answeredBy.get(),
@@ -587,7 +589,10 @@ public final class GuardThresholds {
     }
 
     /**
-     * Which numbers of the input a comparison was read for, for a reader that stopped on it.
+     * Which numbers of the input a comparison was read for, where no reading of it named the
+     * numbers it is about: one that stopped on it, and one that read it to the end without a form of
+     * the input's numbers to file it at — several lines held together, a line at a number nothing
+     * holds, a statement a law or the bounds of a sign settle.
      *
      * <p>Where the reading was looking, and never what the rule is about. A comparison this could
      * not read leaves what it states unknown — {@code a * a + b - b <= 9} is filed at both

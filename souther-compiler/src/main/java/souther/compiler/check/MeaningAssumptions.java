@@ -8,6 +8,7 @@ import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
@@ -20,7 +21,9 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -83,8 +86,9 @@ final class MeaningAssumptions {
     private final Denotations at;
     private Known known;
     private boolean taken;
-    /** Whether every part of what was stated is one a path holds. */
-    private boolean whole = true;
+    /** Why each part of what was stated that a path does not hold was not taken in; empty where
+     *  every part is one a path holds. */
+    private final List<WhyNotTaken> notTaken = new ArrayList<>();
 
     private MeaningAssumptions(Terms terms, InputPlaces places, Denotations at, Known known) {
         this.terms = terms;
@@ -102,7 +106,16 @@ final class MeaningAssumptions {
         taking.take(asked);
         // Read to the end only where every part was taken in: a part a path cannot hold leaves an
         // arm under it unsettled for this reader's reach, which is not a fact about the model.
-        return new Predicates.Assumed(taking.known, taking.taken, taking.whole);
+        return new Predicates.Assumed(taking.known, taking.taken, taking.notTaken.isEmpty(),
+                taking.notTaken);
+    }
+
+    private void notTaken(WhyNotTaken why) {
+        notTaken.add(why);
+    }
+
+    private void incomplete(WhyNotTaken.Shape shape) {
+        notTaken(new WhyNotTaken.ProjectionIncomplete(shape));
     }
 
     private void take(Proposition asked) {
@@ -119,8 +132,12 @@ final class MeaningAssumptions {
                     known = known.taking(over, holds ? p : p.denied(), Known.Held.ON_THE_PATH,
                             terms.kindsOf(over));
                     taken = true;
+                } else if (form.coefs().keySet().stream().anyMatch(atom ->
+                        atom instanceof DecisionAtom.OfAnAnswer
+                                || atom instanceof Quantity.HowManyMeet)) {
+                    WhyNotTaken.quantitiesNoRowWrites(form).forEach(this::notTaken);
                 } else {
-                    whole = false;
+                    incomplete(WhyNotTaken.Shape.A_POSITION_THE_PATH_HAS_NO_PLACE_FOR);
                 }
             }
             case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds, var _) -> {
@@ -129,11 +146,27 @@ final class MeaningAssumptions {
                     known = known.taking(place, holds, Known.Held.ON_THE_PATH);
                     taken = true;
                 } else {
-                    whole = false;
+                    incomplete(WhyNotTaken.Shape.A_POSITION_THE_PATH_HAS_NO_PLACE_FOR);
                 }
             }
             case Proposition.Always _ -> { }
-            default -> whole = false;
+            // What a path knows is facts that all hold, and which of several holds, or which
+            // element, is no fact of it.
+            case Proposition.Any _, Proposition.OnAnApplication _, Proposition.Some _ ->
+                    WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(
+                            WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES), asked)
+                            .forEach(this::notTaken);
+            case Proposition.Unread unread ->
+                    notTaken(new WhyNotTaken.MeaningUnread(unread.why()));
+            case Proposition.Compared(Relation.Ordered _, boolean _, var _) ->
+                    incomplete(WhyNotTaken.Shape.A_PLACE_ON_AN_ORDER);
+            case Proposition.Truth(DecisionSubject.AnAnswer _, boolean _, var _),
+                 Proposition.InCases(DecisionSubject.AnAnswer _, var _, boolean _, var _),
+                 Proposition.Present(DecisionSubject.AnAnswer _, boolean _, var _) ->
+                    incomplete(WhyNotTaken.Shape.WHAT_A_DEPENDENCY_ANSWERED);
+            case Proposition.InCases _ -> incomplete(WhyNotTaken.Shape.THE_CASE_OF_A_SUBJECT);
+            case Proposition.Present _ -> incomplete(WhyNotTaken.Shape.A_VALUE_BEING_THERE);
+            case Proposition.SameValue _ -> incomplete(WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE);
         }
     }
 
@@ -144,7 +177,7 @@ final class MeaningAssumptions {
             FactSubject atom = switch (each.getKey()) {
                 case DecisionAtom.OfTheInput(NumericTerm term) -> atomOf(term);
                 case Quantity.OfABinding bound -> boundAtom(bound);
-                // A count of elements meeting something is no number of one place of the tree.
+                // Not asked: what no row writes was said before a form was made of it.
                 case DecisionAtom.OfAnAnswer _, Quantity.HowManyMeet _ -> null;
             };
             if (atom == null || coefs.putIfAbsent(atom, each.getValue()) != null) {
@@ -189,7 +222,7 @@ final class MeaningAssumptions {
         // Taken in by which value it is, and not read to the end: what the value was made from is
         // not what the proposition says, so an arm this leaves unsettled is left by this reader's
         // reach and says so.
-        whole = false;
+        incomplete(WhyNotTaken.Shape.A_NUMBER_THE_BODY_BOUND);
         RuleKey named = TermPath.ruleKeyOf(bound.steps());
         return value == null || named == null ? null
                 : terms.atomAt(terms.under(value, named), bound.type());

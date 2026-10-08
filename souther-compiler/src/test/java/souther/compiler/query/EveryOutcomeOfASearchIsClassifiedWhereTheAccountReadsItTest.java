@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionRepertoire;
@@ -44,7 +45,8 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
     private static final WayToTheBorder WAY = new WayToTheBorder(List.of(
             new OnTheWay.Declined(MET,
                     new ConditionReportAnchor.WhereTheReadingMetIt("m", MET),
-                    new OnTheWay.Why.NoWordsForTheShape())));
+                    new WhyNotTaken.ProjectionIncomplete(
+                            WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE))));
 
     /** One of each outcome, by the leaf that names it. */
     private static Map<Class<?>, ItemAssessment.Attempt> oneOfEach() {

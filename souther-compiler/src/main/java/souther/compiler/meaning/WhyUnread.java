@@ -152,6 +152,15 @@ public sealed interface WhyUnread {
     record MoreReadingsThanAreMade() implements WhyUnread {}
 
     /**
+     * A construct met in several copies — a helper's, wherever the helper is written — whose copies
+     * state different things, so the construct states none of them.
+     */
+    record CopiesStateDifferentThings() implements WhyUnread {}
+
+    /** A construct the reading of what a body's conditions mean did not meet. */
+    record NotMetByTheReading() implements WhyUnread {}
+
+    /**
      * A part that follows from what the language and the library already say, through a step this
      * reading does not take yet.
      */

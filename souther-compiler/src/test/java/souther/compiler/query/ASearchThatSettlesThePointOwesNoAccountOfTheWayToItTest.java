@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.ConditionOccurrence;
 import souther.compiler.partition.ConditionReportAnchor;
@@ -41,7 +42,7 @@ class ASearchThatSettlesThePointOwesNoAccountOfTheWayToItTest {
 
     private static final OnTheWay.Declined LEFT_OUT = new OnTheWay.Declined(MET,
             new ConditionReportAnchor.WhereTheReadingMetIt("m", MET),
-            new OnTheWay.Why.NoWordsForTheShape());
+            new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE));
 
     /** One way to a point, with one condition on it that nothing took in. */
     private static WayToTheBorder way() {

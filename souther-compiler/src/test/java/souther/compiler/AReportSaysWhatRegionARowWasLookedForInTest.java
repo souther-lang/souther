@@ -95,7 +95,8 @@ class AReportSaysWhatRegionARowWasLookedForInTest {
         assertTrue(line.contains("not every condition on the way to the line is one the row was"
                 + " composed against"), line);
         assertTrue(line.contains(
-                        "a condition that is neither a comparison nor a combination of them (17:8)"),
+                        "a condition on what String.startsWith answers, which comes to one string"
+                                + " standing inside another — no condition here says that (17:8)"),
                 "named for the shape this reading stopped at, and where it is written: " + line);
         // Beside what the search came to and not instead of it. The two answer different questions
         // — what happened, and what the search was looking over — and a reader acts on both.

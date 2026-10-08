@@ -22,7 +22,19 @@ public enum Unsayable {
 
     /** That a string is made up of copies of another. What a replacement leaves is empty for that,
      *  and a string is no container of parts. */
-    MADE_UP_OF_COPIES_OF_A_TEXT("a string being made up of copies of another");
+    MADE_UP_OF_COPIES_OF_A_TEXT("a string being made up of copies of another"),
+
+    /** That one string stands inside another, at its start or its end or anywhere. A string is
+     *  no container of parts a statement can be made of. */
+    A_STRING_INSIDE_ANOTHER("one string standing inside another"),
+
+    /** That a string matches a pattern, which says something of every way the string could be
+     *  taken apart. */
+    A_STRING_MATCHING_A_PATTERN("a string matching a pattern"),
+
+    /** That no two elements of a container come to one key. A statement about some element is
+     *  about one element at a time, and this is about every pair of them. */
+    NO_TWO_ELEMENTS_ALIKE("no two elements of a container coming to one key");
 
     private final String proposition;
 

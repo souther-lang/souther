@@ -271,7 +271,7 @@ sealed interface ComparisonAssessment {
                                    InputReading read, InputReads reads,
                                    BindingId answer, WhatAnAnswerTakesUp dependencies,
                                    souther.compiler.coverage.Arrivals answering,
-                                   boolean drawnByAnInvariant) {
+                                   boolean drawnByAnInvariant, WhatConditionsState conditions) {
         Quantities quantities = read.quantities();
         // Asked first, and of the whole comparison. A rule that reads the answer anywhere in it is
         // one this reading does not put on the input space, whichever side the answer is on and
@@ -280,16 +280,16 @@ sealed interface ComparisonAssessment {
         if (readsAnswer(comparison.left(), answer) || readsAnswer(comparison.right(), answer)) {
             return new AnswerDependent();
         }
-        return switch (Cutting.read(behavior, comparison, read, reads, answering)) {
+        return switch (Cutting.read(behavior, comparison, read, reads, answering, conditions)) {
             case Cutting.Read.Cuts cuts ->
                     onTheQuantity(at, cuts.cutting(), quantities, drawnByAnInvariant);
             // Read to the end and cutting nothing, which is a fact about the rule and not a limit
             // of this compiler: `a <= a` holds of every row. Where the comparison names no position
             // either, there is no rule about a position to say it of — `2 > 1` is a comparison of
             // constants and states nothing anywhere.
-            case Cutting.Read.CutsNothing over -> over.read().isEmpty()
+            case Cutting.Read.CutsNothing over -> over.filedAt().isEmpty()
                     ? aboutNoPosition(comparison, reads, read.newtypes())
-                    : new CutsNothing(AffineReading.filedAt(over.read()));
+                    : new CutsNothing(over.filedAt());
             // Where the reading stopped and the comparison is over what a dependency answered, it is
             // the decision table's. A number of an answer is no number of the input, so this reading
             // stops at it however the comparison was written, and the stop is about whose subject

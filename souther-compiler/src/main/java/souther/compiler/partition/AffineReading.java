@@ -186,6 +186,25 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     }
 
     /**
+     * The line {@code form stated 0} draws, where {@code form} is over the input's numbers alone.
+     *
+     * <p>What a comparison states is read once ({@link Pullback#ofAComparison}), and this is that
+     * statement put on the input space: the constant moved to the threshold, and the form faced the
+     * way the comparison's left side names ({@link #facesTheOtherWay}). The facing is how the line is
+     * named in a report and not what it is: the two ways are one statement.
+     *
+     * @param leftSide the comparison's left side as written, which is only asked which position it
+     *                 names first
+     */
+    static AffineReading stating(LinearForm<NumericTerm> form, Rel stated, Core leftSide,
+                                 InputReads reads, RuleReadingSource ruleSource) {
+        AffineReading here = new AffineReading(new LinearForm<>(ExactRatio.ZERO, form.coefs()),
+                form.constant().negated(), ComparisonClaim.stating(stated));
+        return here.facesTheOtherWay(subjectOf(leftSide, form, reads, ruleSource))
+                ? here.mirrored() : here;
+    }
+
+    /**
      * The order a form's positions are named in, which settles what "the first coefficient" means.
      *
      * <p>By the position's own name, because that is the one thing about a form that does not depend
@@ -373,8 +392,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         return (first != null ? first : ordered(form).getFirst().getValue()).signum() < 0;
     }
 
-    /** The position the comparison's left side names first, or null where it names none. Handed the
-     *  reading of that side rather than walking it again: one comparison is read once. */
+    /** The position the comparison's left side names first among the terms of {@code left}, or null
+     *  where it names none of them. Handed what was read rather than walking it again: one
+     *  comparison is read once. */
     private static NumericTerm subjectOf(Core leftSide, LinearForm<NumericTerm> left,
                                          InputReads reads, RuleReadingSource ruleSource) {
         if (left == null || left.coefs().isEmpty()) {

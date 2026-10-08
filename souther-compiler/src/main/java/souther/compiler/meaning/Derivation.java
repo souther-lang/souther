@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * How what a condition states was arrived at: the rule each step applied and what it was applied to.
@@ -342,28 +343,6 @@ public sealed interface Derivation {
         }
     }
 
-    /** A container at a position holding a value at a position: some element the same as it. */
-    record AMembership(ValueName.Stdlib operation, TermPath container, TermPath value)
-            implements Derivation {
-
-        public AMembership {
-            Objects.requireNonNull(operation, "membership is asked by an operation");
-            Objects.requireNonNull(container, "membership is in a container");
-            Objects.requireNonNull(value, "membership is of a value");
-        }
-
-        @Override
-        public Proposition conclusion(Conclusion numbering) {
-            return new Proposition.Some(container, sameValue(), true);
-        }
-
-        /** The part an element of the container is asked: being the value. */
-        public Proposition sameValue() {
-            return new Proposition.SameValue(new DecisionSubject.AnInput(container.element()),
-                    new DecisionSubject.AnInput(value), true);
-        }
-    }
-
     /**
      * Some element of a container written out making a closure answer some way: some one of what
      * the closure's body states of each element, read on the application that hands it that
@@ -654,8 +633,18 @@ public sealed interface Derivation {
         }
     }
 
-    /** A comparison whose answer the arithmetic settles whatever the input. */
-    record ACutThatCutsNothing(boolean holds) implements Derivation {
+    /**
+     * A comparison whose answer the arithmetic settles whatever the input.
+     *
+     * @param named the numbers of the input the comparison was read over, whether or not they
+     *              survived the cancelling: {@code a - a <= 0} is about {@code a} and cuts nothing.
+     *              Empty where the reading named none of the input's own
+     */
+    record ACutThatCutsNothing(boolean holds, Set<NumericTerm> named) implements Derivation {
+
+        public ACutThatCutsNothing {
+            named = Set.copyOf(named);
+        }
 
         @Override
         public Proposition conclusion(Conclusion numbering) {

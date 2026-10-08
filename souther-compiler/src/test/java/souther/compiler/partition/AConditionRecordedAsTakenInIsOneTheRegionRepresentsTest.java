@@ -10,6 +10,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.query.Adequacy;
@@ -76,7 +77,8 @@ class AConditionRecordedAsTakenInIsOneTheRegionRepresentsTest {
                     only("recordsAreEqual", holding),
                     "a difference between two records is a distance on nothing, so no search was"
                             + " narrowed by it");
-            assertEquals(new OnTheWay.Why.QuantityStandsOnNoOrder(), declined.why());
+            assertEquals(List.of(new WhyNotTaken.OutsideDomain(
+                    WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER)), declined.whys());
         }
     }
 
@@ -213,7 +215,8 @@ class AConditionRecordedAsTakenInIsOneTheRegionRepresentsTest {
 
         List<OnTheWay> stating(boolean holding) {
             return ReachingCuts.stating(Condition.of(body, reads, rules.symbols(),
-                    rules.newtypes(), new ConditionNumbering(module, behavior)), read, holding);
+                    rules.newtypes(), new ConditionNumbering(module, behavior)), read, holding,
+                    new WhatConditionsState(read));
         }
     }
 

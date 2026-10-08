@@ -148,6 +148,10 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // what was not reached is which of those positions the line runs between. Both measures are
         // short, because a row either side of the line is owed and there is nowhere to ask for one.
         table.put("CasePairingNotDetermined", "UNRESOLVED_CASE_PAIRING/UNAFFECTED");
+        // Read to the end, and several lines held together. Nothing about what the rule states is
+        // unknown; what is missing is a division of the input by more than one line of one rule,
+        // and a run allowed more of everything meets the same statement.
+        table.put("SeveralLinesInOneRule", "SEVERAL_LINES_IN_ONE_RULE/UNAFFECTED");
         // Read to the end. Whatever the rule places has been placed, and there is none to be owed —
         // and no measurement is weakened, so from here down there is no sensitivity to answer.
         table.put("ComparisonCuttingNothing", "RULE_CUTS_NOTHING/-");
@@ -444,6 +448,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.RulesNotHandedOnAsSets(),
                 new BlockReason.ValueRuleRelatingTwoPositions(),
                 new BlockReason.CasePairingNotDetermined(),
+                new BlockReason.SeveralLinesInOneRule(),
                 new BlockReason.ComparisonCuttingNothing(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),
                 new BlockReason.ComparisonNothingArrivesAtItsLine(),

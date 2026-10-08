@@ -300,7 +300,7 @@ class AMembershipIsComposedIntoTheRowTest {
         List<OnTheWay> stated = ReachingCuts.stating(Condition.of(analysis.core(), reads,
                         rules().symbols(), rules().newtypes(),
                         new ConditionNumbering(module(), behavior)),
-                reading, holding);
+                reading, holding, new WhatConditionsState(reading));
         assertFalse(stated.isEmpty(), () -> "the body asks something of a row: " + behavior);
         return stated;
     }
