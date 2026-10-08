@@ -418,6 +418,11 @@ public final class InputReads {
      *         the fields read off the answer in the order they are written
      */
     public AnAnswerAt answerAt(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
+        // A body that stands nothing in has no answer anywhere in it, and the names it reads are
+        // not walked to find that out.
+        if (dependencies.isEmpty()) {
+            return null;
+        }
         List<TermPath.Step> steps = new ArrayList<>();
         Core under = e;
         InputReads reads = this;
