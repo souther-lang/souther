@@ -3,12 +3,14 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Citation;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Sites;
 import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.Unsayable;
 import souther.compiler.sites.WrittenCondition;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
@@ -42,10 +44,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
 
-    /** Why a fork on {@code String.startsWith} is declined: the library says nothing of it. */
-    private static final OnTheWay.Why STARTS_WITH_HAS_NO_LAW = new OnTheWay.Why.TheMeaningWasNotRead(
-            new WhyUnread.NoLawFor(new ValueName.Stdlib.Operation("String", "startsWith"),
-                    AnswerAspect.TRUTH));
+    /** Why a fork on {@code String.startsWith} is declined: what it answers is one string standing
+     *  inside another, which nothing here has words for. */
+    private static final WhyNotTaken STARTS_WITH_HAS_NO_WORDS = new WhyNotTaken.MeaningUnread(
+            new WhyUnread.NoWordsFor(new ValueName.Stdlib.Operation("String", "startsWith"),
+                    AnswerAspect.TRUTH, Unsayable.A_STRING_INSIDE_ANOTHER));
 
     /**
      * Two forks on a truth this reading has no words for, one inside the other.
@@ -91,8 +94,8 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
             }
         }
         assertEquals(2, declined.size(), () -> "both forks are on the way: " + declined);
-        assertEquals(List.of(STARTS_WITH_HAS_NO_LAW, STARTS_WITH_HAS_NO_LAW),
-                declined.stream().map(OnTheWay.Declined::why).toList(),
+        assertEquals(List.of(List.of(STARTS_WITH_HAS_NO_WORDS), List.of(STARTS_WITH_HAS_NO_WORDS)),
+                declined.stream().map(OnTheWay.Declined::whys).toList(),
                 "and for the one reason, which is what leaves the name doing the telling apart");
         assertNotEquals(declined.get(0), declined.get(1),
                 () -> "two conditions this compiler tells apart: " + declined);
@@ -172,7 +175,7 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
         for (List<OnTheWay> way : waysIn(compilation, "oneCondition")) {
             for (OnTheWay each : way) {
                 if (each instanceof OnTheWay.Declined left
-                        && left.why().equals(STARTS_WITH_HAS_NO_LAW)) {
+                        && left.whys().equals(List.of(STARTS_WITH_HAS_NO_WORDS))) {
                     named.add(left);
                 }
             }
@@ -231,7 +234,8 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
         for (List<OnTheWay> way : waysIn(compiledFrom(source), "calledTwice")) {
             for (OnTheWay each : way) {
                 if (each instanceof OnTheWay.Declined left
-                        && left.why() instanceof OnTheWay.Why.OneOfTwoThings) {
+                        && left.whys().contains(new WhyNotTaken.ProjectionIncomplete(
+                                WhyNotTaken.Shape.ONE_OF_SEVERAL_THINGS))) {
                     declined.add(left);
                 }
             }
@@ -264,7 +268,7 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
         ConditionOccurrence reported = new ConditionOccurrence("b", 1);
         assertThrows(IllegalArgumentException.class, () -> new OnTheWay.Declined(declined,
                 new ConditionReportAnchor.WhereTheReadingMetIt("m", reported),
-                new OnTheWay.Why.NoWordsForTheShape()));
+                new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE)));
     }
 
     /**

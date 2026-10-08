@@ -16,6 +16,7 @@ import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -246,8 +247,8 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
         // declaration's to say below.
         CasesLeft selected = CasesLeft.selectedBy(arm.pattern());
         if (selected == null) {
-            return new OnTheWay.Declined(met, at,
-                    new OnTheWay.Why.ForkArmNotReadAsANarrowing());
+            return new OnTheWay.Declined(met, at, new WhyNotTaken.ProjectionIncomplete(
+                    WhyNotTaken.Shape.AN_ARM_READ_AS_WRITTEN));
         }
         // The arm is declined for either answer: a search composes against a position read as one
         // of its cases, and there is no position to narrow whether the scrutinee stands at none or
@@ -282,8 +283,8 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
                 : taking(inputs, inputs.declared(ruleSource), scrutinee,
                         match.scrutinee().type(), selected);
         if (taking == null) {
-            return new OnTheWay.Declined(met, at,
-                    new OnTheWay.Why.ForkArmNotReadAsANarrowing());
+            return new OnTheWay.Declined(met, at, new WhyNotTaken.ProjectionIncomplete(
+                    WhyNotTaken.Shape.AN_ARM_READ_AS_WRITTEN));
         }
         return switch (taking) {
             case DeclaredInput.Taking.Narrows(TermPath to) -> new OnTheWay.Narrowed(at, to,
@@ -428,7 +429,7 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
                                ConditionNumbering numbering) {
         ConditionOccurrence met = numbering.metEntering(attempt, part);
         return new OnTheWay.Declined(met, numbering.anchorOfArm(attempt.origin(), part, at, met),
-                new OnTheWay.Why.ForkArmNotReadAsANarrowing());
+                new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.AN_ARM_AN_INVARIANT_DECIDES));
     }
 
     /**

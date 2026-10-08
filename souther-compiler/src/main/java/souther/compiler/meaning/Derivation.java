@@ -342,28 +342,6 @@ public sealed interface Derivation {
         }
     }
 
-    /** A container at a position holding a value at a position: some element the same as it. */
-    record AMembership(ValueName.Stdlib operation, TermPath container, TermPath value)
-            implements Derivation {
-
-        public AMembership {
-            Objects.requireNonNull(operation, "membership is asked by an operation");
-            Objects.requireNonNull(container, "membership is in a container");
-            Objects.requireNonNull(value, "membership is of a value");
-        }
-
-        @Override
-        public Proposition conclusion(Conclusion numbering) {
-            return new Proposition.Some(container, sameValue(), true);
-        }
-
-        /** The part an element of the container is asked: being the value. */
-        public Proposition sameValue() {
-            return new Proposition.SameValue(new DecisionSubject.AnInput(container.element()),
-                    new DecisionSubject.AnInput(value), true);
-        }
-    }
-
     /**
      * Some element of a container written out making a closure answer some way: some one of what
      * the closure's body states of each element, read on the application that hands it that

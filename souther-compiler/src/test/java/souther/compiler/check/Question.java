@@ -340,14 +340,13 @@ enum Question {
         }
     },
 
-    /** What its answer coming out true comes to over its arguments. Asked of a walk with a closure
-     *  answering a truth that answers one itself: how its answer comes out is what its closure's
-     *  answers make of it. Settled as {@link #HOLDING_SOMETHING} is. */
-    TRUTH_OF_A_WALK("what its answer coming out true comes to") {
+    /** What its answer coming out true comes to over its arguments. Asked of every operation
+     *  answering a truth, whatever it is handed: a walk with a closure, a predicate over a
+     *  container or a string, a denial. Settled as {@link #HOLDING_SOMETHING} is. */
+    TRUTH("what its answer coming out true comes to") {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
-            return signature.result() == Type.Prim.BOOL && signature.params().stream().anyMatch(
-                    t -> t instanceof Type.FnOf fn && fn.result() == Type.Prim.BOOL);
+            return signature.result() == Type.Prim.BOOL;
         }
 
         @Override

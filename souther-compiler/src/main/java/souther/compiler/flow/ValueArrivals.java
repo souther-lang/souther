@@ -699,8 +699,11 @@ public final class ValueArrivals<P> {
         boolean[] entering = new boolean[arms.length];
         for (int part = 0; part < arms.length; part++) {
             boolean want = part == 0;
-            Optional<Boolean> stated = comparisons.stated(iff, want);
-            entering[part] = stated.isPresent() ? stated.get() : cond.mayCome(want);
+            // Entered unless ruled out: a way the rules leave something behind, or that was not
+            // asked of them, may be taken, and that is all entering it says.
+            Optional<AWayThrough> stated = comparisons.stated(iff, want);
+            entering[part] = stated.isPresent()
+                    ? !(stated.get() instanceof AWayThrough.RuledOut) : cond.mayCome(want);
         }
         enters.put(iff, entering);
         Gathered out = new Gathered();

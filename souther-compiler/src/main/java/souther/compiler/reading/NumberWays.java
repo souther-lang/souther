@@ -5,12 +5,14 @@ import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.flow.AWayThrough;
 import souther.compiler.flow.ComparisonWays;
 import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.ComparedNumbers;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.meaning.MeaningsOfABody;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.partition.WhatTheRulesLeave;
 import souther.compiler.numeric.Place;
@@ -18,6 +20,7 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
@@ -87,11 +90,20 @@ final class NumberWays implements ComparisonWays {
      * operations states nothing of the model, and its parts answer.
      */
     @Override
-    public Optional<Boolean> stated(Core.If fork, boolean want) {
-        return ModelOccurrence.statedAt(fork.place().occurrence())
-                .flatMap(construct -> meanings.at(
-                        new MeaningsOfABody.Site(construct, MeaningsOfABody.Part.CONDITION)))
-                .map(proposition -> WhatTheRulesLeave.admits(proposition, want, quantities));
+    public Optional<AWayThrough> stated(Core.If fork, boolean want) {
+        Optional<ModelOccurrence> construct = ModelOccurrence.statedAt(fork.place().occurrence());
+        // A body with no reading of what its conditions mean has its forks read as they stand.
+        if (construct.isEmpty() || meanings == MeaningsOfABody.NONE) {
+            return Optional.empty();
+        }
+        // One that has a reading and states nothing at this fork is not read a second way: the
+        // fork is not ruled out, for the reason nothing is stated there.
+        MeaningsOfABody.Site site =
+                new MeaningsOfABody.Site(construct.get(), MeaningsOfABody.Part.CONDITION);
+        return Optional.of(meanings.at(site)
+                .map(proposition -> WhatTheRulesLeave.admits(proposition, want, quantities))
+                .orElseGet(() -> new AWayThrough.NotRuledOut(List.of(
+                        new WhyNotTaken.MeaningUnread(meanings.whyNothingAt(site))))));
     }
 
     @Override

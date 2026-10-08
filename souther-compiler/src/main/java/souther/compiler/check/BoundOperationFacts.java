@@ -308,33 +308,42 @@ public final class BoundOperationFacts {
             }
         }
         for (BoundOperationFact fact : held) {
-            DeclaredArgument source = soleSource(fact);
-            if (source == null) {
-                continue;
-            }
             ValueName operation = fact.operation().operation();
-            Map<OperationLaw.Observed, Settled> of =
-                    out.computeIfAbsent(operation, _ -> new LinkedHashMap<>());
-            LawSubject<DeclaredArgument> it = new LawSubject.Argument<>(source);
-            Map<OperationLaw.Observed, Settled> derived = Map.of(
-                    OperationLaw.Observed.EMPTINESS, new Settled.ByALaw(
-                            new OperationLaw.Observation<>(AnswerAspect.EMPTINESS,
-                                    new LawProposition.Observed<>(it,
-                                            new SideAnswered(AnswerAspect.EMPTINESS, true))), true),
-                    OperationLaw.Observed.SIZE, new Settled.ByALaw(new OperationLaw.Size<>(
-                            LinearForm.atom(new LawNumber.SizeOf<>(it))), true));
-            for (OperationLaw.Observed observed : List.of(OperationLaw.Observed.EMPTINESS,
-                    OperationLaw.Observed.SIZE)) {
-                if (of.put(observed, derived.get(observed)) != null) {
-                    throw new IllegalStateException(operation + " is built as many as one source,"
-                            + " which says what " + observed + " of its answer comes to, and"
-                            + " settles it again");
+            for (OperationLaw<DeclaredArgument> law : derivedFrom(fact)) {
+                if (out.computeIfAbsent(operation, _ -> new LinkedHashMap<>())
+                        .put(law.observed(), new Settled.ByALaw(law, true)) != null) {
+                    throw new IllegalStateException(operation + " is declared to be something"
+                            + " that says what " + law.observed() + " of its answer comes to,"
+                            + " and settles it again");
                 }
             }
         }
         Map<ValueName, Map<OperationLaw.Observed, Settled>> fixed = new LinkedHashMap<>();
         out.forEach((operation, of) -> fixed.put(operation, Collections.unmodifiableMap(of)));
         return Collections.unmodifiableMap(fixed);
+    }
+
+    /**
+     * The laws {@code fact} says by being declared: an answer as many as one source holds
+     * something where that source does and is as many as it, and an emptiness check comes out
+     * true where its argument holds nothing.
+     */
+    private static List<OperationLaw<DeclaredArgument>> derivedFrom(BoundOperationFact fact) {
+        if (fact instanceof BoundOperationFact.MeansTheSameAsASizeOfNought means) {
+            return List.of(new OperationLaw.Observation<>(AnswerAspect.TRUTH,
+                    new LawProposition.Observed<>(new LawSubject.Argument<>(means.of()),
+                            new SideAnswered(AnswerAspect.EMPTINESS, false))));
+        }
+        DeclaredArgument source = soleSource(fact);
+        if (source == null) {
+            return List.of();
+        }
+        LawSubject<DeclaredArgument> it = new LawSubject.Argument<>(source);
+        return List.of(
+                new OperationLaw.Observation<>(AnswerAspect.EMPTINESS,
+                        new LawProposition.Observed<>(it,
+                                new SideAnswered(AnswerAspect.EMPTINESS, true))),
+                new OperationLaw.Size<>(LinearForm.atom(new LawNumber.SizeOf<>(it))));
     }
 
     /** The one argument {@code fact} says the answer is as many as, or null where it says no
@@ -364,19 +373,6 @@ public final class BoundOperationFacts {
     /** The operations that are predicates over what a container holds. */
     public Set<ValueName> readsItsContainer() {
         return ones(BoundOperationFact.ReadsItsContainer.class);
-    }
-
-    /** Where {@code operation} is handed the value it asks its container whether it holds, or null
-     *  where it asks no such thing. */
-    public DeclaredArgument asksWhetherItsContainerHolds(ValueName operation) {
-        BoundOperationFact.AsksWhetherItsContainerHolds held =
-                one(BoundOperationFact.AsksWhetherItsContainerHolds.class, operation);
-        return held == null ? null : held.value();
-    }
-
-    /** The operations that ask whether their container holds a value. */
-    public Set<ValueName> asksWhetherItsContainerHolds() {
-        return ones(BoundOperationFact.AsksWhetherItsContainerHolds.class);
     }
 
     /** Where {@code operation}'s predicate is stated over a projection, or null where it is stated

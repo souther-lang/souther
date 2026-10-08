@@ -7,6 +7,7 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.Requirements;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -111,10 +112,11 @@ class AnArmOfAForkIsOnTheWayLikeAnyOtherConditionTest {
         List<OnTheWay> way = wayOf("onSomethingComposed");
         assertTrue(narrowingsIn("onSomethingComposed").isEmpty(),
                 "no position was narrowed: " + way);
-        assertEquals(List.of(new OnTheWay.Why.ForkArmNotReadAsANarrowing(),
-                        new OnTheWay.Why.ForkArmNotReadAsANarrowing()),
+        WhyNotTaken asWritten =
+                new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.AN_ARM_READ_AS_WRITTEN);
+        assertEquals(List.of(List.of(asWritten), List.of(asWritten)),
                 way.stream().filter(OnTheWay.Declined.class::isInstance)
-                        .map(each -> ((OnTheWay.Declined) each).why()).toList(),
+                        .map(each -> ((OnTheWay.Declined) each).whys()).toList(),
                 "each arm said so, at the arm");
     }
 

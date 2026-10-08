@@ -165,11 +165,6 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
         }
     }
 
-    /** The operation answers whether the container it reads holds an element equal to what stands
-     *  at {@code value}, which is of the type that container holds. */
-    record AsksWhetherItsContainerHolds(DeclaredOperation operation, DeclaredArgument value)
-            implements OneAboutAnOperation {}
-
     /** The predicate is stated over a projection of each element, and {@code projection} is where
      *  it is written. */
     record IsStatedOverAProjection(DeclaredOperation operation, DeclaredArgument projection)
@@ -188,7 +183,8 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
      * under which such a rewrite says the same thing — asked once, where both declarations are in
      * hand, rather than by the reader that has a call and a name.
      */
-    record MeansTheSameAsASizeOfNought(DeclaredOperation operation, DeclaredOperation size)
+    record MeansTheSameAsASizeOfNought(DeclaredOperation operation, DeclaredOperation size,
+                                       DeclaredArgument of)
             implements OneAboutAnOperation {}
 
     /** The operation computes a number, and this says which arithmetic and where it answers it. */

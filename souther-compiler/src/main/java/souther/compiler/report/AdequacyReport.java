@@ -42,6 +42,7 @@ import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.DecidedCondition;
 import souther.compiler.partition.DecisionCondition;
 import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
@@ -50,7 +51,6 @@ import souther.compiler.partition.FarEnd;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.Level;
 import souther.compiler.partition.NotOwedReason;
-import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.CompositionAccount;
 import souther.compiler.partition.ConditionGap;
 import souther.compiler.partition.DemandGap;
@@ -3755,8 +3755,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
     private static String whatTheInputSideLeftOut(ReachabilityGap gap) {
         return switch (gap) {
-            case ReachabilityGap.Unstated(var condition) ->
-                    whyDeclined(condition.why());
+            case ReachabilityGap.Unstated(var condition) -> String.join("; ",
+                    condition.whys().stream().map(AdequacyReport::whyDeclined).toList());
             // The model's word and not this compiler's. Every other sentence here says what was not
             // managed and leaves the condition owed; this one says the rules leave nothing, which is
             // what an author can act on.
@@ -3851,38 +3851,68 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * not read" for all of them is the vocabulary being kept apart in the compiler and put back
      * together on the way out.
      */
-    private static String whyDeclined(OnTheWay.Why why) {
+    private static String whyDeclined(WhyNotTaken why) {
         // Noun phrases, because what the line above them says is "not every condition ... is
         // represented", and each of these names one of those conditions. Written as sentences, the
         // place in brackets after them lands after a verb and reads as part of what is being said
         // rather than as where to look.
         return switch (why) {
-            case OnTheWay.Why.NoWordsForTheShape _ ->
-                    "a condition that is neither a comparison nor a combination of them";
-            // Not the words a comparison gets for drawing no line: that answers why there is no
-            // boundary, and its answers are wrong about this — a comparison of two constants is a
-            // form nothing reads there, and a form this arithmetic cannot carry is a relation
-            // between positions there, which is something a cut carries perfectly well.
-            case OnTheWay.Why.ComparisonNotRepresentedAsACut _ ->
-                    "a comparison this reading could not turn into a cut";
-            // And the other, which is not a shortfall in how it was written: the rule was read in
-            // full and constrains both of the positions it names, and what is missing is an order
-            // to measure them on. An author acts on the types here rather than on how the
-            // comparison was written.
-            case OnTheWay.Why.QuantityStandsOnNoOrder _ ->
-                    "a comparison whose quantity stands on no order this compiler measures";
-            case OnTheWay.Why.OneOfTwoThings _ ->
-                    "an outcome that states one of two things";
-            case OnTheWay.Why.ForkArmNotReadAsANarrowing _ ->
-                    "an arm of a fork this reading could not read as a narrowing of a position";
-            case OnTheWay.Why.TheMeaningWasNotRead(WhyUnread unread) -> whyNotRead(unread);
-            case OnTheWay.Why.MoreThanEachElement _ ->
-                    "a condition every element has to meet that is about more than the element";
-            case OnTheWay.Why.SizeOfTheContainerNotStated _ ->
-                    "a condition about what a container holds that comes to how many it holds,"
-                            + " which is no number this reading measures";
+            case WhyNotTaken.MeaningUnread(WhyUnread unread) -> whyNotRead(unread);
+            // Not a shortfall in how it was written: the rule was read in full, and what is
+            // missing is in the domain. An author acts on the types here rather than on how the
+            // condition was written.
+            case WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit limit) -> switch (limit) {
+                case A_QUANTITY_ON_NO_ORDER ->
+                        "a comparison whose quantity stands on no order this compiler measures";
+                case A_SIZE_NOTHING_MEASURES -> "a condition about what a container holds that"
+                        + " comes to how many it holds, which no type measures";
+                case A_PATH_KNOWS_NO_ALTERNATIVES -> "a condition that comes to one of several"
+                        + " things, or to some element, which no fact a path knows says";
+            };
+            // This compiler's own shortfall, and said as one: the condition was read, and a row
+            // could be asked for it, and nothing here asks yet.
+            case WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape shape) ->
+                    NOT_YET_ASKED_OF_A_ROW + switch (shape) {
+                        case ONE_OF_SEVERAL_THINGS -> "an outcome that states one of several things";
+                        case EVERY_ELEMENT_AND_MORE -> "a condition every element has to meet that"
+                                + " is about more than the element";
+                        case A_QUANTIFIER_WITHIN_ONE -> "a condition on the elements of each"
+                                + " element of a container";
+                        case A_TRUTH_OF_AN_ELEMENT -> "a truth of an element of a container";
+                        case WHAT_A_DEPENDENCY_ANSWERED -> "a condition on what a dependency"
+                                + " answered";
+                        case THE_CASE_OF_A_SUBJECT -> "which case a value is, outside an arm of a"
+                                + " fork";
+                        case A_VALUE_BEING_THERE -> "an optional of the input holding a value";
+                        case TWO_SUBJECTS_ONE_VALUE -> "two values being one";
+                        case A_NUMBER_A_DEPENDENCY_ANSWERED -> "a comparison over a number a"
+                                + " dependency answered";
+                        case A_NUMBER_THE_BODY_BOUND -> "a comparison over a number the body"
+                                + " bound to a name";
+                        case A_COUNT_OF_ELEMENTS -> "a comparison over how many elements of a"
+                                + " container meet something";
+                        case AN_ORDER_OF_NO_ONE_POSITION -> "a comparison on an order of a term"
+                                + " that is no one position";
+                        case SEVERAL_DEMANDS_IN_ONE_COLUMN -> "a condition that asks several"
+                                + " things of a row at once";
+                        case A_QUANTIFIER_AS_A_COLUMN -> "a condition on some or every element of"
+                                + " a container, as one distinction";
+                        case AN_ARM_READ_AS_WRITTEN -> "an arm of a fork this reading could not"
+                                + " read as a narrowing of a position";
+                        case AN_ARM_AN_INVARIANT_DECIDES -> "an arm of an attempt, which the"
+                                + " invariant it checks decides";
+                        case A_TRUTH_ASKED_OF_THE_RULES -> "a truth of the input, asked of what"
+                                + " the rules leave it";
+                        case SOME_ELEMENT_ASKED_OF_THE_RULES -> "a condition on some or every"
+                                + " element, asked of what the rules leave the container";
+                        case A_POSITION_THE_PATH_HAS_NO_PLACE_FOR -> "a condition on a position"
+                                + " the path has no place for";
+                        case A_PLACE_ON_AN_ORDER -> "a place on an order, as a fact of a path";
+                    };
         };
     }
+
+    private static final String NOT_YET_ASKED_OF_A_ROW = "not yet asked of a row: ";
 
     /**
      * What stopped the reading of what a condition means, as a noun phrase beside the ones above.
@@ -3905,11 +3935,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case WhyUnread.NoMeasureOfItsSize _ ->
                     "a condition about what a container holds that comes to how many it holds,"
                             + " which is no number this reading measures";
-            case WhyUnread.OutsideTheLinearFragment _, WhyUnread.ANumberNotHeld _,
-                 WhyUnread.NoNumberOnARun _, WhyUnread.NoFormOfWhatItAnswers _,
-                 WhyUnread.ANumberOfWhatAnOperationAnswers _ -> NO_CUT;
-            case WhyUnread.TwoElementsOfOneContainer _, WhyUnread.NoLawFor _,
-                 WhyUnread.WhatARecursiveHelperAnswers _ -> NEITHER_A_COMPARISON_NOR_A_COMBINATION;
+            case WhyUnread.OutsideTheLinearFragment _ -> "a comparison over a product of two"
+                    + " values or a quotient by one, which no linear form says";
+            case WhyUnread.ANumberNotHeld _ -> "a comparison over a number worked out exactly and"
+                    + " too large to hold";
+            case WhyUnread.NoNumberOnARun _ -> "a comparison over a quotient by nought, which no"
+                    + " run has a number for";
+            case WhyUnread.NoFormOfWhatItAnswers(var operation) -> "a comparison over what "
+                    + operation.qualified() + " answers, which the library states no form of";
+            case WhyUnread.ANumberOfWhatAnOperationAnswers(var measure, var madeBy) ->
+                    "a comparison over " + measure.qualified() + " of what " + madeBy.qualified()
+                            + " answers, which the library states no law of";
+            case WhyUnread.TwoElementsOfOneContainer _ -> "a condition on two elements of one"
+                    + " container at once";
+            case WhyUnread.NoLawFor(var operation, var _) -> "a condition on what "
+                    + operation.qualified() + " answers, whose declaration gives it no such side";
+            case WhyUnread.WhatARecursiveHelperAnswers _ -> "a condition on what a recursive"
+                    + " helper answers";
             // Its own words: what the condition comes to is known, and it is the domain that has
             // no words for it.
             case WhyUnread.NoWordsFor(var operation, var _, var proposition) ->
@@ -3918,15 +3960,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // Its own words: nothing the author wrote is wanting, and raising a figure lifts it.
             case WhyUnread.MoreReadingsThanAreMade _ -> "a condition that would be read once for each"
                     + " of more values or cases than this compiler reads one by one";
-            case WhyUnread.NotYetComposed(WhyUnread.NotYetComposed.Step step) -> switch (step) {
-                case A_CHOICE_BY_CASES, VALUES_WRITTEN_OUT -> NO_CUT;
-                case A_DEPENDENCY_ASKED_ABOUT_A_COMPUTED_VALUE, A_BEHAVIOR_CALLED_BY_NAME,
-                     A_CLOSURE_BY_NAME -> NEITHER_A_COMPARISON_NOR_A_COMBINATION;
-            };
+            case WhyUnread.CopiesStateDifferentThings _ -> "a condition of a helper that states"
+                    + " different things where the helper is written";
+            case WhyUnread.NotMetByTheReading _ -> "a condition the reading of what conditions"
+                    + " mean did not meet";
+            // This compiler's: what the condition means follows from rules it has, put together
+            // in a way it does not put them together yet.
+            case WhyUnread.NotYetComposed(WhyUnread.NotYetComposed.Step step) ->
+                    "not yet read: " + switch (step) {
+                        case A_CHOICE_BY_CASES -> "a value chosen by cases inside arithmetic, or"
+                                + " compared as no number";
+                        case VALUES_WRITTEN_OUT -> "a comparison over one of several values"
+                                + " written out";
+                        case A_DEPENDENCY_ASKED_ABOUT_A_COMPUTED_VALUE -> "what a dependency"
+                                + " answered about a value the body computed";
+                        case A_BEHAVIOR_CALLED_BY_NAME -> "what another behavior answers";
+                        case A_CLOSURE_BY_NAME -> "a closure handed by name";
+                    };
         };
     }
-
-    private static final String NO_CUT = "a comparison this reading could not turn into a cut";
 
     private static final String NEITHER_A_COMPARISON_NOR_A_COMBINATION =
             "a condition that is neither a comparison nor a combination of them";
@@ -4433,10 +4485,97 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // A condition this compiler had no words for, named by the reading that met it. Two
             // such conditions mean nothing to be told apart by, so the occurrence is the identity
             // — which is what the reading already decided and is not a second answer here.
+            // And why, beside the identity and no part of it: the occurrence is what tells two of
+            // them apart, and what stopped each is said of that occurrence.
             case DecidedCondition.Unread(var condition, var held) -> {
                 out.put("kind", "not_read");
                 out.put("condition", condition.met().toString());
                 out.put("outcome", held ? "held" : "denied");
+                ArrayNode whys = out.putArray("notRead");
+                condition.whys().forEach(why -> whys.add(notReadWord(why)));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * What stopped a condition, as the document writes it: which of the three kinds it is, and
+     * the word for it within that kind.
+     */
+    private static ObjectNode notReadWord(WhyNotTaken why) {
+        ObjectNode out = JsonNodeFactory.instance.objectNode();
+        switch (why) {
+            case WhyNotTaken.MeaningUnread(WhyUnread unread) -> {
+                out.put("kind", "meaning_unread");
+                out.put("reason", switch (unread) {
+                    case WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place place) ->
+                            switch (place) {
+                                case CONTAINER -> "container_at_no_position";
+                                case VALUE -> "value_at_no_position";
+                                case SCRUTINEE -> "scrutinee_at_no_position";
+                                case SUBJECT -> "subject_at_no_position";
+                            };
+                    case WhyUnread.NoMeasureOfItsSize _ -> "no_measure_of_its_size";
+                    case WhyUnread.OutsideTheLinearFragment _ -> "outside_the_linear_fragment";
+                    case WhyUnread.ANumberNotHeld _ -> "number_not_held";
+                    case WhyUnread.NoNumberOnARun _ -> "no_number_on_a_run";
+                    case WhyUnread.TwoElementsOfOneContainer _ -> "two_elements_of_one_container";
+                    case WhyUnread.NoLawFor _ -> "no_law_for_the_operation";
+                    case WhyUnread.NoWordsFor _ -> "no_words_for_what_it_comes_to";
+                    case WhyUnread.NoFormOfWhatItAnswers _ -> "no_form_of_what_it_answers";
+                    case WhyUnread.ANumberOfWhatAnOperationAnswers _ ->
+                            "number_of_what_an_operation_answers";
+                    case WhyUnread.WhatARecursiveHelperAnswers _ ->
+                            "what_a_recursive_helper_answers";
+                    case WhyUnread.MoreReadingsThanAreMade _ -> "more_readings_than_are_made";
+                    case WhyUnread.CopiesStateDifferentThings _ ->
+                            "copies_state_different_things";
+                    case WhyUnread.NotMetByTheReading _ -> "not_met_by_the_reading";
+                    case WhyUnread.NotYetComposed(WhyUnread.NotYetComposed.Step step) ->
+                            switch (step) {
+                                case A_CHOICE_BY_CASES -> "not_yet_composed_choice_by_cases";
+                                case VALUES_WRITTEN_OUT -> "not_yet_composed_values_written_out";
+                                case A_DEPENDENCY_ASKED_ABOUT_A_COMPUTED_VALUE ->
+                                        "not_yet_composed_dependency_of_a_computed_value";
+                                case A_BEHAVIOR_CALLED_BY_NAME ->
+                                        "not_yet_composed_behavior_called_by_name";
+                                case A_CLOSURE_BY_NAME -> "not_yet_composed_closure_by_name";
+                            };
+                });
+            }
+            case WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit limit) -> {
+                out.put("kind", "outside_domain");
+                out.put("reason", switch (limit) {
+                    case A_QUANTITY_ON_NO_ORDER -> "quantity_on_no_order";
+                    case A_SIZE_NOTHING_MEASURES -> "size_nothing_measures";
+                    case A_PATH_KNOWS_NO_ALTERNATIVES -> "path_knows_no_alternatives";
+                });
+            }
+            case WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape shape) -> {
+                out.put("kind", "projection_incomplete");
+                out.put("reason", switch (shape) {
+                    case ONE_OF_SEVERAL_THINGS -> "one_of_several_things";
+                    case EVERY_ELEMENT_AND_MORE -> "every_element_and_more";
+                    case A_QUANTIFIER_WITHIN_ONE -> "quantifier_within_one";
+                    case A_TRUTH_OF_AN_ELEMENT -> "truth_of_an_element";
+                    case WHAT_A_DEPENDENCY_ANSWERED -> "what_a_dependency_answered";
+                    case THE_CASE_OF_A_SUBJECT -> "case_of_a_subject";
+                    case A_VALUE_BEING_THERE -> "value_being_there";
+                    case TWO_SUBJECTS_ONE_VALUE -> "two_subjects_one_value";
+                    case A_NUMBER_A_DEPENDENCY_ANSWERED -> "number_a_dependency_answered";
+                    case A_NUMBER_THE_BODY_BOUND -> "number_the_body_bound";
+                    case A_COUNT_OF_ELEMENTS -> "count_of_elements";
+                    case AN_ORDER_OF_NO_ONE_POSITION -> "order_of_no_one_position";
+                    case SEVERAL_DEMANDS_IN_ONE_COLUMN -> "several_demands_in_one_column";
+                    case A_QUANTIFIER_AS_A_COLUMN -> "quantifier_as_a_column";
+                    case AN_ARM_READ_AS_WRITTEN -> "arm_read_as_written";
+                    case AN_ARM_AN_INVARIANT_DECIDES -> "arm_an_invariant_decides";
+                    case A_TRUTH_ASKED_OF_THE_RULES -> "truth_asked_of_the_rules";
+                    case SOME_ELEMENT_ASKED_OF_THE_RULES -> "some_element_asked_of_the_rules";
+                    case A_POSITION_THE_PATH_HAS_NO_PLACE_FOR ->
+                            "position_the_path_has_no_place_for";
+                    case A_PLACE_ON_AN_ORDER -> "place_on_an_order";
+                });
             }
         }
         return out;

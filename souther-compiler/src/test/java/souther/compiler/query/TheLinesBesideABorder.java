@@ -9,6 +9,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermOrdersFixtures;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -116,7 +117,8 @@ final class TheLinesBesideABorder {
     static WayToTheBorder aWayWithAConditionNobodyRead() {
         return new WayToTheBorder(List.of(
                 new OnTheWay.Declined(new ConditionOccurrence("f", 0), anchor(),
-                        new OnTheWay.Why.NoWordsForTheShape())));
+                        new WhyNotTaken.ProjectionIncomplete(
+                                WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE))));
     }
 
     private static ConditionReportAnchor anchor() {

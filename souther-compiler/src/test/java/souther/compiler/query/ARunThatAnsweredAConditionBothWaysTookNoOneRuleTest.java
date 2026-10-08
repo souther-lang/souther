@@ -5,13 +5,13 @@ import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.Observation;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.partition.AnswersDemanded;
 import souther.compiler.partition.ConditionOccurrence;
 import souther.compiler.partition.DecidedCondition;
 import souther.compiler.partition.DecisionCondition;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
-import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.RulesTaken;
 import souther.compiler.partition.ShownBy;
 import souther.compiler.partition.WayToTheBorder;
@@ -49,7 +49,8 @@ class ARunThatAnsweredAConditionBothWaysTookNoOneRuleTest {
     private static final ConditionOccurrence AT = new ConditionOccurrence("f", 0);
 
     private static final DecisionCondition.AConditionNotRead CONDITION =
-            new DecisionCondition.AConditionNotRead(AT, new OnTheWay.Why.NoWordsForTheShape());
+            new DecisionCondition.AConditionNotRead(AT,
+                    new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE));
 
     private static final DecisionRule THEN = rule(true);
 

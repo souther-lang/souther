@@ -95,39 +95,7 @@ final class OperationFactBinder {
         }
         BoundOperationFacts facts = new BoundOperationFacts(bound);
         holdEachNumberToOneReading(stdlib, facts);
-        holdEachMembershipToItsContainer(facts);
         return facts;
-    }
-
-    /**
-     * Holds every operation that asks whether its container holds a value to reading a container,
-     * and the value to being of the type that container holds.
-     *
-     * <p>Asked once every fact is bound, because the two halves are two facts: which argument is
-     * the container is {@link BoundOperationFact.ReadsItsContainer}'s answer, and a membership
-     * fact naming a container of its own would be a second answer to it. A value of another type
-     * than the elements is a question no element answers, and a reader composing a container
-     * holding it would write a value of a type the container does not declare.
-     */
-    private static void holdEachMembershipToItsContainer(BoundOperationFacts facts) {
-        for (BoundOperationFact fact : facts.all()) {
-            if (!(fact instanceof BoundOperationFact.AsksWhetherItsContainerHolds asks)) {
-                continue;
-            }
-            ValueName operation = asks.operation().operation();
-            String named = theLibraryOperation(operation).qualified();
-            BoundOperationFact.ReadsItsContainer reads = facts.readsItsContainer(operation);
-            if (reads == null) {
-                throw new IllegalStateException(named + " is declared to ask whether its"
-                        + " container holds a value, and reads no container");
-            }
-            Type element = Type.elementOfAContainer(reads.container().stands());
-            if (!asks.value().stands().equals(element)) {
-                throw new IllegalStateException(named + " asks whether a container of "
-                        + Type.show(element) + " holds a " + Type.show(asks.value().stands())
-                        + ", which no element is");
-            }
-        }
     }
 
     /** The same, over what the language declares. */
@@ -201,18 +169,6 @@ final class OperationFactBinder {
                                     new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
                                     "the container a predicate reads"),
                             reads.through());
-            // What stands at the value is held to the container where every fact is bound
-            // ({@link #holdEachMembershipToItsContainer}), since the container is another fact's.
-            case OperationFact.AsksWhetherItsContainerHolds asks -> {
-                if (!Type.BOOL.equals(declaration.result())) {
-                    throw new IllegalStateException(((ValueName.Stdlib) operation.operation())
-                            .qualified() + " answers " + Type.show(declaration.result())
-                            + ", and whether a container holds a value is a truth");
-                }
-                yield new BoundOperationFact.AsksWhetherItsContainerHolds(operation,
-                        holdToTheDeclaration(declaration, asks.value(), null,
-                                TypeRequirement.ANY, "the value a container is asked to hold"));
-            }
             case OperationFact.IsStatedOverAProjection over ->
                     new BoundOperationFact.IsStatedOverAProjection(operation,
                             holdToTheDeclaration(declaration, over.projection(),
@@ -657,7 +613,8 @@ final class OperationFactBinder {
                     + ", so a call of the first is no call of the second");
         }
         return new BoundOperationFact.MeansTheSameAsASizeOfNought(asks.declaring(),
-                counts.declaring());
+                counts.declaring(), new DeclaredArgument(asks.declaring(), 0,
+                        asks.params().getFirst()));
     }
 
     /**

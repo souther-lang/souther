@@ -5,6 +5,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 
@@ -66,6 +67,7 @@ class OneRuleIsOneWayHoweverTheWalkMetItsConditionsTest {
                 List.of(new OnTheWay.Declined(new ConditionOccurrence("b", against),
                         new ConditionReportAnchor.WhereTheReadingMetIt(
                                 "b", new ConditionOccurrence("b", against)),
-                        new OnTheWay.Why.NoWordsForTheShape())));
+                        new WhyNotTaken.ProjectionIncomplete(
+                                WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE))));
     }
 }

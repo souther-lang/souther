@@ -8,6 +8,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.ModelOccurrence;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.SortedMap;
@@ -427,24 +428,27 @@ public sealed interface Proposition {
     /** Why the first part of {@code stated} nothing read stopped, in the order its parts are
      *  kept, or null where every part was read. */
     static WhyUnread firstStopIn(Proposition stated) {
-        return switch (stated) {
-            case Unread unread -> unread.why();
-            case All all -> firstStopIn(all.parts());
-            case Any any -> firstStopIn(any.parts());
-            case OnAnApplication applications -> firstStopIn(applications.each());
-            case Some some -> firstStopIn(some.ofTheElement());
-            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _ -> null;
-        };
+        List<WhyUnread> stops = stopsIn(stated);
+        return stops.isEmpty() ? null : stops.getFirst();
     }
 
-    private static WhyUnread firstStopIn(List<Proposition> parts) {
-        for (Proposition part : parts) {
-            WhyUnread why = firstStopIn(part);
-            if (why != null) {
-                return why;
-            }
+    /** Why each part of {@code stated} nothing read stopped, in the order its parts are kept. */
+    static List<WhyUnread> stopsIn(Proposition stated) {
+        List<WhyUnread> out = new ArrayList<>();
+        stopsIn(stated, out);
+        return List.copyOf(out);
+    }
+
+    private static void stopsIn(Proposition stated, List<WhyUnread> into) {
+        switch (stated) {
+            case Unread unread -> into.add(unread.why());
+            case All all -> all.parts().forEach(part -> stopsIn(part, into));
+            case Any any -> any.parts().forEach(part -> stopsIn(part, into));
+            case OnAnApplication applications ->
+                    applications.each().forEach(one -> stopsIn(one, into));
+            case Some some -> stopsIn(some.ofTheElement(), into);
+            case Always _, Compared _, Truth _, InCases _, Present _, SameValue _ -> { }
         }
-        return null;
     }
 
     /**

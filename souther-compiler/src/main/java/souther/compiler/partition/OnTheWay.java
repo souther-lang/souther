@@ -3,8 +3,9 @@ package souther.compiler.partition;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.meaning.WhyUnread;
+import souther.compiler.meaning.WhyNotTaken;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 
 /**
@@ -159,15 +160,31 @@ public sealed interface OnTheWay {
      * <p>Named and not placed. Where two of them are written is what used to tell them apart, which
      * is a location doing identity's work because nothing else was doing it.
      *
+     * <p>Every reason, and not the first. A condition made of parts can be declined for one reason
+     * in one part and another in the next — one part's meaning unread, the whole a shape this
+     * reading has no demand for — and each is a different thing for somebody to do, so none stands
+     * in for another.
+     *
      * @param condition which condition of the reading was declined
+     * @param whys      why, each once, in the order met
      */
-    record Declined(ConditionOccurrence condition, ConditionReportAnchor anchor, Why why)
+    record Declined(ConditionOccurrence condition, ConditionReportAnchor anchor,
+                    List<WhyNotTaken> whys)
             implements OnTheWay {
+
+        public Declined(ConditionOccurrence condition, ConditionReportAnchor anchor,
+                        WhyNotTaken why) {
+            this(condition, anchor, List.of(why));
+        }
 
         public Declined {
             if (condition == null) {
                 throw new IllegalArgumentException(
                         "a condition this reading declined is some condition it met");
+            }
+            whys = List.copyOf(new LinkedHashSet<>(whys));
+            if (whys.isEmpty()) {
+                throw new IllegalArgumentException("a condition is declined for some reason");
             }
             // And the one it is named after is the one a report is sent to. Where the reading
             // places it, the anchor says which condition of the reading that is — so the two are
@@ -179,109 +196,5 @@ public sealed interface OnTheWay {
                         + condition + " reported at " + anchored);
             }
         }
-    }
-
-    /**
-     * What stopped a condition from being stated in either vocabulary.
-     *
-     * <p>The walk's own answers and no other stage's. A condition this stated and something later
-     * could not act on is still stated — it keeps the answer given here and what became of it
-     * downstream is {@link ReachabilityGap}'s. Written as another word here, one condition would
-     * wear two of these.
-     *
-     * <p>Each says what this reading did rather than what the model says. A condition an author
-     * wrote plainly is here wherever nothing here has a way of carrying it, so nothing read off one
-     * of these says a row cannot be written, and a word going away is a capability gained rather
-     * than a model changed.
-     *
-     * <p><b>Not the reason the same comparison gets for drawing no line.</b>
-     * {@link UnreadComparison} answers why a comparison did not become a boundary, which is a
-     * different question with different answers: {@code 1 < 2} comes back there as a form nothing
-     * reads, when what happened is that it constrains no position; and a comparison this
-     * arithmetic cannot carry comes back as one relating two positions, when a relation between two
-     * positions is exactly what a cut over a {@code LinearForm} does carry. Borrowed here, either
-     * would send an author after the wrong thing.
-     *
-     * <p>So what is said about a comparison is what is known about it here, and no more. The finer
-     * answer belongs to whatever decided — {@link AffineReading}, which returns nothing and says
-     * nothing about why — and it is not invented at this end from the shape of what it was given.
-     */
-    sealed interface Why {
-
-        /** A condition that is neither a comparison nor a combination of them, so nothing was read
-         *  of it. */
-        record NoWordsForTheShape() implements Why {}
-
-        /**
-         * Part of what the condition means was not read, for a reason about the domain the reading
-         * is over — said in the reading's words and carried as they are.
-         */
-        record TheMeaningWasNotRead(WhyUnread why) implements Why {}
-
-        /**
-         * A comparison this reading did not turn into a cut.
-         *
-         * <p>One word, because one word is what this end knows. A comparison naming no position, a
-         * form outside the arithmetic and a subject with no spacing for its values arrive here as
-         * one absence, and {@link AffineReading} is where they would be told apart.
-         */
-        record ComparisonNotRepresentedAsACut() implements Why {}
-
-        /**
-         * A comparison read from end to end whose quantity stands on no order a region measures
-         * values on.
-         *
-         * <p>Apart from the two above, and from both directions. It is not a reading that fell
-         * short: {@code a == b} over two records is read perfectly, and what it comes to is a
-         * difference between two positions that is a distance on nothing. And it is not a rule
-         * that constrains no position: it constrains both of them, and an author reading that it
-         * constrains none would go looking for a cancellation that is not there.
-         *
-         * <p>What is here for an author to act on is the carrier. A position whose values this
-         * compiler measures on nothing is one every rule about it is unrepresented in, so the
-         * shortfall is where the model's own type has no order rather than in how the rule was
-         * written.
-         */
-        record QuantityStandsOnNoOrder() implements Why {}
-
-        /**
-         * What the condition coming out this way says is one of two things, and a region is what
-         * has been accumulated onto it. {@code A && B} coming out false says one of them failed and
-         * names neither, and taking either would exclude rows that arrive.
-         */
-        record OneOfTwoThings() implements Why {}
-
-        /**
-         * An arm of a fork this reading could not state as a narrowing of a position.
-         *
-         * <p>A fork on something no position holds — an expression the walk cannot follow back to
-         * one, an arm answering for several cases at once, a case the reading of the declarations
-         * has no position for, an attempt whose arm is decided by an invariant the walk does not
-         * read. Each of those leaves the same thing unsaid, which is which values of the input
-         * reach this arm, so they arrive here as one word.
-         */
-        record ForkArmNotReadAsANarrowing() implements Why {}
-
-        /**
-         * A condition every element of a container has to meet, which says something of more than
-         * the element.
-         *
-         * <p>Every element meeting it is also what an empty container does, whatever the rest of
-         * the condition says. So where the condition is about something beside the element, a row
-         * past it need not meet that part — and narrowing on it would exclude rows that arrive.
-         */
-        record MoreThanEachElement() implements Why {}
-
-        /**
-         * What a container's elements are asked for comes to how many it holds, and that is no
-         * number this reading can state of it.
-         *
-         * <p>Some element meeting what every element meets is the container holding one, and every
-         * element meeting what none meets is the container holding none. Where its size is no
-         * number of the input a region measures, neither can be put to a row — and saying nothing
-         * instead would be a condition read as asking nothing.
-         */
-        record SizeOfTheContainerNotStated() implements Why {}
-
     }
 }

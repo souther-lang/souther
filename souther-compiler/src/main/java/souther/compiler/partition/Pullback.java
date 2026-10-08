@@ -237,10 +237,11 @@ final class Pullback {
         if (!mayBeCarriedPast(comparison)) {
             return false;
         }
-        Pulled pulled = ofAComparison(comparison, reads, read, Optional.empty());
-        return !(pulled.proposition() instanceof Proposition.Compared)
-                && pulled.turnsOn().stream()
-                        .noneMatch(leaf -> leaf.part() instanceof Proposition.Unread);
+        // Unread anywhere in what is stated, and not among the parts it turns on: a part nothing
+        // read that is the same on every run turns on nothing, and is still not read.
+        Proposition stated = ofAComparison(comparison, reads, read, Optional.empty()).proposition();
+        return !(stated instanceof Proposition.Compared)
+                && !Proposition.leavesSomethingUnread(stated);
     }
 
     /**
@@ -274,10 +275,8 @@ final class Pullback {
             if (concluded == null) {
                 continue;
             }
-            Proposition part = each.step() instanceof Derivation.AMembership membership
-                    ? membership.sameValue() : concluded;
-            if (!(part instanceof Proposition.Always)) {
-                leaves.add(new Leaf(part, each.from()));
+            if (!(concluded instanceof Proposition.Always)) {
+                leaves.add(new Leaf(concluded, each.from()));
             }
         }
         return new Pulled(meaning, List.copyOf(leaves));
@@ -339,8 +338,7 @@ final class Pullback {
                 },
                 () -> BooleanMeaning.asAComparison(e).map(stated -> comparison(stated,
                         new Denotation(e, reads), fixed(e, reads), reads)).orElse(null),
-                () -> byALaw(applied, e, AnswerAspect.TRUTH, reads, new Denotation(e, reads)),
-                () -> applied == null ? null : membership(applied, e, reads)));
+                () -> byALaw(applied, e, AnswerAspect.TRUTH, reads, new Denotation(e, reads))));
         return taken != null ? taken
                 : unread(e, reads, unreadAs(applied, AnswerAspect.TRUTH, reads));
     }
@@ -1087,31 +1085,6 @@ final class Pullback {
     }
 
 
-
-    /**
-     * How a container holding the value {@code applied} asks about was read: some element the same
-     * as it — or null where {@code applied} asks no such thing.
-     */
-    private Derivation membership(AnOperationApplied applied, Core e, InputReads reads) {
-        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
-        DeclaredArgument asked = facts.asksWhetherItsContainerHolds(applied.operation());
-        var reads0 = facts.readsItsContainer(applied.operation());
-        if (asked == null || reads0 == null
-                || !(applied.operation() instanceof ValueName.Stdlib operation)) {
-            return null;
-        }
-        Core over = applied.argument(reads0.container());
-        if (!(reads.pathOf(over, read.rules().newtypes()) instanceof PathResolution.At(
-                TermPath held))) {
-            return unread(over, reads,
-                    new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
-        }
-        if (!(reads.pathOf(applied.argument(asked), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath value))) {
-            return unread(e, reads, new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.VALUE));
-        }
-        return leaf(new Derivation.AMembership(operation, held, value), e, reads);
-    }
 
     /** That the container at {@code held} holds something, as its size above nought — or null
      *  where its size is no term of this input. */

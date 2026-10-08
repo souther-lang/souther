@@ -265,25 +265,6 @@ public sealed interface OperationFact {
     }
 
     /**
-     * The operation answers whether the container it reads holds an element equal to what stands
-     * at {@code value}.
-     *
-     * <p>Beside {@link ReadsItsContainer} and not a part of it. {@code List.all} reads its
-     * container and asks no value of it, so reading a container and asking whether it holds a value
-     * are two statements; and which argument is the value is said here rather than taken from the
-     * absence of a closure, which a reader would otherwise have to read as one.
-     *
-     * <p>Held to the container the operation reads where every fact is bound: what stands at
-     * {@code value} is of the type the container holds, and the operation answers a truth.
-     */
-    record AsksWhetherItsContainerHolds(ArgumentRef value) implements OperationFact {
-
-        public AsksWhetherItsContainerHolds {
-            Objects.requireNonNull(value, "this one names the value asked for");
-        }
-    }
-
-    /**
      * The predicate is stated over a projection of each element, and {@code projection} is where it
      * is written.
      *

@@ -8,6 +8,7 @@ import souther.compiler.core.Core;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.query.Adequacy;
@@ -199,8 +200,10 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
      */
     @Test
     void anArmThatStatesOneOfTwoThingsIsDeclinedWhole() {
-        assertEquals(List.of(new OnTheWay.Why.OneOfTwoThings()), whys("both", false));
-        assertEquals(List.of(new OnTheWay.Why.OneOfTwoThings()), whys("either", true));
+        WhyNotTaken oneOfSeveral =
+                new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.ONE_OF_SEVERAL_THINGS);
+        assertEquals(List.of(oneOfSeveral), whys("both", false));
+        assertEquals(List.of(oneOfSeveral), whys("either", true));
         assertEquals(List.of(), whys("both", true), "and both operands are taken in the other way");
         assertEquals(List.of(), whys("either", false));
     }
@@ -216,17 +219,17 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
      */
     @Test
     void aComparisonItCouldNotTurnIntoACutSaysThatAndNoMore() {
-        assertEquals(List.of(new OnTheWay.Why.TheMeaningWasNotRead(
+        assertEquals(List.of(new WhyNotTaken.MeaningUnread(
                         new WhyUnread.OutsideTheLinearFragment())),
                 whys("product", true));
         // The same product handed to an operation the library says answers what it was handed:
         // the call is where the reading stopped, and why is what stopped its argument.
-        assertEquals(List.of(new OnTheWay.Why.TheMeaningWasNotRead(
+        assertEquals(List.of(new WhyNotTaken.MeaningUnread(
                         new WhyUnread.OutsideTheLinearFragment())),
                 whys("productThroughACall", true));
         // The affine operand is taken in beside it: a conjunction coming out true says both, and
         // one of them being unreadable is no reason to lose the other.
-        assertEquals(List.of(new OnTheWay.Why.TheMeaningWasNotRead(
+        assertEquals(List.of(new WhyNotTaken.MeaningUnread(
                         new WhyUnread.NoFormOfWhatItAnswers(
                                 new ValueName.Stdlib.Operation("Int", "floorMod")))),
                 whys("withAnUnreadCall", true));
@@ -235,10 +238,10 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
     }
 
     /** What the walk declined, and why, in the order it met them. */
-    private static List<OnTheWay.Why> whys(String behavior, boolean holding) {
+    private static List<WhyNotTaken> whys(String behavior, boolean holding) {
         return stating(behavior, holding).stream()
                 .filter(each -> each instanceof OnTheWay.Declined)
-                .map(each -> ((OnTheWay.Declined) each).why())
+                .flatMap(each -> ((OnTheWay.Declined) each).whys().stream())
                 .toList();
     }
 }

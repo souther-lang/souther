@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.sites.WrittenCondition;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
@@ -61,7 +62,8 @@ class ADeclineIsAnsweredForByTheConditionAndNotByWhereItIsWrittenTest {
 
     /** A condition the walk had no words for, written where the one written condition is. */
     private static OnTheWay.Declined declined(ConditionOccurrence condition) {
-        return new OnTheWay.Declined(condition, where(), new OnTheWay.Why.NoWordsForTheShape());
+        return new OnTheWay.Declined(condition, where(),
+                new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE));
     }
 
     /** Where the one condition both of these came from is written. */

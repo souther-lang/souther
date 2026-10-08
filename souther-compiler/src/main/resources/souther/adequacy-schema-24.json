@@ -2506,11 +2506,158 @@
               "outcome": {
                 "type": "string",
                 "description": "What the path came out as: `held` or `denied` for a comparison, a truth and a condition nothing read, and the case the subject was read as for a fork."
+              },
+              "notRead": {
+                "type": "array",
+                "minItems": 1,
+                "description": "Why a condition nothing read was not, every reason once — written only for `not_read`, beside the identity and no part of it. `meaning_unread` is what the condition means not having been read, `outside_domain` the domain a row is written in having no words for what it means, and `projection_incomplete` this compiler not yet asking a row for something it could.",
+                "items": {
+                  "$ref": "#/$defs/conditionNotReadReason"
+                }
+              }
+            },
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "not_read"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "notRead"
+              ]
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "notRead"
+                ]
               }
             }
           }
         }
       }
+    },
+    "conditionNotReadReason": {
+      "type": "object",
+      "description": "One reason a condition nothing read was not: which of the three kinds, and the word within it. The kinds are told apart by what lifts one — a rule of the reading of what a condition means, a wider domain, or a projection this compiler writes — so a reason of the third kind is never a fact about the model.",
+      "required": [
+        "kind",
+        "reason"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "meaning_unread",
+            "outside_domain",
+            "projection_incomplete"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "description": "The word for the reason within its kind."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "meaning_unread"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason": {
+                "enum": [
+                  "container_at_no_position",
+                  "value_at_no_position",
+                  "scrutinee_at_no_position",
+                  "subject_at_no_position",
+                  "no_measure_of_its_size",
+                  "outside_the_linear_fragment",
+                  "number_not_held",
+                  "no_number_on_a_run",
+                  "two_elements_of_one_container",
+                  "no_law_for_the_operation",
+                  "no_words_for_what_it_comes_to",
+                  "no_form_of_what_it_answers",
+                  "number_of_what_an_operation_answers",
+                  "what_a_recursive_helper_answers",
+                  "more_readings_than_are_made",
+                  "copies_state_different_things",
+                  "not_met_by_the_reading",
+                  "not_yet_composed_choice_by_cases",
+                  "not_yet_composed_values_written_out",
+                  "not_yet_composed_dependency_of_a_computed_value",
+                  "not_yet_composed_behavior_called_by_name",
+                  "not_yet_composed_closure_by_name"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "outside_domain"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason": {
+                "enum": [
+                  "quantity_on_no_order",
+                  "size_nothing_measures",
+                  "path_knows_no_alternatives"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "projection_incomplete"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason": {
+                "enum": [
+                  "one_of_several_things",
+                  "every_element_and_more",
+                  "quantifier_within_one",
+                  "truth_of_an_element",
+                  "what_a_dependency_answered",
+                  "case_of_a_subject",
+                  "value_being_there",
+                  "two_subjects_one_value",
+                  "number_a_dependency_answered",
+                  "number_the_body_bound",
+                  "count_of_elements",
+                  "order_of_no_one_position",
+                  "several_demands_in_one_column",
+                  "quantifier_as_a_column",
+                  "arm_read_as_written",
+                  "arm_an_invariant_decides",
+                  "truth_asked_of_the_rules",
+                  "some_element_asked_of_the_rules",
+                  "position_the_path_has_no_place_for",
+                  "place_on_an_order"
+                ]
+              }
+            }
+          }
+        }
+      ]
     },
     "replacementObligationId": {
       "type": "object",

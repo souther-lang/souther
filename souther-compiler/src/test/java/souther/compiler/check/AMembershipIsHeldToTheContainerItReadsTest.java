@@ -3,24 +3,24 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.core.CompleteSignature;
+import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ArgumentRef;
-import souther.compiler.semantics.OperationFact;
-import souther.compiler.semantics.OperationFacts;
+import souther.compiler.semantics.LawProposition;
+import souther.compiler.semantics.LawSubject;
+import souther.compiler.semantics.OperationLaw;
 import souther.compiler.types.ValueName;
 
-import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Which argument a membership asks for is said, and held to the container the operation reads.
- *
- * <p>The value and the container are two facts about one operation, so what makes them agree is
- * asked of the two together: an operation that reads no container asks nothing of one, and a value
- * of another type than the elements is a value no element is.
+ * A container holding a value is some element of it being that value, and the law saying so is
+ * held to the container the operation reads: the value is of the type the elements are, the
+ * container is one, and what the operation answers is a truth.
  */
 class AMembershipIsHeldToTheContainerItReadsTest {
 
@@ -29,47 +29,54 @@ class AMembershipIsHeldToTheContainerItReadsTest {
         BoundOperationFacts facts = OperationFactBinder.bindAll(DefaultStdlib.get());
         for (String library : List.of("List", "Set")) {
             ValueName contains = ValueName.Stdlib.operation(library, "contains");
-            DeclaredArgument value = facts.asksWhetherItsContainerHolds(contains);
-            assertEquals(0, value.position(), () -> library + ".contains asks of its first");
-            assertEquals(1, facts.readsItsContainer(contains).container().position(),
-                    () -> "and reads its second: " + library);
+            BoundOperationFacts.Settled.ByALaw law = assertInstanceOf(
+                    BoundOperationFacts.Settled.ByALaw.class,
+                    facts.settled(contains, OperationLaw.Observed.TRUTH), library);
+            assertTrue(law.law() instanceof OperationLaw.Observation<DeclaredArgument>(
+                            var _, LawProposition.SomeElement<DeclaredArgument> _),
+                    () -> library + ".contains holds a value where some element is it");
         }
     }
 
-    /** An operation that reads no container is asked nothing of one. */
+    /** An operation handed no container at the place the law reads one is refused. */
     @Test
     void anOperationReadingNoContainerIsRefused() {
         IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> bindWith(ValueName.Stdlib.operation("List", "isEmpty"), 0));
-
-        assertTrue(e.getMessage().contains("List.isEmpty"), e.getMessage());
-        assertTrue(e.getMessage().contains("reads no container"), e.getMessage());
+                () -> bind("String.contains"));
+        assertTrue(e.getMessage().contains("String.contains"), e.getMessage());
+        assertTrue(e.getMessage().contains("not a container"), e.getMessage());
     }
 
-    /** A value of another type than the elements is refused: `List.any` is handed a closure. */
+    /** A value of another type than the elements is refused: a map's elements are its values,
+     *  and `Map.containsKey` is handed a key. */
     @Test
     void aValueNoElementCanBeIsRefused() {
         IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> bindWith(ValueName.Stdlib.operation("List", "any"), 0));
-
-        assertTrue(e.getMessage().contains("List.any"), e.getMessage());
-        assertTrue(e.getMessage().contains("no element is"), e.getMessage());
+                () -> bind("Map.containsKey"));
+        assertTrue(e.getMessage().contains("Map.containsKey"), e.getMessage());
+        assertTrue(e.getMessage().contains("are one value"), e.getMessage());
     }
 
     /** And whether a container holds a value is a truth. */
     @Test
     void anOperationAnsweringNoTruthIsRefused() {
         IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> bindWith(ValueName.Stdlib.operation("List", "length"), 0));
-
-        assertTrue(e.getMessage().contains("List.length"), e.getMessage());
+                () -> bind("List.take"));
+        assertTrue(e.getMessage().contains("List.take"), e.getMessage());
     }
 
-    /** The binding, over the declarations the language has plus one written here. */
-    private static void bindWith(ValueName operation, int value) {
-        List<OperationFacts.Declared> gained = new ArrayList<>(OperationFacts.declarations());
-        gained.add(new OperationFacts.Declared(operation,
-                new OperationFact.AsksWhetherItsContainerHolds(new ArgumentRef.At(value))));
-        OperationFactBinder.bindAll(DefaultStdlib.get(), gained);
+    /** That some element of argument 2 is argument 1, as {@code operation}'s truth. */
+    private static void bind(String operation) {
+        int dot = operation.indexOf('.');
+        CompleteSignature declaration = OperationFactBinder.declaredSignature(DefaultStdlib.get(),
+                ValueName.Stdlib.operation(operation.substring(0, dot),
+                        operation.substring(dot + 1)));
+        ArgumentRef value = new ArgumentRef.At(0);
+        ArgumentRef container = new ArgumentRef.At(1);
+        OperationFactBinder.holdLaw(declaration, declaration.declaring(),
+                new OperationLaw.Observation<>(AnswerAspect.TRUTH,
+                        new LawProposition.SomeElement<>(container, new LawProposition.Same<>(
+                                new LawSubject.ElementOf<>(container),
+                                new LawSubject.Argument<>(value), true), true)));
     }
 }

@@ -11,11 +11,13 @@ import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.Unsayable;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
@@ -131,9 +133,10 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
         for (boolean holding : List.of(true, false)) {
             OnTheWay.Declined declined = assertInstanceOf(OnTheWay.Declined.class,
                     only("keyAsked", holding));
-            assertEquals(new OnTheWay.Why.TheMeaningWasNotRead(new WhyUnread.NoLawFor(
-                    new ValueName.Stdlib.Operation("Map", "containsKey"), AnswerAspect.TRUTH)),
-                    declined.why());
+            assertEquals(List.of(new WhyNotTaken.MeaningUnread(new WhyUnread.NoWordsFor(
+                    new ValueName.Stdlib.Operation("Map", "containsKey"), AnswerAspect.TRUTH,
+                    Unsayable.A_KEY_OF_A_MAP))),
+                    declined.whys());
         }
     }
 
@@ -182,10 +185,12 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
     void everyElementMeetingWhatIsNotAboutTheElementIsDeclined() {
         OnTheWay.Declined beside = assertInstanceOf(OnTheWay.Declined.class,
                 only("allAboveTheirFloor", true));
-        assertEquals(new OnTheWay.Why.MoreThanEachElement(), beside.why());
+        assertEquals(List.of(new WhyNotTaken.ProjectionIncomplete(
+                WhyNotTaken.Shape.EVERY_ELEMENT_AND_MORE)), beside.whys());
         OnTheWay.Declined apart = assertInstanceOf(OnTheWay.Declined.class,
                 only("allAboveTheFloor", true));
-        assertEquals(new OnTheWay.Why.OneOfTwoThings(), apart.why());
+        assertEquals(List.of(new WhyNotTaken.ProjectionIncomplete(
+                WhyNotTaken.Shape.ONE_OF_SEVERAL_THINGS)), apart.whys());
     }
 
     /**

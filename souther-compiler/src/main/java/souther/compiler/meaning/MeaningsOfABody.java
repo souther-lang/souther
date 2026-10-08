@@ -165,4 +165,10 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous) {
     public Optional<Meaning> meaningAt(Site site) {
         return ambiguous.contains(site) ? Optional.empty() : Optional.ofNullable(stated.get(site));
     }
+
+    /** Why nothing is stated at {@code site}, where {@link #at} answers nothing. */
+    public WhyUnread whyNothingAt(Site site) {
+        return ambiguous.contains(site) ? new WhyUnread.CopiesStateDifferentThings()
+                : new WhyUnread.NotMetByTheReading();
+    }
 }

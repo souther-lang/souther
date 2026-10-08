@@ -4312,7 +4312,11 @@
             }, {
               "kind" : "not_read",
               "condition" : "condition 0 of `seat`",
-              "outcome" : "held"
+              "outcome" : "held",
+              "notRead" : [ {
+                "kind" : "meaning_unread",
+                "reason" : "no_words_for_what_it_comes_to"
+              } ]
             } ]
           },
           "taken" : false,
@@ -4328,7 +4332,11 @@
             }, {
               "kind" : "not_read",
               "condition" : "condition 0 of `seat`",
-              "outcome" : "held"
+              "outcome" : "held",
+              "notRead" : [ {
+                "kind" : "meaning_unread",
+                "reason" : "no_words_for_what_it_comes_to"
+              } ]
             } ]
           },
           "taken" : false,
@@ -4340,7 +4348,11 @@
             "conditions" : [ {
               "kind" : "not_read",
               "condition" : "condition 0 of `seat`",
-              "outcome" : "denied"
+              "outcome" : "denied",
+              "notRead" : [ {
+                "kind" : "meaning_unread",
+                "reason" : "no_words_for_what_it_comes_to"
+              } ]
             } ]
           },
           "taken" : false,
@@ -4360,7 +4372,11 @@
           "conditions" : [ {
             "kind" : "not_read",
             "condition" : "condition 0 of `seat`",
-            "outcome" : "denied"
+            "outcome" : "denied",
+            "notRead" : [ {
+              "kind" : "meaning_unread",
+              "reason" : "no_words_for_what_it_comes_to"
+            } ]
           } ]
         },
         "code" : "E1935"
@@ -4547,7 +4563,11 @@
             "conditions" : [ {
               "kind" : "not_read",
               "condition" : "condition 0 of `originOf`",
-              "outcome" : "held"
+              "outcome" : "held",
+              "notRead" : [ {
+                "kind" : "meaning_unread",
+                "reason" : "no_words_for_what_it_comes_to"
+              } ]
             } ]
           },
           "taken" : false,
@@ -4559,7 +4579,11 @@
             "conditions" : [ {
               "kind" : "not_read",
               "condition" : "condition 0 of `originOf`",
-              "outcome" : "denied"
+              "outcome" : "denied",
+              "notRead" : [ {
+                "kind" : "meaning_unread",
+                "reason" : "no_words_for_what_it_comes_to"
+              } ]
             } ]
           },
           "taken" : false,
@@ -4606,7 +4630,11 @@
           "conditions" : [ {
             "kind" : "not_read",
             "condition" : "condition 0 of `originOf`",
-            "outcome" : "denied"
+            "outcome" : "denied",
+            "notRead" : [ {
+              "kind" : "meaning_unread",
+              "reason" : "no_words_for_what_it_comes_to"
+            } ]
           } ]
         },
         "code" : "E1935"
