@@ -3,11 +3,14 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.StatedComparison;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Proposition;
@@ -98,6 +101,34 @@ class AComparisonOfAChosenValueIsTheChoiceOfItsComparisonsTest {
         assertFalse(unreadIn(least));
     }
 
+    /**
+     * A truth held against one written out, read as the comparison it is written as, is that truth
+     * whatever chooses it: a truth chosen by cases is read as the choice it is, and not split into
+     * comparisons of truths as numbers. Read as a condition, the same spelling is a truth under a
+     * denial or none, and the two readings state one thing.
+     */
+    @Test
+    void aTruthChosenByCasesHeldAgainstAWrittenTruthIsThatTruth() {
+        String chosen = "(if b.open then b.x > 1 else b.y > 2)";
+        Proposition itself = stated("if " + chosen + " then 1 else 0");
+        assertFalse(unreadIn(itself));
+        for (String spelled : List.of(chosen + " == true", "false /= " + chosen)) {
+            assertEquals(itself, compared("if " + spelled + " then 1 else 0"), spelled);
+            assertEquals(itself, stated("if " + spelled + " then 1 else 0"), spelled);
+        }
+        assertEquals(itself.denied(), compared("if " + chosen + " == false then 1 else 0"));
+    }
+
+    /** What the condition of the one fork of {@code body}, written as a comparison, states read as
+     *  that comparison rather than as a truth. */
+    private static Proposition compared(String body) {
+        Fork fork = fork(body);
+        StatedComparison comparison = BooleanMeaning.asAComparison(fork.condition())
+                .orElseThrow(() -> new AssertionError(body + " is a comparison"));
+        return Pullback.ofAComparison(comparison, fork.reads(), fork.read(), Optional.empty())
+                .proposition();
+    }
+
     /** No comparison of a value nothing chooses is taken by this rule. */
     @Test
     void aComparisonOfNoChoiceIsNotOne() {
@@ -129,6 +160,14 @@ class AComparisonOfAChosenValueIsTheChoiceOfItsComparisonsTest {
     }
 
     private static Pullback.Pulled pulled(String body) {
+        Fork fork = fork(body);
+        return Pullback.ofATruth(fork.condition(), fork.reads(), fork.read(), Optional.empty());
+    }
+
+    private record Fork(Core condition, InputReads reads, InputReading read) {}
+
+    /** The condition of the one fork of a body written {@code body}, as the reading meets it. */
+    private static Fork fork(String body) {
         String model = "module demo\n\n" + INPUT + """
 
                 behavior f : (b: Box) -> Int
@@ -152,6 +191,6 @@ class AComparisonOfAChosenValueIsTheChoiceOfItsComparisonsTest {
             e = Core.withoutStanding(let.body());
         }
         Core.If fork = assertInstanceOf(Core.If.class, e, "the body is one fork");
-        return Pullback.ofATruth(fork.cond(), reads, inputs.reading(rules), Optional.empty());
+        return new Fork(fork.cond(), reads, inputs.reading(rules));
     }
 }

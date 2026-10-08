@@ -51,7 +51,8 @@ class EveryQuestionAReadingAnswersIsAboutItsOwnInputTest {
     /** A reading of an input that takes one whole number, and nothing called {@code s}. */
     private static Quantities reading() {
         return InputDomain.of(List.of(new InputDomain.Parameter("n", null, Type.INT)),
-                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES)).quantities(RULES);
+                RuleReadingContext.unshared(RULES, ReadAs.THE_COMPILATION_DOES),
+                souther.compiler.carrier.Membership.none()).quantities(RULES);
     }
 
     /** A term of another input, whose root this reading takes nothing under. */

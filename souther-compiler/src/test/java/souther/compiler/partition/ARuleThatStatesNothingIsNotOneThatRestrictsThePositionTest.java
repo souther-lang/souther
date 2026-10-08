@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ARuleNoReadingTakesIn;
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -257,7 +258,7 @@ class ARuleThatStatesNothingIsNotOneThatRestrictsThePositionTest {
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return Partitions.of("read",
                 InputDomain.of(sigs.get("read"), RuleReadingContext.unshared(rules,
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES))
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES), Membership.none())
                 .reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 }

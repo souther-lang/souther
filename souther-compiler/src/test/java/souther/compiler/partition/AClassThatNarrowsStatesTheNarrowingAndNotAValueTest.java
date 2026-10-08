@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingContext;
@@ -83,7 +84,7 @@ class AClassThatNarrowsStatesTheNarrowingAndNotAValueTest {
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get("use");
         InputDomain domain = InputDomain.of(sigs.get("use"),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES), Membership.none());
         Partitions.Partitioning axes =
                 Partitions.of("use", domain.reading(rules), ReadAs.THE_COMPILATION_DOES);
         // What a body draws, where there is one. A behavior nothing implements has the classes its

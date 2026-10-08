@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclarationReadings;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -279,7 +280,7 @@ class APatternIsCompiledOnceHoweverOftenASearchAsksForItsPositionTest {
                 ? RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES)
                 : RuleReadingContext.of(rules, ReadAs.THE_COMPILATION_DOES, asked == null
                         ? compilation.db().readings() : asked.over(compilation.db().readings()));
-        InputDomain domain = InputDomain.of(sigs.get("grade"), world);
+        InputDomain domain = InputDomain.of(sigs.get("grade"), world, Membership.none());
         Partitions.Partitioning partitioning =
                 Partitions.of("grade", domain.reading(rules), ReadAs.THE_COMPILATION_DOES);
         return MeasuredInput.of("grade", domain.reading(rules), partitioning);

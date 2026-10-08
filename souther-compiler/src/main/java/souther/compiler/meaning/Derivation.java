@@ -160,6 +160,23 @@ public sealed interface Derivation {
         }
     }
 
+    /**
+     * A truth held against a truth the source settles: {@code x == true} holding is {@code x}
+     * holding, and {@code x == false} holding is {@code x} not holding.
+     */
+    record HeldAgainstAWrittenTruth(Derivation truth, boolean held) implements Derivation {
+
+        public HeldAgainstAWrittenTruth {
+            Objects.requireNonNull(truth, "a truth is held against one written out");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            Proposition stated = numbering.of(truth);
+            return held ? stated : stated.denied();
+        }
+    }
+
     /** A denial: what is under it, the other way round where it denies. */
     record UnderADenial(Derivation part, boolean denies) implements Derivation {
 

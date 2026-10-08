@@ -119,7 +119,8 @@ class WhatIsKnownBesideTheRulesIsSolvedWithThemTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return InputDomain.of(sigs.get("take"),
-                        RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES))
+                        RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
+                        souther.compiler.carrier.Membership.none())
                 .quantities(rules).region();
     }
 }

@@ -67,7 +67,8 @@ class EveryAnswerAPositionGivesAboutADistinctionIsOneSomeModelHereGetsTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         assertNotNull(sigs);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        Position k = InputDomain.of(sigs.get("take"), RuleReadingContext.unshared(rules, policy))
+        Position k = InputDomain.of(sigs.get("take"), RuleReadingContext.unshared(rules, policy),
+                        souther.compiler.carrier.Membership.none())
                 .positions().stream()
                 .filter(p -> p.path().toString().equals("r.k"))
                 .findFirst().orElseThrow();

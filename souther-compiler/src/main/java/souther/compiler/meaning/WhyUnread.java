@@ -155,9 +155,10 @@ public sealed interface WhyUnread {
             A_SIZE_AN_OPERATION_KEEPS,
 
             /**
-             * A value chosen by cases where the choice is not a side of the comparison: inside
-             * arithmetic, where what each case answers has to be carried out through what is
-             * computed from it, or a truth held against one written out.
+             * A value chosen by cases where the choice is not a side of a comparison of numbers:
+             * inside arithmetic, where what each case answers has to be carried out through what is
+             * computed from it, or compared as a value no carrier counts — two truths neither
+             * written out, two strings.
              */
             A_CHOICE_BY_CASES,
 

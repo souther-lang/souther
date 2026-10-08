@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -88,7 +89,7 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
         Core body = checked.behaviorBodies().get("book");
         CoverageSites.Plan plan = checked.plan();
         InputDomain read = InputDomain.of(sigs.get("book"), RuleReadingContext.unshared(rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES), Membership.none());
         Partitions.Partitioning partitioning = ThresholdFixtures.withThresholds(
                 Partitions.of("book", read.reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 read.quantities(rules),

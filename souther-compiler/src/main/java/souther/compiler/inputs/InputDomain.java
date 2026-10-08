@@ -277,10 +277,18 @@ public final class InputDomain {
      */
     public record Parameter(String name, BindingId binding, Type type) {}
 
-    /** Every position of an input, in the order the parameters are declared and descended into, of
-     *  something no row stands a dependency in for. */
-    public static InputDomain of(List<Parameter> parameters, RuleReadingContext reading) {
-        return of(parameters, reading, InputDemand.NONE, souther.compiler.carrier.Membership.none());
+    /**
+     * Every position of an input, in the order the parameters are declared and descended into, where
+     * no body names a path the enumeration does not.
+     *
+     * <p>What a row stands in for is asked of every caller and supplied by none: an input read
+     * without its behavior's own account of its dependencies would read a fork on one of their
+     * answers as a value the model computes, and nothing would say so.
+     */
+    public static InputDomain of(
+            List<Parameter> parameters, RuleReadingContext reading,
+            souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
+        return of(parameters, reading, InputDemand.NONE, dependencies);
     }
 
     /**
@@ -306,8 +314,9 @@ public final class InputDomain {
      * @param dependencies the behaviors a row of this behavior stands in for ({@link
      *                     #dependencies()})
      */
-    public static InputDomain of(List<Parameter> parameters, RuleReadingContext reading,
-                                 InputDemand demand, souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
+    public static InputDomain of(
+            List<Parameter> parameters, RuleReadingContext reading, InputDemand demand,
+            souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
         List<Position> found = new ArrayList<>();
         List<RuleRoot> roots = new ArrayList<>();
         Map<BindingId, String> read = new LinkedHashMap<>();
@@ -425,11 +434,13 @@ public final class InputDomain {
      * <p>The positions are the same either way — what a behavior takes is what it declares — and
      * what is absent is the means to tell one of its parameters from a name a body binds under the
      * same spelling. So this is the reading for a caller with no body in hand, and a caller with one
-     * that used it would find every claim and every comparison naming nothing — and with no body to
-     * read, nothing a row stands in for is asked about.
+     * that used it would find every claim and every comparison naming nothing. What a row stands in
+     * for is still the caller's to say, as it is for every reading of an input.
      */
-    public static InputDomain of(DeclaredSig declared, RuleReadingContext reading) {
-        return of(declared, List.of(), reading, InputDemand.NONE, souther.compiler.carrier.Membership.none());
+    public static InputDomain of(
+            DeclaredSig declared, RuleReadingContext reading,
+            souther.compiler.carrier.Membership<ValueName.Behavior> dependencies) {
+        return of(declared, List.of(), reading, InputDemand.NONE, dependencies);
     }
 
     /** The positions, in the order they were read. */

@@ -314,7 +314,8 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         return new Read(
                 InputDomain.of(sigs.get("visit"),
-                        RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES)),
+                        RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
+                        souther.compiler.carrier.Membership.none()),
                 checked.behaviorBodies().get("visit"), rules);
     }
 }

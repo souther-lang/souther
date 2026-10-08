@@ -174,7 +174,8 @@ class TakingRulesOverIsSaidAndNotInferredTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain read = InputDomain.of(sigs.get("take"),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
+                souther.compiler.carrier.Membership.none());
         assertNotNull(read, "the model under test compiles");
         return read;
     }

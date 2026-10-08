@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -48,7 +49,7 @@ class AFloorNothingBuildsIsSaidTheSameWhereverItIsWrittenTest {
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         assertNotNull(sigs, "the model did not compile");
         InputDomain domain = InputDomain.of(sigs.get(behavior), RuleReadingContext.unshared(rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES), Membership.none());
         Partitions.Partitioning partitioning = Partitions.of(behavior, domain.reading(rules), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         FillResult filled = GenerationFixtures.fill(
                 MeasuredInput.of(behavior, domain.reading(rules), partitioning),

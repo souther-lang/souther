@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.BooleanMeaning;
+import souther.compiler.check.Carrier;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationAccess;
@@ -400,6 +401,7 @@ final class Pullback {
                         : asking(at, () -> observe(checked.container(), AnswerAspect.EMPTINESS,
                                 reads)), checked.emptyWhereItHolds()),
                 () -> partOf(at, truthCompared(stated, reads)),
+                () -> heldAgainstAWrittenTruth(stated, reads),
                 () -> partOf(at, asACut(stated, arithmetic.get(), fixed)),
                 () -> partOf(at, onAnOrder(stated, arithmetic.get(), reads)),
                 () -> partOf(at, ofItsArguments(stated, fixed, reads)),
@@ -833,6 +835,9 @@ final class Pullback {
                 // through to the call. Its binding is the identity a reader walking the tree
                 // follows, where each call to a dependency is an evaluation of its own: read as the
                 // answer, a value that reader could relate to the rest would be one it cannot name.
+                // What that costs is said here: one answer spelled both ways in one condition —
+                // through a name and as the call — is two atoms, and a relation between them is
+                // not read. Lifted when that reader names an answer as an answer.
                 return through != null && answerAt(through.value(), through.at()) != null
                         ? null : through;
             }
@@ -881,6 +886,22 @@ final class Pullback {
                 .map(against -> subjects.truthOf(against.side(), against.held(), reads))
                 .<Derivation>map(stood -> new Derivation.ATruthCompared(stood.condition().of(),
                         stood.held()))
+                .orElse(null);
+    }
+
+    /**
+     * A truth held against a truth the source settles, as that truth or its denial — or null where
+     * neither side is a truth held against one written out.
+     *
+     * <p>Whatever the truth is: what it states is read as any truth is ({@link #observe}), through
+     * a name, a denial or a choice by cases. The truth of a subject a row controls is read by the
+     * rule before this one, which keeps the comparison as the part it is; this is every other.
+     */
+    private Derivation heldAgainstAWrittenTruth(StatedComparison stated, InputReads reads) {
+        return BooleanMeaning.againstATruth(stated, true, read.rules().symbols(),
+                        side -> BooleanMeaning.folded(side, read.rules().symbols()).isEmpty())
+                .<Derivation>map(against -> new Derivation.HeldAgainstAWrittenTruth(
+                        observe(against.side(), AnswerAspect.TRUTH, reads), against.held()))
                 .orElse(null);
     }
 
@@ -999,9 +1020,12 @@ final class Pullback {
     private Derivation ofAChoice(StatedComparison stated, Denotation at, InputReads reads) {
         Denotation left = new Denotation(stated.left(), reads);
         Denotation right = new Denotation(stated.right(), reads);
-        // What each case answers is related as a number, which a truth is not: a truth chosen by
-        // cases and held against one written out is a truth of the choice, a step not taken here.
-        if (Core.withoutStanding(stated.left()).type() == Type.Prim.BOOL
+        // What each case answers is related as a number ({@link #overQuantities}), so this takes
+        // the comparisons of values counted on a carrier and no others. A truth held against one
+        // written out is that truth, which a rule before this reads whatever chooses it.
+        Carrier counted = Carrier.ofValue(Core.withoutStanding(stated.left()).type(),
+                read.rules().declarations());
+        if (counted == null || !counted.counts()
                 || (chosenAt(left) == null && chosenAt(right) == null)) {
             return null;
         }

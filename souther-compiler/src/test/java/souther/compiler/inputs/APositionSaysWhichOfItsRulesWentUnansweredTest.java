@@ -69,7 +69,8 @@ class APositionSaysWhichOfItsRulesWentUnansweredTest {
         assertNotNull(sigs);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return InputDomain.of(sigs.get("price"), RuleReadingContext.unshared(rules,
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES)).positions().stream()
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                souther.compiler.carrier.Membership.none()).positions().stream()
                 .filter(p -> p.path().toString().equals("length"))
                 .findFirst().orElseThrow();
     }

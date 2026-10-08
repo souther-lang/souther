@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.OfferedAtTheLines;
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingContext;
@@ -71,7 +72,8 @@ class ACollectionOfSeveralIsFilledFromWhatItsElementTypeAdmitsTest {
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain domain =
                 InputDomain.of(sigs.get("countThem"),
-                        RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES));
+                        RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
+                        Membership.none());
         Partitions.Partitioning partitioning =
                 Partitions.of("countThem", domain.reading(rules), ReadAs.THE_COMPILATION_DOES);
         return GenerationFixtures.fill(MeasuredInput.of("countThem", domain.reading(rules), partitioning),

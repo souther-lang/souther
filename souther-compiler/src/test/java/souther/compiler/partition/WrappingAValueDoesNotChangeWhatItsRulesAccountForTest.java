@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -123,7 +124,8 @@ class WrappingAValueDoesNotChangeWhatItsRulesAccountForTest {
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         TermPath path = TermPath.of("n");
         return InputDomain.of(sigs.get("take"),
-                        RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES))
+                        RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
+                        Membership.none())
                 .at(path).boundsFor(new NumericTerm.ValueOf(path)).rangeLeft();
     }
 

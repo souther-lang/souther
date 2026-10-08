@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.Numberings;
 
@@ -52,7 +53,8 @@ class NoAxesByItselfIsNotAGenerationReasonTest {
     private static souther.compiler.inputs.InputReading readingOf(String parameter, Type type) {
         return souther.compiler.inputs.InputDomain.of(
                 List.of(new souther.compiler.inputs.InputDomain.Parameter(parameter, null, type)),
-                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES)).reading(SYMBOLS);
+                RuleReadingContext.unshared(SYMBOLS, ReadAs.THE_COMPILATION_DOES),
+                Membership.none()).reading(SYMBOLS);
     }
 
     @Test

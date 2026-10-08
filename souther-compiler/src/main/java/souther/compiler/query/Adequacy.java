@@ -2839,7 +2839,9 @@ public final class Adequacy {
         }
         souther.compiler.inputs.InputReading read = souther.compiler.inputs.InputDomain.of(
                 List.of(new souther.compiler.inputs.InputDomain.Parameter(ANSWER, null, answers)),
-                RuleReadingContext.of(reading, policy, beside.machines())).reading(reading);
+                RuleReadingContext.of(reading, policy, beside.machines()),
+                // An answer, which no row stands anything in for.
+                Membership.none()).reading(reading);
         return souther.compiler.partition.MeasuredInput.of(ANSWER, read,
                 souther.compiler.partition.Partitions.of(ANSWER, read, policy));
     }

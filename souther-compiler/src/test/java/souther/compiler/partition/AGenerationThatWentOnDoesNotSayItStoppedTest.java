@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.carrier.Lookup;
+import souther.compiler.carrier.Membership;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
@@ -75,7 +76,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain domain = InputDomain.of(sigs.get("submit"), RuleReadingContext.unshared(rules,
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES), Membership.none());
         return MeasuredInput.of("submit", domain.reading(rules),
                 Partitions.of("submit", domain.reading(rules),
                         souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
