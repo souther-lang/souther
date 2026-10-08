@@ -81,7 +81,7 @@ class NormalisingAPropositionKeepsWhatItStatesTest {
     private static boolean value(Proposition stated, Map<TermPath, Boolean> values) {
         return switch (stated) {
             case Proposition.Always(boolean holds) -> holds;
-            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds) ->
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds, var _) ->
                     values.get(at) == holds;
             case Proposition.All all -> all.parts().stream().allMatch(part -> value(part, values));
             case Proposition.Any any -> any.parts().stream().anyMatch(part -> value(part, values));

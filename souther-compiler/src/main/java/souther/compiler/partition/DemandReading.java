@@ -175,7 +175,7 @@ final class DemandReading {
         return switch (stated) {
             case Proposition.Always(boolean holds) -> List.of(new Read.Settled(holds));
             case Proposition.Compared compared -> List.of(ofARelation(compared, read));
-            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds) ->
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds, var _) ->
                     List.of(new Read.Demands(new RowDemand.ATruth(at, holds)));
             case Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
                  Proposition.SameValue _ ->
@@ -223,7 +223,7 @@ final class DemandReading {
             // What a container holding a value asks of an element is that it be that value, which
             // a composer writes into the container and no region narrows by.
             if (part instanceof Proposition.SameValue(var _, DecisionSubject.AnInput(TermPath at),
-                    boolean holds)) {
+                    boolean holds, var _)) {
                 ofTheElement.add(holds ? new RowDemand.SameAs(at) : new RowDemand.DifferentFrom(at));
                 continue;
             }

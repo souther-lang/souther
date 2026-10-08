@@ -1312,7 +1312,7 @@ final class Terms {
 
     /** The product of {@code left} and {@code right}, or null where either factor is a value nothing
      * can be said of. A factor that is a written constant is not this: that product is a scalar
-     * multiply and the fragment carries it ({@link #scale}). */
+     * multiply and the fragment carries it ({@link #product(LinearForm, LinearForm)}). */
     private Derivation product(Core left, Core right, Denotations at) {
         LinearForm<FactSubject> over = affineOf(left, at);
         LinearForm<FactSubject> by = affineOf(right, at);

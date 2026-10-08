@@ -190,13 +190,21 @@ final class Pullback {
      * value made from the input, which the comparison still is.
      */
     static boolean carriesPast(StatedComparison comparison, InputReads reads, InputReading read) {
-        if (AnEmptinessCheck.checked(comparison) == null) {
+        if (!mayBeCarriedPast(comparison)) {
             return false;
         }
         Pulled pulled = ofAComparison(comparison, reads, read, Optional.empty());
         return !(pulled.proposition() instanceof Proposition.Compared)
                 && pulled.turnsOn().stream()
                         .noneMatch(leaf -> leaf.part() instanceof Proposition.Unread);
+    }
+
+    /**
+     * Whether {@code comparison} is one {@link #carriesPast} can answer yes for, which is a question
+     * about its shape alone: only an emptiness check is carried anywhere.
+     */
+    static boolean mayBeCarriedPast(StatedComparison comparison) {
+        return AnEmptinessCheck.checked(comparison) != null;
     }
 
     /** What {@code container} holding something states. */

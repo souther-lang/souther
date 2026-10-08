@@ -113,7 +113,7 @@ final class MeaningAssumptions {
             }
             case Proposition.All all -> all.parts().forEach(this::take);
             case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, Rel p),
-                                      boolean holds) -> {
+                                      boolean holds, var _) -> {
                 LinearForm<FactSubject> over = formAt(form);
                 if (over != null) {
                     known = known.taking(over, holds ? p : p.denied(), Known.Held.ON_THE_PATH,
@@ -123,7 +123,7 @@ final class MeaningAssumptions {
                     whole = false;
                 }
             }
-            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds) -> {
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds, var _) -> {
                 FactSubject place = placeOf(at);
                 if (place != null) {
                     known = known.taking(place, holds, Known.Held.ON_THE_PATH);
