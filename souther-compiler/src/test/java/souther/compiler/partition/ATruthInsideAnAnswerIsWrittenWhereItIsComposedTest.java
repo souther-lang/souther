@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.InjectedAnswer;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.ValueName;

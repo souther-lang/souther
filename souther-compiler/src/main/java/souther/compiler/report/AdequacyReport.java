@@ -41,7 +41,7 @@ import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.DecidedCondition;
 import souther.compiler.partition.DecisionCondition;
-import souther.compiler.partition.DecisionSubject;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.DomainPoint;

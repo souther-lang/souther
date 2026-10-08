@@ -14,6 +14,9 @@ import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionArgument;
+import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.InjectedAnswer;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 

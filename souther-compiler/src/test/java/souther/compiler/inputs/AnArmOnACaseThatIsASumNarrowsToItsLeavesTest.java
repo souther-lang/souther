@@ -9,7 +9,7 @@ import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.DecidedCondition;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
-import souther.compiler.partition.DecisionSubject;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.TakenConstraint;
 import souther.compiler.query.Adequacy;
