@@ -6,6 +6,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.meaning.WhyNotTaken;
@@ -108,8 +109,10 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
                 compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
         InputReads reads = InputReads.ofParameters(inputs.parameterReads(), inputs.declared(rules),
                 checked.elementBindings().get(behavior), inputs.dependencies());
+        InputReading read = inputs.reading(rules);
         return ReachingCuts.stating(Condition.of(body, reads, rules.symbols(), rules.newtypes(),
-                new ConditionNumbering(module, behavior)), inputs.reading(rules), holding);
+                new ConditionNumbering(module, behavior)), read, holding,
+                new WhatConditionsState(read));
     }
 
     /** Whether {@code cut} holds where {@code x} and {@code y} stand at these values. */

@@ -207,9 +207,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     static Read read(String behavior, StatedComparison comparison,
                      InputReading read, InputReads reads,
-                     souther.compiler.coverage.Arrivals answering) {
-        Pullback.OnTheInput onTheInput = Pullback.ofAComparisonOnTheInput(comparison, reads, read);
+                     souther.compiler.coverage.Arrivals answering,
+                     WhatConditionsState conditions) {
+        Pullback.OnTheInput onTheInput = conditions.comparison(comparison, reads, read);
         Pullback.Pulled stated = onTheInput.stated();
+        // A form put on the input's numbers, where what is stated is one over them.
+        LinearForm<NumericTerm> overTheInput =
+                stated.proposition() instanceof Proposition.Compared(
+                        Relation.Affine affine, boolean _, String _)
+                        ? WhatTheRulesLeave.ofTheInput(affine.form()) : null;
         return switch (stated.proposition()) {
             // Read to the end, and the same answer for every row. What it is about is what the
             // reading named, which is how a report says where it cuts nothing.
@@ -217,9 +223,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     stated.meaning().how() instanceof Derivation.ACutThatCutsNothing cut
                             ? cut.named() : Set.of());
             case Proposition.Compared(Relation.Affine affine, boolean holds, String _)
-                    when WhatTheRulesLeave.ofTheInput(affine.form()) != null ->
-                    realized(behavior, AffineReading.stating(
-                            WhatTheRulesLeave.ofTheInput(affine.form()),
+                    when overTheInput != null ->
+                    realized(behavior, AffineReading.stating(overTheInput,
                             holds ? affine.proposition() : affine.proposition().denied(),
                             comparison.left(), reads, read.rules()), read.quantities());
             case Proposition.Compared(Relation.Ordered(

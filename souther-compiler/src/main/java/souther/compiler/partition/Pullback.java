@@ -252,12 +252,15 @@ final class Pullback {
      * value made from the input, which the comparison still is.
      */
     static boolean carriesPast(StatedComparison comparison, InputReads reads, InputReading read) {
-        if (!mayBeCarriedPast(comparison)) {
-            return false;
-        }
+        return mayBeCarriedPast(comparison)
+                && carriesPast(ofAComparison(comparison, reads, read, Optional.empty()));
+    }
+
+    /** The same, of what an emptiness check was read to state. */
+    static boolean carriesPast(Pulled read) {
         // Unread anywhere in what is stated, and not among the parts it turns on: a part nothing
         // read that is the same on every run turns on nothing, and is still not read.
-        Proposition stated = ofAComparison(comparison, reads, read, Optional.empty()).proposition();
+        Proposition stated = read.proposition();
         return !(stated instanceof Proposition.Compared)
                 && !Proposition.leavesSomethingUnread(stated);
     }

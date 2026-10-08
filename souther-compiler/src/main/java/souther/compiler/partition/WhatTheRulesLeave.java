@@ -83,20 +83,25 @@ public final class WhatTheRulesLeave {
                 case AWayThrough.NotRuledOut(List<WhyNotTaken> whys) -> notAsked.addAll(whys);
             }
         }
-        return new AWayThrough.NotRuledOut(notAsked);
+        return left(notAsked);
+    }
+
+    /** Not ruled out, with what was not asked: the one answer where nothing was left unasked. */
+    private static AWayThrough left(List<WhyNotTaken> notAsked) {
+        return notAsked.isEmpty() ? LEFT : new AWayThrough.NotRuledOut(notAsked);
     }
 
     /** Some one of {@code parts} coming out {@code want}: ruled out where every one is. */
     private static AWayThrough some(List<Proposition> parts, boolean want, Quantities rules) {
         List<WhyNotTaken> notAsked = new ArrayList<>();
-        boolean left = false;
+        boolean somePartLeft = false;
         for (Proposition part : parts) {
             if (admits(part, want, rules) instanceof AWayThrough.NotRuledOut(var whys)) {
-                left = true;
+                somePartLeft = true;
                 notAsked.addAll(whys);
             }
         }
-        return left ? new AWayThrough.NotRuledOut(notAsked) : new AWayThrough.RuledOut();
+        return somePartLeft ? left(notAsked) : new AWayThrough.RuledOut();
     }
 
     private static AWayThrough notAsked(WhyNotTaken why) {

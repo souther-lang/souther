@@ -237,7 +237,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     private record Body(String behavior, InputReading read,
                         souther.compiler.coverage.Arrivals answering, Templates templates,
                         List<TruthMet> truths, List<ForkDecided> decided,
-                        WhatAnAnswerTakesUp dependencies, CarriedPast carried) {
+                        WhatAnAnswerTakesUp dependencies, CarriedPast carried,
+                        WhatConditionsState conditions) {
 
         Symbols symbols() {
             return read.symbols();
@@ -278,10 +279,11 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         ConditionNumbering numbering =
                 new ConditionNumbering(read.symbols().module(), behavior);
         CarriedPast carried = new CarriedPast();
+        WhatConditionsState conditions = new WhatConditionsState(read);
         walk(body, new Body(behavior, read,
                         souther.compiler.coverage.Arrivals.inTheTree(body,
                                 analysis.templates()::bodyOf),
-                        templates, truths, decided, dependencies, carried),
+                        templates, truths, decided, dependencies, carried, conditions),
                 reads,
                 LiveFlow.of(body), List.of(), true, readings, forks, numbering);
         // What each value the body builds states, read once. A value means the same wherever it is
@@ -294,7 +296,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 walk(template, new Body(behavior, read,
                                 souther.compiler.coverage.Arrivals.inTheTree(template,
                                         analysis.templates()::bodyOf),
-                        templates, truths, decided, dependencies, carried),
+                        templates, truths, decided, dependencies, carried, conditions),
                         insideATemplate, LiveFlow.of(template), entry.assumed(), entry.live(),
                         readings, forks, numbering);
             }
@@ -387,7 +389,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     .orElseGet(() -> new BoundaryPolicy.Standing.Admitted(
                             ComparisonAssessment.of(in.behavior(), stated.statement(), where,
                                     in.read(), reads, null, in.dependencies(), in.answering(),
-                                    false)));
+                                    false, in.conditions())));
             out.add(new Reading(stands, stated.statement(), where, reads, assumed, standing));
         }
         switch (e) {
@@ -400,7 +402,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 walk(both.right(), in, reads, flow,
                         taking(Condition.of(both.left(), reads, symbols, in.newtypes(), numbering),
                                 true,
-                                in.read(), assumed),
+                                in.read(), assumed, in.conditions()),
                         live, out, forks, numbering);
             }
             case Core.Binary either when either.op() == BinOp.OR -> {
@@ -408,7 +410,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 walk(either.right(), in, reads, flow,
                         taking(Condition.of(either.left(), reads, symbols, in.newtypes(),
                                         numbering), false,
-                                in.read(), assumed),
+                                in.read(), assumed, in.conditions()),
                         live, out, forks, numbering);
             }
             // The condition under what stood above the fork, and each arm under what that arm proves
@@ -422,10 +424,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         Condition.of(iff.cond(), reads, symbols, in.newtypes(), numbering);
                 // What the condition coming out each way says, once: what each arm is entered
                 // under, and what a run seen down it is known to have done.
-                List<OnTheWay> holding = ReachingCuts.stating(condition, in.read(), true);
-                List<OnTheWay> failing = ReachingCuts.stating(condition, in.read(), false);
+                List<OnTheWay> holding =
+                        ReachingCuts.stating(condition, in.read(), true, in.conditions());
+                List<OnTheWay> failing =
+                        ReachingCuts.stating(condition, in.read(), false, in.conditions());
                 if (live) {
-                    truthsIn(condition, assumed, in.read(), in.truths());
+                    truthsIn(condition, assumed, in.read(), in.truths(), in.conditions());
                     if (iff.occurrence() != null) {
                         in.decided().add(new ForkDecided(iff.occurrence(), assumed, holding,
                                 failing));
@@ -521,17 +525,18 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * way that runs it say.
      */
     private static void truthsIn(Condition condition, List<OnTheWay> assumed, InputReading read,
-                                 List<TruthMet> out) {
+                                 List<TruthMet> out, WhatConditionsState conditions) {
         switch (condition) {
             case Condition.Truth truth -> out.add(new TruthMet(truth, assumed));
             case Condition.Compares _ -> { }
             // The right part runs where the left leaves the answer open, which under a conjunction
             // is the left holding and under a disjunction the left failing.
             case Condition.Joined joined -> {
-                truthsIn(joined.left(), assumed, read, out);
+                truthsIn(joined.left(), assumed, read, out, conditions);
                 boolean leftHolding = joined.how().under(true) == ConditionJoin.BOTH;
-                truthsIn(joined.right(), taking(joined.left(), leftHolding, read, assumed), read,
-                        out);
+                truthsIn(joined.right(),
+                        taking(joined.left(), leftHolding, read, assumed, conditions), read, out,
+                        conditions);
             }
         }
     }
@@ -547,8 +552,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      */
     private static List<OnTheWay> taking(Condition condition, boolean holding,
                                          souther.compiler.inputs.InputReading read,
-                                         List<OnTheWay> assumed) {
-        return past(assumed, ReachingCuts.stating(condition, read, holding));
+                                         List<OnTheWay> assumed, WhatConditionsState conditions) {
+        return past(assumed, ReachingCuts.stating(condition, read, holding, conditions));
     }
 
     /** What stood before, and then what was {@code stated} past it. */

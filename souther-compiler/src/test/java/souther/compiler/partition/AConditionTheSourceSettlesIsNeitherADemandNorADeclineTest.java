@@ -11,6 +11,7 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.numeric.Count;
 import souther.compiler.query.Adequacy;
@@ -202,8 +203,9 @@ class AConditionTheSourceSettlesIsNeitherADemandNorADeclineTest {
     }
 
     private static OnTheWay only(String behavior, boolean holding) {
-        List<OnTheWay> stated = ReachingCuts.stating(conditionOf(behavior),
-                domain(behavior).reading(rules()), holding);
+        InputReading read = domain(behavior).reading(rules());
+        List<OnTheWay> stated = ReachingCuts.stating(conditionOf(behavior), read, holding,
+                new WhatConditionsState(read));
         assertEquals(1, stated.size(), () -> behavior + " is one condition: " + stated);
         return stated.getFirst();
     }

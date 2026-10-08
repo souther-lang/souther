@@ -45,13 +45,22 @@ class TheSizeOfWhatAnOperationAnswersIsReadThroughItsLawTest {
                 if String.length(String.lowercase(s)) >= 2 then 1 else 0
             """;
 
+    /** The report on {@link #MODEL}, made once: every case here asks it about one behavior. */
+    private static AdequacyReport report;
+
+    private static AdequacyReport report() {
+        if (report == null) {
+            Compilation compilation = Compilation.ofSource(MODEL, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.answerEverything();
+            report = AdequacyReport.of(compilation);
+        }
+        return report;
+    }
+
     /** What was left unread about each position of {@code behavior}, as {@code position reason}. */
     private static List<String> notRead(String behavior) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        for (AdequacyReport.BehaviorReport each
-                : AdequacyReport.of(compilation).modules().get(0).behaviors()) {
+        for (AdequacyReport.BehaviorReport each : report().modules().get(0).behaviors()) {
             if (each.name().equals(behavior)) {
                 return each.partition().notRead().stream()
                         .map(one -> one.at() + " " + one.reason()).toList();

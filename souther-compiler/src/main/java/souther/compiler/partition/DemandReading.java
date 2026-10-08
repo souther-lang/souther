@@ -1,9 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.NumericMeasures;
-import souther.compiler.check.StatedComparison;
 import souther.compiler.inputs.InputReading;
-import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
@@ -92,15 +90,8 @@ final class DemandReading {
     record Stated(Condition where, Read read) {}
 
     /**
-     * What a condition coming out {@code holding} asks of a row, one entry for each thing it asks.
-     */
-    static List<Read> of(Condition condition, InputReading read, boolean holding) {
-        return stated(condition, read, holding).stream().map(Stated::read).toList();
-    }
-
-    /**
-     * The same, each with the condition of the shape it was read off — the one a report about it
-     * is sent to.
+     * What a condition coming out {@code holding} asks of a row, one entry for each thing it asks,
+     * each with the condition of the shape it was read off — the one a report about it is sent to.
      *
      * <p>A conjunction coming out the way that gives both halves asks both. The other way it says
      * one of two things, and that asks neither — {@code A && B} failing names no half that failed —
@@ -109,12 +100,15 @@ final class DemandReading {
      * is {@link Condition#of}'s answer, the one place a condition becomes a shape, and taken as it
      * gave it; and this is the one place what a conjunction asks is composed, so a way on to a
      * border and a predicate asked of each element read one connective one way.
+     *
+     * @param conditions what each part states, read once for every reader of the same reading
      */
-    static List<Stated> stated(Condition condition, InputReading read, boolean holding) {
+    static List<Stated> stated(Condition condition, InputReading read, boolean holding,
+                               WhatConditionsState conditions) {
         return switch (condition) {
             case Condition.Joined joined -> {
-                List<Stated> left = stated(joined.left(), read, holding);
-                List<Stated> right = stated(joined.right(), read, holding);
+                List<Stated> left = stated(joined.left(), read, holding, conditions);
+                List<Stated> right = stated(joined.right(), read, holding, conditions);
                 if (joined.how().under(holding) == ConditionJoin.BOTH) {
                     yield List.copyOf(both(left, right));
                 }
@@ -140,12 +134,16 @@ final class DemandReading {
                 }
                 yield List.of(new Stated(joined, new Read.Unread(whys)));
             }
-            case Condition.Compares one -> ofAComparison(one.comparison().stated(), one.reads(),
-                    read, holding).stream()
+            // What a comparison states, read as what it states: a size held against a number that
+            // parts nought from every size above it asks what the container holding something
+            // asks, and any other comparison is the relation it states.
+            case Condition.Compares one -> projected(holdingAs(conditions.comparison(
+                    one.comparison().stated(), one.reads(), read).stated().proposition(),
+                    holding), read).stream()
                     .map(each -> new Stated(one, each))
                     .toList();
-            case Condition.Truth truth -> projected(holdingAs(Pullback.ofATruth(truth.value(),
-                    truth.reads(), read, Optional.empty()).proposition(), holding), read).stream()
+            case Condition.Truth truth -> projected(holdingAs(conditions.truth(truth.value(),
+                    truth.reads(), read).proposition(), holding), read).stream()
                     .map(each -> new Stated(truth, each))
                     .toList();
         };
@@ -179,19 +177,6 @@ final class DemandReading {
             }
             return every ? THIS_WAY : OPEN;
         }
-    }
-
-    /**
-     * What {@code comparison} coming out {@code holding} asks of a row.
-     *
-     * <p>Read as what it states ({@link Pullback#ofAComparison}): a size held against a number that
-     * parts nought from every size above it asks what the container holding something asks, and
-     * any other comparison is the relation it states.
-     */
-    static List<Read> ofAComparison(StatedComparison comparison, InputReads reads,
-                                    InputReading read, boolean holding) {
-        return projected(holdingAs(Pullback.ofAComparison(comparison, reads, read,
-                Optional.empty()).proposition(), holding), read);
     }
 
     private static Proposition holdingAs(Proposition stated, boolean holding) {

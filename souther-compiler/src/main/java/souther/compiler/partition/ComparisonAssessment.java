@@ -271,7 +271,7 @@ sealed interface ComparisonAssessment {
                                    InputReading read, InputReads reads,
                                    BindingId answer, WhatAnAnswerTakesUp dependencies,
                                    souther.compiler.coverage.Arrivals answering,
-                                   boolean drawnByAnInvariant) {
+                                   boolean drawnByAnInvariant, WhatConditionsState conditions) {
         Quantities quantities = read.quantities();
         // Asked first, and of the whole comparison. A rule that reads the answer anywhere in it is
         // one this reading does not put on the input space, whichever side the answer is on and
@@ -280,7 +280,7 @@ sealed interface ComparisonAssessment {
         if (readsAnswer(comparison.left(), answer) || readsAnswer(comparison.right(), answer)) {
             return new AnswerDependent();
         }
-        return switch (Cutting.read(behavior, comparison, read, reads, answering)) {
+        return switch (Cutting.read(behavior, comparison, read, reads, answering, conditions)) {
             case Cutting.Read.Cuts cuts ->
                     onTheQuantity(at, cuts.cutting(), quantities, drawnByAnInvariant);
             // Read to the end and cutting nothing, which is a fact about the rule and not a limit

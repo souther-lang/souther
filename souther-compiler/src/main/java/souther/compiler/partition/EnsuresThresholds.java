@@ -214,7 +214,7 @@ public final class EnsuresThresholds {
         ComparisonAssessment assessed = ComparisonAssessment.of(out.behavior(), comparison.stated(),
                 Citation.of(e.pos()), read,
                 reads, rule.value(), WhatAnAnswerTakesUp.of(read),
-                answering, false);
+                answering, false, new WhatConditionsState(read));
         // What the positions this names are left with, where the reading of lines drew none. Asked
         // of the assessment and not worked out per arm here: the same table stood in the guard
         // reader, and a case added to an assessment had to be answered in both.

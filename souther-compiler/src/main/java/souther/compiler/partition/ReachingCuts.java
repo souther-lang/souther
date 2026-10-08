@@ -198,14 +198,15 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
      * is declined whole, at the condition rather than at an operand — neither operand is what could
      * not be carried.
      */
-    static List<OnTheWay> stating(Condition node, InputReading read, boolean holding) {
+    static List<OnTheWay> stating(Condition node, InputReading read, boolean holding,
+                                  WhatConditionsState conditions) {
         // What the condition asks is {@link DemandReading}'s, connectives and all, and each thing
         // it asks is put on the way at the condition of the shape that asked it. A truth stays
         // the truth it is: what a report names and where a run through it is seen are the
         // condition the author wrote, and only the demand is read as the comparison it means. A
         // disjunction of things is put at the whole node, since neither operand is what could not
         // be carried.
-        return DemandReading.stated(node, read, holding).stream()
+        return DemandReading.stated(node, read, holding, conditions).stream()
                 .map(each -> onTheWay(each.where().occurrence(), each.where().anchor(),
                         each.read()))
                 .toList();
