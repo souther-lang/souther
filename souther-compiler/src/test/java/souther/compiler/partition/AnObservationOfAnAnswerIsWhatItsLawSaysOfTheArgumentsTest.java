@@ -73,6 +73,30 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
                 stated("if Bool.not(String.isEmpty(b.s ++ b.t)) then 1 else 0"));
     }
 
+    /**
+     * A law naming the element of a container the source wrote out is read of each value it
+     * writes, as that value: lists put end to end hold something where one of those written does.
+     */
+    @Test
+    void aLawOverValuesWrittenOutIsReadOfEachOfThem() {
+        assertEquals(stated("if List.length(b.xs) >= 1 || List.length(b.ys) >= 1 then 1 else 0"),
+                stated("if Bool.not(List.isEmpty(List.concat([b.xs, b.ys]))) then 1 else 0"));
+        assertEquals(new Proposition.Always(true),
+                stated("if Bool.not(List.isEmpty(List.concat([[1], b.xs]))) then 1 else 0"));
+        assertEquals(stated("if String.length(b.s) >= 1 then 1 else 0"),
+                stated("if Bool.not(String.isEmpty(String.concat([\"\", b.s]))) then 1 else 0"));
+    }
+
+    /** How many values written out meet a statement is a number where each of them settles it,
+     *  and no linear one of the input where one turns on it. */
+    @Test
+    void aCountOfValuesWrittenOutIsANumberWhereEachSettlesIt() {
+        assertEquals(new Proposition.Always(true), stated(
+                "if List.length(List.filter(x -> x > 0, [1, 2, -1])) == 2 then 1 else 0"));
+        assertInstanceOf(WhyUnread.OutsideTheLinearFragment.class, Proposition.firstStopIn(
+                stated("if List.length(List.filter(x -> x > 0, [b.n, 1])) == 2 then 1 else 0")));
+    }
+
     /** What a set holds once a value is taken out is some other value, read as the quantifier over
      *  the set's element. */
     @Test

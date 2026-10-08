@@ -194,7 +194,7 @@ final class Pullback {
      * holds how each was read ({@link Derivation.AComparisonRead#counts}) — or null where what is
      * read is no comparison that keeps them, and a count is not read there.
      */
-    private List<Derivation.AComparisonRead.Counted> counting;
+    private Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> counting;
 
     private Pullback(InputReading read, Optional<ModelOccurrence> where) {
         this.read = read;
@@ -599,6 +599,24 @@ final class Pullback {
         record NotSized(WhyUnread why) implements Sized {}
     }
 
+    /** What an element a law names is, inside a statement about some element of its container. */
+    private sealed interface ElementAt {
+
+        /** The element of the container at {@code container}, which a row writes. */
+        record AtAPosition(TermPath container) implements ElementAt {}
+
+        /** A value the source wrote out, read in {@code at}. */
+        record WrittenOut(Core value, InputReads at) implements ElementAt {}
+    }
+
+    /** A statement read of each value a container written out holds, or why it was not. */
+    private sealed interface WrittenOutRead {
+
+        record Each(List<Derivation> each) implements WrittenOutRead {}
+
+        record Stops(WhyUnread why) implements WrittenOutRead {}
+    }
+
     private Sized sizeOf(Core value, InputReads at) {
         if (at.pathOf(value, read.rules().newtypes()) instanceof PathResolution.At(TermPath held)) {
             NumericTerm.TakenOf size = sizeAt(held);
@@ -647,9 +665,9 @@ final class Pullback {
         private final AnOperationApplied applied;
         private final Core e;
         private final InputReads reads;
-        /** The containers a statement about some element of each is being read inside, and where
-         *  each stands. */
-        private final Map<DeclaredArgument, TermPath> elements = new HashMap<>();
+        /** The containers a statement about some element of each is being read inside, and what
+         *  the element is there. */
+        private final Map<DeclaredArgument, ElementAt> elements = new HashMap<>();
         /** Where the closure's body is read, where one application of it is: a container written
          *  out hands it one value at a time. */
         private InputReads application;
@@ -692,21 +710,27 @@ final class Pullback {
             return switch (subject) {
                 case LawSubject.Argument<DeclaredArgument>(DeclaredArgument at) ->
                         observe(applied.argument(at), aspect, reads);
-                case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at) -> {
-                    TermPath element = elements.get(at).element();
-                    yield switch (aspect) {
-                        case TRUTH -> leaf(new Derivation.ATruthOfASubject(
-                                new DecisionSubject.AnInput(element), true), e, reads);
-                        case PRESENCE -> leaf(new Derivation.PresentInASubject(
-                                new DecisionSubject.AnInput(element)), e, reads);
-                        case EMPTINESS -> {
-                            NumericTerm.TakenOf size = sizeAt(element);
-                            yield leaf(size != null ? new Derivation.SizeAboveNought(size)
-                                    : new Derivation.Stopped(new WhyUnread.NoMeasureOfItsSize(),
-                                            false), e, reads);
-                        }
-                    };
-                }
+                case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at) ->
+                        switch (elements.get(at)) {
+                            // A value written out is read as itself, where it was written.
+                            case ElementAt.WrittenOut(Core value, InputReads in) ->
+                                    observe(value, aspect, in);
+                            case ElementAt.AtAPosition(TermPath container) -> {
+                                TermPath element = container.element();
+                                yield switch (aspect) {
+                                    case TRUTH -> leaf(new Derivation.ATruthOfASubject(
+                                            new DecisionSubject.AnInput(element), true), e, reads);
+                                    case PRESENCE -> leaf(new Derivation.PresentInASubject(
+                                            new DecisionSubject.AnInput(element)), e, reads);
+                                    case EMPTINESS -> {
+                                        Derivation some = holdsSomethingAt(element);
+                                        yield leaf(some != null ? some : new Derivation.Stopped(
+                                                new WhyUnread.NoMeasureOfItsSize(), false), e,
+                                                reads);
+                                    }
+                                };
+                            }
+                        };
                 case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(DeclaredArgument at) -> {
                     Denotation closure = reads.denotes(applied.argument(at),
                             read.rules().symbols(), read.rules().newtypes());
@@ -729,7 +753,15 @@ final class Pullback {
                             ? new DecisionSubject.AnInput(held) : answerAt(value, reads);
                 }
                 case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at) ->
-                        new DecisionSubject.AnInput(elements.get(at).element());
+                        switch (elements.get(at)) {
+                            case ElementAt.AtAPosition(TermPath container) ->
+                                    new DecisionSubject.AnInput(container.element());
+                            case ElementAt.WrittenOut(Core value, InputReads in) ->
+                                    in.pathOf(value, read.rules().newtypes())
+                                            instanceof PathResolution.At(TermPath held)
+                                            ? new DecisionSubject.AnInput(held)
+                                            : answerAt(value, in);
+                        };
                 case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _ -> null;
             };
         }
@@ -747,49 +779,15 @@ final class Pullback {
         private Derivation meeting(Core over, LawProposition.SomeElement<DeclaredArgument> some) {
             Denotation container = reads.standing(over, read.rules().symbols(),
                     read.rules().newtypes());
-            // A container the source wrote out has no element where it is empty. Otherwise each
-            // application of the closure hands it one of the written values, and what some element
-            // meets is what the body states on one of those applications. Where which value one of
-            // them hands cannot be said, the body is read once with the parameter standing for all
-            // of them ({@code ReadMeaning.OneOf}), which states of the input only what they agree
-            // on.
+            // A container the source wrote out has some element meeting a statement where one of
+            // the values it writes out does.
             if (Core.withoutStanding(container.value()) instanceof Core.ListLit list) {
-                if (list.elements().isEmpty()) {
-                    return new Derivation.OverElementsWrittenOut(List.of(), true);
-                }
-                if (namesTheElement(some.ofTheElement(), some.container())) {
-                    return unread(over, reads,
-                            new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
-                }
-                DeclaredArgument named = closureIn(some.ofTheElement());
-                Denotation closure = named == null ? null : reads.denotes(applied.argument(named),
-                        read.rules().symbols(), read.rules().newtypes());
-                if (closure == null
-                        || !(Core.withoutStanding(closure.value()) instanceof Core.Block block)) {
-                    return unread(e, reads, new WhyUnread.NotYetComposed(
-                            WhyUnread.NotYetComposed.Step.A_CLOSURE_BY_NAME));
-                }
-                List<InputReads> applications = switch (applicationsOf(block, closure.at(),
-                        read.rules().symbols(), read.rules().newtypes())) {
-                    case InputReads.Applications.Each(var each) -> each;
-                    case InputReads.Applications.NoneHanded _, InputReads.Applications.Unsaid _ ->
-                            List.of(closure.at());
-                    case InputReads.Applications.MoreThanAreRead _ -> null;
+                return switch (ofEachWrittenOut(some.container(), list, container.at(),
+                        some.ofTheElement())) {
+                    case WrittenOutRead.Each(List<Derivation> each) ->
+                            new Derivation.OverElementsWrittenOut(each, true);
+                    case WrittenOutRead.Stops(WhyUnread why) -> unread(e, reads, why);
                 };
-                if (applications == null) {
-                    return unread(e, reads, new WhyUnread.MoreReadingsThanAreMade());
-                }
-                List<Derivation> ofEach = new ArrayList<>();
-                InputReads outer = application;
-                try {
-                    for (InputReads one : applications) {
-                        application = one;
-                        ofEach.add(of(some.ofTheElement()));
-                    }
-                } finally {
-                    application = outer;
-                }
-                return new Derivation.OverElementsWrittenOut(ofEach, true);
             }
             if (!(reads.pathOf(over, read.rules().newtypes()) instanceof PathResolution.At(
                     TermPath held))) {
@@ -823,7 +821,7 @@ final class Pullback {
             if (!quantifying.add(held)) {
                 return null;
             }
-            elements.put(container, held);
+            elements.put(container, new ElementAt.AtAPosition(held));
             try {
                 return of(ofTheElement);
             } finally {
@@ -832,19 +830,85 @@ final class Pullback {
             }
         }
 
+        /**
+         * {@code law} read of each value {@code list}, written out at {@code at} as the container
+         * {@code container}, holds: of the value itself where the law names the element, and of
+         * what the closure states on the application that hands it that value where the law names
+         * what the closure answers.
+         *
+         * <p>Where which value one application hands cannot be said, the closure's body is read
+         * once with its parameter standing for all of them ({@code ReadMeaning.OneOf}), which
+         * states of the input only what they agree on. A law naming both the element and the
+         * closure would have to pair each value with its application, which nothing here does.
+         */
+        private WrittenOutRead ofEachWrittenOut(DeclaredArgument container, Core.ListLit list,
+                                                InputReads at,
+                                                LawProposition<DeclaredArgument> law) {
+            if (list.elements().isEmpty()) {
+                return new WrittenOutRead.Each(List.of());
+            }
+            DeclaredArgument named = closureIn(law);
+            boolean element = namesTheElement(law, container);
+            if (named != null && element) {
+                return new WrittenOutRead.Stops(new WhyUnread.NotYetComposed(
+                        WhyUnread.NotYetComposed.Step.VALUES_WRITTEN_OUT));
+            }
+            List<Derivation> ofEach = new ArrayList<>();
+            if (named == null) {
+                if (list.elements().size() > READINGS.maximum()) {
+                    return new WrittenOutRead.Stops(new WhyUnread.MoreReadingsThanAreMade());
+                }
+                for (Core value : list.elements()) {
+                    elements.put(container, new ElementAt.WrittenOut(value, at));
+                    try {
+                        ofEach.add(of(law));
+                    } finally {
+                        elements.remove(container);
+                    }
+                }
+                return new WrittenOutRead.Each(ofEach);
+            }
+            Denotation closure = reads.denotes(applied.argument(named), read.rules().symbols(),
+                    read.rules().newtypes());
+            if (!(Core.withoutStanding(closure.value()) instanceof Core.Block block)) {
+                return new WrittenOutRead.Stops(new WhyUnread.NotYetComposed(
+                        WhyUnread.NotYetComposed.Step.A_CLOSURE_BY_NAME));
+            }
+            List<InputReads> applications = switch (applicationsOf(block, closure.at(),
+                    read.rules().symbols(), read.rules().newtypes())) {
+                case InputReads.Applications.Each(var each) -> each;
+                case InputReads.Applications.NoneHanded _, InputReads.Applications.Unsaid _ ->
+                        List.of(closure.at());
+                case InputReads.Applications.MoreThanAreRead _ -> null;
+            };
+            if (applications == null) {
+                return new WrittenOutRead.Stops(new WhyUnread.MoreReadingsThanAreMade());
+            }
+            InputReads outer = application;
+            try {
+                for (InputReads one : applications) {
+                    application = one;
+                    ofEach.add(of(law));
+                }
+            } finally {
+                application = outer;
+            }
+            return new WrittenOutRead.Each(ofEach);
+        }
+
 
         /**
          * {@code form states 0}, over numbers of the arguments, read as a relation over the
          * quantities a condition is read over.
          */
         private Derivation compared(LinearForm<LawNumber<DeclaredArgument>> form, Rel states) {
-            List<Derivation.AComparisonRead.Counted> outer = counting;
-            counting = new ArrayList<>();
+            Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> outer = counting;
+            counting = new LinkedHashMap<>();
             try {
                 Sized sized = number(form);
                 return switch (sized) {
                     case Sized.NotSized(WhyUnread why) ->
-                            leaf(new Derivation.Stopped(why, false), e, reads);
+                            leaf(new Derivation.Stopped(why, fixed(e, reads)), e, reads);
                     case Sized.AsAForm(LinearForm<Quantity> read) -> read.coefs().isEmpty()
                             ? new Derivation.ACutThatCutsNothing(
                                     states.holds(read.constant().signum()))
@@ -889,13 +953,18 @@ final class Pullback {
                         switch (of) {
                             case LawSubject.Argument<DeclaredArgument>(DeclaredArgument at) ->
                                     sizeOf(applied.argument(at), reads);
-                            case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at) -> {
-                                NumericTerm.TakenOf size = sizeAt(elements.get(at).element());
-                                yield size == null
-                                        ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
-                                        : new Sized.AsAForm(LinearForm.atom(
-                                                new DecisionAtom.OfTheInput(size)));
-                            }
+                            case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at) ->
+                                    switch (elements.get(at)) {
+                                        case ElementAt.WrittenOut(Core value, InputReads in) ->
+                                                sizeOf(value, in);
+                                        case ElementAt.AtAPosition(TermPath container) -> {
+                                            NumericTerm.TakenOf size = sizeAt(container.element());
+                                            yield size == null ? new Sized.NotSized(
+                                                    new WhyUnread.NoMeasureOfItsSize())
+                                                    : new Sized.AsAForm(LinearForm.atom(
+                                                            new DecisionAtom.OfTheInput(size)));
+                                        }
+                                    };
                             case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _ ->
                                     new Sized.NotSized(new WhyUnread.AtNoPosition(
                                             WhyUnread.AtNoPosition.Place.SUBJECT));
@@ -908,6 +977,31 @@ final class Pullback {
          *  relation is written over. */
         private Sized count(LawNumber.HowManyMeet<DeclaredArgument> counted) {
             Core over = applied.argument(counted.container());
+            Denotation container = reads.standing(over, read.rules().symbols(),
+                    read.rules().newtypes());
+            // Of values written out, how many meet the statement is a number where each of them
+            // settles whether it does, and turns on the input in no linear way where one does not.
+            if (Core.withoutStanding(container.value()) instanceof Core.ListLit list) {
+                return switch (ofEachWrittenOut(counted.container(), list, container.at(),
+                        counted.ofTheElement())) {
+                    case WrittenOutRead.Stops(WhyUnread why) -> new Sized.NotSized(why);
+                    case WrittenOutRead.Each(List<Derivation> each) -> {
+                        long meeting = 0;
+                        for (Derivation one : each) {
+                            Proposition stated = trying.of(one);
+                            WhyUnread stopped = Proposition.firstStopIn(stated);
+                            if (stopped != null) {
+                                yield new Sized.NotSized(stopped);
+                            }
+                            if (!(stated instanceof Proposition.Always(boolean holds))) {
+                                yield new Sized.NotSized(new WhyUnread.OutsideTheLinearFragment());
+                            }
+                            meeting += holds ? 1 : 0;
+                        }
+                        yield new Sized.AsAForm(LinearForm.constant(ExactRatio.of(meeting)));
+                    }
+                };
+            }
             if (counting == null || !(reads.pathOf(over, read.rules().newtypes())
                     instanceof PathResolution.At(TermPath held))) {
                 return new Sized.NotSized(
@@ -933,8 +1027,9 @@ final class Pullback {
                 }
                 return new Sized.NotSized(new WhyUnread.OutsideTheLinearFragment());
             }
-            counting.add(new Derivation.AComparisonRead.Counted(held, answered));
-            return new Sized.AsAForm(LinearForm.atom(new Quantity.HowManyMeet(held, element)));
+            Quantity.HowManyMeet count = new Quantity.HowManyMeet(held, element);
+            counting.putIfAbsent(count, new Derivation.AComparisonRead.Counted(held, answered));
+            return new Sized.AsAForm(LinearForm.atom(count));
         }
     }
 
@@ -1060,8 +1155,8 @@ final class Pullback {
      * was read.
      */
     private Derivation overQuantities(Denotation left, Denotation right, Rel states) {
-        List<Derivation.AComparisonRead.Counted> outer = counting;
-        counting = new ArrayList<>();
+        Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> outer = counting;
+        counting = new LinkedHashMap<>();
         try {
             return overQuantitiesCounting(left, right, states);
         } finally {
@@ -1102,22 +1197,22 @@ final class Pullback {
     }
 
     /**
-     * The same, holding how each count it names was read: the ones of {@code read} it still names,
-     * once each — a count written on both sides comes to nought and names none.
+     * The same, holding how each count it names was read: the ones of {@code read} it still names —
+     * a count written on both sides comes to nought and names none.
      */
-    private Derivation aRelation(Derivation.ComparisonReading by, LinearForm<Quantity> form,
-                                 Rel states, List<Derivation.AComparisonRead.Counted> read) {
+    private static Derivation aRelation(Derivation.ComparisonReading by, LinearForm<Quantity> form,
+                                        Rel states,
+                                        Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted>
+                                                read) {
         Relation.OneWay<Quantity> one = Relation.OneWay.of(form, states);
-        Map<Quantity, Derivation.AComparisonRead.Counted> named = new LinkedHashMap<>();
-        for (Derivation.AComparisonRead.Counted count : read) {
-            Quantity counted = count.counted(trying);
-            if (one.form().coefs().containsKey(counted)) {
-                named.putIfAbsent(counted, count);
+        List<Derivation.AComparisonRead.Counted> named = new ArrayList<>();
+        read.forEach((count, how) -> {
+            if (one.form().coefs().containsKey(count)) {
+                named.add(how);
             }
-        }
+        });
         return new Derivation.AComparisonRead(by,
-                new Relation.Affine(one.form(), one.proposition()), one.holds(),
-                List.copyOf(named.values()));
+                new Relation.Affine(one.form(), one.proposition()), one.holds(), named);
     }
 
     /**
@@ -1757,6 +1852,8 @@ final class Pullback {
      * handed — or does, by a step not taken yet.
      */
     private WhyUnread noNumberOf(ValueName.Stdlib measure, Core measured, InputReads reads) {
+        // Read again for why: the arithmetic says only that nothing named the size, and what
+        // stopped the reading of it is the reading's to say.
         if (DefaultBoundOperationFacts.get().takenAs(measure) instanceof TakenAs.HowManyItHolds
                 && sizeOf(measured, reads) instanceof Sized.NotSized(WhyUnread why)) {
             return why;

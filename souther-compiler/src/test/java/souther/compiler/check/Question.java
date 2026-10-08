@@ -826,10 +826,12 @@ enum Question {
     /**
      * The operations this is asked of and answers nothing for, each named with the reason.
      *
-     * <p>Held by the question and not by the facts the compiler reads. What a name here records is
-     * that the question was considered for that operation and closed; the reason is about the
-     * operation, but nothing in the compiler reads a closed question as a proposition, and what
-     * would have to be true for one of these to gain a rule is argued in the comment beside it.
+     * <p>Held by the question and not by the facts the compiler reads, where nothing in the
+     * compiler reads the closing. What a name here records is that the question was considered for
+     * that operation and closed, and what would have to be true for one of these to gain a rule is
+     * argued in the comment beside it. The questions about an observation of an answer are the
+     * exception, and read their closings off the facts: the reading of a condition stops on one
+     * with the proposition it names, so the closing is a statement the compiler reads.
      */
     abstract Set<ValueName> deliberatelyUnanswered();
 
