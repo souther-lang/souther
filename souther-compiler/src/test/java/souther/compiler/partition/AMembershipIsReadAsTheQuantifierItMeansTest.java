@@ -11,6 +11,7 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -164,7 +165,8 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
         for (boolean holding : List.of(true, false)) {
             OnTheWay.Declined declined = assertInstanceOf(OnTheWay.Declined.class,
                     stated("written", holding));
-            assertInstanceOf(OnTheWay.Why.ValueAtNoPosition.class, declined.why());
+            assertEquals(new OnTheWay.Why.TheMeaningWasNotRead(
+                    new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.VALUE)), declined.why());
         }
     }
 
@@ -174,7 +176,9 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
         for (boolean holding : List.of(true, false)) {
             OnTheWay.Declined declined = assertInstanceOf(OnTheWay.Declined.class,
                     stated("filtered", holding));
-            assertInstanceOf(OnTheWay.Why.ContainerAtNoPosition.class, declined.why());
+            assertEquals(new OnTheWay.Why.TheMeaningWasNotRead(
+                    new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER)),
+                    declined.why());
         }
     }
 

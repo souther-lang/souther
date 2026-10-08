@@ -3,12 +3,15 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Citation;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Sites;
+import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.sites.WrittenCondition;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -38,6 +41,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * report still points at the condition.
  */
 class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
+
+    /** Why a fork on {@code String.startsWith} is declined: the library says nothing of it. */
+    private static final OnTheWay.Why STARTS_WITH_HAS_NO_LAW = new OnTheWay.Why.TheMeaningWasNotRead(
+            new WhyUnread.NoLawFor(new ValueName.Stdlib.Operation("String", "startsWith"),
+                    AnswerAspect.TRUTH));
 
     /**
      * Two forks on a truth this reading has no words for, one inside the other.
@@ -83,8 +91,7 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
             }
         }
         assertEquals(2, declined.size(), () -> "both forks are on the way: " + declined);
-        assertEquals(List.of(new OnTheWay.Why.NoWordsForTheShape(),
-                        new OnTheWay.Why.NoWordsForTheShape()),
+        assertEquals(List.of(STARTS_WITH_HAS_NO_LAW, STARTS_WITH_HAS_NO_LAW),
                 declined.stream().map(OnTheWay.Declined::why).toList(),
                 "and for the one reason, which is what leaves the name doing the telling apart");
         assertNotEquals(declined.get(0), declined.get(1),
@@ -165,7 +172,7 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
         for (List<OnTheWay> way : waysIn(compilation, "oneCondition")) {
             for (OnTheWay each : way) {
                 if (each instanceof OnTheWay.Declined left
-                        && left.why() instanceof OnTheWay.Why.NoWordsForTheShape) {
+                        && left.why().equals(STARTS_WITH_HAS_NO_LAW)) {
                     named.add(left);
                 }
             }

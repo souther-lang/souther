@@ -9,16 +9,11 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.MeaningsOfABody;
-import souther.compiler.meaning.Proposition;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -36,8 +31,7 @@ public final class MeaningsOfABodyReading {
     private final Symbols symbols;
     private final DeclarationNewtypes newtypes;
     private InputReading read;
-    private final Map<MeaningsOfABody.Site, Proposition> stated = new LinkedHashMap<>();
-    private final Set<MeaningsOfABody.Site> ambiguous = new HashSet<>();
+    private final MeaningsOfABody.Filing filed = new MeaningsOfABody.Filing();
 
     private MeaningsOfABodyReading(Supplier<InputReading> reading, Symbols symbols,
                                    DeclarationNewtypes newtypes) {
@@ -58,7 +52,7 @@ public final class MeaningsOfABodyReading {
                                      DeclarationNewtypes newtypes) {
         MeaningsOfABodyReading reading = new MeaningsOfABodyReading(read, symbols, newtypes);
         reading.walk(analysis.core(), reads);
-        return new MeaningsOfABody(reading.stated, reading.ambiguous);
+        return reading.filed.filed();
     }
 
     private InputReading read() {
@@ -90,10 +84,6 @@ public final class MeaningsOfABodyReading {
             return;
         }
         MeaningsOfABody.Site site = new MeaningsOfABody.Site(construct.get(), part);
-        Proposition one = Pullback.ofATruth(truth, reads, read(), construct).proposition();
-        Proposition before = stated.putIfAbsent(site, one);
-        if (before != null && !before.equals(one)) {
-            ambiguous.add(site);
-        }
+        filed.met(site, Pullback.ofATruth(truth, reads, read(), construct).meaning());
     }
 }

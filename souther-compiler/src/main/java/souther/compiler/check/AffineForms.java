@@ -5,9 +5,11 @@ import souther.compiler.core.ConstructionProjection;
 import souther.compiler.core.Core;
 import souther.compiler.core.IntNegation;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -16,6 +18,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.function.BiFunction;
 
 /**
  * Reading an expression as {@code const + Σ coef·atom}, over whatever a caller counts as an atom.
@@ -231,20 +235,68 @@ public final class AffineForms {
         }
 
         /**
-         * The expression this has no rule for and the caller could not name either, and what it was
-         * being read in.
+         * The expression the reading stopped at, what it was being read in, and why it stopped
+         * there.
          *
          * <p>The environment travels with the expression, for the reason {@link ReadThrough} says:
          * a value stands for a name in the environment the binding was made in, which is not always
          * the one the name was read in. A caller handed the expression alone read it again in
          * whatever it happened to hold, which is that reading being done twice and the second one
          * free to disagree — and the day the two environments come apart, silently.
+         *
+         * <p>And why travels with it for the same kind of reason: this walk is what decided it. A
+         * caller that names a reason told from the kind of expression stopped at would be a second
+         * account of the arithmetic, and one that tells a product of two unknowns from a sum whose
+         * number has no representation only by guessing.
          */
-        record StoppedAt<A, E>(Core node, E at) implements Outcome<A, E> {
+        record StoppedAt<A, E>(Core node, E at, Halt<A, E> why) implements Outcome<A, E> {
 
             public StoppedAt {
                 java.util.Objects.requireNonNull(node, "a reading that stopped stopped somewhere");
                 java.util.Objects.requireNonNull(at, "and was reading it in something");
+                Objects.requireNonNull(why, "and stopped for a reason");
+            }
+        }
+    }
+
+    /**
+     * Why the walk stopped at an expression, from the closed set of ways it can.
+     *
+     * <p>Only the first is about the expression being one this walk has no words for. The rest are
+     * expressions it has a rule for, under which the parts it read do not come to one form.
+     */
+    public sealed interface Halt<A, E> {
+
+        /** No rule here for the expression, and the caller named it nothing. */
+        record NoRule<A, E>() implements Halt<A, E> {}
+
+        /** A product of two values neither of which is a constant, or a quotient by one that is
+         *  not: arithmetic, and none a form over the atoms says. */
+        record NotLinear<A, E>() implements Halt<A, E> {}
+
+        /** A quotient by nought or the least whole number negated, which no run has a number
+         *  for: the run aborts there. */
+        record NoNumberOnARun<A, E>() implements Halt<A, E> {}
+
+        /** A number the arithmetic worked out exactly and could not hold. */
+        record NotHeld<A, E>(UnheldNumber why) implements Halt<A, E> {
+
+            public NotHeld {
+                Objects.requireNonNull(why, "a number not held is not held for a reason");
+            }
+        }
+
+        /** The values the expression can stand for, every one read, came to different forms. */
+        record ValuesDisagree<A, E>() implements Halt<A, E> {}
+
+        /**
+         * An argument of a call the library says the form of did not compose; reported at the call,
+         * which is what an author wrote, and stopped for what stopped the argument.
+         */
+        record AnArgumentStopped<A, E>(Outcome.StoppedAt<A, E> argument) implements Halt<A, E> {
+
+            public AnArgumentStopped {
+                Objects.requireNonNull(argument, "an argument stopped somewhere");
             }
         }
     }
@@ -307,7 +359,7 @@ public final class AffineForms {
         if (stopped.at != null) {
             return stopped.at;
         }
-        return denoted != null ? denoted : new Outcome.StoppedAt<>(e, at);
+        return denoted != null ? denoted : new Outcome.StoppedAt<>(e, at, new Halt.NoRule<>());
     }
 
     /** The first stop met inside what this walk composes, kept while the questions after it are
@@ -374,7 +426,8 @@ public final class AffineForms {
             return null;
         }
         Stop<A, E> stopped = new Stop<>();
-        LinearForm<A> agreed = commonForm(membersOf(alternatives, reading), following, stopped);
+        LinearForm<A> agreed =
+                commonForm(membersOf(alternatives, reading), e, at, following, stopped);
         following.leave(r.binding());
         if (agreed != null) {
             return new Outcome.Composed<>(agreed);
@@ -655,9 +708,10 @@ public final class AffineForms {
      * model's.
      *
      * <p>Not a meet. There is no order being descended here and no weaker answer to fall back on:
-     * the values agree or this walk has nothing to say about the position.
+     * the values agree or this walk has nothing to say about the position — and says so at
+     * {@code e}, the expression that stands for all of them.
      */
-    private static <A, E> LinearForm<A> commonForm(java.util.List<Standing<A, E>> these,
+    private static <A, E> LinearForm<A> commonForm(List<Standing<A, E>> these, Core e, E at,
                                                    Walk<A, E> following,
                                                    Stop<A, E> stopped) {
         LinearForm<A> agreed = null;
@@ -670,10 +724,40 @@ public final class AffineForms {
             if (agreed == null) {
                 agreed = here;
             } else if (!sameForm(agreed, here)) {
-                return null;
+                return halted(e, at, new Halt.ValuesDisagree<>(), stopped);
             }
         }
         return agreed;
+    }
+
+    /**
+     * What an operator over the forms of its two parts comes to under its rule: the form, or null
+     * with why there is none recorded at {@code e}. Null where a part is no form, whose stop is the
+     * whole one.
+     */
+    private static <A, E> LinearForm<A> operated(
+            Core e, E at, LinearForm<A> left, LinearForm<A> right,
+            BiFunction<LinearForm<A>, LinearForm<A>, Terms.Operated<A>> rule, Stop<A, E> stopped) {
+        if (left == null || right == null) {
+            return null;
+        }
+        return switch (rule.apply(left, right)) {
+            case Terms.Operated.Form<A>(LinearForm<A> form) -> form;
+            case Terms.Operated.NotLinear<A> _ -> halted(e, at, new Halt.NotLinear<>(), stopped);
+            case Terms.Operated.NoNumberOnARun<A> _ ->
+                    halted(e, at, new Halt.NoNumberOnARun<>(), stopped);
+            case Terms.Operated.NotHeld<A>(UnheldNumber why) ->
+                    halted(e, at, new Halt.NotHeld<>(why), stopped);
+        };
+    }
+
+    /** No form, and {@code e} recorded as where the reading stopped and why — where nothing
+     *  stopped it first. */
+    private static <A, E> LinearForm<A> halted(Core e, E at, Halt<A, E> why, Stop<A, E> stopped) {
+        if (stopped.at == null) {
+            stopped.at = new Outcome.StoppedAt<>(e, at, why);
+        }
+        return null;
     }
 
     /** {@code e} read as arithmetic over what its parts answer, or null where this has no rule for
@@ -689,28 +773,33 @@ public final class AffineForms {
         return switch (e) {
             // No number: the smallest Int negated is the run time's abort, and reading it as the
             // form of the operand negated would put a number there that no run has.
-            case Core.Neg n when IntNegation.isTheLeastInt(n.operand()) -> null;
+            case Core.Neg n when IntNegation.isTheLeastInt(n.operand()) ->
+                    halted(e, at, new Halt.NoNumberOnARun<>(), stopped);
             case Core.Neg n -> Terms.negate(formOf(n.operand(), at, reading, following, stopped));
             case Core.Binary b when b.op() == BinOp.ADD ->
-                    Terms.add(formOf(b.left(), at, reading, following, stopped),
-                            formOf(b.right(), at, reading, following, stopped), false);
+                    operated(e, at, formOf(b.left(), at, reading, following, stopped),
+                            formOf(b.right(), at, reading, following, stopped),
+                            (left, right) -> Terms.sum(left, right, false), stopped);
             case Core.Binary b when b.op() == BinOp.SUB ->
-                    Terms.add(formOf(b.left(), at, reading, following, stopped),
-                            formOf(b.right(), at, reading, following, stopped), true);
+                    operated(e, at, formOf(b.left(), at, reading, following, stopped),
+                            formOf(b.right(), at, reading, following, stopped),
+                            (left, right) -> Terms.sum(left, right, true), stopped);
             // A scalar multiply by a constant (`Amount * 2`) is linear and a variable factor is
             // not, so a product of two atoms comes back here as one value rather than as arithmetic
             // over two.
             case Core.Binary b when b.op() == BinOp.MUL ->
-                    Terms.scale(formOf(b.left(), at, reading, following, stopped),
-                            formOf(b.right(), at, reading, following, stopped));
+                    operated(e, at, formOf(b.left(), at, reading, following, stopped),
+                            formOf(b.right(), at, reading, following, stopped), Terms::product,
+                            stopped);
             // And a quotient by a constant is that scalar multiply by the reciprocal. The quotient
             // is exact, so a third is what `x / 3` weighs its position by and not the nearest number
             // either operand's type writes — which is why this is arithmetic over a position at all
             // rather than a value whose fraction went somewhere the form could not say. Which
-            // divisors are constant, and why `1 / x` is none of them, is `Terms.overAConstant`'s.
+            // divisors are constant, and why `1 / x` is none of them, is `Terms.quotient`'s.
             case Core.Binary b when b.op() == BinOp.DIV ->
-                    Terms.overAConstant(formOf(b.left(), at, reading, following, stopped),
-                            formOf(b.right(), at, reading, following, stopped));
+                    operated(e, at, formOf(b.left(), at, reading, following, stopped),
+                            formOf(b.right(), at, reading, following, stopped), Terms::quotient,
+                            stopped);
             // An operation the library says answers arithmetic over what it was given is that
             // arithmetic here: `Decimal.fromInt(n)` is `n`, `Date.daysBetween(a, b)` is `b - a`,
             // and a rule about the arguments is a rule about the call. Composed here beside the
@@ -746,7 +835,7 @@ public final class AffineForms {
                 java.util.List<Standing<A, E>> eliminated =
                         eliminated(fa, at, reading, following);
                 if (eliminated != null) {
-                    yield commonForm(eliminated, following, stopped);
+                    yield commonForm(eliminated, e, at, following, stopped);
                 }
                 yield reading.readsThrough(fa, at)
                         ? formOf(fa.target(), at, reading, following, stopped) : null;
@@ -760,7 +849,8 @@ public final class AffineForms {
             case Core.TupleGet get -> {
                 java.util.List<Standing<A, E>> eliminated =
                         eliminated(get, at, reading, following);
-                yield eliminated == null ? null : commonForm(eliminated, following, stopped);
+                yield eliminated == null ? null
+                        : commonForm(eliminated, e, at, following, stopped);
             }
             // A binding an expansion introduced (`let $0_n = n.value in $0_n * 2`) is what a helper
             // becomes, so reading through it is reading what the author wrote at the call. Whether
@@ -806,7 +896,7 @@ public final class AffineForms {
             }
             List<Standing<A, E>> eliminated = eliminated(here, at, reading, following);
             if (eliminated != null) {
-                form = commonForm(eliminated, following, stop);
+                form = commonForm(eliminated, here, at, following, stop);
                 break;
             }
             if (!reading.readsThrough(here.lastAccess(), at)) {
@@ -853,7 +943,8 @@ public final class AffineForms {
         if (leaf != null) {
             return new Outcome.Composed<>(leaf);
         }
-        return stopped.at != null ? stopped.at : new Outcome.StoppedAt<>(p, at);
+        return stopped.at != null ? stopped.at
+                : new Outcome.StoppedAt<>(p, at, new Halt.NoRule<>());
     }
 
     /**
@@ -915,18 +1006,25 @@ public final class AffineForms {
             // is checked here rather than by a kept call's own constructor.
             int position = CallArguments.positionOf(each.getKey(), Terms.operationOf(call));
             if (position < 0 || position >= args.size()) {
-                return stoppedAtTheCall(call, at, stopped);
+                return halted(call, at, new Halt.NoRule<>(), stopped);
             }
             LinearForm<A> argument = formOf(args.get(position), at, reading, following, inside);
+            // Recorded at the call and not at what was found inside it. A stop is reported at the
+            // most particular expression with no rule here, which is what an author would change,
+            // and inside a form the library declares there is no such expression: the author wrote
+            // the call. Reported from within, a rule over what `Date.daysBetween` answers would be
+            // a rule about the field the expansion reached, which the model does not state. Why it
+            // stopped is the argument's.
             if (argument == null) {
-                return stoppedAtTheCall(call, at, stopped);
+                return halted(call, at, new Halt.AnArgumentStopped<>(inside.at), stopped);
             }
-            LinearForm<A> weighed = argument.times(each.getValue()).orNull();
-            form = weighed == null ? null : form.plus(weighed).orNull();
-            if (form == null) {
-                // A number of the declared form has no representation here: an expression this
-                // does not compose, the same as one that is not affine.
-                return null;
+            LinearForm<A> before = form;
+            switch (argument.times(each.getValue()).flatMap(before::plus)) {
+                case ExactAnswer.Held<LinearForm<A>>(LinearForm<A> held) -> form = held;
+                // A number of the declared form, worked out exactly, has no representation here.
+                case ExactAnswer.Unheld<LinearForm<A>>(UnheldNumber why) -> {
+                    return halted(call, at, new Halt.NotHeld<>(why), stopped);
+                }
             }
         }
         return form;
@@ -947,22 +1045,6 @@ public final class AffineForms {
                     return position < 0 ? Integer.MAX_VALUE : position;
                 }))
                 .toList();
-    }
-
-    /**
-     * No form, and the call recorded as where the reading stopped.
-     *
-     * <p>The call and not what was found inside it. A stop is reported at the most particular
-     * expression with no rule here, which is what an author would change — and inside a form the
-     * library declares there is no such expression: the author wrote the call. Reported from
-     * within, a rule over what {@code Date.daysBetween} answers came back as a rule about the field
-     * the expansion reached, which is a rule the model does not state and a spelling nobody wrote.
-     */
-    private static <A, E> LinearForm<A> stoppedAtTheCall(Core call, E at, Stop<A, E> stopped) {
-        if (stopped.at == null) {
-            stopped.at = new Outcome.StoppedAt<>(call, at);
-        }
-        return null;
     }
 
     /**

@@ -10,11 +10,13 @@ import souther.compiler.types.ReferenceOrigin;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -773,23 +775,53 @@ final class Terms {
         return folded instanceof BigDecimal d ? d : null;
     }
 
-    /** A linear form scaled by a constant, when one side is a bare constant (a scalar multiply); null
-     * when neither side is constant (a non-linear product), or when a number scaled has no
-     * representation — no form this reasons with, which is what null says at this boundary. */
-    static <A> LinearForm<A> scale(LinearForm<A> a, LinearForm<A> b) {
-        if (a == null || b == null) {
-            return null;
+    /**
+     * What an operator over two forms comes to under the rule this arithmetic has for it: the form,
+     * or why there is none.
+     *
+     * <p>The reasons are the rule's own and not the expression's. A reader that says why a reading
+     * stopped asks this; one that only needs a form takes {@link #formOrNull}, where every reason
+     * is no form.
+     */
+    sealed interface Operated<A> {
+
+        /** The form the parts come to. */
+        record Form<A>(LinearForm<A> form) implements Operated<A> {}
+
+        /** Arithmetic no form over the atoms says: a product of two unknowns, a quotient by one. */
+        record NotLinear<A>() implements Operated<A> {}
+
+        /** A quotient by nought, which no run has a number for. */
+        record NoNumberOnARun<A>() implements Operated<A> {}
+
+        /** A number of the form, worked out exactly, that could not be held. */
+        record NotHeld<A>(UnheldNumber why) implements Operated<A> {}
+
+        /** The form, or null whatever the reason there is none. */
+        default LinearForm<A> formOrNull() {
+            return this instanceof Form<A>(LinearForm<A> form) ? form : null;
         }
+
+        /** {@code answer} as the form it holds or the number it could not. */
+        static <A> Operated<A> of(ExactAnswer<LinearForm<A>> answer) {
+            return switch (answer) {
+                case ExactAnswer.Held<LinearForm<A>>(LinearForm<A> form) -> new Form<>(form);
+                case ExactAnswer.Unheld<LinearForm<A>>(UnheldNumber why) -> new NotHeld<>(why);
+            };
+        }
+    }
+
+    /** The product of two forms: a scalar multiply where one side is a bare constant. */
+    static <A> Operated<A> product(LinearForm<A> a, LinearForm<A> b) {
         if (a.coefs().isEmpty()) {
-            return b.times(a.constant()).orNull();
+            return Operated.of(b.times(a.constant()));
         }
-        return b.coefs().isEmpty() ? a.times(b.constant()).orNull() : null;
+        return b.coefs().isEmpty() ? Operated.of(a.times(b.constant()))
+                : new Operated.NotLinear<>();
     }
 
     /**
-     * A linear form over a constant divisor, which is that form with each of its numbers divided by
-     * the divisor; null where the divisor is no constant, or is the constant nought, or a quotient
-     * has no representation.
+     * The quotient of two forms: the first with each of its numbers divided by a constant divisor.
      *
      * <p><b>Constant is what the divisor was read as and not how it was spelled.</b> A form with no
      * coefficients is a number whatever expression came to it, so {@code x / 2}, {@code x / (1 + 1)}
@@ -808,11 +840,19 @@ final class Terms {
      * exponent has no exponent, while a form over that divisor can be one whose numbers are all
      * held.
      */
-    static <A> LinearForm<A> overAConstant(LinearForm<A> a, LinearForm<A> b) {
-        if (a == null || b == null || !b.coefs().isEmpty() || b.constant().isZero()) {
-            return null;
+    static <A> Operated<A> quotient(LinearForm<A> a, LinearForm<A> b) {
+        if (!b.coefs().isEmpty()) {
+            return new Operated.NotLinear<>();
         }
-        return a.dividedBy(b.constant()).orNull();
+        if (b.constant().isZero()) {
+            return new Operated.NoNumberOnARun<>();
+        }
+        return Operated.of(a.dividedBy(b.constant()));
+    }
+
+    /** The sum or the difference of two forms. */
+    static <A> Operated<A> sum(LinearForm<A> a, LinearForm<A> b, boolean subtract) {
+        return Operated.of(subtract ? a.minus(b) : a.plus(b));
     }
 
     /** A node the affine walk composes nothing out of, as a form: a numeric atom, what a name was
@@ -929,13 +969,10 @@ final class Terms {
      * <p>Null is the one word this boundary has, and it is enough for what stands on it: a fact
      * about a comparison is stated from a form, and a comparison with no form states none. The
      * reading of a comparison that has to tell the two apart, because it answers a reader with which
-     * one it was, asks {@link LinearForm#minus} itself.
+     * one it was, asks {@link #sum} itself.
      */
     static <A> LinearForm<A> add(LinearForm<A> a, LinearForm<A> b, boolean subtract) {
-        if (a == null || b == null) {
-            return null;
-        }
-        return (subtract ? a.minus(b) : a.plus(b)).orNull();
+        return a == null || b == null ? null : sum(a, b, subtract).formOrNull();
     }
 
     /**
@@ -1275,7 +1312,7 @@ final class Terms {
 
     /** The product of {@code left} and {@code right}, or null where either factor is a value nothing
      * can be said of. A factor that is a written constant is not this: that product is a scalar
-     * multiply and the fragment carries it ({@link #scale}). */
+     * multiply and the fragment carries it ({@link #product(LinearForm, LinearForm)}). */
     private Derivation product(Core left, Core right, Denotations at) {
         LinearForm<FactSubject> over = affineOf(left, at);
         LinearForm<FactSubject> by = affineOf(right, at);

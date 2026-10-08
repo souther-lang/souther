@@ -4,12 +4,10 @@ import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.ModelOccurrence;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
 /**
  * What a condition states, about the subjects it is finally about.
@@ -28,7 +26,13 @@ public sealed interface Proposition {
     /** What holds exactly where this does not. */
     Proposition denied();
 
-    /** A spelling that tells two propositions apart exactly where they are two, and orders parts. */
+    /**
+     * A spelling that tells two propositions apart exactly where they are two, and orders parts.
+     *
+     * <p>Spelled once, when the proposition is made: it is what parts are kept once and put in order
+     * by, and asked of every part each time parts are joined, so a spelling built on asking would be
+     * built again for every join a part goes into.
+     */
     String key();
 
     /**
@@ -99,43 +103,51 @@ public sealed interface Proposition {
         }
     }
 
-    /** A relation over quantities, held or failing. */
-    record Compared(Relation relation, boolean holds) implements Proposition {
+    /**
+     * A relation over quantities, held or failing.
+     *
+     * @param key spelled from the rest when it is made, whatever is handed in
+     */
+    record Compared(Relation relation, boolean holds, String key) implements Proposition {
+
+        public Compared(Relation relation, boolean holds) {
+            this(relation, holds, null);
+        }
 
         public Compared {
             if (relation == null) {
                 throw new IllegalArgumentException("a comparison states some relation");
             }
+            key = (holds ? "" : "!") + relation;
         }
 
         @Override
         public Proposition denied() {
             return new Compared(relation, !holds);
         }
-
-        @Override
-        public String key() {
-            return (holds ? "" : "!") + relation;
-        }
     }
 
-    /** A subject read for its truth, holding or failing. */
-    record Truth(DecisionSubject of, boolean holds) implements Proposition {
+    /**
+     * A subject read for its truth, holding or failing.
+     *
+     * @param key spelled from the rest when it is made, whatever is handed in
+     */
+    record Truth(DecisionSubject of, boolean holds, String key) implements Proposition {
+
+        public Truth(DecisionSubject of, boolean holds) {
+            this(of, holds, null);
+        }
 
         public Truth {
             if (of == null) {
                 throw new IllegalArgumentException("a truth is a truth of something");
             }
+            key = (holds ? "" : "!") + of.spelled();
         }
 
         @Override
         public Proposition denied() {
             return new Truth(of, !holds);
-        }
-
-        @Override
-        public String key() {
-            return (holds ? "" : "!") + of.spelled();
         }
     }
 
@@ -144,109 +156,126 @@ public sealed interface Proposition {
      *
      * <p>The cases selected and not the fork that selected them: a match of three arms is three
      * propositions about one subject, one per arm.
+     *
+     * @param key spelled from the rest when it is made, whatever is handed in
      */
-    record InCases(DecisionSubject of, CasesLeft cases, boolean holds) implements Proposition {
+    record InCases(DecisionSubject of, CasesLeft cases, boolean holds, String key)
+            implements Proposition {
+
+        public InCases(DecisionSubject of, CasesLeft cases, boolean holds) {
+            this(of, cases, holds, null);
+        }
 
         public InCases {
             if (of == null || cases == null) {
                 throw new IllegalArgumentException("a case is some subject's, and some cases");
             }
+            key = (holds ? "" : "!") + of.spelled() + " is " + cases.spelled();
         }
 
         @Override
         public Proposition denied() {
             return new InCases(of, cases, !holds);
         }
-
-        @Override
-        public String key() {
-            return (holds ? "" : "!") + of.spelled() + " is " + cases.spelled();
-        }
     }
 
-    /** An optional subject holding a value, or not. */
-    record Present(DecisionSubject of, boolean holds) implements Proposition {
+    /**
+     * An optional subject holding a value, or not.
+     *
+     * @param key spelled from the rest when it is made, whatever is handed in
+     */
+    record Present(DecisionSubject of, boolean holds, String key) implements Proposition {
+
+        public Present(DecisionSubject of, boolean holds) {
+            this(of, holds, null);
+        }
 
         public Present {
             if (of == null) {
                 throw new IllegalArgumentException("a value is present at some subject");
             }
+            key = (holds ? "" : "!") + "present " + of.spelled();
         }
 
         @Override
         public Proposition denied() {
             return new Present(of, !holds);
         }
-
-        @Override
-        public String key() {
-            return (holds ? "" : "!") + "present " + of.spelled();
-        }
     }
 
     /**
      * Two subjects holding the same value, or not — what a container holding a value asks of one
      * of its elements.
+     *
+     * @param key spelled from the rest when it is made, whatever is handed in
      */
-    record SameValue(DecisionSubject one, DecisionSubject other, boolean holds)
+    record SameValue(DecisionSubject one, DecisionSubject other, boolean holds, String key)
             implements Proposition {
+
+        public SameValue(DecisionSubject one, DecisionSubject other, boolean holds) {
+            this(one, other, holds, null);
+        }
 
         public SameValue {
             if (one == null || other == null) {
                 throw new IllegalArgumentException("a sameness is of two subjects");
             }
+            key = one.spelled() + (holds ? " == " : " /= ") + other.spelled();
         }
 
         @Override
         public Proposition denied() {
             return new SameValue(one, other, !holds);
         }
-
-        @Override
-        public String key() {
-            return one.spelled() + (holds ? " == " : " /= ") + other.spelled();
-        }
     }
 
-    /** Every part holding. Made through {@link #all}. */
-    record All(List<Proposition> parts) implements Proposition {
+    /**
+     * Every part holding. Made through {@link #all}.
+     *
+     * @param key spelled from the parts' own when it is made, whatever is handed in
+     */
+    record All(List<Proposition> parts, String key) implements Proposition {
+
+        public All(List<Proposition> parts) {
+            this(parts, null);
+        }
 
         public All {
             parts = List.copyOf(parts);
             if (parts.size() < 2) {
                 throw new IllegalArgumentException("a conjunction is of two or more parts");
             }
+            key = "all" + parts.stream().map(Proposition::key).toList();
         }
 
         @Override
         public Proposition denied() {
             return any(parts.stream().map(Proposition::denied).toList());
         }
-
-        @Override
-        public String key() {
-            return "all" + parts.stream().map(Proposition::key).toList();
-        }
     }
 
-    /** Some part holding. Made through {@link #any}. */
-    record Any(List<Proposition> parts) implements Proposition {
+    /**
+     * Some part holding. Made through {@link #any}.
+     *
+     * @param key spelled from the parts' own when it is made, whatever is handed in
+     */
+    record Any(List<Proposition> parts, String key) implements Proposition {
+
+        public Any(List<Proposition> parts) {
+            this(parts, null);
+        }
 
         public Any {
             parts = List.copyOf(parts);
             if (parts.size() < 2) {
                 throw new IllegalArgumentException("a disjunction is of two or more parts");
             }
+            key = "any" + parts.stream().map(Proposition::key).toList();
         }
 
         @Override
         public Proposition denied() {
             return all(parts.stream().map(Proposition::denied).toList());
-        }
-
-        @Override
-        public String key() {
-            return "any" + parts.stream().map(Proposition::key).toList();
         }
     }
 
@@ -259,24 +288,26 @@ public sealed interface Proposition {
      * entry, so is one under {@code container[key]} — and nothing else is. Which is why
      * the same container is never quantified twice inside one proposition: the two elements would be
      * one subject, and the proposition would say {@code x < x} where it was asked about two of them.
+     *
+     * @param key spelled from the rest when it is made, whatever is handed in
      */
-    record Some(TermPath container, Proposition ofTheElement, boolean holds)
+    record Some(TermPath container, Proposition ofTheElement, boolean holds, String key)
             implements Proposition {
+
+        public Some(TermPath container, Proposition ofTheElement, boolean holds) {
+            this(container, ofTheElement, holds, null);
+        }
 
         public Some {
             if (container == null || ofTheElement == null) {
                 throw new IllegalArgumentException("a quantifier is over some container");
             }
+            key = (holds ? "some " : "no ") + container + " [" + ofTheElement.key() + "]";
         }
 
         @Override
         public Proposition denied() {
             return new Some(container, ofTheElement, !holds);
-        }
-
-        @Override
-        public String key() {
-            return (holds ? "some " : "no ") + container + " [" + ofTheElement.key() + "]";
         }
     }
 
@@ -293,25 +324,27 @@ public sealed interface Proposition {
      * @param ordinal which unread part of the condition this is, in the order the reading met them
      * @param why     what stopped it, in the stopping reader's words
      * @param fixed   whether it is the same whatever the input, which is all that is known of it
+     * @param key     spelled from where and which it is when it is made, whatever is handed in
      */
     record Unread(Optional<ModelOccurrence> where, int ordinal, WhyUnread why, boolean fixed,
-                  boolean holds) implements Proposition {
+                  boolean holds, String key) implements Proposition {
+
+        public Unread(Optional<ModelOccurrence> where, int ordinal, WhyUnread why, boolean fixed,
+                      boolean holds) {
+            this(where, ordinal, why, fixed, holds, null);
+        }
 
         public Unread {
             if (where == null || why == null) {
                 throw new IllegalArgumentException("an unread part stopped somewhere, for a reason");
             }
+            key = (holds ? "" : "!") + "unread " + where.map(String::valueOf).orElse("")
+                    + "#" + ordinal;
         }
 
         @Override
         public Proposition denied() {
             return new Unread(where, ordinal, why, fixed, !holds);
-        }
-
-        @Override
-        public String key() {
-            return (holds ? "" : "!") + "unread " + where.map(String::valueOf).orElse("")
-                    + "#" + ordinal;
         }
     }
 
@@ -329,8 +362,8 @@ public sealed interface Proposition {
     }
 
     private static Proposition joined(List<Proposition> parts, boolean every) {
-        Set<String> seen = new LinkedHashSet<>();
-        List<Proposition> kept = new ArrayList<>();
+        // In the order of their spellings, a part whose spelling is already kept left out.
+        SortedMap<String, Proposition> kept = new TreeMap<>();
         for (Proposition part : parts) {
             List<Proposition> flat = switch (part) {
                 case All all when every -> all.parts();
@@ -344,16 +377,14 @@ public sealed interface Proposition {
                     }
                     continue;
                 }
-                if (seen.add(one.key())) {
-                    kept.add(one);
-                }
+                kept.putIfAbsent(one.key(), one);
             }
         }
-        kept.sort(Comparator.comparing(Proposition::key));
         return switch (kept.size()) {
             case 0 -> new Always(every);
-            case 1 -> kept.getFirst();
-            default -> every ? new All(kept) : new Any(kept);
+            case 1 -> kept.firstEntry().getValue();
+            default -> every ? new All(List.copyOf(kept.values()))
+                    : new Any(List.copyOf(kept.values()));
         };
     }
 }

@@ -11,9 +11,12 @@ import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.types.ValueName;
 
 import java.util.List;
 import java.util.Map;
@@ -128,7 +131,9 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
         for (boolean holding : List.of(true, false)) {
             OnTheWay.Declined declined = assertInstanceOf(OnTheWay.Declined.class,
                     only("keyAsked", holding));
-            assertEquals(new OnTheWay.Why.NoWordsForTheShape(), declined.why());
+            assertEquals(new OnTheWay.Why.TheMeaningWasNotRead(new WhyUnread.NoLawFor(
+                    new ValueName.Stdlib.Operation("Map", "containsKey"), AnswerAspect.TRUTH)),
+                    declined.why());
         }
     }
 

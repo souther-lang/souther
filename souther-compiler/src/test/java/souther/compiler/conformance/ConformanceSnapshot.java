@@ -1,5 +1,9 @@
 package souther.compiler.conformance;
 
+import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.ElementBindings;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.diag.Diagnostic;
@@ -9,17 +13,28 @@ import souther.compiler.diag.Primary;
 import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourceProvenance;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReading;
+import souther.compiler.inputs.InputReads;
+import souther.compiler.meaning.MeaningsOfABody;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.partition.MeaningsOfABodyReading;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Bodies;
+import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.function.Consumer;
 
 /**
- * The two documents a corpus is held against, written the same way every time.
+ * The documents a corpus is held against, written the same way every time.
  *
- * <p>Split in two because they churn for different reasons. What the compiler answered about a
+ * <p>Split because they churn for different reasons. What the compiler answered about a
  * model changes when the compiler's answers change, which is the whole point of keeping it; what a
  * diagnostic says changes when someone rewords a message, which is held by the test that owns that
  * rule and would otherwise rewrite the corpus every time.
@@ -45,6 +60,60 @@ final class ConformanceSnapshot {
                 analysed.compilation().texts());
         return report.json(rendering).replace("\"" + report.compilerVersion() + "\"",
                 "\"" + VERSION_PLACEHOLDER + "\"") + System.lineSeparator();
+    }
+
+    /**
+     * Every part of a condition the corpus writes that the reading of what it means stopped at, and
+     * why, one line each.
+     *
+     * <p>Its own document because what it records moves on its own. A rule added to that reading
+     * takes a part this lists and turns it into something read, and a report may show nothing of
+     * that where no reader of the proposition has a use for the part yet; here it is a line gone,
+     * with the reason it had. A reason that changes for a part still unread is a line that changes,
+     * which is how an obligation renamed is told from one met.
+     */
+    static String unread(ConformanceCorpus.Analysed analysed) {
+        Compilation compilation = analysed.compilation();
+        List<String> lines = new ArrayList<>();
+        for (String module : compilation.modules()) {
+            Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
+            Map<String, InputDomain> inputs =
+                    compilation.db().ask(new Adequacy.Inputs(module)).value();
+            if (checked == null || inputs == null) {
+                continue;
+            }
+            RuleReadingSource rules = RuleReadings.of(compilation, module);
+            inputs.forEach((behavior, input) -> {
+                AnalysisBody analysis = checked.analysisBodies().get(behavior);
+                if (analysis == null) {
+                    return;
+                }
+                InputReading reading = input.reading(rules);
+                MeaningsOfABody meanings = MeaningsOfABodyReading.of(analysis, () -> reading,
+                        InputReads.ofParametersWhereCallsStand(input.parameterReads(),
+                                input.declared(rules),
+                                ElementBindings.of(analysis, rules.newtypes())),
+                        rules.symbols(), rules.newtypes());
+                meanings.stated().forEach((site, meaning) -> unreadIn(meaning.states(),
+                        unread -> lines.add(module + "." + behavior + " " + site + " #"
+                                + unread.ordinal() + ": " + unread.why())));
+            });
+        }
+        lines.sort(String::compareTo);
+        StringBuilder out = new StringBuilder();
+        lines.forEach(line -> out.append(line).append(System.lineSeparator()));
+        return out.toString();
+    }
+
+    /** Each part of {@code stated} nothing read, to {@code into}. */
+    private static void unreadIn(Proposition stated, Consumer<Proposition.Unread> into) {
+        switch (stated) {
+            case Proposition.Unread unread -> into.accept(unread);
+            case Proposition.All all -> all.parts().forEach(part -> unreadIn(part, into));
+            case Proposition.Any any -> any.parts().forEach(part -> unreadIn(part, into));
+            case Proposition.Some some -> unreadIn(some.ofTheElement(), into);
+            default -> { }
+        }
     }
 
     /**

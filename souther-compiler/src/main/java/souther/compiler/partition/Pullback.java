@@ -1,17 +1,21 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.AffineForms;
 import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.Choice;
+import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementWitness;
 import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.StatedComparison;
+import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.InputTruth;
@@ -19,15 +23,20 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.Conclusion;
 import souther.compiler.meaning.DecisionAtom;
-import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.MeaningsOfABody.Meaning;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
-import souther.compiler.numeric.ExactRatio;
+import souther.compiler.meaning.WhyUnread;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.SideAnswered;
 import souther.compiler.types.ModelOccurrence;
@@ -63,6 +72,10 @@ import java.util.function.Supplier;
  * where what it was handed does. What is left is a comparison, a truth, a case or a value being there
  * at a subject a row controls — the parts a proposition is made of.
  *
+ * <p><b>Each step is a {@link Derivation}.</b> What is built here is how the condition was read, a
+ * rule at a time; what it states is what that concludes, worked out once at the end. So nothing here
+ * writes a proposition, and a step that is no rule of the set has nowhere to be written.
+ *
  * <p>Each part is kept with the expression it was read off, in the order it was met ({@link Leaf}),
  * so a reader asking what a fork turns on and a reader sending an author to a part have what they
  * need without reading the condition a second time.
@@ -78,12 +91,17 @@ final class Pullback {
     record Leaf(Proposition part, Denotation from) {}
 
     /**
-     * What a condition states, and the parts it was read from.
+     * What a condition states, how that was derived, and the parts it was read from.
      *
-     * @param proposition what holds where the condition does
-     * @param leaves      every part met, in the order met — a part met twice is here twice
+     * @param meaning what holds where the condition does, and how it was read a rule at a time
+     * @param leaves  every part met, in the order met — a part met twice is here twice
      */
-    record Pulled(Proposition proposition, List<Leaf> leaves) {
+    record Pulled(Meaning meaning, List<Leaf> leaves) {
+
+        /** What holds where the condition does. */
+        Proposition proposition() {
+            return meaning.states();
+        }
 
         /**
          * The parts the truth of {@link #proposition} turns on, each with where it was read off.
@@ -97,7 +115,7 @@ final class Pullback {
          */
         List<Leaf> turnsOn() {
             Set<String> parts = new HashSet<>();
-            partsOf(proposition, parts);
+            partsOf(proposition(), parts);
             return leaves.stream().filter(leaf -> parts.contains(leaf.part().key())).toList();
         }
 
@@ -117,9 +135,14 @@ final class Pullback {
         }
     }
 
+    /** A step a part was read at, and the expression it was read off. */
+    private record Met(Derivation step, Denotation from) {}
+
     private final InputReading read;
     private final Optional<ModelOccurrence> where;
-    private final List<Leaf> leaves = new ArrayList<>();
+    private final List<Met> met = new ArrayList<>();
+    /** What the candidates for each expression state, concluded once a step ({@link RuleChoice}). */
+    private final Conclusion trying = Conclusion.reusing();
     private final Set<TermPath> quantifying = new HashSet<>();
     /**
      * Where whether a container holds anything was asked, while what it holds is being read.
@@ -130,7 +153,6 @@ final class Pullback {
      * reader of it.
      */
     private Denotation askedAt;
-    private int unread;
 
     private Pullback(InputReading read, Optional<ModelOccurrence> where) {
         this.read = read;
@@ -145,8 +167,7 @@ final class Pullback {
     static Pulled ofATruth(Core truth, InputReads reads, InputReading read,
                            Optional<ModelOccurrence> where) {
         Pullback reading = new Pullback(read, where);
-        Proposition stated = reading.observe(truth, AnswerAspect.TRUTH, reads);
-        return new Pulled(stated, List.copyOf(reading.leaves));
+        return reading.pulled(reading.observe(truth, AnswerAspect.TRUTH, reads));
     }
 
     /**
@@ -156,15 +177,7 @@ final class Pullback {
     static Pulled ofAComparison(StatedComparison comparison, InputReads reads, InputReading read,
                                 Optional<ModelOccurrence> where) {
         Pullback reading = new Pullback(read, where);
-        AnEmptinessCheck.Checked checked = AnEmptinessCheck.checked(comparison);
-        Proposition stated;
-        if (checked != null) {
-            Proposition some = reading.observe(checked.container(), AnswerAspect.EMPTINESS, reads);
-            stated = checked.emptyWhereItHolds() ? some.denied() : some;
-        } else {
-            stated = reading.compared(comparison, false, reads);
-        }
-        return new Pulled(stated, List.copyOf(reading.leaves));
+        return reading.pulled(reading.comparison(comparison, null, false, reads));
     }
 
     /**
@@ -177,7 +190,7 @@ final class Pullback {
      * value made from the input, which the comparison still is.
      */
     static boolean carriesPast(StatedComparison comparison, InputReads reads, InputReading read) {
-        if (AnEmptinessCheck.checked(comparison) == null) {
+        if (!mayBeCarriedPast(comparison)) {
             return false;
         }
         Pulled pulled = ofAComparison(comparison, reads, read, Optional.empty());
@@ -186,33 +199,66 @@ final class Pullback {
                         .noneMatch(leaf -> leaf.part() instanceof Proposition.Unread);
     }
 
+    /**
+     * Whether {@code comparison} is one {@link #carriesPast} can answer yes for, which is a question
+     * about its shape alone: only an emptiness check is carried anywhere.
+     */
+    static boolean mayBeCarriedPast(StatedComparison comparison) {
+        return AnEmptinessCheck.checked(comparison) != null;
+    }
+
     /** What {@code container} holding something states. */
     static Pulled ofHoldingSomething(Core container, InputReads reads, InputReading read,
                                      Optional<ModelOccurrence> where) {
         Pullback reading = new Pullback(read, where);
-        Proposition stated = reading.observe(container, AnswerAspect.EMPTINESS, reads);
-        return new Pulled(stated, List.copyOf(reading.leaves));
+        return reading.pulled(reading.observe(container, AnswerAspect.EMPTINESS, reads));
     }
 
     /**
-     * What {@code e} coming out {@code holds} on {@code aspect} states: holding, holding something,
-     * holding a value.
+     * What {@code stated} concludes, with every part met as what it came to.
+     *
+     * <p>A part is a step of {@code stated}: one this concluding reached. A step met by a rule that
+     * was not kept is in no derivation concluded here, so whatever was met on the way, the parts
+     * are the derivation's own.
      */
-    private Proposition observe(Core standing, AnswerAspect aspect, InputReads reads) {
+    private Pulled pulled(Derivation stated) {
+        Conclusion conclusion = new Conclusion(where);
+        Meaning meaning = conclusion.meaningOf(stated);
+        List<Leaf> leaves = new ArrayList<>();
+        for (Met each : met) {
+            Proposition concluded = conclusion.concludedAt(each.step());
+            if (concluded == null) {
+                continue;
+            }
+            Proposition part = each.step() instanceof Derivation.AMembership membership
+                    ? membership.sameValue() : concluded;
+            if (!(part instanceof Proposition.Always)) {
+                leaves.add(new Leaf(part, each.from()));
+            }
+        }
+        return new Pulled(meaning, List.copyOf(leaves));
+    }
+
+    /**
+     * How {@code e} coming out on {@code aspect} was read: holding, holding something, holding a
+     * value.
+     */
+    private Derivation observe(Core standing, AnswerAspect aspect, InputReads reads) {
         Core e = Core.withoutStanding(standing);
         switch (e) {
             case Core.LetIn let -> {
-                return observe(let.body(), aspect, reads.and(let.binder(), let.value()));
+                return new Derivation.ThroughABinding(
+                        observe(let.body(), aspect, reads.and(let.binder(), let.value())));
             }
             case Core.Read name when reads.meaningOf(name, read.rules().symbols(),
                     read.rules().newtypes()) instanceof ReadMeaning.Through through -> {
-                return observe(through.denotes().value(), aspect, through.denotes().at());
+                return new Derivation.ThroughABinding(
+                        observe(through.denotes().value(), aspect, through.denotes().at()));
             }
             case Core.If iff -> {
-                Proposition cond = observe(iff.cond(), AnswerAspect.TRUTH, reads);
-                return Proposition.any(List.of(
-                        Proposition.all(List.of(cond, observe(iff.then(), aspect, reads))),
-                        Proposition.all(List.of(cond.denied(), observe(iff.els(), aspect, reads)))));
+                Derivation cond = observe(iff.cond(), AnswerAspect.TRUTH, reads);
+                Derivation then = observe(iff.then(), aspect, reads);
+                return new Derivation.IfThenElse(cond, then, observe(iff.els(), aspect, reads));
             }
             case Core.Match match -> {
                 return ofAMatch(match, aspect, reads);
@@ -226,172 +272,241 @@ final class Pullback {
         };
     }
 
-    /** What a truth that is no binding, name or choice states. */
-    private Proposition truth(Core standing, InputReads reads) {
+    /**
+     * How a truth that is no binding, name or choice was read, by the first rule in this order that
+     * reads all of it — or, where none does, the first that takes it at all.
+     */
+    private Derivation truth(Core standing, InputReads reads) {
         Core e = Core.withoutStanding(standing);
-        if (e instanceof Core.Bool written) {
-            return new Proposition.Always(written.value());
-        }
-        Optional<BooleanMeaning.UnderADenial> denied = BooleanMeaning.underADenial(e, true);
-        if (denied.isPresent()) {
-            Proposition under = observe(denied.get().part(), AnswerAspect.TRUTH, reads);
-            return denied.get().positive() ? under : under.denied();
-        }
-        Optional<Boolean> folded = BooleanMeaning.folded(e, read.rules().symbols());
-        if (folded.isPresent()) {
-            return new Proposition.Always(folded.get());
-        }
-        if (e instanceof Core.Binary binary) {
-            Optional<ConditionJoin> joined = ConditionJoin.of(binary.op());
-            if (joined.isPresent()) {
-                List<Proposition> parts = List.of(observe(binary.left(), AnswerAspect.TRUTH, reads),
-                        observe(binary.right(), AnswerAspect.TRUTH, reads));
-                return joined.get().under(true) == ConditionJoin.BOTH
-                        ? Proposition.all(parts) : Proposition.any(parts);
-            }
-        }
-        TermPath position = InputTruth.positionOf(e, reads, read.rules().newtypes());
-        if (position != null) {
-            return leaf(new Proposition.Truth(new DecisionSubject.AnInput(position), true), e,
-                    reads);
-        }
-        Optional<StatedComparison> stated = BooleanMeaning.asAComparison(e);
-        if (stated.isPresent()) {
-            AnEmptinessCheck.Checked checked = AnEmptinessCheck.checked(stated.get());
-            if (checked != null) {
-                Proposition some = asking(new Denotation(e, reads),
-                        () -> observe(checked.container(), AnswerAspect.EMPTINESS, reads));
-                return checked.emptyWhereItHolds() ? some.denied() : some;
-            }
-            return leaf(compared(stated.get(), fixed(e, reads), reads), e, reads);
-        }
         AnOperationApplied applied = AnOperationApplied.of(e);
-        if (applied != null) {
-            Proposition witnessed = witnessed(applied, e, AnswerAspect.TRUTH, reads);
-            if (witnessed != null) {
-                return witnessed;
-            }
-            Proposition member = membership(applied, e, reads);
-            if (member != null) {
-                return member;
-            }
-        }
-        return unread(e, reads, new OnTheWay.Why.NoWordsForTheShape());
-    }
-
-    /** What a container that is no binding, name or choice holding something states. */
-    private Proposition holdingSomething(Core standing, InputReads reads) {
-        Core e = Core.withoutStanding(standing);
-        switch (e) {
-            case Core.ListLit list -> {
-                return new Proposition.Always(!list.elements().isEmpty());
-            }
-            case Core.Str text -> {
-                return new Proposition.Always(!text.value().isEmpty());
-            }
-            default -> { }
-        }
-        AnOperationApplied applied = AnOperationApplied.of(e);
-        if (applied != null) {
-            Proposition witnessed = witnessed(applied, e, AnswerAspect.EMPTINESS, reads);
-            if (witnessed != null) {
-                return witnessed;
-            }
-            DeclaredArgument kept = DefaultBoundOperationFacts.get()
-                    .keepsWhetherItHoldsAnything(applied.operation());
-            Core source = kept == null ? null : applied.argument(kept);
-            if (source != null) {
-                return observe(source, AnswerAspect.EMPTINESS, reads);
-            }
-        }
-        // What the container's holding anything is read off, or where reading it stopped, is the
-        // question that asked it, where something asked it.
-        Denotation asked = askedAt != null ? askedAt : new Denotation(e, reads);
-        if (reads.pathOf(e, read.rules().newtypes()) instanceof PathResolution.At(TermPath held)) {
-            Proposition some = holdsSomethingAt(held);
-            return leaf(some != null ? some
-                    : unreadPart(new OnTheWay.Why.SizeOfTheContainerNotStated(),
-                            fixed(e, reads)), asked);
-        }
-        return leaf(unreadPart(new OnTheWay.Why.NoWordsForTheShape(), fixed(e, reads)), asked);
-    }
-
-    /** What an optional that is no binding, name or choice holding a value states. */
-    private Proposition present(Core standing, InputReads reads) {
-        Core e = Core.withoutStanding(standing);
-        switch (e) {
-            case Core.OptionSome _ -> {
-                return new Proposition.Always(true);
-            }
-            case Core.OptionNone _ -> {
-                return new Proposition.Always(false);
-            }
-            default -> { }
-        }
-        AnOperationApplied applied = AnOperationApplied.of(e);
-        if (applied != null) {
-            Proposition witnessed = witnessed(applied, e, AnswerAspect.PRESENCE, reads);
-            if (witnessed != null) {
-                return witnessed;
-            }
-        }
-        if (reads.pathOf(e, read.rules().newtypes()) instanceof PathResolution.At(TermPath at)) {
-            return leaf(new Proposition.Present(new DecisionSubject.AnInput(at), true), e, reads);
-        }
-        return unread(e, reads, new OnTheWay.Why.NoWordsForTheShape());
+        Derivation taken = firstThatReadsIt(List.of(
+                () -> writtenOut(e, AnswerAspect.TRUTH),
+                () -> BooleanMeaning.underADenial(e, true).<Derivation>map(denied ->
+                        new Derivation.UnderADenial(
+                                observe(denied.part(), AnswerAspect.TRUTH, reads),
+                                !denied.positive())).orElse(null),
+                () -> BooleanMeaning.folded(e, read.rules().symbols())
+                        .<Derivation>map(Derivation.Folded::new).orElse(null),
+                () -> joined(e, reads),
+                () -> {
+                    TermPath position = InputTruth.positionOf(e, reads, read.rules().newtypes());
+                    return position == null ? null
+                            : leaf(new Derivation.ATruthAtAPosition(position, true), e, reads);
+                },
+                () -> BooleanMeaning.asAComparison(e).map(stated -> comparison(stated,
+                        new Denotation(e, reads), fixed(e, reads), reads)).orElse(null),
+                () -> applied == null ? null : witnessed(applied, e, AnswerAspect.TRUTH, reads),
+                () -> applied == null ? null : membership(applied, e, reads)));
+        return taken != null ? taken : unread(e, reads, unreadAs(applied, AnswerAspect.TRUTH));
     }
 
     /**
-     * What a match answering {@code aspect} states: some arm taken, and what that arm answers.
+     * What a value the source wrote out answers about {@code aspect}, or null where {@code standing}
+     * is no such value.
+     */
+    private static Derivation writtenOut(Core standing, AnswerAspect aspect) {
+        Core e = Core.withoutStanding(standing);
+        return switch (aspect) {
+            case TRUTH -> e instanceof Core.Bool written
+                    ? new Derivation.WrittenOut(written.value()) : null;
+            case EMPTINESS -> switch (e) {
+                case Core.ListLit list -> new Derivation.WrittenOut(!list.elements().isEmpty());
+                case Core.Str text -> new Derivation.WrittenOut(!text.value().isEmpty());
+                default -> null;
+            };
+            case PRESENCE -> switch (e) {
+                case Core.OptionSome _ -> new Derivation.WrittenOut(true);
+                case Core.OptionNone _ -> new Derivation.WrittenOut(false);
+                default -> null;
+            };
+        };
+    }
+
+    /** Two truths joined by a connective, or null where {@code standing} joins none. */
+    private Derivation joined(Core standing, InputReads reads) {
+        if (!(Core.withoutStanding(standing) instanceof Core.Binary binary)) {
+            return null;
+        }
+        return ConditionJoin.of(binary.op()).<Derivation>map(join -> {
+            Derivation left = observe(binary.left(), AnswerAspect.TRUTH, reads);
+            return new Derivation.Joined(join.under(true), left,
+                    observe(binary.right(), AnswerAspect.TRUTH, reads));
+        }).orElse(null);
+    }
+
+    /**
+     * How a comparison the source wrote was read, by the first of the rules for one that reads all
+     * of it ({@link RuleChoice}).
+     *
+     * <p>A size held where it parts nought from every size above it is whether the container holds
+     * anything; and every comparison is the relation it states — about a truth of the input, as a
+     * cut on the input's arithmetic, as a line on an order that arithmetic does not count, or over
+     * values the body bound. More than one of them takes some comparisons, and the one tried first
+     * is not the one kept where it leaves a part unread and one after it reads all of it.
+     *
+     * @param at    where the comparison is a part of a larger condition, kept as a part met there;
+     *              null where the comparison is itself what is read
+     * @param fixed whether its answer is the same on every run
+     */
+    private Derivation comparison(StatedComparison stated, Denotation at, boolean fixed,
+                                  InputReads reads) {
+        return firstThatReadsIt(rulesFor(stated, at, fixed, reads));
+    }
+
+    /** The rules that take a comparison the source wrote, in the order they are tried. */
+    private List<Supplier<Derivation>> rulesFor(StatedComparison stated, Denotation at,
+                                                boolean fixed, InputReads reads) {
+        AnEmptinessCheck.Checked checked = AnEmptinessCheck.checked(stated);
+        Once<AffineReading.OfAComparison> arithmetic = new Once<>(
+                () -> AffineReading.read(stated, read.domain(), reads, read.rules()));
+        return List.of(
+                () -> checked == null ? null : new Derivation.AnEmptinessCheck(at == null
+                        ? observe(checked.container(), AnswerAspect.EMPTINESS, reads)
+                        : asking(at, () -> observe(checked.container(), AnswerAspect.EMPTINESS,
+                                reads)), checked.emptyWhereItHolds()),
+                () -> partOf(at, truthCompared(stated, reads)),
+                () -> partOf(at, asACut(stated, arithmetic.get(), fixed)),
+                () -> partOf(at, onAnOrder(stated, arithmetic.get(), reads)),
+                () -> partOf(at, ofBoundValues(stated, fixed, reads)));
+    }
+
+    /**
+     * What each rule that takes {@code comparison} concludes, each read on its own and in the order
+     * they are tried; a rule that does not take it is left out.
+     *
+     * <p>For holding the rules to one another: two of them that read all of one comparison have to
+     * state one thing, or which was tried first would decide what the model says.
+     */
+    static List<Proposition> byEachRule(StatedComparison comparison, InputReads reads,
+                                        InputReading read) {
+        int rules = new Pullback(read, Optional.empty())
+                .rulesFor(comparison, null, false, reads).size();
+        List<Proposition> out = new ArrayList<>();
+        for (int i = 0; i < rules; i++) {
+            Pullback alone = new Pullback(read, Optional.empty());
+            Derivation taken = alone.rulesFor(comparison, null, false, reads).get(i).get();
+            if (taken != null) {
+                out.add(alone.pulled(taken).proposition());
+            }
+        }
+        return out;
+    }
+
+    /** {@code step}, kept as a part met at {@code at} where there is one. */
+    private Derivation partOf(Denotation at, Derivation step) {
+        return step == null || at == null ? step : leaf(step, at);
+    }
+
+    /**
+     * How a container that is no binding, name or choice holding something was read, chosen as
+     * {@link #truth} chooses.
+     */
+    private Derivation holdingSomething(Core standing, InputReads reads) {
+        Core e = Core.withoutStanding(standing);
+        AnOperationApplied applied = AnOperationApplied.of(e);
+        // What the container's holding anything is read off, or where reading it stopped, is the
+        // question that asked it, where something asked it.
+        Denotation asked = askedAt != null ? askedAt : new Denotation(e, reads);
+        Derivation taken = firstThatReadsIt(List.of(
+                () -> writtenOut(e, AnswerAspect.EMPTINESS),
+                () -> applied == null ? null
+                        : witnessed(applied, e, AnswerAspect.EMPTINESS, reads),
+                () -> applied == null ? null : kept(applied, reads),
+                () -> {
+                    if (!(reads.pathOf(e, read.rules().newtypes())
+                            instanceof PathResolution.At(TermPath held))) {
+                        return null;
+                    }
+                    Derivation some = holdsSomethingAt(held);
+                    return leaf(some != null ? some : new Derivation.Stopped(
+                            new WhyUnread.NoMeasureOfItsSize(), fixed(e, reads)), asked);
+                }));
+        return taken != null ? taken : leaf(new Derivation.Stopped(
+                unreadAs(applied, AnswerAspect.EMPTINESS), fixed(e, reads)), asked);
+    }
+
+    /** What {@code applied} was handed, where it holds something exactly where that does. */
+    private Derivation kept(AnOperationApplied applied, InputReads reads) {
+        DeclaredArgument kept = DefaultBoundOperationFacts.get()
+                .keepsWhetherItHoldsAnything(applied.operation());
+        Core source = kept == null ? null : applied.argument(kept);
+        if (source == null || !(applied.operation() instanceof ValueName.Stdlib operation)) {
+            return null;
+        }
+        return new Derivation.KeepsWhetherItHoldsAnything(operation,
+                observe(source, AnswerAspect.EMPTINESS, reads));
+    }
+
+    /**
+     * How an optional that is no binding, name or choice holding a value was read, chosen as
+     * {@link #truth} chooses.
+     */
+    private Derivation present(Core standing, InputReads reads) {
+        Core e = Core.withoutStanding(standing);
+        AnOperationApplied applied = AnOperationApplied.of(e);
+        Derivation taken = firstThatReadsIt(List.of(
+                () -> writtenOut(e, AnswerAspect.PRESENCE),
+                () -> applied == null ? null
+                        : witnessed(applied, e, AnswerAspect.PRESENCE, reads),
+                () -> reads.pathOf(e, read.rules().newtypes()) instanceof PathResolution.At(
+                        TermPath at)
+                        ? leaf(new Derivation.PresentAtAPosition(at), e, reads) : null));
+        return taken != null ? taken : unread(e, reads, unreadAs(applied, AnswerAspect.PRESENCE));
+    }
+
+    /** The one of {@code rules} an expression is read by ({@link RuleChoice}). */
+    private Derivation firstThatReadsIt(List<Supplier<Derivation>> rules) {
+        return RuleChoice.firstThatReadsIt(rules, met, trying);
+    }
+
+    /**
+     * How a match answering {@code aspect} was read: some arm taken, and what that arm answers.
      *
      * <p>An arm is taken where the value is one of its cases and none of an arm before it. Which
      * cases a value written in the source is is settled before any row ({@link
      * InputReads#whetherEveryRowTakes}); one at a position is a case the row writes there.
      */
-    private Proposition ofAMatch(Core.Match match, AnswerAspect aspect, InputReads reads) {
+    private Derivation ofAMatch(Core.Match match, AnswerAspect aspect, InputReads reads) {
         Set<TypeSymbol> written = reads.casesWritten(match.scrutinee(),
                 read.rules().symbols(), read.rules().newtypes());
-        DecisionSubject subject = reads.pathOf(match.scrutinee(), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath at) ? new DecisionSubject.AnInput(at) : null;
-        List<Proposition> taken = new ArrayList<>();
-        List<Proposition> before = new ArrayList<>();
+        TermPath subject = reads.pathOf(match.scrutinee(), read.rules().newtypes())
+                instanceof PathResolution.At(TermPath at) ? at : null;
+        List<Derivation.MatchArms.Arm> arms = new ArrayList<>();
         for (Core.Case arm : match.cases()) {
-            Proposition selects;
+            Derivation selects;
             Optional<Boolean> every = InputReads.whetherEveryRowTakes(arm, written);
             if (every.isPresent()) {
-                selects = new Proposition.Always(every.get());
+                selects = new Derivation.CasesWrittenOut(every.get());
             } else if (arm.pattern() == null) {
-                selects = new Proposition.Always(true);
+                selects = new Derivation.CasesWrittenOut(true);
             } else if (subject != null) {
-                selects = new Proposition.InCases(subject, CasesLeft.selectedBy(arm.pattern()), true);
+                selects = new Derivation.CasesAtAPosition(subject,
+                        CasesLeft.selectedBy(arm.pattern()));
             } else {
                 // Which arm is taken is the match's own reader's to classify, and no part offered
                 // here: what is read is what the arms answer. Not the same whatever the input even
                 // over values the source wrote out, since what is matched is one of several of them
                 // and each may take another arm — one alone is settled above.
-                selects = unreadPart(new OnTheWay.Why.ForkArmNotReadAsANarrowing(), false);
+                selects = new Derivation.Stopped(
+                        new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SCRUTINEE), false);
             }
-            List<Proposition> arrives = new ArrayList<>(before.stream()
-                    .map(Proposition::denied).toList());
-            arrives.add(selects);
             InputReads inside = reads.choosing(Choice.Decides.ofCase(match, arm),
                     read.rules().symbols(), read.rules().newtypes());
-            arrives.add(observe(arm.body(), aspect, inside));
-            taken.add(Proposition.all(arrives));
-            before.add(selects);
+            arms.add(new Derivation.MatchArms.Arm(selects, observe(arm.body(), aspect, inside)));
         }
-        return Proposition.any(taken);
+        return new Derivation.MatchArms(arms);
     }
 
     /**
-     * What {@code applied} coming out on {@code aspect} states where the library declares the
+     * How {@code applied} coming out on {@code aspect} was read where the library declares the
      * element that witnesses it — or null where it declares none on that side.
      */
-    private Proposition witnessed(AnOperationApplied applied, Core e, AnswerAspect aspect,
-                                  InputReads reads) {
+    private Derivation witnessed(AnOperationApplied applied, Core e, AnswerAspect aspect,
+                                 InputReads reads) {
         BoundOperationFacts facts = DefaultBoundOperationFacts.get();
         ElementWitness law = facts.resultHasAnElementWitness(applied.operation());
-        if (law == null || law.result().aspect() != aspect) {
+        if (law == null || law.result().aspect() != aspect
+                || !(applied.operation() instanceof ValueName.Stdlib operation)) {
             return null;
         }
         Core over = applied.argument(law.container());
@@ -399,19 +514,20 @@ final class Pullback {
         if (over == null || handed == null) {
             return null;
         }
-        Proposition some = someElement(over, handed, law.ofTheClosure(), e, reads);
-        return law.result().holds() ? some : some.denied();
+        return new Derivation.AWitnessLaw(operation, law.result(),
+                someElement(over, handed, law.ofTheClosure(), e, reads));
     }
 
     /**
-     * Some element of {@code over}, handed to the closure at {@code handed}, making it answer as
-     * {@code witness}.
+     * How some element of {@code over}, handed to the closure at {@code handed}, making it answer
+     * as {@code witness} was read.
      */
-    private Proposition someElement(Core over, Core handed, SideAnswered witness, Core e,
-                                    InputReads reads) {
+    private Derivation someElement(Core over, Core handed, SideAnswered witness, Core e,
+                                   InputReads reads) {
         Denotation closure = reads.denotes(handed, read.rules().symbols(), read.rules().newtypes());
         if (!(Core.withoutStanding(closure.value()) instanceof Core.Block block)) {
-            return unread(e, reads, new OnTheWay.Why.NoWordsForTheShape());
+            return unread(e, reads,
+                    new WhyUnread.NotYetComposed(WhyUnread.NotYetComposed.Step.A_CLOSURE_BY_NAME));
         }
         Denotation container = reads.standing(over, read.rules().symbols(),
                 read.rules().newtypes());
@@ -420,182 +536,201 @@ final class Pullback {
         // reads its parameter ({@code ReadMeaning.OneOf}) for every reader of the closure: what it
         // states of the input is what it states of any of them.
         if (Core.withoutStanding(container.value()) instanceof Core.ListLit list) {
-            if (list.elements().isEmpty()) {
-                return new Proposition.Always(false);
-            }
-            Proposition answered = observe(block.body(), witness.aspect(), closure.at());
-            return witness.holds() ? answered : answered.denied();
+            return new Derivation.OverElementsWrittenOut(list.elements().isEmpty()
+                    ? Optional.empty()
+                    : Optional.of(observe(block.body(), witness.aspect(), closure.at())),
+                    witness.holds());
         }
         if (!(reads.pathOf(over, read.rules().newtypes()) instanceof PathResolution.At(
                 TermPath held))) {
-            return unread(over, reads, new OnTheWay.Why.ContainerAtNoPosition());
+            return unread(over, reads,
+                    new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
         }
         // The element is what stands at the container's element inside the closure, so the same
         // container quantified inside itself would name two elements one subject.
         if (!quantifying.add(held)) {
-            return unread(e, reads, new OnTheWay.Why.NoWordsForTheShape());
+            return unread(e, reads, new WhyUnread.TwoElementsOfOneContainer());
         }
-        Proposition answered;
+        Derivation answered;
         try {
             answered = observe(block.body(), witness.aspect(), closure.at());
         } finally {
             quantifying.remove(held);
         }
-        Proposition ofTheElement = witness.holds() ? answered : answered.denied();
-        return someElementMeeting(held, ofTheElement, () -> {
-            Proposition some = holdsSomethingAt(held);
-            return some != null ? leaf(some, askedAt != null ? askedAt : new Denotation(e, reads))
-                    : unread(over, reads, new OnTheWay.Why.SizeOfTheContainerNotStated());
-        });
+        Proposition element = trying.of(answered);
+        boolean asked = Derivation.SomeElementMeeting.asksWhetherItHoldsAnything(held,
+                witness.holds() ? element : element.denied());
+        Optional<Derivation> holdsSomething = Optional.empty();
+        if (asked) {
+            Derivation some = holdsSomethingAt(held);
+            holdsSomething = Optional.of(some != null
+                    ? leaf(some, askedAt != null ? askedAt : new Denotation(e, reads))
+                    : unread(over, reads, new WhyUnread.NoMeasureOfItsSize()));
+        }
+        return new Derivation.SomeElementMeeting(held, answered, witness.holds(), holdsSomething);
     }
 
     /**
-     * Some element of the container at {@code held} meeting {@code ofTheElement}, with what no
-     * element decides taken out of the quantifier.
-     *
-     * <p>What comes out the same for every element is itself and there being an element at all —
-     * one that never holds settles it, one that always does leaves whether there is an element. A
-     * disjunct no element decides is that disjunct and there being an element, beside some element
-     * meeting the rest; a conjunct is that conjunct, beside some element meeting the rest. Left
-     * inside, whether the container holds anything would be something the proposition turns on that
-     * none of its parts names, and a reader of the parts would hand nobody the container.
-     *
-     * @param holdsSomething that the container holds something, asked for only where it is a part
-     */
-    private static Proposition someElementMeeting(TermPath held, Proposition ofTheElement,
-                                                  Supplier<Proposition> holdsSomething) {
-        if (!ofTheElement.mayTurnOnAnElementOf(held)) {
-            return ofTheElement instanceof Proposition.Always(boolean holds) && !holds
-                    ? ofTheElement
-                    : Proposition.all(List.of(ofTheElement, holdsSomething.get()));
-        }
-        List<Proposition> parts = switch (ofTheElement) {
-            case Proposition.All all -> all.parts();
-            case Proposition.Any any -> any.parts();
-            default -> List.of(ofTheElement);
-        };
-        List<Proposition> decided = parts.stream()
-                .filter(part -> !part.mayTurnOnAnElementOf(held)).toList();
-        if (decided.isEmpty()) {
-            return new Proposition.Some(held, ofTheElement, true);
-        }
-        List<Proposition> undecided = parts.stream()
-                .filter(part -> part.mayTurnOnAnElementOf(held)).toList();
-        return ofTheElement instanceof Proposition.Any
-                ? Proposition.any(List.of(
-                        someElementMeeting(held, Proposition.any(decided), holdsSomething),
-                        new Proposition.Some(held, Proposition.any(undecided), true)))
-                : Proposition.all(List.of(Proposition.all(decided),
-                        new Proposition.Some(held, Proposition.all(undecided), true)));
-    }
-
-    /**
-     * What a container holding the value {@code applied} asks about states: some element the same
+     * How a container holding the value {@code applied} asks about was read: some element the same
      * as it — or null where {@code applied} asks no such thing.
      */
-    private Proposition membership(AnOperationApplied applied, Core e, InputReads reads) {
+    private Derivation membership(AnOperationApplied applied, Core e, InputReads reads) {
         BoundOperationFacts facts = DefaultBoundOperationFacts.get();
         DeclaredArgument asked = facts.asksWhetherItsContainerHolds(applied.operation());
         var reads0 = facts.readsItsContainer(applied.operation());
-        if (asked == null || reads0 == null) {
+        if (asked == null || reads0 == null
+                || !(applied.operation() instanceof ValueName.Stdlib operation)) {
             return null;
         }
         Core over = applied.argument(reads0.container());
         if (!(reads.pathOf(over, read.rules().newtypes()) instanceof PathResolution.At(
                 TermPath held))) {
-            return unread(over, reads, new OnTheWay.Why.ContainerAtNoPosition());
+            return unread(over, reads,
+                    new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
         }
         if (!(reads.pathOf(applied.argument(asked), read.rules().newtypes())
                 instanceof PathResolution.At(TermPath value))) {
-            return unread(e, reads, new OnTheWay.Why.ValueAtNoPosition());
+            return unread(e, reads, new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.VALUE));
         }
-        Proposition same = leaf(new Proposition.SameValue(
-                new DecisionSubject.AnInput(held.element()), new DecisionSubject.AnInput(value),
-                true), e, reads);
-        return new Proposition.Some(held, same, true);
+        return leaf(new Derivation.AMembership(operation, held, value), e, reads);
     }
 
     /** That the container at {@code held} holds something, as its size above nought — or null
      *  where its size is no term of this input. */
-    private Proposition holdsSomethingAt(TermPath held) {
+    private Derivation holdsSomethingAt(TermPath held) {
         Type container = read.domain().typeAt(held, read.rules());
         ValueName.Stdlib size = container == null ? null
                 : NumericMeasures.takenOf(container, read.rules().inners());
         NumericTerm.TakenOf count = size == null ? null : NumericTerm.TakenOf.of(size, held,
                 container, read.rules().inners(), read.rules().symbols());
-        if (count == null) {
-            return null;
-        }
-        LinearForm<Quantity> form =
-                LinearForm.<Quantity>atom(new DecisionAtom.OfTheInput(count));
-        return new Proposition.Compared(new Relation.Affine(form, Rel.GT), true);
+        return count == null ? null : new Derivation.SizeAboveNought(count);
     }
 
     /**
-     * A comparison over values the body bound, as the relation it states over them — or unread
-     * where it is over anything else.
+     * A comparison read as a relation over the quantities a condition is read over: numbers of the
+     * input, and numbers of values the body bound — or unread where some part of it is neither.
      *
-     * <p>Asked where the arithmetic of the input read nothing, which is where what a value is
-     * computed from is unknown: a dependency's answer, what an attempt built. Which value it is is
-     * still known, by the binding that names it, and two comparisons over one name are about one
-     * number. A comparison mixing such a value with a position of the input is not read here.
+     * <p>The last rule for a comparison, and the one that takes every comparison: what reads the
+     * input alone is tried before it. It reads what those cannot, where what a value is computed
+     * from is unknown: a dependency's answer, what an attempt built. Which value it is is still known, by the binding that names it, and two comparisons over
+     * one name are about one number. The arithmetic is {@link AffineForms}'s, the one walk every
+     * reader of a number in this compiler composes by; this says only what its atoms are.
      */
-    private Proposition ofBoundValues(StatedComparison comparison, boolean fixed,
-                                      InputReads reads) {
+    private Derivation ofBoundValues(StatedComparison comparison, boolean fixed,
+                                     InputReads reads) {
         // A comparison whose answer is the same on every run is no relation between numbers that
         // vary: what it compares can be a parameter of a closure applied to elements written out,
         // and that name stands for a different value each time it is applied.
         if (fixed) {
-            return unreadPart(new OnTheWay.Why.ComparisonNotRepresentedAsACut(), true);
+            return new Derivation.Stopped(new WhyUnread.NotYetComposed(
+                    WhyUnread.NotYetComposed.Step.VALUES_WRITTEN_OUT), true);
         }
-        LinearForm<Quantity> left = boundForm(comparison.left(), reads);
-        LinearForm<Quantity> right = boundForm(comparison.right(), reads);
-        LinearForm<Quantity> form = left == null || right == null ? null
-                : left.minus(right).orNull();
-        if (form == null || form.coefs().isEmpty()) {
-            return unreadPart(new OnTheWay.Why.ComparisonNotRepresentedAsACut(), fixed);
-        }
-        Rel states = comparison.claim().statedRelation();
-        Rel proposition = states.orItsDenial();
-        return new Proposition.Compared(new Relation.Affine(form, proposition),
-                states == proposition);
-    }
-
-    /** {@code side} as a number written out or a number of a value the body bound, or null. */
-    private LinearForm<Quantity> boundForm(Core side, InputReads reads) {
-        Core e = Core.withoutStanding(side);
-        if (e instanceof Core.Int written) {
-            return LinearForm.constant(ExactRatio.of(written.value()));
-        }
-        if (reads.pathOf(e, read.rules().newtypes()) instanceof PathResolution.At) {
-            return null;
-        }
-        List<TermPath.Step> steps = new ArrayList<>();
-        Core at = Core.withoutStanding(e);
-        while (true) {
-            if (at instanceof Core.FieldProjection projection) {
-                at = Core.withoutStanding(projection.lastAccess());
-            } else if (at instanceof Core.FieldAccess access) {
-                if (Location.isStep(access.target().type(), access.field(),
-                        read.rules().newtypes())) {
-                    steps.addFirst(new TermPath.Step.Field(access.field()));
+        List<LinearForm<Quantity>> sides = new ArrayList<>();
+        for (Core side : List.of(comparison.left(), comparison.right())) {
+            switch (AffineForms.outcome(side, reads, quantities())) {
+                case AffineForms.Outcome.Composed<Quantity, InputReads>(var form) -> sides.add(form);
+                case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
+                    return new Derivation.Stopped(noFormOf(stopped), false);
                 }
-                at = Core.withoutStanding(access.target());
-            } else {
-                break;
             }
         }
-        // One value by its binding, and only where the name is one value on a run. A name handed
-        // each element of a container, or one that can be any of several values, stands for a
-        // different value each time it is read, so a relation over it relates nothing.
-        if (!(Core.withoutStanding(at) instanceof Core.Read name)) {
-            return null;
+        LinearForm<Quantity> form;
+        switch (sides.get(0).minus(sides.get(1))) {
+            case ExactAnswer.Held<LinearForm<Quantity>>(LinearForm<Quantity> held) -> form = held;
+            case ExactAnswer.Unheld<LinearForm<Quantity>>(UnheldNumber why) -> {
+                return new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why), false);
+            }
         }
-        ReadMeaning stands = reads.meaningOf(name, read.rules().symbols(), read.rules().newtypes());
-        if (stands instanceof ReadMeaning.Element || stands instanceof ReadMeaning.OneOf) {
-            return null;
+        Rel states = comparison.claim().statedRelation();
+        if (form.coefs().isEmpty()) {
+            return new Derivation.ACutThatCutsNothing(states.holds(form.constant().signum()));
         }
-        return LinearForm.atom(new Quantity.OfABinding(name.binding(), steps, side.type()));
+        Rel proposition = states.orItsDenial();
+        return new Derivation.AComparisonRead(Derivation.ComparisonReading.OVER_BOUND_VALUES,
+                new Relation.Affine(form, proposition), states == proposition);
+    }
+
+    /**
+     * What this reading calls an atom of a number: a number of the input where the expression is
+     * one, and otherwise a number of a value the body bound, named by its binding and the fields
+     * read off it.
+     *
+     * <p>A name is one value only where it is one on a run. A name handed each element of a
+     * container, or one that can be any of several values, stands for a different value each time
+     * it is read, so a relation over it relates nothing and it is no atom.
+     */
+    private AffineForms.Reading<Quantity, InputReads> quantities() {
+        return new AffineForms.Reading<>() {
+
+            @Override
+            public Symbols symbols() {
+                return read.rules().symbols();
+            }
+
+            @Override
+            public DeclarationAccess declarations() {
+                return read.rules().declarations();
+            }
+
+            @Override
+            public LinearForm<Quantity> leafOf(Core node, InputReads at) {
+                NumericTerm term = InputNumber.of(node, read.domain(), at, read.rules());
+                if (term != null) {
+                    return LinearForm.atom(new DecisionAtom.OfTheInput(term));
+                }
+                List<TermPath.Step> steps = new ArrayList<>();
+                Core under = Core.withoutStanding(node);
+                while (true) {
+                    if (under instanceof Core.FieldProjection projection) {
+                        under = Core.withoutStanding(projection.lastAccess());
+                    } else if (under instanceof Core.FieldAccess access) {
+                        if (Location.isStep(access.target().type(), access.field(),
+                                read.rules().newtypes())) {
+                            steps.addFirst(new TermPath.Step.Field(access.field()));
+                        }
+                        under = Core.withoutStanding(access.target());
+                    } else {
+                        break;
+                    }
+                }
+                if (!(under instanceof Core.Read name)) {
+                    return null;
+                }
+                return switch (at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())) {
+                    case ReadMeaning.Element _, ReadMeaning.OneOf _, ReadMeaning.Position _ -> null;
+                    case ReadMeaning.Through _, ReadMeaning.Unknown _ -> LinearForm.atom(
+                            new Quantity.OfABinding(name.binding(), steps, node.type()));
+                };
+            }
+
+            @Override
+            public InputReads inside(Core.LetIn li, InputReads at) {
+                return at.and(li.binder(), li.value());
+            }
+
+            @Override
+            public AffineForms.ReadThrough<InputReads> readThrough(Core.Read name, InputReads at) {
+                return NameAnswers.denoting(name, at, read.rules().symbols(),
+                        read.rules().newtypes());
+            }
+
+            @Override
+            public List<AffineForms.ReadThrough<InputReads>> alternativesOf(Core.Read name,
+                                                                           InputReads at) {
+                return NameAnswers.alternativesOf(name, at, read.rules().symbols(),
+                        read.rules().newtypes());
+            }
+
+            @Override
+            public boolean readsThrough(Core.FieldAccess fa, InputReads at) {
+                // A field of a value that stands nowhere is arithmetic's to walk into, as it is for
+                // the reading of the input's own numbers ({@link AffineReading}).
+                boolean stands = !(at.pathOf(fa.target(), read.rules().newtypes())
+                        instanceof PathResolution.NotAPosition);
+                return !stands && !Location.isStep(fa.target().type(), fa.field(),
+                        read.rules().newtypes());
+            }
+        };
     }
 
     /** A form over the input's numbers, as one over the quantities a relation is written over. */
@@ -604,61 +739,103 @@ final class Pullback {
     }
 
     /**
-     * A comparison as the relation it states over this input's quantities.
-     *
-     * <p>Off the same readings the arithmetic and a stopped reading are read by everywhere a
-     * comparison is, so what it states here is what a border on it is drawn at.
+     * A comparison of a truth of the input against a truth written out, or null where it is no
+     * such comparison.
      */
-    private Proposition compared(StatedComparison comparison, boolean fixed, InputReads reads) {
+    private Derivation truthCompared(StatedComparison comparison, InputReads reads) {
         InputTruth truth = InputTruth.compared(comparison, true, reads, read.rules().symbols(),
                 read.rules().newtypes());
-        if (truth != null) {
-            return new Proposition.Truth(new DecisionSubject.AnInput(truth.at()), truth.held());
-        }
-        return switch (AffineReading.read(comparison, read.domain(), reads, read.rules())) {
+        return truth == null ? null : new Derivation.ATruthCompared(truth.at(), truth.held());
+    }
+
+    /**
+     * A comparison as the cut the arithmetic of the input reads it to, or as one that cuts nothing —
+     * or null where that arithmetic read it to neither.
+     *
+     * <p>Off the same reading a border on it is drawn from everywhere a comparison is, so what it
+     * states here is what a border on it is drawn at.
+     */
+    private static Derivation asACut(StatedComparison comparison,
+                                     AffineReading.OfAComparison arithmetic, boolean fixed) {
+        return switch (arithmetic) {
             case AffineReading.OfAComparison.Cuts(var affine) -> {
                 Rel states = affine.claim().statedRelation();
-                LinearForm<NumericTerm> against =
-                        affine.form().minus(LinearForm.constant(affine.cut())).orNull();
-                if (against == null) {
-                    yield unreadPart(new OnTheWay.Why.ComparisonNotRepresentedAsACut(), fixed);
+                LinearForm<NumericTerm> against;
+                switch (affine.form().minus(LinearForm.constant(affine.cut()))) {
+                    case ExactAnswer.Held<LinearForm<NumericTerm>>(var held) -> against = held;
+                    case ExactAnswer.Unheld<LinearForm<NumericTerm>>(UnheldNumber why) -> {
+                        yield new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why), fixed);
+                    }
                 }
                 Rel proposition = states.orItsDenial();
-                yield new Proposition.Compared(new Relation.Affine(
-                        asQuantities(DecisionComparison.ofTheInput(against)), proposition),
+                yield new Derivation.AComparisonRead(Derivation.ComparisonReading.AS_A_CUT,
+                        new Relation.Affine(
+                                asQuantities(DecisionComparison.ofTheInput(against)), proposition),
                         states == proposition);
             }
             case AffineReading.OfAComparison.CutsNothing constant ->
-                    new Proposition.Always(constant.holds(comparison.claim().statedRelation()));
-            case AffineReading.OfAComparison.NotHeld _ -> ofBoundValues(comparison, fixed, reads);
-            case AffineReading.OfAComparison.Stopped _ -> {
-                ComparedLine drawn = ComparedLine.asWritten(comparison, read, reads);
-                if (drawn == null) {
-                    yield ofBoundValues(comparison, fixed, reads);
-                }
-                Rel states = drawn.claim().statedRelation();
-                Rel proposition = states.orItsDenial();
-                yield new Proposition.Compared(new Relation.Ordered(
-                        new DecisionAtom.OfTheInput(drawn.term()), drawn.value(), proposition),
-                        states == proposition);
-            }
+                    new Derivation.ACutThatCutsNothing(
+                            constant.holds(comparison.claim().statedRelation()));
+            case AffineReading.OfAComparison.NotHeld _, AffineReading.OfAComparison.Stopped _ ->
+                    null;
         };
     }
 
-    /** {@code part}, kept with the expression it was read off. */
-    private Proposition leaf(Proposition part, Core from, InputReads reads) {
-        return leaf(part, new Denotation(from, reads));
+    /**
+     * A comparison as a line on an order the arithmetic of the input stopped at, or null where it
+     * did not stop or no line is drawn on what it stopped at.
+     *
+     * <p>Only where it stopped: a date against a written date and a case of an enumeration are
+     * values it does not count, and the comparison still states a line on their order. A comparison
+     * the arithmetic read is that arithmetic's, which is the reading a border is drawn by.
+     */
+    private Derivation onAnOrder(StatedComparison comparison,
+                                 AffineReading.OfAComparison arithmetic, InputReads reads) {
+        if (!(arithmetic instanceof AffineReading.OfAComparison.Stopped)) {
+            return null;
+        }
+        ComparedLine drawn = ComparedLine.asWritten(comparison, read, reads);
+        if (drawn == null) {
+            return null;
+        }
+        Rel states = drawn.claim().statedRelation();
+        Rel proposition = states.orItsDenial();
+        return new Derivation.AComparisonRead(Derivation.ComparisonReading.ON_AN_ORDER,
+                new Relation.Ordered(new DecisionAtom.OfTheInput(drawn.term()), drawn.value(),
+                        proposition),
+                states == proposition);
     }
 
-    private Proposition leaf(Proposition part, Denotation from) {
-        if (!(part instanceof Proposition.Always)) {
-            leaves.add(new Leaf(part, from));
+    /** A value worked out by the first rule that asks for it, and not before or again. */
+    private static final class Once<T> {
+
+        private final Supplier<T> making;
+        private T made;
+
+        Once(Supplier<T> making) {
+            this.making = making;
         }
-        return part;
+
+        T get() {
+            if (made == null) {
+                made = making.get();
+            }
+            return made;
+        }
+    }
+
+    /** {@code step}, kept as a part met at the expression it was read off. */
+    private Derivation leaf(Derivation step, Core from, InputReads reads) {
+        return leaf(step, new Denotation(from, reads));
+    }
+
+    private Derivation leaf(Derivation step, Denotation from) {
+        met.add(new Met(step, from));
+        return step;
     }
 
     /** {@code reading}, with whether a container holds anything asked at {@code where}. */
-    private Proposition asking(Denotation where, Supplier<Proposition> reading) {
+    private Derivation asking(Denotation where, Supplier<Derivation> reading) {
         Denotation outer = askedAt;
         askedAt = where;
         try {
@@ -669,8 +846,139 @@ final class Pullback {
     }
 
     /** {@code e}, which nothing here reads the meaning of. */
-    private Proposition unread(Core e, InputReads reads, OnTheWay.Why why) {
-        return leaf(unreadPart(why, fixed(e, reads)), e, reads);
+    private Derivation unread(Core e, InputReads reads, WhyUnread why) {
+        return leaf(new Derivation.Stopped(why, fixed(e, reads)), e, reads);
+    }
+
+    /**
+     * Why {@code applied} — or, where nothing is applied, the value it is asked of — coming out on
+     * {@code aspect} was read as nothing, once no rule took it.
+     */
+    private static WhyUnread unreadAs(AnOperationApplied applied, AnswerAspect aspect) {
+        if (applied == null) {
+            return new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
+        }
+        return switch (applied.operation()) {
+            case ValueName.Stdlib operation -> new WhyUnread.NoLawFor(operation, aspect);
+            case ValueName.Behavior _ -> aspect == AnswerAspect.EMPTINESS
+                    ? new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT)
+                    : new WhyUnread.NotYetComposed(
+                            WhyUnread.NotYetComposed.Step.A_DEPENDENCYS_ANSWER);
+            case ValueName.Helper _ -> new WhyUnread.WhatARecursiveHelperAnswers();
+            default -> new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
+        };
+    }
+
+    /**
+     * Why the arithmetic stopped where it did, as a reason about the domain.
+     *
+     * <p>The arithmetic says why ({@link AffineForms.Halt}), and that is what this says, in these
+     * words. Only where it had no rule for the expression is anything asked of the expression
+     * itself, and then of what kind of value it is and not of how the arithmetic would have read it.
+     */
+    private WhyUnread noFormOf(AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped) {
+        return switch (stopped.why()) {
+            case AffineForms.Halt.NoRule<Quantity, InputReads> _ ->
+                    noRuleFor(stopped.node(), stopped.at());
+            case AffineForms.Halt.NotLinear<Quantity, InputReads> _ ->
+                    new WhyUnread.OutsideTheLinearFragment();
+            case AffineForms.Halt.NoNumberOnARun<Quantity, InputReads> _ ->
+                    new WhyUnread.NoNumberOnARun();
+            case AffineForms.Halt.NotHeld<Quantity, InputReads>(UnheldNumber why) ->
+                    new WhyUnread.ANumberNotHeld(why);
+            // Several values a name stands for, which only values written out are: a closure's
+            // parameter applied to each of them.
+            case AffineForms.Halt.ValuesDisagree<Quantity, InputReads> _ ->
+                    new WhyUnread.NotYetComposed(WhyUnread.NotYetComposed.Step.VALUES_WRITTEN_OUT);
+            case AffineForms.Halt.AnArgumentStopped<Quantity, InputReads>(var argument) ->
+                    noFormOf(argument);
+        };
+    }
+
+    /**
+     * Why an expression the arithmetic has no rule for, read in {@code reads}, is no number of the
+     * input: what stands at the end of the accesses it is made of.
+     */
+    private WhyUnread noRuleFor(Core stopped, InputReads reads) {
+        Core e = Core.withoutStanding(stopped);
+        while (true) {
+            if (e instanceof Core.FieldProjection projection) {
+                e = Core.withoutStanding(projection.lastAccess());
+            } else if (e instanceof Core.FieldAccess access) {
+                e = Core.withoutStanding(access.target());
+            } else {
+                break;
+            }
+        }
+        if (e instanceof Core.Read name) {
+            return switch (reads.meaningOf(name, read.rules().symbols(), read.rules().newtypes())) {
+                case ReadMeaning.Element _ ->
+                        new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER);
+                case ReadMeaning.OneOf _ -> new WhyUnread.NotYetComposed(
+                        WhyUnread.NotYetComposed.Step.VALUES_WRITTEN_OUT);
+                case ReadMeaning.Unknown _, ReadMeaning.Position _, ReadMeaning.Through _ ->
+                        new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
+            };
+        }
+        switch (e) {
+            // An operator that is no arithmetic: what it answers is no number of anything.
+            case Core.Binary _ -> {
+                return new WhyUnread.OutsideTheLinearFragment();
+            }
+            // A choice between values, where what is chosen is one of the arms.
+            case Core.If _, Core.IfConstructed _, Core.Match _ -> {
+                return new WhyUnread.NotYetComposed(
+                        WhyUnread.NotYetComposed.Step.A_CHOICE_BY_CASES);
+            }
+            default -> { }
+        }
+        AnOperationApplied applied = AnOperationApplied.of(e);
+        if (applied == null) {
+            return new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
+        }
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
+        return switch (applied.operation()) {
+            case ValueName.Behavior _ -> new WhyUnread.NotYetComposed(
+                    WhyUnread.NotYetComposed.Step.A_DEPENDENCYS_ANSWER);
+            case ValueName.Helper _ -> new WhyUnread.WhatARecursiveHelperAnswers();
+            case ValueName.Stdlib operation -> {
+                if (facts.statesTheOrderOfItsArguments().contains(operation)) {
+                    yield new WhyUnread.NotYetComposed(
+                            WhyUnread.NotYetComposed.Step.AN_ORDER_OF_ITS_ARGUMENTS);
+                }
+                if (!facts.isDefinedByCases(operation).isEmpty()) {
+                    yield new WhyUnread.NotYetComposed(
+                            WhyUnread.NotYetComposed.Step.A_CHOICE_BY_CASES);
+                }
+                if (facts.takenAs(operation) != null && !applied.args().isEmpty()) {
+                    yield noNumberOf(operation, applied.args().getFirst(), reads);
+                }
+                yield new WhyUnread.NoFormOfWhatItAnswers(operation);
+            }
+            default -> new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
+        };
+    }
+
+    /**
+     * Why a number {@code measure} takes of {@code measured} is no number of the input: what stands
+     * there is no position, and what made it says nothing of that number in terms of what it was
+     * handed — or does, by a step not taken yet.
+     */
+    private WhyUnread noNumberOf(ValueName.Stdlib measure, Core measured, InputReads reads) {
+        Core made = Core.withoutStanding(reads.standing(measured, read.rules().symbols(),
+                read.rules().newtypes()).value());
+        if (!(AnOperationApplied.of(made) instanceof AnOperationApplied applied
+                && applied.operation() instanceof ValueName.Stdlib madeBy)) {
+            return new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
+        }
+        // As many as what it was handed, so its size is that one's.
+        BuiltFrom<DeclaredArgument> built = DefaultBoundOperationFacts.get()
+                .buildsItsResultFrom(madeBy);
+        if (built != null && built.mapsEachElementOf() != null) {
+            return new WhyUnread.NotYetComposed(
+                    WhyUnread.NotYetComposed.Step.A_SIZE_AN_OPERATION_KEEPS);
+        }
+        return new WhyUnread.ANumberOfWhatAnOperationAnswers(measure, madeBy);
     }
 
     /**
@@ -688,9 +996,5 @@ final class Pullback {
         AnOperationApplied applied = AnOperationApplied.of(e);
         return applied != null && applied.args().stream().allMatch(arg -> reads.writtenOut(arg,
                 read.rules().symbols(), read.rules().newtypes()));
-    }
-
-    private Proposition unreadPart(OnTheWay.Why why, boolean fixed) {
-        return new Proposition.Unread(where, unread++, why, fixed, true);
     }
 }

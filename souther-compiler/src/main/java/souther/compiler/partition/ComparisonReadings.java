@@ -19,6 +19,7 @@ import souther.compiler.inputs.PathResolution;
 import souther.compiler.semantics.ConditionJoin;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -236,7 +237,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     private record Body(String behavior, InputReading read,
                         souther.compiler.coverage.Arrivals answering, Templates templates,
                         List<TruthMet> truths, List<ForkDecided> decided,
-                        WhatAnAnswerTakesUp dependencies) {
+                        WhatAnAnswerTakesUp dependencies, CarriedPast carried) {
 
         Symbols symbols() {
             return read.symbols();
@@ -276,10 +277,11 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         // — a condition inside a helper spliced in from elsewhere is still one this reading met.
         ConditionNumbering numbering =
                 new ConditionNumbering(read.symbols().module(), behavior);
+        CarriedPast carried = new CarriedPast();
         walk(body, new Body(behavior, read,
                         souther.compiler.coverage.Arrivals.inTheTree(body,
                                 analysis.templates()::bodyOf),
-                        templates, truths, decided, dependencies),
+                        templates, truths, decided, dependencies, carried),
                 reads,
                 LiveFlow.of(body), List.of(), true, readings, forks, numbering);
         // What each value the body builds states, read once. A value means the same wherever it is
@@ -292,7 +294,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 walk(template, new Body(behavior, read,
                                 souther.compiler.coverage.Arrivals.inTheTree(template,
                                         analysis.templates()::bodyOf),
-                        templates, truths, decided, dependencies),
+                        templates, truths, decided, dependencies, carried),
                         insideATemplate, LiveFlow.of(template), entry.assumed(), entry.live(),
                         readings, forks, numbering);
             }
@@ -371,7 +373,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                              List<OnTheWay> assumed, boolean live, List<Reading> out,
                              List<ForkMet> forks, ConditionNumbering numbering) {
         Symbols symbols = in.symbols();
-        StatedAt stated = statedAt(e, () -> WhatNamesStandFor.in(reads, in.read()));
+        StatedAt stated = statedAt(e, () -> WhatNamesStandFor.in(reads, in.read()), in.carried());
         if (stated != null) {
             // Which construct of the model it is, off the node. The two readings of a body hold
             // different copies of it and agree about this, so it is what a reader below joins on.
@@ -449,7 +451,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     for (Denotation part : ConditionSkeleton.atoms(iff.cond(),
                             WhatNamesStandFor.in(reads, in.read()))) {
                         Denotation atom = part.at().denotes(part.value(), symbols, in.newtypes());
-                        atoms.add(new Atom(atom, statedElsewhere(atom, in.read())));
+                        atoms.add(new Atom(atom, statedElsewhere(atom, in.read(), in.carried())));
                     }
                     forks.add(new ForkMet(iff.occurrence(), iff.cond(), Citation.of(iff.pos()),
                             atoms));
@@ -583,7 +585,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * is what turns on them. The names are asked for only there: this is asked at every node a
      * walk meets, and nearly all of them are no construct that states one.
      */
-    private static StatedAt statedAt(Core e, Supplier<WhatNamesStandFor> names) {
+    private static StatedAt statedAt(Core e, Supplier<WhatNamesStandFor> names,
+                                     CarriedPast carried) {
         ConstructOccurrence written = switch (e) {
             case Core.Binary binary -> binary.occurrence();
             case Core.PreservedCall call -> call.occurrence();
@@ -593,9 +596,45 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             return null;
         }
         return BooleanMeaning.asAComparison(e)
-                .filter(statement -> !Pullback.carriesPast(statement, names.get().reads(),
-                        names.get().read()))
+                .filter(statement -> !carried.carriesPast(e, statement, names))
                 .map(statement -> new StatedAt(written, statement)).orElse(null);
+    }
+
+    /**
+     * Whether what a comparison states is carried past it ({@link Pullback#carriesPast}), asked
+     * once per comparison and reading of its names over one reading of a body.
+     *
+     * <p>A comparison is met where the walk reaches it and again as a part of each fork that turns
+     * on it, and the answer is a reading of what it states. Read under names that are the same
+     * value, it is the same reading; so it is kept, and the walk and every fork are answered by it.
+     */
+    private static final class CarriedPast {
+
+        /** A comparison, by the node it is, under a reading of its names, by what that holds. */
+        private record Asked(Core node, InputReads reads) {
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof Asked that && node == that.node && reads.equals(that.reads);
+            }
+
+            @Override
+            public int hashCode() {
+                return System.identityHashCode(node) * 31 + reads.hashCode();
+            }
+        }
+
+        private final Map<Asked, Boolean> answered = new HashMap<>();
+
+        boolean carriesPast(Core e, StatedComparison statement,
+                            Supplier<WhatNamesStandFor> names) {
+            if (!Pullback.mayBeCarriedPast(statement)) {
+                return false;
+            }
+            WhatNamesStandFor standing = names.get();
+            return answered.computeIfAbsent(new Asked(e, standing.reads()),
+                    _ -> Pullback.carriesPast(statement, standing.reads(), standing.read()));
+        }
     }
 
 
@@ -632,12 +671,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * as "something in there is owned", the second went with the first — which is the same partial
      * ownership a condition's own parts are cut along, lost one step past the operation.
      */
-    static List<Denotation> statedElsewhere(Denotation atom, InputReading read) {
+    private static List<Denotation> statedElsewhere(Denotation atom, InputReading read,
+                                                    CarriedPast carried) {
         List<Denotation> left = new ArrayList<>();
         for (Denotation part : WhatAForkTests.partsOfTheAnswer(atom.value(),
                 WhatNamesStandFor.in(atom.at(), read))) {
             // Which rule the part is, by the node; where it stands, in the reading it is written in.
-            if (statedAt(part.value(), () -> WhatNamesStandFor.in(part.at(), read)) == null
+            if (statedAt(part.value(), () -> WhatNamesStandFor.in(part.at(), read), carried) == null
                     && !(part.at().pathOf(part.value(), read.rules().newtypes())
                             instanceof PathResolution.At)) {
                 left.add(part);

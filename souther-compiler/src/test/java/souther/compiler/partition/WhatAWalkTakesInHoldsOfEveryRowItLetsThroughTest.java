@@ -8,6 +8,7 @@ import souther.compiler.core.Core;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -64,6 +65,9 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
             behavior product : (p: Pair) -> Bool
             let product (p) = p.x * p.y > 4
 
+            behavior productThroughACall : (p: Pair) -> Bool
+            let productThroughACall (p) = Decimal.fromInt(p.x * p.y) > Decimal.fromInt(4)
+
             behavior nested : (p: Pair) -> Bool
             let nested (p) = (p.x > 0 || p.y > 1) && p.y < 5
             """;
@@ -76,6 +80,7 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
             "affineSum", (x, y) -> x + 2 * y <= 7,
             "withACall", (x, y) -> x > 0 && Math.max(y, 3) > 10,
             "product", (x, y) -> x * y > 4,
+            "productThroughACall", (x, y) -> x * y > 4,
             "nested", (x, y) -> (x > 0 || y > 1) && y < 5);
 
     /**
@@ -206,11 +211,18 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
      */
     @Test
     void aComparisonItCouldNotTurnIntoACutSaysThatAndNoMore() {
-        assertEquals(List.of(new OnTheWay.Why.ComparisonNotRepresentedAsACut()),
+        assertEquals(List.of(new OnTheWay.Why.TheMeaningWasNotRead(
+                        new WhyUnread.OutsideTheLinearFragment())),
                 whys("product", true));
+        // The same product handed to an operation the library says answers what it was handed:
+        // the call is where the reading stopped, and why is what stopped its argument.
+        assertEquals(List.of(new OnTheWay.Why.TheMeaningWasNotRead(
+                        new WhyUnread.OutsideTheLinearFragment())),
+                whys("productThroughACall", true));
         // The affine operand is taken in beside it: a conjunction coming out true says both, and
         // one of them being unreadable is no reason to lose the other.
-        assertEquals(List.of(new OnTheWay.Why.ComparisonNotRepresentedAsACut()),
+        assertEquals(List.of(new OnTheWay.Why.TheMeaningWasNotRead(new WhyUnread.NotYetComposed(
+                        WhyUnread.NotYetComposed.Step.A_CHOICE_BY_CASES))),
                 whys("withACall", true));
         assertEquals(1, stating("withACall", true).stream()
                 .filter(each -> each instanceof OnTheWay.TakenIn).count());
