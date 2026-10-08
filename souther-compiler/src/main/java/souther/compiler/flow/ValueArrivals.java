@@ -12,6 +12,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.Function;
@@ -76,6 +77,14 @@ public final class ValueArrivals<P> {
      * asks about.
      */
     private final IdentityHashMap<Core.If, IntoArms> into = new IdentityHashMap<>();
+
+    /**
+     * Which arms of each fork a run can enter, decided once where the fork is settled.
+     *
+     * <p>Held so that every reader asking whether an arm is there reads the one decision: what the
+     * condition states where the reading has that in hand, and what its parts come to otherwise.
+     */
+    private final IdentityHashMap<Core.If, boolean[]> enters = new IdentityHashMap<>();
 
     /** The ways into the arms of one fork, each worked out the first time it is asked for. */
     private final class IntoArms {
@@ -285,6 +294,25 @@ public final class ValueArrivals<P> {
         Set<Truth> truths = EnumSet.noneOf(Truth.class);
         waysAt(e).orNone().forEach(each -> truths.add(each.value()));
         return new Comes(truths);
+    }
+
+    /**
+     * Whether a run can go into arm {@code part} of {@code fork}: the one answer to it, decided
+     * where the fork was settled ({@link ComparisonWays#stated}).
+     *
+     * <p>Asked of a fork this was rooted at, and it raises for one it was not, for the reason
+     * {@link #waysAt} does.
+     */
+    public boolean mayEnter(Core.If fork, int part) {
+        if (semantics != null) {
+            return semantics.mayEnter(fork, part);
+        }
+        boolean[] arms = enters.get(fork);
+        if (arms == null) {
+            throw new IllegalArgumentException("this reading was not rooted at the body holding"
+                    + " the fork at " + fork.pos());
+        }
+        return arms[part];
     }
 
     /** Whether {@code e} can be evaluated to a value. */
@@ -668,10 +696,16 @@ public final class ValueArrivals<P> {
         Comes cond = comesAt(iff.cond());
         IntoArms waysInto = new IntoArms(iff, naming);
         into.put(iff, waysInto);
-        Gathered out = new Gathered();
+        boolean[] entering = new boolean[arms.length];
         for (int part = 0; part < arms.length; part++) {
             boolean want = part == 0;
-            if (!cond.mayCome(want)) {
+            Optional<Boolean> stated = comparisons.stated(iff, want);
+            entering[part] = stated.isPresent() ? stated.get() : cond.mayCome(want);
+        }
+        enters.put(iff, entering);
+        Gathered out = new Gathered();
+        for (int part = 0; part < arms.length; part++) {
+            if (!entering[part]) {
                 continue;
             }
             Paths<P> body = settle(arms[part], naming, comparisons, bound);

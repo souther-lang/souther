@@ -114,7 +114,7 @@ public final class NormalReturn {
      * thing was made — neither is a truth this reading has anything to say about.
      */
     public boolean mayEnter(Core fork, int part) {
-        return !(fork instanceof Core.If iff) || reading().comesAt(iff.cond()).mayCome(part == 0);
+        return !(fork instanceof Core.If iff) || reading().mayEnter(iff, part);
     }
 
     /**

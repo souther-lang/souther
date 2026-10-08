@@ -1,5 +1,6 @@
 package souther.compiler.coverage;
 
+import souther.compiler.check.AnalysisBody;
 import souther.compiler.core.Core;
 
 import java.util.ArrayList;
@@ -39,7 +40,16 @@ public final class RunBodies {
 
     private final CoverageSites.Plan plan;
 
+    /** The behavior's body where the language's operations stand, which is where what a condition
+     *  of the model states is read; null where there is none. */
+    private final AnalysisBody analysis;
+
     RunBodies(Core entry, List<List<Core>> groups, Methods graph, CoverageSites.Plan plan) {
+        this(entry, groups, graph, plan, null);
+    }
+
+    private RunBodies(Core entry, List<List<Core>> groups, Methods graph, CoverageSites.Plan plan,
+                      AnalysisBody analysis) {
         this.entry = entry;
         List<List<Core>> held = new ArrayList<>();
         Map<Core, Core> groupOf = new IdentityHashMap<>();
@@ -53,6 +63,17 @@ public final class RunBodies {
         this.groupOf = Collections.unmodifiableMap(groupOf);
         this.graph = graph;
         this.plan = plan;
+        this.analysis = analysis;
+    }
+
+    /** The same run, with the body of the behavior where the language's operations stand. */
+    public RunBodies readOff(AnalysisBody analysed) {
+        return new RunBodies(entry, groups, graph, plan, analysed);
+    }
+
+    /** The behavior's body where the language's operations stand, where there is one. */
+    public Optional<AnalysisBody> analysis() {
+        return Optional.ofNullable(analysis);
     }
 
     /**
@@ -87,7 +108,7 @@ public final class RunBodies {
     /** The same bodies, read against {@code other}: a plan of the same trees that answers some
      *  question about them otherwise. */
     RunBodies under(CoverageSites.Plan other) {
-        return new RunBodies(entry, groups, graph, other);
+        return new RunBodies(entry, groups, graph, other, analysis);
     }
 
     /**

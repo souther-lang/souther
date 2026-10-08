@@ -15,6 +15,8 @@ import souther.compiler.flow.ValueArrivals;
 import souther.compiler.flow.Ways;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.meaning.MeaningsOfABody;
+import souther.compiler.partition.MeaningsOfABodyReading;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -262,12 +264,21 @@ public final class CoverageRead {
                 souther.compiler.inputs.ComparedNumbers.of(input);
         CoverageNaming naming =
                 new CoverageNaming(plan, symbols, source.newtypes(), reads, numbers);
+        // What each fork of the model states, read off the tree where the language's operations
+        // stand, so which arm a run can enter is what the condition means rather than what its
+        // expanded parts come to here.
+        MeaningsOfABody meanings = run.analysis()
+                .map(analysis -> MeaningsOfABodyReading.of(analysis, () -> input,
+                        InputReads.ofParametersWhereCallsStand(input.domain().parameterReads(),
+                                input.declared(), ElementBindings.of(analysis, source.newtypes())),
+                        symbols, source.newtypes()))
+                .orElse(MeaningsOfABody.NONE);
         Meetings meetings = new Meetings(plan);
         Arms arms = new Arms(plan);
         CoverageRead walked = new CoverageRead(run,
                 body -> ValueArrivals.ofBody(body, naming,
                         new NumberWays(numbers, numbers.reading().quantities(), reads, symbols,
-                                source.newtypes())),
+                                source.newtypes(), meanings)),
                 meetings, arms);
         walked.walkBody(run.entry(), null, naming,
                 new Reach.Ways(List.of(new WayIn(List.of()))), true);
@@ -684,15 +695,15 @@ public final class CoverageRead {
         // Whether the arm is there at all is the reading of what the body does, and it is asked
         // first. An arm the condition never comes out the way of is no arm to walk into, and falling
         // back to naming it would offer whatever is inside it under a reach no run takes.
-        if (!reading.comesAt(iff.cond()).mayCome(part == 0)) {
+        if (!reading.mayEnter(iff, part)) {
             return new Reach.Nothing(
                     PathAccess.Unreachable.Why.THE_CONDITION_NEVER_COMES_OUT_THAT_WAY);
         }
-        if (reading.waysInto(iff, part) instanceof Ways.Known<Outcome> known) {
-            return known.paths().isEmpty()
-                    ? new Reach.Nothing(
-                            PathAccess.Unreachable.Why.THE_CONDITION_NEVER_COMES_OUT_THAT_WAY)
-                    : new Reach.Ways(waysOf(known.paths()));
+        // The arm is there, so a list of no ways into it is the parts of the condition coming to
+        // less than what it states, and not the arm being closed.
+        if (reading.waysInto(iff, part) instanceof Ways.Known<Outcome> known
+                && !known.paths().isEmpty()) {
+            return new Reach.Ways(waysOf(known.paths()));
         }
         return fallbackWayIn(iff, part, naming,
                 PathAccess.Unsupported.Why.WAYS_NOT_ENUMERABLE);

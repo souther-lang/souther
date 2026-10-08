@@ -3822,7 +3822,9 @@ public final class Bodies {
          * the plan apart could be reading trees the plan is not of.
          */
         public RunBodies run(String behavior) {
-            return RunBodies.of(of, plan, behavior);
+            RunBodies run = RunBodies.of(of, plan, behavior);
+            AnalysisBody analysis = analysed.get(behavior);
+            return analysis == null ? run : run.readOff(analysis);
         }
 
         /**

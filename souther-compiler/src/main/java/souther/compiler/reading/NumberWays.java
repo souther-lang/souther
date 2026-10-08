@@ -10,12 +10,15 @@ import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.ComparedNumbers;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.Quantities;
-import souther.compiler.numeric.Endpoint;
+import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.partition.WhatTheRulesLeave;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
+import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -57,20 +60,38 @@ final class NumberWays implements ComparisonWays {
      *  somewhere else ({@link souther.compiler.check.Location#isStep}). */
     private final DeclarationNewtypes newtypes;
 
+    /** What each condition of the model the body holds states, read where the language's
+     *  operations stand. */
+    private final MeaningsOfABody meanings;
+
     NumberWays(ComparedNumbers numbers, Quantities quantities, InputReads reads, Symbols symbols,
-               DeclarationNewtypes newtypes) {
+               DeclarationNewtypes newtypes, MeaningsOfABody meanings) {
         this.numbers = numbers;
         this.quantities = quantities;
         this.reads = reads;
         this.symbols = symbols;
         this.newtypes = newtypes;
+        this.meanings = meanings;
     }
 
     @Override
     public ComparisonWays entering(ScopeStep step) {
         InputReads inside = reads.entering(step, symbols, newtypes);
         return inside == reads ? this
-                : new NumberWays(numbers, quantities, inside, symbols, newtypes);
+                : new NumberWays(numbers, quantities, inside, symbols, newtypes, meanings);
+    }
+
+    /**
+     * A fork of the model is entered where what its condition states can come out that way under
+     * the input's rules ({@link WhatTheRulesLeave}). A fork in a copy of one of the language's
+     * operations states nothing of the model, and its parts answer.
+     */
+    @Override
+    public Optional<Boolean> stated(Core.If fork, boolean want) {
+        return ModelOccurrence.statedAt(fork.place().occurrence())
+                .flatMap(construct -> meanings.at(
+                        new MeaningsOfABody.Site(construct, MeaningsOfABody.Part.CONDITION)))
+                .map(proposition -> WhatTheRulesLeave.admits(proposition, want, quantities));
     }
 
     @Override
@@ -99,7 +120,7 @@ final class NumberWays implements ComparisonWays {
             case ComparisonClaim.Cut cut -> {
                 // Which side the way needs, which is the side the comparison is true on.
                 boolean upIsTrue = cut.satisfyingSide() == Towards.ABOVE;
-                yield anythingBeyond(runs, drawn.at(), upIsTrue == want,
+                yield WhatTheRulesLeave.anythingBeyond(runs, drawn.at(), upIsTrue == want,
                         cut.holdsAtTheValue() == want);
             }
             // The value itself where the way is the one the comparison holds at, and everything else
@@ -110,40 +131,15 @@ final class NumberWays implements ComparisonWays {
         };
     }
 
-    /**
-     * Whether the run holds a value on the {@code up} side of {@code at}, taking {@code at} itself
-     * where the side {@code inclusive} reaches it.
-     *
-     * <p>Only the end the side runs towards can close it: everything above a line is still above it
-     * however far the run's low end is raised, so a side that reaches past the far end is a side
-     * with a value on it.
-     *
-     * <p>Where the end falls exactly on the line, what is beyond it is the line itself and nothing
-     * else, so a side that takes the line has a value there where the run does, and a side that does
-     * not has none. That is the one place this closes a way on the run's word: strictly past an end
-     * the run stops at, no value stands. Everywhere short of the end this answers that a value
-     * stands, whether the run steps or fills there, because that much the end says on its own.
-     */
-    private static boolean anythingBeyond(NumericDomain.Bounds runs, Place at, boolean up,
-                                          boolean inclusive) {
-        Endpoint end = runs == null ? null : (up ? runs.max() : runs.min());
-        if (end == null || end.at() == null) {
-            return true;
-        }
-        int against = end.at().compareTo(at);
-        if (up ? against > 0 : against < 0) {
-            return true;
-        }
-        return against == 0 && inclusive && end.inclusive();
-    }
-
     /** Whether the run holds the value the comparison named. */
     private static boolean holds(NumericDomain.Bounds runs, Place at) {
-        return anythingBeyond(runs, at, true, true) && anythingBeyond(runs, at, false, true);
+        return WhatTheRulesLeave.anythingBeyond(runs, at, true, true)
+                && WhatTheRulesLeave.anythingBeyond(runs, at, false, true);
     }
 
     /** Whether the run holds anything but the value the comparison named. */
     private static boolean notOnlyOneValue(NumericDomain.Bounds runs, Place at) {
-        return anythingBeyond(runs, at, true, false) || anythingBeyond(runs, at, false, false);
+        return WhatTheRulesLeave.anythingBeyond(runs, at, true, false)
+                || WhatTheRulesLeave.anythingBeyond(runs, at, false, false);
     }
 }
