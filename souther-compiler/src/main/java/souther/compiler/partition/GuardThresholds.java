@@ -589,7 +589,10 @@ public final class GuardThresholds {
     }
 
     /**
-     * Which numbers of the input a comparison was read for, for a reader that stopped on it.
+     * Which numbers of the input a comparison was read for, where no reading of it named the
+     * numbers it is about: one that stopped on it, and one that read it to the end without a form of
+     * the input's numbers to file it at — several lines held together, a line at a number nothing
+     * holds, a statement a law or the bounds of a sign settle.
      *
      * <p>Where the reading was looking, and never what the rule is about. A comparison this could
      * not read leaves what it states unknown — {@code a * a + b - b <= 9} is filed at both

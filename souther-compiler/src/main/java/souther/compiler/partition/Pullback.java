@@ -57,6 +57,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -935,13 +936,14 @@ final class Pullback {
             Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> outer = counting;
             counting = new LinkedHashMap<>();
             try {
-                Sized sized = number(form);
+                List<LinearForm<Quantity>> parts = new ArrayList<>();
+                Sized sized = number(form, parts);
                 return switch (sized) {
                     case Sized.NotSized(WhyUnread why) ->
                             leaf(new Derivation.Stopped(why, fixed(e, reads)), e, reads);
                     case Sized.AsAForm(LinearForm<Quantity> read) -> read.coefs().isEmpty()
                             ? new Derivation.ACutThatCutsNothing(
-                                    states.holds(read.constant().signum()))
+                                    states.holds(read.constant().signum()), ofTheInputIn(parts))
                             : leaf(aRelation(Derivation.ComparisonReading.BY_A_LAW, read, states,
                                     counting), e, reads);
                 };
@@ -953,12 +955,20 @@ final class Pullback {
         /** {@code form}, a number of the arguments, as a form over the quantities a condition is
          *  read over. */
         Sized number(LinearForm<LawNumber<DeclaredArgument>> form) {
+            return number(form, new ArrayList<>());
+        }
+
+        /** The same, with what each number of it was read as put in {@code parts}, before any of
+         *  them cancels. */
+        private Sized number(LinearForm<LawNumber<DeclaredArgument>> form,
+                             List<LinearForm<Quantity>> parts) {
             LinearForm<Quantity> out = LinearForm.constant(form.constant());
             for (Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> term : form.coefs().entrySet()) {
                 Sized part = atom(term.getKey());
                 if (!(part instanceof Sized.AsAForm(LinearForm<Quantity> each))) {
                     return part;
                 }
+                parts.add(each);
                 ExactAnswer<LinearForm<Quantity>> sum = each.times(term.getValue())
                         instanceof ExactAnswer.Held<LinearForm<Quantity>>(var scaled)
                         ? out.plus(scaled) : null;
@@ -1169,6 +1179,20 @@ final class Pullback {
         }
     }
 
+    /** The numbers of the input {@code forms} are over, which is what a comparison read through
+     *  them names however much of it cancels. */
+    private static Set<NumericTerm> ofTheInputIn(List<LinearForm<Quantity>> forms) {
+        Set<NumericTerm> out = new LinkedHashSet<>();
+        for (LinearForm<Quantity> form : forms) {
+            for (Quantity atom : form.coefs().keySet()) {
+                if (atom instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
+                    out.add(term);
+                }
+            }
+        }
+        return out;
+    }
+
     private Derivation overQuantitiesCounting(Denotation left, Denotation right, Rel states) {
         List<LinearForm<Quantity>> sides = new ArrayList<>();
         for (Denotation side : List.of(left, right)) {
@@ -1187,7 +1211,8 @@ final class Pullback {
             }
         }
         if (form.coefs().isEmpty()) {
-            return new Derivation.ACutThatCutsNothing(states.holds(form.constant().signum()));
+            return new Derivation.ACutThatCutsNothing(states.holds(form.constant().signum()),
+                    ofTheInputIn(sides));
         }
         return aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, form, states, counting);
     }

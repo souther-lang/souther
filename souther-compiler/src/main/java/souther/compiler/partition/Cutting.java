@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.coverage.Arrivals;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputReading;
@@ -26,10 +27,13 @@ import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.reach.ComparisonArrival;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
+import java.util.SequencedMap;
 
 /**
  * What one comparison cuts, and where — the one place that decides it.
@@ -61,7 +65,7 @@ import java.util.Set;
  *               about the quantity
  */
 record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
-               souther.compiler.numeric.NumericDomain.Bounds within) {
+               NumericDomain.Bounds within) {
 
     /**
      * What reading {@code comparison} as a line came to.
@@ -83,18 +87,17 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         record Cuts(Cutting cutting) implements Read {
 
             public Cuts {
-                java.util.Objects.requireNonNull(cutting, "a comparison that cuts has a line");
+                Objects.requireNonNull(cutting, "a comparison that cuts has a line");
             }
         }
 
-        /** Read to the end, and the quantity it cuts is nothing. {@code read} is what the reading
-         *  named on the way, which is what the rule is about however much of it cancelled
-         *  ({@link AffineReading.OfAComparison.CutsNothing}). */
-        record CutsNothing(java.util.Set<souther.compiler.inputs.NumericTerm> read)
-                implements Read {
+        /** Read to the end, and the same answer for every row, filed where {@link #settledAt}
+         *  says: {@code a - a <= 0} is about {@code a} however much of it cancelled, and
+         *  {@code 2 > 1} is about nothing. */
+        record CutsNothing(List<FilingCoordinate> filedAt) implements Read {
 
             public CutsNothing {
-                read = java.util.Set.copyOf(read);
+                filedAt = List.copyOf(filedAt);
             }
         }
 
@@ -106,12 +109,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
          * expression this did not take apart says nothing about what that position carries — and
          * one answer handed to all of them told a position about the carrier of another.
          */
-        record Stopped(java.util.SequencedMap<souther.compiler.inputs.FilingCoordinate,
-                souther.compiler.inputs.BlockReason.RuleReadingStopped> why) implements Read {
+        record Stopped(SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why)
+                implements Read {
 
             public Stopped {
-                why = java.util.Collections.unmodifiableSequencedMap(
-                        new java.util.LinkedHashMap<>(why));
+                why = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(why));
             }
         }
 
@@ -138,11 +140,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
          *
          * @param over the coordinates of the quantity, which is where a reader is sent
          */
-        record NoOrderToCountOn(
-                java.util.List<souther.compiler.inputs.FilingCoordinate> over) implements Read {
+        record NoOrderToCountOn(List<FilingCoordinate> over) implements Read {
 
             public NoOrderToCountOn {
-                over = java.util.List.copyOf(over);
+                over = List.copyOf(over);
             }
         }
 
@@ -206,8 +207,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * afterwards by whoever met the absence.
      */
     static Read read(String behavior, StatedComparison comparison,
-                     InputReading read, InputReads reads,
-                     souther.compiler.coverage.Arrivals answering,
+                     InputReading read, InputReads reads, Arrivals answering,
                      WhatConditionsState conditions) {
         Pullback.OnTheInput onTheInput = conditions.comparison(comparison, reads, read);
         Pullback.Pulled stated = onTheInput.stated();
@@ -217,11 +217,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         Relation.Affine affine, boolean _, String _)
                         ? WhatTheRulesLeave.ofTheInput(affine.form()) : null;
         return switch (stated.proposition()) {
-            // Read to the end, and the same answer for every row. What it is about is what the
-            // reading named, which is how a report says where it cuts nothing.
             case Proposition.Always _ -> new Read.CutsNothing(
-                    stated.meaning().how() instanceof Derivation.ACutThatCutsNothing cut
-                            ? cut.named() : Set.of());
+                    settledAt(stated, comparison, read, reads, answering));
             case Proposition.Compared(Relation.Affine affine, boolean holds, String _)
                     when overTheInput != null ->
                     realized(behavior, AffineReading.stating(overTheInput,
@@ -247,6 +244,25 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
+     * Where a comparison read to the end and the same for every row is said to cut nothing.
+     *
+     * <p>At the numbers of the input it was read over where a form of them cancelled, whether or
+     * not they survived: {@code a - a <= 0} is about {@code a}, and a rule about a length that
+     * cancels is about the length and not the string's own values. Where it was settled without a
+     * number of the input being read — a law, the bounds of a sign, a value written out — at the
+     * positions the comparison mentions, since that is all it was read over.
+     */
+    private static List<FilingCoordinate> settledAt(Pullback.Pulled stated,
+                                                    StatedComparison comparison,
+                                                    InputReading read, InputReads reads,
+                                                    Arrivals answering) {
+        return stated.meaning().how() instanceof Derivation.ACutThatCutsNothing cut
+                && !cut.named().isEmpty()
+                ? AffineReading.filedAt(cut.named())
+                : GuardThresholds.filedAt(comparison, read, reads, answering);
+    }
+
+    /**
      * The line a statement of one term against a place on its order draws, or the refusal to place
      * it: a date against a written date, a case of an enumeration.
      */
@@ -269,7 +285,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static Read notALine(StatedComparison comparison,
                                  AffineReading.OfAComparison arithmetic, InputReading read,
-                                 InputReads reads, souther.compiler.coverage.Arrivals answering) {
+                                 InputReads reads, Arrivals answering) {
         if (!(arithmetic instanceof AffineReading.OfAComparison.Stopped stopped)) {
             throw new IllegalStateException("a comparison the arithmetic over the input read states"
                     + " something that is no line on it: " + comparison);
@@ -470,7 +486,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // reach orders that do not count — two strings stand no measurable distance apart and the
         // place they meet is a line — so a reader asking this first would refuse lines the model
         // draws.
-        java.util.Map<NumericTerm, TermOrders> on = read.carriers(quantities);
+        Map<NumericTerm, TermOrders> on = read.carriers(quantities);
         if (on == null) {
             return new Read.NoOrderToCountOn(
                     AffineReading.filedAt(read.form().coefs().keySet()));
@@ -573,7 +589,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * the form is right here.
      */
     private static Cutting overAForm(String behavior, AffineReading read,
-                                     java.util.Map<NumericTerm, TermOrders> on,
+                                     Map<NumericTerm, TermOrders> on,
                                      Quantities quantities) {
         Cutting drawn = made(new BorderQuantity.OverAForm(behavior, read.form(), on),
                 new Level.OfTheQuantity(read.cut()), read.claim(), quantities);
@@ -643,7 +659,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * distinguishes (issue #880).
      */
     NumericTerm.FromOnePosition dividedPosition() {
-        java.util.Map<NumericTerm, ExactRatio> direction =
+        Map<NumericTerm, ExactRatio> direction =
                 quantity().direction();
         // And only where one position answers that number. A quantity read from somewhere else
         // divides no position however few terms it is over, so there is nothing here for a class
@@ -719,7 +735,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * 10} is {@code a + c <= 10}, and a note filed at {@code b} would say the rule relates a
      * position it does not mention.
      */
-    java.util.List<souther.compiler.inputs.FilingCoordinate> over() {
+    List<FilingCoordinate> over() {
         // Where a reading that reached the numbers files them, which is one answer for every such
         // reading ({@link AffineReading#filedAt}): the terms themselves, in the order a document
         // names them. Written out here, a reader that reached the numbers by another way would

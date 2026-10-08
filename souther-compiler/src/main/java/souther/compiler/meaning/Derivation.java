@@ -646,11 +646,6 @@ public sealed interface Derivation {
             named = Set.copyOf(named);
         }
 
-        /** The same, over numbers none of which is the input's. */
-        public ACutThatCutsNothing(boolean holds) {
-            this(holds, Set.of());
-        }
-
         @Override
         public Proposition conclusion(Conclusion numbering) {
             return new Proposition.Always(holds);

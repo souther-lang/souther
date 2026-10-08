@@ -8,6 +8,7 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.StatedContract;
 import souther.compiler.core.Core;
+import souther.compiler.coverage.Arrivals;
 import souther.compiler.diag.Citation;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
@@ -85,7 +86,7 @@ class WhatAComparisonIsARuleAboutTest {
                 reading,
                 InputReads.ofWhatIsDeclared(roots, inputs.declared(rules)), rule.value(),
                 WhatAnAnswerTakesUp.of(reading),
-                souther.compiler.coverage.Arrivals.inTheTree(read), false,
+                Arrivals.inTheTree(read), false,
                 new WhatConditionsState(reading));
     }
 

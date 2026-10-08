@@ -287,9 +287,9 @@ sealed interface ComparisonAssessment {
             // of this compiler: `a <= a` holds of every row. Where the comparison names no position
             // either, there is no rule about a position to say it of — `2 > 1` is a comparison of
             // constants and states nothing anywhere.
-            case Cutting.Read.CutsNothing over -> over.read().isEmpty()
+            case Cutting.Read.CutsNothing over -> over.filedAt().isEmpty()
                     ? aboutNoPosition(comparison, reads, read.newtypes())
-                    : new CutsNothing(AffineReading.filedAt(over.read()));
+                    : new CutsNothing(over.filedAt());
             // Where the reading stopped and the comparison is over what a dependency answered, it is
             // the decision table's. A number of an answer is no number of the input, so this reading
             // stops at it however the comparison was written, and the stop is about whose subject
