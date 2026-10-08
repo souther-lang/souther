@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -162,6 +163,9 @@ public final class StandingAtAPoint {
                           List<ConditionOutcomeSite> watched) {
         BorderQuantity quantity = line.quantity();
         BehaviorInputs where = line.subject().inputs();
+        Optional<WhereAPartDecides.AskedOfRows> decides = whereItDecides(line);
+        List<BorderQuantity> alsoOver =
+                decides.map(WhereAPartDecides.AskedOfRows::over).orElse(List.of());
         Set<ReadingGap> unreadable = new LinkedHashSet<>();
         boolean unwatched = false;
         boolean stoppedShort = false;
@@ -174,7 +178,7 @@ public final class StandingAtAPoint {
             // the readings are tried under each choice of an element of each.
             boolean stands = false;
             Set<ReadingGap> stopped = new LinkedHashSet<>();
-            Readings readings = readings(where, one, quantity);
+            Readings readings = readings(where, one, quantity, alsoOver);
             List<OneReadingOfARow> tried = readings.tried();
             for (int which = 0; which < tried.size(); which++) {
                 switch (quantity.standsAt(criterion, readings.readAt(which))) {
@@ -183,7 +187,19 @@ public final class StandingAtAPoint {
                     // knows whether a position it wrote nothing at leaves it a value.
                     case BorderQuantity.Stands.CouldNotTell it -> stopped.addAll(it.why());
                     case BorderQuantity.Stands.No _ -> { }
-                    case BorderQuantity.Stands.Yes _ -> stands = true;
+                    // And for a line of a statement of several, only somewhere the statement turns
+                    // on it: a row the statement answers alike on both sides of the line stands at
+                    // the line and says nothing about it.
+                    case BorderQuantity.Stands.Yes _ -> {
+                        OneReadingOfARow reading = tried.get(which);
+                        switch (decides.map(asked -> asked.at(reading))
+                                .orElse(WhereAPartDecides.AtARow.DECIDES)) {
+                            case WhereAPartDecides.AtARow.Decides _ -> stands = true;
+                            case WhereAPartDecides.AtARow.DecidesNothing _ -> { }
+                            case WhereAPartDecides.AtARow.CouldNotTell(var why) ->
+                                    stopped.addAll(why);
+                        }
+                    }
                 }
                 if (stands) {
                     break;
@@ -260,6 +276,9 @@ public final class StandingAtAPoint {
                                     List<ConditionOutcomeSite> watched) {
         BorderQuantity quantity = line.quantity();
         BehaviorInputs where = line.subject().inputs();
+        Optional<WhereAPartDecides.AskedOfRows> decides = whereItDecides(line);
+        List<BorderQuantity> alsoOver =
+                decides.map(WhereAPartDecides.AskedOfRows::over).orElse(List.of());
         List<Map<souther.compiler.inputs.NumericTerm, souther.compiler.numeric.Place>> read =
                 new ArrayList<>();
         Set<ReadingGap> unreadable = new LinkedHashSet<>();
@@ -279,8 +298,22 @@ public final class StandingAtAPoint {
                     }
                 }
             }
-            Readings readings = readings(where, one, quantity);
+            Readings readings = readings(where, one, quantity, alsoOver);
             for (int which = 0; which < readings.tried().size(); which++) {
+                // Only where the statement turns on the line, for a line of a statement of several:
+                // a reading somewhere it does not says nothing about where this line falls.
+                OneReadingOfARow reading = readings.tried().get(which);
+                switch (decides.map(asked -> asked.at(reading))
+                        .orElse(WhereAPartDecides.AtARow.DECIDES)) {
+                    case WhereAPartDecides.AtARow.Decides _ -> { }
+                    case WhereAPartDecides.AtARow.DecidesNothing _ -> {
+                        continue;
+                    }
+                    case WhereAPartDecides.AtARow.CouldNotTell(var why) -> {
+                        unreadable.addAll(why);
+                        continue;
+                    }
+                }
                 switch (quantity.valuesOf(readings.readAt(which))) {
                     case ValuesAtARow.Read(Map<souther.compiler.inputs.NumericTerm,
                             souther.compiler.numeric.Place> values) -> read.add(values);
@@ -299,6 +332,18 @@ public final class StandingAtAPoint {
         return new RowsRead(read, unreadable, stoppedShort
                 ? new ReadingsTried.StoppedAtTheLimit(MOST_READINGS) : ReadingsTried.EVERY_ONE,
                 unwatched);
+    }
+
+    /**
+     * Where the line {@code line} reads decides, put to rows — or empty where the line is a whole
+     * comparison's or no comparison's, and a row standing at it is all there is to ask.
+     */
+    private static Optional<WhereAPartDecides.AskedOfRows> whereItDecides(
+            MeasuredInput.BorderReading line) {
+        return line.border().origin() instanceof LineOrigin.ComparisonOrigin comparison
+                ? comparison.part().map(part -> part.askedOfRows(line.quantity().behavior(),
+                        line.subject().quantities()))
+                : Optional.empty();
     }
 
     /**
@@ -508,8 +553,19 @@ public final class StandingAtAPoint {
      */
     static Readings readings(BehaviorInputs where, ObservedInputs observed,
                              BorderQuantity quantity) {
+        return readings(where, observed, quantity, List.of());
+    }
+
+    /**
+     * The same, with the containers {@code alsoOver} are inside chosen in each reading too: a
+     * reading is one choice of an element in every container any of them is read at, so what the
+     * line reads and what is asked beside it are read of the same elements.
+     */
+    private static Readings readings(BehaviorInputs where, ObservedInputs observed,
+                                     BorderQuantity quantity, List<BorderQuantity> alsoOver) {
         DiscoveringRow discovering = new DiscoveringRow(where, observed);
         QuantityReading discovery = quantity.read(discovering);
+        alsoOver.forEach(each -> each.read(discovering));
         Map<TermPath, Integer> containers = discovering.containers();
         List<OneReadingOfARow> out = new ArrayList<>();
         for (Map<TermPath, Integer> choice : readingsOver(containers)) {

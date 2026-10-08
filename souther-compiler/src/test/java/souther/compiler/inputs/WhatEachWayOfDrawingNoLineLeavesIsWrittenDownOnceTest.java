@@ -163,6 +163,9 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // the line would make hold nothing that arrives, which is a fact about the model.
         table.put("ComparisonNothingArrivesAtItsLine",
                 "NOTHING_ARRIVES_AT_THE_RULES_LINE/-");
+        // And its own word beside that one: rows arrive at the line, and the rest of the statement
+        // it is a line of decides the outcome wherever they do. Nothing is owed there either.
+        table.put("ComparisonLineTurningNothing", "RULE_NEVER_TURNS_ON_THIS_LINE/-");
         table.put("ComparisonBetweenPositions", "UNSUPPORTED_PARTITION_SHAPE/-");
         // Its own word beside the one above, because what a reader does about it differs: a rule
         // between two positions is waiting on a class about the pair, and a rule about what the
@@ -452,6 +455,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.ComparisonCuttingNothing(),
                 new BlockReason.ComparisonCuttingOutsideDomain(),
                 new BlockReason.ComparisonNothingArrivesAtItsLine(),
+                new BlockReason.ComparisonLineTurningNothing(),
                 new BlockReason.ComparisonBetweenPositions(),
                 new BlockReason.ComparisonOverARun(),
                 new BlockReason.RuleRestrictingToAdmittedValues(),

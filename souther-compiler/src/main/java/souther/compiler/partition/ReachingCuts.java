@@ -16,6 +16,7 @@ import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
@@ -65,7 +66,7 @@ import java.util.Set;
  * the list is what lets a report say a condition is unaccounted for; it is not what the region is
  * built from.
  */
-public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
+public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                            Lookup<ModelOccurrence, ConditionOnTheWay> byTruth,
                            Lookup<ModelOccurrence, ConditionOnTheWay> byFork) {
 
@@ -73,9 +74,30 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
             Lookup.built(_ -> { }), Lookup.built(_ -> { }));
 
     public ReachingCuts {
-        Objects.requireNonNull(byComparison, "what a walk collected, comparison by comparison");
+        Objects.requireNonNull(byLine, "what a walk collected, line by line");
         Objects.requireNonNull(byTruth, "what a walk collected, truth by truth");
         Objects.requireNonNull(byFork, "what a walk collected, fork by fork");
+    }
+
+    /**
+     * Which line of which comparison a row is looked for at.
+     *
+     * <p>The comparison, and which of its lines where it states several. Those are reached by one
+     * way and looked for under more than it: a line of {@code Int.max(a, b) <= g} is one the
+     * statement turns on only where the other part holds, and that is part of what a row at it has
+     * to meet — so each line has a way of its own, the way to the comparison and where the line
+     * decides after it.
+     *
+     * @param states which construct of the model the comparison is stated at
+     * @param part   which of its lines and which case of where that line decides, where it states
+     *               several; empty where it states one
+     */
+    public record ALine(ModelOccurrence states, Optional<WhereAPartDecides> part) {
+
+        public ALine {
+            Objects.requireNonNull(states, "a line is some comparison's");
+            Objects.requireNonNull(part, "a line is the comparison's one, or one of several");
+        }
     }
 
     /**
@@ -162,17 +184,26 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
     }
 
     /**
-     * How a row for a border on the rule stated at {@code states} came to be looked for where it is:
-     * the whole account of the walk to it.
+     * How a row for a border on the line {@code origin} drew came to be looked for where it is: the
+     * whole account of the walk to it, and where the line decides after it where it is one of
+     * several a comparison states.
      *
      * <p>Empty where nothing was collected there — and the answer says so, rather than leaving a
      * reader to tell a comparison at the top of a body from one this could read nothing on the way
      * to. Both leave a region as wide as the declarations and both are sound; only one of them is a
      * limit of this compiler, and an author who is told nothing has no way to find out which they
      * are looking at.
+     *
+     * <p>Nothing on the way for a line no comparison drew. An invariant is about the values and
+     * holds wherever one stands, and a clause states a relation the behavior is held to, so there
+     * is nowhere for a row to have come from.
      */
-    public WayToTheBorder wayTo(ModelOccurrence states) {
-        List<OnTheWay> found = byComparison.get(states);
+    public WayToTheBorder wayTo(LineOrigin origin) {
+        if (!(origin instanceof LineOrigin.ComparisonOrigin comparison)) {
+            return WayToTheBorder.UNTOUCHED;
+        }
+        List<OnTheWay> found =
+                byLine.get(new ALine(comparison.read().states(), comparison.part()));
         return new WayToTheBorder(found == null ? List.of() : found);
     }
 
@@ -434,6 +465,22 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
     }
 
     /**
+     * What a line of the comparison {@code at} asks of a row for the statement to turn on it,
+     * {@code decides}, put on the way at that comparison.
+     *
+     * <p>At the comparison, because that is where it was written: what has to hold beside a line
+     * is part of what the comparison states. A part of it this reading has no words for is
+     * declined there with whatever stopped it, as any condition on the way is — so a line looked
+     * for over rows where it may decide nothing says so, and is never taken to be one nothing
+     * reaches for it.
+     */
+    static List<OnTheWay> whereItDecides(Condition at, Proposition decides, InputReading read) {
+        return DemandReading.asked(decides, read).stream()
+                .map(each -> onTheWay(at.occurrence(), at.anchor(), each))
+                .toList();
+    }
+
+    /**
      * What a condition's demand comes to on the way: taken in where there is one, and declined at
      * the condition with the reason where there is none.
      */
@@ -450,7 +497,7 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
     /** These conditions, with the rule stated at {@code states} reached under {@code assumed}. */
     static final class Collected {
 
-        private final Map<ModelOccurrence, List<OnTheWay>> byComparison = new LinkedHashMap<>();
+        private final Map<ALine, List<OnTheWay>> byLine = new LinkedHashMap<>();
         private final Map<ModelOccurrence, ConditionOnTheWay> byTruth = new LinkedHashMap<>();
         private final Map<ModelOccurrence, ConditionOnTheWay> byFork = new LinkedHashMap<>();
 
@@ -480,22 +527,34 @@ public record ReachingCuts(Lookup<ModelOccurrence, List<OnTheWay>> byComparison,
             }
         }
 
-        void reached(ModelOccurrence states, List<OnTheWay> assumed) {
+        /**
+         * The comparison stated at {@code states}, reached under {@code assumed} — and each reading
+         * of each of its lines, where it states several, reached under that and then the case of
+         * where the line decides it is read in.
+         */
+        void reached(ModelOccurrence states, List<OnTheWay> assumed,
+                     Map<WhereAPartDecides, List<OnTheWay>> whereEachDecides) {
             // Once per construct of the model, because that is what the walk reads: a comparison
             // inside a non-recursive helper is read once per call of it and each of those calls is
             // a construct of its own. Two arriving under one would be the reading holding two
             // comparisons the model states at one place, which is what nothing downstream could
             // then tell apart — so it is refused here rather than resolved by keeping one of them.
-            List<OnTheWay> already = byComparison.putIfAbsent(states, List.copyOf(assumed));
+            List<OnTheWay> already =
+                    byLine.putIfAbsent(new ALine(states, Optional.empty()), List.copyOf(assumed));
             if (already != null) {
                 throw new IllegalStateException(
                         "two comparisons of one reading state one construct of the model: "
                                 + states);
             }
+            whereEachDecides.forEach((part, decides) -> {
+                List<OnTheWay> way = new ArrayList<>(assumed);
+                way.addAll(decides);
+                byLine.put(new ALine(states, Optional.of(part)), List.copyOf(way));
+            });
         }
 
         ReachingCuts made() {
-            return new ReachingCuts(Lookup.built(put -> byComparison.forEach(put::put)),
+            return new ReachingCuts(Lookup.built(put -> byLine.forEach(put::put)),
                     Lookup.built(put -> byTruth.forEach(put::put)),
                     Lookup.built(put -> byFork.forEach(put::put)));
         }

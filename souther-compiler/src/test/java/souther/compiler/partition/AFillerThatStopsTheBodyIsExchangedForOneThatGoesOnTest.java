@@ -440,8 +440,12 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
      */
     @Test
     void aGuardWhoseWaysPastCannotBeReadSaysSo() {
+        // The guard is one rule with a line at each of its relations, so it divides the amount;
+        // a class between nought and four is one it refuses, and the way past it is either arm of
+        // the choice, which is one of several things and no list of ways.
         RepairShortfall stop = stopsOf(MODEL.replace("guard amount > 0",
-                "guard (if amount > 0 then amount else 0 - amount) > 4")).get("kind=Plain");
+                "guard (if amount > 0 then amount else 0 - amount) > 4"))
+                .get("amount=0 < x <= 4");
         assertTrue(stop != null && stop.came() instanceof RepairShortfall.AtTheGuard.WaysNotRead,
                 () -> "the ways past the guard were not read, which is what is said: " + stop);
     }

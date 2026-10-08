@@ -246,12 +246,13 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         UNRESOLVED_CASE_PAIRING,
         /**
-         * What the rule states was read, and it is several lines held together, where the input is
-         * divided one line to a rule.
+         * What the rule states was read, and it is several lines held together whose lines are not
+         * drawn: what a closure states on each application, a statement one of whose relations is
+         * over what a dependency answered, or a clause, which has nowhere to hold where each of its
+         * lines decides.
          *
-         * <p>Its own word and not one saying the rule went unread: {@code Int.max(a, b) > 5} is read
-         * as {@code a > 5} or {@code b > 5}, and what is missing is a division by a statement made
-         * of several lines.
+         * <p>Its own word and not one saying the rule went unread: what it states is known, and
+         * what is missing is a division by it.
          */
         SEVERAL_LINES_IN_ONE_RULE,
         /**
@@ -395,7 +396,18 @@ public record UndividedPosition(TermPath at, Why why) {
          * place the rule stands at, and what a reader does about it differs: there they read one
          * rule against the declarations, here they read the guards above it.
          */
-        NOTHING_ARRIVES_AT_THE_RULES_LINE
+        NOTHING_ARRIVES_AT_THE_RULES_LINE,
+        /**
+         * A rule naming this position states several relations held together, and one of its
+         * lines is here — rows arrive at it, and wherever they do the rule comes out the same on
+         * both sides of it.
+         *
+         * <p>Its own word beside {@link #NOTHING_ARRIVES_AT_THE_RULES_LINE}: nothing on the way
+         * rules the line out. What leaves it nothing to turn is the rest of the rule — {@code
+         * Int.max(a, a + 1) > 5} already holds wherever {@code a} reaches five — so a reader looks
+         * inside the rule and not above it.
+         */
+        RULE_NEVER_TURNS_ON_THIS_LINE
     }
 
     /**

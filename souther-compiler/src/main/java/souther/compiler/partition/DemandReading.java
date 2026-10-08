@@ -208,6 +208,14 @@ final class DemandReading {
         }
     }
 
+    /**
+     * What {@code stated} asks of a row, one entry for each thing it asks — a proposition no
+     * condition of the shape states, such as where a line of a statement of several decides.
+     */
+    static List<Read> asked(Proposition stated, InputReading read) {
+        return projected(stated, read);
+    }
+
     private static Proposition holdingAs(Proposition stated, boolean holding) {
         return holding ? stated : stated.denied();
     }

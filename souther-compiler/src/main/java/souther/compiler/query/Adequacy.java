@@ -10,6 +10,7 @@ import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Classification;
 import souther.compiler.meaning.MeaningsOfABody;
+import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.MeaningsOfABodyReading;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementOwed;
@@ -5611,12 +5612,15 @@ public final class Adequacy {
                                                      ReachingCuts reaching,
                                                      ControlPlace.Outcome outcome) {
             for (BorderAssessment edge : edges) {
-                Optional<ModelOccurrence> comparison = edge.border().origin().comparisonAt();
-                if (!edge.border().origin().recordedAt().contains(outcome.at())
-                        || comparison.isEmpty()) {
+                // Only a line whose sides are which way the comparison comes out. A line of a
+                // statement of several is not: the other relations may settle the statement on
+                // either side of it.
+                if (!(edge.border().origin() instanceof LineOrigin.ComparisonOrigin comparison)
+                        || !comparison.comesOutBySides()
+                        || !comparison.recordedAt().contains(outcome.at())) {
                     continue;
                 }
-                if (!(souther.compiler.partition.Reachability.of(reaching.wayTo(comparison.get()),
+                if (!(souther.compiler.partition.Reachability.of(reaching.wayTo(comparison),
                         subject.quantities().region())
                         instanceof souther.compiler.partition.Reachability.Reaching able)) {
                     return Optional.empty();   // nothing takes the way to it
@@ -6878,8 +6882,7 @@ public final class Adequacy {
             if (subject == null || divided == null) {
                 return List.of();
             }
-            WayToTheBorder way = reading.border().origin().comparisonAt()
-                    .map(divided.reaching()::wayTo).orElse(WayToTheBorder.UNTOUCHED);
+            WayToTheBorder way = divided.reaching().wayTo(reading.border().origin());
             return unanswered.everyRowIn(InteractionCells.holdingEveryRowOf(way, subject.axes()));
         }
     }

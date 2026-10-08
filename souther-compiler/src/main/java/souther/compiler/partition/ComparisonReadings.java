@@ -19,8 +19,10 @@ import souther.compiler.inputs.PathResolution;
 import souther.compiler.semantics.ConditionJoin;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -200,16 +202,33 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                   nothing stood on the way, which a comparison at the top of a body is; one
      *                   this reading has no arithmetic for is on the list as a decline, so the two
      *                   are not one answer
+     * @param whereEachDecides what each reading of a line of a statement of several asks of a row
+     *                   beside the way — one case of where the statement turns on the line — put on
+     *                   the way at this comparison; empty where the comparison is one line
      */
     record Reading(ConstructOccurrence occurrence, StatedComparison statement, Citation at,
                    InputReads reads,
-                   List<OnTheWay> assumed, BoundaryPolicy.Standing standing) {
+                   List<OnTheWay> assumed, BoundaryPolicy.Standing standing,
+                   Map<WhereAPartDecides, List<OnTheWay>> whereEachDecides) {
 
         Reading {
             if (occurrence == null || statement == null || at == null) {
                 throw new IllegalArgumentException(
                         "a reading is of some comparison of the model, placed somewhere");
             }
+            whereEachDecides = Collections.unmodifiableMap(new LinkedHashMap<>(whereEachDecides));
+        }
+
+        /** What a row at the reading {@code part} of a line has met by the time it is there: the
+         *  way, and then the case of where the line decides it is read in. */
+        List<OnTheWay> wayTo(WhereAPartDecides part) {
+            List<OnTheWay> decides = whereEachDecides.get(part);
+            if (decides == null) {
+                throw new IllegalArgumentException("this comparison states no " + part);
+            }
+            List<OnTheWay> out = new ArrayList<>(assumed);
+            out.addAll(decides);
+            return List.copyOf(out);
         }
     }
 
@@ -390,7 +409,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             ComparisonAssessment.of(in.behavior(), stated.statement(), where,
                                     in.read(), reads, null, in.dependencies(), in.answering(),
                                     false, in.conditions())));
-            out.add(new Reading(stands, stated.statement(), where, reads, assumed, standing));
+            out.add(new Reading(stands, stated.statement(), where, reads, assumed, standing,
+                    whereEachDecides(e, standing, reads, in, numbering)));
         }
         switch (e) {
             // The right operand runs only where the left came out the way that leaves the answer
@@ -539,6 +559,28 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         conditions);
             }
         }
+    }
+
+    /**
+     * What each reading of each line of the statement {@code e} makes asks of a row for the
+     * statement to turn on it, put on the way at {@code e} — or nothing, where the comparison is
+     * one line or draws none.
+     */
+    private static Map<WhereAPartDecides, List<OnTheWay>> whereEachDecides(
+            Core e, BoundaryPolicy.Standing standing, InputReads reads, Body in,
+            ConditionNumbering numbering) {
+        if (!(standing instanceof BoundaryPolicy.Standing.Admitted admitted)
+                || !(admitted.read() instanceof ComparisonAssessment.Several several)) {
+            return Map.of();
+        }
+        Condition at = Condition.of(e, reads, in.symbols(), in.newtypes(), numbering);
+        Map<WhereAPartDecides, List<OnTheWay>> out = new LinkedHashMap<>();
+        for (ComparisonAssessment.Several.Part part : several.parts()) {
+            for (WhereAPartDecides reading : part.readings()) {
+                out.put(reading, ReachingCuts.whereItDecides(at, reading.decides(), in.read()));
+            }
+        }
+        return out;
     }
 
     /**

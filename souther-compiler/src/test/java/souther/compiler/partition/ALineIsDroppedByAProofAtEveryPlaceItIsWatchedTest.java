@@ -95,7 +95,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     void oneProofAmongSeveralPlacesTakesNoLineAway() {
         ComparisonAssessment read = line();
 
-        assertEquals(read, ComparisonAssessment.narrowedByWhatArrives(read, untouched(),
+        assertEquals(read, ComparisonAssessment.narrowedByWhatArrives(read, untouched(), _ -> untouched(),
                         List.of(new ComparisonArrival.NothingArrives(),
                                 new ComparisonArrival.NoProjection()),
                         false),
@@ -105,7 +105,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     @Test
     void everyPlaceProvingItTakesTheLineAway() {
         assertInstanceOf(ComparisonAssessment.NothingArrivesAtItsLine.class,
-                ComparisonAssessment.narrowedByWhatArrives(line(), untouched(),
+                ComparisonAssessment.narrowedByWhatArrives(line(), untouched(), _ -> untouched(),
                         List.of(new ComparisonArrival.NothingArrives(), misses()), false),
                 "no run answers through the rule at any place it is watched");
     }
@@ -114,7 +114,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     void onePlaceReachingItKeepsTheLine() {
         ComparisonAssessment read = line();
 
-        assertEquals(read, ComparisonAssessment.narrowedByWhatArrives(read, untouched(),
+        assertEquals(read, ComparisonAssessment.narrowedByWhatArrives(read, untouched(), _ -> untouched(),
                         List.of(new ComparisonArrival.NothingArrives(),
                                 new ComparisonArrival.Values(N, NumericDomain.Bounds.OPEN)),
                         false),

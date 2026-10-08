@@ -215,6 +215,7 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
                         new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
                         List.of(WHERE)),
+                Optional.empty(),
                 new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(Towards.BELOW, true)));
     }
 }

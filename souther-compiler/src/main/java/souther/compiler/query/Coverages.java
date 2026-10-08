@@ -1039,10 +1039,8 @@ final class Coverages {
      * nothing narrows and a clause then say the same thing for the same stated reason, and each says
      * it in its own account rather than by coming back with nothing.
      */
-    private static souther.compiler.partition.WayToTheBorder wayTo(
-            Border border, ReachingCuts reaching) {
-        return border.origin().comparisonAt().map(reaching::wayTo)
-                .orElse(souther.compiler.partition.WayToTheBorder.UNTOUCHED);
+    private static WayToTheBorder wayTo(Border border, ReachingCuts reaching) {
+        return reaching.wayTo(border.origin());
     }
 
     /**

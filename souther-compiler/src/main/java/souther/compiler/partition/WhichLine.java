@@ -111,4 +111,23 @@ public sealed interface WhichLine {
             }
         }
     }
+
+    /**
+     * One of the lines a comparison written in a body states, where it states several.
+     *
+     * <p>Still one rule. {@code Int.max(a, b) > 5} is one comparison an author wrote and one rule,
+     * and the line on {@code a} and the line on {@code b} are two lines of it: a row at one says
+     * nothing about the other. Which of them this is was named by the reading that took the
+     * statement apart, and by nothing that met the line afterwards.
+     */
+    record OfAPartOfAComparison(RuleRef.Comparison rule, PartOfAComparison part)
+            implements WhichLine {
+
+        public OfAPartOfAComparison {
+            if (rule == null || part == null) {
+                throw new IllegalArgumentException(
+                        "a line of a statement of several is some line of some comparison's");
+            }
+        }
+    }
 }

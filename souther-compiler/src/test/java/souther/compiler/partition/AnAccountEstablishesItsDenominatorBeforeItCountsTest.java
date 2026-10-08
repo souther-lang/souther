@@ -19,6 +19,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Towards;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -114,6 +115,7 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
                         new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
                         List.of(WHERE)),
+                Optional.empty(),
                 new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(Towards.BELOW, true)));
     }
 }
