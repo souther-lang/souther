@@ -145,12 +145,6 @@ public sealed interface WhyUnread {
              */
             A_SIZE_AN_OPERATION_KEEPS,
 
-            /**
-             * A number an operation answers whose sign the library says states which of its
-             * arguments is the greater, compared where its arguments are values the body bound.
-             */
-            AN_ORDER_OF_ITS_ARGUMENTS,
-
             /** A number an operation answers by choosing among cases of its arguments. */
             A_CHOICE_BY_CASES,
 

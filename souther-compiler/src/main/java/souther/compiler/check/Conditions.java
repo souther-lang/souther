@@ -1,13 +1,8 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
-import souther.compiler.numeric.CanonicalOrder;
-import souther.compiler.numeric.Granularity;
-import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
-import souther.compiler.semantics.ConstantArguments;
-import souther.compiler.semantics.ResultRange;
 import souther.compiler.types.ApplicationDerivationCause;
 import souther.compiler.types.ApplicationOrigin;
 import souther.compiler.types.BinOp;
@@ -302,12 +297,8 @@ final class Conditions {
      * Which way {@code call}'s answer stands to nought, given that a condition puts it {@code rel}
      * what {@code against} reads as — or null where that leaves both sides open.
      *
-     * <p>Composed in the numeric domain rather than decided here, so that what a step is worth is
-     * the step the domain knows about: over whole numbers {@code > -1} is {@code >= 0}, and this
-     * would either have to say so a second time or answer as though a sign could fall between the
-     * two. The rules taken in are the two there are — what the operation declares of its answer
-     * ({@code semantics}) and what the condition says — and the tightest relation to nought the two
-     * prove together is the answer.
+     * <p>Which way that is, is {@link TheSignOfAnOrder}'s answer, the one every reader of a
+     * condition takes.
      *
      * <p>The number the condition stands against is read and not matched, for the reason every
      * argument a fact names is: a name given a constant is that constant, so {@code compare(a, b) >
@@ -323,38 +314,9 @@ final class Conditions {
         if (rel == null || read == null || !read.coefs().isEmpty()) {
             return null;
         }
-        // One atom, standing for the number this call answered. Nothing else is in this domain: what
-        // is asked is what the operation and the condition prove between them, and a rule about
-        // anything else would be a rule about a value that is not the sign.
-        Object sign = new Object();
-        java.util.Map<Object, Granularity> spacing =
-                java.util.Map.of(sign, terms.granularityOf(call.type()));
-        LinearForm<Object> answered = LinearForm.atom(sign);
-        // One position, so the order is total on the domain by there being nothing to put in an
-        // order. Two of them reaching it would be a second position in a domain written to have
-        // one, and it says so rather than choosing between them.
-        CanonicalOrder<Object> order = (one, other) -> {
-            if (one == other) {
-                return 0;
-            }
-            throw new IllegalStateException("this domain stands for one number and was asked to"
-                    + " walk two: " + one + " and " + other);
-        };
-        NumericDomain<Object> known = NumericDomain.top(order)
-                .assuming(sign, ResultRange.of(DefaultBoundOperationFacts.get()
-                        .boundsOnTheResult(call.operation()), ConstantArguments.none()), spacing)
-                .assume(answered.minus(LinearForm.constant(read.constant())), rel, spacing);
-        if (known.isBottom()) {
-            return null;
-        }
-        // Tightest first: a sign held at nought is an equality and not two half-statements, and one
-        // held above it says more than one held at or above it.
-        for (Rel each : List.of(Rel.EQ, Rel.GT, Rel.LT, Rel.GE, Rel.LE, Rel.NE)) {
-            if (known.entails(answered, each)) {
-                return each;
-            }
-        }
-        return null;
+        return TheSignOfAnOrder.of(call.operation(), terms.granularityOf(call.type()), rel,
+                read.constant()) instanceof TheSignOfAnOrder.Stands.Between(Rel between, var _)
+                ? between : null;
     }
 
     /**

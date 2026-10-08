@@ -206,6 +206,41 @@ public sealed interface Derivation {
         }
     }
 
+    /**
+     * The number an operation answering the order of its two arguments answered, compared with a
+     * number that settles which side of nought it falls on: the comparison of the two arguments
+     * that sign stands for.
+     */
+    record AnOrderOfItsArguments(ValueName.Stdlib operation, Derivation ofTheArguments)
+            implements Derivation {
+
+        public AnOrderOfItsArguments {
+            Objects.requireNonNull(operation, "a law is of an operation");
+            Objects.requireNonNull(ofTheArguments, "an order is of the arguments");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.of(ofTheArguments);
+        }
+    }
+
+    /**
+     * The number an operation answering the order of its two arguments answered, compared with a
+     * number every answer the library says it can give comes out {@code holds} against.
+     */
+    record ASignItsBoundsSettle(ValueName.Stdlib operation, boolean holds) implements Derivation {
+
+        public ASignItsBoundsSettle {
+            Objects.requireNonNull(operation, "a law is of an operation");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return new Proposition.Always(holds);
+        }
+    }
+
     /** A container at a position holding a value at a position: some element the same as it. */
     record AMembership(ValueName.Stdlib operation, TermPath container, TermPath value)
             implements Derivation {
