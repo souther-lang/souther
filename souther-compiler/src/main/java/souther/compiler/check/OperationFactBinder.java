@@ -154,6 +154,32 @@ final class OperationFactBinder {
             case OperationFact.BuildsItsResultFrom builds ->
                     new BoundOperationFact.BuildsItsResultFrom(operation,
                             holdBuilding(declaration, builds));
+            // A key kept is a key of a map, so both the argument named and what the operation
+            // answers are maps.
+            case OperationFact.KeepsTheKeysOf kept -> {
+                if (!TypeRequirement.KEYED.admits(declaration.result())) {
+                    throw new IllegalStateException(((ValueName.Stdlib) operation.operation())
+                            .qualified() + " answers " + Type.show(declaration.result())
+                            + ", and an answer that keeps the keys of a map is one");
+                }
+                yield new BoundOperationFact.KeepsTheKeysOf(operation,
+                        holdToTheDeclaration(declaration, kept.map(),
+                                new ArgumentRef.TheContainer(), TypeRequirement.KEYED,
+                                "the map the keys were kept from"));
+            }
+            // A list of what a map holds is a list, and the map is one.
+            case OperationFact.ListsAPartOf lists -> {
+                if (!TypeRequirement.CONTAINER.admits(declaration.result())) {
+                    throw new IllegalStateException(((ValueName.Stdlib) operation.operation())
+                            .qualified() + " answers " + Type.show(declaration.result())
+                            + ", and a list of what a map holds is a container");
+                }
+                yield new BoundOperationFact.ListsAPartOf(operation,
+                        holdToTheDeclaration(declaration, lists.map(),
+                                new ArgumentRef.TheContainer(), TypeRequirement.KEYED,
+                                "the map listed"),
+                        lists.part());
+            }
             case OperationFact.ResultIsNoSmallerThan bounded ->
                     new BoundOperationFact.ResultIsNoSmallerThan(operation,
                             holdToTheDeclaration(declaration, bounded.container(),

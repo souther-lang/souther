@@ -157,14 +157,15 @@ final class BindingEnvironment {
     }
 
     /**
-     * What a walk asking {@code question} may do at {@code binding} ({@link ElementStep}).
+     * What a walk asking {@code question} about {@code part} of what {@code binding} holds may do
+     * there ({@link ElementStep}).
      *
      * <p>The edge itself does not come back. What one licenses depends on what is being asked, and a
      * walk that held an edge would be answering that for itself beside the one place that answers it
      * ({@link souther.compiler.check.ElementProvenance#stepFrom}).
      */
-    ElementStep stepFrom(BindingId binding, ElementQuestion question) {
-        return elements.provenance().stepFrom(binding, question);
+    ElementStep stepFrom(BindingId binding, ElementQuestion question, HeldIn.Part part) {
+        return elements.provenance().stepFrom(binding, question, part);
     }
 
     /**

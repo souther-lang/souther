@@ -191,6 +191,7 @@ class WhatWasProvedOfABodyIsSaidAgainOfEveryCopyOfItTest {
             case HOLDS_THE_SAME_AS -> builder::holdsTheSameAs;
             case DERIVES_FROM -> builder::derivesFrom;
             case PROJECTS_EACH_ELEMENT_OF -> builder::projectsEachElementOf;
+            case KEEPS_THE_KEYS_OF -> builder::keepsTheKeysOf;
         };
         into.accept(of, from);
     }

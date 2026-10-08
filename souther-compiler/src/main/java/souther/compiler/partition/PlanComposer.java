@@ -115,8 +115,9 @@ final class PlanComposer {
                                         RuleReadingContext reading) {
         List<FixtureTemplate> holding = new ArrayList<>();
         List<FixtureTemplate> keptOut = List.of();
+        FixtureTemplate element = null;
         if (plan.under().isPresent()) {
-            FixtureTemplate element = compose(plan.under().get(), values, reading);
+            element = compose(plan.under().get(), values, reading);
             if (element == null) {
                 return null;
             }
@@ -140,8 +141,8 @@ final class PlanComposer {
                 instanceof Shape.Container container)) {
             return null;
         }
-        // The key the plan put the element under, where it put it under one: the first value held
-        // is the element, so the first entry is that key's.
+        // The key the plan put the element under, or over whatever value the rules admit where
+        // nothing was asked of the value.
         FixtureTemplate key = null;
         if (plan.key().isPresent()) {
             key = compose(plan.key().get(), values, reading);
@@ -150,10 +151,16 @@ final class PlanComposer {
             }
         }
         FixtureTemplate collection = switch (container) {
-            case Shape.Sequence carrier -> key != null ? null
-                    : Witnesses.holding(carrier, holding, keptOut, plan.holds(), reading);
-            case Shape.Mapping carrier ->
-                    Witnesses.holding(carrier, holding, keptOut, key, plan.holds(), reading);
+            case Shape.Sequence carrier -> {
+                if (key != null) {
+                    throw new IllegalStateException("a plan put a key on what a list or a set"
+                            + " holds, which files nothing under one: " + plan.at());
+                }
+                yield Witnesses.holding(carrier, holding, keptOut, plan.holds(), reading);
+            }
+            case Shape.Mapping carrier -> Witnesses.holding(carrier, holding, keptOut,
+                    key == null ? null : new Witnesses.Filed(key, element),
+                    plan.holds(), reading);
         };
         if (collection == null) {
             return null;

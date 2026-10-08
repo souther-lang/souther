@@ -63,6 +63,53 @@ class AMapsKeysAreAPositionBesideItsValuesTest {
                 () -> "the row that was offered meets it: " + report(after));
     }
 
+    /**
+     * A map keyed by an enumeration, holding a value nested deeper than a plan for a row descends,
+     * and a body that asks only which case a key is.
+     */
+    private static final String A_DEEP_VALUE = """
+            module example.deep
+
+            data Region = North | South
+
+            data L8 = { n: Int }
+            data L7 = { next: L8 }
+            data L6 = { next: L7 }
+            data L5 = { next: L6 }
+            data L4 = { next: L5 }
+            data L3 = { next: L4 }
+            data L2 = { next: L3 }
+            data L1 = { next: L2 }
+
+            data Usage = { counts: Map<Region, L1> }
+
+            behavior northern : (u: Usage) -> Int
+
+            let northern (u) = Map.size(Map.filterEntries((k, _) -> match k with
+                | North -> true
+                | South -> false, u.counts))
+
+            example northern
+                | "north" : (Usage { counts = [(North, L1 { next = L2 { next = L3 { next = L4 {
+                    next = L5 { next = L6 { next = L7 { next = L8 { n = 1 } } } } } } } })] }) -> 1
+            """;
+
+    /**
+     * A class at a map's keys is offered a row whatever the values under them are, since nothing
+     * was asked of those: the key is filed over a value the rules admit, chosen whole. That the plan
+     * does not go into the value is held where the plan is made
+     * ({@code APlanAsksAMapForWhatIsAskedOfEachPartTest}); this holds the row that comes of it.
+     */
+    @Test
+    void aClassAtTheKeysIsOfferedWithoutPlanningTheValue() {
+        Compilation compilation = measured(A_DEEP_VALUE);
+        assertTrue(report(compilation).contains("no row is in `South` at u.counts[key]"),
+                () -> "the case is owed at the keys: " + report(compilation));
+        String block = block(compilation, "example.deep");
+        assertTrue(block.contains("u.counts[key]=South"),
+                () -> "and a row is offered for it: " + block);
+    }
+
     /** A body comparing what a key measures against a field beside the map. */
     private static final String LONG_NAMES = """
             module example.names
@@ -99,6 +146,92 @@ class AMapsKeysAreAPositionBesideItsValuesTest {
                 """);
         assertEquals(List.of(), gapsOf(after, Adequacy.Kind.BOUNDARY_UNMET),
                 () -> "the rows that were offered meet the line: " + report(after));
+    }
+
+    /** A rule about a key, read over what an operation made of the map. */
+    private static String overAnAnswer(String answer) {
+        return """
+                module example.answers
+
+                data Usage = { counts: Map<String, Int>, atLeast: Int }
+
+                behavior popular : (u: Usage) -> Map<String, Int>
+
+                let popular (u) = Map.filterEntries((k, _) -> String.length(k) >= u.atLeast,
+                    %s)
+                """.formatted(answer);
+    }
+
+    /**
+     * A key is followed into an operation's answer where the operation keeps the keys of the map it
+     * was given — whatever it does to the values — and not into one that keys its answer otherwise.
+     */
+    @Test
+    void aKeyIsFollowedIntoAnAnswerOnlyWhereTheOperationKeepsTheKeys() {
+        for (String keeping : List.of("Map.filterEntries((_, v) -> v > 0, u.counts)",
+                "Map.mapValues((_, v) -> v + 1, u.counts)")) {
+            String report = report(measured(overAnAnswer(keeping)));
+            assertTrue(report.contains("String.length(u.counts[key])"),
+                    () -> "the answer of " + keeping + " is keyed by the input's keys: " + report);
+        }
+        String named = report(measured("""
+                module example.named
+
+                data Usage = { counts: Map<String, Int> }
+
+                behavior popular : (u: Usage) -> Map<String, Int>
+
+                let popular (u) = {
+                    let selected = Map.filterEntries((k, _) -> String.length(k) >= 3, u.counts)
+                    Map.filterEntries((k, _) -> String.length(k) <= 8, selected)
+                }
+                """));
+        assertFalse(named.contains("written in a form this compiler does not read"),
+                () -> "a key read over a map bound to a name is read at the input's keys: "
+                        + named);
+        String inserting = "Map.insert(\"extra\", 0, u.counts)";
+        String report = report(measured(overAnAnswer(inserting)));
+        assertFalse(report.contains("String.length(u.counts[key])"),
+                () -> "an answer with a key put in is not keyed by the input's keys alone: "
+                        + report);
+    }
+
+    /** A rule read over a list an operation made of what a map holds. */
+    private static String overAList(String rule, String list) {
+        return """
+                module example.lists
+
+                data Usage = { counts: Map<String, Int>, atLeast: Int }
+
+                behavior popular : (u: Usage) -> Int
+
+                let popular (u) = List.length(List.filter(%s, %s))
+                """.formatted(rule, list);
+    }
+
+    /**
+     * A list of a map's keys holds its keys and a list of its values holds its values, so a rule
+     * about an element of either is a rule about that part of the input's map.
+     */
+    @Test
+    void aListOfWhatAMapHoldsHoldsThatPartOfIt() {
+        String keys = report(measured(overAList("k -> String.length(k) >= u.atLeast",
+                "Map.keys(u.counts)")));
+        assertTrue(keys.contains("String.length(u.counts[key])"),
+                () -> "an element of the keys is a key of the map: " + keys);
+        String values = report(measured(overAList("v -> v >= u.atLeast", "Map.values(u.counts)")));
+        assertTrue(values.contains("read as popular/u.counts[*]: = u.atLeast"),
+                () -> "an element of the values is a value of the map: " + values);
+        // A list of the entries holds pairs, and which place of a pair is the key is the list's to
+        // say: the first.
+        String entries = report(measured(overAList("""
+                e -> {
+                        let (k, n) = e
+                        String.length(k) >= n
+                    }""", "Map.toList(u.counts)")));
+        assertTrue(entries.contains("read as popular/String.length(u.counts[key]): = u.counts[*]"),
+                () -> "the first place of an entry is its key and the second its value: "
+                        + entries);
     }
 
     /**

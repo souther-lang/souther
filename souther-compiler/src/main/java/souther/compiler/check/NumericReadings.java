@@ -162,6 +162,8 @@ final class NumericReadings {
                      BoundOperationFact.StatesTheOrderOfItsArguments _,
                      BoundOperationFact.ShiftsBy _,
                      BoundOperationFact.BuildsItsResultFrom _,
+                     BoundOperationFact.KeepsTheKeysOf _,
+                     BoundOperationFact.ListsAPartOf _,
                      BoundOperationFact.ResultIsNoSmallerThan _,
                      BoundOperationFact.ReadsItsContainer _,
                      BoundOperationFact.AsksWhetherItsContainerHolds _,

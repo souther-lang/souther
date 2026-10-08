@@ -184,13 +184,14 @@ final class ConstructionPlan {
      * can be and still meet all of them. How many that is is worked out where the values are in
      * hand ({@link Witnesses#holding}), since two values handed over to a set may be one.
      *
-     * <p>A map holding a value in a class holds it under some key, and where a class is put at its
-     * keys as well the key is a position of its own beside the value — the two go into one entry,
-     * since an entry is what a row writes.
+     * <p>A map is asked part by part. A class at its values is placed at a value under some key, a
+     * class at its keys at a key over some value the rules admit, and a class at both at one entry
+     * holding the two — since an entry is what a row writes.
      *
      * @param worn     {@link Node#worn}: every name the position wears, since what is composed
      *                 here is bare
-     * @param under    the element's own position, where a class is put there
+     * @param under    the element's own position, where a class is put there; empty where only a
+     *                 map's key is asked something
      * @param key      the position of the key the element is filed under, where a map's keys are
      *                 asked something; empty for a list or a set, and for a map nothing asks of
      *                 its keys
@@ -204,13 +205,9 @@ final class ConstructionPlan {
 
         Held {
             worn = List.copyOf(worn);
-            if (under.isEmpty() && !handed) {
-                throw new IllegalArgumentException("a list built rather than chosen is built to"
-                        + " hold something asked of it: " + at);
-            }
-            if (key.isPresent() && under.isEmpty()) {
-                throw new IllegalArgumentException("a key is the key of an entry, and an entry"
-                        + " holds a value: " + at);
+            if (under.isEmpty() && key.isEmpty() && !handed) {
+                throw new IllegalArgumentException("a container built rather than chosen is built"
+                        + " to hold something asked of it: " + at);
             }
         }
     }
@@ -711,7 +708,14 @@ final class ConstructionPlan {
             // value at, and values handed over to be written into it or kept out of it are no
             // position at all — what stands at the element of a list holding nothing equal to a
             // value is whatever the rules leave, and a position chosen there would make it hold one.
-            boolean elementAsked = anythingIsAskedUnder(here, decided, required);
+            //
+            // And what is placed in it is asked part by part. A map holds a value under a key, and
+            // a class at one is no demand on the other: a key asked for is filed over whatever
+            // value the rules admit, and nothing about the value's own structure is planned for it.
+            boolean valueAsked = anythingIsAskedAtOrUnder(here.element(), decided, required);
+            boolean keyAsked = container instanceof Shape.Mapping
+                    && anythingIsAskedAtOrUnder(here.key(), decided, required);
+            boolean elementAsked = valueAsked || keyAsked;
             boolean handed = contents.handedTo(here);
             boolean demanded = elementAsked || handed;
             // How many it may hold, off one reading, and whether something has to be placed in it.
@@ -739,18 +743,25 @@ final class ConstructionPlan {
                 return new NodeResult.Made(new Held(here, building, worn, Optional.empty(),
                         Optional.empty(), holds, true));
             }
-            NodeResult inside = node(container.element(), here.element(), inners, symbols,
-                    kinds, sums,
-                    depth + 1, decided, required, contents, howMany);
-            if (!(inside instanceof NodeResult.Made(Node element))) {
-                return inside;
+            // What stands at its element, where something is asked there — and where nothing is
+            // asked anywhere inside it, so that a walk giving up part-way below is told from one
+            // that found nothing to place. Not where only a map's key is asked: the value under it
+            // is then a value the rules admit and no position.
+            Optional<Node> element = Optional.empty();
+            if (valueAsked || !keyAsked) {
+                NodeResult inside = node(container.element(), here.element(), inners, symbols,
+                        kinds, sums,
+                        depth + 1, decided, required, contents, howMany);
+                if (!(inside instanceof NodeResult.Made(Node made))) {
+                    return inside;
+                }
+                element = Optional.of(made);
             }
             // The key the element is filed under, where something is asked of a map's keys. Only
             // then: a map nothing asks a key of is keyed by whatever keeps its entries apart, and a
             // position chosen there would be one more thing for the search to choose.
             Optional<Node> key = Optional.empty();
-            if (container instanceof Shape.Mapping map
-                    && anythingIsAskedAtOrUnder(here.key(), decided, required)) {
+            if (keyAsked && container instanceof Shape.Mapping map) {
                 NodeResult keyed = node(map.key(), here.key(), inners, symbols, kinds, sums,
                         depth + 1, decided, required, contents, howMany);
                 if (!(keyed instanceof NodeResult.Made(Node filedUnder))) {
@@ -759,14 +770,14 @@ final class ConstructionPlan {
                 key = Optional.of(filedUnder);
             }
             if (demanded) {
-                return new NodeResult.Made(new Held(here, building, worn, Optional.of(element),
-                        key, holds, handed));
+                return new NodeResult.Made(new Held(here, building, worn, element, key, holds,
+                        handed));
             }
             // Nothing was asked for inside it, so the list is chosen whole — but where the walk
             // that would have found something gave up part-way, that is not the same answer. Read
             // as "no class is placed in here", a plan that never reached the class says there is
             // none.
-            Set<CompositionBudget> cutBy = cutBy(element);
+            Set<CompositionBudget> cutBy = cutBy(element.orElseThrow());
             if (!cutBy.isEmpty()) {
                 return new NodeResult.Made(new Slot(here, building, settled.outer(),
                         new Leaf.Beneath(cutBy)));

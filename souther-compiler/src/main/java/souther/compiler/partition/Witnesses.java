@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -406,44 +407,79 @@ final class Witnesses {
      * elements may. The keys are what keeps the entries apart, and they are the key type's distinct
      * values, the same ones a map built to a size is keyed by ({@link #ofMapping}).
      *
-     * <p>{@code key}, where there is one, is the key the first of {@code holding} is filed under —
-     * a class was put at the map's keys, and the entry holding the element is the entry it is about.
-     * Every other entry is keyed apart from it, since a map holds one entry under a key.
+     * <p>{@code filed}, where there is one, is a key a class was put at and the value of
+     * {@code holding} it is filed under — the entry holding the element is the entry the key is
+     * about. Every other entry is keyed apart from it, since a map holds one entry under a key.
      */
     static FixtureTemplate holding(Shape.Mapping map,
                                    List<FixtureTemplate> holding, List<FixtureTemplate> keptOut,
-                                   FixtureTemplate key, DeclaredBounds.CountRange holds,
+                                   Filed filed, DeclaredBounds.CountRange holds,
                                    RuleReadingContext reading) {
+        // A key chosen over no value in particular needs an entry to be the key of, so the map holds
+        // at least one value whatever else is asked of it.
+        DeclaredBounds.CountRange room = filed != null && filed.value() == null
+                ? new DeclaredBounds.CountRange(Math.max(1, holds.least()), holds.most())
+                : holds;
         List<FixtureTemplate> values =
-                elementsHolding(map.value(), true, holding, keptOut, holds, reading);
+                elementsHolding(map.value(), true, holding, keptOut, room, reading);
         if (values == null) {
             return null;
         }
-        List<FixtureTemplate> keys = new ArrayList<>();
+        // Where the value the key is chosen for stands among them, asked of the values rather than
+        // assumed from the order they were handed in. Any of them, where none was chosen.
+        int under = -1;
+        if (filed != null) {
+            for (int i = 0; i < values.size() && under < 0; i++) {
+                if (filed.value() == null || values.get(i).text().equals(filed.value().text())) {
+                    under = i;
+                }
+            }
+            if (under < 0) {
+                throw new IllegalStateException("a key was chosen for a value the map is not"
+                        + " built to hold: " + filed.value().text());
+            }
+        }
         Set<String> written = new LinkedHashSet<>();
-        if (key != null) {
-            keys.add(key);
-            written.add(key.text());
+        if (filed != null) {
+            written.add(filed.key().text());
         }
         // One more than is needed, so that the key already chosen being one of them still leaves
         // enough beside it.
-        for (FixtureTemplate each
-                : distinctValuesOf(map.key(), values.size() + keys.size(), reading, Set.of())) {
-            if (keys.size() == values.size()) {
+        List<FixtureTemplate> others = new ArrayList<>();
+        int needed = filed == null ? values.size() : values.size() - 1;
+        for (FixtureTemplate each : distinctValuesOf(map.key(), values.size() + 1, reading,
+                Set.of())) {
+            if (others.size() == needed) {
                 break;
             }
             if (written.add(each.text())) {
-                keys.add(each);
+                others.add(each);
             }
         }
-        if (keys.size() < values.size()) {
+        if (others.size() < needed) {
             return null;
         }
         List<FixtureTemplate> entries = new ArrayList<>();
+        int next = 0;
         for (int i = 0; i < values.size(); i++) {
-            entries.add(FixtureTemplate.entry(keys.get(i), values.get(i)));
+            FixtureTemplate key = i == under ? filed.key() : others.get(next++);
+            entries.add(FixtureTemplate.entry(key, values.get(i)));
         }
         return FixtureTemplate.collection(entries);
+    }
+
+    /**
+     * A key chosen for a map, and the value it is to be filed under.
+     *
+     * @param key   the key, which a class was put at
+     * @param value the value under it, which is one of the values the map is built to hold — or
+     *              null where nothing was asked of the value, and any value the rules admit will do
+     */
+    record Filed(FixtureTemplate key, FixtureTemplate value) {
+
+        Filed {
+            Objects.requireNonNull(key, "a key is filed");
+        }
     }
 
     /**
