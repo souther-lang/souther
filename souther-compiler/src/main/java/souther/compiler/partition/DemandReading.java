@@ -1,29 +1,27 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.BooleanMeaning;
-import souther.compiler.check.BoundOperationFacts;
-import souther.compiler.check.DeclaredArgument;
-import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.StatedComparison;
-import souther.compiler.core.Core;
-import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
-import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Relation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
-import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -34,6 +32,11 @@ import java.util.Optional;
  * condition from somewhere that is no way at all — what a quantifier asks of each element — asks
  * this and has none of them to make up. So the answer is a {@link RowDemand} or the reason there is
  * none, and putting it on the way is {@link ReachingCuts}'s.
+ *
+ * <p><b>What a condition states is not read here.</b> It is the proposition the condition states
+ * ({@link Pullback}), and what this does is put that proposition in the words a row is composed in:
+ * a relation a region carries, a truth written at a position, a container some or every element of
+ * which meets something. What those words cannot carry is said as what stopped it.
  */
 final class DemandReading {
 
@@ -66,12 +69,6 @@ final class DemandReading {
 
     /**
      * What a condition coming out {@code holding} asks of a row, one entry for each thing it asks.
-     *
-     * <p>A comparison is read as itself, and a value the body asks the truth of as the comparison
-     * it means where it means one: an emptiness check is its size against nought, and a denial is
-     * what is under it the other way round. That comparison is one no source wrote, which is why it
-     * is read here and never named as a condition of the body — what a run through it is seen at is
-     * still the application the author wrote.
      */
     static List<Read> of(Condition condition, InputReading read, boolean holding) {
         return stated(condition, read, holding).stream().map(Stated::read).toList();
@@ -113,10 +110,12 @@ final class DemandReading {
                 yield List.of(new Stated(joined,
                         new Read.Unread(new OnTheWay.Why.OneOfTwoThings())));
             }
-            case Condition.Compares one -> List.of(new Stated(one,
-                    ofAComparison(one.comparison().stated(), one.reads(), read, holding)));
-            case Condition.Truth truth -> ofATruth(truth.value(), truth.reads(), read, holding,
-                    truth.occurrence().behavior()).stream()
+            case Condition.Compares one -> ofAComparison(one.comparison().stated(), one.reads(),
+                    read, holding).stream()
+                    .map(each -> new Stated(one, each))
+                    .toList();
+            case Condition.Truth truth -> projected(holdingAs(Pullback.ofATruth(truth.value(),
+                    truth.reads(), read, Optional.empty()).proposition(), holding), read).stream()
                     .map(each -> new Stated(truth, each))
                     .toList();
         };
@@ -147,157 +146,125 @@ final class DemandReading {
     }
 
     /**
-     * What a value the body asks the truth of asks of a row.
+     * What {@code comparison} coming out {@code holding} asks of a row.
      *
-     * <p>Read as what it is asked of ({@link InputTruth#asked}): bindings, names and denials are
-     * looked through on the way down, as {@link Condition#of} looks through them — a denial the
-     * library writes as a body binds what it denies, and what it binds is the truth.
-     *
-     * @param behavior whose body the truth is in, which is whose a predicate handed to an
-     *                 operation inside it is
+     * <p>Read as what it states ({@link Pullback#ofAComparison}): a size held against a number that
+     * parts nought from every size above it asks what the container holding something asks, and
+     * any other comparison is the relation it states.
      */
-    private static List<Read> ofATruth(Core value, InputReads reads, InputReading read,
-                                       boolean holding, String behavior) {
-        List<Read> settled = settled(value, reads, read, holding);
-        if (settled != null) {
-            return settled;
-        }
-        InputTruth.Asked asked = InputTruth.asked(value, holding, reads, read.rules().symbols(),
-                read.rules().newtypes());
-        settled = settled(asked.value(), asked.reads(), read, asked.holding());
-        if (settled != null) {
-            return settled;
-        }
-        return ofWhatIsAsked(asked.value(), asked.reads(), read, asked.holding(), behavior);
+    static List<Read> ofAComparison(StatedComparison comparison, InputReads reads,
+                                    InputReading read, boolean holding) {
+        return projected(holdingAs(Pullback.ofAComparison(comparison, reads, read,
+                Optional.empty()).proposition(), holding), read);
+    }
+
+    private static Proposition holdingAs(Proposition stated, boolean holding) {
+        return holding ? stated : stated.denied();
     }
 
     /**
-     * Which answers {@code value} can give, before what it asks, where the source settles it: one
-     * the source settles asks nothing of a row, or is a way no row takes, and read for its
-     * relations it would be neither — a predicate always holding states no relation of the
-     * element, and every element meeting it is not a container holding none. {@link TruthOutcomes}
-     * is the one reading of that, which the ways a body is walked are read by too. Null where the
-     * source leaves it open.
+     * What a proposition asks of a row, one entry for each thing it asks.
+     *
+     * <p>Every part of a conjunction is asked; a disjunction asks one of its parts and names none
+     * of them; a relation is asked where a region can carry it, and a truth where it stands at a
+     * position. What some element meets, and what every element meets, are asked of the container
+     * the elements are in ({@link #ofSomeElement}).
      */
-    private static List<Read> settled(Core value, InputReads reads, InputReading read,
-                                      boolean holding) {
-        TruthOutcomes.Outcomes outcomes = TruthOutcomes.ofTheTruth(value,
-                WhatNamesStandFor.in(reads, read));
-        return outcomes.always(holding) || outcomes.always(!holding)
-                ? List.of(new Read.Settled(outcomes.always(holding))) : null;
-    }
-
-    /** What a truth asks of a row, read as what it is asked of. */
-    private static List<Read> ofWhatIsAsked(Core e, InputReads reads, InputReading read,
-                                            boolean holding, String behavior) {
-        TermPath truth = InputTruth.positionOf(e, reads, read.rules().newtypes());
-        if (truth != null) {
-            return List.of(new Read.Demands(new RowDemand.ATruth(truth, holding)));
-        }
-        List<Read> quantified = ofAQuantifier(e, reads, read, holding, behavior);
-        if (quantified != null) {
-            return quantified;
-        }
-        return List.of(BooleanMeaning.asAComparison(e)
-                .map(comparison -> ofAComparison(comparison, reads, read, holding))
-                .orElse(new Read.Unread(new OnTheWay.Why.NoWordsForTheShape())));
+    private static List<Read> projected(Proposition stated, InputReading read) {
+        return switch (stated) {
+            case Proposition.Always(boolean holds) -> List.of(new Read.Settled(holds));
+            case Proposition.Compared compared -> List.of(ofARelation(compared, read));
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds) ->
+                    List.of(new Read.Demands(new RowDemand.ATruth(at, holds)));
+            case Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
+                 Proposition.SameValue _ ->
+                    List.of(new Read.Unread(new OnTheWay.Why.NoWordsForTheShape()));
+            case Proposition.Unread unread -> List.of(new Read.Unread(
+                    unread.why() instanceof OnTheWay.Why why ? why
+                            : new OnTheWay.Why.NoWordsForTheShape()));
+            case Proposition.All all -> {
+                List<Read> out = new ArrayList<>();
+                all.parts().forEach(part -> out.addAll(projected(part, read)));
+                yield List.copyOf(out);
+            }
+            case Proposition.Any _ -> List.of(new Read.Unread(new OnTheWay.Why.OneOfTwoThings()));
+            case Proposition.Some some -> ofSomeElement(some, read);
+        };
     }
 
     /**
-     * What a predicate the library says is asked of a container's elements asks of a row, or null
-     * where {@code e} applies no such predicate.
+     * What some element of a container meeting something — or no element meeting it — asks of a
+     * row.
      *
-     * <p>Which operation asks it of every element and which of one is the library's to say
-     * ({@code StatesItsPredicateOfEveryElement}), and the two ways each comes out are two demands
-     * and not four: some element meeting the predicate, or every element meeting what it is
-     * coming out the way asked. {@code List.any} failing is every element failing its predicate,
-     * and {@code List.all} failing is some element failing it.
+     * <p>No element meeting something is every element meeting its denial, so the two ways round
+     * are two demands and not four. Neither is a relation a region can be narrowed by: a region
+     * reads a term inside the elements as the value of one that is there, and what every element
+     * meets is met by a container holding none ({@link RowDemand.ForAll}), while what some element
+     * meets is met by one element and not the rest ({@link RowDemand.Exists}). Every element
+     * meeting a relation about something beside the element is declined, since an empty container
+     * meets it whatever that part says.
      *
-     * <p>The predicate is read where the closure was written, with what it is handed standing at
-     * the container's elements. Neither way round is a relation a region can be narrowed by: a
-     * region reads a term inside the elements as the value of one that is there, and what every
-     * element meets is met by a container holding none ({@link RowDemand.ForAll}), while what some
-     * element meets is met by one element and not the rest ({@link RowDemand.Exists}). Every
-     * element meeting a relation about something beside the element is declined, since an empty
-     * container meets it whatever that part says.
+     * <p>The element is what stands at the container's elements — and of a map, at its keys as
+     * well, since an entry is its key and its value.
      */
-    private static List<Read> ofAQuantifier(Core e, InputReads reads, InputReading read,
-                                            boolean holding, String behavior) {
-        AnOperationApplied call = AnOperationApplied.of(e);
-        if (call == null) {
-            return null;
-        }
-        ValueName operation = call.operation();
-        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
-        var container = facts.readsItsContainer(operation);
-        DeclaredArgument asked = facts.asksWhetherItsContainerHolds(operation);
-        if (asked != null) {
-            return List.of(ofAMembership(operation, call.argument(container.container()),
-                    call.argument(asked), reads, read, holding));
-        }
-        var turns = facts.turnsOnWhetherAnArgumentHolds(operation, AnswerAspect.TRUTH);
-        Core closure = turns == null ? null : call.argument(turns.argument());
-        Core over = container == null ? null : call.argument(container.container());
-        if (closure == null || over == null) {
-            return null;
-        }
-        Denotation handed = reads.denotes(closure, read.rules().symbols(),
-                read.rules().newtypes());
-        if (!(Core.withoutStanding(handed.value()) instanceof Core.Block block)) {
-            return null;
-        }
-        if (!(reads.pathOf(over, read.rules().newtypes())
-                instanceof PathResolution.At(TermPath held))) {
-            return List.of(new Read.Unread(new OnTheWay.Why.ContainerAtNoPosition()));
-        }
-        TermPath element = held.element();
-        boolean everyElement = facts.statesItsPredicateOfEveryElement(operation) == holding;
+    private static List<Read> ofSomeElement(Proposition.Some some, InputReading read) {
+        TermPath held = some.container();
+        List<TermPath> element = elementOf(held);
+        boolean everyElement = !some.holds();
+        Proposition asked = everyElement ? some.ofTheElement().denied() : some.ofTheElement();
         List<Read> out = new ArrayList<>();
         List<RowDemand.OfAnElement> ofTheElement = new ArrayList<>();
-        // Named apart from the body's own conditions: nothing reports one of these by its name,
-        // and filed under the body's numbering they would take names the body's conditions have.
-        Condition predicate = Condition.of(block.body(), handed.at(), read.rules().symbols(),
-                read.rules().newtypes(),
-                new ConditionNumbering(read.symbols().module(), behavior));
         // Whether what is asked of the element is something no element meets, which leaves every
         // element meeting it to a container holding none and some element meeting it to nothing.
         boolean noElementMeetsIt = false;
-        for (Read each : of(predicate, read, holding)) {
-            switch (each) {
-                case Read.Unread _ -> out.add(each);
-                // Met by every element whatever it is, which holds the element to nothing.
-                case Read.Settled(boolean thisWay) when thisWay -> { }
-                case Read.Settled _ -> noElementMeetsIt = true;
-                case Read.Demands(RowDemand.Relational relation)
-                        when everyElement && !aboutOnly(relation, element) ->
-                        out.add(new Read.Unread(new OnTheWay.Why.MoreThanEachElement()));
-                // About the element and nothing beside it, or about some element: what some
-                // element meets, the parts of it about nothing of the element hold of the row
-                // whichever element it is, so those are relations of the row like any other.
-                case Read.Demands(RowDemand.Relational relation)
-                        when everyElement || aboutAny(relation, element) ->
-                        ofTheElement.add(relation);
-                case Read.Demands(RowDemand.Relational _) -> out.add(each);
-                // A quantifier inside a quantifier asks of an element's own elements, which is
-                // nothing a single relation of the outer element says.
-                case Read.Demands(RowDemand.Exists _), Read.Demands(RowDemand.ForAll _) ->
-                        out.add(new Read.Unread(new OnTheWay.Why.NoWordsForTheShape()));
-                // A truth of the element is a value written into one element, which nothing that
-                // composes a container's elements writes.
-                case Read.Demands(RowDemand.ATruth _) ->
-                        out.add(new Read.Unread(new OnTheWay.Why.NoWordsForTheShape()));
+        List<Proposition> parts = asked instanceof Proposition.All all ? all.parts()
+                : List.of(asked);
+        for (Proposition part : parts) {
+            // What a container holding a value asks of an element is that it be that value, which
+            // a composer writes into the container and no region narrows by.
+            if (part instanceof Proposition.SameValue(var _, DecisionSubject.AnInput(TermPath at),
+                    boolean holds)) {
+                ofTheElement.add(holds ? new RowDemand.SameAs(at) : new RowDemand.DifferentFrom(at));
+                continue;
+            }
+            for (Read each : projected(part, read)) {
+                switch (each) {
+                    case Read.Unread _ -> out.add(each);
+                    // Met by every element whatever it is, which holds the element to nothing.
+                    case Read.Settled(boolean thisWay) when thisWay -> { }
+                    case Read.Settled _ -> noElementMeetsIt = true;
+                    case Read.Demands(RowDemand.Relational relation)
+                            when everyElement && !aboutOnly(relation, element) ->
+                            out.add(new Read.Unread(new OnTheWay.Why.MoreThanEachElement()));
+                    // About the element and nothing beside it, or about some element: what some
+                    // element meets, the parts of it about nothing of the element hold of the row
+                    // whichever element it is, so those are relations of the row like any other.
+                    case Read.Demands(RowDemand.Relational relation)
+                            when everyElement || aboutAny(relation, element) ->
+                            ofTheElement.add(relation);
+                    case Read.Demands(RowDemand.Relational _) -> out.add(each);
+                    // A quantifier inside a quantifier asks of an element's own elements, which is
+                    // nothing a single relation of the outer element says.
+                    case Read.Demands(RowDemand.Exists _), Read.Demands(RowDemand.ForAll _) ->
+                            out.add(new Read.Unread(new OnTheWay.Why.NoWordsForTheShape()));
+                    // A truth of the element is a value written into one element, which nothing
+                    // that composes a container's elements writes.
+                    case Read.Demands(RowDemand.ATruth _) ->
+                            out.add(new Read.Unread(new OnTheWay.Why.NoWordsForTheShape()));
+                }
             }
         }
         if (everyElement) {
             // Every element meeting what none meets is the container holding none, and nothing
             // else of the predicate is asked of an element that is not there.
             if (noElementMeetsIt) {
-                RowDemand.Relational none = sizeAgainst(held, operation, read, false);
+                RowDemand.Relational none = sizeAgainst(held, read, false);
                 return List.of(none != null ? new Read.Demands(none)
                         : new Read.Unread(new OnTheWay.Why.SizeOfTheContainerNotStated()));
             }
             if (!ofTheElement.isEmpty()) {
-                out.add(new Read.Demands(quantified(held, operation, read, true, ofTheElement)));
+                out.add(new Read.Demands(new RowDemand.ForAll(held, ofTheElement,
+                        Optional.ofNullable(sizeAgainst(held, read, false)))));
             }
             // Every element meeting what every element meets, whatever the container holds.
             return out.isEmpty() ? List.of(new Read.Settled(true)) : List.copyOf(out);
@@ -307,12 +274,12 @@ final class DemandReading {
             return List.of(new Read.Settled(false));
         }
         Optional<RowDemand.Relational> holdingOne =
-                Optional.ofNullable(sizeAgainst(held, operation, read, true));
+                Optional.ofNullable(sizeAgainst(held, read, true));
         // An element meeting nothing this reading could state is still the container holding
         // one, which every row past it does — and where that cannot be said either, it is said
         // that it could not, rather than nothing being asked.
         if (!ofTheElement.isEmpty()) {
-            out.add(new Read.Demands(quantified(held, operation, read, false, ofTheElement)));
+            out.add(new Read.Demands(new RowDemand.Exists(held, ofTheElement, holdingOne)));
         } else {
             out.add(holdingOne.<Read>map(Read.Demands::new)
                     .orElseGet(() -> new Read.Unread(
@@ -322,63 +289,23 @@ final class DemandReading {
     }
 
     /**
-     * What a container holding the value at {@code value} — or holding nothing equal to it — asks of
-     * a row.
-     *
-     * <p>A quantifier and read as one: holding it is some element equal to the value, and not
-     * holding it is every element unequal to it. So it lands where {@code List.any} and
-     * {@code List.all} land ({@link #quantified}), and a row composed for
-     * {@code Set.contains(v, xs)} is one composed for {@code List.any(e -> e == v, xs)}.
-     *
-     * <p>The element is compared with a position and not with a number. Two strings differ by a
-     * distance on nothing, so what is asked is that the value at that position is written into the
-     * container, or kept out of it — which is a demand a composer meets and no region narrows by.
-     * A value that stands at no position of the input is declined as that: a value written in the
-     * source is a bound on the element's own order, which this reading does not yet draw here.
+     * Where an element of the container at {@code held} stands: at its elements, and at its keys —
+     * which only a map has, so of anything else nothing stands there.
      */
-    private static Read ofAMembership(ValueName operation, Core over, Core value,
-                                      InputReads reads, InputReading read, boolean holding) {
-        if (!(reads.pathOf(over, read.rules().newtypes()) instanceof PathResolution.At(
-                TermPath held))) {
-            return new Read.Unread(new OnTheWay.Why.ContainerAtNoPosition());
-        }
-        if (!(reads.pathOf(value, read.rules().newtypes()) instanceof PathResolution.At(
-                TermPath at))) {
-            return new Read.Unread(new OnTheWay.Why.ValueAtNoPosition());
-        }
-        RowDemand.OfAnElement element = holding ? new RowDemand.SameAs(at)
-                : new RowDemand.DifferentFrom(at);
-        return new Read.Demands(quantified(held, operation, read, !holding, List.of(element)));
+    private static List<TermPath> elementOf(TermPath held) {
+        return List.of(held.element(), held.key());
     }
 
-    /**
-     * Some element of the container at {@code held} meeting every one of {@code ofTheElement}, or
-     * every element meeting them — with the container's size where it is a number a region
-     * carries.
-     *
-     * <p>The one place a demand on a container's elements is made, whatever operation it was
-     * written with.
-     */
-    private static RowDemand.OfACondition quantified(TermPath held, ValueName operation,
-                                                     InputReading read, boolean everyElement,
-                                                     List<RowDemand.OfAnElement> ofTheElement) {
-        return everyElement
-                ? new RowDemand.ForAll(held, ofTheElement,
-                        Optional.ofNullable(sizeAgainst(held, operation, read, false)))
-                : new RowDemand.Exists(held, ofTheElement,
-                        Optional.ofNullable(sizeAgainst(held, operation, read, true)));
+    /** Whether every term {@code relation} is over stands inside the element. */
+    private static boolean aboutOnly(RowDemand.Relational relation, List<TermPath> element) {
+        return relation.constraint().terms().stream().allMatch(term ->
+                element.stream().anyMatch(term.subjectPath()::isAtOrUnder));
     }
 
-    /** Whether every term {@code relation} is over stands inside {@code element}. */
-    private static boolean aboutOnly(RowDemand.Relational relation, TermPath element) {
-        return relation.constraint().terms().stream()
-                .allMatch(term -> term.subjectPath().isAtOrUnder(element));
-    }
-
-    /** Whether some term {@code relation} is over stands inside {@code element}. */
-    private static boolean aboutAny(RowDemand.Relational relation, TermPath element) {
-        return relation.constraint().terms().stream()
-                .anyMatch(term -> term.subjectPath().isAtOrUnder(element));
+    /** Whether some term {@code relation} is over stands inside the element. */
+    private static boolean aboutAny(RowDemand.Relational relation, List<TermPath> element) {
+        return relation.constraint().terms().stream().anyMatch(term ->
+                element.stream().anyMatch(term.subjectPath()::isAtOrUnder));
     }
 
     /**
@@ -386,102 +313,52 @@ final class DemandReading {
      * against nought — or null where its size is no term of this input or the region cannot
      * carry it.
      *
-     * <p>The size is the one the container's own library means by emptiness
-     * ({@code MeansTheSameAsASizeOfNought}), asked of the library the quantifier is in: a list is
-     * walked by the list's operations, and its size is the list's.
+     * <p>The size is the one that counts what a value of the container's type holds
+     * ({@link NumericMeasures#takenOf}).
      */
-    private static RowDemand.Relational sizeAgainst(TermPath held, ValueName quantifier,
-                                                    InputReading read, boolean atLeastOne) {
-        if (!(quantifier instanceof ValueName.Stdlib.Operation(String library, String _))) {
+    private static RowDemand.Relational sizeAgainst(TermPath held, InputReading read,
+                                                    boolean atLeastOne) {
+        Type container = read.domain().typeAt(held, read.rules());
+        ValueName.Stdlib size = container == null ? null
+                : NumericMeasures.takenOf(container, read.rules().inners());
+        NumericTerm.TakenOf count = size == null ? null : NumericTerm.TakenOf.of(size, held,
+                container, read.rules().inners(), read.rules().symbols());
+        if (count == null) {
             return null;
         }
-        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
-        for (ValueName emptiness : facts.meansTheSameAsASizeOfNought()) {
-            if (!(emptiness instanceof ValueName.Stdlib.Operation(String at, String _))
-                    || !at.equals(library)) {
-                continue;
-            }
-            if (!(facts.meansTheSameAsASizeOfNought(emptiness).size().operation()
-                    instanceof ValueName.Stdlib size)) {
-                return null;
-            }
-            // What stands at the container, resolved the one way a term's type is: a name every
-            // case of a sum spreads is no position of the input, and the declarations say what it
-            // is ({@link InputNumber}, which reads a size written in a comparison, asks the same).
-            Type container = read.domain().typeAt(held, read.rules());
-            if (container == null) {
-                return null;
-            }
-            NumericTerm.TakenOf count = NumericTerm.TakenOf.of(size, held, container,
-                    read.rules().inners(), read.rules().symbols());
-            if (count == null) {
-                return null;
-            }
-            // `count - 1 >= 0`, or `count <= 0`.
-            LinearForm<NumericTerm> form = atLeastOne
-                    ? LinearForm.<NumericTerm>atomMinusConstant(count, ExactRatio.ONE)
-                    : LinearForm.<NumericTerm>atom(count);
-            Rel rel = atLeastOne ? Rel.GE : Rel.LE;
-            return read.quantities().region().assuming(form, rel)
-                    instanceof SearchRegion.Assumption.Taken
-                    ? new RowDemand.Relational(new TakenConstraint.Affine(form, rel))
-                    : null;
-        }
-        return null;
+        // `count - 1 >= 0`, or `count <= 0`.
+        LinearForm<NumericTerm> form = atLeastOne
+                ? LinearForm.<NumericTerm>atomMinusConstant(count, ExactRatio.ONE)
+                : LinearForm.<NumericTerm>atom(count);
+        Rel rel = atLeastOne ? Rel.GE : Rel.LE;
+        return read.quantities().region().assuming(form, rel)
+                instanceof SearchRegion.Assumption.Taken
+                ? new RowDemand.Relational(new TakenConstraint.Affine(form, rel))
+                : null;
     }
 
     /**
-     * What {@code comparison} states about this input, coming out {@code holding} — or why the
-     * arithmetic reads nothing here.
+     * What a relation coming out the way it does asks of a row, where a region can carry it.
      *
-     * <p>Read once, off the same {@link AffineReading} every other reader of a comparison uses. A
-     * second reading of what a comparison says is a second thing to keep in step with how a border
-     * is drawn, and the two disagreeing is a region that excludes the very level the border is at.
+     * <p>Whether a region can carry it is asked of a region rather than decided from the shape of
+     * the form. That a reading reached the end of a comparison is a fact about the arithmetic's
+     * reading; whether the values it is over stand on anything a region measures them on is the
+     * region's, and the two are not each other — a difference between two positions holding records
+     * is read perfectly and is a distance on nothing.
      *
-     * <p><b>Three answers and not one absence.</b> A reading that ran to the end and found the
-     * quantity empty, and a reading that stopped, are opposite facts. The second is not a decline
-     * on its own: the arithmetic stopping is what a written value on a carrier that counts nothing
-     * does, and such a comparison still says where on that carrier's order the position lies. So
-     * the stopped reading is asked again as written, and only a comparison neither vocabulary
-     * carries is declined.
-     *
-     * <p>The reason the same comparison gets for drawing no line is {@link UnreadComparison}'s and
-     * answers another question: {@code 1 < 2} is a form nothing reads over there and constrains no
-     * position here, and a form this arithmetic cannot carry is a comparison between two positions
-     * over there while a relation between two positions is exactly what a cut carries here.
+     * <p>A relation on an order is a bound where the relation says where the run stops and a hole
+     * where it does not, which are two shapes and not one with a flag: an end moves where a chooser
+     * looks, and a hole leaves the run where it was and takes one value out of it.
      */
-    static Read ofAComparison(StatedComparison comparison, InputReads reads, InputReading read,
-                              boolean holding) {
-        // Before any order is asked for: a `Bool` stands on none, and read here and not as the
-        // position, `a.flag` and `a.flag == true` would be two conditions — one a row is composed
-        // against and one declined.
-        InputTruth truth = InputTruth.compared(comparison, holding, reads, read.rules().symbols(),
-                read.rules().newtypes());
-        if (truth != null) {
-            return new Read.Demands(new RowDemand.ATruth(truth.at(), truth.held()));
-        }
-        return switch (AffineReading.read(comparison, read.domain(), reads, read.rules())) {
-            case AffineReading.OfAComparison.Cuts(var affine) -> {
-                // What the comparison states, in the words a domain is told things in. Taken the
-                // way the path met it: an arm reached by the condition failing has what holds
-                // exactly where the comparison does not.
-                Rel states = affine.claim().statedRelation();
-                // The form with the threshold moved into it, since what a domain is told is
-                // `f rel 0`.
-                LinearForm<NumericTerm> against =
-                        affine.form().minus(LinearForm.constant(affine.cut())).orNull();
-                // A form no ratio holds once the threshold is moved into it is a comparison this
-                // cannot state to a region, which is a comparison not represented as a cut.
+    private static Read ofARelation(Proposition.Compared compared, InputReading read) {
+        Rel proposition = compared.relation().proposition();
+        Rel met = compared.holds() ? proposition : proposition.denied();
+        return switch (compared.relation()) {
+            case Relation.Affine(LinearForm<DecisionAtom> form, Rel _) -> {
+                LinearForm<NumericTerm> against = ofTheInput(form);
                 if (against == null) {
                     yield new Read.Unread(new OnTheWay.Why.ComparisonNotRepresentedAsACut());
                 }
-                Rel met = holding ? states : states.denied();
-                // And whether a region can carry it, asked of a region rather than decided from
-                // the shape of the form. That a reading reached the end of a comparison is a fact
-                // about the arithmetic's reading; whether the values it is over stand on anything
-                // a region measures them on is the region's, and the two are not each other — a
-                // difference between two positions holding records is read perfectly and is a
-                // distance on nothing.
                 yield switch (read.quantities().region().assuming(against, met)) {
                     case SearchRegion.Assumption.Taken _ -> new Read.Demands(
                             new RowDemand.Relational(new TakenConstraint.Affine(against, met)));
@@ -489,26 +366,27 @@ final class DemandReading {
                             new Read.Unread(whyDeclined(why));
                 };
             }
-            // Read from end to end, and the quantity it cuts is nothing. `a - a > 0` constrains no
-            // position: its two sides differ by the same amount on every row, so it comes out one
-            // way for all of them — which asks nothing of a row, or is a way none takes.
-            case AffineReading.OfAComparison.CutsNothing constant -> new Read.Settled(
-                    constant.holds(comparison.claim().statedRelation()) == holding);
-            // Read from end to end and the difference of the two sides has no number to state to a
-            // region. Nothing is narrowed by it, and nothing was left unread — so it is not asked
-            // again as written, which is a reading of a spelling and would say nothing more.
-            case AffineReading.OfAComparison.NotHeld _ ->
+            case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm.FromOnePosition term),
+                                  var at, Rel _) ->
+                    new Read.Demands(new RowDemand.Relational(TakenConstraint.Ordered.isABound(met)
+                            ? new TakenConstraint.Ordered(term, at, met)
+                            : new TakenConstraint.AwayFrom(term, at)));
+            case Relation.Ordered _ ->
                     new Read.Unread(new OnTheWay.Why.ComparisonNotRepresentedAsACut());
-            // The arithmetic stopped, which is what a written value on an order that counts nothing
-            // does. Asked as written, and declined only where that reading comes to nothing either.
-            case AffineReading.OfAComparison.Stopped _ -> {
-                TakenConstraint ordered = onAnOrder(comparison, reads, read, holding);
-                yield ordered != null ? new Read.Demands(new RowDemand.Relational(ordered))
-                        : new Read.Unread(new OnTheWay.Why.ComparisonNotRepresentedAsACut());
-            }
         };
     }
 
+    /** The form over the input's own numbers, or null where it is over anything else. */
+    private static LinearForm<NumericTerm> ofTheInput(LinearForm<DecisionAtom> form) {
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+        for (Map.Entry<DecisionAtom, ExactRatio> each : form.coefs().entrySet()) {
+            if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term))) {
+                return null;
+            }
+            coefs.put(term, each.getValue());
+        }
+        return new LinearForm<>(form.constant(), coefs);
+    }
 
     /**
      * A region's refusal in the words an account of the way is written in.
@@ -523,37 +401,5 @@ final class DemandReading {
             case SearchRegion.Refusal.NoOrderUnderATerm _ ->
                     new OnTheWay.Why.QuantityStandsOnNoOrder();
         };
-    }
-
-    /**
-     * The comparison as a bound on one position's own order, or null where it draws none.
-     *
-     * <p>Read where the arithmetic stopped and nowhere else, so a spelling never settles what the
-     * canonical form has already settled — the arrangement {@link Cutting} is under, reached here
-     * for the same reason and off the same reading ({@link ComparedLine#asWritten}). What that
-     * reading answers is which position was compared and where on its order the written value
-     * falls, which is the whole of an ordered constraint.
-     *
-     * <p>Taken the way the path met it, like the form above: an arm reached by the condition failing
-     * has what holds exactly where the comparison does not. Which is why the relation is settled
-     * before the bound is asked for and not after: {@code /= } coming out one way and {@code ==}
-     * coming out the other are the same relation, and a reading that looked at what the author
-     * wrote would carry one of them and refuse the other.
-     *
-     * <p>A bound where the relation says where the run stops and a hole where it does not, which
-     * are two shapes and not one with a flag: an end moves where a chooser looks, and a hole leaves
-     * the run where it was and takes one value out of it.
-     */
-    private static TakenConstraint onAnOrder(StatedComparison comparison, InputReads reads,
-                                             InputReading read, boolean holding) {
-        ComparedLine drawn = ComparedLine.asWritten(comparison, read, reads);
-        if (drawn == null) {
-            return null;
-        }
-        Rel states = drawn.claim().statedRelation();
-        Rel met = holding ? states : states.denied();
-        return TakenConstraint.Ordered.isABound(met)
-                ? new TakenConstraint.Ordered(drawn.term(), drawn.value(), met)
-                : new TakenConstraint.AwayFrom(drawn.term(), drawn.value());
     }
 }

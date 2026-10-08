@@ -115,6 +115,24 @@ final class Pullback {
         return new Pulled(stated, List.copyOf(reading.leaves));
     }
 
+    /**
+     * What a comparison the source wrote states, read as any truth is: a size held where it parts
+     * nought from every size above it is whether the container holds anything.
+     */
+    static Pulled ofAComparison(StatedComparison comparison, InputReads reads, InputReading read,
+                                Optional<ModelOccurrence> where) {
+        Pullback reading = new Pullback(read, where);
+        WhatAnEmptinessTurnsOn.Checked checked = WhatAnEmptinessTurnsOn.checked(comparison);
+        Proposition stated;
+        if (checked != null) {
+            Proposition some = reading.observe(checked.container(), AnswerAspect.EMPTINESS, reads);
+            stated = checked.emptyWhereItHolds() ? some.denied() : some;
+        } else {
+            stated = reading.compared(comparison, false, reads);
+        }
+        return new Pulled(stated, List.copyOf(reading.leaves));
+    }
+
     /** What {@code container} holding something states. */
     static Pulled ofHoldingSomething(Core container, InputReads reads, InputReading read,
                                      Optional<ModelOccurrence> where) {
