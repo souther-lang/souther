@@ -266,6 +266,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " else about them is read off the shape it leaves"),
             new Held("souther.compiler.partition.Condition.of",
                     "the composition, which the shape it makes carries"),
+            new Held("souther.compiler.partition.MeaningsOfABodyReading.walk",
+                    "where a short-circuit's left operand is the truth a reader of the tree that"
+                            + " runs takes in before its right one, which is a site to file what"
+                            + " the operand states at"),
             new Held("souther.compiler.partition.Pullback.truth",
                     "the composition of what a condition states, joined as the proposition the"
                             + " two halves make"),

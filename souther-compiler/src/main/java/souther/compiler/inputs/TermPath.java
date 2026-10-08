@@ -374,11 +374,17 @@ public record TermPath(String head, List<Step> steps) {
      */
     public RuleKey ruleKeyUnder(TermPath root) {
         List<Step> below = below(root);
-        if (below == null) {
-            return null;
-        }
+        return below == null ? null : ruleKeyOf(below);
+    }
+
+    /**
+     * The name the rules of a value call what {@code steps} reach below it, or null where none of
+     * them can name it: {@link #ruleKeyUnder} asked of steps that stand below a value no path is
+     * rooted at, such as one a body bound to a name.
+     */
+    public static RuleKey ruleKeyOf(List<Step> steps) {
         List<String> named = new ArrayList<>();
-        for (Step step : below) {
+        for (Step step : steps) {
             switch (step) {
                 case Step.Field field -> named.add(field.name());
                 case Step.Element _, Step.Key _, Step.Refine _ -> {

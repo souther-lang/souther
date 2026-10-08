@@ -1,10 +1,13 @@
 package souther.compiler.check;
 
 import souther.compiler.numeric.ClosedStates;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.core.Contract;
 import souther.compiler.core.Contract.Guard;
 import souther.compiler.core.Core;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.ResolvedCase;
@@ -234,6 +237,13 @@ final class PathEngine {
      */
     Predicates.Assumed assuming(Core cond, Known k, Denotations at, boolean positive) {
         return predicates.assumeCond(cond, k, at, positive);
+    }
+
+    /** The same, of a condition whose meaning was read already: what it states coming out
+     *  {@code positive}, taken in as far as a path can hold it ({@link MeaningAssumptions}). */
+    Predicates.Assumed assuming(Proposition stated, Core cond, Known k, Denotations at,
+                                boolean positive, MeaningAssumptions.InputPlaces places) {
+        return predicates.assumeMeaning(stated, cond, k, at, positive, places);
     }
 
     /**
@@ -504,7 +514,30 @@ final class PathEngine {
         Core.IfConstructed ic = built.attempt();
         Core.Read root = Terms.read(ic.binder(), ic.construct().type(), ic.pos());
         Denotations next = terms.choosing(built, at);
-        return new Entered(seedAt(root, k, next), next);
+        return new Entered(builtFrom(ic, root, seedAt(root, k, next), next), next);
+    }
+
+    /**
+     * {@code k} with each number of what an attempt built standing at what it was built from.
+     *
+     * <p>What was built is what it was given, field by field, so what its type guarantees of a
+     * field is guaranteed of the value it was given there: an {@code Amount} built from {@code raw}
+     * stops where {@code raw} does on every run that built one. Held of the value, since it is true
+     * wherever the built value is named.
+     */
+    private Known builtFrom(Core.IfConstructed ic, Core.Read root, Known k, Denotations at) {
+        Known out = k;
+        for (Core.FieldValue given : ic.construct().values()) {
+            LinearForm<FactSubject> field = terms.affineOf(
+                    new Core.FieldAccess(root, given.field(), given.value().type(), ic.pos()), at);
+            LinearForm<FactSubject> value = terms.affineOf(given.value(), at);
+            LinearForm<FactSubject> apart = field == null || value == null ? null
+                    : Terms.add(field, value, true);
+            if (apart != null && !apart.coefs().isEmpty()) {
+                out = out.taking(apart, Rel.EQ, Known.Held.OF_THE_VALUE, terms.kindsOf(apart));
+            }
+        }
+        return out;
     }
 
     // --- seeding -------------------------------------------------------------------------------

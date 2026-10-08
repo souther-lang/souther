@@ -24,7 +24,7 @@ public sealed interface Relation {
      *                    {@code form proposition 0}
      * @param proposition the canonical relation
      */
-    record Affine(LinearForm<DecisionAtom> form, Rel proposition) implements Relation {
+    record Affine(LinearForm<Quantity> form, Rel proposition) implements Relation {
 
         public Affine {
             if (form == null || proposition != proposition.orItsDenial()) {

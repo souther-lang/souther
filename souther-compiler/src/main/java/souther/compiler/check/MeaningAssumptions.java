@@ -1,0 +1,206 @@
+package souther.compiler.check;
+
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.Relation;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.ConstantArguments;
+import souther.compiler.semantics.ResultRange;
+import souther.compiler.semantics.TakenArguments;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Function;
+
+/**
+ * What a path knows once a condition comes out a way, read off what the condition states.
+ *
+ * <p>The condition's meaning is not read here. It is the proposition the condition states, read
+ * once off the tree where the language's operations stand ({@link Proposition}); what this does is
+ * take into {@link Known} every fact the proposition coming out that way makes certain and that
+ * {@code Known} can hold, and nothing else. So what a path knows is never more than the condition
+ * says, and how much of it is known is this reader's reach and not a second reading of the
+ * condition.
+ *
+ * <p><b>What is taken.</b> A comparison over numbers of the input — a value at a position, the size
+ * of a container at one — as the relation it states. A truth at a position. Both halves of a
+ * conjunction, since both hold. Nothing at all where the condition is never met, since nothing
+ * reaches there.
+ *
+ * <p><b>What is not.</b> A disjunction, since which half holds is not known; that some element
+ * meets something, since which element is not known; a case, a value being present, a relation on
+ * an order, and a part nothing read. Each is left out, which is the sound answer with less: a path
+ * that took nothing in has ruled nothing out.
+ */
+final class MeaningAssumptions {
+
+    /**
+     * Where the positions a proposition names stand in the tree a reader walks.
+     *
+     * @param parameters the binding each parameter of the behavior is, by the name a position's
+     *                   path starts with
+     * @param typeAt     what stands at a position, or null where nothing is known to
+     */
+    record InputPlaces(Map<String, BindingId> parameters, Function<TermPath, Type> typeAt) {
+
+        /** Where nothing stands: no proposition names a place here. */
+        static final InputPlaces NONE = new InputPlaces(Map.of(), path -> null);
+    }
+
+    private final Terms terms;
+    private final InputPlaces places;
+    /** What the bindings in force where the condition stands are, which is where a value the body
+     *  bound is found. */
+    private final Denotations at;
+    private Known known;
+    private boolean taken;
+    /** Whether every part of what was stated is one a path holds. */
+    private boolean whole = true;
+
+    private MeaningAssumptions(Terms terms, InputPlaces places, Denotations at, Known known) {
+        this.terms = terms;
+        this.places = places;
+        this.at = at;
+        this.known = known;
+    }
+
+    /** What {@code k} comes to once what {@code stated} states comes out {@code positive}, read
+     *  where the bindings {@code at} holds are in force. */
+    static Predicates.Assumed assumed(Proposition stated, boolean positive, Known k, Terms terms,
+                                      InputPlaces places, Denotations at) {
+        Proposition asked = positive ? stated : stated.denied();
+        MeaningAssumptions taking = new MeaningAssumptions(terms, places, at, k);
+        taking.take(asked);
+        // Read to the end only where every part was taken in: a part a path cannot hold leaves an
+        // arm under it unsettled for this reader's reach, which is not a fact about the model.
+        return new Predicates.Assumed(taking.known, taking.taken, taking.whole);
+    }
+
+    private void take(Proposition asked) {
+        switch (asked) {
+            case Proposition.Always(boolean holds) when !holds -> {
+                known = known.reachingNothing();
+                taken = true;
+            }
+            case Proposition.All all -> all.parts().forEach(this::take);
+            case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, Rel p),
+                                      boolean holds) -> {
+                LinearForm<FactSubject> over = formAt(form);
+                if (over != null) {
+                    known = known.taking(over, holds ? p : p.denied(), Known.Held.ON_THE_PATH,
+                            terms.kindsOf(over));
+                    taken = true;
+                } else {
+                    whole = false;
+                }
+            }
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds) -> {
+                FactSubject place = placeOf(at);
+                if (place != null) {
+                    known = known.taking(place, holds, Known.Held.ON_THE_PATH);
+                    taken = true;
+                } else {
+                    whole = false;
+                }
+            }
+            case Proposition.Always _ -> { }
+            default -> whole = false;
+        }
+    }
+
+    /** {@code form} over the atoms this tree names, or null where one of them it cannot name. */
+    private LinearForm<FactSubject> formAt(LinearForm<Quantity> form) {
+        Map<FactSubject, ExactRatio> coefs = new HashMap<>();
+        for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
+            FactSubject atom = switch (each.getKey()) {
+                case DecisionAtom.OfTheInput(NumericTerm term) -> atomOf(term);
+                case Quantity.OfABinding bound -> boundAtom(bound);
+                case DecisionAtom.OfAnAnswer _ -> null;
+            };
+            if (atom == null || coefs.putIfAbsent(atom, each.getValue()) != null) {
+                return null;
+            }
+        }
+        return new LinearForm<>(form.constant(), coefs);
+    }
+
+    /**
+     * The atom a number of the input is here, or null where it is none this can name: a value at
+     * a chain of fields from a parameter, or a size of one.
+     *
+     * <p>A size carries what its operation bounds its result to, of the value and not of the path:
+     * a size is never negative whether or not the condition holds.
+     */
+    private FactSubject atomOf(NumericTerm term) {
+        return switch (term) {
+            case NumericTerm.ValueOf(TermPath at) -> {
+                Type type = places.typeAt().apply(at);
+                yield type == null ? null : terms.atomAt(placeOf(at), type);
+            }
+            case NumericTerm.TakenOf taken when taken.arguments().equals(TakenArguments.NONE)
+                    && isASize(taken) -> {
+                FactSubject size = terms.sizeAtPlace(taken.operation(), placeOf(taken.position()));
+                if (size != null) {
+                    carrying(size, taken.operation());
+                }
+                yield size;
+            }
+            default -> null;
+        };
+    }
+
+    /**
+     * The atom a number of a value the body bound is here, by the binding — the value the binding
+     * stands for where the condition stands, and the fields read off it — or null where no binding
+     * of that name is in force or its number is none the domain carries.
+     */
+    private FactSubject boundAtom(Quantity.OfABinding bound) {
+        FactSubject value = at.subject(bound.binding());
+        // Taken in by which value it is, and not read to the end: what the value was made from is
+        // not what the proposition says, so an arm this leaves unsettled is left by this reader's
+        // reach and says so.
+        whole = false;
+        RuleKey named = TermPath.ruleKeyOf(bound.steps());
+        return value == null || named == null ? null
+                : terms.atomAt(terms.under(value, named), bound.type());
+    }
+
+    /** Whether {@code taken} is the count of what its position holds. */
+    private boolean isASize(NumericTerm.TakenOf taken) {
+        Type at = places.typeAt().apply(taken.position());
+        return at != null && taken.operation().equals(
+                NumericMeasures.takenOf(at, terms.newtypeInners()));
+    }
+
+    /** {@code atom} holding where {@code operation} bounds what it answers. */
+    private void carrying(FactSubject atom, ValueName operation) {
+        Endpoint least = ResultRange.of(DefaultBoundOperationFacts.get().boundsOnTheResult(operation),
+                ConstantArguments.none()).min();
+        if (least == null) {
+            return;
+        }
+        ExactRatio at = Count.number(least.at()).exactly();
+        known = known.taking(LinearForm.atomMinusConstant(atom, at),
+                least.inclusive() ? Rel.GE : Rel.GT, Known.Held.OF_THE_VALUE,
+                terms.kindsOf(LinearForm.atom(atom)));
+    }
+
+    /** The place a position is in this tree: a chain of fields from a parameter, or null. */
+    private FactSubject placeOf(TermPath at) {
+        BindingId parameter = places.parameters().get(at.head());
+        RuleKey fields = at.ruleKey();
+        return parameter == null || fields == null ? null
+                : terms.under(terms.placeSubject(parameter), fields);
+    }
+}

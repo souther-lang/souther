@@ -6,6 +6,7 @@ import souther.compiler.check.Choice;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementWitness;
+import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.core.Core;
@@ -21,7 +22,9 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.AnswerAspect;
@@ -35,6 +38,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -469,9 +473,74 @@ final class Pullback {
         if (count == null) {
             return null;
         }
-        LinearForm<DecisionAtom> form =
-                LinearForm.<DecisionAtom>atom(new DecisionAtom.OfTheInput(count));
+        LinearForm<Quantity> form =
+                LinearForm.<Quantity>atom(new DecisionAtom.OfTheInput(count));
         return new Proposition.Compared(new Relation.Affine(form, Rel.GT), true);
+    }
+
+    /**
+     * A comparison over values the body bound, as the relation it states over them — or unread
+     * where it is over anything else.
+     *
+     * <p>Asked where the arithmetic of the input read nothing, which is where what a value is
+     * computed from is unknown: a dependency's answer, what an attempt built. Which value it is is
+     * still known, by the binding that names it, and two comparisons over one name are about one
+     * number. A comparison mixing such a value with a position of the input is not read here.
+     */
+    private Proposition ofBoundValues(StatedComparison comparison, boolean fixed,
+                                      InputReads reads) {
+        // A comparison whose answer is the same on every run is no relation between numbers that
+        // vary: what it compares can be a parameter of a closure applied to elements written out,
+        // and that name stands for a different value each time it is applied.
+        if (fixed) {
+            return unreadPart(new OnTheWay.Why.ComparisonNotRepresentedAsACut(), true);
+        }
+        LinearForm<Quantity> left = boundForm(comparison.left(), reads);
+        LinearForm<Quantity> right = boundForm(comparison.right(), reads);
+        LinearForm<Quantity> form = left == null || right == null ? null
+                : left.minus(right).orNull();
+        if (form == null || form.coefs().isEmpty()) {
+            return unreadPart(new OnTheWay.Why.ComparisonNotRepresentedAsACut(), fixed);
+        }
+        Rel states = comparison.claim().statedRelation();
+        Rel proposition = states.orItsDenial();
+        return new Proposition.Compared(new Relation.Affine(form, proposition),
+                states == proposition);
+    }
+
+    /** {@code side} as a number written out or a number of a value the body bound, or null. */
+    private LinearForm<Quantity> boundForm(Core side, InputReads reads) {
+        Core e = Core.withoutStanding(side);
+        if (e instanceof Core.Int written) {
+            return LinearForm.constant(ExactRatio.of(written.value()));
+        }
+        if (reads.pathOf(e, read.rules().newtypes()) instanceof PathResolution.At) {
+            return null;
+        }
+        List<TermPath.Step> steps = new ArrayList<>();
+        Core at = Core.withoutStanding(e);
+        while (true) {
+            if (at instanceof Core.FieldProjection projection) {
+                at = Core.withoutStanding(projection.lastAccess());
+            } else if (at instanceof Core.FieldAccess access) {
+                if (Location.isStep(access.target().type(), access.field(),
+                        read.rules().newtypes())) {
+                    steps.addFirst(new TermPath.Step.Field(access.field()));
+                }
+                at = Core.withoutStanding(access.target());
+            } else {
+                break;
+            }
+        }
+        return Core.withoutStanding(at) instanceof Core.Read name
+                ? LinearForm.<Quantity>atom(new Quantity.OfABinding(name.binding(), steps,
+                        side.type()))
+                : null;
+    }
+
+    /** A form over the input's numbers, as one over the quantities a relation is written over. */
+    private static LinearForm<Quantity> asQuantities(LinearForm<DecisionAtom> form) {
+        return new LinearForm<>(form.constant(), new LinkedHashMap<>(form.coefs()));
     }
 
     /**
@@ -496,16 +565,16 @@ final class Pullback {
                 }
                 Rel proposition = states.orItsDenial();
                 yield new Proposition.Compared(new Relation.Affine(
-                        DecisionComparison.ofTheInput(against), proposition), states == proposition);
+                        asQuantities(DecisionComparison.ofTheInput(against)), proposition),
+                        states == proposition);
             }
             case AffineReading.OfAComparison.CutsNothing constant ->
                     new Proposition.Always(constant.holds(comparison.claim().statedRelation()));
-            case AffineReading.OfAComparison.NotHeld _ ->
-                    unreadPart(new OnTheWay.Why.ComparisonNotRepresentedAsACut(), fixed);
+            case AffineReading.OfAComparison.NotHeld _ -> ofBoundValues(comparison, fixed, reads);
             case AffineReading.OfAComparison.Stopped _ -> {
                 ComparedLine drawn = ComparedLine.asWritten(comparison, read, reads);
                 if (drawn == null) {
-                    yield unreadPart(new OnTheWay.Why.ComparisonNotRepresentedAsACut(), fixed);
+                    yield ofBoundValues(comparison, fixed, reads);
                 }
                 Rel states = drawn.claim().statedRelation();
                 Rel proposition = states.orItsDenial();

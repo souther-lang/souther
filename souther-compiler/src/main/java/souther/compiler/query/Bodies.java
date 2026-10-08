@@ -3380,7 +3380,7 @@ public final class Bodies {
      * would be a second one of the same module for every later reader to hold a claim against.
      */
     private static Map<String, Claims> judged(
-            Db db, ModuleBodies of, Hir.Module settled,
+            Db db, ModuleBodies of, Map<String, AnalysisBody> analysed, Hir.Module settled,
             CoverageSites.Plan plan) {
         String module = of.module();
         Map<String, Core> bodies = of.bodies();
@@ -3417,7 +3417,10 @@ public final class Bodies {
                     UnreachableClaims.of(body, read, scope.value(), ruleReading.source(), plan),
                     PathReachability.of(body,
                             fn == null ? null : SpecImplementation.align(spec, fn),
-                            plan, read, ruleReading)));
+                            plan, read, ruleReading, Adequacy.meaningsOf(
+                                    analysed.get(spec.name()), read,
+                                    () -> Adequacy.readingOf(db, read, reading.value()),
+                                    reading.value()))));
         }
         // In the order the module declares them, which is the order a reader meets the diagnostics
         // these carry. `Map.copyOf` keeps the entries and not the order (see `Ordered`), so a
@@ -4448,7 +4451,7 @@ public final class Bodies {
         // an answer carrying no plan is one every reader of it would walk the bodies for.
         CoverageSites.Plan plan =
                 CoverageSites.of(of, read, handed);
-        return new Elaborated(of, module.emittedDefinitions(), judged(db, of, settled, plan), elements,
+        return new Elaborated(of, module.emittedDefinitions(), judged(db, of, analysed, settled, plan), elements,
                 read, handed, analysed, plan, emits);
     }
 

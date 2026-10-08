@@ -448,6 +448,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "meaning/DecisionSubject;", Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/LiveFlow", "walk", "(" + core + "Ljava/util/Set;)V",
                 Reading.STRUCTURE, BINDINGS);
+        row(out, c + "partition/MeaningsOfABodyReading", "walk", "(" + core + reads + ")V",
+                Reading.STRUCTURE, CHOICES_AND_CALLS);
+        row(out, c + "partition/Pullback", "boundForm", "(" + core + reads + ")L" + c
+                + "numeric/LinearForm;", Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/PredicateReadings", "walk", "(" + core + "Ljava/lang/String;L" + c
                 + "inputs/InputReading;" + reads + "L" + c + "partition/LiveFlow;ZLjava/util/List;L"
                 + c + "partition/RuleReachNumbering;Ljava/util/Set;L" + c

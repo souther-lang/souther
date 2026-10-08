@@ -8,6 +8,8 @@ import souther.compiler.observe.AnswerChange;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Classification;
+import souther.compiler.meaning.MeaningsOfABody;
+import souther.compiler.partition.MeaningsOfABodyReading;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.partition.RowToRun;
@@ -124,6 +126,7 @@ import java.util.Optional;
 import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /** How well a module's {@code example} rows cover what it declares. */
 public final class Adequacy {
@@ -961,8 +964,24 @@ public final class Adequacy {
      * meetings its body holds and the decisions it makes are questions apart, and each of them
      * reading the input for itself is every rule of every parameter read again to the same answers.
      */
-    private static InputReading readingOf(Db db, InputDomain input, RuleReadingSource source) {
+    static InputReading readingOf(Db db, InputDomain input, RuleReadingSource source) {
         return db.readings().revision().settled(new AnInputRead(input, source));
+    }
+
+    /**
+     * What each condition of {@code analysis} states, for a reader of the tree that runs to take in
+     * where it passes one ({@link MeaningsOfABody}). Nothing where there is no analysis to read it
+     * off, which is a body whose conditions a path takes in as it reads them.
+     */
+    static MeaningsOfABody meaningsOf(AnalysisBody analysis, InputDomain read,
+                                      Supplier<InputReading> reading, RuleReadingSource source) {
+        if (analysis == null) {
+            return MeaningsOfABody.NONE;
+        }
+        return MeaningsOfABodyReading.of(analysis, reading,
+                InputReads.ofParametersWhereCallsStand(read.parameterReads(),
+                        read.declared(source), ElementBindings.of(analysis, source.newtypes())),
+                source.symbols(), source.newtypes());
     }
 
     /** What one behavior states about its answer, or nothing where it states none. A behavior
@@ -1053,16 +1072,16 @@ public final class Adequacy {
                 }
                 // Read per behavior, and the two absences told apart where they are classified.
                 // A body this image has none of is not a behavior the model gives none.
-                souther.compiler.core.Core body =
-                        bodyReading(db, name, checked.value(), spec.name())
-                                instanceof souther.compiler.partition.BodyReading.Read it
-                                ? it.emitted() : null;
+                BodyReading.Read both = bodyReading(db, name, checked.value(), spec.name())
+                        instanceof BodyReading.Read it ? it : null;
                 Hir.FnDef fn = db.ask(new Bodies.SettledFn(name, spec.name())).value();
-                if (body == null || fn == null) {
+                if (both == null || fn == null) {
                     continue;
                 }
                 out.put(spec.name(), souther.compiler.check.PathReachability.of(
-                        body, SpecImplementation.align(spec, fn), plan, read, ruleReading));
+                        both.emitted(), SpecImplementation.align(spec, fn), plan, read,
+                        ruleReading, meaningsOf(both.analysis(), read,
+                                () -> readingOf(db, read, reading.value()), reading.value())));
             }
             return Answer.of(Ordered.map(out));
         }

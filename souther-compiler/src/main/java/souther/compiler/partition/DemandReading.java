@@ -10,6 +10,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -354,7 +355,7 @@ final class DemandReading {
         Rel proposition = compared.relation().proposition();
         Rel met = compared.holds() ? proposition : proposition.denied();
         return switch (compared.relation()) {
-            case Relation.Affine(LinearForm<DecisionAtom> form, Rel _) -> {
+            case Relation.Affine(LinearForm<Quantity> form, Rel _) -> {
                 LinearForm<NumericTerm> against = ofTheInput(form);
                 if (against == null) {
                     yield new Read.Unread(new OnTheWay.Why.ComparisonNotRepresentedAsACut());
@@ -376,10 +377,11 @@ final class DemandReading {
         };
     }
 
-    /** The form over the input's own numbers, or null where it is over anything else. */
-    private static LinearForm<NumericTerm> ofTheInput(LinearForm<DecisionAtom> form) {
+    /** The form over the input's own numbers, or null where it is over anything else — a value
+     *  the body bound is one no row writes at. */
+    private static LinearForm<NumericTerm> ofTheInput(LinearForm<Quantity> form) {
         Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
-        for (Map.Entry<DecisionAtom, ExactRatio> each : form.coefs().entrySet()) {
+        for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
             if (!(each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term))) {
                 return null;
             }
