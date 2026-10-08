@@ -1,7 +1,5 @@
-package souther.compiler.partition;
+package souther.compiler.check;
 
-import souther.compiler.check.CallArguments;
-import souther.compiler.check.DeclaredArgument;
 import souther.compiler.core.Core;
 import souther.compiler.types.ValueName;
 
@@ -18,10 +16,10 @@ import java.util.List;
  * @param operation which operation is applied
  * @param args      what it is handed, in the order the declaration takes them
  */
-record AnOperationApplied(ValueName operation, List<Core> args) {
+public record AnOperationApplied(ValueName operation, List<Core> args) {
 
     /** {@code e} read as an application of an operation, or null where it applies none. */
-    static AnOperationApplied of(Core e) {
+    public static AnOperationApplied of(Core e) {
         return switch (Core.withoutStanding(e)) {
             case Core.PreservedCall kept ->
                     new AnOperationApplied(kept.declared().operation(), kept.args());
@@ -32,7 +30,7 @@ record AnOperationApplied(ValueName operation, List<Core> args) {
     }
 
     /** What it passes where {@code which} stands, or null where it passes nothing there. */
-    Core argument(DeclaredArgument which) {
+    public Core argument(DeclaredArgument which) {
         int at = CallArguments.positionOf(which, operation);
         return at < 0 || at >= args.size() ? null : args.get(at);
     }

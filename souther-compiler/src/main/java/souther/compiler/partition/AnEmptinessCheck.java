@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.StatedComparison;

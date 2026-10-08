@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.core.Core;
 import souther.compiler.flow.ComparisonWays;

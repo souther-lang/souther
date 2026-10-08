@@ -1,11 +1,10 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.BoundOperationFacts;
-import souther.compiler.check.Carrier;
 import souther.compiler.check.Choice;
-import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
@@ -35,6 +34,7 @@ import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
@@ -817,57 +817,61 @@ final class Pullback {
      * the comparison of those two arguments it states — or null where neither side is such a number,
      * or the other side is no number the same on every run.
      *
-     * <p>Which relation of the arguments it states is {@link TheSignOfAnOrder}'s answer, which is
-     * what the check reads such a comparison by. The arguments are read where the operation was
-     * applied, which is not where the comparison stands when a name was given the answer, and by the
-     * rules for a comparison, as any comparison is: over the input, on an order, or over values the
-     * body bound.
+     * <p>What it states of them is {@link TheSignOfAnOrder}'s answer, the one the check reads such a
+     * comparison by; what is this reading's own is the environment ({@link #sides}). The arguments
+     * are read where the operation was applied, which is not where the comparison stands when a
+     * name was given the answer, and by the rules for a comparison, as any comparison is: over the
+     * input, on an order, or over values the body bound.
      */
     private Derivation ofItsArguments(StatedComparison comparison, boolean fixed,
                                       InputReads reads) {
-        for (boolean signFirst : List.of(true, false)) {
-            Denotation sign = reads.standing(signFirst ? comparison.left() : comparison.right(),
-                    read.rules().symbols(), read.rules().newtypes());
-            Core answered = Core.withoutStanding(sign.value());
-            if (!(AnOperationApplied.of(answered) instanceof AnOperationApplied applied
-                    && applied.operation() instanceof ValueName.Stdlib operation)) {
-                continue;
-            }
-            TheSignOfAnOrder.Ordered order = TheSignOfAnOrder.argumentsOf(operation);
-            if (order == null) {
-                continue;
-            }
-            Core greater = applied.argument(order.greater());
-            Core lesser = applied.argument(order.lesser());
-            Carrier counted = Carrier.ofValue(answered.type(), read.rules().declarations());
-            Core against = signFirst ? comparison.right() : comparison.left();
-            if (greater == null || lesser == null || counted == null || !counted.counts()
-                    || !(AffineForms.outcome(against, reads, quantities())
-                            instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
-                                    LinearForm<Quantity> number))
-                    || !number.coefs().isEmpty()) {
-                return null;
-            }
-            // The relation the source wrote, read from the sign's side: `sign rel number` however
-            // the two were written round.
-            Rel written = (signFirst ? comparison.claim() : comparison.claim().turned())
-                    .statedRelation();
+        return switch (TheSignOfAnOrder.read(comparison, reads, sides())) {
+            case null -> null;
             // What the comparison means, so only where the order of the two is all it states: one
             // that only proves an order is a rule about the number, which is no order's to read.
-            return switch (TheSignOfAnOrder.of(operation, counted.spacing(), written,
-                    number.constant())) {
-                case null -> null;
-                case TheSignOfAnOrder.Stands.Between(Rel _, boolean exactly) when !exactly -> null;
-                case TheSignOfAnOrder.Stands.Settled(boolean holds) ->
-                        new Derivation.ASignItsBoundsSettle(operation, holds);
-                case TheSignOfAnOrder.Stands.Between(Rel between, var _) ->
-                        new Derivation.AnOrderOfItsArguments(operation, firstThatReadsIt(rulesFor(
-                                new StatedComparison(ComparisonClaim.stating(between), greater,
-                                        lesser, Core.BinaryReading.AS_THEY_STAND),
-                                null, fixed, sign.at())));
-            };
-        }
-        return null;
+            case TheSignOfAnOrder.Read.OfTheArguments<InputReads> ordered
+                    when !ordered.isTheCondition() -> null;
+            case TheSignOfAnOrder.Read.OfTheArguments<InputReads> ordered
+                    when ordered.operation() instanceof ValueName.Stdlib operation ->
+                    new Derivation.AnOrderOfItsArguments(operation, firstThatReadsIt(
+                            rulesFor(ordered.arguments(), null, fixed, ordered.at())));
+            case TheSignOfAnOrder.Read.Settled<InputReads> settled
+                    when settled.operation() instanceof ValueName.Stdlib operation ->
+                    new Derivation.ASignItsBoundsSettle(operation, settled.holds());
+            // An order the library declares is of one of its own operations.
+            case TheSignOfAnOrder.Read.OfTheArguments<InputReads> _,
+                 TheSignOfAnOrder.Read.Settled<InputReads> _ -> null;
+        };
+    }
+
+    /**
+     * What this reading answers about its environment for a comparison of a sign: a name is what
+     * it stands for where it was given it, and the number against the sign is read as any number
+     * here is ({@link #quantities}).
+     */
+    private TheSignOfAnOrder.Sides<InputReads> sides() {
+        return new TheSignOfAnOrder.Sides<>() {
+
+            @Override
+            public AffineForms.ReadThrough<InputReads> standing(Core e, InputReads at) {
+                Denotation stands = at.standing(e, read.rules().symbols(),
+                        read.rules().newtypes());
+                return new AffineForms.ReadThrough<>(stands.value(), stands.at());
+            }
+
+            @Override
+            public ExactRatio constant(Core e, InputReads at) {
+                return AffineForms.outcome(e, at, quantities())
+                        instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                                LinearForm<Quantity> number)
+                        && number.coefs().isEmpty() ? number.constant() : null;
+            }
+
+            @Override
+            public DeclarationAccess declarations() {
+                return read.rules().declarations();
+            }
+        };
     }
 
     /** A value worked out by the first rule that asks for it, and not before or again. */
