@@ -50,11 +50,28 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
             behavior allAboveTheFloor : (o: Order) -> Bool
             let allAboveTheFloor (o) = List.all(l -> o.floor > 3, o.lines)
 
+            behavior allAboveTheirFloor : (o: Order) -> Bool
+            let allAboveTheirFloor (o) = List.all(l -> l.price > o.floor, o.lines)
+
             behavior everyLineHolds : (o: Order) -> Bool
             let everyLineHolds (o) = List.all(l -> true, o.lines)
 
             behavior someLineHolds : (o: Order) -> Bool
             let someLineHolds (o) = List.any(l -> true, o.lines)
+
+            behavior someLineMeetsWhatNoLineDecides : (o: Order) -> Bool
+            let someLineMeetsWhatNoLineDecides (o) =
+                List.any(l -> String.startsWith("a", "ab"), o.lines)
+
+            behavior someLineKeptForWhatNoLineDecides : (o: Order) -> Bool
+            let someLineKeptForWhatNoLineDecides (o) =
+                List.length(List.filter(l -> String.startsWith("a", "ab"), o.lines)) >= 1
+
+            behavior onlyTheArmTaken : (o: Order) -> Bool
+            let onlyTheArmTaken (o) = if true then o.floor > 3 else o.floor < 0
+
+            behavior someLineBesideTheFloor : (o: Order) -> Bool
+            let someLineBesideTheFloor (o) = List.any(l -> o.floor > 3, o.lines)
 
             behavior someWordWritten : (o: Order) -> Bool
             let someWordWritten (o) = List.any(s -> String.contains("x", s), [ "x" ])
@@ -151,13 +168,19 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
                         + " fails is its denial");
     }
 
-    /** What every element has to meet is not narrowed on where it is about more than the element:
-     *  an empty list meets it whatever the rest says. */
+    /**
+     * What every element has to meet is not narrowed on where it is about more than the element:
+     * an empty list meets it whatever the rest says. Where it is about nothing of the element at
+     * all, every element meeting it is it or the list holding none, which is one of two things.
+     */
     @Test
     void everyElementMeetingWhatIsNotAboutTheElementIsDeclined() {
-        OnTheWay.Declined declined = assertInstanceOf(OnTheWay.Declined.class,
+        OnTheWay.Declined beside = assertInstanceOf(OnTheWay.Declined.class,
+                only("allAboveTheirFloor", true));
+        assertEquals(new OnTheWay.Why.MoreThanEachElement(), beside.why());
+        OnTheWay.Declined apart = assertInstanceOf(OnTheWay.Declined.class,
                 only("allAboveTheFloor", true));
-        assertEquals(new OnTheWay.Why.MoreThanEachElement(), declined.why());
+        assertEquals(new OnTheWay.Why.OneOfTwoThings(), apart.why());
     }
 
     /**
@@ -172,6 +195,43 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
                 "whether the list holds anything, which the application is what is offered for");
         assertEquals(List.of(), partsOf("someWordWritten"),
                 "an operation applied to a word written out turns on nothing either");
+    }
+
+    /**
+     * A closure answering what no line decides leaves the walk turning on whether there is a line
+     * to hand it, beside what it answers. A truth the same on every run that this compiler does not
+     * work out is no part — but it holding still leaves the list to decide, so the list is one; and
+     * a comparison against the order is one, with the list beside it.
+     */
+    @Test
+    void whatNoElementDecidesLeavesTheContainerAPartOfWhatTheWalkTurnsOn() {
+        for (String behavior : List.of("someLineHolds", "someLineMeetsWhatNoLineDecides")) {
+            List<Core> parts = partsOf(behavior);
+            assertEquals(1, parts.size(), () -> behavior + ": whether the list holds anything, as"
+                    + " it is where the closure always holds: " + parts);
+            assertInstanceOf(Core.PreservedCall.class, Core.withoutStanding(parts.getFirst()),
+                    () -> behavior + " offers the application: " + parts);
+        }
+        List<Core> kept = partsOf("someLineKeptForWhatNoLineDecides");
+        assertEquals(1, kept.size(), () -> "a count of what was kept for it turns on the list"
+                + " too, which the comparison asking it is offered for: " + kept);
+        assertInstanceOf(Core.Binary.class, Core.withoutStanding(kept.getFirst()),
+                () -> "the comparison: " + kept);
+        List<Core> parts = partsOf("someLineBesideTheFloor");
+        assertEquals(2, parts.size(), () -> "the comparison and the list: " + parts);
+        assertTrue(parts.stream().anyMatch(part -> Core.withoutStanding(part)
+                        instanceof Core.Binary),
+                () -> "the comparison against the order: " + parts);
+    }
+
+    /**
+     * What an answer turns on is what it states, and not every part met on the way to it: an arm
+     * a choice never takes was read and decides nothing.
+     */
+    @Test
+    void anArmNeverTakenIsNoPartOfWhatTheAnswerTurnsOn() {
+        List<Core> parts = partsOf("onlyTheArmTaken");
+        assertEquals(1, parts.size(), () -> "the comparison in the arm taken: " + parts);
     }
 
     /**

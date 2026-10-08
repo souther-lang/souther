@@ -78,6 +78,27 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
         assertEquals(some.denied(), stated("List.all(v -> v <= 0, b.xs)"));
     }
 
+    /**
+     * What no element decides comes out of the quantifier: some element meeting it is it and the
+     * container holding something. Left inside, the container would be something the proposition
+     * turns on that no part of it names — a truth that holds makes the walk whether there is an
+     * element, and one that fails makes it false.
+     */
+    @Test
+    void whatNoElementDecidesIsNoPartOfWhatSomeElementMeets() {
+        String fixed = "String.startsWith(\"a\", \"ab\")";
+        assertEquals(stated(fixed + " && Bool.not(List.isEmpty(b.xs))"),
+                stated("List.any(v -> " + fixed + ", b.xs)"));
+        assertEquals(stated(fixed + " && Bool.not(List.isEmpty(b.xs))"),
+                stated("Bool.not(List.isEmpty(List.filter(v -> " + fixed + ", b.xs)))"));
+        assertEquals(stated("(" + fixed + " && Bool.not(List.isEmpty(b.xs))) || List.any(v -> v > 0, b.xs)"),
+                stated("List.any(v -> " + fixed + " || v > 0, b.xs)"),
+                "a disjunction is some element meeting one part or some element meeting the other");
+        assertEquals(stated(fixed + " && List.any(v -> v > 0, b.xs)"),
+                stated("List.any(v -> " + fixed + " && v > 0, b.xs)"),
+                "a part no element decides comes out of a conjunction the element does");
+    }
+
     @Test
     void aMappingHoldsSomethingWhereWhatItMappedDoes() {
         assertEquals(stated("List.isEmpty(List.filter(v -> v > 0, b.xs))"),

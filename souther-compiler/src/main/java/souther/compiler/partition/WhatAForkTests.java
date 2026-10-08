@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
-import souther.compiler.meaning.Proposition;
 
 import java.util.List;
 import java.util.Optional;
@@ -22,8 +21,10 @@ import java.util.Optional;
  * states a comparison and something nothing here reads, and the fork around the operation states
  * the second whoever owns the first.
  *
- * <p><b>Only what can vary.</b> A part that comes out the same whatever the input is an answer and
- * not a question, so nobody owns it and it is not offered.
+ * <p><b>Only what can vary, read off the proposition.</b> A part that comes out the same whatever
+ * the input is an answer and not a question, so nobody owns it and it is not offered — and whether
+ * a part varies is a question about where it stands in what the fork states, not about the part on
+ * its own ({@link Pullback.Pulled#turnsOn}).
  */
 final class WhatAForkTests {
 
@@ -31,10 +32,8 @@ final class WhatAForkTests {
 
     /** The parts the truth of {@code atom} turns on, each read where it stands. */
     static List<Denotation> partsOfTheAnswer(Core atom, WhatNamesStandFor names) {
-        return Pullback.ofATruth(atom, names.reads(), names.read(), Optional.empty()).leaves()
+        return Pullback.ofATruth(atom, names.reads(), names.read(), Optional.empty()).turnsOn()
                 .stream()
-                .filter(leaf -> !(leaf.part() instanceof Proposition.Unread unread
-                        && unread.fixed()))
                 .map(Pullback.Leaf::from)
                 .toList();
     }

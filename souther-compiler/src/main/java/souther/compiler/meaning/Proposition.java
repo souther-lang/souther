@@ -31,6 +31,60 @@ public sealed interface Proposition {
     /** A spelling that tells two propositions apart exactly where they are two, and orders parts. */
     String key();
 
+    /**
+     * Whether this can come out one way for one element of the container at {@code container} and
+     * the other way for another: whether it names a subject an element is, or holds something
+     * nothing here sees into.
+     *
+     * <p>What cannot is the same for every element, so some element meeting it is it and the
+     * container holding something — and a quantifier left holding it would turn on the container
+     * without any part of it saying so.
+     */
+    default boolean mayTurnOnAnElementOf(TermPath container) {
+        return switch (this) {
+            case Always _ -> false;
+            case Unread unread -> !unread.fixed();
+            case Compared compared -> switch (compared.relation()) {
+                case Relation.Affine affine -> affine.form().coefs().keySet().stream()
+                        .anyMatch(quantity -> mayBeAnElementOf(quantity, container));
+                case Relation.Ordered ordered -> mayBeAnElementOf(ordered.term(), container);
+            };
+            case Truth truth -> mayBeAnElementOf(truth.of(), container);
+            case InCases cases -> mayBeAnElementOf(cases.of(), container);
+            case Present present -> mayBeAnElementOf(present.of(), container);
+            case SameValue same -> mayBeAnElementOf(same.one(), container)
+                    || mayBeAnElementOf(same.other(), container);
+            case All all -> all.parts().stream()
+                    .anyMatch(part -> part.mayTurnOnAnElementOf(container));
+            case Any any -> any.parts().stream()
+                    .anyMatch(part -> part.mayTurnOnAnElementOf(container));
+            case Some some -> isAnElementOf(some.container(), container)
+                    || some.ofTheElement().mayTurnOnAnElementOf(container);
+        };
+    }
+
+    /** Whether {@code quantity} may be read off an element of {@code container}. A value a body
+     *  bound or a dependency answered is computed from something nothing here names, so it may. */
+    private static boolean mayBeAnElementOf(Quantity quantity, TermPath container) {
+        return switch (quantity) {
+            case DecisionAtom.OfTheInput(var term) -> isAnElementOf(term.subjectPath(), container);
+            case DecisionAtom.OfAnAnswer _, Quantity.OfABinding _ -> true;
+        };
+    }
+
+    /** Whether {@code subject} may be an element of {@code container}, the same way. */
+    private static boolean mayBeAnElementOf(DecisionSubject subject, TermPath container) {
+        return switch (subject) {
+            case DecisionSubject.AnInput(TermPath at) -> isAnElementOf(at, container);
+            case DecisionSubject.AnAnswer _ -> true;
+        };
+    }
+
+    /** Whether {@code at} is an element of {@code container}, or a key of it, or under one. */
+    private static boolean isAnElementOf(TermPath at, TermPath container) {
+        return at.isAtOrUnder(container.element()) || at.isAtOrUnder(container.key());
+    }
+
     /** Comes out {@code holds} for every row. */
     record Always(boolean holds) implements Proposition {
 

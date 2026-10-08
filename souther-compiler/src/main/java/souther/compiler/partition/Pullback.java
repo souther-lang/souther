@@ -83,7 +83,39 @@ final class Pullback {
      * @param proposition what holds where the condition does
      * @param leaves      every part met, in the order met — a part met twice is here twice
      */
-    record Pulled(Proposition proposition, List<Leaf> leaves) {}
+    record Pulled(Proposition proposition, List<Leaf> leaves) {
+
+        /**
+         * The parts the truth of {@link #proposition} turns on, each with where it was read off.
+         *
+         * <p>Read off the proposition and not off the parts met. A part a choice left out — an arm
+         * of an {@code if} whose condition always fails, a conjunct beside one that never holds —
+         * was met and turns nothing; and a part that comes out the same whatever the input is an
+         * answer and not a question. Some element meeting a part turns on that part, and on whether
+         * there is an element only through it: what no element decides was taken out of the
+         * quantifier where it was made, so the container is a part wherever it is one.
+         */
+        List<Leaf> turnsOn() {
+            Set<String> parts = new HashSet<>();
+            partsOf(proposition, parts);
+            return leaves.stream().filter(leaf -> parts.contains(leaf.part().key())).toList();
+        }
+
+        /** The spelling of each part {@code stated} turns on, either way round, into {@code into}. */
+        private static void partsOf(Proposition stated, Set<String> into) {
+            switch (stated) {
+                case Proposition.Always _ -> { }
+                case Proposition.Unread unread when unread.fixed() -> { }
+                case Proposition.All all -> all.parts().forEach(part -> partsOf(part, into));
+                case Proposition.Any any -> any.parts().forEach(part -> partsOf(part, into));
+                case Proposition.Some some -> partsOf(some.ofTheElement(), into);
+                default -> {
+                    into.add(stated.key());
+                    into.add(stated.denied().key());
+                }
+            }
+        }
+    }
 
     private final InputReading read;
     private final Optional<ModelOccurrence> where;
@@ -150,8 +182,8 @@ final class Pullback {
         }
         Pulled pulled = ofAComparison(comparison, reads, read, Optional.empty());
         return !(pulled.proposition() instanceof Proposition.Compared)
-                && pulled.leaves().stream().noneMatch(leaf ->
-                        leaf.part() instanceof Proposition.Unread unread && !unread.fixed());
+                && pulled.turnsOn().stream()
+                        .noneMatch(leaf -> leaf.part() instanceof Proposition.Unread);
     }
 
     /** What {@code container} holding something states. */
@@ -410,16 +442,51 @@ final class Pullback {
             quantifying.remove(held);
         }
         Proposition ofTheElement = witness.holds() ? answered : answered.denied();
-        // An element that always meets it leaves whether there is one; one that never does, none.
-        if (ofTheElement instanceof Proposition.Always(boolean holds)) {
-            if (!holds) {
-                return ofTheElement;
-            }
+        return someElementMeeting(held, ofTheElement, () -> {
             Proposition some = holdsSomethingAt(held);
             return some != null ? leaf(some, askedAt != null ? askedAt : new Denotation(e, reads))
                     : unread(over, reads, new OnTheWay.Why.SizeOfTheContainerNotStated());
+        });
+    }
+
+    /**
+     * Some element of the container at {@code held} meeting {@code ofTheElement}, with what no
+     * element decides taken out of the quantifier.
+     *
+     * <p>What comes out the same for every element is itself and there being an element at all —
+     * one that never holds settles it, one that always does leaves whether there is an element. A
+     * disjunct no element decides is that disjunct and there being an element, beside some element
+     * meeting the rest; a conjunct is that conjunct, beside some element meeting the rest. Left
+     * inside, whether the container holds anything would be something the proposition turns on that
+     * none of its parts names, and a reader of the parts would hand nobody the container.
+     *
+     * @param holdsSomething that the container holds something, asked for only where it is a part
+     */
+    private static Proposition someElementMeeting(TermPath held, Proposition ofTheElement,
+                                                  Supplier<Proposition> holdsSomething) {
+        if (!ofTheElement.mayTurnOnAnElementOf(held)) {
+            return ofTheElement instanceof Proposition.Always(boolean holds) && !holds
+                    ? ofTheElement
+                    : Proposition.all(List.of(ofTheElement, holdsSomething.get()));
         }
-        return new Proposition.Some(held, ofTheElement, true);
+        List<Proposition> parts = switch (ofTheElement) {
+            case Proposition.All all -> all.parts();
+            case Proposition.Any any -> any.parts();
+            default -> List.of(ofTheElement);
+        };
+        List<Proposition> decided = parts.stream()
+                .filter(part -> !part.mayTurnOnAnElementOf(held)).toList();
+        if (decided.isEmpty()) {
+            return new Proposition.Some(held, ofTheElement, true);
+        }
+        List<Proposition> undecided = parts.stream()
+                .filter(part -> part.mayTurnOnAnElementOf(held)).toList();
+        return ofTheElement instanceof Proposition.Any
+                ? Proposition.any(List.of(
+                        someElementMeeting(held, Proposition.any(decided), holdsSomething),
+                        new Proposition.Some(held, Proposition.any(undecided), true)))
+                : Proposition.all(List.of(Proposition.all(decided),
+                        new Proposition.Some(held, Proposition.all(undecided), true)));
     }
 
     /**
