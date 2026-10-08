@@ -5,8 +5,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 
-import java.util.Comparator;
-import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -82,18 +81,23 @@ public sealed interface Relation {
          * and not from every coefficient's sign, so a form with one of each sign faces one way too.
          */
         static <A extends Quantity> boolean facesTheOtherWay(LinearForm<A> form) {
-            List<Map.Entry<A, ExactRatio>> walked = form.coefs().entrySet().stream()
-                    .sorted(Comparator.comparing(each -> each.getKey().spelled())).toList();
-            for (int at = 1; at < walked.size(); at++) {
-                A before = walked.get(at - 1).getKey();
-                A here = walked.get(at).getKey();
-                if (before.spelled().equals(here.spelled()) && !before.equals(here)) {
+            Map<String, A> spelled = new HashMap<>();
+            String first = null;
+            ExactRatio firstCoefficient = null;
+            for (Map.Entry<A, ExactRatio> each : form.coefs().entrySet()) {
+                String spelling = each.getKey().spelled();
+                A before = spelled.putIfAbsent(spelling, each.getKey());
+                if (before != null && !before.equals(each.getKey())) {
                     throw new IllegalStateException("two atoms of one form are spelled alike: "
-                            + before + " and " + here + "; which of them comes first would be left"
-                            + " to how the comparison was written");
+                            + before + " and " + each.getKey() + "; which of them comes first"
+                            + " would be left to how the comparison was written");
+                }
+                if (first == null || spelling.compareTo(first) < 0) {
+                    first = spelling;
+                    firstCoefficient = each.getValue();
                 }
             }
-            return !walked.isEmpty() && walked.getFirst().getValue().signum() < 0;
+            return firstCoefficient != null && firstCoefficient.signum() < 0;
         }
     }
 

@@ -68,6 +68,17 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
                 return new DecisionSubject.AnInput(stands.position());
             }
         }
+        return anAnswer(e, at);
+    }
+
+    /**
+     * What a dependency answered, or a place inside it, that {@code e} is — or null where it is no
+     * such thing.
+     *
+     * <p>The second half of {@link #of}, for a reader asking only this: what a position is takes
+     * resolving where {@code e} stands, and an answer is reached through fields and names alone.
+     */
+    DecisionSubject.AnAnswer anAnswer(Core e, InputReads at) {
         List<TermPath.Step> steps = new ArrayList<>();
         Core under = e;
         InputReads reads = at;

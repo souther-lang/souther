@@ -453,8 +453,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "partition/ConditionNumbering;)V", Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "partition/DecisionComparison$1", "readsThrough",
                 "(L" + CORE + "$FieldAccess;" + reads + ")Z", Reading.ONE_ACCESS, ONE);
-        row(out, c + "partition/DecisionSubjects", "of", "(" + core + reads + ")L" + c
-                + "meaning/DecisionSubject;", Reading.NAMES, READS_THE_NAMES);
+        row(out, c + "partition/DecisionSubjects", "anAnswer", "(" + core + reads + ")L" + c
+                + "meaning/DecisionSubject$AnAnswer;", Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/LiveFlow", "walk", "(" + core + "Ljava/util/Set;)V",
                 Reading.STRUCTURE, BINDINGS);
         row(out, c + "partition/MeaningsOfABodyReading", "walk", "(" + core + reads + ")V",

@@ -51,7 +51,9 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiFunction;
@@ -127,10 +129,11 @@ final class Pullback {
             Set<String> parts = new HashSet<>();
             partsOf(proposition(), parts);
             List<Leaf> out = new ArrayList<>();
+            Map<Core, Set<String>> kept = new IdentityHashMap<>();
             for (Leaf leaf : leaves) {
-                if (parts.contains(leaf.part().key()) && out.stream().noneMatch(kept ->
-                        kept.from().value() == leaf.from().value()
-                                && kept.part().key().equals(leaf.part().key()))) {
+                if (parts.contains(leaf.part().key()) && kept
+                        .computeIfAbsent(leaf.from().value(), _ -> new HashSet<>())
+                        .add(leaf.part().key())) {
                     out.add(leaf);
                 }
             }
@@ -870,7 +873,7 @@ final class Pullback {
     /** What a dependency answered, or a place inside it, that {@code e} is — or null where it is
      *  no such thing. */
     private DecisionSubject.AnAnswer answerAt(Core e, InputReads reads) {
-        return subjects.of(e, reads) instanceof DecisionSubject.AnAnswer answered ? answered : null;
+        return subjects.anAnswer(e, reads);
     }
 
     /**
