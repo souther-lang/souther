@@ -286,7 +286,7 @@ class AReadingAnswersAboutThePlacesOfOnePlanTest {
             AnalysisBody analysis = checked.analysisBodies().get("pick");
             return GuardThresholds.of("pick", analysis, body, plan, inputs.reading(rules),
                     ElementBindings.of(analysis.core(), analysis.elements(), rules.newtypes()),
-                    against, new RuleReachNumbering(module, "pick"), Set.of());
+                    against, new RuleReachNumbering(module, "pick"));
         }
 
         /** What this behavior's body declares cannot arrive. */

@@ -61,8 +61,8 @@ class APropositionIsMadeOnlyWhereARuleConcludesItTest {
                         .contains(Derivation.IfThenElse.class.getName()),
                 "an if concludes a disjunction, and the census above sees nobody making one");
         assertTrue(WhatWasCompiled.callersOf(Proposition.class, "<init>")
-                        .contains(Derivation.ATruthAtAPosition.class.getName()),
-                "a truth at a position is built by its rule, and the census above sees nobody"
+                        .contains(Derivation.ATruthOfASubject.class.getName()),
+                "a truth of a subject is built by its rule, and the census above sees nobody"
                         + " building one");
     }
 }

@@ -179,7 +179,8 @@ class AConditionOnAContainersElementsIsComposedAsWhatItSaysTest {
         assertNotNull(analysis, () -> "the model under test writes " + behavior);
         InputDomain inputs = domain(behavior);
         InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
-                inputs.declared(rules()), ElementBindings.of(analysis, rules().newtypes()));
+                inputs.declared(rules()), ElementBindings.of(analysis, rules().newtypes()),
+                inputs.dependencies());
         List<OnTheWay> stated = ReachingCuts.stating(Condition.of(analysis.core(), reads,
                         rules().symbols(), rules().newtypes(),
                         new ConditionNumbering(module(), behavior)),

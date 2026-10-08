@@ -141,7 +141,8 @@ class ASignOfAnOrderIsReadAsTheOrderOfItsArgumentsTest {
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("demo")).value().get("f");
         InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
-                inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()));
+                inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
+                inputs.dependencies());
         Core e = Core.withoutStanding(analysis.core());
         while (e instanceof Core.LetIn let) {
             reads = reads.and(let.binder(), let.value());

@@ -19,6 +19,17 @@ import java.util.List;
 public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding {
 
     /**
+     * What this quantity is, as an identity spells it.
+     *
+     * <p>Whole, so that two quantities are one exactly where they are the same thing. A dependency
+     * is written under the module that declares it: two modules may declare behaviors of one name,
+     * and a spelling that left the module off would make the order two quantities come in — and so
+     * which way a comparison over them faces ({@link Relation.OneWay}) — turn on which of them a
+     * reader happens to meet.
+     */
+    String spelled();
+
+    /**
      * The number at {@code steps} below the value bound at {@code binding}: one value, by the
      * binding that names it and nothing else.
      *
@@ -44,10 +55,15 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding {
         }
 
         @Override
-        public String toString() {
+        public String spelled() {
             StringBuilder out = new StringBuilder(binding.toString());
             steps.forEach(each -> out.append('.').append(each));
             return out.toString();
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
         }
     }
 }

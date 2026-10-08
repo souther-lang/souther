@@ -33,7 +33,8 @@ class AnExpressionIsReadByTheFirstRuleThatReadsAllOfItTest {
     private static final WhyUnread OWED =
             new WhyUnread.NotYetComposed(WhyUnread.NotYetComposed.Step.A_SIZE_AN_OPERATION_KEEPS);
 
-    private static final Derivation READ = new Derivation.ATruthAtAPosition(TermPath.of("a"), true);
+    private static final Derivation READ = new Derivation.ATruthOfASubject(
+            new DecisionSubject.AnInput(TermPath.of("a")), true);
 
     /** A rule that meets {@code part} and answers {@code with}. */
     private static Supplier<Derivation> meeting(List<String> met, String part, Derivation with) {

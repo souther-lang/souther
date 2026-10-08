@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.PredicateStatement;
@@ -149,16 +150,16 @@ record PredicateReadings(List<Reading> predicates, Set<Core> statedAt,
             Builds builds = new Builds(body.templates());
             walk(body.core(), behavior, read,
                     InputReads.ofParametersWhereCallsStand(parameters, read.declared(),
-                            elements),
+                            elements, read.domain().dependencies()),
                     LiveFlow.of(body.core()), true, predicates, reaches, statedAt, builds);
             // What each value the body builds states, read once and where nothing of the
-            // behavior's inputs is in force: a value takes none and names none.
+            // behavior's inputs is in force: a value takes none, names none and stands nothing in.
             for (Core template : body.templatesAfterTheirBuilders()) {
                 Boolean live = builds.read().get(template);
                 if (live != null) {
                     walk(template, behavior, read,
                             InputReads.ofParametersWhereCallsStand(Map.of(), DeclaredInput.NONE,
-                                    elements),
+                                    elements, Membership.none()),
                             LiveFlow.of(template), live, predicates, reaches, statedAt, builds);
                 }
             }

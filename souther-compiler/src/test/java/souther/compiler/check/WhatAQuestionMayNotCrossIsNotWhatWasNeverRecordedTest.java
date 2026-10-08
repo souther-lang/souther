@@ -3,6 +3,7 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.carrier.Membership;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.DeclaredInput;
@@ -65,7 +66,7 @@ class WhatAQuestionMayNotCrossIsNotWhatWasNeverRecordedTest {
                 Map.of(CONTAINER, read("held", HELD)),
                 provenance, Map.of());
         return InputReads.ofParameters(Map.of(HELD, "held", MADE_FROM, "made"),
-                DeclaredInput.NONE, elements);
+                DeclaredInput.NONE, elements, Membership.none());
     }
 
     private static ElementProvenance madeFrom() {

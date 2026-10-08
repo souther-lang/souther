@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -152,6 +153,7 @@ class OneReadingTakesBothRoadsToAPositionTest {
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return InputDomain.of(sigs.get(behavior), List.of(),
-                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES), demand);
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES), demand,
+                Membership.none());
     }
 }

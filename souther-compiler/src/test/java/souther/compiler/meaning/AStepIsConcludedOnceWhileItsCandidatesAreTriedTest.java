@@ -24,10 +24,10 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 class AStepIsConcludedOnceWhileItsCandidatesAreTriedTest {
 
     private static final Derivation PART =
-            new Derivation.ATruthAtAPosition(TermPath.of("a"), true);
+            new Derivation.ATruthOfASubject(new DecisionSubject.AnInput(TermPath.of("a")), true);
 
     private static final Derivation WHOLE = new Derivation.Joined(ConditionJoin.BOTH, PART,
-            new Derivation.ATruthAtAPosition(TermPath.of("b"), true));
+            new Derivation.ATruthOfASubject(new DecisionSubject.AnInput(TermPath.of("b")), true));
 
     @Test
     void aStepAlreadyConcludedIsNotConcludedAgain() {

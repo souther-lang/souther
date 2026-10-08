@@ -215,7 +215,8 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("demo")).value().get("f");
         InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
-                inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()));
+                inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
+                inputs.dependencies());
         Core.If fork = assertInstanceOf(Core.If.class, Core.withoutStanding(analysis.core()),
                 "the body is the fork");
         return Pullback.ofATruth(fork.cond(), reads, inputs.reading(rules), Optional.empty())

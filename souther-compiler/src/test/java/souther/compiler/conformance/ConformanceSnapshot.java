@@ -92,7 +92,8 @@ final class ConformanceSnapshot {
                 MeaningsOfABody meanings = MeaningsOfABodyReading.of(analysis, () -> reading,
                         InputReads.ofParametersWhereCallsStand(input.parameterReads(),
                                 input.declared(rules),
-                                ElementBindings.of(analysis, rules.newtypes())),
+                                ElementBindings.of(analysis, rules.newtypes()),
+                                input.dependencies()),
                         rules.symbols(), rules.newtypes());
                 meanings.stated().forEach((site, meaning) -> unreadIn(meaning.states(),
                         unread -> lines.add(module + "." + behavior + " " + site + " #"

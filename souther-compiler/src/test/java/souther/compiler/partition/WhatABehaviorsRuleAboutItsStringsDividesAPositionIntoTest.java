@@ -17,7 +17,6 @@ import souther.compiler.values.Allowance;
 import souther.compiler.values.Value;
 
 import java.util.List;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -342,6 +341,6 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
         Allowance<NumericTerm.FromOnePosition> allowance = Allowance.of(budget);
         return BehaviorSetStatements.of("f", read, inputs.reading(rules), allowance,
                 List.of(), new RuleReachNumbering(rules.symbols().module(), "f"),
-                WhatAnAnswerTakesUp.of(inputs.reading(rules), Set.of()));
+                WhatAnAnswerTakesUp.of(inputs.reading(rules)));
     }
 }

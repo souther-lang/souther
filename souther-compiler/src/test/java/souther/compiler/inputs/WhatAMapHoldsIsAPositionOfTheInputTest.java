@@ -118,7 +118,7 @@ class WhatAMapHoldsIsAPositionOfTheInputTest {
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value()
                 .get("popular");
         InputReads reads = InputReads.ofParameters(inputs.parameterReads(), inputs.declared(rules),
-                checked.elementBindings().get("popular"));
+                checked.elementBindings().get("popular"), inputs.dependencies());
         return InputDemand.of(body, reads, rules.symbols(), rules.newtypes()).paths();
     }
 

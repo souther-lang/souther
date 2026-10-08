@@ -27,6 +27,7 @@ import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Conclusion;
 import souther.compiler.meaning.DecisionAtom;
+import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.MeaningsOfABody.Meaning;
 import souther.compiler.meaning.Proposition;
@@ -39,8 +40,10 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.ArgumentsStand;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ConditionJoin;
+import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.SideAnswered;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
@@ -53,6 +56,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -143,6 +148,12 @@ final class Pullback {
 
     private final InputReading read;
     private final Optional<ModelOccurrence> where;
+    /**
+     * What a value a row stands a dependency in for is, read as the decision table reads it: one
+     * account of which answer a call is, so a column of the table and a part of what a condition
+     * states are one subject.
+     */
+    private final DecisionSubjects subjects;
     private final List<Met> met = new ArrayList<>();
     /** What the candidates for each expression state, concluded once a step ({@link RuleChoice}). */
     private final Conclusion trying = Conclusion.reusing();
@@ -160,6 +171,8 @@ final class Pullback {
     private Pullback(InputReading read, Optional<ModelOccurrence> where) {
         this.read = read;
         this.where = where;
+        this.subjects = new DecisionSubjects(read.domain(), read.rules().symbols(),
+                read.rules().declarations(), read.rules().newtypes());
     }
 
     /**
@@ -292,15 +305,16 @@ final class Pullback {
                         .<Derivation>map(Derivation.Folded::new).orElse(null),
                 () -> joined(e, reads),
                 () -> {
-                    TermPath position = InputTruth.positionOf(e, reads, read.rules().newtypes());
-                    return position == null ? null
-                            : leaf(new Derivation.ATruthAtAPosition(position, true), e, reads);
+                    DecisionSubject subject = truthAt(e, reads);
+                    return subject == null ? null
+                            : leaf(new Derivation.ATruthOfASubject(subject, true), e, reads);
                 },
                 () -> BooleanMeaning.asAComparison(e).map(stated -> comparison(stated,
                         new Denotation(e, reads), fixed(e, reads), reads)).orElse(null),
                 () -> applied == null ? null : witnessed(applied, e, AnswerAspect.TRUTH, reads),
                 () -> applied == null ? null : membership(applied, e, reads)));
-        return taken != null ? taken : unread(e, reads, unreadAs(applied, AnswerAspect.TRUTH));
+        return taken != null ? taken
+                : unread(e, reads, unreadAs(applied, AnswerAspect.TRUTH, reads));
     }
 
     /**
@@ -373,6 +387,7 @@ final class Pullback {
                 () -> partOf(at, asACut(stated, arithmetic.get(), fixed)),
                 () -> partOf(at, onAnOrder(stated, arithmetic.get(), reads)),
                 () -> partOf(at, ofItsArguments(stated, fixed, reads)),
+                () -> ofAChoice(stated, at, reads),
                 () -> partOf(at, ofBoundValues(stated, fixed, reads)));
     }
 
@@ -428,7 +443,7 @@ final class Pullback {
                             new WhyUnread.NoMeasureOfItsSize(), fixed(e, reads)), asked);
                 }));
         return taken != null ? taken : leaf(new Derivation.Stopped(
-                unreadAs(applied, AnswerAspect.EMPTINESS), fixed(e, reads)), asked);
+                unreadAs(applied, AnswerAspect.EMPTINESS, reads), fixed(e, reads)), asked);
     }
 
     /** What {@code applied} was handed, where it holds something exactly where that does. */
@@ -454,10 +469,15 @@ final class Pullback {
                 () -> writtenOut(e, AnswerAspect.PRESENCE),
                 () -> applied == null ? null
                         : witnessed(applied, e, AnswerAspect.PRESENCE, reads),
-                () -> reads.pathOf(e, read.rules().newtypes()) instanceof PathResolution.At(
-                        TermPath at)
-                        ? leaf(new Derivation.PresentAtAPosition(at), e, reads) : null));
-        return taken != null ? taken : unread(e, reads, unreadAs(applied, AnswerAspect.PRESENCE));
+                () -> {
+                    DecisionSubject subject = reads.pathOf(e, read.rules().newtypes())
+                            instanceof PathResolution.At(TermPath at)
+                            ? new DecisionSubject.AnInput(at) : answerAt(e, reads);
+                    return subject == null ? null
+                            : leaf(new Derivation.PresentInASubject(subject), e, reads);
+                }));
+        return taken != null ? taken
+                : unread(e, reads, unreadAs(applied, AnswerAspect.PRESENCE, reads));
     }
 
     /** The one of {@code rules} an expression is read by ({@link RuleChoice}). */
@@ -470,13 +490,24 @@ final class Pullback {
      *
      * <p>An arm is taken where the value is one of its cases and none of an arm before it. Which
      * cases a value written in the source is is settled before any row ({@link
-     * InputReads#whetherEveryRowTakes}); one at a position is a case the row writes there.
+     * InputReads#whetherEveryRowTakes}); one a row controls is a case the row writes at its position
+     * or stands the dependency in with.
      */
     private Derivation ofAMatch(Core.Match match, AnswerAspect aspect, InputReads reads) {
+        return armsOf(match, reads, (body, inside) -> observe(body, aspect, inside));
+    }
+
+    /**
+     * Some arm of {@code match} taken, and what {@code states} reads of that arm's body where it is
+     * taken — for a match a condition is, and for one that chooses a value a condition compares.
+     */
+    private Derivation.MatchArms armsOf(Core.Match match, InputReads reads,
+                                        BiFunction<Core, InputReads, Derivation> states) {
         Set<TypeSymbol> written = reads.casesWritten(match.scrutinee(),
                 read.rules().symbols(), read.rules().newtypes());
-        TermPath subject = reads.pathOf(match.scrutinee(), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath at) ? at : null;
+        DecisionSubject subject = reads.pathOf(match.scrutinee(), read.rules().newtypes())
+                instanceof PathResolution.At(TermPath at)
+                ? new DecisionSubject.AnInput(at) : answerAt(match.scrutinee(), reads);
         List<Derivation.MatchArms.Arm> arms = new ArrayList<>();
         for (Core.Case arm : match.cases()) {
             Derivation selects;
@@ -486,7 +517,7 @@ final class Pullback {
             } else if (arm.pattern() == null) {
                 selects = new Derivation.CasesWrittenOut(true);
             } else if (subject != null) {
-                selects = new Derivation.CasesAtAPosition(subject,
+                selects = new Derivation.CasesOfASubject(subject,
                         CasesLeft.selectedBy(arm.pattern()));
             } else {
                 // Which arm is taken is the match's own reader's to classify, and no part offered
@@ -498,7 +529,7 @@ final class Pullback {
             }
             InputReads inside = reads.choosing(Choice.Decides.ofCase(match, arm),
                     read.rules().symbols(), read.rules().newtypes());
-            arms.add(new Derivation.MatchArms.Arm(selects, observe(arm.body(), aspect, inside)));
+            arms.add(new Derivation.MatchArms.Arm(selects, states.apply(arm.body(), inside)));
         }
         return new Derivation.MatchArms(arms);
     }
@@ -614,12 +645,14 @@ final class Pullback {
 
     /**
      * A comparison read as a relation over the quantities a condition is read over: numbers of the
-     * input, and numbers of values the body bound — or unread where some part of it is neither.
+     * input, numbers dependencies answered, and numbers of values the body bound — or unread where
+     * some part of it is none of them.
      *
      * <p>The last rule for a comparison, and the one that takes every comparison: what reads the
-     * input alone is tried before it. It reads what those cannot, where what a value is computed
-     * from is unknown: a dependency's answer, what an attempt built. Which value it is is still known, by the binding that names it, and two comparisons over
-     * one name are about one number. The arithmetic is {@link AffineForms}'s, the one walk every
+     * input alone is tried before it. It reads what those cannot: a number a row stands a
+     * dependency in with, and a value whose making is unknown, such as what an attempt built. Which
+     * value that is is still known, by the binding that names it, and two comparisons over one name
+     * are about one number. The arithmetic is {@link AffineForms}'s, the one walk every
      * reader of a number in this compiler composes by; this says only what its atoms are.
      */
     private Derivation ofBoundValues(StatedComparison comparison, boolean fixed,
@@ -631,9 +664,23 @@ final class Pullback {
             return new Derivation.Stopped(new WhyUnread.NotYetComposed(
                     WhyUnread.NotYetComposed.Step.VALUES_WRITTEN_OUT), true);
         }
+        return overQuantities(new Denotation(comparison.left(), reads),
+                new Denotation(comparison.right(), reads), comparison.claim().statedRelation());
+    }
+
+    /**
+     * {@code left states right}, each side read where it stands, as a relation over the quantities
+     * a condition is read over — or unread where a side is no form over them.
+     *
+     * <p>Each side in its own names, because what is related is two numbers and not two spellings:
+     * an atom of these quantities is a number of the input, an answer or a binding, none of which
+     * turns on the names in force where it was read, so two forms are put together wherever each
+     * was read.
+     */
+    private Derivation overQuantities(Denotation left, Denotation right, Rel states) {
         List<LinearForm<Quantity>> sides = new ArrayList<>();
-        for (Core side : List.of(comparison.left(), comparison.right())) {
-            switch (AffineForms.outcome(side, reads, quantities())) {
+        for (Denotation side : List.of(left, right)) {
+            switch (AffineForms.outcome(side.value(), side.at(), quantities())) {
                 case AffineForms.Outcome.Composed<Quantity, InputReads>(var form) -> sides.add(form);
                 case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
                     return new Derivation.Stopped(noFormOf(stopped), false);
@@ -647,19 +694,26 @@ final class Pullback {
                 return new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why), false);
             }
         }
-        Rel states = comparison.claim().statedRelation();
         if (form.coefs().isEmpty()) {
             return new Derivation.ACutThatCutsNothing(states.holds(form.constant().signum()));
         }
-        Rel proposition = states.orItsDenial();
-        return new Derivation.AComparisonRead(Derivation.ComparisonReading.OVER_BOUND_VALUES,
-                new Relation.Affine(form, proposition), states == proposition);
+        return aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, form, states);
+    }
+
+    /** {@code form states 0}, read by {@code by}, written the one way every writing of a relation
+     *  comes to ({@link Relation.OneWay}). */
+    private static Derivation aRelation(Derivation.ComparisonReading by, LinearForm<Quantity> form,
+                                        Rel states) {
+        Relation.OneWay<Quantity> one = Relation.OneWay.of(form, states);
+        return new Derivation.AComparisonRead(by,
+                new Relation.Affine(one.form(), one.proposition()), one.holds());
     }
 
     /**
      * What this reading calls an atom of a number: a number of the input where the expression is
-     * one, and otherwise a number of a value the body bound, named by its binding and the fields
-     * read off it.
+     * one, a number a dependency answered where the call is written, and otherwise a number of a
+     * value the body bound, named by its binding and the fields read off it — an answer given a name
+     * among them.
      *
      * <p>A name is one value only where it is one on a run. A name handed each element of a
      * container, or one that can be any of several values, stands for a different value each time
@@ -699,8 +753,13 @@ final class Pullback {
                         break;
                     }
                 }
+                // A number a dependency answered where the call is written, which a row stands in
+                // and so controls, named as the decision table names it. One a name holds is that
+                // binding's value, below ({@link #readThrough}).
                 if (!(under instanceof Core.Read name)) {
-                    return null;
+                    DecisionSubject.AnAnswer answered = answerAt(node, at);
+                    return answered == null ? null
+                            : LinearForm.atom(new DecisionAtom.OfAnAnswer(answered));
                 }
                 return switch (at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())) {
                     case ReadMeaning.Element _, ReadMeaning.OneOf _, ReadMeaning.Position _ -> null;
@@ -716,8 +775,14 @@ final class Pullback {
 
             @Override
             public AffineForms.ReadThrough<InputReads> readThrough(Core.Read name, InputReads at) {
-                return NameAnswers.denoting(name, at, read.rules().symbols(),
-                        read.rules().newtypes());
+                AffineForms.ReadThrough<InputReads> through = NameAnswers.denoting(name, at,
+                        read.rules().symbols(), read.rules().newtypes());
+                // A name given what a dependency answered is that binding's value, and not read
+                // through to the call. Its binding is the identity a reader walking the tree
+                // follows, where each call to a dependency is an evaluation of its own: read as the
+                // answer, a value that reader could relate to the rest would be one it cannot name.
+                return through != null && answerAt(through.value(), through.at()) != null
+                        ? null : through;
             }
 
             @Override
@@ -745,13 +810,41 @@ final class Pullback {
     }
 
     /**
-     * A comparison of a truth of the input against a truth written out, or null where it is no
+     * A comparison of a truth a row controls against a truth written out, or null where it is no
      * such comparison.
+     *
+     * <p>A truth of the input as the reading of the input reads one, and one a dependency answered
+     * as the decision table does: {@code known(name) == false} holding is {@code known(name)} not
+     * holding, over either.
      */
     private Derivation truthCompared(StatedComparison comparison, InputReads reads) {
         InputTruth truth = InputTruth.compared(comparison, true, reads, read.rules().symbols(),
                 read.rules().newtypes());
-        return truth == null ? null : new Derivation.ATruthCompared(truth.at(), truth.held());
+        if (truth != null) {
+            return new Derivation.ATruthCompared(new DecisionSubject.AnInput(truth.at()),
+                    truth.held());
+        }
+        return BooleanMeaning.againstATruth(comparison, true, read.rules().symbols(),
+                        side -> subjects.isTheTruthOfAnAnswer(side, reads))
+                .map(against -> subjects.truthOf(against.side(), against.held(), reads))
+                .<Derivation>map(stood -> new Derivation.ATruthCompared(stood.condition().of(),
+                        stood.held()))
+                .orElse(null);
+    }
+
+    /**
+     * The subject a row controls that {@code e} is the truth of: a position, or what a dependency
+     * answered — or null where it is neither.
+     */
+    private DecisionSubject truthAt(Core e, InputReads reads) {
+        TermPath position = InputTruth.positionOf(e, reads, read.rules().newtypes());
+        return position != null ? new DecisionSubject.AnInput(position) : answerAt(e, reads);
+    }
+
+    /** What a dependency answered, or a place inside it, that {@code e} is — or null where it is
+     *  no such thing. */
+    private DecisionSubject.AnAnswer answerAt(Core e, InputReads reads) {
+        return subjects.of(e, reads) instanceof DecisionSubject.AnAnswer answered ? answered : null;
     }
 
     /**
@@ -773,11 +866,8 @@ final class Pullback {
                         yield new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why), fixed);
                     }
                 }
-                Rel proposition = states.orItsDenial();
-                yield new Derivation.AComparisonRead(Derivation.ComparisonReading.AS_A_CUT,
-                        new Relation.Affine(
-                                asQuantities(DecisionComparison.ofTheInput(against)), proposition),
-                        states == proposition);
+                yield aRelation(Derivation.ComparisonReading.AS_A_CUT,
+                        asQuantities(DecisionComparison.ofTheInput(against)), states);
             }
             case AffineReading.OfAComparison.CutsNothing constant ->
                     new Derivation.ACutThatCutsNothing(
@@ -842,6 +932,132 @@ final class Pullback {
             case TheSignOfAnOrder.Read.OfTheArguments<InputReads> _,
                  TheSignOfAnOrder.Read.Settled<InputReads> _ -> null;
         };
+    }
+
+    /**
+     * A comparison one side of which is a value chosen by cases, read as the choice: in each case,
+     * the comparison of what that case answers — or null where neither side is such a value.
+     *
+     * <p>The cases are the language's — an {@code if}, a {@code match} — and the library's, where an
+     * operation answers one of its arguments by how its arguments stand ({@link
+     * BoundOperationFacts#isDefinedByCases}). What a case answers is compared with the other side
+     * wherever each was read, so a case reached through a name given the choice is compared with a
+     * side read where the comparison stands ({@link #overQuantities}).
+     */
+    private Derivation ofAChoice(StatedComparison stated, Denotation at, InputReads reads) {
+        Denotation left = new Denotation(stated.left(), reads);
+        Denotation right = new Denotation(stated.right(), reads);
+        // What each case answers is related as a number, which a truth is not: a truth chosen by
+        // cases and held against one written out is a truth of the choice, a step not taken here.
+        if (Core.withoutStanding(stated.left()).type() == Type.Prim.BOOL
+                || (chosenAt(left) == null && chosenAt(right) == null)) {
+            return null;
+        }
+        return new Derivation.AComparisonOfAChoice(
+                comparedCase(left, right, stated.claim().statedRelation(), at));
+    }
+
+    /**
+     * {@code left states right}, each side split into its cases where it is chosen by them, and
+     * related as numbers where neither is.
+     */
+    private Derivation comparedCase(Denotation left, Denotation right, Rel states,
+                                    Denotation at) {
+        Derivation byLeft = byItsCases(left, at, side -> comparedCase(side, right, states, at));
+        if (byLeft != null) {
+            return byLeft;
+        }
+        Derivation byRight = byItsCases(right, at, side -> comparedCase(left, side, states, at));
+        return byRight != null ? byRight : partOf(at, overQuantities(left, right, states));
+    }
+
+    /**
+     * The value {@code side} stands for, where it is chosen by cases — or null where it is not.
+     */
+    private Denotation chosenAt(Denotation side) {
+        Denotation stands = side.at().standing(side.value(), read.rules().symbols(),
+                read.rules().newtypes());
+        return switch (Core.withoutStanding(stands.value())) {
+            case Core.If _, Core.Match _ -> stands;
+            case Core e when AnOperationApplied.of(e) instanceof AnOperationApplied applied
+                    && casesOf(applied) != null -> stands;
+            default -> null;
+        };
+    }
+
+    /**
+     * The cases the library writes {@code applied}'s definition in, or null where it writes it in
+     * none or an argument a case is about is not one this call was handed.
+     */
+    private static List<DefinitionCase<DeclaredArgument>> casesOf(AnOperationApplied applied) {
+        List<DefinitionCase<DeclaredArgument>> cases =
+                DefaultBoundOperationFacts.get().isDefinedByCases(applied.operation());
+        for (DefinitionCase<DeclaredArgument> each : cases) {
+            if (applied.argument(each.answers()) == null || each.given().stream().anyMatch(
+                    stands -> applied.argument(stands.left()) == null
+                            || applied.argument(stands.right()) == null)) {
+                return null;
+            }
+        }
+        return cases.isEmpty() ? null : cases;
+    }
+
+    /**
+     * The choice {@code side} is, with {@code compared} read of what each case answers — or null
+     * where {@code side} is chosen by no cases.
+     *
+     * @param at the comparison the choice is a side of, where it is a part of a larger condition:
+     *           how the arguments of an operation stand is a part read off it
+     */
+    private Derivation byItsCases(Denotation side, Denotation at,
+                                  Function<Denotation, Derivation> compared) {
+        Denotation chosen = chosenAt(side);
+        if (chosen == null) {
+            return null;
+        }
+        InputReads where = chosen.at();
+        return switch (Core.withoutStanding(chosen.value())) {
+            case Core.If iff -> new Derivation.IfThenElse(
+                    observe(iff.cond(), AnswerAspect.TRUTH, where),
+                    compared.apply(new Denotation(iff.then(), where)),
+                    compared.apply(new Denotation(iff.els(), where)));
+            case Core.Match match -> armsOf(match, where,
+                    (body, inside) -> compared.apply(new Denotation(body, inside)));
+            case Core e -> ofAnOperationsCases(AnOperationApplied.of(e), where, at, compared);
+        };
+    }
+
+    /**
+     * The cases the library writes {@code applied}'s definition in, each reached where its
+     * arguments stand as the case says and none before it does, with {@code compared} read of the
+     * argument that case answers.
+     */
+    private Derivation ofAnOperationsCases(AnOperationApplied applied, InputReads where,
+                                           Denotation at,
+                                           Function<Denotation, Derivation> compared) {
+        if (!(applied.operation() instanceof ValueName.Stdlib operation)) {
+            return null;
+        }
+        List<Derivation.MatchArms.Arm> cases = new ArrayList<>();
+        for (DefinitionCase<DeclaredArgument> each : casesOf(applied)) {
+            Derivation reached = null;
+            for (ArgumentsStand<DeclaredArgument> stands : each.given()) {
+                Derivation one = comparedCase(
+                        new Denotation(applied.argument(stands.left()), where),
+                        new Denotation(applied.argument(stands.right()), where), stands.rel(), at);
+                reached = reached == null ? one
+                        : new Derivation.Joined(ConditionJoin.BOTH, reached, one);
+            }
+            if (reached == null) {
+                // A case reached whatever the arguments are is no case of a choice, and the cases
+                // after it would never be reached; the library writes none.
+                throw new IllegalStateException("a case of " + operation + " is reached by no"
+                        + " standing of its arguments");
+            }
+            cases.add(new Derivation.MatchArms.Arm(reached,
+                    compared.apply(new Denotation(applied.argument(each.answers()), where))));
+        }
+        return new Derivation.AnOperationsCases(operation, cases);
     }
 
     /**
@@ -922,19 +1138,30 @@ final class Pullback {
      * Why {@code applied} — or, where nothing is applied, the value it is asked of — coming out on
      * {@code aspect} was read as nothing, once no rule took it.
      */
-    private static WhyUnread unreadAs(AnOperationApplied applied, AnswerAspect aspect) {
+    private static WhyUnread unreadAs(AnOperationApplied applied, AnswerAspect aspect,
+                                      InputReads reads) {
         if (applied == null) {
             return new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
         }
         return switch (applied.operation()) {
             case ValueName.Stdlib operation -> new WhyUnread.NoLawFor(operation, aspect);
-            case ValueName.Behavior _ -> aspect == AnswerAspect.EMPTINESS
+            case ValueName.Behavior behavior -> aspect == AnswerAspect.EMPTINESS
                     ? new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT)
-                    : new WhyUnread.NotYetComposed(
-                            WhyUnread.NotYetComposed.Step.A_DEPENDENCYS_ANSWER);
+                    : whatABehaviorAnswers(behavior, reads);
             case ValueName.Helper _ -> new WhyUnread.WhatARecursiveHelperAnswers();
             default -> new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
         };
+    }
+
+    /**
+     * Why what {@code behavior} answered was read as nothing: a dependency's answer is named by what
+     * it was asked about, so one of them unread is one asked about a value nothing names yet, and
+     * any other behavior's is what its body computes.
+     */
+    private static WhyUnread whatABehaviorAnswers(ValueName.Behavior behavior, InputReads reads) {
+        return new WhyUnread.NotYetComposed(reads.standsIn(behavior)
+                ? WhyUnread.NotYetComposed.Step.A_DEPENDENCY_ASKED_ABOUT_A_COMPUTED_VALUE
+                : WhyUnread.NotYetComposed.Step.A_BEHAVIOR_CALLED_BY_NAME);
     }
 
     /**
@@ -1006,8 +1233,7 @@ final class Pullback {
         }
         BoundOperationFacts facts = DefaultBoundOperationFacts.get();
         return switch (applied.operation()) {
-            case ValueName.Behavior _ -> new WhyUnread.NotYetComposed(
-                    WhyUnread.NotYetComposed.Step.A_DEPENDENCYS_ANSWER);
+            case ValueName.Behavior behavior -> whatABehaviorAnswers(behavior, reads);
             case ValueName.Helper _ -> new WhyUnread.WhatARecursiveHelperAnswers();
             case ValueName.Stdlib operation -> {
                 if (!facts.isDefinedByCases(operation).isEmpty()) {

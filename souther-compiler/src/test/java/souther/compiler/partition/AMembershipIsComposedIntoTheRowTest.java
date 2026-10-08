@@ -295,7 +295,8 @@ class AMembershipIsComposedIntoTheRowTest {
         InputDomain inputs = domain(behavior);
         InputReading reading = inputs.reading(rules());
         InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
-                reading.declared(), ElementBindings.of(analysis, rules().newtypes()));
+                reading.declared(), ElementBindings.of(analysis, rules().newtypes()),
+                inputs.dependencies());
         List<OnTheWay> stated = ReachingCuts.stating(Condition.of(analysis.core(), reads,
                         rules().symbols(), rules().newtypes(),
                         new ConditionNumbering(module(), behavior)),

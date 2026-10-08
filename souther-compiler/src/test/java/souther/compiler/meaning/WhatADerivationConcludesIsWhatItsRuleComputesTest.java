@@ -29,7 +29,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
     private static final TermPath XS = TermPath.of("xs");
 
     private static Derivation truthAt(TermPath at) {
-        return new Derivation.ATruthAtAPosition(at, true);
+        return new Derivation.ATruthOfASubject(new DecisionSubject.AnInput(at), true);
     }
 
     private static Proposition truth(TermPath at) {

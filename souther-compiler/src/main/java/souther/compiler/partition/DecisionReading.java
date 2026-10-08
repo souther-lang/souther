@@ -8,13 +8,10 @@ import souther.compiler.flow.ValueArrivals;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 
-import souther.compiler.types.ValueName;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * The rules of the decision one body states.
@@ -168,12 +165,12 @@ public record DecisionReading(String behavior, List<Ruled> found, Enumeration en
      * <p>Whose body it is is asked for, because a rule is reported as a rule of a behavior and a
      * condition takes its name from the reading of one.
      *
-     * @param dependencies which behaviors this one declares it depends on, since a distinction the
-     *                     body draws on what one of them answered is a distinction a row can write
-     *                     for, and the same call to anything else is a value the model computes
+     * <p>A distinction the body draws on what a dependency answered is one a row can write for, and
+     * the same call to anything else is a value the model computes; which calls are which is
+     * {@code reads}'s ({@link InputReads#standsIn}).
      */
     public static DecisionReading of(String behavior, AnalysisBody analysis, InputReading read,
-                                     InputReads reads, Set<ValueName.Behavior> dependencies) {
+                                     InputReads reads) {
         Core body = analysis.core();
         // The conditions of this body take their names here, and one register serves every scope: a
         // condition met under a binding and the same condition met outside it are one condition.
@@ -182,7 +179,7 @@ public record DecisionReading(String behavior, List<Ruled> found, Enumeration en
         // leaves nothing after its build reached. What is inside the template is not counted as a
         // way of this body — a value takes no input, so it is no rule a row can be written for.
         ValueArrivals<DecisionPath> arrivals = ValueArrivals.ofBodyWhereTheOperationsStand(body,
-                new DecisionNaming(meanings(read, dependencies), reads, numbering,
+                new DecisionNaming(meanings(read), reads, numbering,
                         PATHS_READ.maximum()),
                 new AnOperationsTruthComesOutAsItCan(reads, read),
                 analysis.templates()::bodyOf);
@@ -199,10 +196,9 @@ public record DecisionReading(String behavior, List<Ruled> found, Enumeration en
     }
 
     /** What this body's conditions decide, made once for the whole reading of it. */
-    private static DecisionMeanings meanings(InputReading read,
-                                             Set<ValueName.Behavior> dependencies) {
+    private static DecisionMeanings meanings(InputReading read) {
         ConditionMeanings states = new ConditionMeanings(read);
-        WhatAnAnswerTakesUp answers = WhatAnAnswerTakesUp.of(read, dependencies);
+        WhatAnAnswerTakesUp answers = WhatAnAnswerTakesUp.of(read);
         return new DecisionMeanings(states, answers.subjects(), answers.comparisons());
     }
 }

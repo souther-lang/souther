@@ -296,7 +296,8 @@ public final class PathReachability {
         reading.entered = in.at();
         reading.walk(body, in.known(), in.at(),
                         InputReads.ofParameters(read.parameterReads(),
-                                read.declared(ruleReading.source()), elements),
+                                read.declared(ruleReading.source()), elements,
+                                read.dependencies()),
                         List.of(), true);
         // A walk that ran to the end and made none of the answers it is written to produce. Its own
         // limit and said as one: the analysis this borrows is open about what it reads, so a

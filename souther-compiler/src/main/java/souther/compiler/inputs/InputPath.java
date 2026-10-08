@@ -174,6 +174,13 @@ final class InputPath {
                             ? base -> base.then(fa.field()) : base -> base);
             // The two rules above a name at a time, from the base.
             case Core.FieldProjection p -> namedAlong(p.base(), p.steps().inOrder(), 0, names);
+            // A newtype made of one value is that value wearing a name, so it stands where the value
+            // does: the other way round from reading its `value`, which is no step either. Read as
+            // no position, `Slug(draft.title)` handed to a dependency asked it about nothing a row
+            // writes, where `draft.title` asked it about a position.
+            case Core.Construct construct when newtypes.of(construct.typeName().key())
+                    && construct.values().size() == 1 ->
+                    named(construct.values().getFirst().value(), names);
             // What an expression that binds a name comes to is what its body comes to, under that
             // name. Whether the name may stand for the position its value names is not asked here
             // and is not a question about this shape: it is asked where the name is read, of what

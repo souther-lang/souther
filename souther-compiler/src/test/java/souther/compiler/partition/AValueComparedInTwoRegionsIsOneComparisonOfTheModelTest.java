@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -17,7 +18,6 @@ import souther.compiler.types.WrittenOwner;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -81,9 +81,11 @@ class AValueComparedInTwoRegionsIsOneComparisonOfTheModelTest {
         List<ComparisonReadings.Reading> readings = ComparisonReadings.of("f", read.analysis(),
                 read.inputs().reading(read.rules()),
                 InputReads.ofParametersWhereCallsStand(read.inputs().parameterReads(),
-                        read.inputs().declared(read.rules()), elements),
-                InputReads.ofParametersWhereCallsStand(Map.of(), DeclaredInput.NONE, elements),
-                WhatAnAnswerTakesUp.of(read.inputs().reading(read.rules()), Set.of()))
+                        read.inputs().declared(read.rules()), elements,
+                        read.inputs().dependencies()),
+                InputReads.ofParametersWhereCallsStand(Map.of(), DeclaredInput.NONE, elements,
+                        Membership.none()),
+                WhatAnAnswerTakesUp.of(read.inputs().reading(read.rules())))
                 .comparisons();
 
         long ofTheValue = readings.stream()

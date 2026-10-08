@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.carrier.Membership;
 import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.ElementBindings;
@@ -9,11 +10,13 @@ import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -68,19 +71,27 @@ import java.util.Set;
  * <p>What an arm narrowed is this reading's own and not the environment's. It is a fact about where
  * a walk is in the tree rather than about where a binding came from — read under one arm and not
  * under the next — so it is held beside the environment and put to it here.
+ *
+ * <p>And which of the behaviors a body calls a row stands in for. A call to one of them is a value a
+ * row supplies, as a position's is, and a call to any other is one the model computes; which it is
+ * is a fact about the body being read and not about the call, so a rule a declaration states, which
+ * nothing stands a dependency in for, is read where none is.
  */
 public final class InputReads {
 
     private final BindingEnvironment names;
     private final Map<BindingId, java.util.List<Denotation>> alternatives;
     private final DeclaredInput declared;
+    private final Membership<ValueName.Behavior> dependencies;
 
     private InputReads(BindingEnvironment names,
                        Map<BindingId, java.util.List<Denotation>> alternatives,
-                       DeclaredInput declared) {
+                       DeclaredInput declared, Membership<ValueName.Behavior> dependencies) {
         this.names = names;
         this.alternatives = Map.copyOf(alternatives);
         this.declared = declared;
+        this.dependencies = Objects.requireNonNull(dependencies,
+                "a body says which calls a row stands in for, if none");
     }
 
     /**
@@ -98,11 +109,14 @@ public final class InputReads {
      * <p>{@code elements} is what the operations that handed their closures the contents of
      * containers were read to say, since the tree this walks has none of them left in it. Given
      * nothing, every name inside a closure names no position.
+     *
+     * <p>{@code dependencies} is what a row stands in for ({@link InputDomain#dependencies}).
      */
     public static InputReads ofParameters(Map<BindingId, String> parameters,
-                                          DeclaredInput declared, ElementBindings elements) {
+                                          DeclaredInput declared, ElementBindings elements,
+                                          Membership<ValueName.Behavior> dependencies) {
         return new InputReads(new BindingEnvironment(BindingEnvironment.rooted(parameters),
-                Map.of(), elements, false), Map.of(), declared);
+                Map.of(), elements, false), Map.of(), declared, dependencies);
     }
 
     /**
@@ -120,9 +134,10 @@ public final class InputReads {
      * be reported as this compiler failing to expand something.
      */
     public static InputReads ofParametersWhereCallsStand(
-            Map<BindingId, String> parameters, DeclaredInput declared, ElementBindings elements) {
+            Map<BindingId, String> parameters, DeclaredInput declared, ElementBindings elements,
+            Membership<ValueName.Behavior> dependencies) {
         return new InputReads(new BindingEnvironment(BindingEnvironment.rooted(parameters),
-                Map.of(), elements, true), Map.of(), declared);
+                Map.of(), elements, true), Map.of(), declared, dependencies);
     }
 
     /**
@@ -135,7 +150,7 @@ public final class InputReads {
     public static InputReads ofWhatIsDeclared(Map<BindingId, String> roots,
                                               DeclaredInput declared) {
         return new InputReads(new BindingEnvironment(BindingEnvironment.rooted(roots), Map.of(),
-                ElementBindings.NONE, true), Map.of(), declared);
+                ElementBindings.NONE, true), Map.of(), declared, Membership.none());
     }
 
     /**
@@ -154,7 +169,7 @@ public final class InputReads {
     public static InputReads ofADeclaredClause(Map<BindingId, TermPath> roots,
                                                DeclaredInput declared) {
         return new InputReads(new BindingEnvironment(roots, Map.of(),
-                ElementBindings.NONE, true), Map.of(), declared);
+                ElementBindings.NONE, true), Map.of(), declared, Membership.none());
     }
 
     /**
@@ -168,7 +183,12 @@ public final class InputReads {
     static InputReads written(Map<BindingId, TermPath> roots, Map<BindingId, Core> bound,
                               ElementBindings elements) {
         return new InputReads(new BindingEnvironment(roots, bound, elements, false), Map.of(),
-                DeclaredInput.NONE);
+                DeclaredInput.NONE, Membership.none());
+    }
+
+    /** Whether a call to {@code behavior} is a value a row stands in for, read here. */
+    public boolean standsIn(ValueName.Behavior behavior) {
+        return dependencies.contains(behavior);
     }
 
     /**
@@ -254,7 +274,7 @@ public final class InputReads {
         // only the first here is what breaks that circle, and the cost of asking it alone is a name
         // that stands for a place no row reaches — which the reading refuses when it is asked.
         return new InputReads(names.naming(arm.binder().binding(), narrowed), alternatives,
-                declared);
+                declared, dependencies);
     }
 
     /**
@@ -304,7 +324,7 @@ public final class InputReads {
         }
         Map<BindingId, java.util.List<Denotation>> wider = new LinkedHashMap<>(alternatives);
         wider.put(arm.binder().binding(), left);
-        return new InputReads(names, wider, declared);
+        return new InputReads(names, wider, declared, dependencies);
     }
 
     /**
@@ -498,7 +518,8 @@ public final class InputReads {
     /** The same, inside what {@code binder} binds. */
     public InputReads and(Core.Binder binder, Core value) {
         BindingEnvironment inside = names.inside(binder, value);
-        return inside == names ? this : new InputReads(inside, alternatives, declared);
+        return inside == names ? this
+                : new InputReads(inside, alternatives, declared, dependencies);
     }
 
     /**
@@ -847,12 +868,14 @@ public final class InputReads {
         return this == other
                 || (other instanceof InputReads that && names.equals(that.names)
                         && alternatives.equals(that.alternatives)
-                        && declared.equals(that.declared));
+                        && declared.equals(that.declared)
+                        && dependencies.equals(that.dependencies));
     }
 
     @Override
     public int hashCode() {
-        return (names.hashCode() * 31 + alternatives.hashCode()) * 31 + declared.hashCode();
+        return ((names.hashCode() * 31 + alternatives.hashCode()) * 31 + declared.hashCode()) * 31
+                + dependencies.hashCode();
     }
 
     @Override

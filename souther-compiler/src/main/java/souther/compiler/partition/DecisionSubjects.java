@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.carrier.Membership;
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.Location;
 import souther.compiler.check.DeclarationAccess;
@@ -34,14 +33,12 @@ import java.util.List;
  *
  * <p><b>Only what a row can control.</b> A position of the input is written at and an answer of a
  * dependency this behavior declares is stood in for. A call to anything else is a value the model
- * computes, and a row cannot be composed to make it come out one way rather than another.
- *
- * @param dependencies the behaviors this one declares it depends on, which are the ones a row
- *                     stands in for
+ * computes, and a row cannot be composed to make it come out one way rather than another. Which
+ * calls are stood in for is the environment's to say ({@link InputReads#standsIn}), since it is a
+ * fact about the body being read: a rule a declaration states is read where nothing is.
  */
 record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess declarations,
-                        DeclarationNewtypes newtypes,
-                        Membership<ValueName.Behavior> dependencies) {
+                        DeclarationNewtypes newtypes) {
 
     DecisionSubjects {
         if (declarations == null || newtypes == null) {
@@ -150,7 +147,7 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
         if (!(Core.withoutStanding(e) instanceof Core.Call call
                 && call.fn() instanceof Core.Reached reached
                 && reached.denotes() instanceof ValueName.Behavior dependency
-                && dependencies.contains(dependency))) {
+                && at.standsIn(dependency))) {
             return null;
         }
         List<DecisionArgument> arguments = new ArrayList<>();

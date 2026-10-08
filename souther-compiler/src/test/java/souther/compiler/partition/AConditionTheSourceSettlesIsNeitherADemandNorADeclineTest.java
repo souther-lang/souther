@@ -221,7 +221,7 @@ class AConditionTheSourceSettlesIsNeitherADemandNorADeclineTest {
         assertNotNull(analysis, () -> "the model under test writes " + behavior);
         InputReads reads = InputReads.ofParametersWhereCallsStand(
                 domain(behavior).parameterReads(), domain(behavior).declared(rules()),
-                ElementBindings.of(analysis, rules().newtypes()));
+                ElementBindings.of(analysis, rules().newtypes()), domain(behavior).dependencies());
         return Condition.of(analysis.core(), reads, rules().symbols(), rules().newtypes(),
                 new ConditionNumbering(module(), behavior));
     }

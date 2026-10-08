@@ -1,13 +1,9 @@
 package souther.compiler.partition;
 
-import souther.compiler.carrier.Membership;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
-import souther.compiler.types.ValueName;
-
-import java.util.Set;
 
 /**
  * Which of a body's conditions the decision table holds as distinctions over what a dependency
@@ -33,17 +29,16 @@ import java.util.Set;
 record WhatAnAnswerTakesUp(DecisionSubjects subjects, DecisionComparison comparisons) {
 
     /**
-     * What the decision table over {@code read} takes up, where the body depends on
-     * {@code dependencies}.
+     * What the decision table over {@code read} takes up.
      *
-     * <p>Given none, nothing is taken up: a rule nothing stands a dependency in for has no answer in
-     * it a row controls, which is what a declaration's clause is.
+     * <p>Which calls are answers a row stands in for is the environment's each is asked under
+     * ({@link InputReads#standsIn}): a rule nothing stands a dependency in for, which is what a
+     * declaration's clause is, is read where none is and has no answer in it a row controls.
      */
-    static WhatAnAnswerTakesUp of(InputReading read, Set<ValueName.Behavior> dependencies) {
+    static WhatAnAnswerTakesUp of(InputReading read) {
         DecisionSubjects subjects =
                 new DecisionSubjects(read.domain(), read.rules().symbols(),
-                        read.rules().declarations(), read.rules().newtypes(),
-                        Membership.built(add -> dependencies.forEach(add::add)));
+                        read.rules().declarations(), read.rules().newtypes());
         return new WhatAnAnswerTakesUp(subjects,
                 new DecisionComparison(read.domain(), read.rules(), subjects));
     }

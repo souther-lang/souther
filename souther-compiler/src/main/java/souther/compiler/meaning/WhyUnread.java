@@ -145,7 +145,11 @@ public sealed interface WhyUnread {
              */
             A_SIZE_AN_OPERATION_KEEPS,
 
-            /** A number an operation answers by choosing among cases of its arguments. */
+            /**
+             * A value chosen by cases where the choice is not a side of the comparison: inside
+             * arithmetic, where what each case answers has to be carried out through what is
+             * computed from it, or a truth held against one written out.
+             */
             A_CHOICE_BY_CASES,
 
             /**
@@ -154,8 +158,16 @@ public sealed interface WhyUnread {
              */
             VALUES_WRITTEN_OUT,
 
-            /** The truth of what a dependency of the behavior answers. */
-            A_DEPENDENCYS_ANSWER,
+            /**
+             * What a dependency answers when asked about a value the model computes from what a row
+             * controls. A row asks it the same thing however it is spelled, so the answer is one the
+             * row stands in; naming it takes naming the value it was asked about, which only a
+             * subject or a number written out is named by so far.
+             */
+            A_DEPENDENCY_ASKED_ABOUT_A_COMPUTED_VALUE,
+
+            /** What a behavior called by name answers, which its body computes. */
+            A_BEHAVIOR_CALLED_BY_NAME,
 
             /** A closure handed to an operation as a name rather than written where it is handed. */
             A_CLOSURE_BY_NAME

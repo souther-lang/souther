@@ -291,7 +291,7 @@ class AnArmOnACaseTheDeclarationAlreadyMakesNarrowsNothingTest {
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value()
                 .get(behavior);
         InputReads reads = InputReads.ofParameters(inputs.parameterReads(), inputs.declared(rules),
-                checked.elementBindings().get(behavior));
+                checked.elementBindings().get(behavior), inputs.dependencies());
         return InputDemand.of(body, reads, rules.symbols(), rules.newtypes()).paths();
     }
 }

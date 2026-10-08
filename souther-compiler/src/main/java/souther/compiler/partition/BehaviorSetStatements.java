@@ -25,7 +25,6 @@ import souther.compiler.values.Allowance;
 import souther.compiler.values.Realizations;
 import souther.compiler.values.Sameness;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -193,19 +192,18 @@ public final class BehaviorSetStatements {
      * a term written about in both places would be measured twice and the second measure would be
      * told nothing of the first's classes.
      *
-     * <p>{@code dependencies} are the behaviors this one declares it depends on. A fork on what one
-     * of them answered states no rule of its own: the decision table holds it as a column.
+     * <p>A fork on what a dependency answered states no rule of its own: the decision table holds
+     * it as a column.
      */
     public static Read of(String behavior, AnalysisBody body, StatedContract stated,
                           InputReading read,
                           Map<BindingId, String> parameters, ElementBindings elements,
                           Allowance<NumericTerm.FromOnePosition> allowance,
                           List<ComparisonReadings.ForkMet> forks,
-                          RuleReachNumbering reaches,
-                          Set<ValueName.Behavior> dependencies) {
+                          RuleReachNumbering reaches) {
         return of(behavior,
                 PredicateReadings.of(behavior, body, stated, read, parameters, elements, reaches),
-                read, allowance, forks, reaches, WhatAnAnswerTakesUp.of(read, dependencies));
+                read, allowance, forks, reaches, WhatAnAnswerTakesUp.of(read));
     }
 
     /**

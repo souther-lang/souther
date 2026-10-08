@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.WhereItSits;
+import souther.compiler.carrier.Membership;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.AnalysisBody;
@@ -18,7 +19,6 @@ import souther.compiler.query.Compilation;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -84,10 +84,11 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
                         new AnalysisBody(body, ElementProvenance.NONE, ValueTemplates.NONE),
                         inputs.reading(rules),
                         InputReads.ofParameters(inputs.parameterReads(), inputs.declared(rules),
-                                checked.elementBindings().get("read")),
+                                checked.elementBindings().get("read"), inputs.dependencies()),
                         InputReads.ofParameters(Map.of(), DeclaredInput.NONE,
-                                checked.elementBindings().get("read")),
-                        WhatAnAnswerTakesUp.of(inputs.reading(rules), Set.of())).comparisons()) {
+                                checked.elementBindings().get("read"),
+                                Membership.none()),
+                        WhatAnAnswerTakesUp.of(inputs.reading(rules))).comparisons()) {
             Citation.Written at = assertInstanceOf(
                     Citation.Written.class, each.at(),
                     "the model under test is written in this compile's own source");

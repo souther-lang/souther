@@ -151,7 +151,7 @@ final class Coverages {
                 new RuleReachNumbering(read.symbols().module(), behavior.name());
         GuardThresholds.Guards guards = body == null ? GuardThresholds.Guards.NONE
                 : GuardThresholds.of(behavior.name(), analysis, body, plan, read, standing, arrives,
-                        reaches, behavior.dependsOnBehaviors());
+                        reaches);
         // And what the declarations state between two of this input's positions. Such a rule places
         // no end at either of them, so the reading of ends has nothing to draw it from; read here,
         // it is a line like the two above and is arranged with them.
@@ -164,7 +164,7 @@ final class Coverages {
         souther.compiler.partition.BehaviorSetStatements.Read sets =
                 souther.compiler.partition.BehaviorSetStatements.of(behavior.name(), analysis, stated, read,
                         read.domain().parameterReads(), standing, distinctions, guards.forks(),
-                        reaches, behavior.dependsOnBehaviors());
+                        reaches);
         List<souther.compiler.partition.LineDrawn> declared =
                 souther.compiler.partition.DeclaredThresholds.between(behavior.name(), read);
         // Every producer of one kind of line, put together before the position is divided. Two

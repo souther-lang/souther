@@ -232,7 +232,7 @@ class AConditionRecordedAsTakenInIsOneTheRegionRepresentsTest {
             souther.compiler.inputs.InputDomain inputs =
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get(name);
             InputReads reads = InputReads.ofParameters(inputs.parameterReads(), inputs.declared(rules),
-                    checked.elementBindings().get(name));
+                    checked.elementBindings().get(name), inputs.dependencies());
             return new Read(body, inputs.reading(rules), reads, rules, module, name);
         });
     }
