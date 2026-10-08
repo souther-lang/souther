@@ -37,7 +37,8 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
 
     private static final String INPUT = """
             data Item = { price: Int, tag: String? }
-            data Box = { xs: List<Int>, items: List<Item>, open: Bool, x: Int, y: Int }
+            data Box = { xs: List<Int>, items: List<Item>, open: Bool, x: Int, y: Int,
+                         m: Map<String, Int> }
             """;
 
     @Test
@@ -112,6 +113,26 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
         Proposition.Present tag = assertInstanceOf(Proposition.Present.class,
                 some.ofTheElement());
         assertEquals("b.items[*].tag", ((DecisionSubject.AnInput) tag.of()).at().toString());
+    }
+
+    /**
+     * An entry of a map is its key and its value, so what a filter of its entries asks of either is
+     * asked of the element.
+     */
+    @Test
+    void anEntryOfAMapIsTheElementByItsKeyAndByItsValue() {
+        for (List<String> asked : List.of(
+                List.of("String.length(k) >= 3", "b.m[key]"),
+                List.of("v > 0", "b.m[*]"))) {
+            Proposition some = stated("Bool.not(Map.isEmpty(Map.filterEntries((k, v) -> "
+                    + asked.get(0) + ", b.m)))");
+            Proposition.Some entry = assertInstanceOf(Proposition.Some.class, some, asked.get(0));
+            assertEquals("b.m", entry.container().toString());
+            Proposition.Compared compared = assertInstanceOf(Proposition.Compared.class,
+                    entry.ofTheElement(), asked.get(0));
+            assertTrue(compared.relation().toString().contains(asked.get(1)),
+                    () -> asked.get(0) + " is about " + asked.get(1) + ": " + compared);
+        }
     }
 
     /** One container quantified inside itself would make its two elements one subject. */

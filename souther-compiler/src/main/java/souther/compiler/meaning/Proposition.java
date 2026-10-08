@@ -201,7 +201,8 @@ public sealed interface Proposition {
      * {@code holds} is false, no element meeting it.
      *
      * <p>The element is what stands at {@code container}'s element inside {@code ofTheElement}: a
-     * subject under {@code container[*]} there is the element's, and nothing else is. Which is why
+     * subject under {@code container[*]} there is the element's — and of a map, whose element is an
+     * entry, so is one under {@code container[key]} — and nothing else is. Which is why
      * the same container is never quantified twice inside one proposition: the two elements would be
      * one subject, and the proposition would say {@code x < x} where it was asked about two of them.
      */
