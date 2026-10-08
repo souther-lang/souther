@@ -3905,7 +3905,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case WhyUnread.NoMeasureOfItsSize _ ->
                     "a condition about what a container holds that comes to how many it holds,"
                             + " which is no number this reading measures";
-            case WhyUnread.OutsideTheLinearFragment _, WhyUnread.NoFormOfWhatItAnswers _,
+            case WhyUnread.OutsideTheLinearFragment _, WhyUnread.ANumberNotHeld _,
+                 WhyUnread.NoNumberOnARun _, WhyUnread.NoFormOfWhatItAnswers _,
                  WhyUnread.ANumberOfWhatAnOperationAnswers _ -> NO_CUT;
             case WhyUnread.TwoElementsOfOneContainer _, WhyUnread.NoLawFor _,
                  WhyUnread.WhatARecursiveHelperAnswers _ -> NEITHER_A_COMPARISON_NOR_A_COMBINATION;

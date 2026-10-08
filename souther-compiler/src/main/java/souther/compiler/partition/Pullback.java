@@ -31,8 +31,10 @@ import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhyUnread;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ConditionJoin;
@@ -617,16 +619,19 @@ final class Pullback {
         for (Core side : List.of(comparison.left(), comparison.right())) {
             switch (AffineForms.outcome(side, reads, quantities())) {
                 case AffineForms.Outcome.Composed<Quantity, InputReads>(var form) -> sides.add(form);
-                case AffineForms.Outcome.StoppedAt<Quantity, InputReads>(var node, var at) -> {
-                    return new Derivation.Stopped(noFormOf(node, at), false);
+                case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
+                    return new Derivation.Stopped(noFormOf(stopped), false);
                 }
             }
         }
-        LinearForm<Quantity> form = sides.get(0).minus(sides.get(1)).orNull();
-        Rel states = comparison.claim().statedRelation();
-        if (form == null) {
-            return new Derivation.Stopped(new WhyUnread.OutsideTheLinearFragment(), false);
+        LinearForm<Quantity> form;
+        switch (sides.get(0).minus(sides.get(1))) {
+            case ExactAnswer.Held<LinearForm<Quantity>>(LinearForm<Quantity> held) -> form = held;
+            case ExactAnswer.Unheld<LinearForm<Quantity>>(UnheldNumber why) -> {
+                return new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why), false);
+            }
         }
+        Rel states = comparison.claim().statedRelation();
         if (form.coefs().isEmpty()) {
             return new Derivation.ACutThatCutsNothing(states.holds(form.constant().signum()));
         }
@@ -745,10 +750,12 @@ final class Pullback {
         return switch (arithmetic) {
             case AffineReading.OfAComparison.Cuts(var affine) -> {
                 Rel states = affine.claim().statedRelation();
-                LinearForm<NumericTerm> against =
-                        affine.form().minus(LinearForm.constant(affine.cut())).orNull();
-                if (against == null) {
-                    yield new Derivation.Stopped(new WhyUnread.OutsideTheLinearFragment(), fixed);
+                LinearForm<NumericTerm> against;
+                switch (affine.form().minus(LinearForm.constant(affine.cut()))) {
+                    case ExactAnswer.Held<LinearForm<NumericTerm>>(var held) -> against = held;
+                    case ExactAnswer.Unheld<LinearForm<NumericTerm>>(UnheldNumber why) -> {
+                        yield new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why), fixed);
+                    }
                 }
                 Rel proposition = states.orItsDenial();
                 yield new Derivation.AComparisonRead(Derivation.ComparisonReading.AS_A_CUT,
@@ -853,14 +860,36 @@ final class Pullback {
     }
 
     /**
-     * Why the arithmetic stopped at {@code stopped}, read in {@code reads}: what stands at the end of
-     * the accesses it is made of.
+     * Why the arithmetic stopped where it did, as a reason about the domain.
      *
-     * <p>Said of the expression {@link AffineForms} could not compose and named no atom for, which is
-     * the most particular one; the walk is what knows the arithmetic, so what it stopped at is no
-     * form whatever this would say of it.
+     * <p>The arithmetic says why ({@link AffineForms.Halt}), and that is what this says, in these
+     * words. Only where it had no rule for the expression is anything asked of the expression
+     * itself, and then of what kind of value it is and not of how the arithmetic would have read it.
      */
-    private WhyUnread noFormOf(Core stopped, InputReads reads) {
+    private WhyUnread noFormOf(AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped) {
+        return switch (stopped.why()) {
+            case AffineForms.Halt.NoRule<Quantity, InputReads> _ ->
+                    noRuleFor(stopped.node(), stopped.at());
+            case AffineForms.Halt.NotLinear<Quantity, InputReads> _ ->
+                    new WhyUnread.OutsideTheLinearFragment();
+            case AffineForms.Halt.NoNumberOnARun<Quantity, InputReads> _ ->
+                    new WhyUnread.NoNumberOnARun();
+            case AffineForms.Halt.NotHeld<Quantity, InputReads>(UnheldNumber why) ->
+                    new WhyUnread.ANumberNotHeld(why);
+            // Several values a name stands for, which only values written out are: a closure's
+            // parameter applied to each of them.
+            case AffineForms.Halt.ValuesDisagree<Quantity, InputReads> _ ->
+                    new WhyUnread.NotYetComposed(WhyUnread.NotYetComposed.Step.VALUES_WRITTEN_OUT);
+            case AffineForms.Halt.AnArgumentStopped<Quantity, InputReads>(var argument) ->
+                    noFormOf(argument);
+        };
+    }
+
+    /**
+     * Why an expression the arithmetic has no rule for, read in {@code reads}, is no number of the
+     * input: what stands at the end of the accesses it is made of.
+     */
+    private WhyUnread noRuleFor(Core stopped, InputReads reads) {
         Core e = Core.withoutStanding(stopped);
         while (true) {
             if (e instanceof Core.FieldProjection projection) {
@@ -882,9 +911,8 @@ final class Pullback {
             };
         }
         switch (e) {
-            // Arithmetic the walk has a rule for and could not compose: a product of two values
-            // neither of which is written out, a quotient by one that is not.
-            case Core.Binary _, Core.Neg _ -> {
+            // An operator that is no arithmetic: what it answers is no number of anything.
+            case Core.Binary _ -> {
                 return new WhyUnread.OutsideTheLinearFragment();
             }
             // A choice between values, where what is chosen is one of the arms.

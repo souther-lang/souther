@@ -1,5 +1,6 @@
 package souther.compiler.meaning;
 
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.types.ValueName;
 
@@ -55,8 +56,28 @@ public sealed interface WhyUnread {
      */
     record NoMeasureOfItsSize() implements WhyUnread {}
 
-    /** A comparison whose relation is no form over the quantities a condition is read over. */
+    /**
+     * A comparison over arithmetic no form over the quantities a condition is read over says: a
+     * product of two of them, a quotient by one.
+     */
     record OutsideTheLinearFragment() implements WhyUnread {}
+
+    /**
+     * A comparison whose form over those quantities was worked out exactly, with a number in it that
+     * could not be held: the relation is linear, and what it is cannot be written down here.
+     */
+    record ANumberNotHeld(UnheldNumber why) implements WhyUnread {
+
+        public ANumberNotHeld {
+            Objects.requireNonNull(why, "a number not held is not held for a reason");
+        }
+    }
+
+    /**
+     * A comparison over arithmetic no run has a number for — a quotient by nought, the least whole
+     * number negated: the run aborts there, so there is no relation for the comparison to state.
+     */
+    record NoNumberOnARun() implements WhyUnread {}
 
     /**
      * A container quantified inside a quantifier over itself: the element is what stands at the
