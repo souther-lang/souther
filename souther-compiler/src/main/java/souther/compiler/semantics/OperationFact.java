@@ -245,6 +245,40 @@ public sealed interface OperationFact {
     }
 
     /**
+     * What the operation answers comes out as {@code result} exactly where, for some element of the
+     * container it walks, what its closure answers comes out as {@code ofTheClosure}.
+     *
+     * <p>An equivalence, and the whole of what the operation's answer is on that side: the result
+     * comes out the other way exactly where no element is such a witness. So a statement about the
+     * result is a statement about the elements, either way round, and a reader carrying one across
+     * says nothing the operation does not.
+     *
+     * <p><b>One quantifier for all of them.</b> {@code List.filter} holds something where some
+     * element's answer is true; {@code List.filterMap} where some element's answer holds a value;
+     * {@code List.flatMap} where some element's answer holds something; {@code List.any} is true
+     * where some element's answer is true. {@code List.all} is the same statement turned round: it
+     * is false where some element's answer is false. Said that way, every one is "some element is a
+     * witness", and what an empty container answers — nothing kept, {@code any} false,
+     * {@code all} true — follows from there being no element and is not a case of its own.
+     *
+     * <p><b>Not a dependency.</b> That the closure's answer decides a side of the result is weaker,
+     * and is {@link TurnsOnWhetherAnArgumentHolds}: an operation could turn on its closure and
+     * answer by some other rule than this one. What is declared here is the rule.
+     *
+     * <p>Which argument is the container and which the closure, and which of the closure's
+     * parameters an element arrives on, is what the operation's signature says
+     * ({@link Combinator}), and is not said again here.
+     */
+    record ResultHasAnElementWitness(SideAnswered result, SideAnswered ofTheClosure)
+            implements OperationFact {
+
+        public ResultHasAnElementWitness {
+            Objects.requireNonNull(result, "this one says how the result comes out");
+            Objects.requireNonNull(ofTheClosure, "and how a witness's answer does");
+        }
+    }
+
+    /**
      * The predicate is stated over a projection of each element, and {@code projection} is where it
      * is written.
      *

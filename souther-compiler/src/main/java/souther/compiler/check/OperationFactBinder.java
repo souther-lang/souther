@@ -14,6 +14,7 @@ import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.OperationFact;
 import souther.compiler.semantics.OperationFacts;
 import souther.compiler.semantics.ResultBound;
+import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
@@ -179,6 +180,8 @@ final class OperationFactBinder {
             }
             case OperationFact.TurnsOnWhetherAnArgumentHolds turns ->
                     holdTurnsOn(declaration, operation, turns);
+            case OperationFact.ResultHasAnElementWitness witnessed ->
+                    holdWitness(declaration, operation, witnessed);
             case OperationFact.IsStatedOverAProjection over ->
                     new BoundOperationFact.IsStatedOverAProjection(operation,
                             holdToTheDeclaration(declaration, over.projection(),
@@ -865,8 +868,72 @@ final class OperationFactBinder {
                             + ", which holds nothing for an argument to decide the emptiness of");
                 }
             }
+            // Whether an argument holds decides a truth or an emptiness. Whether an optional holds
+            // a value is decided by what was answered, not by whether something held, so it is
+            // said as a witness and not here.
+            case PRESENCE -> throw new IllegalStateException(library.qualified()
+                    + " is said to have whether its answer holds a value decided by whether an"
+                    + " argument holds, which is not what decides it");
         }
         return new BoundOperationFact.TurnsOnWhetherAnArgumentHolds(operation, turns.aspect(),
                 argument);
+    }
+
+    /**
+     * A witness law, held to the declaration on every side it names.
+     *
+     * <p>The operation has to walk a container with a closure, since the law is about an element
+     * of one handed to the other — and which arguments those are is the signature's, so an
+     * operation that hands its closure nothing a container holds has no law of this kind to carry.
+     * What the result is said to come out as has to be a side the result has, and what a witness's
+     * answer comes out as a side the closure's answer has: a truth of a {@code Bool}, whether it
+     * holds anything of a container, whether it holds a value of an optional.
+     *
+     * <p><b>Each, because an equivalence read on the wrong side is a wrong statement and not a
+     * weaker one.</b> A filterMap read as though its closure answered a truth would be carried back
+     * to a rule about the closure's answer holding, which it has no truth to do, and a reader would
+     * state of the input what the model never said.
+     */
+    static BoundOperationFact holdWitness(CompleteSignature declaration,
+                                          DeclaredOperation operation,
+                                          OperationFact.ResultHasAnElementWitness witnessed) {
+        ValueName.Stdlib library = (ValueName.Stdlib) declaration.declaring().operation();
+        Combinator walks = Combinators.of(library);
+        if (walks == null) {
+            throw new IllegalStateException(library.qualified() + " hands no closure the elements"
+                    + " of a container, so nothing it answers has an element to witness it");
+        }
+        DeclaredArgument container = holdToTheDeclaration(declaration,
+                new ArgumentRef.TheContainer(), null, TypeRequirement.CONTAINER,
+                "the container a witness is an element of");
+        DeclaredArgument closure = holdToTheDeclaration(declaration,
+                new ArgumentRef.TheClosure(), null, TypeRequirement.CLOSURE,
+                "the closure a witness is handed to");
+        Type.FnOf applied = (Type.FnOf) closure.stands();
+        Type element = Type.elementOfAContainer(container.stands());
+        if (!applied.params().get(walks.elementParam()).equals(element)) {
+            throw new IllegalStateException("the closure " + library.qualified() + " applies takes "
+                    + Type.show(applied.params().get(walks.elementParam()))
+                    + " where an element arrives, and the container holds " + Type.show(element));
+        }
+        holdTheSide(witnessed.result(), declaration.result(),
+                "what " + library.qualified() + " answers");
+        holdTheSide(witnessed.ofTheClosure(), applied.result(),
+                "what the closure " + library.qualified() + " applies answers");
+        return new BoundOperationFact.ResultHasAnElementWitness(operation, witnessed.result(),
+                witnessed.ofTheClosure(), container, closure);
+    }
+
+    /** Refuses {@code side} where {@code answers} has no such side. */
+    private static void holdTheSide(SideAnswered side, Type answers, String what) {
+        boolean has = switch (side.aspect()) {
+            case TRUTH -> Type.BOOL.equals(answers);
+            case EMPTINESS -> Type.elementOfAContainer(answers) != null;
+            case PRESENCE -> answers instanceof Type.OptionOf;
+        };
+        if (!has) {
+            throw new IllegalStateException(what + " is " + Type.show(answers)
+                    + ", which has no " + side.aspect() + " to come out on");
+        }
     }
 }

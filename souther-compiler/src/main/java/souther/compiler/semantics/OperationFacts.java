@@ -262,8 +262,8 @@ public final class OperationFacts {
             // emptiness reads.
             //
             // `List.filterMap` decides emptiness, and by whether the closure answered a value
-            // rather than by whether it holds. Nothing here can say that yet, so it says nothing
-            // rather than saying the nearest thing.
+            // rather than by whether it holds. That is no truth for this edge to name, so it says
+            // nothing here, and its witness below says what decides it.
             about("List", "filter", turnsOn(AnswerAspect.EMPTINESS)),
             about("Set", "filter", turnsOn(AnswerAspect.EMPTINESS)),
             about("Map", "filterEntries", turnsOn(AnswerAspect.EMPTINESS)),
@@ -273,6 +273,23 @@ public final class OperationFacts {
             // And a negation, whose whole answer is the truth of what it was given. Not a closure,
             // which is why the fact names an argument rather than one kind of one.
             about("Bool", "not", turnsOn(AnswerAspect.TRUTH, at(0))),
+
+            // How each of the operations that walk a container with a closure comes out, as the
+            // element that witnesses it. A filter holds something where some element was kept, a
+            // filterMap where some element's answer held a value, a flatMap where some element's
+            // answer held something; `any` is true where some element's answer is, and `all` is
+            // false where some element's answer is false.
+            about("List", "filter", witnessed(holdsSomething(true), holds(true))),
+            about("Set", "filter", witnessed(holdsSomething(true), holds(true))),
+            about("Map", "filterEntries", witnessed(holdsSomething(true), holds(true))),
+            about("List", "filterMap", witnessed(holdsSomething(true),
+                    new SideAnswered(AnswerAspect.PRESENCE, true))),
+            about("List", "flatMap", witnessed(holdsSomething(true), holdsSomething(true))),
+            about("List", "any", witnessed(holds(true), holds(true))),
+            about("List", "all", witnessed(holds(false), holds(false))),
+            // And `find`, which answers a value exactly where some element's answer is true.
+            about("List", "find", witnessed(new SideAnswered(AnswerAspect.PRESENCE, true),
+                    holds(true))),
 
             // The containers a construction's result is never smaller than. A union answers one of
             // what both sides hold and an insert of something already there adds nothing, so
@@ -444,6 +461,20 @@ public final class OperationFacts {
     /** The same, where the argument is not a closure. */
     private static OperationFact turnsOn(AnswerAspect aspect, ArgumentRef argument) {
         return new OperationFact.TurnsOnWhetherAnArgumentHolds(aspect, argument);
+    }
+
+    /** The result comes out as {@code result} exactly where some element's answer comes out as
+     *  {@code ofTheClosure}. */
+    private static OperationFact witnessed(SideAnswered result, SideAnswered ofTheClosure) {
+        return new OperationFact.ResultHasAnElementWitness(result, ofTheClosure);
+    }
+
+    private static SideAnswered holds(boolean holds) {
+        return new SideAnswered(AnswerAspect.TRUTH, holds);
+    }
+
+    private static SideAnswered holdsSomething(boolean holds) {
+        return new SideAnswered(AnswerAspect.EMPTINESS, holds);
     }
 
     /** The answer holds the very elements {@code source} held. */

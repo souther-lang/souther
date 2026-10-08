@@ -261,6 +261,20 @@ public final class BoundOperationFacts {
         return held == null || held.aspect() != aspect ? null : held;
     }
 
+    /** The element that witnesses how {@code operation}'s answer comes out, or null where the
+     *  library states no such law of it. */
+    public ElementWitness resultHasAnElementWitness(ValueName operation) {
+        BoundOperationFact.ResultHasAnElementWitness held =
+                one(BoundOperationFact.ResultHasAnElementWitness.class, operation);
+        return held == null ? null : new ElementWitness(held.result(), held.ofTheClosure(),
+                held.container(), held.closure());
+    }
+
+    /** The operations whose answer has an element that witnesses it. */
+    public Set<ValueName> resultHasAnElementWitness() {
+        return ones(BoundOperationFact.ResultHasAnElementWitness.class);
+    }
+
     /** Where {@code operation}'s predicate is stated over a projection, or null where it is stated
      *  over the element itself. */
     public DeclaredArgument isStatedOverAProjection(ValueName operation) {

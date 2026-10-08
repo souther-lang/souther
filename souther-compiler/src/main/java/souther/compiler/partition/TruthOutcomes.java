@@ -154,6 +154,8 @@ final class TruthOutcomes {
         return switch (aspect) {
             case TRUTH -> reading.truth(application);
             case EMPTINESS -> reading.emptiness(application);
+            // No operation's answer is said to turn on an argument's presence, so nothing asks.
+            case PRESENCE -> Outcomes.EITHER;
         };
     }
 

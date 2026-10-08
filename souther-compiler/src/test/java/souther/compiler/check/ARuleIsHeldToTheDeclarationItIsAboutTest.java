@@ -7,6 +7,7 @@ import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.OperationFact;
+import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.types.ValueName;
 
@@ -125,6 +126,65 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
                 new ArgumentRef.TheClosure()));
         assertDoesNotThrow(() -> bindTurnsOn("Bool.not",
                 AnswerAspect.TRUTH, new ArgumentRef.At(0)));
+    }
+
+    /** A witness law, bound to the declaration it is about. */
+    private static void bindWitness(String operation, SideAnswered result,
+                                    SideAnswered ofTheClosure) {
+        CompleteSignature declaration = declared(operation);
+        OperationFactBinder.holdWitness(declaration, declaration.declaring(),
+                new OperationFact.ResultHasAnElementWitness(result, ofTheClosure));
+    }
+
+    /** An operation walking no container with a closure has no element to witness anything. */
+    @Test
+    void aWitnessOfAnOperationThatWalksNothingIsRefused() {
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> bindWitness("List.reverse", new SideAnswered(AnswerAspect.EMPTINESS, true),
+                        new SideAnswered(AnswerAspect.TRUTH, true)));
+        assertTrue(e.getMessage().contains("hands no closure the elements of a container"),
+                e.getMessage());
+    }
+
+    /**
+     * A side the result does not have, or a side the closure's answer does not have, is a law about
+     * something that is not there — read anyway, it would carry a statement back to one the model
+     * never made.
+     */
+    @Test
+    void aWitnessOnASideThatIsNotThereIsRefused() {
+        IllegalStateException result = assertThrows(IllegalStateException.class,
+                () -> bindWitness("List.filter", new SideAnswered(AnswerAspect.TRUTH, true),
+                        new SideAnswered(AnswerAspect.TRUTH, true)));
+        assertTrue(result.getMessage().contains("what List.filter answers is"),
+                result.getMessage());
+
+        IllegalStateException present = assertThrows(IllegalStateException.class,
+                () -> bindWitness("List.filter", new SideAnswered(AnswerAspect.EMPTINESS, true),
+                        new SideAnswered(AnswerAspect.PRESENCE, true)));
+        assertTrue(present.getMessage().contains("has no PRESENCE"), present.getMessage());
+
+        IllegalStateException truth = assertThrows(IllegalStateException.class,
+                () -> bindWitness("List.filterMap", new SideAnswered(AnswerAspect.EMPTINESS, true),
+                        new SideAnswered(AnswerAspect.TRUTH, true)));
+        assertTrue(truth.getMessage().contains("has no TRUTH"), truth.getMessage());
+    }
+
+    /** And the laws the library states, which bind. */
+    @Test
+    void theWitnessesTheLibraryStatesBind() {
+        assertDoesNotThrow(() -> bindWitness("List.filterMap",
+                new SideAnswered(AnswerAspect.EMPTINESS, true),
+                new SideAnswered(AnswerAspect.PRESENCE, true)));
+        assertDoesNotThrow(() -> bindWitness("List.flatMap",
+                new SideAnswered(AnswerAspect.EMPTINESS, true),
+                new SideAnswered(AnswerAspect.EMPTINESS, true)));
+        assertDoesNotThrow(() -> bindWitness("Map.filterEntries",
+                new SideAnswered(AnswerAspect.EMPTINESS, true),
+                new SideAnswered(AnswerAspect.TRUTH, true)));
+        assertDoesNotThrow(() -> bindWitness("List.all",
+                new SideAnswered(AnswerAspect.TRUTH, false),
+                new SideAnswered(AnswerAspect.TRUTH, false)));
     }
 
     @Test

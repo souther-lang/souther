@@ -10,6 +10,7 @@ import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.ResultBound;
+import souther.compiler.semantics.SideAnswered;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
@@ -147,6 +148,20 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     record TurnsOnWhetherAnArgumentHolds(DeclaredOperation operation,
                                         AnswerAspect aspect,
                                         DeclaredArgument argument)
+            implements OneAboutAnOperation {}
+
+    /**
+     * What the operation answers comes out as {@code result} exactly where some element of
+     * {@code container}, handed to {@code closure}, answers as {@code ofTheClosure}.
+     *
+     * <p>The container and the closure are the ones the signature says the operation walks and
+     * applies, resolved here so that a reader holds the arguments and not a word for them.
+     */
+    record ResultHasAnElementWitness(DeclaredOperation operation,
+                                     SideAnswered result,
+                                     SideAnswered ofTheClosure,
+                                     DeclaredArgument container,
+                                     DeclaredArgument closure)
             implements OneAboutAnOperation {}
 
     /** The predicate is stated over a projection of each element, and {@code projection} is where
