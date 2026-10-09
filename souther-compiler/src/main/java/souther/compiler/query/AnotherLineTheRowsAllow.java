@@ -14,7 +14,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Towards;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.partition.Border;
-import souther.compiler.partition.BorderQuantity;
+import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.OrderedAffineBoundary;
 import souther.compiler.partition.QuantityKey;
@@ -359,6 +359,10 @@ public sealed interface AnotherLineTheRowsAllow {
         /** The line is on one position, which has no line one step from it: weighed one less it is
          *  nothing, and weighed one more it is the same line. */
         THE_LINE_IS_ON_ONE_POSITION,
+        /** The line is on a number that is no form over positions — how many elements of a
+         *  container meet something — so there are no weights for another line to write
+         *  differently. */
+        THE_QUANTITY_IS_NO_FORM,
         /** No position of it is weighed by a number a model writes. A date counts from an origin
          *  nobody wrote, so a line weighing one of them two is a line nobody can state — such a
          *  border can shift and cannot turn. */
@@ -389,7 +393,9 @@ public sealed interface AnotherLineTheRowsAllow {
         // from this one is the line's own answer and is the same whichever way the rule reads it —
         // so a bound on one position comes back as a question that does not arise, and never as one
         // this compiler declined to put.
-        BorderQuantity of = border.cut().of();
+        if (!(border.cut().of() instanceof LinearQuantity of)) {
+            return new NoSuchQuestion(Reason.THE_QUANTITY_IS_NO_FORM);
+        }
         if (!OrderedAffineBoundary.weighable(of)) {
             return new NoSuchQuestion(Reason.THE_QUANTITY_HAS_NO_NUMBERS);
         }
@@ -745,6 +751,13 @@ public sealed interface AnotherLineTheRowsAllow {
                     }
                     case OnTheWay.TakenIn(var _, RowDemand.ForAll every) -> {
                         if (movesAnyOf(every.positions())) {
+                            return false;
+                        }
+                    }
+                    // How many elements meet a statement, for the same reason: a step moving a
+                    // number the statement reads may move which elements meet it.
+                    case OnTheWay.TakenIn(var _, RowDemand.SoMany many) -> {
+                        if (movesAnyOf(many.positions())) {
                             return false;
                         }
                     }

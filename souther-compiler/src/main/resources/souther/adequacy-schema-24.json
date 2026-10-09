@@ -666,10 +666,9 @@
     },
     "quantityId": {
       "type": "object",
-      "description": "What a line cuts, by every part that tells one quantity from another: which shape it is, and what it weighs each of its terms by. Every quantity is written as a form over its terms, which way it runs included — one position's own values are that position weighed once, and how far two positions stand apart is the first weighed once less the second once — so `shape` is what tells one position's values from a form weighing that position once. The orders each term stands on are part of it as well: two quantities over one place that are read or measured on different orders are two.",
+      "description": "What a line cuts, by every part that tells one quantity from another: which shape it is, and what it weighs each of its terms by. A form is written over its terms, which way it runs included — one position's own values are that position weighed once, and how far two positions stand apart is the first weighed once less the second once — so `shape` is what tells one position's values from a form weighing that position once. The orders each term stands on are part of it as well: two quantities over one place that are read or measured on different orders are two. A count of the elements meeting something is no form and weighs no terms: `shape` is `count_of_elements`, and `counted` names which count it is in place of `terms`.",
       "required": [
-        "shape",
-        "terms"
+        "shape"
       ],
       "additionalProperties": false,
       "properties": {
@@ -677,9 +676,14 @@
           "enum": [
             "at_value",
             "between_positions",
-            "over_a_form"
+            "over_a_form",
+            "count_of_elements"
           ],
           "description": "The same word `boundaries[].kind` writes for the line."
+        },
+        "counted": {
+          "type": "string",
+          "description": "Where `shape` is `count_of_elements`: the container whose elements are counted and what each is counted for meeting, as `#container [statement]`. Absent for every other shape."
         },
         "terms": {
           "type": "array",
@@ -4937,13 +4941,14 @@
                 "enum": [
                   "at_value",
                   "between_positions",
-                  "over_a_form"
+                  "over_a_form",
+                  "count_of_elements"
                 ],
-                "description": "What this line is a line at. `at_value` is a place of the position `axis` names, which is what an invariant's bound and a guard against a constant draw. `between_positions` is a guard comparing one position against another: the line is where the two hold the same place, `axis` names the left of it and `value` the other position rather than a value. `over_a_form` is a rule over an arithmetic form across several positions: the line is where the form comes to `value`, `axis` names the form as an author would write it and `value` is a number the form takes rather than a value any position holds. Reading `value` without reading this reads a position's name as a value."
+                "description": "What this line is a line at. `at_value` is a place of the position `axis` names, which is what an invariant's bound and a guard against a constant draw. `between_positions` is a guard comparing one position against another: the line is where the two hold the same place, `axis` names the left of it and `value` the other position rather than a value. `over_a_form` is a rule over an arithmetic form across several positions: the line is where the form comes to `value`, `axis` names the form as an author would write it and `value` is a number the form takes rather than a value any position holds. `count_of_elements` is a rule over how many elements of a container meet something: the line is where that many do, `axis` names the count as `#container [statement]` and `value` is the number of elements. Reading `value` without reading this reads a position's name as a value."
               },
               "value": {
                 "type": "string",
-                "description": "Where the line is, as an author would write it: a value where `kind` is `at_value`; the other position, and how far from it where the rule holds them apart, where it is `between_positions`; and a number the form comes to where it is `over_a_form`. Not what any one of the border's points asks for — three of the four ask for something else, and each says so itself."
+                "description": "Where the line is, as an author would write it: a value where `kind` is `at_value`; the other position, and how far from it where the rule holds them apart, where it is `between_positions`; a number the form comes to where it is `over_a_form`; and how many elements where it is `count_of_elements`. Not what any one of the border's points asks for — three of the four ask for something else, and each says so itself."
               },
               "items": {
                 "type": "array",

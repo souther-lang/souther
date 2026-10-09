@@ -969,7 +969,7 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             // Every line as it was read. Two of them at one place are one place with two lines
             // against it, which the arrangement says and this does not: told apart here, whichever
             // was read first stood for the other and the second line was not written down anywhere.
-            String quantity = each.cuts().quantity().key();
+            String quantity = each.cuts().quantity();
             switch (each.cuts().seam()) {
                 case ExactAnswer.Held<Seam> held -> byQuantity
                         .computeIfAbsent(quantity, _ -> new ArrayList<>())
@@ -989,8 +989,8 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             // the next one this can place only if it is known that no line lies between, and here
             // that is the one thing not known.
             ExactAnswer<List<Parting>> beside = inTheUnitsOf(per,
-                    byQuantity.getOrDefault(each.cuts().quantity().key(), List.of()),
-                    notWorkedOut.get(each.cuts().quantity().key()));
+                    byQuantity.getOrDefault(each.cuts().quantity(), List.of()),
+                    notWorkedOut.get(each.cuts().quantity()));
             // One line drawn, one border. Which lines there are was settled by whoever read the
             // rules — a comparison whose line the quantity does not reach is no line, and says so
             // there ({@code ComparisonAssessment.OutsideTheDomain}) — so nothing here decides it

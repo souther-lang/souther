@@ -210,7 +210,7 @@ final class MeaningAssumptions {
                 case DecisionAtom.OfAnAnswer(DecisionSubject.AnAnswer answer) -> answerAtom(answer);
                 case Quantity.OfABinding bound -> boundAtom(bound);
                 // Not asked: what no row writes was said before a form was made of it.
-                case Quantity.HowManyMeet _ -> null;
+                case Quantity.HowManyMeet _, Quantity.HowManyHold _ -> null;
             };
             if (atom == null || coefs.putIfAbsent(atom, each.getValue()) != null) {
                 return null;

@@ -4,6 +4,8 @@ import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 
+import java.util.List;
+
 /**
  * What a row has to satisfy to stand at one coverage item, in the words a search can solve.
  *
@@ -97,6 +99,25 @@ public sealed interface Standing {
                         + NumericTerms.inOrder(form.coefs().keySet())
                         + " against " + NumericTerms.inOrder(on.keySet()));
             }
+        }
+    }
+
+    /**
+     * How many elements of a container meet a statement, at a number or in a run of them.
+     *
+     * <p>What the row has to hold is elements: so many meeting the statement, and the rest
+     * whatever the run leaves room for. Not a value at a position — the count is written nowhere,
+     * and a search that wrote a number at the container would write a list of the wrong kind.
+     *
+     * @param count   the count: the container its elements are counted in, and what an element is
+     *                counted for meeting
+     * @param numbers every number of a row the statement reads, the element's own among them
+     */
+    record OfACount(CountedElements count, List<NumericTerm> numbers,
+                    Criterion where) implements Standing {
+
+        public OfACount {
+            numbers = List.copyOf(numbers);
         }
     }
 }

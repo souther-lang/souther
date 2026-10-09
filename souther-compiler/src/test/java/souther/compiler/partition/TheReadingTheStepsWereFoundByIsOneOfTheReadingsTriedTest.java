@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
@@ -64,10 +65,10 @@ class TheReadingTheStepsWereFoundByIsOneOfTheReadingsTriedTest {
 
         assertEquals(1, readings.tried().size(),
                 "a position outside a sequence gives one reading of the row");
-        assertEquals(1, readings.made().size(),
-                "and the reading the steps were found by is the reading of it");
-        assertSame(readings.made().getFirst(), readings.readAt(0),
-                "so asking for it hands back what was read, rather than reading the row again");
+        assertInstanceOf(StandingAtAPoint.DiscoveringRow.class, readings.tried().getFirst(),
+                "and the walk the steps were found by is the reading of it");
+        assertSame(readings.tried().getFirst().at(FLAT), readings.tried().getFirst().at(FLAT),
+                "so asking it hands back what was read, rather than walking the row again");
     }
 
     @Test
@@ -78,10 +79,11 @@ class TheReadingTheStepsWereFoundByIsOneOfTheReadingsTriedTest {
 
         assertEquals(2, readings.tried().size(),
                 "one reading per element the position holds");
-        assertEquals(List.of(), readings.made(),
-                "each of them names an element, and none of them is the reading that names none");
-        assertNotSame(readings.readAt(0), readings.readAt(0),
-                "so each of them is read when it is asked for");
+        readings.tried().forEach(each -> assertInstanceOf(StandingAtAPoint.OneReadingOfARow.class,
+                each, "each of them names an element, and none of them is the walk that named"
+                        + " none"));
+        assertNotSame(readings.tried().get(0), readings.tried().get(1),
+                "so each of them is a walk of its own");
     }
 
     private static StandingAtAPoint.Readings readingsOf(TermPath at, List<ObservedValue> row) {

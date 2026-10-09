@@ -81,7 +81,17 @@ public enum CompositionRepertoire {
      * about the model, they are told the range holds no value when what happened is that this
      * compiler tried one of them.
      */
-    PLACES_IN_A_RUN_THAT_ARE_NAMED;
+    PLACES_IN_A_RUN_THAT_ARE_NAMED,
+
+    /**
+     * The elements chosen for how many of a container's elements meet a statement.
+     *
+     * <p>Chosen where the element is one number the statement reads, against numbers beside it that
+     * stand at one value. An element holding the number inside it, or two numbers, or a statement
+     * read over the elements of another container, is chosen by nothing here: what would reach it
+     * is a way of choosing such elements, and raising no figure does.
+     */
+    ELEMENTS_CHOSEN_FOR_A_COUNT;
 
     /**
      * Whether a wider run could reach the rest: never, since raising anything reaches none of it.

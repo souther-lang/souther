@@ -32,6 +32,6 @@ public record QuantityInRegion(BorderQuantity quantity, LevelRegion values)
 
     @Override
     public Set<NumericTerm> terms() {
-        return Set.copyOf(quantity.terms());
+        return Set.copyOf(quantity.numbers());
     }
 }

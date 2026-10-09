@@ -242,6 +242,7 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
             case BorderQuantity.Apart apart ->
                     apart.onTerm() + " vs " + apart.againstTerm()
                             + " on " + apart.on() + ", " + apart.against();
+            case BorderQuantity.HowMany count -> count.left();
         };
     }
 

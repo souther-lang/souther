@@ -121,8 +121,7 @@ sealed interface ComparisonAssessment {
         /** Whether what it cuts is a number read over a run of values rather than a form over
          *  positions, which is a different thing to tell a reader who found no partition. */
         boolean overARun() {
-            return cutting.quantity().direction().keySet().stream()
-                    .anyMatch(term -> term.atOnePosition() == null);
+            return cutting.of().readOverARun();
         }
     }
 
@@ -359,7 +358,9 @@ sealed interface ComparisonAssessment {
     /**
      * What {@code comparison} comes to, whoever wrote it.
      *
-     * <p>The one way in. {@code answer} is the binding a clause calls what the behavior answers, or
+     * <p>The one way in. {@code applying} is the applications of the closures the comparison
+     * stands inside, on each of which it is read. {@code answer} is the binding a clause calls what
+     * the behavior answers, or
      * null where the comparison is written in a body and there is nothing to be the answer.
      * {@code dependencies} is what the decision table takes up of a body that stands dependencies
      * in, which a clause stands none of.
@@ -376,6 +377,7 @@ sealed interface ComparisonAssessment {
      */
     static ComparisonAssessment of(String behavior, StatedComparison comparison, Citation at,
                                    InputReading read, InputReads reads,
+                                   ClosureApplications applying,
                                    BindingId answer, WhatAnAnswerTakesUp dependencies,
                                    Arrivals answering,
                                    boolean drawnByAnInvariant, WhatConditionsState conditions) {
@@ -386,7 +388,8 @@ sealed interface ComparisonAssessment {
         if (readsAnswer(comparison.left(), answer) || readsAnswer(comparison.right(), answer)) {
             return new AnswerDependent();
         }
-        Cutting.Read cut = Cutting.read(behavior, comparison, read, reads, answering, conditions);
+        Cutting.Read cut = Cutting.read(behavior, comparison, read, reads, applying, answering,
+                conditions);
         return switch (cut) {
             case Cutting.Read.Cuts _, Cutting.Read.NoOrderToCountOn _,
                  Cutting.Read.NumberNoRatioHolds _ ->
@@ -883,7 +886,9 @@ sealed interface ComparisonAssessment {
     default boolean drawsABorder() {
         return switch (this) {
             case AtAPosition at -> at.places() == Places.ACROSS_THE_VALUE;
-            case AcrossPositions over -> over.places() == Places.ACROSS_THE_VALUE;
+            case AcrossPositions over -> over.places() == Places.ACROSS_THE_VALUE
+                    || (over.places() == Places.AT_THE_VALUE
+                            && over.cutting().of().singlesWithSides());
             case Several several -> several.parts().stream()
                     .anyMatch(part -> part.line().drawsABorder());
             case AnswerDependent _, OnADependencysAnswer _, NoInput _, CutsNothing _,

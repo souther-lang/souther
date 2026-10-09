@@ -140,7 +140,7 @@ final class ContainersAddingUp {
         // Which number is being built for, read off the answer that says which number it is of.
         // Named beside it, the two were free to be about two numbers and this would fill a
         // container found under one path with elements counted on another's order.
-        RealizationTarget target = RealizationTarget.of(orders.term());
+        RealizationTarget.OfANumber target = RealizationTarget.of(orders.term());
         Carrier elements = orders.answered();
         if (!(answer instanceof Count total) || elements == null) {
             return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
@@ -655,7 +655,7 @@ final class ContainersAddingUp {
      * owner ({@link RealizationTarget#writeRoot}) — so a way of writing a number added later is not
      * a second answer about which occurrences a container counts.
      */
-    private static TermPath occurrences(RealizationTarget target) {
+    private static TermPath occurrences(RealizationTarget.OfANumber target) {
         return switch (target.term()) {
             case NumericTerm.FromOnePosition one -> one.position().element();
             case NumericTerm.TakenOver over -> over.source().subjectPath();

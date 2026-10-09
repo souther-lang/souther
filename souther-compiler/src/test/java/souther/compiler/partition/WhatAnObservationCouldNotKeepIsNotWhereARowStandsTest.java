@@ -122,7 +122,7 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
                 Map.of(TOTAL, ON_THE_TOTAL, OTHER_TOTAL, ON_THE_OTHER));
 
         BorderQuantity.Stands met = stands(both, AT_A_HUNDRED,
-                new BorderQuantity.Observation() {
+                new AnObservationOfAForm() {
 
                     @Override
                     public WalkResult<ObservationAtPoint> at(TermPath path) {
@@ -154,7 +154,7 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
     @Test
     void aWalkThatReachedNoValueIsNotAnObservationThatStopped() {
         BorderQuantity.Stands met = stands(atAPlace(), AT_A_HUNDRED,
-                new BorderQuantity.Observation() {
+                new AnObservationOfAForm() {
 
                     @Override
                     public WalkResult<ObservationAtPoint> at(TermPath path) {
@@ -183,7 +183,7 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
     @Test
     void aRunTheWalkNeverReachedIsNotARunThatMissedTheLine() {
         BorderQuantity.Stands met = stands(form(), AT_A_HUNDRED,
-                new BorderQuantity.Observation() {
+                new AnObservationOfAForm() {
 
                     @Override
                     public WalkResult<ObservationAtPoint> at(TermPath path) {
@@ -214,7 +214,7 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
 
     /** A row whose only readable place is the run, holding these values. */
     private static BorderQuantity.Observation run(ObservedValue... values) {
-        return new BorderQuantity.Observation() {
+        return new AnObservationOfAForm() {
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {

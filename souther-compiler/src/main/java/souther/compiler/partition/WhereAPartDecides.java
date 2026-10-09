@@ -1,20 +1,10 @@
 package souther.compiler.partition;
 
-import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
-import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Proposition;
-import souther.compiler.meaning.Relation;
-import souther.compiler.numeric.ExactAnswer;
-import souther.compiler.numeric.LinearForm;
-import souther.compiler.numeric.Place;
-import souther.compiler.numeric.Rel;
 
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -57,8 +47,9 @@ public record WhereAPartDecides(PartOfAComparison part, Proposition decides) {
         /** A number the relations are over could not be read at the row, for these reasons. */
         record CouldNotTell(Set<ReadingGap> why) implements AtARow {
 
+            /** In the order the reasons were met, which is the order a reader is told them in. */
             public CouldNotTell {
-                why = Set.copyOf(why);
+                why = Collections.unmodifiableSet(new LinkedHashSet<>(why));
             }
         }
 
@@ -70,100 +61,25 @@ public record WhereAPartDecides(PartOfAComparison part, Proposition decides) {
     /**
      * This, put to rows: each relation it is over, as the quantity a row is read at.
      *
-     * <p>Read the way a line over the same quantity reads a row ({@link BorderQuantity#valuesOf}),
-     * so what a row holds at a position is one answer whether a line or the place it decides asks
-     * for it.
-     *
      * @param quantities the reading of the input, which says which order each number is on
      */
     AskedOfRows askedOfRows(String behavior, Quantities quantities) {
-        Map<Relation, OneRelation> relations = new LinkedHashMap<>();
-        gather(decides, behavior, quantities, relations);
-        return new AskedOfRows(decides, relations);
-    }
-
-    private static void gather(Proposition stated, String behavior, Quantities quantities,
-                               Map<Relation, OneRelation> into) {
-        switch (stated) {
-            case Proposition.Always _ -> { }
-            case Proposition.All all ->
-                    all.parts().forEach(part -> gather(part, behavior, quantities, into));
-            case Proposition.Any any ->
-                    any.parts().forEach(part -> gather(part, behavior, quantities, into));
-            case Proposition.Compared compared -> into.computeIfAbsent(compared.relation(),
-                    relation -> OneRelation.of(relation, behavior, quantities));
-            default -> throw new IllegalStateException("where a line of a statement decides is"
-                    + " over relations of the input's own numbers, and this is " + stated);
-        }
-    }
-
-    /** One relation, as the quantity a row is read at and what its numbers have to come to. */
-    private sealed interface OneRelation {
-
-        BorderQuantity over();
-
-        /** Whether the relation holds at the numbers a row read at {@link #over}. */
-        ExactAnswer<Boolean> holdsAt(Map<NumericTerm, Place> values);
-
-        /** A form of the input's numbers against nought. */
-        record OfAForm(BorderQuantity over, LinearForm<NumericTerm> form, Rel rel)
-                implements OneRelation {
-
-            @Override
-            public ExactAnswer<Boolean> holdsAt(Map<NumericTerm, Place> values) {
-                return OrderedAffineBoundary.along(form.coefs(), values)
-                        .flatMap(sum -> sum.plus(form.constant()))
-                        .map(sum -> rel.holds(sum.signum()));
-            }
-        }
-
-        /** One position against a place on the order it stands on. */
-        record OnAnOrder(BorderQuantity over, NumericTerm term, Place at, Rel rel)
-                implements OneRelation {
-
-            @Override
-            public ExactAnswer<Boolean> holdsAt(Map<NumericTerm, Place> values) {
-                return ExactAnswer.held(rel.holds(values.get(term).compareTo(at)));
-            }
-        }
-
-        static OneRelation of(Relation relation, String behavior, Quantities quantities) {
-            return switch (relation) {
-                case Relation.Affine affine -> {
-                    LinearForm<NumericTerm> form = WhatTheRulesLeave.ofTheInput(affine.form());
-                    if (form == null) {
-                        throw new IllegalStateException("a relation a line decides under is over"
-                                + " the input's own numbers: " + affine);
-                    }
-                    yield new OfAForm(Cutting.readAt(behavior, form, quantities), form,
-                            affine.proposition());
-                }
-                case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place at, Rel rel)
-                        when term.atOnePosition() != null -> new OnAnOrder(
-                                Cutting.readAt(behavior, term.atOnePosition(), quantities),
-                                term, at, rel);
-                case Relation.Ordered ordered -> throw new IllegalStateException("a relation a"
-                        + " line decides under is over the input's own numbers: " + ordered);
-            };
-        }
+        return new AskedOfRows(AStatementAtARow.of(decides, behavior, quantities));
     }
 
     /** Where a line decides, ready to be asked of rows. */
     static final class AskedOfRows {
 
-        private final Proposition decides;
-        private final Map<Relation, OneRelation> relations;
+        private final AStatementAtARow decides;
 
-        private AskedOfRows(Proposition decides, Map<Relation, OneRelation> relations) {
+        private AskedOfRows(AStatementAtARow decides) {
             this.decides = decides;
-            // In the order the relations were met, which is the order their containers are found
-            // in when a row is walked for them.
-            this.relations = Collections.unmodifiableMap(new LinkedHashMap<>(relations));
         }
 
-        /** Every quantity a row is read at to say whether it is somewhere the line decides. */
-        List<BorderQuantity> over() {
-            return relations.values().stream().map(OneRelation::over).toList();
+        /** Reads {@code row} the way {@link #at} does, for the walk that finds which containers a
+         *  row has to choose an element of ({@link AStatementAtARow#lookAt}). */
+        void lookAt(BorderQuantity.Observation row) {
+            decides.lookAt(row);
         }
 
         /**
@@ -173,63 +89,11 @@ public record WhereAPartDecides(PartOfAComparison part, Proposition decides) {
          * row is not somewhere it holds.
          */
         AtARow at(BorderQuantity.Observation row) {
-            return at(decides, row);
-        }
-
-        private AtARow at(Proposition stated, BorderQuantity.Observation row) {
-            return switch (stated) {
-                case Proposition.Always(boolean holds) ->
-                        holds ? AtARow.DECIDES : AtARow.DECIDES_NOTHING;
-                case Proposition.All all -> joined(all.parts().stream()
-                        .map(part -> at(part, row)).toList(), true);
-                case Proposition.Any any -> joined(any.parts().stream()
-                        .map(part -> at(part, row)).toList(), false);
-                case Proposition.Compared compared -> {
-                    AtARow held = heldAt(relations.get(compared.relation()), row);
-                    yield compared.holds() || held instanceof AtARow.CouldNotTell ? held
-                            : held instanceof AtARow.Decides ? AtARow.DECIDES_NOTHING
-                            : AtARow.DECIDES;
-                }
-                default -> throw new IllegalStateException("where a line of a statement decides"
-                        + " is over relations of the input's own numbers, and this is " + stated);
+            return switch (decides.at(row)) {
+                case AStatementAtARow.Answer.Holds _ -> AtARow.DECIDES;
+                case AStatementAtARow.Answer.Fails _ -> AtARow.DECIDES_NOTHING;
+                case AStatementAtARow.Answer.CouldNotTell(var why) -> new AtARow.CouldNotTell(why);
             };
-        }
-
-        private static AtARow heldAt(OneRelation relation, BorderQuantity.Observation row) {
-            BorderQuantity over = relation.over();
-            return switch (over.valuesOf(over.read(row))) {
-                case ValuesAtARow.Read(Map<NumericTerm, Place> values) ->
-                        switch (relation.holdsAt(values)) {
-                            case ExactAnswer.Held<Boolean>(Boolean holds) ->
-                                    holds ? AtARow.DECIDES : AtARow.DECIDES_NOTHING;
-                            case ExactAnswer.Unheld<Boolean> unheld ->
-                                    new AtARow.CouldNotTell(Set.of(ReadingGap.of(unheld.why())));
-                        };
-                case ValuesAtARow.CouldNotTell(var why) -> new AtARow.CouldNotTell(why);
-                case ValuesAtARow.NoneHere _ -> AtARow.DECIDES_NOTHING;
-            };
-        }
-
-        /**
-         * Every one of {@code parts} holding where {@code every}, and some one of them where not:
-         * settled by one part that settles it whatever the others are, and otherwise not read
-         * where a part was not.
-         */
-        private static AtARow joined(List<AtARow> parts, boolean every) {
-            AtARow settling = every ? AtARow.DECIDES_NOTHING : AtARow.DECIDES;
-            Set<ReadingGap> unread = new LinkedHashSet<>();
-            for (AtARow part : parts) {
-                if (part.equals(settling)) {
-                    return settling;
-                }
-                if (part instanceof AtARow.CouldNotTell(Set<ReadingGap> why)) {
-                    unread.addAll(why);
-                }
-            }
-            if (!unread.isEmpty()) {
-                return new AtARow.CouldNotTell(unread);
-            }
-            return every ? AtARow.DECIDES : AtARow.DECIDES_NOTHING;
         }
     }
 }

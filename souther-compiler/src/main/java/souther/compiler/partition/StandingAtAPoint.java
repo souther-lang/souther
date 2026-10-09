@@ -8,12 +8,14 @@ import souther.compiler.observe.ObservedValue;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * Whether a tuple of values stands at one point of a border.
@@ -164,8 +166,6 @@ public final class StandingAtAPoint {
         BorderQuantity quantity = line.quantity();
         BehaviorInputs where = line.subject().inputs();
         Optional<WhereAPartDecides.AskedOfRows> decides = whereItDecides(line);
-        List<BorderQuantity> alsoOver =
-                decides.map(WhereAPartDecides.AskedOfRows::over).orElse(List.of());
         Set<ReadingGap> unreadable = new LinkedHashSet<>();
         boolean unwatched = false;
         boolean stoppedShort = false;
@@ -178,10 +178,10 @@ public final class StandingAtAPoint {
             // the readings are tried under each choice of an element of each.
             boolean stands = false;
             Set<ReadingGap> stopped = new LinkedHashSet<>();
-            Readings readings = readings(where, one, quantity, alsoOver);
-            List<OneReadingOfARow> tried = readings.tried();
+            Readings readings = readings(where, one, quantity, decides);
+            List<BorderQuantity.Observation> tried = readings.tried();
             for (int which = 0; which < tried.size(); which++) {
-                switch (quantity.standsAt(criterion, readings.readAt(which))) {
+                switch (quantity.standsAt(criterion, tried.get(which))) {
                     // A reading that could not look. What the row wrote nothing at is not among
                     // these: the quantity answers for the row there, since it is the quantity that
                     // knows whether a position it wrote nothing at leaves it a value.
@@ -191,7 +191,7 @@ public final class StandingAtAPoint {
                     // on it: a row the statement answers alike on both sides of the line stands at
                     // the line and says nothing about it.
                     case BorderQuantity.Stands.Yes _ -> {
-                        OneReadingOfARow reading = tried.get(which);
+                        BorderQuantity.Observation reading = tried.get(which);
                         switch (decides.map(asked -> asked.at(reading))
                                 .orElse(WhereAPartDecides.AtARow.DECIDES)) {
                             case WhereAPartDecides.AtARow.Decides _ -> stands = true;
@@ -274,11 +274,15 @@ public final class StandingAtAPoint {
     public static RowsRead valuesOf(MeasuredInput.BorderReading line,
                                     List<ObservedInputs> observed,
                                     List<ConditionOutcomeSite> watched) {
-        BorderQuantity quantity = line.quantity();
+        // A row's numbers are read position by position, and only a form has positions to read
+        // them at. A line on any other quantity is not one another line is written beside, and
+        // the reader that would hold one against the rows asks that first.
+        if (!(line.quantity() instanceof LinearQuantity quantity)) {
+            throw new IllegalArgumentException("a row's numbers are read at a form's positions,"
+                    + " and this line is on " + line.quantity());
+        }
         BehaviorInputs where = line.subject().inputs();
         Optional<WhereAPartDecides.AskedOfRows> decides = whereItDecides(line);
-        List<BorderQuantity> alsoOver =
-                decides.map(WhereAPartDecides.AskedOfRows::over).orElse(List.of());
         List<Map<souther.compiler.inputs.NumericTerm, souther.compiler.numeric.Place>> read =
                 new ArrayList<>();
         Set<ReadingGap> unreadable = new LinkedHashSet<>();
@@ -298,11 +302,11 @@ public final class StandingAtAPoint {
                     }
                 }
             }
-            Readings readings = readings(where, one, quantity, alsoOver);
+            Readings readings = readings(where, one, quantity, decides);
             for (int which = 0; which < readings.tried().size(); which++) {
                 // Only where the statement turns on the line, for a line of a statement of several:
                 // a reading somewhere it does not says nothing about where this line falls.
-                OneReadingOfARow reading = readings.tried().get(which);
+                BorderQuantity.Observation reading = readings.tried().get(which);
                 switch (decides.map(asked -> asked.at(reading))
                         .orElse(WhereAPartDecides.AtARow.DECIDES)) {
                     case WhereAPartDecides.AtARow.Decides _ -> { }
@@ -314,7 +318,7 @@ public final class StandingAtAPoint {
                         continue;
                     }
                 }
-                switch (quantity.valuesOf(readings.readAt(which))) {
+                switch (quantity.valuesOf(quantity.read(reading))) {
                     case ValuesAtARow.Read(Map<souther.compiler.inputs.NumericTerm,
                             souther.compiler.numeric.Place> values) -> read.add(values);
                     // The row has no value at this quantity, which is the row's own answer and
@@ -386,11 +390,15 @@ public final class StandingAtAPoint {
      * what each position holds, and a walk reading the row under one of them takes the element
      * that reading names. So arriving is written once and the making of it is each one's own.
      */
-    private abstract static sealed class WalkOfARow implements BorderQuantity.Observation
+    abstract static sealed class WalkOfARow implements BorderQuantity.Observation
             permits DiscoveringRow, OneReadingOfARow {
 
         private final BehaviorInputs where;
         private final ObservedInputs observedInputs;
+
+        /** What this walk found at each path it was asked about, so that a row read once is read
+         *  once however many quantities and items ask it. */
+        private final Map<TermPath, WalkResult<ObservationAtPoint>> found = new HashMap<>();
 
         WalkOfARow(BehaviorInputs where, ObservedInputs observedInputs) {
             this.where = where;
@@ -399,6 +407,10 @@ public final class StandingAtAPoint {
 
         @Override
         public final WalkResult<ObservationAtPoint> at(TermPath path) {
+            return found.computeIfAbsent(path, this::walkedTo);
+        }
+
+        private WalkResult<ObservationAtPoint> walkedTo(TermPath path) {
             // Over the arms, so that a walk coming to answer a third way is one this has to be
             // taught about rather than one quietly read as a walk that could not be made.
             return switch (where.occurrencesAt(observedInputs.inputs(), path)) {
@@ -421,6 +433,48 @@ public final class StandingAtAPoint {
          * @param values what the row wrote there, never none of it
          */
         abstract ObservationAtPoint standingAmong(List<BehaviorInputs.Occurrence> values);
+
+        /** The element this walk chose in each container, none where it chose nothing. */
+        abstract Map<TermPath, Integer> chosen();
+
+        /** Whether {@code each} was reached through the elements this walk chose. */
+        abstract boolean agrees(BehaviorInputs.Occurrence each);
+
+        /**
+         * Every element the row wrote in {@code container}, each read as this walk with that
+         * element chosen too.
+         *
+         * <p>The container is asked first the way any position is, so a walk finding the readings
+         * learns from it which containers the container itself stands inside — and not the
+         * container counted, whose elements are read together and never one reading apiece.
+         */
+        @Override
+        public final WalkResult<List<BorderQuantity.Observation>> eachElementOf(
+                TermPath container) {
+            if (at(container) instanceof WalkResult.CouldNotWalk<ObservationAtPoint>) {
+                return WalkResult.couldNotWalk();
+            }
+            return switch (where.occurrencesAt(observedInputs.inputs(), container.element())) {
+                case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
+                        WalkResult.couldNotWalk();
+                case WalkResult.Reached(List<BehaviorInputs.Occurrence> values) -> {
+                    Set<Integer> elements = new TreeSet<>();
+                    for (BehaviorInputs.Occurrence each : values) {
+                        Integer taken = each.at().elementAt(container);
+                        if (taken != null && agrees(each)) {
+                            elements.add(taken);
+                        }
+                    }
+                    List<BorderQuantity.Observation> out = new ArrayList<>();
+                    for (int element : elements) {
+                        Map<TermPath, Integer> choosing = new LinkedHashMap<>(chosen());
+                        choosing.put(container, element);
+                        out.add(new OneReadingOfARow(where, observedInputs, choosing));
+                    }
+                    yield WalkResult.reached(List.copyOf(out));
+                }
+            };
+        }
 
         /**
          * Every value the row wrote at {@code path}, whichever elements a reading chose.
@@ -454,7 +508,7 @@ public final class StandingAtAPoint {
      * makes it the reading of the row wherever the positions are inside no container; where they are
      * inside one it is a walk made to find them and none of the readings it finds.
      */
-    private static final class DiscoveringRow extends WalkOfARow {
+    static final class DiscoveringRow extends WalkOfARow {
 
         /** How many elements each container was found to hold, in the order the walk met them,
          *  which is the order the readings are taken in. */
@@ -481,6 +535,16 @@ public final class StandingAtAPoint {
             return new ObservationAtPoint.Value(values.getFirst().value());
         }
 
+        @Override
+        Map<TermPath, Integer> chosen() {
+            return Map.of();
+        }
+
+        @Override
+        boolean agrees(BehaviorInputs.Occurrence each) {
+            return true;
+        }
+
         /** What the containers hold, as of a walk that is over. */
         Map<TermPath, Integer> containers() {
             return Collections.unmodifiableMap(new LinkedHashMap<>(containers));
@@ -502,7 +566,7 @@ public final class StandingAtAPoint {
      * a line is over is its to say. So {@link DiscoveringRow} asks it once and every choice the
      * containers it found allow is a reading made here, tried until one stands or they are used up.
      */
-    private static final class OneReadingOfARow extends WalkOfARow {
+    static final class OneReadingOfARow extends WalkOfARow {
 
         /** The element chosen in each container, for this reading. */
         private final Map<TermPath, Integer> chosen;
@@ -525,8 +589,13 @@ public final class StandingAtAPoint {
             return ObservationAtPoint.ANOTHER_READING;
         }
 
-        /** Whether {@code each} was reached through the elements this reading chose. */
-        private boolean agrees(BehaviorInputs.Occurrence each) {
+        @Override
+        Map<TermPath, Integer> chosen() {
+            return chosen;
+        }
+
+        @Override
+        boolean agrees(BehaviorInputs.Occurrence each) {
             for (Map.Entry<TermPath, Integer> picked : chosen.entrySet()) {
                 Integer taken = each.at().elementAt(picked.getKey());
                 if (taken != null && !taken.equals(picked.getValue())) {
@@ -553,35 +622,40 @@ public final class StandingAtAPoint {
      */
     static Readings readings(BehaviorInputs where, ObservedInputs observed,
                              BorderQuantity quantity) {
-        return readings(where, observed, quantity, List.of());
+        return readings(where, observed, quantity, Optional.empty());
     }
 
     /**
-     * The same, with the containers {@code alsoOver} are inside chosen in each reading too: a
-     * reading is one choice of an element in every container any of them is read at, so what the
-     * line reads and what is asked beside it are read of the same elements.
+     * The same, with the containers where the line decides is read at chosen in each reading too:
+     * a reading is one choice of an element in every container either is read at, so what the line
+     * reads and what is asked beside it are read of the same elements.
      */
     private static Readings readings(BehaviorInputs where, ObservedInputs observed,
-                                     BorderQuantity quantity, List<BorderQuantity> alsoOver) {
+                                     BorderQuantity quantity,
+                                     Optional<WhereAPartDecides.AskedOfRows> decides) {
         DiscoveringRow discovering = new DiscoveringRow(where, observed);
-        QuantityReading discovery = quantity.read(discovering);
-        alsoOver.forEach(each -> each.read(discovering));
+        quantity.lookAt(discovering);
+        decides.ifPresent(asked -> asked.lookAt(discovering));
         Map<TermPath, Integer> containers = discovering.containers();
-        List<OneReadingOfARow> out = new ArrayList<>();
-        for (Map<TermPath, Integer> choice : readingsOver(containers)) {
-            out.add(new OneReadingOfARow(where, observed, choice));
-        }
-        // The reading the containers were found by, where it is also a reading the point is tried
+        // The walk the containers were found by, where it is also a reading the point is tried
         // against. Where the row's positions are inside no container there is one choice and it is
         // the empty one, which is the choice this was read under — the same row, the same quantity,
-        // the same elements chosen — so it is the reading of it. Where they are inside one, every
-        // choice names an element and a reading that names one is not the reading that names none.
-        List<QuantityReading> made = containers.isEmpty() ? List.of(discovery) : List.of();
+        // the same elements chosen — so it is the reading of it, and what it found is not walked
+        // again. Where they are inside one, every choice names an element and a reading that names
+        // one is not the reading that names none.
+        List<BorderQuantity.Observation> out = new ArrayList<>();
+        if (containers.isEmpty()) {
+            out.add(discovering);
+        } else {
+            for (Map<TermPath, Integer> choice : readingsOver(containers)) {
+                out.add(new OneReadingOfARow(where, observed, choice));
+            }
+        }
         // Said by the walk that stopped, which is the only thing that knows it stopped. Worked out
         // afterwards from how many readings came back, a walk that was cut short and one the
         // containers never had more than are one answer, and whichever word is chosen for the pair
         // is wrong about the other.
-        return new Readings(quantity, out, made, containersAllowMoreThan(containers, MOST_READINGS)
+        return new Readings(out, containersAllowMoreThan(containers, MOST_READINGS)
                 ? new ReadingsTried.StoppedAtTheLimit(MOST_READINGS)
                 : ReadingsTried.EVERY_ONE);
     }
@@ -589,22 +663,10 @@ public final class StandingAtAPoint {
     /**
      * The readings of one row that were made, and whether they are all of them.
      *
-     * @param of      the quantity these are readings of, so that what was read and what may be
-     *                asked of it are not two things a caller holds and has to keep together
      * @param tried   the readings, in the order the choices were taken
-     * @param made    what has already been read, for the first of {@code tried} and in its order,
-     *                and empty where the reading the containers were found by is not one of them
      * @param whether what the walk that built them says about itself
      */
-    record Readings(BorderQuantity of, List<OneReadingOfARow> tried, List<QuantityReading> made,
-                    ReadingsTried whether) {
-
-        /** What the quantity reads at the reading {@code which}, read here where it has not been
-         *  read already. */
-        QuantityReading readAt(int which) {
-            return which < made.size() ? made.get(which) : of.read(tried.get(which));
-        }
-    }
+    record Readings(List<BorderQuantity.Observation> tried, ReadingsTried whether) {}
 
     /**
      * Every reading of a row over the containers its positions were found to be inside.

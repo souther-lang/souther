@@ -27,14 +27,18 @@ import souther.compiler.inputs.TermPath;
  * <p>Whether anything can be built at a target is a different question and is not asked here.
  * {@link TermRealizations} owns it, and answers it for a target that exists — so "there is nowhere
  * to write this" and "nothing writes this" stay two sentences with one owner apiece.
+ *
+ * <p><b>Two kinds of demand, and only one of them is a number of the row.</b> A number is read off
+ * the row's values and a search can put it to the rules ({@link OfANumber}). How many elements of a
+ * container meet a statement is read off every element and whatever else the statement names, and
+ * is no number the rules hold a range of ({@link ACount}). Both are met by rebuilding one value, so
+ * both are targets; a reader that asks for the number asks it of the first kind only.
  */
 public sealed interface RealizationTarget {
 
-    /** The number to be realized, which is what the rules and the report are about. */
-    NumericTerm term();
-
     /**
-     * The location whose whole value is rebuilt so that {@link #term} answers what was asked.
+     * The location whose whole value is rebuilt so that what is asked of it is answered: the
+     * number a {@link OfANumber} names, or how many elements an {@link ACount} counts.
      *
      * <p>Not where the number is written. {@code List.sum(lines[*].amount)} is answered by no
      * location and its root is {@code lines}, at which no total is written and out of which every
@@ -56,11 +60,18 @@ public sealed interface RealizationTarget {
      * builds {@link AtOnePositionElsewhere} instead — and only such a caller can, which is why
      * this answers with the place the term names rather than guessing at a case.
      */
-    static RealizationTarget of(NumericTerm term) {
+    static OfANumber of(NumericTerm term) {
         return switch (term) {
             case NumericTerm.FromOnePosition one -> new AtOnePosition(one);
             case NumericTerm.TakenOver over -> new OverARun(over);
         };
+    }
+
+    /** A number of the row, which the rules hold a range of and a search can put to them. */
+    sealed interface OfANumber extends RealizationTarget {
+
+        /** The number to be realized, which is what the rules and the report are about. */
+        NumericTerm term();
     }
 
     /**
@@ -69,7 +80,7 @@ public sealed interface RealizationTarget {
      * <p>The root and the position are the same location here, which is the case the vocabulary
      * grew out of and is not what a root means.
      */
-    record AtOnePosition(NumericTerm.FromOnePosition term) implements RealizationTarget {
+    record AtOnePosition(NumericTerm.FromOnePosition term) implements OfANumber {
 
         @Override
         public TermPath writeRoot() {
@@ -108,7 +119,7 @@ public sealed interface RealizationTarget {
      *                  the row rebuilds
      */
     record AtOnePositionElsewhere(NumericTerm.FromOnePosition term,
-                                  TermPath writeRoot) implements RealizationTarget {
+                                  TermPath writeRoot) implements OfANumber {
 
         public AtOnePositionElsewhere {
             if (term == null || writeRoot == null) {
@@ -141,7 +152,7 @@ public sealed interface RealizationTarget {
      * row that fixed the place they are read from would fix one of them, which is a rule about one
      * value where the model wrote one about what they come to.
      */
-    record OverARun(NumericTerm.TakenOver term) implements RealizationTarget {
+    record OverARun(NumericTerm.TakenOver term) implements OfANumber {
 
         @Override
         public TermPath writeRoot() {
@@ -151,6 +162,38 @@ public sealed interface RealizationTarget {
         @Override
         public String toString() {
             return term.toString();
+        }
+    }
+
+    /**
+     * How many elements of a container meet a statement, realized by writing the container with
+     * that many of them meeting it.
+     *
+     * <p>The place a search fixes for this is the count, and it says nothing about which elements:
+     * the same count is met by many containers, and which of them a row holds is the composing's
+     * choice ({@link CardinalityComposer}). A number the statement reads beside an element is a
+     * number of the row and a target of its own.
+     *
+     * <p>Rooted where a number taken over the elements is, for the same reason: the container's
+     * elements stand inside the outermost container holding them, and rebuilding that is what moves
+     * the count.
+     */
+    record ACount(CountedElements count) implements RealizationTarget {
+
+        public ACount {
+            if (count == null) {
+                throw new IllegalArgumentException("a count of nothing is no demand");
+            }
+        }
+
+        @Override
+        public TermPath writeRoot() {
+            return count.container().element().outermostContainer();
+        }
+
+        @Override
+        public String toString() {
+            return count.toString();
         }
     }
 }

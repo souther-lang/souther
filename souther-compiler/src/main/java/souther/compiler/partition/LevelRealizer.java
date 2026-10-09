@@ -136,16 +136,101 @@ public final class LevelRealizer {
             case Standing.OfOneCoordinate one -> ofOne(one, within, runs, looking, tried);
             case Standing.OfTwoOnOneCarrier two -> ofTwo(two, within, runs, looking, tried);
             case Standing.OfAForm over -> ofAForm(over, within, runs, tried);
+            case Standing.OfACount count -> ofACount(count, within, looking, tried);
         };
     }
 
-    /** Every position the item asks a value at: where the item names them in an order, that one,
-     *  and where it is a form, the order its terms are walked in. */
+    /**
+     * A count the item asks for, and a place for each number the statement reads beside an
+     * element.
+     *
+     * <p>Not which elements. A count is met by many containers, and which of them a row holds is
+     * the composing's choice ({@link CardinalityComposer}); a count and the numbers beside it are
+     * what a row is asked to be built at, and the numbers are numbers of the row and are put to
+     * the rules as any item's are. Which counts to try is {@link LevelCandidateSource}'s, as it is
+     * for any item.
+     *
+     * <p>The numbers beside an element are placed together, with an element meeting the statement
+     * where the count is one or more ({@link CountedElements#placesBeside}).
+     *
+     * <p>Never a proof. That no container holds so many elements meeting the statement is not
+     * something a walk over counts settles: the elements are the composing's to choose, and a count
+     * nothing here composed is a count left open — even where no element the region leaves meets
+     * the statement, since the region was narrowed by the statement here and not by the rules.
+     */
+    private Realization ofACount(Standing.OfACount count, SearchRegion within,
+                                 WitnessSearch looking, ValuesTried tried) {
+        RealizationTarget.ACount counted = new RealizationTarget.ACount(count.count());
+        Set<CompositionBudget> stoppedBy = java.util.EnumSet.noneOf(CompositionBudget.class);
+        Set<CompositionCapacity> unheld = new HashSet<>();
+        LevelCandidateSource.Offered offered =
+                LevelCandidateSource.forItem(count.where(), count.count().levels());
+        if (offered.stoppedShort()) {
+            stoppedBy.add(CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT);
+        }
+        for (Level level : offered.levels()) {
+            // A count is whole and from none, so a level below none is no count at all; one this
+            // could not write as a count is a number not held, and said as that.
+            Count asked;
+            switch (Count.written(level.asAnExactNumber())) {
+                case ExactAnswer.Held<Optional<Count>>(Optional<Count> written)
+                        when written.isPresent() -> asked = written.get();
+                case ExactAnswer.Held<Optional<Count>> _ -> {
+                    unheld.add(new CompositionCapacity(
+                            CompositionCapacity.Where.COUNTS_AN_ITEM_IS_TRIED_AT,
+                            UnheldNumber.NO_REPRESENTATION_EXISTS));
+                    continue;
+                }
+                case ExactAnswer.Unheld<Optional<Count>> notHeld -> {
+                    unheld.add(new CompositionCapacity(
+                            CompositionCapacity.Where.COUNTS_AN_ITEM_IS_TRIED_AT, notHeld.why()));
+                    continue;
+                }
+            }
+            if (asked.at().signum() < 0) {
+                continue;
+            }
+            switch (count.count().placesBeside(within, asked.at().signum() > 0, looking)) {
+                case NumericWitness.Standing.Found beside -> {
+                    Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
+                    fixing.put(counted, asked);
+                    for (NumericWitness.Standing.Found.Placed each : beside.inFixingOrder()) {
+                        if (!each.position().subjectPath().insideAContainer()) {
+                            fixing.put(RealizationTarget.of(each.position()), each.place());
+                        }
+                    }
+                    Realization made = found(fixing, within, tried);
+                    if (made instanceof Realization.Found) {
+                        return made;
+                    }
+                }
+                case NumericWitness.Standing.ProvedImpossible _ -> { }
+                case NumericWitness.Standing.NotFound(var figures, var held) -> {
+                    stoppedBy.addAll(figures);
+                    unheld.addAll(held);
+                }
+            }
+        }
+        return Realization.Unknown.leftOpen(
+                Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
+                stoppedBy, Set.of(), unheld);
+    }
+
+    /**
+     * Every position the item asks a value at: where the item names them in an order, that one,
+     * and where it is a form, the order its terms are walked in.
+     *
+     * <p>Of a count, the numbers its statement reads beside an element and none of the elements'.
+     * An element is chosen and not asked to stand anywhere: where the rules leave it nowhere the
+     * container holds none, which is a count of none, so the elements' numbers settle nothing here.
+     */
     private static List<NumericTerm> termsOf(Standing standing) {
         return switch (standing) {
             case Standing.OfOneCoordinate one -> List.of(one.term());
             case Standing.OfTwoOnOneCarrier two -> List.of(two.on(), two.against());
             case Standing.OfAForm over -> NumericTerms.inOrder(over.form().coefs().keySet());
+            case Standing.OfACount count -> count.numbers().stream()
+                    .filter(term -> !term.subjectPath().insideAContainer()).toList();
         };
     }
 
@@ -448,7 +533,7 @@ public final class LevelRealizer {
         // were recorded in is a hash order — and which position is solved last decides whether the
         // walk finds an answer inside its budget, so an answer that depended on it would depend on
         // nothing a reader can see.
-        List<Map.Entry<RealizationTarget, ExactRatio>> terms = new java.util.ArrayList<>();
+        List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms = new java.util.ArrayList<>();
         for (Map.Entry<NumericTerm, ExactRatio> each : AffineReading.ordered(over.form())) {
             // Every number is realized by rebuilding one value, so what the walk assigns is a demand
             // and there is one for each term of the form. Whether anything writes such a value is
@@ -587,7 +672,7 @@ public final class LevelRealizer {
      */
     private final class Search {
 
-        private final List<Map.Entry<RealizationTarget, ExactRatio>> terms;
+        private final List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms;
         /**
          * The order each position is read and written on, in the order the terms are walked.
          *
@@ -653,7 +738,7 @@ public final class LevelRealizer {
             return true;
         }
 
-        Search(List<Map.Entry<RealizationTarget, ExactRatio>> terms,
+        Search(List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms,
                Map<NumericTerm, Carrier> on, SearchRegion within,
                Map<NumericTerm, NumericDomain.Bounds> runs, ValuesTried tried) {
             this.tried = tried;
@@ -1563,7 +1648,12 @@ public final class LevelRealizer {
     private boolean theRulesHaveNotRefused(Map<RealizationTarget, Place> fixing,
                                            SearchRegion within) {
         Map<NumericTerm, Place> standing = new LinkedHashMap<>();
-        fixing.forEach((target, at) -> standing.put(target.term(), at));
+        // A count is no number the region holds a range of; the numbers fixed beside it are.
+        fixing.forEach((target, at) -> {
+            if (target instanceof RealizationTarget.OfANumber number) {
+                standing.put(number.term(), at);
+            }
+        });
         return standing.isEmpty() || within.given(standing).emptiness().isEmpty();
     }
 }

@@ -69,7 +69,7 @@ class ACutSaysWhatItDividesAndWhereTest {
      */
     @Test
     void aRuleWrittenInTwosCutsWhatARuleWrittenInOnesCuts() {
-        assertEquals(onThePosition("10").quantity().key(), overAMultiple("2", "40").quantity().key(),
+        assertEquals(onThePosition("10").quantity(), overAMultiple("2", "40").quantity(),
                 "`n > 10` and `2 * n > 40` cut one quantity");
     }
 

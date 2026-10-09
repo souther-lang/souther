@@ -114,6 +114,8 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                     // the container is not held to holding none either, since elements meeting
                     // these are a way past it too.
                     case RowDemand.ForAll _ -> region;
+                    // How many elements meet a statement, which is no number a region holds.
+                    case RowDemand.SoMany _ -> region;
                     // Which of two values stands at a position no region measures. The row is
                     // written with it where the row is composed, and the region says nothing of it.
                     case RowDemand.ATruth _ -> region;

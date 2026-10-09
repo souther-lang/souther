@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -27,12 +28,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * assessment path and report arm — nine places, for the second of two.
  *
  * <p>So the rule is that a reader takes what the quantity answers ({@link BorderQuantity#levels},
- * {@link BorderQuantity#standsAt}, {@link BorderQuantity#standingAt}, {@link BorderQuantity#carrierOf},
- * {@link BorderQuantity#left}, {@link BorderQuantity#writtenAt}, {@link BorderQuantity#shape}) and
- * never asks which one it is. A reader that needs an answer none of those gives is a reader asking
- * for a method on the quantity, not for a variant.
+ * {@link BorderQuantity#standsAt}, {@link BorderQuantity#standingAt}, {@link BorderQuantity#left},
+ * {@link BorderQuantity#writtenAt}, {@link BorderQuantity#shape}) and never asks which one it is. A
+ * reader that needs an answer none of those gives is a reader asking for a method on the quantity,
+ * not for a variant.
  *
- * <p><b>Where a variant may be named.</b> Its own file, because that is where the answers live; and
+ * <p>A capability is not a variant. {@link LinearQuantity} is what every quantity that is a form
+ * over a row's numbers answers beyond the rest, and a reader whose question is only about forms —
+ * another line written beside this one, a position the line divides — holds one, the way a reader
+ * that acts on a position holds a {@code NumericTerm.FromOnePosition}. The variants are the leaves.
+ *
+ * <p><b>Where a variant may be named.</b> Its own files, because that is where the answers live; and
  * the readings that build one, because deciding which quantity a rule cut is what those do. Nothing
  * else, in any module.
  *
@@ -53,6 +59,7 @@ class OnlyTheQuantityAnswersForItsOwnVariantsTest {
      */
     private static final Set<String> MAY_NAME_ONE = Set.of(
             "souther/compiler/partition/BorderQuantity.java",
+            "souther/compiler/partition/LinearQuantity.java",
             "souther/compiler/partition/Cutting.java",
             "souther/compiler/partition/Partitions.java");
 
@@ -89,12 +96,25 @@ class OnlyTheQuantityAnswersForItsOwnVariantsTest {
     @Test
     void theVariantsThisReadsAreTheOnesTheTypeDeclares() {
         assertTrue(variantNames().contains("OfACoordinate"), variantNames().toString());
-        assertEquals(BorderQuantity.class.getPermittedSubclasses().length, variantNames().size());
+        assertFalse(variantNames().contains("LinearQuantity"),
+                "a capability the variants share is not one of them");
     }
 
+    /** The leaves of the sealed type, through every sealed type between them and it. */
     private static List<String> variantNames() {
-        return java.util.Arrays.stream(BorderQuantity.class.getPermittedSubclasses())
-                .map(Class::getSimpleName).toList();
+        List<String> out = new ArrayList<>();
+        leaves(BorderQuantity.class, out);
+        return out;
+    }
+
+    private static void leaves(Class<?> sealed, List<String> out) {
+        for (Class<?> each : sealed.getPermittedSubclasses()) {
+            if (each.isSealed()) {
+                leaves(each, out);
+            } else {
+                out.add(each.getSimpleName());
+            }
+        }
     }
 
     /**

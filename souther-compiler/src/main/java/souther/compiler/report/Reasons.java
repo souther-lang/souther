@@ -150,6 +150,12 @@ final class Reasons {
                 case ELEMENTS_A_TOTAL_IS_SPREAD_OVER ->
                         "how many elements a total is spread over";
                 case SHAPES_OF_A_TOTAL_OFFERED -> "how many containers are offered for one total";
+                case ELEMENTS_A_COUNT_IS_COMPOSED_WITH ->
+                        "how many elements a container composed for a count holds";
+                case CONTAINERS_A_COUNT_IS_OFFERED ->
+                        "how many containers are offered for one count";
+                case SHARES_A_COUNT_IS_TRIED_AT ->
+                        "how many ways of sharing out a container's elements are tried for a count";
                 case WAYS_DOWN_TO_A_TOTAL_TRIED ->
                         "how many ways down to what a total adds up are tried";
                 case WAYS_UNDER_THE_CASES_TRIED ->
@@ -201,6 +207,8 @@ final class Reasons {
                         "the values that answer several of their own numbers";
                 case PLACES_IN_A_RUN_THAT_ARE_NAMED ->
                         "the places inside one run a value is named at";
+                case ELEMENTS_CHOSEN_FOR_A_COUNT ->
+                        "the elements chosen for how many of them meet a statement";
             });
         }
         return String.join(", ", out);
@@ -226,6 +234,10 @@ final class Reasons {
                 case VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO ->
                         "the next value of a position on the way";
                 case VALUES_A_TOTAL_IS_SPREAD_OVER -> "one element's share of a total";
+                case THE_LEAST_COUNT_ASKED_FOR -> "the least count the conditions on a count leave";
+                case COUNTS_AN_ITEM_IS_TRIED_AT -> "a count a line on a count is tried at";
+                case PLACES_AN_ELEMENT_TURNS_AT ->
+                        "a place a statement about an element turns over at";
             };
             out.add(what + switch (each.why()) {
                 case MORE_ROOM_COULD_ANSWER -> ", which this host had no room to work out";

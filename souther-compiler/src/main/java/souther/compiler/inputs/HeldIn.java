@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.core.Core;
+import souther.compiler.semantics.HowAClosureIsApplied;
 
 import java.util.Objects;
 
@@ -13,10 +14,15 @@ import java.util.Objects;
  * name read as "something {@code container} holds" would be filed at whichever of them the reader
  * thought of first.
  *
+ * <p>And how far the operation goes handing them over. What a closure states on the element after
+ * the one {@code List.any} stopped at is stated on no run, so which applications there are is a
+ * fact about the handing and not about the container.
+ *
  * @param container the expression the container was handed as
  * @param part      which of the things it holds the closure was handed
+ * @param applied   how far the operation goes applying the closure
  */
-public record HeldIn(Core container, Part part) {
+public record HeldIn(Core container, Part part, HowAClosureIsApplied applied) {
 
     /** Which part of what a container holds. */
     public enum Part {
@@ -42,5 +48,6 @@ public record HeldIn(Core container, Part part) {
     public HeldIn {
         Objects.requireNonNull(container, "something held came from a container");
         Objects.requireNonNull(part, "and is some part of what it holds");
+        Objects.requireNonNull(applied, "handed over some way");
     }
 }

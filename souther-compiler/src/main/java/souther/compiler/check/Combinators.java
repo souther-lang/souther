@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.semantics.Combinator;
+import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.types.Type;
@@ -51,9 +52,10 @@ final class Combinators {
 
     /** What a call hands its closure: the argument that takes the function, the block that argument
      * is, the parameter the element arrives on, the container it comes from, and the parameter the
-     * key it is filed under arrives on — null where the closure is handed no key. */
+     * key it is filed under arrives on — null where the closure is handed no key — and how far the
+     * operation goes applying it. */
     record Handed(Core closure, Core.Block step, Core.Binder element, Core container,
-                  Core.Binder key) {}
+                  Core.Binder key, HowAClosureIsApplied applied) {}
 
     /** The same, off the tree an author wrote, where a closure is the block as written. */
     record Written(Hir.Block step, Hir.Binder element, Hir.Expr container) {}
@@ -106,7 +108,7 @@ final class Combinators {
         }
         return new Handed(closure, step, step.params().get(rule.elementParam()),
                 args.get(rule.containerArg()),
-                rule.handsAKey() ? step.params().get(rule.keyParam()) : null);
+                rule.handsAKey() ? step.params().get(rule.keyParam()) : null, rule.applied());
     }
 
     /**
@@ -163,6 +165,19 @@ final class Combinators {
         });
         return named;
     }
+
+    /**
+     * The operations that stop applying their closure before the last element, and where.
+     *
+     * <p>Written down, since a signature says what a closure is handed and not when it stops being
+     * handed anything. Every other operation applies it to every element. Which of the two each
+     * operation is, is held to what the library computes by a test that runs every operation whose
+     * closure answers a truth on a container whose second element aborts the closure.
+     */
+    private static final Map<ValueName, HowAClosureIsApplied> STOPPING = Map.of(
+            ValueName.Stdlib.operation("List", "any"), HowAClosureIsApplied.UNTIL_ONE_HOLDS,
+            ValueName.Stdlib.operation("List", "find"), HowAClosureIsApplied.UNTIL_ONE_HOLDS,
+            ValueName.Stdlib.operation("List", "all"), HowAClosureIsApplied.UNTIL_ONE_FAILS);
 
     /** Read off the library on the first ask. The library is the same library for every module
      * compiled, and reading it is answering the question for all of them at once. */
@@ -239,7 +254,8 @@ final class Combinators {
                             + " parameter, so which is not read off its signature");
                 }
                 found = new Combinator(closureArg, p, c,
-                        keyParam(qualified, Type.keyOf(params.get(c)), closureParams, p));
+                        keyParam(qualified, Type.keyOf(params.get(c)), closureParams, p),
+                        STOPPING.getOrDefault(qualified, HowAClosureIsApplied.TO_EVERY_ELEMENT));
             }
         }
         return found;

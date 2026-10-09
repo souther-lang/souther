@@ -303,7 +303,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         souther.compiler.coverage.Arrivals.inTheTree(body,
                                 analysis.templates()::bodyOf),
                         templates, truths, decided, dependencies, carried, conditions),
-                reads,
+                reads, ClosureApplications.OUTSIDE,
                 LiveFlow.of(body), List.of(), true, readings, forks, numbering);
         // What each value the body builds states, read once. A value means the same wherever it is
         // built, so what is read of it is one reading however many builds there are; what differs
@@ -316,7 +316,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                                 souther.compiler.coverage.Arrivals.inTheTree(template,
                                         analysis.templates()::bodyOf),
                         templates, truths, decided, dependencies, carried, conditions),
-                        insideATemplate, LiveFlow.of(template), entry.assumed(), entry.live(),
+                        insideATemplate, ClosureApplications.OUTSIDE, LiveFlow.of(template),
+                        entry.assumed(), entry.live(),
                         readings, forks, numbering);
             }
         }
@@ -385,14 +386,17 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     }
 
     /**
-     * @param assumed what evaluating everything before this position established
-     * @param live    whether what is computed here is read on the way to what the behavior answers
-     *                with. Carried down because everything inside a value nothing reads is read by
-     *                nothing either
+     * @param applying the applications of the closures this position stands inside, moved by the
+     *                 same steps as {@code reads}
+     * @param assumed  what evaluating everything before this position established
+     * @param live     whether what is computed here is read on the way to what the behavior
+     *                 answers with. Carried down because everything inside a value nothing reads is
+     *                 read by nothing either
      */
-    private static void walk(Core e, Body in, InputReads reads, LiveFlow flow,
-                             List<OnTheWay> assumed, boolean live, List<Reading> out,
-                             List<ForkMet> forks, ConditionNumbering numbering) {
+    private static void walk(Core e, Body in, InputReads reads, ClosureApplications applying,
+                             LiveFlow flow, List<OnTheWay> assumed, boolean live,
+                             List<Reading> out, List<ForkMet> forks,
+                             ConditionNumbering numbering) {
         Symbols symbols = in.symbols();
         StatedAt stated = statedAt(e, () -> WhatNamesStandFor.in(reads, in.read()), in.carried());
         if (stated != null) {
@@ -407,8 +411,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     .<BoundaryPolicy.Standing>map(BoundaryPolicy.Standing.Refused::new)
                     .orElseGet(() -> new BoundaryPolicy.Standing.Admitted(
                             ComparisonAssessment.of(in.behavior(), stated.statement(), where,
-                                    in.read(), reads, null, in.dependencies(), in.answering(),
-                                    false, in.conditions())));
+                                    in.read(), reads, applying, null, in.dependencies(),
+                                    in.answering(), false, in.conditions())));
             out.add(new Reading(stands, stated.statement(), where, reads, assumed, standing,
                     whereEachDecides(e, standing, reads, in, numbering)));
         }
@@ -417,26 +421,34 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // unsettled, so what it stands under is what that says. Asked of the operand and not of
             // any fork above it: there need not be one, and where there is, this is what the fork
             // would have been reading anyway.
+            //
+            // Inside a closure whose applications are said, what the left came to is a statement
+            // about each application, so it goes onto what each is reached under and not onto the
+            // way every application shares.
             case Core.Binary both when both.op() == BinOp.AND -> {
-                walk(both.left(), in, reads, flow, assumed, live, out, forks, numbering);
-                walk(both.right(), in, reads, flow,
-                        taking(Condition.of(both.left(), reads, symbols, in.newtypes(), numbering),
-                                true,
-                                in.read(), assumed, in.conditions()),
+                walk(both.left(), in, reads, applying, flow, assumed, live, out, forks,
+                        numbering);
+                walk(both.right(), in, reads, applying.taking(both.left(), true, in.read()), flow,
+                        applying.saysWhatStandsInIt() ? assumed
+                                : taking(Condition.of(both.left(), reads, symbols, in.newtypes(),
+                                        numbering), true, in.read(), assumed, in.conditions()),
                         live, out, forks, numbering);
             }
             case Core.Binary either when either.op() == BinOp.OR -> {
-                walk(either.left(), in, reads, flow, assumed, live, out, forks, numbering);
-                walk(either.right(), in, reads, flow,
-                        taking(Condition.of(either.left(), reads, symbols, in.newtypes(),
-                                        numbering), false,
-                                in.read(), assumed, in.conditions()),
+                walk(either.left(), in, reads, applying, flow, assumed, live, out, forks,
+                        numbering);
+                walk(either.right(), in, reads, applying.taking(either.left(), false, in.read()),
+                        flow,
+                        applying.saysWhatStandsInIt() ? assumed
+                                : taking(Condition.of(either.left(), reads, symbols,
+                                        in.newtypes(), numbering), false, in.read(), assumed,
+                                        in.conditions()),
                         live, out, forks, numbering);
             }
             // The condition under what stood above the fork, and each arm under what that arm proves
             // of it. A comparison inside a condition is not below the fork: it runs to decide it.
             case Core.If iff -> {
-                walk(iff.cond(), in, reads, flow, assumed, live, out, forks, numbering);
+                walk(iff.cond(), in, reads, applying, flow, assumed, live, out, forks, numbering);
                 // Read once, whichever arm is being entered. Reaching the `then` and reaching the
                 // `els` are two things one condition says, and a second reading for the second arm
                 // would name that one condition twice.
@@ -480,14 +492,18 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     forks.add(new ForkMet(iff.occurrence(), iff.cond(), Citation.of(iff.pos()),
                             atoms));
                 }
-                walk(iff.then(), in,
-                        reads.choosing(Choice.Decides.ofCondition(iff, true), symbols,
-                                in.newtypes()),
-                        flow, past(assumed, holding), live, out, forks, numbering);
-                walk(iff.els(), in,
-                        reads.choosing(Choice.Decides.ofCondition(iff, false), symbols,
-                                in.newtypes()),
-                        flow, past(assumed, failing), live, out, forks, numbering);
+                Choice.Decides then = Choice.Decides.ofCondition(iff, true);
+                Choice.Decides els = Choice.Decides.ofCondition(iff, false);
+                walk(iff.then(), in, reads.choosing(then, symbols, in.newtypes()),
+                        applying.taking(iff.cond(), true, in.read())
+                                .choosing(then, symbols, in.newtypes()),
+                        flow, applying.saysWhatStandsInIt() ? assumed : past(assumed, holding),
+                        live, out, forks, numbering);
+                walk(iff.els(), in, reads.choosing(els, symbols, in.newtypes()),
+                        applying.taking(iff.cond(), false, in.read())
+                                .choosing(els, symbols, in.newtypes()),
+                        flow, applying.saysWhatStandsInIt() ? assumed : past(assumed, failing),
+                        live, out, forks, numbering);
             }
             // What a `let` computes is read on the way to the answer only where the name is read;
             // everywhere else a value stands in a body it is consumed by what it stands in. And its
@@ -501,11 +517,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     given = in.templates().bodyOf(build);
                     in.templates().entered(given, assumed, live && flow.reads(let));
                 } else {
-                    walk(let.value(), in, reads, flow, assumed, live && flow.reads(let), out, forks,
-                            numbering);
+                    walk(let.value(), in, reads, applying, flow, assumed,
+                            live && flow.reads(let), out, forks, numbering);
                 }
-                walk(let.body(), in, reads.and(let.binder(), given), flow, assumed, live,
-                        out, forks, numbering);
+                walk(let.body(), in, reads.and(let.binder(), given),
+                        applying.and(let.binder(), given), flow, assumed, live, out, forks,
+                        numbering);
             }
             // And each arm under what the arm says the value it matched turned out to be. A name
             // the arm binds is the scrutinee's position narrowed to that case, so a comparison
@@ -517,24 +534,31 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // inside an arm was owed a row by a walk that had been told nothing stood on the way to
             // it, and the row composed for it was written in whichever arm the values fell in.
             case Core.Match match -> {
-                walk(match.scrutinee(), in, reads, flow, assumed, live, out, forks, numbering);
+                walk(match.scrutinee(), in, reads, applying, flow, assumed, live, out, forks,
+                        numbering);
                 for (int part = 0; part < match.cases().size(); part++) {
                     Core.Case arm = match.cases().get(part);
-                    walk(arm.body(), in,
-                            reads.choosing(Choice.Decides.ofCase(match, arm), symbols,
-                                    in.newtypes()),
-                            flow,
+                    Choice.Decides taken = Choice.Decides.ofCase(match, arm);
+                    walk(arm.body(), in, reads.choosing(taken, symbols, in.newtypes()),
+                            applying.choosing(taken, symbols, in.newtypes()), flow,
                             entering(match, arm, part, in.read(), reads, assumed, numbering),
                             live, out, forks, numbering);
                 }
             }
+            // A closure handed the values a container was written with is entered once for all of
+            // its applications, each of them carried beside the names as the value it was handed.
+            case Core.Block block -> ScopeStep.forEachChild(block, (child, step) ->
+                    walk(child, in, reads.entering(step, symbols, in.newtypes()),
+                            applying.into(block, step, reads, in.read()), flow, assumed, live,
+                            out, forks, numbering));
             // Every other child under what the step into it binds. An attempt's `then` is where its
             // name stands for what was built, so a comparison written over that name is one over
             // the positions the construction was given. That the attempt held puts no line on the
             // account: which way it went is decided by the type's rules, and a row is not steered
             // by it.
             default -> ScopeStep.forEachChild(e, (child, step) ->
-                    walk(child, in, reads.entering(step, symbols, in.newtypes()), flow, assumed,
+                    walk(child, in, reads.entering(step, symbols, in.newtypes()),
+                            applying.entering(step, symbols, in.newtypes()), flow, assumed,
                             live, out, forks, numbering));
         }
     }

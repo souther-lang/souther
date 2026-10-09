@@ -66,6 +66,22 @@ public enum CompositionBudget {
      *  buys is another row reading like the last. */
     SHAPES_OF_A_TOTAL_OFFERED(4),
 
+    /** How many elements a container composed for how many of them meet a statement is tried
+     *  with. Walked from none up, so a count is met at the least size that holds it; a size past
+     *  this is one where a smaller container would already have met any count a line is drawn
+     *  near. */
+    ELEMENTS_A_COUNT_IS_COMPOSED_WITH(16),
+
+    /** How many containers are offered for one count. A second meets the count with other
+     *  elements beside it, which is a different row where the first one does not stand. */
+    CONTAINERS_A_COUNT_IS_OFFERED(4),
+
+    /** How many ways of sharing a size out among the values a count's elements are drawn from
+     *  are looked at, over every size tried. The ways grow with the size and with how many ways
+     *  an element answers the statements, and each is checked against every count before any is
+     *  built. */
+    SHARES_A_COUNT_IS_TRIED_AT(4096),
+
     /** How many ways down to the number a total is read from are tried. Its own figure and not
      *  {@link #SHAPES_OF_A_TOTAL_OFFERED}: a way that plans is not a container that was offered, and
      *  charging one to the other leaves a case never tried because an earlier one planned and built
@@ -308,6 +324,8 @@ public enum CompositionBudget {
                     VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT;
             case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS, PAIRINGS_BUILT_AT_ONCE,
                  ELEMENTS_A_TOTAL_IS_SPREAD_OVER, SHAPES_OF_A_TOTAL_OFFERED,
+                 ELEMENTS_A_COUNT_IS_COMPOSED_WITH, CONTAINERS_A_COUNT_IS_OFFERED,
+                 SHARES_A_COUNT_IS_TRIED_AT,
                  WAYS_DOWN_TO_A_TOTAL_TRIED, WAYS_UNDER_THE_CASES_TRIED,
                  PLACES_A_PAIR_IS_TRIED_AT, STEPS_A_SEARCH_MAY_TAKE,
                  ASSIGNMENTS_A_SEARCH_COMPOSES, VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,

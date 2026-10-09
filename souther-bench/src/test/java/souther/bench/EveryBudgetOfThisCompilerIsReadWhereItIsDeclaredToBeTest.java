@@ -112,6 +112,29 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "stops building an element along a way with another choice of the values"
                             + " asked inside it, under the figure the ways down are counted by,"
                             + " and hands it over the same way"),
+            // A count's two: the sizes a container is tried at and the containers offered for one
+            // count, each said under its own figure in what the composing comes back with.
+            Map.entry("souther.compiler.partition.CardinalityComposer#<clinit>()V",
+                    "how many elements a container composed for a count holds, how many"
+                            + " containers are offered for one, and how many ways of sharing its"
+                            + " elements out are looked at"),
+            Map.entry("souther.compiler.partition.CardinalityComposer#compose("
+                            + "Lsouther/compiler/types/Type;Ljava/util/List;"
+                            + "Ljava/util/SequencedMap;"
+                            + "Lsouther/compiler/partition/RealizationTarget$OfANumber;"
+                            + "Ljava/util/List;Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "stops at a size or at the containers offered, and hands the figure over in"
+                            + " the shortfall it comes back with"),
+            Map.entry("souther.compiler.partition.LevelRealizer#ofACount("
+                            + "Lsouther/compiler/partition/Standing$OfACount;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/partition/WitnessSearch;"
+                            + "Lsouther/compiler/partition/ValuesTried;)"
+                            + "Lsouther/compiler/partition/Realization;",
+                    "says the counts were offered short where the source of them stopped, as a"
+                            + " side's levels are"),
             Map.entry("souther.compiler.partition.Generator#inputsFrom("
                             + "Lsouther/compiler/partition/Generator$RowBeingComposed;I"
                             + "[Lsouther/compiler/partition/FixtureTemplate;"
@@ -261,6 +284,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Pullback$WrittenOutRead;",
                     "counts the values a law is read of one by one, and past the figure carries"
                             + " the law out as a part nothing read, naming it"),
+            Map.entry("souther.compiler.partition.Pullback$ALawRead#count("
+                            + "Lsouther/compiler/semantics/LawNumber$HowManyMeet;)"
+                            + "Lsouther/compiler/partition/Pullback$Sized;",
+                    "counts the choices of which values written out meet a statement, and past"
+                            + " the figure carries the count out as a part nothing read, naming it"),
             Map.entry("souther.compiler.partition.DecisionReading#<clinit>()V",
                     "how many paths through one body a decision is read for"),
             Map.entry("souther.compiler.partition.DecisionReading#of("

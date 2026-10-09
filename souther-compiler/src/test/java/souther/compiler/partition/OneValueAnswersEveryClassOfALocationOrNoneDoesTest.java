@@ -183,7 +183,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
     @Test
     void twoClassesTheCalendarLeavesNothingInAreAnsweredByNothing() {
         Model model = new Model(FEBRUARY_AND_A_THIRTIETH);
-        SequencedMap<RealizationTarget, NumericSet> february = model.classesAt(1, 1);
+        SequencedMap<RealizationTarget.OfANumber, NumericSet> february = model.classesAt(1, 1);
 
         assertEquals(List.of("2 <= x <= 2", "30 <= x <= 31"), model.labelsAt(1, 1),
                 "the months cut to February alone, and the days from the thirtieth on");
@@ -202,7 +202,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
     @Test
     void aClassOfEverythingButOneValueIsAskedForTheRestOfThem() {
         Model model = new Model(ANY_MONTH_BUT_JANUARY);
-        SequencedMap<RealizationTarget, NumericSet> asked = model.upperClasses();
+        SequencedMap<RealizationTarget.OfANumber, NumericSet> asked = model.upperClasses();
 
         assertEquals(List.of("/= 1", "30 <= x <= 31"), model.labelsAt(1, 1),
                 "every month but January, and the days from the thirtieth on");
@@ -249,7 +249,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
     @Test
     void aContainerIsComposedOutOfHowManyItHoldsAndWhatItComesTo() {
         Model model = new Model(A_LENGTH_AND_A_TOTAL);
-        SequencedMap<RealizationTarget, NumericSet> asked = model.upperClasses();
+        SequencedMap<RealizationTarget.OfANumber, NumericSet> asked = model.upperClasses();
 
         assertEquals(2, asked.size(), () -> "a length and a total of one place: " + asked.keySet());
         TermRealizations.Realization made = model.answering(asked);
@@ -343,8 +343,8 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
 
         /** The uppermost class of each of the location's numbers, which is the one the rules cut
          *  off at the top. */
-        private SequencedMap<RealizationTarget, NumericSet> upperClasses() {
-            SequencedMap<RealizationTarget, NumericSet> out = new LinkedHashMap<>();
+        private SequencedMap<RealizationTarget.OfANumber, NumericSet> upperClasses() {
+            SequencedMap<RealizationTarget.OfANumber, NumericSet> out = new LinkedHashMap<>();
             for (Axis axis : partitioning.axes()) {
                 PartitionClass upper = axis.classes().get(axis.classes().size() - 1);
                 out.put(RealizationTarget.of(upper.of()), upper.recognises().numbers());
@@ -353,8 +353,8 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
         }
 
         /** One named class of each of the location's numbers, in the order the axes were read. */
-        private SequencedMap<RealizationTarget, NumericSet> classesAt(int... which) {
-            SequencedMap<RealizationTarget, NumericSet> out = new LinkedHashMap<>();
+        private SequencedMap<RealizationTarget.OfANumber, NumericSet> classesAt(int... which) {
+            SequencedMap<RealizationTarget.OfANumber, NumericSet> out = new LinkedHashMap<>();
             List<Axis> axes = partitioning.axes();
             for (int i = 0; i < axes.size() && i < which.length; i++) {
                 PartitionClass cls = axes.get(i).classes().get(which[i]);
@@ -375,8 +375,8 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
         }
 
         /** The same numbers asked for exactly, in the order the axes were read. */
-        private SequencedMap<RealizationTarget, NumericSet> at(int... numbers) {
-            SequencedMap<RealizationTarget, NumericSet> out = new LinkedHashMap<>();
+        private SequencedMap<RealizationTarget.OfANumber, NumericSet> at(int... numbers) {
+            SequencedMap<RealizationTarget.OfANumber, NumericSet> out = new LinkedHashMap<>();
             List<Axis> axes = partitioning.axes();
             for (int i = 0; i < axes.size() && i < numbers.length; i++) {
                 out.put(RealizationTarget.of(axes.get(i).term()),
@@ -386,7 +386,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
         }
 
         private TermRealizations.Realization answering(
-                SequencedMap<RealizationTarget, NumericSet> demands) {
+                SequencedMap<RealizationTarget.OfANumber, NumericSet> demands) {
             // The classes as they are asked for, which is what a search of one is about: these
             // fixtures hand over what a rule leaves and nothing picked a number out of it.
             SequencedMap<RealizationTarget, AskedAt> asked = new LinkedHashMap<>();
@@ -449,7 +449,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
          * with the writing by both being wrong would pass.
          */
         private void readsBackIntoEveryClass(List<FixtureTemplate> built,
-                                             SequencedMap<RealizationTarget, NumericSet> asked) {
+                                             SequencedMap<RealizationTarget.OfANumber, NumericSet> asked) {
             List<String> elsewhere = new ArrayList<>();
             for (FixtureTemplate value : built) {
                 List<Integer> parts = partsOf(value.text());
@@ -478,13 +478,13 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
          * numbers and offered for both does not pass.
          */
         private void aContainerReadsBackIntoBothClasses(
-                List<FixtureTemplate> built, SequencedMap<RealizationTarget, NumericSet> asked) {
+                List<FixtureTemplate> built, SequencedMap<RealizationTarget.OfANumber, NumericSet> asked) {
             List<String> elsewhere = new ArrayList<>();
             for (FixtureTemplate value : built) {
                 List<BigDecimal> held = elementsOf(value.text());
                 BigDecimal total = held.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
                 int i = 0;
-                for (Map.Entry<RealizationTarget, NumericSet> each : asked.entrySet()) {
+                for (Map.Entry<RealizationTarget.OfANumber, NumericSet> each : asked.entrySet()) {
                     TakenAs how = ((NumericTerm.TakenOf) each.getKey().term()).takenAs();
                     Place read = how instanceof TakenAs.HowManyItHolds
                             ? Count.of(BigDecimal.valueOf(held.size())) : Count.of(total);
@@ -511,7 +511,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
         }
 
         private souther.compiler.check.Carrier carrierOf(
-                SequencedMap<RealizationTarget, NumericSet> asked, int at) {
+                SequencedMap<RealizationTarget.OfANumber, NumericSet> asked, int at) {
             return subject.quantities()
                     .ordersOf(new ArrayList<>(asked.keySet()).get(at).term()).answered();
         }

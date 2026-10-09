@@ -329,7 +329,7 @@ public final class MeasuredInput {
      * the same things is this line, whatever was written beside it where the caller got it.
      *
      * <p><b>A quantity a transformation produced comes back through here.</b> Moving a quantity to
-     * another number ({@link BorderQuantity#movedTo}) is done on the quantity alone and carries
+     * another number ({@link LinearQuantity#movedTo}) is done on the quantity alone and carries
      * nothing of where it was measured, so what comes out is geometry again rather than a reading
      * of it — and a line this measurement never drew is not one it can read a row at.
      */

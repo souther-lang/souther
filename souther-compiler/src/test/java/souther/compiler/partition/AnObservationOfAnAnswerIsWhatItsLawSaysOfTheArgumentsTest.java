@@ -23,6 +23,7 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.semantics.Unsayable;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -88,13 +89,28 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
     }
 
     /** How many values written out meet a statement is a number where each of them settles it,
-     *  and no linear one of the input where one turns on it. */
+     *  and which of the rest meet it where one turns on it. */
     @Test
     void aCountOfValuesWrittenOutIsANumberWhereEachSettlesIt() {
         assertEquals(new Proposition.Always(true), stated(
                 "if List.length(List.filter(x -> x > 0, [1, 2, -1])) == 2 then 1 else 0"));
-        assertInstanceOf(WhyUnread.OutsideTheLinearFragment.class, Proposition.firstStopIn(
-                stated("if List.length(List.filter(x -> x > 0, [b.n, 1])) == 2 then 1 else 0")));
+        assertEquals(stated("if b.n > 0 then 1 else 0"),
+                stated("if List.length(List.filter(x -> x > 0, [b.n, 1])) == 2 then 1 else 0"));
+    }
+
+    /**
+     * Which of them meet it is a choice for each value that does not settle it, so the readings
+     * double with every one, and past the readings one condition is read in the count is not read
+     * — said as that, and not as a statement nothing could read.
+     */
+    @Test
+    void aCountOfMoreValuesThanTheReadingsOfACondition() {
+        String eight = String.join(", ", Collections.nCopies(8, "b.n"));
+        assertEquals(stated("if b.n > 0 then 1 else 0"), stated(
+                "if List.length(List.filter(x -> x > 0, [" + eight + "])) == 8 then 1 else 0"));
+        String nine = String.join(", ", Collections.nCopies(9, "b.n"));
+        assertInstanceOf(WhyUnread.MoreReadingsThanAreMade.class, Proposition.firstStopIn(stated(
+                "if List.length(List.filter(x -> x > 0, [" + nine + "])) == 9 then 1 else 0")));
     }
 
     /** What a set holds once a value is taken out is some other value, read as the quantifier over

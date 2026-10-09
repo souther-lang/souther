@@ -115,11 +115,7 @@ public record Seam(CutPosition at, Level below, Level above) {
      * read it off.
      */
     static ExactAnswer<Seam> where(BorderQuantity of, Level at, Towards belongsTo) {
-        souther.compiler.numeric.LinearForm<souther.compiler.inputs.NumericTerm> direction =
-                of.direction();
-        ExactRatio per = QuantityKey.per(direction);
-        return of(of.levels(), at, belongsTo, new Scale(per, direction.coefs().size() == 1
-                ? of.carrierOf(direction.coefs().keySet().iterator().next()) : null));
+        return of(of.levels(), at, belongsTo, new Scale(of.per(), of.writtenBackOn()));
     }
 
     /**

@@ -39,7 +39,7 @@ public sealed interface WhyNotTaken {
                         out.add(new ProjectionIncomplete(Shape.A_NUMBER_A_DEPENDENCY_ANSWERED));
                 case Quantity.OfABinding _ ->
                         out.add(new ProjectionIncomplete(Shape.A_NUMBER_THE_BODY_BOUND));
-                case Quantity.HowManyMeet _ ->
+                case Quantity.HowManyMeet _, Quantity.HowManyHold _ ->
                         out.add(new ProjectionIncomplete(Shape.A_COUNT_OF_ELEMENTS));
             }
         }

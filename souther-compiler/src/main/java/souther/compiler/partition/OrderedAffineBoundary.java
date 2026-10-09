@@ -21,7 +21,7 @@ import java.util.Set;
  * <p>What a rule that orders values says, with the shape it was written in gone: a direction over
  * the positions, a place along that direction where the values part, and which side of it the rule
  * is satisfied on. A bound on one position, a rule holding two positions apart and a rule over an
- * arithmetic form all read this way, because that is what {@link BorderQuantity#direction} answers
+ * arithmetic form all read this way, because that is what {@link LinearQuantity#direction} answers
  * and it answers it for all three.
  *
  * <p><b>What this is for is holding a line against a line the model did not draw.</b> A border says
@@ -43,7 +43,7 @@ import java.util.Set;
  * @param seam        where the values part, in the quantity's own units
  * @param satisfiedOn the side of it the rule is satisfied on
  */
-public record OrderedAffineBoundary(BorderQuantity of, Seam seam, Towards satisfiedOn) {
+public record OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisfiedOn) {
 
     public OrderedAffineBoundary {
         if (of == null || seam == null || satisfiedOn == null) {
@@ -63,8 +63,8 @@ public record OrderedAffineBoundary(BorderQuantity of, Seam seam, Towards satisf
      */
     public static ExactAnswer<Optional<OrderedAffineBoundary>> of(Border border) {
         ComparisonClaim claim = border.origin().lineFacts().claim();
-        BorderQuantity of = border.cut().of();
-        if (!(claim instanceof ComparisonClaim.Cut order) || !weighable(of)) {
+        if (!(claim instanceof ComparisonClaim.Cut order)
+                || !(border.cut().of() instanceof LinearQuantity of) || !weighable(of)) {
             return ExactAnswer.held(Optional.empty());
         }
         return Seam.where(of, border.cut().at(), claim).map(seam ->
@@ -79,7 +79,7 @@ public record OrderedAffineBoundary(BorderQuantity of, Seam seam, Towards satisf
      * differently — there is nothing to multiply — so it is not a boundary of this kind, and reading
      * one asks its positions for a number they do not have.
      */
-    public static boolean weighable(BorderQuantity of) {
+    public static boolean weighable(LinearQuantity of) {
         for (NumericTerm term : of.terms()) {
             Carrier on = of.carrierOf(term);
             if (on == null || !on.counts()) {
@@ -103,7 +103,7 @@ public record OrderedAffineBoundary(BorderQuantity of, Seam seam, Towards satisf
      * nobody can state — and the weights such a position has are the one pair a distance is written
      * with.
      */
-    public static Set<NumericTerm> weighedByANumber(BorderQuantity of) {
+    public static Set<NumericTerm> weighedByANumber(LinearQuantity of) {
         Set<NumericTerm> out = new LinkedHashSet<>();
         // A linked set answers in the order it was filled, so it is filled in the terms' own order
         // and not in whatever order the direction happens to walk its keys.
@@ -181,7 +181,12 @@ public record OrderedAffineBoundary(BorderQuantity of, Seam seam, Towards satisf
      * date counts its days from somewhere, and a reader handed the count has been handed a number
      * that is not what they would write in a row.
      */
-    public static String saidAt(BorderQuantity of, Map<NumericTerm, Place> values) {
+    public static String saidAt(BorderQuantity quantity, Map<NumericTerm, Place> values) {
+        // An input is said position by position, and a quantity that is no form over positions
+        // has none to say it by.
+        if (!(quantity instanceof LinearQuantity of)) {
+            return null;
+        }
         StringBuilder out = new StringBuilder();
         // In the order the quantity's own form is spelled in, so that an input and the line it is
         // an input of name their positions the same way round. Taken in the order the terms were

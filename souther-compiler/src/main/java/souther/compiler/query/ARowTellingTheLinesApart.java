@@ -8,6 +8,7 @@ import souther.compiler.partition.CameToNothing;
 import souther.compiler.partition.CompositionShortfall;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Realization;
+import souther.compiler.partition.RealizationTarget;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -108,7 +109,14 @@ public record ARowTellingTheLinesApart(List<AtOneReading> each) {
                     List.of(new AtOneReading(reading, null, searches)));
         }
         Map<NumericTerm, Place> byTerm = new HashMap<>();
-        composed.fixing().forEach((target, place) -> byTerm.put(target.term(), place));
+        composed.fixing().forEach((target, place) -> {
+            switch (target) {
+                case RealizationTarget.OfANumber number -> byTerm.put(number.term(), place);
+                // How many elements meet a statement is no number of the row, so there is no term
+                // to say the row was composed at it; the row's elements say it.
+                case RealizationTarget.ACount _ -> { }
+            }
+        });
         // A linked map answers in the order it was filled, so it is filled in the terms' own order
         // and not in the order the fixing happened to be walked.
         Map<NumericTerm, Place> at = new LinkedHashMap<>();

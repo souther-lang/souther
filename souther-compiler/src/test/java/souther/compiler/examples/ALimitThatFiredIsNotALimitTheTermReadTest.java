@@ -17,6 +17,7 @@ import souther.compiler.observe.FieldTypes;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.partition.AnObservationOfAForm;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Level;
@@ -144,7 +145,7 @@ class ALimitThatFiredIsNotALimitTheTermReadTest {
 
     /** A row whose only readable place is the container itself. */
     private static BorderQuantity.Observation at(ObservedValue observed) {
-        return new BorderQuantity.Observation() {
+        return new AnObservationOfAForm() {
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {
@@ -161,7 +162,7 @@ class ALimitThatFiredIsNotALimitTheTermReadTest {
 
     /** A row whose only readable place is the run, holding what {@code observed} came to. */
     private static BorderQuantity.Observation run(ObservedValue observed) {
-        return new BorderQuantity.Observation() {
+        return new AnObservationOfAForm() {
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {

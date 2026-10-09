@@ -2,7 +2,10 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -375,6 +378,74 @@ public sealed interface RowDemand {
         @Override
         public Set<TermPath> valuesRead() {
             return valuesReadOf(ofEachElement);
+        }
+    }
+
+    /**
+     * That so many elements of a container meet a statement: the count against a number.
+     *
+     * <p>Not a relation a region can be narrowed by, for the reason {@link Exists} is not, and more:
+     * the count is no number of the row at all. What is done with this is compose — a container
+     * with as many elements meeting the statement as this leaves it, written together with every
+     * other count of that container a row is asked for ({@link CardinalityComposer}).
+     *
+     * @param count             what is counted: the container, and what an element is counted
+     *                          for meeting
+     * @param met               how the count stands to {@code level} on every row this holds of
+     * @param level             the number the count is held against
+     * @param anElementMeeting  what an element meeting what is counted is held to, as relations,
+     *                          where it is that ({@link DemandReading#anElementMeeting})
+     */
+    record SoMany(Quantity.HowManyMeet count, Rel met, ExactRatio level,
+                  Optional<List<TakenConstraint>> anElementMeeting)
+            implements OfACondition {
+
+        public SoMany {
+            Objects.requireNonNull(count, "a count of the elements of some container");
+            Objects.requireNonNull(met, "a count held against a number some way");
+            Objects.requireNonNull(level, "a count held against some number");
+            Objects.requireNonNull(anElementMeeting,
+                    "what an element meeting it is held to is said, or said to be nothing read");
+        }
+
+        /**
+         * The counts this leaves, as what a count a row is composed at is one of.
+         *
+         * <p>A region and not one of its counts. Several conditions on one count are met where
+         * their regions cross, and which count of that a container is composed at is the
+         * composing's to choose.
+         */
+        public NumbersAskedFor counts() {
+            Level at = new Level.OfTheQuantity(level);
+            return NumbersAskedFor.of(switch (met) {
+                case EQ -> LevelRegion.point(at);
+                case NE -> LevelRegion.EVERYTHING.without(at);
+                case GE -> LevelRegion.of(new LevelInterval(Bound.at(at, true), null));
+                case GT -> LevelRegion.of(new LevelInterval(Bound.at(at, false), null));
+                case LE -> LevelRegion.of(new LevelInterval(null, Bound.at(at, true)));
+                case LT -> LevelRegion.of(new LevelInterval(null, Bound.at(at, false)));
+            });
+        }
+
+        /** The numbers the statement reads, of the elements and beside them. */
+        @Override
+        public Set<NumericTerm> terms() {
+            return AStatementAtARow.numbersOf(count.ofTheElement());
+        }
+
+        @Override
+        public Set<TermPath> positions() {
+            Set<TermPath> out = new LinkedHashSet<>();
+            out.add(count.container());
+            terms().forEach(term -> out.add(term.subjectPath()));
+            return Collections.unmodifiableSet(out);
+        }
+
+        /** None: a row held to this writes the container and whatever the statement reads beside
+         *  an element. */
+        @Override
+        public Set<TermPath> valuesRead() {
+            return Set.of();
         }
     }
 
