@@ -4651,8 +4651,8 @@ public final class Generator {
         // time, the second was a value built for a place the first had already written.
         for (Map.Entry<TermPath, SequencedMap<RealizationTarget, AskedAt>> group
                 : byTheLocationTheyWrite(atThoseNumbers(standing,
-                        whatEachOfThemIsANumberOf(subject, fixing, where.routed(), asking,
-                                reaching)))
+                        whatEachOfThemIsANumberOf(subject, fixing, where.routed(),
+                                where.counted(), asking, reaching)), where.someElement())
                 .entrySet()) {
             Edge edge = edgeAt(subject, group.getKey(), group.getValue(),
                     composedIn(group.getValue(), reaching.region(), standing));
@@ -5076,6 +5076,8 @@ public final class Generator {
                                          Reachability.Reaching reaching) {
         Map<RealizationTarget, Place> out = new LinkedHashMap<>(fixing);
         Map<NumericTerm.FromOnePosition, RealizationTarget> routed = new LinkedHashMap<>();
+        Map<RealizationTarget.ACount, NumbersAskedFor> counted = new LinkedHashMap<>();
+        Set<RealizationTarget> someElement = new LinkedHashSet<>();
         List<ReachabilityGap> gaps = new ArrayList<>();
         SearchRegion here = reaching.region();
         for (Map.Entry<RealizationTarget, Place> each : fixing.entrySet()) {
@@ -5109,12 +5111,12 @@ public final class Generator {
             // goes in beside the row's other demands, so the container is composed with it and
             // with every other count of it at once.
             if (cut.demand() instanceof RowDemand.SoMany many) {
-                SearchRegion counted = counted(subject, here, out, routed, many);
-                if (counted == null) {
+                SearchRegion withIt = counted(subject, here, out, routed, counted, many);
+                if (withIt == null) {
                     gaps.add(new ReachabilityGap.Uncomposed(cut,
                             new ReachabilityGap.Why.NoValueComposedForItsPositions()));
                 } else {
-                    here = counted;
+                    here = withIt;
                 }
                 continue;
             }
@@ -5128,7 +5130,7 @@ public final class Generator {
             // cut takes is one decision — where each of its numbers stands, where the row writes
             // them, and what the row had to be taken as — and a reader that applied the parts as it
             // found them would leave a case chosen on the way to a cut that came to nothing.
-            switch (placing(subject, looking, here, out, assumed, cut)) {
+            switch (placing(subject, looking, here, out, someElement, assumed, cut)) {
                 case Placed.AtNone(ReachabilityGap why) -> gaps.add(why);
                 case Placed.AtAll(NumericWitness.Standing.Found standing,
                                   Map<NumericTerm.FromOnePosition, RealizationTarget> routes,
@@ -5144,10 +5146,16 @@ public final class Generator {
                     // worked out twice — once where the cut was read and once where its answer is
                     // filed — and the two would part at exactly the name this routing exists for.
                     owing.forEach((target, asked) -> out.put(target, standing.placeOf(asked)));
+                    // What a condition that some element meets something placed is a value some
+                    // element stands at, and no more.
+                    if (cut.demand() instanceof RowDemand.Exists) {
+                        someElement.addAll(owing.keySet());
+                    }
                 }
             }
         }
-        return new Standing(out, routed, CompositionAccount.ofTheInput(gaps));
+        return new Standing(out, routed, counted, Set.copyOf(someElement),
+                CompositionAccount.ofTheInput(gaps));
     }
 
     /**
@@ -5165,6 +5173,7 @@ public final class Generator {
     private static SearchRegion counted(MeasuredInput subject, SearchRegion here,
                                         Map<RealizationTarget, Place> out,
                                         Map<NumericTerm.FromOnePosition, RealizationTarget> routed,
+                                        Map<RealizationTarget.ACount, NumbersAskedFor> counted,
                                         RowDemand.SoMany many) {
         Count least = many.least();
         if (least == null) {
@@ -5195,7 +5204,13 @@ public final class Generator {
             }
             now = now.given(term, at);
         }
-        out.putIfAbsent(new RealizationTarget.ACount(count), least);
+        // Where the item itself asks for this count it is already standing, at the place the item
+        // asks and one of what the item leaves; a count two conditions ask for is one of what both
+        // leave.
+        RealizationTarget.ACount target = new RealizationTarget.ACount(count);
+        if (out.putIfAbsent(target, least) == null || counted.containsKey(target)) {
+            counted.merge(target, many.counts(), NumbersAskedFor::meet);
+        }
         return now;
     }
 
@@ -5216,18 +5231,19 @@ public final class Generator {
      */
     private static Placed placing(MeasuredInput subject, WitnessSearch looking, SearchRegion here,
                                   Map<RealizationTarget, Place> alreadyStanding,
+                                  Set<RealizationTarget> someElement,
                                   Requirements assumed, OnTheWay.TakenIn cut) {
         return switch (cut.demand()) {
             // What every row past it holds, which the region a search runs over was narrowed by
             // already — so what is left there is what the rules leave, and nothing left is a
             // proof.
             case RowDemand.Relational(var relation) -> placedIn(subject, looking, here,
-                    alreadyStanding, assumed, cut, List.of(relation), false);
+                    alreadyStanding, someElement, assumed, cut, List.of(relation), false);
             // What an element meets, which the region was not narrowed by. Placed in a region that
             // is, for this cut alone: the element written meets it, and every element a list
             // writes is that one.
             case RowDemand.Exists exists -> asComposedOnly(cut,
-                    placedIn(subject, looking, here, alreadyStanding, assumed, cut,
+                    placedIn(subject, looking, here, alreadyStanding, someElement, assumed, cut,
                             constraints(exists.relations()), true),
                     noElementCanMeet(constraints(exists.relations()), subject));
             // And where no element can be written that meets them, the container holding none,
@@ -5236,13 +5252,13 @@ public final class Generator {
             case RowDemand.ForAll every -> {
                 List<RowDemand.Relational> ofEachElement = every.relations();
                 Optional<RowDemand.Relational> holdingNone = every.holdingNone();
-                Placed some = placedIn(subject, looking, here, alreadyStanding, assumed, cut,
-                        constraints(ofEachElement), true);
+                Placed some = placedIn(subject, looking, here, alreadyStanding, someElement,
+                        assumed, cut, constraints(ofEachElement), true);
                 if (some instanceof Placed.AtAll || holdingNone.isEmpty()) {
                     yield asComposedOnly(cut, some, false);
                 }
-                Placed none = placedIn(subject, looking, here, alreadyStanding, assumed, cut,
-                        List.of(holdingNone.get().constraint()), true);
+                Placed none = placedIn(subject, looking, here, alreadyStanding, someElement,
+                        assumed, cut, List.of(holdingNone.get().constraint()), true);
                 if (none instanceof Placed.AtAll) {
                     yield none;
                 }
@@ -5335,6 +5351,7 @@ public final class Generator {
      */
     private static Placed placedIn(MeasuredInput subject, WitnessSearch looking, SearchRegion here,
                                    Map<RealizationTarget, Place> alreadyStanding,
+                                   Set<RealizationTarget> someElement,
                                    Requirements assumed, OnTheWay.TakenIn cut,
                                    List<TakenConstraint> stated, boolean narrowHere) {
         SearchRegion within = here;
@@ -5362,7 +5379,8 @@ public final class Generator {
         // are part of placing the cut, and a cut is placed at every position it names or at none —
         // so a cut that comes to nothing leaves the row the case it had, and the next cut chooses
         // as freely as this one did.
-        return new CutPlacing(subject, looking, within, alreadyStanding, cut, List.copyOf(terms))
+        return new CutPlacing(subject, looking, within, alreadyStanding, someElement, cut,
+                List.copyOf(terms))
                 .from(0, assumed, new LinkedHashMap<>(), new LinkedHashMap<>());
     }
 
@@ -5389,10 +5407,14 @@ public final class Generator {
      *
      * @param alreadyStanding where the row already writes, which a number asked for here has to
      *                        stand beside — read and never added to
+     * @param someElement     the numbers among those standing that some element of a container
+     *                        is to stand at, which a condition that some element meets something
+     *                        placed ({@link #writtenAmong})
      * @param terms           the cut's numbers, in the order the search takes them
      */
     private record CutPlacing(MeasuredInput subject, WitnessSearch looking, SearchRegion here,
                               Map<RealizationTarget, Place> alreadyStanding,
+                              Set<RealizationTarget> someElement,
                               OnTheWay.TakenIn cut, List<NumericTerm> terms) {
 
         /**
@@ -5476,7 +5498,14 @@ public final class Generator {
             // answer is about the demands this row actually has. Which locations are one is asked
             // of the reader that owns it, because a container written whole and a position inside
             // it are one location spelled two ways.
-            if (!beside.isEmpty() && !writtenTogether(beside, target)) {
+            // A number this cut places is some element's where the cut is that some element meets
+            // something, and not where it is that every one does.
+            Set<RealizationTarget> some = someElement;
+            if (cut.demand() instanceof RowDemand.Exists) {
+                some = new HashSet<>(someElement);
+                some.add(target);
+            }
+            if (!beside.isEmpty() && !writtenTogether(beside, target, some)) {
                 return new Placed.AtNone(new ReachabilityGap.Uncomposed(cut,
                         new ReachabilityGap.Why.TwoNumbersAtOneLocation()));
             }
@@ -5699,14 +5728,15 @@ public final class Generator {
      * would put such a number beside whatever else the sum's own name attracted.
      */
     private static boolean writtenTogether(List<RealizationTarget> beside,
-                                           RealizationTarget asked) {
+                                           RealizationTarget asked,
+                                           Set<RealizationTarget> someElement) {
         List<RealizationTarget> both = new ArrayList<>(beside.size() + 1);
         both.addAll(beside);
         both.add(asked);
         Map<TermPath, TermPath> counted = countedAmong(both);
-        TermPath at = writtenAmong(asked, counted);
+        TermPath at = writtenAmong(asked, counted, someElement);
         for (RealizationTarget target : beside) {
-            if (!writtenAmong(target, counted).equals(at)) {
+            if (!writtenAmong(target, counted, someElement).equals(at)) {
                 return false;
             }
         }
@@ -5751,14 +5781,20 @@ public final class Generator {
      *               because the place was chosen here: worked out again by whoever asks what a
      *               number is one of, the two would part at exactly that name and a number would be
      *               asked about under a target the row never wrote
+     * @param counted the counts a condition on the way asked for, each with the counts the
+     *                condition leaves, which is what the one the row stands at is one of
+     * @param someElement the numbers some element of a container is to stand at, which a
+     *                    condition that some element meets something placed
      */
     private record Standing(Map<RealizationTarget, Place> at,
                             Map<NumericTerm.FromOnePosition, RealizationTarget> routed,
+                            Map<RealizationTarget.ACount, NumbersAskedFor> counted,
+                            Set<RealizationTarget> someElement,
                             CompositionAccount unrepresented) {
 
         /** The same, with what standing the dependencies in was arrived at without on it. */
         Standing with(CompositionAccount answers) {
-            return new Standing(at, routed, unrepresented.and(answers));
+            return new Standing(at, routed, counted, someElement, unrepresented.and(answers));
         }
     }
 
@@ -6108,20 +6144,24 @@ public final class Generator {
      * they were: nothing composes those together, and {@link LocationWrites} is what says so.
      *
      * <p>But for one: a container composed for how many of its elements meet something chooses its
-     * elements, so a value asked at the element itself is some element of it standing there, and
-     * goes in with the counts ({@link CardinalityComposer}).
+     * elements, so a value some element of it is to stand at goes in with the counts
+     * ({@link CardinalityComposer}).
      *
      * <p>The numbers as the sets they are asked for out of, which a point of a border and a class
      * both are: the arrangement is the same either way, and reading it twice would be two answers
      * to which location a number is written at.
+     *
+     * @param someElement the numbers among {@code standing} some element is to stand at
      */
     private static SequencedMap<TermPath, SequencedMap<RealizationTarget, AskedAt>>
-            byTheLocationTheyWrite(Map<RealizationTarget, AskedAt> standing) {
+            byTheLocationTheyWrite(Map<RealizationTarget, AskedAt> standing,
+                                   Set<RealizationTarget> someElement) {
         Map<TermPath, TermPath> counted = countedAmong(standing.keySet());
         SequencedMap<TermPath, SequencedMap<RealizationTarget, AskedAt>> out =
                 new LinkedHashMap<>();
         for (Map.Entry<RealizationTarget, AskedAt> each : standing.entrySet()) {
-            out.computeIfAbsent(writtenAmong(each.getKey(), counted), _ -> new LinkedHashMap<>())
+            out.computeIfAbsent(writtenAmong(each.getKey(), counted, someElement),
+                            _ -> new LinkedHashMap<>())
                     .put(each.getKey(), each.getValue());
         }
         return out;
@@ -6146,13 +6186,21 @@ public final class Generator {
     }
 
     /**
-     * Where {@code target} is written: its own root, or where it is a value asked at the element of
-     * a container composed for how many of its elements meet something ({@link #countedAmong}),
-     * that container's — some element of which stands there.
+     * Where {@code target} is written: its own root, or where it is a value some element of a
+     * container composed for how many of its elements meet something is to stand at
+     * ({@link #countedAmong}), that container's.
+     *
+     * <p>Some element and not every one. A value placed for every element of a container to meet
+     * something is a value of each, and composing the container for its counts chooses elements
+     * that value does not hold of; it is a second write of the location, said where it is.
+     *
+     * @param someElement the numbers some element is to stand at, which a condition that some
+     *                    element meets something placed
      */
     private static TermPath writtenAmong(RealizationTarget target,
-                                         Map<TermPath, TermPath> counted) {
-        if (!counted.isEmpty()
+                                         Map<TermPath, TermPath> counted,
+                                         Set<RealizationTarget> someElement) {
+        if (!counted.isEmpty() && someElement.contains(target)
                 && target instanceof RealizationTarget.AtOnePosition(
                         NumericTerm.FromOnePosition term)
                 && term instanceof NumericTerm.ValueOf) {
@@ -6214,11 +6262,14 @@ public final class Generator {
     private static Map<RealizationTarget, NumbersAskedFor> whatEachOfThemIsANumberOf(
             MeasuredInput subject, Map<RealizationTarget, Place> fixing,
             Map<NumericTerm.FromOnePosition, RealizationTarget> routed,
+            Map<RealizationTarget.ACount, NumbersAskedFor> counted,
             NumbersAskedFor asking, Reachability.Reaching reaching) {
         Map<RealizationTarget, NumbersAskedFor> out = new LinkedHashMap<>();
         for (RealizationTarget each : fixing.keySet()) {
             out.put(each, asking);
         }
+        // Every count a condition on the way asked for, which is one of the counts it leaves.
+        out.putAll(counted);
         // Every number a place was chosen for on the way, and not every number a cut names. A cut
         // may be met more than one way — every element meeting a condition, or a container holding
         // none — and what the row stands at is whichever way was placed; asked of the cut's numbers
@@ -6250,14 +6301,8 @@ public final class Generator {
             Map<RealizationTarget, NumbersAskedFor> asking) {
         Map<RealizationTarget, AskedAt> out = new LinkedHashMap<>();
         for (Map.Entry<RealizationTarget, Place> each : standing.entrySet()) {
-            NumbersAskedFor about = asking.get(each.getKey());
-            // A count a condition on the way asks for, which is one of the counts the condition
-            // leaves; the container is composed at this one, and what the rest are is the
-            // condition's.
-            if (about == null && each.getKey() instanceof RealizationTarget.ACount) {
-                about = NumbersAskedFor.ANYTHING;
-            }
-            out.put(each.getKey(), AskedAt.oneNumberOf(about, each.getValue()));
+            out.put(each.getKey(),
+                    AskedAt.oneNumberOf(asking.get(each.getKey()), each.getValue()));
         }
         return out;
     }
@@ -7194,10 +7239,11 @@ public final class Generator {
         // held beside it: a row held to a condition's own demand alone stands at the numbers the
         // way placed and at no point. Then each point's own numbers, asked of what that point asks.
         Map<RealizationTarget, NumbersAskedFor> asking = new LinkedHashMap<>(
-                whatEachOfThemIsANumberOf(subject, Map.of(), where.routed(),
+                whatEachOfThemIsANumberOf(subject, Map.of(), where.routed(), where.counted(),
                         NumbersAskedFor.ANYTHING, reaching));
         for (RowDemand.AtAPoint each : points) {
-            whatEachOfThemIsANumberOf(subject, each.fixing(), Map.of(), each.asking(), reaching)
+            whatEachOfThemIsANumberOf(subject, each.fixing(), Map.of(), Map.of(), each.asking(),
+                    reaching)
                     .forEach((target, of) -> asking.merge(target, of, NumbersAskedFor::meet));
         }
         return new HeldTogether.Asked(new LinkedHashMap<>(atThoseNumbers(where.at(), asking)),
@@ -7595,7 +7641,7 @@ public final class Generator {
         // those classes stand for is in that value, so they write nothing of their own.
         Set<TermPath> composedWhole = new LinkedHashSet<>();
         for (Map.Entry<TermPath, SequencedMap<RealizationTarget, AskedAt>> group
-                : byTheLocationTheyWrite(numbers).entrySet()) {
+                : byTheLocationTheyWrite(numbers, Set.of()).entrySet()) {
             boolean asHeld = group.getValue().keySet().stream()
                     .anyMatch(holding.asked()::containsKey);
             // A location asked for one number, which the class standing at it holds a value for

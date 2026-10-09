@@ -99,13 +99,6 @@ import java.util.function.Supplier;
 final class Pullback {
 
     /**
-     * How many values written out a count is read over where none of them settles whether it
-     * meets the statement. How many of them hold is read as which of them do, a choice for each,
-     * so the reading doubles with every one.
-     */
-    private static final int MOST_WRITTEN_OUT_COUNTED = 6;
-
-    /**
      * A part of what a condition states, and the expression it was read off, where it stands.
      *
      * @param part what the part states, the way round it was met
@@ -1053,9 +1046,10 @@ final class Pullback {
                         if (unsettled.isEmpty()) {
                             yield new Sized.AsAForm(settled);
                         }
-                        // Which of them hold is a choice for each, and past this many the choices
-                        // are more readings than the reading of a condition makes.
-                        if (unsettled.size() > MOST_WRITTEN_OUT_COUNTED) {
+                        // Which of them hold is a choice for each, so the readings double with
+                        // every one; past the readings one condition is read in, it is not read.
+                        if (unsettled.size() >= Long.SIZE - 1
+                                || 1L << unsettled.size() > READINGS.maximum()) {
                             yield new Sized.NotSized(new WhyUnread.MoreReadingsThanAreMade());
                         }
                         yield new Sized.AsAForm(new LinearForm<>(settled.constant(),

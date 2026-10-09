@@ -282,6 +282,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Pullback$WrittenOutRead;",
                     "counts the values a law is read of one by one, and past the figure carries"
                             + " the law out as a part nothing read, naming it"),
+            Map.entry("souther.compiler.partition.Pullback$ALawRead#count("
+                            + "Lsouther/compiler/semantics/LawNumber$HowManyMeet;)"
+                            + "Lsouther/compiler/partition/Pullback$Sized;",
+                    "counts the choices of which values written out meet a statement, and past"
+                            + " the figure carries the count out as a part nothing read, naming it"),
             Map.entry("souther.compiler.partition.DecisionReading#<clinit>()V",
                     "how many paths through one body a decision is read for"),
             Map.entry("souther.compiler.partition.DecisionReading#of("

@@ -239,14 +239,21 @@ public final class LevelRealizer {
         return true;
     }
 
-    /** Every position the item asks a value at: where the item names them in an order, that one,
-     *  and where it is a form, the order its terms are walked in. */
+    /**
+     * Every position the item asks a value at: where the item names them in an order, that one,
+     * and where it is a form, the order its terms are walked in.
+     *
+     * <p>Of a count, the numbers its statement reads beside an element and none of the elements'.
+     * An element is chosen and not asked to stand anywhere: where the rules leave it nowhere the
+     * container holds none, which is a count of none, so the elements' numbers settle nothing here.
+     */
     private static List<NumericTerm> termsOf(Standing standing) {
         return switch (standing) {
             case Standing.OfOneCoordinate one -> List.of(one.term());
             case Standing.OfTwoOnOneCarrier two -> List.of(two.on(), two.against());
             case Standing.OfAForm over -> NumericTerms.inOrder(over.form().coefs().keySet());
-            case Standing.OfACount count -> count.numbers();
+            case Standing.OfACount count -> count.numbers().stream()
+                    .filter(term -> !term.subjectPath().insideAContainer()).toList();
         };
     }
 

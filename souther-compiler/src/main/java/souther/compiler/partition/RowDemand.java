@@ -423,6 +423,19 @@ public sealed interface RowDemand {
             }
         }
 
+        /** The counts this leaves, as what a count a row is composed at is one of. */
+        public NumbersAskedFor counts() {
+            Level at = new Level.OfTheQuantity(level);
+            return NumbersAskedFor.of(switch (met) {
+                case EQ -> LevelRegion.point(at);
+                case NE -> LevelRegion.EVERYTHING.without(at);
+                case GE -> LevelRegion.of(new LevelInterval(Bound.at(at, true), null));
+                case GT -> LevelRegion.of(new LevelInterval(Bound.at(at, false), null));
+                case LE -> LevelRegion.of(new LevelInterval(null, Bound.at(at, true)));
+                case LT -> LevelRegion.of(new LevelInterval(null, Bound.at(at, false)));
+            });
+        }
+
         /** The numbers the statement reads, of the elements and beside them. */
         @Override
         public Set<NumericTerm> terms() {

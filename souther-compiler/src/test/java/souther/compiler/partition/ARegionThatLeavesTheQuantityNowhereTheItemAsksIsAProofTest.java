@@ -11,12 +11,17 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
+import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.Relation;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Towards;
 import souther.compiler.query.Bodies;
@@ -29,6 +34,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Where the region leaves the item's quantity no value the item asks for, the item is out of reach
@@ -176,22 +182,36 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
     }
 
     /**
-     * A count is never proved out of reach by a region, however narrow.
+     * A region that leaves the elements of a container nowhere proves no count out of reach.
      *
-     * <p>A region holds a range of each number of the row, and how many elements meet a statement
-     * is none of them: which elements a container holds is the composing's to choose. So a region
-     * leaving {@code x} at nought and below says nothing about whether one element meets something,
-     * and the count is left to the search.
+     * <p>Where no value is an element, the container holds none, and a container holding none has
+     * none of its elements meeting a statement: a count of none is reached. The elements' numbers
+     * are chosen by the composing and asked nowhere, so what the region leaves them settles
+     * nothing.
      */
     @Test
-    void aCountIsNoNumberARegionCanRefuse() {
-        Standing count = new Standing.OfACount(new CountedElements("read", pathOf("x"),
-                new Proposition.Always(true),
-                AStatementAtARow.of(new Proposition.Always(true), "read",
-                        READ.input().quantities(READ.rules())),
-                Map.of()), List.of(), new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)));
-        assertFalse(realize(count, xIsNoMoreThanNought()) instanceof Realization.Impossible,
-                "nothing a region holds says how many elements meet a statement");
+    void aContainerHoldingNothingIsACountOfNone() {
+        Quantities measuring = COUNTED.input().quantities(COUNTED.rules());
+        SearchRegion holdingNothing = measuring.region();
+        TermPath xs = pathIn(COUNTED, "xs");
+        NumericTerm element = new NumericTerm.ValueOf(xs.element());
+        // An element above the limit: `limit - x >= 0` failing, written facing the way a relation
+        // over the two faces.
+        Map<Quantity, ExactRatio> atMost = new LinkedHashMap<>();
+        atMost.put(new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(pathIn(COUNTED, "limit"))),
+                ExactRatio.ONE);
+        atMost.put(new DecisionAtom.OfTheInput(element), ExactRatio.ONE.negated());
+        CountedElements counted = CountedElements.of("counted", new Quantity.HowManyMeet(xs,
+                new Proposition.Compared(new Relation.Affine(
+                        new LinearForm<>(ExactRatio.ZERO, atMost), Rel.GE), false)), measuring);
+        assertTrue(holdingNothing.emptiness().isEmpty(),
+                () -> "the region admits rows: " + holdingNothing.emptiness());
+        assertInstanceOf(NumericDomain.FormProjection.NothingIsLeft.class,
+                holdingNothing.projectionOf(element), "and leaves an element of `xs` nowhere");
+        Standing none = new Standing.OfACount(counted, counted.numbers(),
+                new Criterion.AtTheLevel(Level.OfTheQuantity.of(0)));
+        assertFalse(realize(none, holdingNothing) instanceof Realization.Impossible,
+                "a container holding nothing has none of its elements above the limit");
     }
 
     /** The item's line, as far as a row for it is concerned. */
@@ -257,7 +277,21 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
         return new LinearForm<>(ExactRatio.of(k), coefs);
     }
 
-    private static final Read READ = read();
+    private static final Read READ = read(PAIR, "read");
+
+    /**
+     * A container whose elements no value is — so it holds none — and a number beside them.
+     */
+    private static final Read COUNTED = read("""
+            module g
+
+            data Ok
+
+            data Never = Int
+                invariant value >= 1 && value <= 0
+
+            behavior counted : (xs: List<Never>, limit: Int) -> Ok
+            """, "counted");
 
     private static SearchRegion region() {
         return READ.input().quantities(READ.rules()).region();
@@ -268,24 +302,28 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
     }
 
     private static TermPath pathOf(String spelled) {
-        return READ.input().positions().stream().map(Position::path)
+        return pathIn(READ, spelled);
+    }
+
+    private static TermPath pathIn(Read read, String spelled) {
+        return read.input().positions().stream().map(Position::path)
                 .filter(each -> each.toString().equals(spelled))
                 .findFirst().orElseThrow(() -> new AssertionError(
-                        "no position at " + spelled + " among " + READ.input().positions().stream()
+                        "no position at " + spelled + " among " + read.input().positions().stream()
                                 .map(Position::path).toList()));
     }
 
     private record Read(InputDomain input, RuleReadingSource rules) {}
 
-    private static Read read() {
+    private static Read read(String source, String behavior) {
         Compilation compilation =
-                Compilation.ofSources(List.of(PAIR), souther.compiler.meta.ModulePath.EMPTY);
+                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
-        return new Read(InputDomain.of(sigs.get("read"),
+        return new Read(InputDomain.of(sigs.get(behavior),
                 RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES),
                 Membership.none()), rules);
     }
