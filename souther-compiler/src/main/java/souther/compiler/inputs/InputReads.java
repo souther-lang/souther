@@ -1017,14 +1017,23 @@ public final class InputReads {
             return new ReadMeaning.OneOf(narrowed);
         }
         return switch (names.roleOf(read.binding())) {
-            // What a container written out in the body holds is the values it was written with. A
-            // map's keys are not among those this walk writes out, so a key is a key of the map and
-            // which one is not said.
+            // What a container written out in the body holds is the values it was written with, and
+            // what a walk answering one value per element of another container holds is that
+            // walk's answer on one of them. A map's keys are among neither, so a key is a key of
+            // the map and which one is not said.
             case BindingRole.Element(var held) -> {
-                java.util.List<Denotation> written = held.part() != HeldIn.Part.ELEMENT ? null
-                        : writtenElementsOf(new Denotation(held.container(), this), symbols,
-                                newtypes, met);
-                yield written == null ? new ReadMeaning.Element() : new ReadMeaning.OneOf(written);
+                if (held.part() != HeldIn.Part.ELEMENT) {
+                    yield new ReadMeaning.Element();
+                }
+                Denotation container = standing(new Denotation(held.container(), this), symbols,
+                        newtypes, met);
+                java.util.List<Denotation> written = writtenElementsOf(container);
+                if (written != null) {
+                    yield new ReadMeaning.OneOf(written);
+                }
+                Denotation answered = answerOnEachElement(container, symbols, newtypes, met);
+                yield answered == null ? new ReadMeaning.Element()
+                        : new ReadMeaning.Through(answered);
             }
             // An element of more than one container is an element, and what it may be is not the
             // values of any one of them. Answered with what one container was written with, a name
@@ -1050,14 +1059,16 @@ public final class InputReads {
     }
 
     /**
-     * The elements {@code container} was written with, or null where it was not written out.
+     * The elements a container standing as {@code standing} was written with, or null where it was
+     * not written out.
      *
      * <p>What makes this an answer about every element and not about some of them is that the
-     * container is followed only through steps with one successor — a name this environment bound,
-     * and the body of a binding — until a list written in the source is standing there. An operation
-     * that builds a container answers elements this walk cannot enumerate, and the walk stops rather
-     * than reading what went in: {@code List.append(xs, ys)} holds the elements of both, and a
-     * reading that took either would have written out a set missing the other half.
+     * container was followed only through steps with one successor ({@link #standing}) — a name
+     * this environment bound, and the body of a binding — and a list written in the source is what
+     * stands there. An operation that builds a container answers elements this walk cannot
+     * enumerate, and the walk stops rather than reading what went in: {@code List.append(xs, ys)}
+     * holds the elements of both, and a reading that took either would have written out a set
+     * missing the other half.
      *
      * <p><b>Followed with this environment and never with the body's.</b> What a binding holds is
      * also recorded over the whole body ({@link ElementBindings#boundTo}), and
@@ -1071,11 +1082,7 @@ public final class InputReads {
      * a statement about every member to be about, and a statement quantified over no members holds
      * whatever it says.
      */
-    private static java.util.List<Denotation> writtenElementsOf(Denotation container,
-                                                                Symbols symbols,
-                                                                DeclarationNewtypes newtypes,
-                                                                Set<BindingId> met) {
-        Denotation standing = standing(container, symbols, newtypes, met);
+    private static java.util.List<Denotation> writtenElementsOf(Denotation standing) {
         if (!(Core.withoutStanding(standing.value()) instanceof Core.ListLit written)
                 || written.elements().isEmpty()) {
             return null;
@@ -1085,6 +1092,35 @@ public final class InputReads {
         written.elements().forEach(each ->
                 out.add(new Denotation(Core.withoutStanding(each), standing.at())));
         return out;
+    }
+
+    /**
+     * What a container standing as {@code standing} holds at each element, where it is the answers
+     * of one walk, one for each element of what that walk was handed — or null where it is not.
+     *
+     * <p>The step's body, read where the walk stands, with the step's parameter standing for the
+     * element it was handed. {@code List.map(x -> x + 1, xs)} holds {@code x + 1} for each element
+     * of {@code xs}, so a rule about one of its elements is a rule about {@code x + 1}, and what
+     * {@code x} is is the reading's question like any other name's.
+     *
+     * <p>The walk this container is and not one over the same elements. Two walks over {@code xs}
+     * answer different values, so which step's body an element is is read off the application that
+     * built the container ({@link ElementBindings#stepAnsweredOnEachElement}), and where that
+     * application answers no run of one value per element — a {@code filter} keeps some of them, a
+     * set's {@code map} may answer one value for two — the element is an element and nothing more.
+     *
+     * <p>Read in the environment the walk stands in. A name the step's body reads from outside it
+     * was bound above the walk, and what it stands for there is what the step was applied under.
+     */
+    private static Denotation answerOnEachElement(Denotation standing, Symbols symbols,
+                                                  DeclarationNewtypes newtypes,
+                                                  Set<BindingId> met) {
+        InputReads at = standing.at();
+        Core.Block step = ElementBindings.stepAnsweredOnEachElement(standing.value(),
+                closure -> Core.withoutStanding(
+                        standing(new Denotation(closure, at), symbols, newtypes, met).value())
+                        instanceof Core.Block block ? block : null);
+        return step == null ? null : new Denotation(step.body(), at);
     }
 
     /**

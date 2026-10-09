@@ -236,7 +236,7 @@ class ARuleAboutTheStringsOfAMadeValueIsNamedWhereItCameFromTest {
             let f (people) =
                 Count(List.length(
                     List.filter(s -> String.startsWith("JP", s),
-                        List.map(q -> q.code, people))))
+                        List.filterMap(q -> List.get(0, [q.code]), people))))
             """;
 
     private static PartitionEvidence measured(String model) {
