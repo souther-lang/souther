@@ -3928,6 +3928,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         + " something, which no fact a path knows says";
                 case A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN -> "what every element meets, which a"
                         + " path holds only as the closure it was written with";
+                case A_NUMBER_THE_PATH_CANNOT_HOLD -> "a relation of numbers whose weights add, on"
+                        + " what a path knows, to a number with no exact representation";
             };
         };
     }
@@ -4614,6 +4616,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     case A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS -> "path_knows_no_count_of_elements";
                     case A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN ->
                             "path_holds_element_facts_as_written";
+                    case A_NUMBER_THE_PATH_CANNOT_HOLD -> "number_the_path_cannot_hold";
                 });
             }
         }

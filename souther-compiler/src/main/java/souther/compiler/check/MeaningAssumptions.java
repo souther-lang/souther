@@ -10,7 +10,6 @@ import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhyNotTaken;
-import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
@@ -161,7 +160,8 @@ final class MeaningAssumptions {
                                 Known.Held.ON_THE_PATH, terms.kindsOf(over));
                         taken = true;
                     }
-                    case FormAt.Unnamed(Set<WhyNotTaken> whys) -> whys.forEach(this::notTaken);
+                    case FormAt.Unnamed(Set<WhyNotTaken.DomainLimit> edges) ->
+                            edges.forEach(this::outside);
                 }
             }
             case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds, var _) -> {
@@ -207,60 +207,86 @@ final class MeaningAssumptions {
         }
     }
 
-    /** {@code form} over the atoms this tree names, or why it is none: what each atom it cannot
-     *  name met, said where the atom was met. */
-    private sealed interface FormAt {
+    /**
+     * A relation's form over what a path knows, or the edges of what it knows that the form meets.
+     *
+     * <p>Only edges: the statement the form is of was read to the end, so nothing that stops it
+     * here is a part of the statement left unread. What stops is what a path can keep a fact in.
+     */
+    sealed interface FormAt {
 
         record Named(LinearForm<FactSubject> form) implements FormAt {}
 
-        record Unnamed(Set<WhyNotTaken> whys) implements FormAt {
+        record Unnamed(Set<WhyNotTaken.DomainLimit> edges) implements FormAt {
 
             public Unnamed {
-                whys = Collections.unmodifiableSet(new LinkedHashSet<>(whys));
-                if (whys.isEmpty()) {
-                    throw new IllegalArgumentException("a form not named is not named for a reason");
+                edges = Collections.unmodifiableSet(new LinkedHashSet<>(edges));
+                if (edges.isEmpty()) {
+                    throw new IllegalArgumentException("a form not named meets some edge");
                 }
             }
         }
     }
 
-    /**
-     * {@code form} over the atoms this tree names.
-     *
-     * <p>Two numbers of the statement this tree names as one fact are one value, and their weights
-     * add. An atom it cannot name meets an edge of what a path knows: a count of elements is no
-     * fact a path holds, and a place, an answer or a binding this tree has no subject for is a place
-     * it does not read. Every edge the form's atoms meet is said, once each, so which is said does
-     * not turn on the order the atoms stand in.
-     */
+    /** What one number of a statement is on what a path knows: the fact it is, or the edge of what
+     *  a path knows it meets. */
+    sealed interface AtomAt {
+
+        record Named(FactSubject subject) implements AtomAt {}
+
+        record AtTheEdge(WhyNotTaken.DomainLimit edge) implements AtomAt {}
+    }
+
+    /** {@code form} over the atoms this tree names ({@link #formOver}). */
     private FormAt formAt(LinearForm<Quantity> form) {
+        return formOver(form, this::atomAt);
+    }
+
+    /**
+     * {@code form} over what a path knows, each of its numbers named by {@code naming}.
+     *
+     * <p>Two numbers of the statement named as one fact are one value, and their weights add; where
+     * the sum is a number with no exact representation, that is the edge the form meets, since the
+     * fact would be kept in a number a path cannot hold. Every edge the form's numbers meet is said,
+     * once each, so which is said does not turn on the order the numbers stand in.
+     */
+    static FormAt formOver(LinearForm<Quantity> form, Function<Quantity, AtomAt> naming) {
         LinearForm<FactSubject> over = LinearForm.constant(form.constant());
-        Set<WhyNotTaken> whys = new LinkedHashSet<>();
+        Set<WhyNotTaken.DomainLimit> edges = new LinkedHashSet<>();
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
-            FactSubject atom;
-            switch (each.getKey()) {
-                case DecisionAtom.OfTheInput(NumericTerm term) -> atom = atomOf(term);
-                case DecisionAtom.OfAnAnswer(DecisionSubject.AnAnswer answer) ->
-                        atom = answerAtom(answer);
-                case Quantity.OfABinding bound -> atom = boundAtom(bound);
-                case Quantity.HowManyMeet _, Quantity.HowManyHold _ -> {
-                    whys.add(new WhyNotTaken.OutsideDomain(
-                            WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS));
-                    continue;
+            switch (naming.apply(each.getKey())) {
+                case AtomAt.AtTheEdge(var edge) -> edges.add(edge);
+                case AtomAt.Named(var subject) -> {
+                    switch (over.plus(LinearForm.weighing(subject, each.getValue()))) {
+                        case ExactAnswer.Held<LinearForm<FactSubject>> sum -> over = sum.value();
+                        case ExactAnswer.Unheld<LinearForm<FactSubject>> _ ->
+                                edges.add(WhyNotTaken.DomainLimit.A_NUMBER_THE_PATH_CANNOT_HOLD);
+                    }
                 }
             }
-            if (atom == null) {
-                whys.add(new WhyNotTaken.OutsideDomain(
-                        WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ));
-                continue;
-            }
-            switch (over.plus(LinearForm.weighing(atom, each.getValue()))) {
-                case ExactAnswer.Held<LinearForm<FactSubject>> sum -> over = sum.value();
-                case ExactAnswer.Unheld<LinearForm<FactSubject>> unheld -> whys.add(
-                        new WhyNotTaken.MeaningUnread(new WhyUnread.ANumberNotHeld(unheld.why())));
+        }
+        return edges.isEmpty() ? new FormAt.Named(over) : new FormAt.Unnamed(edges);
+    }
+
+    /**
+     * What {@code quantity} is on what a path knows here: a count of elements is no fact a path
+     * holds, and a place, an answer or a binding this tree has no subject for is a place it does
+     * not read.
+     */
+    private AtomAt atomAt(Quantity quantity) {
+        FactSubject named;
+        switch (quantity) {
+            case DecisionAtom.OfTheInput(NumericTerm term) -> named = atomOf(term);
+            case DecisionAtom.OfAnAnswer(DecisionSubject.AnAnswer answer) ->
+                    named = answerAtom(answer);
+            case Quantity.OfABinding bound -> named = boundAtom(bound);
+            case Quantity.HowManyMeet _, Quantity.HowManyHold _ -> {
+                return new AtomAt.AtTheEdge(
+                        WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS);
             }
         }
-        return whys.isEmpty() ? new FormAt.Named(over) : new FormAt.Unnamed(whys);
+        return named != null ? new AtomAt.Named(named)
+                : new AtomAt.AtTheEdge(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
     }
 
     /**
