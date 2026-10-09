@@ -19,6 +19,8 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
@@ -361,47 +363,115 @@ final class CardinalityComposer {
     }
 
     /**
-     * Values of the element inside {@code run}: each place a relation turns at, and up to {@code
-     * each} different values from every run between two of them and past the last.
+     * Values of the element inside {@code run}: each place a relation turns at that is a value, and
+     * up to {@code each} different values from every run between two of them and past the last.
      *
      * <p>Nearest the place a run is bounded by, which is the value beside the line an author would
      * write. A run bounded on neither side has one value taken, as a place with nothing to be near.
+     *
+     * <p>Where a relation turns is a number and not always a value: {@code 3 * x > 1} turns at a
+     * third, which no element is. It parts the values either side of it all the same, so the runs
+     * beside it are bounded there ({@link #partingAt}), and a place a value can be is a value
+     * besides.
      */
     private static List<Place> valuesAlong(Carrier carrier, NumericDomain.Bounds run,
                                            List<ExactRatio> turns, int each,
                                            Set<CompositionCapacity> unheld) {
-        List<Place> at = new ArrayList<>();
-        for (ExactRatio turn : turns.stream().distinct().sorted().toList()) {
-            // A place this could not write is a place the values either side of it are not told
-            // apart at, which is a number not held and is said; the runs beside it are walked as
-            // one.
-            switch (Count.written(turn)) {
-                case ExactAnswer.Held<Optional<Count>>(Optional<Count> written)
-                        when written.isPresent() -> at.add(written.get());
-                case ExactAnswer.Held<Optional<Count>> _ -> unheld.add(new CompositionCapacity(
-                        CompositionCapacity.Where.PLACES_AN_ELEMENT_TURNS_AT,
-                        UnheldNumber.NO_REPRESENTATION_EXISTS));
-                case ExactAnswer.Unheld<Optional<Count>> notHeld ->
-                        unheld.add(new CompositionCapacity(
-                                CompositionCapacity.Where.PLACES_AN_ELEMENT_TURNS_AT,
-                                notHeld.why()));
+        List<ExactRatio> at = turns.stream().distinct().sorted().toList();
+        List<Parting.Parts> parted = new ArrayList<>();
+        for (int i = 0; i < at.size(); i++) {
+            switch (partingAt(at.get(i), i == 0 ? null : at.get(i - 1),
+                    i == at.size() - 1 ? null : at.get(i + 1))) {
+                case Parting.Parts parts -> parted.add(parts);
+                // A place this could not part the values at leaves the runs beside it walked as
+                // one, which is a number not held and is said.
+                case Parting.NotWorkedOut(UnheldNumber why) -> unheld.add(new CompositionCapacity(
+                        CompositionCapacity.Where.PLACES_AN_ELEMENT_TURNS_AT, why));
             }
         }
         List<Place> out = new ArrayList<>();
         Endpoint low = run.min();
-        for (int i = 0; i <= at.size(); i++) {
-            Endpoint high = i < at.size() ? tighter(run.max(), Endpoint.exclusive(at.get(i)), false)
-                    : run.max();
+        for (int i = 0; i <= parted.size(); i++) {
+            Parting.Parts parting = i < parted.size() ? parted.get(i) : null;
+            Endpoint high = parting == null ? run.max()
+                    : tighter(run.max(), parting.below(), false);
             out.addAll(walked(carrier, low, high, each));
-            if (i < at.size()) {
-                Place turn = at.get(i);
-                if (carrier.onTheGrid(turn) != null && inside(run, turn)) {
-                    out.add(carrier.onTheGrid(turn));
+            if (parting != null) {
+                Place itself = parting.itself();
+                if (itself != null && carrier.onTheGrid(itself) != null && inside(run, itself)) {
+                    out.add(carrier.onTheGrid(itself));
                 }
-                low = tighter(run.min(), Endpoint.exclusive(turn), true);
+                low = tighter(run.min(), parting.above(), true);
             }
         }
         return out;
+    }
+
+    /**
+     * How a place a relation turns at parts the values beside it.
+     *
+     * <p>A place a value can be is that value, with the runs either side open there. A place none
+     * can be — a third — is bounded on each side by the decimal nearest it there, at as many digits
+     * as keep each bound clear of the places beside it ({@code below} and {@code above}), which is
+     * worked out from how far away they are and not looked for.
+     */
+    sealed interface Parting {
+
+        /**
+         * @param below  the end of the run below the place
+         * @param itself the place, where a value can stand there; null where none can
+         * @param above  the end of the run above it
+         */
+        record Parts(Endpoint below, Place itself, Endpoint above) implements Parting {}
+
+        /** The place could not be parted at, for this. */
+        record NotWorkedOut(UnheldNumber why) implements Parting {}
+    }
+
+    /**
+     * How the values beside {@code turn} are parted there, with the places a relation turns at
+     * either side of it, where there are any.
+     */
+    static Parting partingAt(ExactRatio turn, ExactRatio below, ExactRatio above) {
+        switch (Count.written(turn)) {
+            case ExactAnswer.Held<Optional<Count>>(Optional<Count> written)
+                    when written.isPresent() -> {
+                Count itself = written.get();
+                return new Parting.Parts(Endpoint.exclusive(itself), itself,
+                        Endpoint.exclusive(itself));
+            }
+            case ExactAnswer.Held<Optional<Count>> _ -> { }
+            case ExactAnswer.Unheld<Optional<Count>> notHeld -> {
+                return new Parting.NotWorkedOut(notHeld.why());
+            }
+        }
+        // Digits enough that one step of the last of them is less than the distance to either
+        // place beside it: ten to the power of how many digits the reciprocal of that distance
+        // has is more than the reciprocal.
+        ExactAnswer<ExactRatio> nearest = ExactAnswer.held(ExactRatio.ONE);
+        for (ExactRatio beside : Arrays.asList(below, above)) {
+            if (beside != null) {
+                ExactAnswer<ExactRatio> apart = turn.minus(beside).map(ExactRatio::abs);
+                nearest = nearest.flatMap(sofar -> apart.map(gap ->
+                        gap.compareTo(sofar) < 0 ? gap : sofar));
+            }
+        }
+        if (!(nearest.flatMap(gap -> ExactRatio.ONE.dividedBy(gap)).flatMap(ExactRatio::ceiling)
+                instanceof ExactAnswer.Held<BigInteger>(BigInteger reciprocal))) {
+            return new Parting.NotWorkedOut(UnheldNumber.MORE_ROOM_COULD_ANSWER);
+        }
+        int digits = reciprocal.toString().length();
+        ExactRatio scale = ExactRatio.of(BigInteger.TEN.pow(digits));
+        ExactAnswer<ExactRatio> scaled = turn.times(scale);
+        if (!(scaled.flatMap(ExactRatio::floor) instanceof ExactAnswer.Held<BigInteger>(
+                        BigInteger floor))
+                || !(scaled.flatMap(ExactRatio::ceiling) instanceof ExactAnswer.Held<BigInteger>(
+                        BigInteger ceiling))) {
+            return new Parting.NotWorkedOut(UnheldNumber.MORE_ROOM_COULD_ANSWER);
+        }
+        return new Parting.Parts(
+                Endpoint.inclusive(Count.of(new BigDecimal(floor, digits))), null,
+                Endpoint.inclusive(Count.of(new BigDecimal(ceiling, digits))));
     }
 
     /** Up to {@code each} different values between two ends, from the end there is. */

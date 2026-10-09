@@ -15,9 +15,11 @@ import souther.compiler.numeric.UnheldNumber;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * What a count of the elements of a container is of: the container, what an element is counted for
@@ -100,6 +102,31 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
     /** Which count this is ({@link Identity}). */
     Identity identity() {
         return new Identity(behavior, container, meeting);
+    }
+
+    /**
+     * This count as both readings of it read it: what an element meeting the statement is held to,
+     * wherever either reading worked that out.
+     *
+     * <p>Both and not the first. Each reading that works it out reads the whole statement as the
+     * relations an element meeting it is held to, so either is what the statement says and the two
+     * together say it too; which of them came first is the order conditions were written in, and
+     * what a row is composed with does not turn on that.
+     */
+    CountedElements and(CountedElements other) {
+        if (!identity().equals(other.identity())) {
+            throw new IllegalArgumentException(
+                    "two readings of one count, and these are " + this + " and " + other);
+        }
+        Optional<List<TakenConstraint>> both;
+        if (anElementMeeting.isEmpty() || other.anElementMeeting.isEmpty()) {
+            both = anElementMeeting.isPresent() ? anElementMeeting : other.anElementMeeting;
+        } else {
+            Set<TakenConstraint> union = new LinkedHashSet<>(anElementMeeting.get());
+            union.addAll(other.anElementMeeting.get());
+            both = Optional.of(List.copyOf(union));
+        }
+        return new CountedElements(behavior, container, meeting, perElement, on, both);
     }
 
     /**

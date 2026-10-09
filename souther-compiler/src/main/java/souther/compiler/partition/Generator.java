@@ -5238,15 +5238,15 @@ public final class Generator {
     }
 
     /**
-     * The counts every condition on the way asks of one count, the count as the first of them read
-     * it, and that first condition, which is the one a reader is sent to where they cannot be
-     * taken in.
+     * The counts every condition on the way asks of one count, the count as all of them read it
+     * ({@link CountedElements#and}), and the first of those conditions on the way, which is the one
+     * a reader is sent to where they cannot be taken in.
      */
     private record CountsAsked(CountedElements count, LevelRegion counts,
                                OnTheWay.TakenIn first) {
 
         CountsAsked and(CountsAsked other) {
-            return new CountsAsked(count, counts.meet(other.counts), first);
+            return new CountsAsked(count.and(other.count), counts.meet(other.counts), first);
         }
     }
 

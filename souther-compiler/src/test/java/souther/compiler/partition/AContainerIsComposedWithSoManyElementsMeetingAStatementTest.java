@@ -4,6 +4,9 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -12,6 +15,7 @@ import souther.compiler.report.GeneratedRows;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.math.BigInteger;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +25,7 @@ import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -189,6 +194,53 @@ class AContainerIsComposedWithSoManyElementsMeetingAStatementTest {
                     else 2
                 """)));
         assertComposedAtEveryPointButBelowNone(count);
+    }
+
+    /**
+     * A statement that turns over between two values an element can take still tells them apart:
+     * {@code 3 * x > 1} turns at a third, which no element is, and nought fails it where one meets
+     * it.
+     */
+    @Test
+    void aStatementTurningBetweenTwoValuesStillTellsThemApart() {
+        JsonNode count = only(countBorders(reportOf("""
+                module probe
+
+                behavior third : (xs: List<Int>) -> Int
+                let third (xs) =
+                    if List.length(List.filter(x -> 3 * x > 1, xs)) == 1 then 1 else 0
+                """)));
+        assertComposedAtEveryPointButBelowNone(count);
+    }
+
+    /**
+     * And a place no value is parts the values either side of it at digits enough to stay clear of
+     * the places beside it: the run below a thirtieth ends below it and the run above starts above
+     * it and below a fifteenth, though nothing written in tenths lies between the two.
+     */
+    @Test
+    void aPlaceNoValueIsIsPartedClearOfThePlacesBesideIt() {
+        ExactRatio thirtieth = ExactRatio.of(BigInteger.ONE, BigInteger.valueOf(30));
+        ExactRatio fifteenth = ExactRatio.of(BigInteger.ONE, BigInteger.valueOf(15));
+        CardinalityComposer.Parting.Parts first = assertInstanceOf(
+                CardinalityComposer.Parting.Parts.class,
+                CardinalityComposer.partingAt(thirtieth, null, fifteenth));
+        assertTrue(exactly(first.below()).compareTo(thirtieth) < 0
+                        && exactly(first.above()).compareTo(thirtieth) > 0
+                        && exactly(first.above()).compareTo(fifteenth) < 0,
+                () -> "either side of a thirtieth and short of a fifteenth: " + first);
+        assertTrue(first.itself() == null, "no value is a thirtieth");
+        CardinalityComposer.Parting.Parts second = assertInstanceOf(
+                CardinalityComposer.Parting.Parts.class,
+                CardinalityComposer.partingAt(fifteenth, thirtieth, null));
+        assertTrue(exactly(second.below()).compareTo(thirtieth) > 0
+                        && exactly(second.below()).compareTo(fifteenth) < 0
+                        && exactly(second.above()).compareTo(fifteenth) > 0,
+                () -> "past a thirtieth and either side of a fifteenth: " + second);
+    }
+
+    private static ExactRatio exactly(Endpoint end) {
+        return Count.number(end.at()).exactly();
     }
 
     /**

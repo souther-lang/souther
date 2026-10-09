@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -102,6 +103,34 @@ class AContainerComposedForItsCountsIsLookedForWithinItsBudgetTest {
         CountedElements read = aCount(Optional.of(List.of()));
         CountedElements unread = aCount(Optional.empty());
         assertEquals(read.identity(), unread.identity());
+    }
+
+    /**
+     * Two readings of one count taken together keep what either worked out about an element
+     * meeting its statement, and keep the same whichever came first.
+     */
+    @Test
+    void twoReadingsOfOneCountKeepWhatEitherWorkedOutInEitherOrder() {
+        Read read = read();
+        NumericTerm element = new NumericTerm.ValueOf(read.xs().element());
+        TakenConstraint above = new TakenConstraint.Affine(
+                new LinearForm<>(ExactRatio.ZERO, Map.of(element, ExactRatio.ONE)), Rel.GT);
+        TakenConstraint below = new TakenConstraint.Affine(
+                new LinearForm<>(ExactRatio.of(-10), Map.of(element, ExactRatio.ONE)), Rel.LT);
+        CountedElements none = aCount(Optional.empty());
+        CountedElements one = aCount(Optional.of(List.of(above)));
+        CountedElements other = aCount(Optional.of(List.of(below)));
+
+        assertEquals(Optional.of(List.of(above)), none.and(one).anElementMeeting(),
+                "what one reading worked out is kept where the other worked out nothing");
+        assertEquals(none.and(one).anElementMeeting(), one.and(none).anElementMeeting(),
+                "whichever came first");
+        assertEquals(Set.of(above, below),
+                Set.copyOf(one.and(other).anElementMeeting().orElseThrow()),
+                "and where both worked something out, both are kept");
+        assertEquals(Set.copyOf(one.and(other).anElementMeeting().orElseThrow()),
+                Set.copyOf(other.and(one).anElementMeeting().orElseThrow()),
+                "whichever came first");
     }
 
     private static Level level(long count) {
