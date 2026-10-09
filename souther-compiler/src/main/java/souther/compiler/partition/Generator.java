@@ -5703,9 +5703,10 @@ public final class Generator {
         List<RealizationTarget> both = new ArrayList<>(beside.size() + 1);
         both.addAll(beside);
         both.add(asked);
-        TermPath at = writtenAmong(asked, both);
+        Map<TermPath, TermPath> counted = countedAmong(both);
+        TermPath at = writtenAmong(asked, counted);
         for (RealizationTarget target : beside) {
-            if (!writtenAmong(target, both).equals(at)) {
+            if (!writtenAmong(target, counted).equals(at)) {
                 return false;
             }
         }
@@ -6116,30 +6117,48 @@ public final class Generator {
      */
     private static SequencedMap<TermPath, SequencedMap<RealizationTarget, AskedAt>>
             byTheLocationTheyWrite(Map<RealizationTarget, AskedAt> standing) {
+        Map<TermPath, TermPath> counted = countedAmong(standing.keySet());
         SequencedMap<TermPath, SequencedMap<RealizationTarget, AskedAt>> out =
                 new LinkedHashMap<>();
         for (Map.Entry<RealizationTarget, AskedAt> each : standing.entrySet()) {
-            out.computeIfAbsent(writtenAmong(each.getKey(), standing.keySet()),
-                            _ -> new LinkedHashMap<>())
+            out.computeIfAbsent(writtenAmong(each.getKey(), counted), _ -> new LinkedHashMap<>())
                     .put(each.getKey(), each.getValue());
         }
         return out;
     }
 
     /**
-     * Where {@code target} is written, beside the rest of {@code with}: its own root, or where it is
-     * a value asked at the element of a container composed for how many of its elements meet
-     * something, that container's — some element of which stands there.
+     * The element of each container {@code with} composes for how many of its elements meet
+     * something, and where that container is written. Empty where there is no count among them,
+     * which is every row of a model that counts nothing.
+     */
+    private static Map<TermPath, TermPath> countedAmong(Collection<RealizationTarget> with) {
+        Map<TermPath, TermPath> out = Map.of();
+        for (RealizationTarget each : with) {
+            if (each instanceof RealizationTarget.ACount count) {
+                if (out.isEmpty()) {
+                    out = new HashMap<>();
+                }
+                out.put(count.count().container().element(), count.writeRoot());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Where {@code target} is written: its own root, or where it is a value asked at the element of
+     * a container composed for how many of its elements meet something ({@link #countedAmong}),
+     * that container's — some element of which stands there.
      */
     private static TermPath writtenAmong(RealizationTarget target,
-                                         Collection<RealizationTarget> with) {
-        if (target instanceof RealizationTarget.AtOnePosition(NumericTerm.FromOnePosition term)
+                                         Map<TermPath, TermPath> counted) {
+        if (!counted.isEmpty()
+                && target instanceof RealizationTarget.AtOnePosition(
+                        NumericTerm.FromOnePosition term)
                 && term instanceof NumericTerm.ValueOf) {
-            for (RealizationTarget each : with) {
-                if (each instanceof RealizationTarget.ACount count
-                        && count.count().container().element().equals(term.position())) {
-                    return count.writeRoot();
-                }
+            TermPath container = counted.get(term.position());
+            if (container != null) {
+                return container;
             }
         }
         return target.writeRoot();
