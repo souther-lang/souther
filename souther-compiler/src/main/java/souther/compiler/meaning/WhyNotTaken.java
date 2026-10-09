@@ -142,9 +142,10 @@ public sealed interface WhyNotTaken {
 
         /**
          * A relation of numbers whose form over the places a path reads has a weight its exact
-         * arithmetic does not hold: two numbers of the statement are one value there, and their
-         * weights add to a number with no exact representation. The statement was read to the
-         * end; what stops is the number a path would keep the fact in.
+         * arithmetic could not hold: two numbers of the statement are one value there, and what
+         * their weights add to is a number this compiler had no room for or that has no exact
+         * representation at all. The statement was read to the end; what stops is the number a
+         * path would keep the fact in.
          */
         A_NUMBER_THE_PATH_CANNOT_HOLD
     }

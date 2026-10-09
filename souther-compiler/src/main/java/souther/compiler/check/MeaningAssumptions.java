@@ -245,25 +245,28 @@ final class MeaningAssumptions {
     /**
      * {@code form} over what a path knows, each of its numbers named by {@code naming}.
      *
-     * <p>Two numbers of the statement named as one fact are one value, and their weights add; where
-     * the sum is a number with no exact representation, that is the edge the form meets, since the
-     * fact would be kept in a number a path cannot hold. Every edge the form's numbers meet is said,
-     * once each, so which is said does not turn on the order the numbers stand in.
+     * <p>Two numbers of the statement named as one fact are one value, and their weights add, all of
+     * them at once ({@link LinearForm#sum}); where the exact arithmetic cannot hold what they add
+     * to, that is the edge the form meets, since the fact would be kept in a number a path cannot
+     * hold. Every edge the form's numbers meet is said, once each, so neither which is said nor
+     * whether the weights are held turns on the order the numbers stand in.
      */
     static FormAt formOver(LinearForm<Quantity> form, Function<Quantity, AtomAt> naming) {
-        LinearForm<FactSubject> over = LinearForm.constant(form.constant());
+        List<LinearForm<FactSubject>> terms = new ArrayList<>();
+        terms.add(LinearForm.constant(form.constant()));
         Set<WhyNotTaken.DomainLimit> edges = new LinkedHashSet<>();
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
             switch (naming.apply(each.getKey())) {
                 case AtomAt.AtTheEdge(var edge) -> edges.add(edge);
-                case AtomAt.Named(var subject) -> {
-                    switch (over.plus(LinearForm.weighing(subject, each.getValue()))) {
-                        case ExactAnswer.Held<LinearForm<FactSubject>> sum -> over = sum.value();
-                        case ExactAnswer.Unheld<LinearForm<FactSubject>> _ ->
-                                edges.add(WhyNotTaken.DomainLimit.A_NUMBER_THE_PATH_CANNOT_HOLD);
-                    }
-                }
+                case AtomAt.Named(var subject) ->
+                        terms.add(LinearForm.weighing(subject, each.getValue()));
             }
+        }
+        LinearForm<FactSubject> over = null;
+        switch (LinearForm.sum(terms)) {
+            case ExactAnswer.Held<LinearForm<FactSubject>> held -> over = held.value();
+            case ExactAnswer.Unheld<LinearForm<FactSubject>> _ ->
+                    edges.add(WhyNotTaken.DomainLimit.A_NUMBER_THE_PATH_CANNOT_HOLD);
         }
         return edges.isEmpty() ? new FormAt.Named(over) : new FormAt.Unnamed(edges);
     }

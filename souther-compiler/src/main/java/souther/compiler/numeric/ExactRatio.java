@@ -8,8 +8,13 @@ import souther.exact.ExactParts;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
 /**
  * An exact ratio of two whole numbers, which is what the constraint algebra reasons in.
@@ -334,6 +339,99 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
                 .multiply(BigInteger.TWO.modPow(twos, modulus))
                 .multiply(FIVE.modPow(fives, modulus))
                 .mod(modulus);
+    }
+
+    /**
+     * The sum of {@code terms}, or which way the arithmetic could not hold it — the same answer for
+     * the same terms in whatever order they are handed.
+     *
+     * <p>A sum of many is not a run of {@link #plus} in the order the terms came. That sum fails
+     * where two terms whose scales are far apart meet, so a fine term and its negation either side
+     * of a whole one fail as a run left to right and come to the whole one as a run that meets the
+     * two first: one sum, two answers. So the terms meet by scale. Terms of one scale — one power
+     * of two and of five — add with nothing to align, and are added first; then the two nearest in
+     * scale, and so on until one is left. A term and its negation are of one scale, so a cancellation
+     * is always made before anything is aligned across it, and a sum is refused only where what is
+     * left once every such term has met cannot be aligned, and then for the reason that meeting
+     * gave.
+     */
+    public static ExactAnswer<ExactRatio> sum(Collection<ExactRatio> terms) {
+        List<ExactRatio> left = new ArrayList<>();
+        for (ExactRatio each : terms) {
+            if (!each.isZero()) {
+                left.add(each);
+            }
+        }
+        while (true) {
+            // Terms of one scale first, each scale's added in the order of their values.
+            SortedMap<Scale, List<ExactRatio>> byScale = new TreeMap<>();
+            for (ExactRatio each : left) {
+                byScale.computeIfAbsent(Scale.of(each), _ -> new ArrayList<>()).add(each);
+            }
+            List<ExactRatio> met = new ArrayList<>();
+            for (List<ExactRatio> alike : byScale.values()) {
+                alike.sort(null);
+                ExactRatio total = ZERO;
+                for (ExactRatio each : alike) {
+                    switch (total.plus(each)) {
+                        case ExactAnswer.Held<ExactRatio> held -> total = held.value();
+                        case ExactAnswer.Unheld<ExactRatio> unheld -> {
+                            return ExactAnswer.unheld(unheld.why());
+                        }
+                    }
+                }
+                if (!total.isZero()) {
+                    met.add(total);
+                }
+            }
+            if (met.size() <= 1) {
+                return ExactAnswer.held(met.isEmpty() ? ZERO : met.getFirst());
+            }
+            // Then the two nearest in scale, the first such pair in the order of scales.
+            int one = 0;
+            int other = 1;
+            BigInteger apart = null;
+            for (int i = 0; i < met.size(); i++) {
+                for (int j = i + 1; j < met.size(); j++) {
+                    BigInteger here = Scale.of(met.get(i)).apartFrom(Scale.of(met.get(j)));
+                    if (apart == null || here.compareTo(apart) < 0) {
+                        one = i;
+                        other = j;
+                        apart = here;
+                    }
+                }
+            }
+            switch (met.get(one).plus(met.get(other))) {
+                case ExactAnswer.Held<ExactRatio> held -> {
+                    left = new ArrayList<>(met);
+                    left.remove(other);
+                    left.set(one, held.value());
+                }
+                case ExactAnswer.Unheld<ExactRatio> unheld -> {
+                    return ExactAnswer.unheld(unheld.why());
+                }
+            }
+        }
+    }
+
+    /** The powers of two and five a ratio stands at, which is what a sum aligns. */
+    private record Scale(long twos, long fives) implements Comparable<Scale> {
+
+        static Scale of(ExactRatio ratio) {
+            return new Scale(ratio.twos(), ratio.fives());
+        }
+
+        /** How far apart the two are, as the exponents that would be aligned. */
+        BigInteger apartFrom(Scale other) {
+            return BigInteger.valueOf(twos).subtract(BigInteger.valueOf(other.twos)).abs()
+                    .add(BigInteger.valueOf(fives).subtract(BigInteger.valueOf(other.fives)).abs());
+        }
+
+        @Override
+        public int compareTo(Scale other) {
+            int byTwos = Long.compare(twos, other.twos);
+            return byTwos != 0 ? byTwos : Long.compare(fives, other.fives);
+        }
     }
 
     /**

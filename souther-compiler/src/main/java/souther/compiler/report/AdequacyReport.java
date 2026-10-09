@@ -3928,8 +3928,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         + " something, which no fact a path knows says";
                 case A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN -> "what every element meets, which a"
                         + " path holds only as the closure it was written with";
-                case A_NUMBER_THE_PATH_CANNOT_HOLD -> "a relation of numbers whose weights add, on"
-                        + " what a path knows, to a number with no exact representation";
+                case A_NUMBER_THE_PATH_CANNOT_HOLD -> "a relation of numbers whose weights, added"
+                        + " on what a path knows, come to a number the exact arithmetic could not"
+                        + " hold";
             };
         };
     }

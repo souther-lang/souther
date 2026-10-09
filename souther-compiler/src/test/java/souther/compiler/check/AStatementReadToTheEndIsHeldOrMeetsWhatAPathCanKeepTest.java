@@ -13,6 +13,7 @@ import souther.compiler.numeric.LinearForm;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -60,6 +61,30 @@ class AStatementReadToTheEndIsHeldOrMeetsWhatAPathCanKeepTest {
                         each -> new MeaningAssumptions.AtomAt.Named(X)));
         assertEquals(Set.of(WhyNotTaken.DomainLimit.A_NUMBER_THE_PATH_CANNOT_HOLD),
                 unnamed.edges());
+    }
+
+    /**
+     * Three numbers of one fact whose weights cancel to one are that fact once, in whatever order
+     * the form holds them: a fine weight and its negation either side of a whole one is no number
+     * a path cannot hold, though the first two of them added alone would be.
+     */
+    @Test
+    void weightsThatCancelAreHeldWhateverOrderTheFormHoldsThem() {
+        Quantity third = new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(TermPath.of("z")));
+        List<Map.Entry<Quantity, ExactRatio>> terms = List.of(Map.entry(ONE_SPELLING, FINE),
+                Map.entry(ANOTHER_SPELLING, ExactRatio.ONE), Map.entry(third, FINE.negated()));
+        for (List<Map.Entry<Quantity, ExactRatio>> order : List.of(terms,
+                List.of(terms.get(1), terms.get(0), terms.get(2)),
+                List.of(terms.get(0), terms.get(2), terms.get(1)))) {
+            Map<Quantity, ExactRatio> coefs = new LinkedHashMap<>();
+            order.forEach(each -> coefs.put(each.getKey(), each.getValue()));
+            MeaningAssumptions.FormAt.Named named = assertInstanceOf(
+                    MeaningAssumptions.FormAt.Named.class,
+                    MeaningAssumptions.formOver(new LinearForm<>(ExactRatio.ZERO, coefs),
+                            each -> new MeaningAssumptions.AtomAt.Named(X)),
+                    () -> "the form in the order " + order);
+            assertEquals(Map.of(X, ExactRatio.ONE), named.form().coefs());
+        }
     }
 
     @Test

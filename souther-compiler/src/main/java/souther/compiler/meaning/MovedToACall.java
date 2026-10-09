@@ -43,15 +43,29 @@ final class MovedToACall {
         return new MovedToACall(handed, unread).moved(stated);
     }
 
-    /** Something moved, or why it could not be. */
-    private record Moved<T>(T value, WhyUnread.InACalledBody.What stopped) {
+    /**
+     * Something moved, or why it could not be: something a call cannot say, or a number the moved
+     * statement could not be held in.
+     */
+    private record Moved<T>(T value, WhyUnread stopped) {
 
         static <T> Moved<T> to(T value) {
             return new Moved<>(value, null);
         }
 
         static <T> Moved<T> stoppedBy(WhyUnread.InACalledBody.What why) {
+            return new Moved<>(null, new WhyUnread.InACalledBody(why));
+        }
+
+        /** Stopped for {@code why}: what a statement moved inside it says stopped that, or a
+         *  number the moved statement could not be held in. */
+        static <T> Moved<T> stoppedFor(WhyUnread why) {
             return new Moved<>(null, why);
+        }
+
+        /** Stopped where {@code part} of it was, for the same reason. */
+        static <T> Moved<T> stoppedAt(Moved<?> part) {
+            return new Moved<>(null, part.stopped());
         }
     }
 
@@ -87,8 +101,8 @@ final class MovedToACall {
         };
     }
 
-    private Proposition unread(WhyUnread.InACalledBody.What why) {
-        return unread.apply(new WhyUnread.InACalledBody(why));
+    private Proposition unread(WhyUnread why) {
+        return unread.apply(why);
     }
 
     private <T> Proposition stated(Moved<T> moved, Function<T, Proposition> stating) {
@@ -113,20 +127,22 @@ final class MovedToACall {
     }
 
     private Moved<LinearForm<Quantity>> form(LinearForm<Quantity> form) {
-        LinearForm<Quantity> out = LinearForm.constant(form.constant());
+        List<LinearForm<Quantity>> terms = new ArrayList<>();
+        terms.add(LinearForm.constant(form.constant()));
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
             Moved<Quantity> atom = quantity(each.getKey());
             if (atom.stopped() != null) {
-                return Moved.stoppedBy(atom.stopped());
+                return Moved.stoppedAt(atom);
             }
-            // Two parameters handed one position are one number there, so their weights add.
-            if (!(out.plus(LinearForm.weighing(atom.value(), each.getValue()))
-                    instanceof ExactAnswer.Held<LinearForm<Quantity>>(LinearForm<Quantity> sum))) {
-                return Moved.stoppedBy(WhyUnread.InACalledBody.What.AN_ARGUMENT_AT_NO_POSITION);
-            }
-            out = sum;
+            terms.add(LinearForm.weighing(atom.value(), each.getValue()));
         }
-        return Moved.to(out);
+        // Two parameters handed one position are one number there, so their weights add — all at
+        // once, so whether they are held does not turn on which parameter came first.
+        return switch (LinearForm.sum(terms)) {
+            case ExactAnswer.Held<LinearForm<Quantity>> held -> Moved.to(held.value());
+            case ExactAnswer.Unheld<LinearForm<Quantity>> unheld ->
+                    Moved.stoppedFor(new WhyUnread.ANumberNotHeld(unheld.why()));
+        };
     }
 
     private Moved<DecisionAtom> atom(DecisionAtom atom) {
@@ -149,7 +165,7 @@ final class MovedToACall {
         return switch (atom) {
             case DecisionAtom decided -> {
                 Moved<DecisionAtom> to = atom(decided);
-                yield to.stopped() != null ? Moved.stoppedBy(to.stopped()) : Moved.to(to.value());
+                yield to.stopped() != null ? Moved.stoppedAt(to) : Moved.to(to.value());
             }
             case Quantity.OfABinding _ ->
                     Moved.stoppedBy(WhyUnread.InACalledBody.What.A_VALUE_IT_BINDS);
@@ -157,19 +173,21 @@ final class MovedToACall {
                 Moved<TermPath> at = path(container);
                 Proposition each = moved(ofTheElement);
                 if (at.stopped() != null) {
-                    yield Moved.stoppedBy(at.stopped());
+                    yield Moved.stoppedAt(at);
                 }
-                yield Proposition.leavesSomethingUnread(each)
-                        ? Moved.stoppedBy(WhyUnread.InACalledBody.What.AN_ARGUMENT_AT_NO_POSITION)
+                // A count of what an element meets, where what it meets stopped at the call, is
+                // no number: it stopped for what the statement says stopped it.
+                WhyUnread stop = Proposition.firstStopIn(each);
+                yield stop != null ? Moved.stoppedFor(stop)
                         : Moved.to(new Quantity.HowManyMeet(at.value(), each));
             }
             case Quantity.HowManyHold(List<Proposition> each) -> {
                 List<Proposition> out = new ArrayList<>();
                 for (Proposition one : each) {
                     Proposition to = moved(one);
-                    if (Proposition.leavesSomethingUnread(to)) {
-                        yield Moved.stoppedBy(
-                                WhyUnread.InACalledBody.What.AN_ARGUMENT_AT_NO_POSITION);
+                    WhyUnread stop = Proposition.firstStopIn(to);
+                    if (stop != null) {
+                        yield Moved.stoppedFor(stop);
                     }
                     out.add(to);
                 }
@@ -182,7 +200,7 @@ final class MovedToACall {
         return switch (of) {
             case DecisionSubject.AnInput(TermPath at) -> {
                 Moved<TermPath> to = path(at);
-                yield to.stopped() != null ? Moved.stoppedBy(to.stopped())
+                yield to.stopped() != null ? Moved.stoppedAt(to)
                         : Moved.to(new DecisionSubject.AnInput(to.value()));
             }
             case DecisionSubject.AnAnswer _ ->

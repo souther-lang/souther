@@ -1282,22 +1282,28 @@ final class Pullback {
          *  them cancels. */
         private Sized number(LinearForm<LawNumber<DeclaredArgument>> form,
                              List<LinearForm<Quantity>> parts) {
-            LinearForm<Quantity> out = LinearForm.constant(form.constant());
+            List<LinearForm<Quantity>> scaled = new ArrayList<>();
+            scaled.add(LinearForm.constant(form.constant()));
             for (Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> term : form.coefs().entrySet()) {
                 Sized part = atom(term.getKey());
                 if (!(part instanceof Sized.AsAForm(LinearForm<Quantity> each))) {
                     return part;
                 }
                 parts.add(each);
-                ExactAnswer<LinearForm<Quantity>> sum = each.times(term.getValue())
-                        instanceof ExactAnswer.Held<LinearForm<Quantity>>(var scaled)
-                        ? out.plus(scaled) : null;
-                if (!(sum instanceof ExactAnswer.Held<LinearForm<Quantity>>(var held))) {
-                    return new Sized.NotSized(new WhyUnread.OutsideTheLinearFragment());
+                switch (each.times(term.getValue())) {
+                    case ExactAnswer.Held<LinearForm<Quantity>> held -> scaled.add(held.value());
+                    case ExactAnswer.Unheld<LinearForm<Quantity>> unheld -> {
+                        return new Sized.NotSized(new WhyUnread.ANumberNotHeld(unheld.why()));
+                    }
                 }
-                out = held;
             }
-            return new Sized.AsAForm(out);
+            // Every part's weights added at once, so whether they are held does not turn on which
+            // part came first.
+            return switch (LinearForm.sum(scaled)) {
+                case ExactAnswer.Held<LinearForm<Quantity>> held -> new Sized.AsAForm(held.value());
+                case ExactAnswer.Unheld<LinearForm<Quantity>> unheld ->
+                        new Sized.NotSized(new WhyUnread.ANumberNotHeld(unheld.why()));
+            };
         }
 
         private Sized atom(LawNumber<DeclaredArgument> number) {
