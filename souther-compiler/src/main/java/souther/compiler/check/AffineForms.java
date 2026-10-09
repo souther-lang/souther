@@ -145,12 +145,12 @@ public final class AffineForms {
         }
 
         /**
-         * The form of its arguments the environment takes the call {@code node} as — what the
-         * case of an operation's definition a reading is on answers — or null where it takes it as
-         * none. The call is then that arithmetic over what it was given, as an operation the
-         * library says answers a form of its arguments is.
+         * The form of the values it was given the environment takes the call {@code node} as —
+         * what the case of an operation's definition a reading is on answers — or null where it
+         * takes it as none. The call is then that arithmetic over what it was given, as an
+         * operation the library says answers a form of its arguments is.
          */
-        default LinearForm<DeclaredArgument> takenAsAForm(Core node, E at) {
+        default LinearForm<Core> takenAsAForm(Core node, E at) {
             return null;
         }
 
@@ -558,7 +558,7 @@ public final class AffineForms {
         }
 
         @Override
-        public LinearForm<DeclaredArgument> takenAsAForm(Core node, E at) {
+        public LinearForm<Core> takenAsAForm(Core node, E at) {
             return of.takenAsAForm(node, at);
         }
 
@@ -867,9 +867,10 @@ public final class AffineForms {
             // instead, one of the two would have it and a statement the model makes would be
             // measured by one reader and not the other.
             // And a call the environment takes as what a case of its operation's definition
-            // answers is that arithmetic, on the reading that is on the case.
+            // answers is that arithmetic over the values it was given, on the reading that is on
+            // the case.
             case Core.PreservedCall _ when reading.takenAsAForm(e, at) != null ->
-                    answered(e, reading.takenAsAForm(e, at), at, reading, following, stopped);
+                    overTheValues(e, reading.takenAsAForm(e, at), at, reading, following, stopped);
             case Core.PreservedCall _ when formSaidOf(e) != null ->
                     answered(e, formSaidOf(e), at, reading, following, stopped);
             case Core.Call _ when formSaidOf(e) != null ->
@@ -1043,9 +1044,34 @@ public final class AffineForms {
     }
 
     /**
-     * {@code call} read as {@code says}, the form of its arguments the library says it answers —
-     * always, or in the case a reading is on — or null where one of the arguments it is written
-     * over does not compose.
+     * {@code call} read as {@code says}, a form of the values it was given — what the case of its
+     * operation's definition a reading is on answers — or null where one of those values does not
+     * compose. A stop is recorded at the call, for the reason {@link #answered} gives.
+     */
+    private static <A, E> LinearForm<A> overTheValues(Core call, LinearForm<Core> says, E at,
+                                                      Reading<A, E> reading, Walk<A, E> following,
+                                                      Stop<A, E> stopped) {
+        Stop<A, E> inside = new Stop<>();
+        LinearForm<A> form = LinearForm.constant(says.constant());
+        for (Map.Entry<Core, ExactRatio> each : says.coefs().entrySet()) {
+            LinearForm<A> value = formOf(each.getKey(), at, reading, following, inside);
+            if (value == null) {
+                return halted(call, at, new Halt.AnArgumentStopped<>(inside.at), stopped);
+            }
+            LinearForm<A> before = form;
+            switch (value.times(each.getValue()).flatMap(before::plus)) {
+                case ExactAnswer.Held<LinearForm<A>>(LinearForm<A> held) -> form = held;
+                case ExactAnswer.Unheld<LinearForm<A>>(UnheldNumber why) -> {
+                    return halted(call, at, new Halt.NotHeld<>(why), stopped);
+                }
+            }
+        }
+        return form;
+    }
+
+    /**
+     * {@code call} read as {@code says}, the form of its arguments the library says it answers,
+     * or null where one of the arguments it is written over does not compose.
      *
      * <p>Over what each argument is counted as, which is the form that argument itself reads as
      * here. So a shift of a position by a written number and a shift of one position by another are

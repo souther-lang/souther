@@ -3,7 +3,6 @@ package souther.compiler.inputs;
 import souther.compiler.check.CalledBody;
 import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationNewtypes;
-import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.Location;
 import souther.compiler.check.ScopeStep;
@@ -135,8 +134,8 @@ public final class InputReads {
         /** Another value, read where it stands. */
         record AValue(Denotation value) implements TakenAs {}
 
-        /** A form of the arguments of the call the node is, read where the call stands. */
-        record AFormOfItsArguments(LinearForm<DeclaredArgument> form) implements TakenAs {}
+        /** A form of the values the call the node is was given, read where the call stands. */
+        record AFormOfItsArguments(LinearForm<Core> form) implements TakenAs {}
     }
 
     /**
@@ -466,10 +465,10 @@ public final class InputReads {
     }
 
     /**
-     * The same, taking the call {@code node} as {@code form} of the arguments it was given: a
-     * case of the definition an operation is written in, answering arithmetic over them.
+     * The same, taking the call {@code node} as {@code form} of the values it was given: a case of
+     * the definition an operation is written in, answering arithmetic over them.
      */
-    public InputReads takingAForm(Core node, LinearForm<DeclaredArgument> form, int readings) {
+    public InputReads takingAForm(Core node, LinearForm<Core> form, int readings) {
         return taking(node, new TakenAs.AFormOfItsArguments(form), readings);
     }
 
@@ -490,10 +489,10 @@ public final class InputReads {
     }
 
     /**
-     * The form of its arguments the call {@code e} is taken as on the reading here
+     * The form of the values it was given the call {@code e} is taken as on the reading here
      * ({@link #takingAForm}), or null where it is not taken as one.
      */
-    public LinearForm<DeclaredArgument> takenAsAForm(Core e) {
+    public LinearForm<Core> takenAsAForm(Core e) {
         return applied.taken() == null
                 || !(applied.taken().of(Core.withoutStanding(e))
                         instanceof TakenAs.AFormOfItsArguments(var form)) ? null : form;

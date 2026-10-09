@@ -288,18 +288,35 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.Pullback#answered("
                             + "Lsouther/compiler/inputs/Denotation;"
                             + "Lsouther/compiler/meaning/WhyUnread$AtNoPosition$Place;)"
-                            + "Lsouther/compiler/meaning/CasesOfAnAnswer$Answered;",
+                            + "Lsouther/compiler/meaning/WhichCase;",
                     "counts the arms a value chosen by cases is read through — a body's answer, or"
                             + " what a match chooses by — and past the figure carries which case it"
                             + " is out as unread, naming it"),
+            Map.entry("souther.compiler.partition.Pullback#goingIn("
+                            + "Lsouther/compiler/partition/Pullback$Inside;"
+                            + "Lsouther/compiler/inputs/InputReads;"
+                            + "Lsouther/compiler/inputs/Denotation;Z"
+                            + "Ljava/util/function/Function;)"
+                            + "Lsouther/compiler/meaning/Derivation;",
+                    "counts the readings a value gone into is read in — the arms of a choice, the"
+                            + " values a name stands for, the cases of a definition — and past the"
+                            + " figure carries what is read out as a part nothing read, naming it"),
             Map.entry("souther.compiler.partition.Pullback$ALawRead#ofEachWrittenOut("
                             + "Lsouther/compiler/check/DeclaredArgument;"
-                            + "Lsouther/compiler/core/Core$ListLit;"
-                            + "Lsouther/compiler/inputs/InputReads;"
+                            + "Ljava/util/List;"
                             + "Lsouther/compiler/semantics/LawProposition;)"
                             + "Lsouther/compiler/partition/Pullback$WrittenOutRead;",
                     "counts the values a law is read of one by one, and past the figure carries"
                             + " the law out as a part nothing read, naming it"),
+            Map.entry("souther.compiler.partition.Pullback$ALawRead#onTheApplicationHandingEach("
+                            + "Lsouther/compiler/check/DeclaredArgument;"
+                            + "Ljava/util/List;"
+                            + "Lsouther/compiler/inputs/Denotation;"
+                            + "Lsouther/compiler/core/Core$Block;"
+                            + "Lsouther/compiler/semantics/LawProposition;)"
+                            + "Lsouther/compiler/partition/Pullback$WrittenOutRead;",
+                    "counts the applications a closure is handed each value on, and past the"
+                            + " figure carries the law out as a part nothing read, naming it"),
             Map.entry("souther.compiler.partition.Pullback$ALawRead#count("
                             + "Lsouther/compiler/semantics/LawNumber$HowManyMeet;)"
                             + "Lsouther/compiler/partition/Pullback$Sized;",

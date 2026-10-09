@@ -52,6 +52,10 @@ class WhichArgumentAnOperationAnswersIsReadOutOfItsTableOnceTest {
             // Holds a row of an operation the library writes to that operation's body, as the
             // binder holds one to its signature: about the declaration, and about no call.
             "souther.compiler.check.ProvingTheLibrary",
+            // Files the rows of one definition together, where every one of them is proved and
+            // they cover every way the arguments can stand: about the declaration, and about no
+            // call.
+            "souther.compiler.check.BoundOperationFacts",
             // A row reaches itself: its own equality and rendering read its parts.
             "souther.compiler.semantics.DefinitionCase",
             "souther.compiler.semantics.ArgumentsStand");

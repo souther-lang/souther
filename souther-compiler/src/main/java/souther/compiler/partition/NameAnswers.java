@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.DeclarationNewtypes;
-import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
@@ -60,9 +59,9 @@ final class NameAnswers {
         return as == null ? null : asked(as);
     }
 
-    /** The form of its arguments the reading {@code at} takes the call {@code node} as, or null
-     *  where it takes it as none ({@link InputReads#takenAsAForm}). */
-    static LinearForm<DeclaredArgument> takenAsAForm(Core node, InputReads at) {
+    /** The form of the values it was given the reading {@code at} takes the call {@code node} as,
+     *  or null where it takes it as none ({@link InputReads#takenAsAForm}). */
+    static LinearForm<Core> takenAsAForm(Core node, InputReads at) {
         return at.takenAsAForm(node);
     }
 

@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
-import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.Symbols;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.core.Core;
@@ -258,7 +257,7 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
             }
 
             @Override
-            public LinearForm<DeclaredArgument> takenAsAForm(Core node, InputReads at) {
+            public LinearForm<Core> takenAsAForm(Core node, InputReads at) {
                 return NameAnswers.takenAsAForm(node, at);
             }
 

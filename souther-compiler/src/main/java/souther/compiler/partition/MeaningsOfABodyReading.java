@@ -13,6 +13,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.Conclusion;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.MeaningsOfABody;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.ConstructOccurrence;
@@ -173,6 +174,22 @@ public final class MeaningsOfABodyReading {
     private static MeaningsOfABody.Meaning declined(Optional<ModelOccurrence> construct) {
         return new Conclusion(construct).meaningOf(new Derivation.Stopped(
                 new WhyUnread.MoreReadingsThanAreMade(), false));
+    }
+
+    /**
+     * What the condition of a fork in a copy of one of the language's operations states, read
+     * where the copy stands: the operation's body, its parameters standing for what the call
+     * handed, read through the rules every condition of a model is read by.
+     *
+     * <p>A fork of the model is read where the operations stand ({@link #of}), and has a site. One
+     * in a copy has none — the model wrote the call and not the fork — and which of its arms a run
+     * can enter is still what its condition states, so it is read here and by nothing else.
+     *
+     * @param reads the reading of the tree the copy stands in, at the fork
+     */
+    public static Proposition ofACopiedCondition(Core condition, InputReads reads,
+                                                 InputReading read) {
+        return WhatConditionsState.of(read).truth(condition, reads, read).proposition();
     }
 
     /**

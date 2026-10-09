@@ -6,7 +6,6 @@ import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.CalledBody;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.BoundOperationFacts;
-import souther.compiler.check.CallArguments;
 import souther.compiler.check.Choice;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.ClausesInOrder;
@@ -47,9 +46,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.AnswerAspect;
-import souther.compiler.semantics.ArgumentsStand;
 import souther.compiler.semantics.ConditionJoin;
-import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
@@ -1918,7 +1915,7 @@ final class Pullback {
             }
 
             @Override
-            public LinearForm<DeclaredArgument> takenAsAForm(Core node, InputReads at) {
+            public LinearForm<Core> takenAsAForm(Core node, InputReads at) {
                 return NameAnswers.takenAsAForm(node, at);
             }
 
@@ -2125,8 +2122,8 @@ final class Pullback {
          * the values it was given — arithmetic over them, reached by how they stand against a
          * constant — read where the call stands, {@code at}.
          */
-        record ACallDefinedByCases(Core call, ValueName.Stdlib operation,
-                                   List<DefinitionCase<DeclaredArgument>> cases, InputReads at)
+        record ACallDefinedByCases(Core call, ValueName.Stdlib operation, List<Choice.ACase> cases,
+                                   InputReads at)
                 implements Inside {}
     }
 
@@ -2169,17 +2166,16 @@ final class Pullback {
             }
             // Once for each case, with the call standing for the arithmetic the case answers, where
             // the arguments stand as the case says and as none before it does — which is what the
-            // library proved its body answers ({@link DefinitionCase}).
+            // library proved its body answers ({@link Choice#casesOf}).
             case Inside.ACallDefinedByCases(Core call, ValueName.Stdlib operation,
-                                            List<DefinitionCase<DeclaredArgument>> cases,
-                                            InputReads where) -> {
+                                            List<Choice.ACase> cases, InputReads where) -> {
                 if (reads.readings() * cases.size() > READINGS.maximum()) {
                     yield partOf(at, new Derivation.Stopped(
                             new WhyUnread.MoreReadingsThanAreMade(), fixed));
                 }
                 List<Derivation.MatchArms.Arm> each = new ArrayList<>();
-                for (DefinitionCase<DeclaredArgument> one : cases) {
-                    each.add(new Derivation.MatchArms.Arm(reachedIn(call, one, where),
+                for (Choice.ACase one : cases) {
+                    each.add(new Derivation.MatchArms.Arm(reachedIn(one, where),
                             again.apply(on -> on.takingAForm(call, one.answers(),
                                     cases.size()))));
                 }
@@ -2189,15 +2185,14 @@ final class Pullback {
     }
 
     /**
-     * The arguments of {@code call} standing as {@code one}, a case of the definition the library
+     * The values a call was given standing as {@code one}, a case of the definition the library
      * writes its operation in, says they do for it to be reached — each relation read as the
-     * arithmetic over the call's arguments it is, where the call stands.
+     * arithmetic over those values it is, where the call stands.
      */
-    private Derivation reachedIn(Core call, DefinitionCase<DeclaredArgument> one,
-                                 InputReads where) {
+    private Derivation reachedIn(Choice.ACase one, InputReads where) {
         Derivation reached = null;
-        for (ArgumentsStand<DeclaredArgument> stands : one.given()) {
-            Derivation relation = overTheArguments(call, stands, where);
+        for (Choice.FormsStand stands : one.given()) {
+            Derivation relation = overTheValues(stands, where);
             reached = reached == null ? relation
                     : new Derivation.Joined(ConditionJoin.BOTH, reached, relation);
         }
@@ -2210,21 +2205,18 @@ final class Pullback {
         return reached;
     }
 
-    /** {@code stands}, over the numbers the arguments of {@code call} read as where it stands. */
-    private Derivation overTheArguments(Core call, ArgumentsStand<DeclaredArgument> stands,
-                                        InputReads where) {
-        LinearForm<DeclaredArgument> apart;
+    /** {@code stands}, over the numbers the values a call was given read as where it stands. */
+    private Derivation overTheValues(Choice.FormsStand stands, InputReads where) {
+        LinearForm<Core> apart;
         switch (stands.left().minus(stands.right())) {
-            case ExactAnswer.Held<LinearForm<DeclaredArgument>>(var held) -> apart = held;
-            case ExactAnswer.Unheld<LinearForm<DeclaredArgument>>(UnheldNumber why) -> {
+            case ExactAnswer.Held<LinearForm<Core>>(var held) -> apart = held;
+            case ExactAnswer.Unheld<LinearForm<Core>>(UnheldNumber why) -> {
                 return new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why), false);
             }
         }
-        AnOperationApplied applied = AnOperationApplied.of(call);
         LinearForm<Quantity> form = LinearForm.constant(apart.constant());
-        for (Map.Entry<DeclaredArgument, ExactRatio> each : apart.coefs().entrySet()) {
-            int position = CallArguments.positionOf(each.getKey(), applied.operation());
-            switch (AffineForms.outcome(applied.args().get(position), where, quantities())) {
+        for (Map.Entry<Core, ExactRatio> each : apart.coefs().entrySet()) {
+            switch (AffineForms.outcome(each.getKey(), where, quantities())) {
                 case AffineForms.Outcome.Composed<Quantity, InputReads>(var argument) -> {
                     LinearForm<Quantity> before = form;
                     switch (argument.times(each.getValue()).flatMap(before::plus)) {
@@ -2350,8 +2342,7 @@ final class Pullback {
                         && applied.operation() instanceof ValueName.Stdlib operation)) {
             return null;
         }
-        List<DefinitionCase<DeclaredArgument>> cases =
-                DefaultBoundOperationFacts.get().isDefinedByCases(operation);
+        List<Choice.ACase> cases = Choice.casesOf(call);
         return cases.isEmpty() ? null
                 : new Inside.ACallDefinedByCases(call, operation, cases, at);
     }
