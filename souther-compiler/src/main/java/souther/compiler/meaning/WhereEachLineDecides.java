@@ -61,7 +61,7 @@ public final class WhereEachLineDecides {
     private static final long MOST_PLACES_READ = 1L << 17;
 
     /** How many cases where a line decides is said in before it is said as one. */
-    private static final int MOST_CASES = 16;
+    static final int MOST_CASES = 16;
 
     private WhereEachLineDecides() {
     }

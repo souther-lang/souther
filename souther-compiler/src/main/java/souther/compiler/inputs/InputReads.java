@@ -7,6 +7,7 @@ import souther.compiler.check.Location;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.ModelOccurrence;
@@ -297,6 +298,7 @@ public final class InputReads {
                                        DeclarationNewtypes newtypes, int most) {
         List<Core.Binder> handed = new ArrayList<>();
         List<List<Denotation>> valuesOf = new ArrayList<>();
+        HowAClosureIsApplied how = HowAClosureIsApplied.TO_EVERY_ELEMENT;
         long readings = applied.readings();
         for (int at = 0; at < block.params().size(); at++) {
             Core.Binder param = block.params().get(at);
@@ -306,6 +308,10 @@ public final class InputReads {
             Core.Read read = new Core.Read(param.name(), param.binding(),
                     block.paramTypes().get(at), block.pos());
             if (meaningOf(read, symbols, newtypes) instanceof ReadMeaning.OneOf(var values)) {
+                if (!alternatives.containsKey(param.binding())
+                        && names.roleOf(param.binding()) instanceof BindingRole.Element(var held)) {
+                    how = held.applied();
+                }
                 handed.add(param);
                 valuesOf.add(values);
                 readings *= values.size();
@@ -316,6 +322,11 @@ public final class InputReads {
         }
         if (handed.isEmpty()) {
             return new Applications.NoneHanded();
+        }
+        // Applications made of every value of each of several parameters are made in an order no
+        // operation here states, so where one of them stops is not said either.
+        if (handed.size() > 1 && how != HowAClosureIsApplied.TO_EVERY_ELEMENT) {
+            return new Applications.Unsaid();
         }
         List<InputReads> applications = List.of(this);
         for (int at = 0; at < handed.size(); at++) {
@@ -333,7 +344,7 @@ public final class InputReads {
         }
         long counted = readings;
         return new Applications.Each(applications.stream()
-                .map(each -> each.readAs(counted)).toList());
+                .map(each -> each.readAs(counted)).toList(), how);
     }
 
     /** The same, as one of {@code readings} readings of one condition. */
@@ -346,11 +357,17 @@ public final class InputReads {
      *  #applicationsOf}). */
     public sealed interface Applications {
 
-        /** One environment per application, in the order the values were written. */
-        record Each(List<InputReads> each) implements Applications {
+        /**
+         * One environment per application, in the order the values were written, which is the order
+         * a run makes them in, and how far the operation goes making them.
+         */
+        record Each(List<InputReads> each, HowAClosureIsApplied how) implements Applications {
 
             public Each {
                 each = List.copyOf(each);
+                if (how == null) {
+                    throw new IllegalArgumentException("applications are made some way");
+                }
             }
         }
 
@@ -358,7 +375,8 @@ public final class InputReads {
         record NoneHanded() implements Applications {}
 
         /** A value handed names a binding of where it was written, at no position, so which value
-         *  an application hands cannot be said here ({@link #handing}). */
+         *  an application hands cannot be said here ({@link #handing}) — or several parameters are
+         *  handed values by an operation that stops, so which applications a run makes is not. */
         record Unsaid() implements Applications {}
 
         /** More applications than a condition is read on, counting the ones this reading is
@@ -568,7 +586,10 @@ public final class InputReads {
     }
 
     /**
-     * The same, where what the arm binds is one of the values the scrutinee's set holds.
+     * The same, where what the arm binds is one of the values the scrutinee's set holds — or the
+     * one value it stands for, where that value is written out. A closure handed one of the
+     * values a list was written with matches that value, and the name under the arm is the value
+     * as the arm takes it, as it would be one member of the set.
      *
      * <p>Only where the arm's carriers are the values themselves. A case that binds what an optional
      * holds binds something under the value that was matched rather than the value, so the members
@@ -591,8 +612,16 @@ public final class InputReads {
     private InputReads admitting(Core scrutinee, Core.Case arm, Symbols symbols,
                                  DeclarationNewtypes newtypes) {
         ReadMeaning.OneOf one = pluralityOf(scrutinee, symbols, newtypes);
-        if (one == null) {
-            return denotingWhatWasMatched(scrutinee, arm, symbols, newtypes);
+        List<Denotation> values;
+        if (one != null) {
+            values = one.alternatives();
+        } else {
+            Denotation stands = standing(new Denotation(scrutinee, this), symbols, newtypes,
+                    new HashSet<>());
+            if (WrittenCase.of(stands.value()).isEmpty()) {
+                return denotingWhatWasMatched(scrutinee, arm, symbols, newtypes);
+            }
+            values = List.of(stands);
         }
         for (CaseSelector selector : arm.pattern().selectors()) {
             if (!(selector.refinement() instanceof souther.compiler.types.Refinement.Direct)) {
@@ -600,7 +629,7 @@ public final class InputReads {
             }
         }
         java.util.List<Denotation> left = new java.util.ArrayList<>();
-        for (Denotation each : one.alternatives()) {
+        for (Denotation each : values) {
             Optional<TypeSymbol> written = WrittenCase.of(each.value());
             if (written.isEmpty()) {
                 return this;

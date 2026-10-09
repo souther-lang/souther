@@ -84,7 +84,8 @@ class WhatAComparisonIsARuleAboutTest {
         InputReading reading = inputs.reading(rules);
         return ComparisonAssessment.of("f", comparison.stated(), Citation.of(binary.pos()),
                 reading,
-                InputReads.ofWhatIsDeclared(roots, inputs.declared(rules)), rule.value(),
+                InputReads.ofWhatIsDeclared(roots, inputs.declared(rules)),
+                ClosureApplications.OUTSIDE, rule.value(),
                 WhatAnAnswerTakesUp.of(reading),
                 Arrivals.inTheTree(read), false,
                 new WhatConditionsState(reading));

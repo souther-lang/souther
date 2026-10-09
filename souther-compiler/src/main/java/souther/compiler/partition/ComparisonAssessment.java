@@ -359,7 +359,9 @@ sealed interface ComparisonAssessment {
     /**
      * What {@code comparison} comes to, whoever wrote it.
      *
-     * <p>The one way in. {@code answer} is the binding a clause calls what the behavior answers, or
+     * <p>The one way in. {@code applying} is the applications of the closures the comparison
+     * stands inside, on each of which it is read. {@code answer} is the binding a clause calls what
+     * the behavior answers, or
      * null where the comparison is written in a body and there is nothing to be the answer.
      * {@code dependencies} is what the decision table takes up of a body that stands dependencies
      * in, which a clause stands none of.
@@ -376,6 +378,7 @@ sealed interface ComparisonAssessment {
      */
     static ComparisonAssessment of(String behavior, StatedComparison comparison, Citation at,
                                    InputReading read, InputReads reads,
+                                   ClosureApplications applying,
                                    BindingId answer, WhatAnAnswerTakesUp dependencies,
                                    Arrivals answering,
                                    boolean drawnByAnInvariant, WhatConditionsState conditions) {
@@ -386,7 +389,8 @@ sealed interface ComparisonAssessment {
         if (readsAnswer(comparison.left(), answer) || readsAnswer(comparison.right(), answer)) {
             return new AnswerDependent();
         }
-        Cutting.Read cut = Cutting.read(behavior, comparison, read, reads, answering, conditions);
+        Cutting.Read cut = Cutting.read(behavior, comparison, read, reads, applying, answering,
+                conditions);
         return switch (cut) {
             case Cutting.Read.Cuts _, Cutting.Read.NoOrderToCountOn _,
                  Cutting.Read.NumberNoRatioHolds _ ->

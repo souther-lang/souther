@@ -12,6 +12,7 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReportAnchor;
 import souther.compiler.check.UnreadComparison;
+import souther.compiler.check.ScopeStep;
 import souther.compiler.check.ValueOrigin;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.DeclaredInput;
@@ -652,6 +653,30 @@ public final class GuardThresholds {
                 out.add(each);
             }
         }
+        throughEachValue(e, reads, symbols, newtypes, answering, out);
+    }
+
+    /**
+     * The positions each value a name in {@code e} stands for mentions, where it stands for several
+     * written out.
+     *
+     * <p>Where the reading was looking, which takes in every one of them. What such a name is about
+     * is what all its values support, and that is the arithmetic's to say ({@link ValueOrigin}); but
+     * a reading that stopped at it stopped looking at each of them, and filed at none it would be a
+     * rule about nothing — read by no measure and reported by none.
+     */
+    private static void throughEachValue(Core e, InputReads reads, Symbols symbols,
+                                         DeclarationNewtypes newtypes, Arrivals answering,
+                                         List<TermPath> out) {
+        if (Core.withoutStanding(e) instanceof Core.Read read
+                && reads.meaningOf(read, symbols, newtypes)
+                        instanceof ReadMeaning.OneOf(var values)) {
+            values.forEach(value -> mentioned(value.value(), value.at(), symbols, newtypes,
+                    answering, out));
+            return;
+        }
+        ScopeStep.forEachChild(e, (child, step) -> throughEachValue(child,
+                reads.entering(step, symbols, newtypes), symbols, newtypes, answering, out));
     }
 
     /**

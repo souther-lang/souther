@@ -16,8 +16,16 @@ package souther.compiler.semantics;
  *
  * @param keyParam the closure parameter the key arrives on, or {@link #NO_KEY} where the closure is
  *                 handed none — the container is not a map, or the closure takes the value alone
+ * @param applied  how far the operation goes applying the closure
  */
-public record Combinator(int closureArg, int elementParam, int containerArg, int keyParam) {
+public record Combinator(int closureArg, int elementParam, int containerArg, int keyParam,
+                         HowAClosureIsApplied applied) {
+
+    public Combinator {
+        if (applied == null) {
+            throw new IllegalArgumentException("an operation applies its closure some way");
+        }
+    }
 
     /** No parameter of the closure is handed a key. */
     public static final int NO_KEY = -1;

@@ -346,13 +346,14 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         // the element.
         if (handed.key() != null && handed.key().binding() != null) {
             takes(found, handed.key().binding(),
-                    new HeldIn(handed.container(), HeldIn.Part.KEY));
+                    new HeldIn(handed.container(), HeldIn.Part.KEY, handed.applied()));
         }
         if (handed.element().binding() == null) {
             return;
         }
         BindingId element = handed.element().binding();
-        takes(found, element, new HeldIn(handed.container(), HeldIn.Part.ELEMENT));
+        takes(found, element,
+                new HeldIn(handed.container(), HeldIn.Part.ELEMENT, handed.applied()));
         if (standing != null && answersOnePerElementOf(operation, handed.container(), args)) {
             standing.putIfAbsent(element, handed.step().body());
         }

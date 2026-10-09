@@ -24,6 +24,7 @@ import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.meaning.WhereEachLineDecides;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.reach.ComparisonArrival;
@@ -243,16 +244,87 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * operation's law says its answer comes to, the line is drawn there too.
      *
      * <p>A statement of several relations held together is one rule with a line for each
-     * ({@link Read.Several}). What a closure states on each application is read and not drawn
-     * ({@link BlockReason.SeveralLinesInOneRule}), and so is a statement one of whose parts is no
-     * relation over the input's own numbers.
+     * ({@link Read.Several}), and so is a comparison inside a closure handed the values a
+     * container was written with, read on each application ({@code applying}). A statement one of
+     * whose parts is no relation over the input's own numbers is read and not drawn
+     * ({@link BlockReason.SeveralLinesInOneRule}).
      *
      * <p>The reason a reading stopped is settled here, where it stopped, and not asked for
      * afterwards by whoever met the absence.
      */
     static Read read(String behavior, StatedComparison comparison,
-                     InputReading read, InputReads reads, Arrivals answering,
-                     WhatConditionsState conditions) {
+                     InputReading read, InputReads reads, ClosureApplications applying,
+                     Arrivals answering, WhatConditionsState conditions) {
+        if (!(applying instanceof ClosureApplications.Each(var each))) {
+            return readOnce(behavior, comparison, read, reads, answering, conditions);
+        }
+        Read drawn = onEachApplication(behavior, comparison, read, each, answering, conditions);
+        // Where an application is made, and where a line decides on it, is part of what the line
+        // is; said in anything but what a row's own numbers answer, a row could not be asked
+        // whether it is somewhere the line decides, and none of the lines is drawn.
+        return drawn instanceof Read.Several several && several.parts().stream()
+                .anyMatch(part -> !part.cases().stream().allMatch(WhereAPartDecides::askableOfRows))
+                ? severalNotDrawn(comparison, read, reads, answering)
+                : drawn;
+    }
+
+    /**
+     * What a comparison inside a closure states on each application it is handed: one rule, with
+     * a line for each line some application draws.
+     *
+     * <p>A line two applications draw is one line, read on each of them, and where it decides is
+     * where it decides on one of them, met where a run makes that one
+     * ({@link WhereAnApplicationIsMade#decidesOn}). Drawn on every application where it decides
+     * everywhere, it is the line a comparison outside every closure would be.
+     *
+     * <p>Every application's statement is a line or none of them is drawn, as with the relations of
+     * one statement: where one application's reading stopped, the comparison stops there with that
+     * application's reasons, at that application's places. An application on which the comparison
+     * comes out the same for every row draws nothing.
+     */
+    private static Read onEachApplication(String behavior, StatedComparison comparison,
+                                          InputReading read,
+                                          List<ClosureApplications.Application> each,
+                                          Arrivals answering, WhatConditionsState conditions) {
+        SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> stopped =
+                new LinkedHashMap<>();
+        List<FilingCoordinate> settled = new ArrayList<>();
+        Map<Read, List<WhereAnApplicationIsMade.OnOne>> lines = new LinkedHashMap<>();
+        for (ClosureApplications.Application one : each) {
+            switch (readOnce(behavior, comparison, read, one.reads(), answering, conditions)) {
+                case Read.Stopped alone -> alone.why().forEach(stopped::putIfAbsent);
+                case Read.CutsNothing alone -> alone.filedAt().forEach(at -> {
+                    if (!settled.contains(at)) {
+                        settled.add(at);
+                    }
+                });
+                case Read.Several several -> several.parts().forEach(part -> lines
+                        .computeIfAbsent(part.line(), _ -> new ArrayList<>())
+                        .add(new WhereAnApplicationIsMade.OnOne(part.cases(), one.reached())));
+                case Read line -> lines.computeIfAbsent(line, _ -> new ArrayList<>())
+                        .add(WhereAnApplicationIsMade.OnOne.wherever(one.reached()));
+            }
+        }
+        if (!stopped.isEmpty()) {
+            return new Read.Stopped(stopped);
+        }
+        if (lines.isEmpty()) {
+            return new Read.CutsNothing(settled);
+        }
+        List<Read.Several.Part> parts = new ArrayList<>();
+        lines.forEach((line, readings) -> parts.add(new Read.Several.Part(
+                new PartOfAComparison(parts.size()), line,
+                WhereAnApplicationIsMade.decidesOn(readings))));
+        if (parts.size() == 1 && WhereAnApplicationIsMade.everywhere(parts.getFirst().cases())) {
+            return parts.getFirst().line();
+        }
+        return new Read.Several(parts);
+    }
+
+    /** What {@code comparison} states read once, in {@code reads}. */
+    private static Read readOnce(String behavior, StatedComparison comparison,
+                                 InputReading read, InputReads reads, Arrivals answering,
+                                 WhatConditionsState conditions) {
         Pullback.OnTheInput onTheInput = conditions.comparison(comparison, reads, read);
         Pullback.Pulled stated = onTheInput.stated();
         // A form put on the input's numbers, where what is stated is one over them.
@@ -284,11 +356,6 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 yield several != null ? several
                         : severalNotDrawn(comparison, read, reads, answering);
             }
-            // What a closure states on each of the applications it is handed, which is a line of
-            // each application rather than of the row.
-            case Proposition.OnAnApplication _
-                    when !Proposition.leavesSomethingUnread(stated.proposition()) ->
-                    severalNotDrawn(comparison, read, reads, answering);
             default -> notALine(comparison, onTheInput.arithmetic().get(), read, reads, answering);
         };
     }

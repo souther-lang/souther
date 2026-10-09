@@ -449,8 +449,12 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "types/BindingId;)Z", Reading.STRUCTURE, BINDINGS);
         row(out, c + "partition/ComparisonReadings", "walk", "(" + core + "L" + c
                 + "partition/ComparisonReadings$Body;" + reads + "L" + c
+                + "partition/ClosureApplications;L" + c
                 + "partition/LiveFlow;Ljava/util/List;ZLjava/util/List;Ljava/util/List;L" + c
                 + "partition/ConditionNumbering;)V", Reading.STRUCTURE, CHOICES_AND_CALLS);
+        row(out, c + "partition/GuardThresholds", "throughEachValue", "(" + core + reads + "L"
+                + c + "check/Symbols;L" + c + "check/DeclarationNewtypes;L" + c
+                + "coverage/Arrivals;Ljava/util/List;)V", Reading.STRUCTURE, BINDINGS);
         row(out, c + "partition/DecisionComparison$1", "readsThrough",
                 "(L" + CORE + "$FieldAccess;" + reads + ")Z", Reading.ONE_ACCESS, ONE);
         row(out, c + "inputs/InputReads", "answerAt", "(" + core + "L" + c + "check/Symbols;L"

@@ -91,17 +91,30 @@ class ARuleInsideAWalkOverAWrittenListIsALineWithPointsTest {
     }
 
     /**
-     * And a list whose members state two numbers is a rule with no line, as it was.
+     * And a list whose members state two numbers is a line on each application, owed rows only
+     * where a run gets to it.
      *
-     * <p>Beside the one above and differing in one number. What tells them apart is what the members
-     * state and not how many there are, which case they are, or what the arm admits.
+     * <p>Beside the one above and differing in one number. {@code List.any} reaches the second
+     * member only where the first answered false, which is below a hundred thousand, and no row
+     * there is anywhere near two hundred thousand: that line is one no run that reaches it
+     * crosses. {@code List.all} reaches the second member only where the first held, and there the
+     * line at two hundred thousand is crossed.
      */
     @Test
-    void aRuleAgainstTwoNumbersIsNoLine() {
-        assertEquals("[] unread [n UNSUPPORTED_SYNTAX] points []", reading("""
+    void aRuleAgainstTwoNumbersIsALineOnEachApplicationARunGetsTo() {
+        assertEquals(atAHundredThousand("comparison@0:13:37"), reading("""
                 {
                         let ks = [ AtMost { threshold = 100000 }, AtMost { threshold = 200000 } ]
                         if List.any((k) -> reaches(n, k), ks) then Yes else No
+                    }"""));
+        String at = "comparison@0:13:37";
+        assertEquals("[n/x < 100000, n/100000 <= x < 200000, n/200000 <= x] unread [] points ["
+                + "ON point of " + at + ", OFF point of " + at + ", IN point of " + at + ", "
+                + "OUT point of " + at + ", ON point of " + at + ", OFF point of " + at + ", "
+                + "IN point of " + at + ", OUT point of " + at + "]", reading("""
+                {
+                        let ks = [ AtMost { threshold = 100000 }, AtMost { threshold = 200000 } ]
+                        if List.all((k) -> reaches(n, k), ks) then Yes else No
                     }"""));
     }
 

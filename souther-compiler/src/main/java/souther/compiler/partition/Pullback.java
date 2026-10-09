@@ -907,7 +907,7 @@ final class Pullback {
             }
             List<InputReads> applications = switch (applicationsOf(block, closure.at(),
                     read.rules().symbols(), read.rules().newtypes())) {
-                case InputReads.Applications.Each(var each) -> each;
+                case InputReads.Applications.Each(var each, var _) -> each;
                 case InputReads.Applications.NoneHanded _, InputReads.Applications.Unsaid _ ->
                         List.of(closure.at());
                 case InputReads.Applications.MoreThanAreRead _ -> null;

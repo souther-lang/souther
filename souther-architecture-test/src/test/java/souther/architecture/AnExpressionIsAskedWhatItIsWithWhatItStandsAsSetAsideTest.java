@@ -648,7 +648,8 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                         + " down");
         row(out, c + "partition/ComparisonReadings", "walk",
                 "(" + core + "L" + c + "partition/ComparisonReadings$Body;L" + c
-                        + "inputs/InputReads;L" + c + "partition/LiveFlow;Ljava/util/List;Z"
+                        + "inputs/InputReads;L" + c + "partition/ClosureApplications;L" + c
+                        + "partition/LiveFlow;Ljava/util/List;Z"
                         + "Ljava/util/List;Ljava/util/List;L" + c
                         + "partition/ConditionNumbering;)V", 1, GOES_ON_INTO_IT);
         row(out, c + "partition/LiveFlow", "walk", "(" + core + "Ljava/util/Set;)V", 1,

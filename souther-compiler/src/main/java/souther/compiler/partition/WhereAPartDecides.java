@@ -68,6 +68,31 @@ public record WhereAPartDecides(PartOfAComparison part, Proposition decides) {
     }
 
     /**
+     * Whether a row's own numbers say whether it is in {@code stated}: relations over the input's
+     * own numbers, joined, or nothing asked at all.
+     *
+     * <p>Anything else is no case a row can be asked whether it is in. A truth, a quantifier or
+     * something nobody read may be where a line decides, and a reader that took the line without
+     * it would count a row the statement answers alike on both sides of the line.
+     */
+    static boolean askableOfRows(Proposition stated) {
+        return switch (stated) {
+            case Proposition.Always _ -> true;
+            case Proposition.All all ->
+                    all.parts().stream().allMatch(WhereAPartDecides::askableOfRows);
+            case Proposition.Any any ->
+                    any.parts().stream().allMatch(WhereAPartDecides::askableOfRows);
+            case Proposition.Compared compared -> switch (compared.relation()) {
+                case Relation.Affine affine -> WhatTheRulesLeave.ofTheInput(affine.form()) != null;
+                case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place _, Rel _) ->
+                        term.atOnePosition() != null;
+                case Relation.Ordered _ -> false;
+            };
+            default -> false;
+        };
+    }
+
+    /**
      * This, put to rows: each relation it is over, as the quantity a row is read at.
      *
      * <p>Read the way a line over the same quantity reads a row ({@link BorderQuantity#valuesOf}),

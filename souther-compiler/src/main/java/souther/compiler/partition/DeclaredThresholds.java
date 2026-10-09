@@ -80,7 +80,8 @@ public final class DeclaredThresholds {
         // InputReads#ofADeclaredClause}).
         ComparisonAssessment assessed = ComparisonAssessment.of(behavior, clause.states(),
                 Citation.of(clause.wrote()), read,
-                InputReads.ofADeclaredClause(roots, read.declared()), null,
+                InputReads.ofADeclaredClause(roots, read.declared()),
+                ClosureApplications.OUTSIDE, null,
                 WhatAnAnswerTakesUp.of(read),
                 Arrivals.inTheTree(clause.readOutOf()), true,
                 new WhatConditionsState(read));

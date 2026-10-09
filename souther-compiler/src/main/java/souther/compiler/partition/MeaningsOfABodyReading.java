@@ -76,7 +76,7 @@ public final class MeaningsOfABodyReading {
         // what it states on the application a run meets it on.
         if (Core.withoutStanding(e) instanceof Core.Block block && !pastTheFigure) {
             switch (Pullback.applicationsOf(block, reads, symbols, newtypes)) {
-                case InputReads.Applications.Each(var applications) -> {
+                case InputReads.Applications.Each(var applications, var _) -> {
                     List<MeaningsOfABody> each = new ArrayList<>();
                     for (InputReads application : applications) {
                         MeaningsOfABodyReading inside = inside(false);

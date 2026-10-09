@@ -875,9 +875,8 @@ public sealed interface BlockReason {
      * not drawn.
      *
      * <p>A statement of several relations is drawn as one rule with a line for each, and each line
-     * holds where the statement turns on it. Where that cannot be held, no line is: what a closure
-     * states on each application it is handed is a line of each application rather than of the
-     * row; a relation over what a dependency answered is no line on the input, and the others
+     * holds where the statement turns on it. Where that cannot be held, no line is: a relation over
+     * what a dependency answered is no line on the input, and the others
      * drawn alone would be drawn as though the statement were only them; and a clause has nowhere
      * to hold where each of its lines decides, so a row against one of them would be counted at
      * the line where the clause comes out the same on both sides.
