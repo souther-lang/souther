@@ -488,6 +488,9 @@ class EveryLawHoldsOfWhatTheLibraryComputesTest {
                     yield "(" + body.replaceAll("\\bv\\b", "e" + container)
                             .replaceAll("\\bk\\b", "k" + container) + ")";
                 }
+                case LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument at) -> "k" + at.position();
+                case LawSubject.AnswerOf<DeclaredArgument> _ -> throw new IllegalStateException(
+                        "a law names what another operation answers: " + subject);
             };
         }
 
@@ -504,6 +507,10 @@ class EveryLawHoldsOfWhatTheLibraryComputesTest {
                         };
                 case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(DeclaredArgument at) ->
                         ((Type.FnOf) params.get(at.position())).result();
+                case LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument at) ->
+                        Type.keyOf(params.get(at.position()));
+                case LawSubject.AnswerOf<DeclaredArgument> _ -> throw new IllegalStateException(
+                        "a law names what another operation answers: " + subject);
             };
         }
 

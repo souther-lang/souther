@@ -119,6 +119,21 @@ public sealed interface WhyUnread {
         }
     }
 
+    /**
+     * What is stated of how {@code operation}'s answer comes out on {@code aspect} is not proved
+     * against the operation's body, so it is an obligation still open and no law: about what this
+     * compiler has shown, and neither about the domain's words nor about an operation nothing is
+     * stated of.
+     */
+    record NotProvedOfItsBody(ValueName.Stdlib operation, AnswerAspect aspect)
+            implements WhyUnread {
+
+        public NotProvedOfItsBody {
+            Objects.requireNonNull(operation, "a statement is of an operation");
+            Objects.requireNonNull(aspect, "about one side of what it answers");
+        }
+    }
+
     /** A number an operation answers, of which the library states no form over its arguments. */
     record NoFormOfWhatItAnswers(ValueName.Stdlib operation) implements WhyUnread {
 

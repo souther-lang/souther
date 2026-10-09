@@ -164,6 +164,8 @@ final class NumericReadings {
                      BoundOperationFact.BuildsItsResultFrom _,
                      BoundOperationFact.KeepsTheKeysOf _,
                      BoundOperationFact.HasALaw _,
+                     BoundOperationFact.HasALemma _,
+                     BoundOperationFact.IsRelated _,
                      BoundOperationFact.LeavesUnsaid _,
                      BoundOperationFact.ListsAPartOf _,
                      BoundOperationFact.ResultIsNoSmallerThan _,

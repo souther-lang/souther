@@ -1,5 +1,8 @@
 package souther.compiler.semantics;
 
+import souther.compiler.types.ValueName;
+
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -38,6 +41,31 @@ public sealed interface LawSubject<A> {
 
         public WhatTheClosureAnswers {
             Objects.requireNonNull(closure, "a closure is one of the operation's arguments");
+        }
+    }
+
+    /**
+     * The key the element of {@code container} the statement it stands in is about is filed under
+     * — named where {@link ElementOf} may be, of a container filing what it holds under keys.
+     */
+    record KeyOf<A>(A container) implements LawSubject<A> {
+
+        public KeyOf {
+            Objects.requireNonNull(container, "a key is of an element of a container");
+        }
+    }
+
+    /**
+     * What {@code operation} answers handed {@code args} — named in what is stated of kernels beside
+     * one another and in what a lemma states a walk carries, and never in a law: a law says what one
+     * operation's answer comes to over its own arguments, and the answer of another is no argument.
+     */
+    record AnswerOf<A>(ValueName.Stdlib.Operation operation, List<LawSubject<A>> args)
+            implements LawSubject<A> {
+
+        public AnswerOf {
+            Objects.requireNonNull(operation, "an answer is some operation's");
+            args = List.copyOf(args);
         }
     }
 }

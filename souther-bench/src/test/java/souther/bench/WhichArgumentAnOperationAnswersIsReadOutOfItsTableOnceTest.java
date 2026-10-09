@@ -49,6 +49,9 @@ class WhichArgumentAnOperationAnswersIsReadOutOfItsTableOnceTest {
     private static final Set<String> DECLARING = Set.of(FACTS,
             "souther.compiler.semantics.OperationFacts",
             "souther.compiler.check.OperationFactBinder",
+            // Holds a row of an operation the library writes to that operation's body, as the
+            // binder holds one to its signature: about the declaration, and about no call.
+            "souther.compiler.check.ProvingTheLibrary",
             // A row reaches itself: its own equality and rendering read its parts.
             "souther.compiler.semantics.DefinitionCase",
             "souther.compiler.semantics.ArgumentsStand");

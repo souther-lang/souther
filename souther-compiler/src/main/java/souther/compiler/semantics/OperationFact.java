@@ -1,5 +1,6 @@
 package souther.compiler.semantics;
 
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -208,6 +209,44 @@ public sealed interface OperationFact {
         public LeavesUnsaid {
             Objects.requireNonNull(observed, "this one names an observation");
             Objects.requireNonNull(why, "and what it comes to");
+        }
+    }
+
+    /**
+     * A law of an operation the library writes in the language, stated to be proved against its
+     * body: {@code states}, which is a law only once proved, and what a walk the body makes carries
+     * at every step of it ({@code carries}), which the proof goes by.
+     *
+     * <p>Never a law on its own say-so. A law declared beside a body is a second account of what the
+     * body does and is refused there; this is the same statement as an obligation, which the body
+     * discharges or leaves open. A clause of {@code carries} names the walk's parts with
+     * {@link ArgumentRef.Carried}, {@link ArgumentRef.Walked} and {@link ArgumentRef.Every}, and may
+     * name what other operations answer ({@link LawSubject.AnswerOf}).
+     */
+    record IsALemma(OperationLaw<ArgumentRef> states, List<LawProposition<ArgumentRef>> carries)
+            implements OperationFact {
+
+        public IsALemma {
+            Objects.requireNonNull(states, "a lemma states something");
+            carries = List.copyOf(carries);
+        }
+    }
+
+    /**
+     * What a kernel answers stands to what other kernels answer on its arguments as {@code holds}
+     * says, wherever it answers: a key a map holds is one only where the map holds something; an
+     * insert holds one more than its map unless the key was there.
+     *
+     * <p>An axiom about a kernel, as a law of one is, and held to what it computes the same way. Not
+     * a law: a law says what one observation of an answer comes to over the arguments alone, and
+     * this names other answers ({@link LawSubject.AnswerOf}), the answer itself among them, and may
+     * hold of every value ({@link ArgumentRef.Every}). Read by the proofs of what the library's
+     * written operations keep, and by nothing a reader of a condition is handed.
+     */
+    record IsRelated(LawProposition<ArgumentRef> holds) implements OperationFact {
+
+        public IsRelated {
+            Objects.requireNonNull(holds, "a relation states something");
         }
     }
 

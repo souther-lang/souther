@@ -68,10 +68,14 @@ public final class AppliedClosures {
     /** What an answer lists of an argument. */
     public sealed interface Listing {
 
-        /** Every element the argument at {@code argument} holds, each once. */
-        record EveryElementOf(int argument) implements Listing {}
+        /**
+         * Every element the argument at {@code argument} holds, each once — and no two of them
+         * the same value, where {@code eachDifferent}, as the elements of a set are.
+         */
+        record EveryElementOf(int argument, boolean eachDifferent) implements Listing {}
 
-        /** Every entry of the map at {@code argument}, each once, as a pair of its key and value. */
+        /** Every entry of the map at {@code argument}, each once, as a pair of its key and value —
+         *  no two of them under the same key. */
         record EveryEntryOf(int argument) implements Listing {}
 
         /** At most one element the argument at {@code argument} holds. */
@@ -535,7 +539,8 @@ public final class AppliedClosures {
             return new Source(position, true);
         }
         if (container instanceof LibraryTerm.Call call
-                && listings.of(call.operation()) instanceof Listing.EveryElementOf(int argument)
+                && listings.of(call.operation()) instanceof Listing.EveryElementOf(int argument,
+                        var _)
                 && argument < call.args().size()) {
             return sourceOf(call.args().get(argument));
         }

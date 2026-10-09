@@ -216,7 +216,7 @@ final class Combinators {
      */
     private static final Map<ValueName.Stdlib.Operation, AppliedClosures.Listing> LISTED = Map.of(
             ValueName.Stdlib.operation("Set", "toList"),
-            new AppliedClosures.Listing.EveryElementOf(0),
+            new AppliedClosures.Listing.EveryElementOf(0, true),
             ValueName.Stdlib.operation("Map", "get"),
             new AppliedClosures.Listing.AtMostOneElementOf(1));
 
@@ -238,6 +238,12 @@ final class Combinators {
      *  above are the only things here that reach for the process's own. */
     private static Map<ValueName.Stdlib.Operation, Combinator> read(Stdlib stdlib,
                                                                     BoundOperationFacts facts) {
+        return AppliedClosures.of(stdlib, kernelsIn(stdlib),
+                operation -> listing(stdlib, facts, operation), Combinators::positionsOf);
+    }
+
+    /** What the kernels taking a closure are declared to apply it to, held to the library. */
+    static Map<ValueName.Stdlib.Operation, Combinator> kernelsIn(Stdlib stdlib) {
         Map<ValueName.Stdlib.Operation, Combinator> kernels = new LinkedHashMap<>();
         KERNELS.forEach((operation, how) -> {
             if (stdlib.intrinsicOf(operation) == null) {
@@ -253,8 +259,7 @@ final class Combinators {
             kernels.put(operation, new Combinator(at.closureArg(), at.elementParam(),
                     at.containerArg(), at.keyParam(), how, Combinator.FROM_THE_FIRST));
         });
-        return AppliedClosures.of(stdlib, kernels, operation -> listing(stdlib, facts, operation),
-                Combinators::positionsOf);
+        return kernels;
     }
 
     /**
@@ -262,7 +267,7 @@ final class Combinators {
      * it holds each of them once and nothing else; every entry or every value of a map it lists;
      * at most one element of one, where it holds an element of it in an option.
      */
-    private static AppliedClosures.Listing listing(Stdlib stdlib, BoundOperationFacts facts,
+    static AppliedClosures.Listing listing(Stdlib stdlib, BoundOperationFacts facts,
                                                    ValueName.Stdlib.Operation operation) {
         AppliedClosures.Listing declared = LISTED.get(operation);
         if (declared != null) {
@@ -276,7 +281,8 @@ final class Combinators {
         if (listed != null) {
             return switch (listed.part()) {
                 case ENTRIES -> new AppliedClosures.Listing.EveryEntryOf(listed.map().position());
-                case VALUES -> new AppliedClosures.Listing.EveryElementOf(listed.map().position());
+                case VALUES ->
+                        new AppliedClosures.Listing.EveryElementOf(listed.map().position(), false);
                 case KEYS -> null;
             };
         }
@@ -288,7 +294,8 @@ final class Combinators {
         }
         return built.outputs().get(0).at().equals(ElementLineage.ResultPath.elements())
                 && built.size() == SizeAgainstItsSource.SAME
-                ? new AppliedClosures.Listing.EveryElementOf(same.source().argument().position())
+                ? new AppliedClosures.Listing.EveryElementOf(same.source().argument().position(),
+                        false)
                 : null;
     }
 

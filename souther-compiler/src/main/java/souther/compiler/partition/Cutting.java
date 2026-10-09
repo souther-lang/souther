@@ -490,7 +490,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return switch (why) {
             case WhyUnread.OutsideTheLinearFragment _, WhyUnread.NoNumberOnARun _,
                  WhyUnread.TwoElementsOfOneContainer _, WhyUnread.NoLawFor _,
-                 WhyUnread.NoWordsFor _, WhyUnread.NoFormOfWhatItAnswers _,
+                 WhyUnread.NoWordsFor _, WhyUnread.NotProvedOfItsBody _,
+                 WhyUnread.NoFormOfWhatItAnswers _,
                  WhyUnread.ANumberOfWhatAnOperationAnswers _,
                  WhyUnread.WhatARecursiveHelperAnswers _, WhyUnread.AtNoPosition _,
                  WhyUnread.NoMeasureOfItsSize _ -> true;

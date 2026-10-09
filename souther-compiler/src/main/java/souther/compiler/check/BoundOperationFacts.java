@@ -1,6 +1,9 @@
 package souther.compiler.check;
 
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.proof.Proof;
+import souther.compiler.proof.Slot;
+import souther.compiler.proof.Unproved;
 import souther.compiler.semantics.Accumulation;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.Arithmetic;
@@ -18,6 +21,7 @@ import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.semantics.TakenArguments;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.semantics.Unsayable;
+import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.ValueName;
 
@@ -29,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * What one binding of the declarations came to: every fact about the language's operations, held to
@@ -79,12 +84,17 @@ public final class BoundOperationFacts {
     private final Map<ValueName, List<DeclaredArgument>> noSmallerThan;
     private final Map<ValueName, List<DefinitionCase<DeclaredArgument>>> cases;
     private final Map<BinOp, List<ValueName>> writtenAs;
+    private final Map<ValueName, List<LawProposition<Slot>>> relations;
+    private final Stdlib stdlib;
     private final Map<ValueName, Map<OperationLaw.Observed, Settled>> settled;
+    private final List<BoundOperationFact> notProvedOfTheirBodies;
 
     /** Made by the binder and by nothing else: what these are is what a binding came to, and a
      *  set of facts gathered anywhere else would say so of facts nothing bound. Counted from the
-     *  class files, as the arms' own constructors are. */
-    BoundOperationFacts(List<BoundOperationFact> bound) {
+     *  class files, as the arms' own constructors are. {@code stdlib} is the library they were
+     *  held to, whose written operations' laws are proved against their bodies here. */
+    BoundOperationFacts(Stdlib stdlib, List<BoundOperationFact> bound) {
+        this.stdlib = stdlib;
         this.held = List.copyOf(bound);
         for (BoundOperationFact fact : held) {
             ValueName key = fact.operation().operation();
@@ -104,14 +114,30 @@ public final class BoundOperationFacts {
             }
         }
         // What each query over a family answers with, projected once from what was filed.
-        bounds = projected(BoundOperationFact.BoundsItsResult.class,
-                BoundOperationFact.BoundsItsResult::bound);
         noSmallerThan = projected(BoundOperationFact.ResultIsNoSmallerThan.class,
                 BoundOperationFact.ResultIsNoSmallerThan::container);
-        cases = projected(BoundOperationFact.IsDefinedByCases.class,
-                BoundOperationFact.IsDefinedByCases::one);
         writtenAs = writtenAs();
-        settled = settle();
+        relations = projected(BoundOperationFact.IsRelated.class, BoundOperationFact.IsRelated::holds);
+        Settling settling = settle();
+        settled = settling.settled();
+        // A bound or a case of an operation the library writes is one only where its body proves
+        // it; one it does not is an obligation, held apart, and no reader takes it.
+        List<BoundOperationFact> unproved = new ArrayList<>();
+        bounds = projected(BoundOperationFact.BoundsItsResult.class,
+                BoundOperationFact.BoundsItsResult::bound,
+                each -> !writes(each.operation().operation())
+                        || settling.proving().bounds(asWritten(each), each.bound()),
+                unproved);
+        cases = projected(BoundOperationFact.IsDefinedByCases.class,
+                BoundOperationFact.IsDefinedByCases::one,
+                each -> !writes(each.operation().operation())
+                        || settling.proving().answersInTheCase(asWritten(each), each.one()),
+                unproved);
+        notProvedOfTheirBodies = List.copyOf(unproved);
+    }
+
+    private static ValueName.Stdlib.Operation asWritten(BoundOperationFact fact) {
+        return (ValueName.Stdlib.Operation) fact.operation().operation();
     }
 
     /** Which operation computes what each operator computes, read off the arithmetic each of them
@@ -136,13 +162,30 @@ public final class BoundOperationFacts {
     /** The facts of {@code kind} an operation carries, each read as {@code part}, by operation. */
     private <F extends BoundOperationFact.SeveralAboutAnOperation, V> Map<ValueName, List<V>>
             projected(Class<F> kind, Function<F, V> part) {
+        return projected(kind, part, _ -> true, new ArrayList<>());
+    }
+
+    /** The facts of {@code kind} an operation carries that are {@code taken}, each read as
+     *  {@code part}, by operation; those that are not go to {@code left}. */
+    private <F extends BoundOperationFact.SeveralAboutAnOperation, V> Map<ValueName, List<V>>
+            projected(Class<F> kind, Function<F, V> part, Predicate<F> taken,
+                      List<BoundOperationFact> left) {
         Map<ValueName, List<BoundOperationFact.SeveralAboutAnOperation>> byOperation =
                 several.getOrDefault(kind, Map.of());
         Map<ValueName, List<V>> out = new LinkedHashMap<>();
         byOperation.forEach((operation, facts) -> {
             List<V> parts = new ArrayList<>(facts.size());
-            facts.forEach(each -> parts.add(part.apply(kind.cast(each))));
-            out.put(operation, List.copyOf(parts));
+            for (BoundOperationFact.SeveralAboutAnOperation each : facts) {
+                F fact = kind.cast(each);
+                if (taken.test(fact)) {
+                    parts.add(part.apply(fact));
+                } else {
+                    left.add(fact);
+                }
+            }
+            if (!parts.isEmpty()) {
+                out.put(operation, List.copyOf(parts));
+            }
         });
         return Collections.unmodifiableMap(out);
     }
@@ -266,6 +309,12 @@ public final class BoundOperationFacts {
         return of == null ? null : of.get(observed);
     }
 
+    /** The bounds and cases stated of operations the library writes that their bodies do not
+     *  prove, and that no query answers with. */
+    List<BoundOperationFact> notProvedOfTheirBodies() {
+        return notProvedOfTheirBodies;
+    }
+
     /** The operations some observation of whose answer is settled, each with how. */
     public Map<ValueName, Map<OperationLaw.Observed, Settled>> settled() {
         return settled;
@@ -274,53 +323,124 @@ public final class BoundOperationFacts {
     /** How an observation of an operation's answer is settled. */
     public sealed interface Settled {
 
-        /** By {@code law}, which was read off what the operation builds where {@code derived}. */
-        record ByALaw(OperationLaw<DeclaredArgument> law, boolean derived) implements Settled {}
+        /** By {@code law}, standing on {@code grounds}. */
+        record ByALaw(OperationLaw<DeclaredArgument> law, Grounds grounds) implements Settled {}
 
         /** By a closing: it comes to {@code why}, which no statement over the arguments says. */
         record Unsaid(Unsayable why) implements Settled {}
+
+        /**
+         * By nothing: what was stated of it ({@code stated}, null where it was a closing) is not
+         * proved against the body, for {@code why}. An obligation and no law, which no reader takes.
+         */
+        record Open(OperationLaw<DeclaredArgument> stated, Unproved why) implements Settled {}
     }
 
-    /** Every settling, read once off the facts: what is declared, and what is derived where
-     *  nothing is. */
-    private Map<ValueName, Map<OperationLaw.Observed, Settled>> settle() {
+    /** What a law stands on. */
+    public sealed interface Grounds {
+
+        /** It is declared of a kernel, which has no body to prove it of: an axiom, held to what the
+         *  kernel computes by running it. */
+        record Axiom() implements Grounds {}
+
+        /** It is read off what a kernel is declared to build: as many as one source, or a list of a
+         *  part of a map. An axiom all the same, said once. */
+        record WhatItBuilds() implements Grounds {}
+
+        /** It is proved against the operation's body, as {@code proof} says. */
+        record Proved(Proof proof) implements Grounds {}
+    }
+
+    /** Every settling, read once off the facts: what is declared of the kernels and what follows
+     *  from what they are declared to build, and what is proved of the operations the library
+     *  writes in the language. */
+    private Settling settle() {
         Map<ValueName, Map<OperationLaw.Observed, Settled>> out = new LinkedHashMap<>();
+        Map<ValueName.Stdlib.Operation, Map<OperationLaw.Observed, ProvingTheLibrary.Stated>>
+                stated = new LinkedHashMap<>();
         for (BoundOperationFact fact : held) {
+            ValueName operation = fact.operation().operation();
             Settled settling;
             OperationLaw.Observed observed;
             switch (fact) {
-                case BoundOperationFact.HasALaw stated -> {
-                    settling = new Settled.ByALaw(stated.law(), false);
-                    observed = stated.law().observed();
+                case BoundOperationFact.HasALaw law -> {
+                    settling = new Settled.ByALaw(law.law(), new Grounds.Axiom());
+                    observed = law.law().observed();
+                }
+                case BoundOperationFact.LeavesUnsaid unsaid when writes(operation) -> {
+                    put(stated, operation, unsaid.observed(),
+                            new ProvingTheLibrary.Stated(null, List.of(), unsaid.why()));
+                    continue;
                 }
                 case BoundOperationFact.LeavesUnsaid unsaid -> {
                     settling = new Settled.Unsaid(unsaid.why());
                     observed = unsaid.observed();
                 }
+                case BoundOperationFact.HasALemma lemma -> {
+                    put(stated, operation, lemma.states().observed(),
+                            new ProvingTheLibrary.Stated(lemma.states(), lemma.carries(), null));
+                    continue;
+                }
                 default -> {
                     continue;
                 }
             }
-            if (out.computeIfAbsent(fact.operation().operation(), _ -> new LinkedHashMap<>())
+            if (out.computeIfAbsent(operation, _ -> new LinkedHashMap<>())
                     .put(observed, settling) != null) {
-                throw new IllegalStateException(fact.operation().operation() + " settles what "
+                throw new IllegalStateException(operation + " settles what "
                         + observed + " of its answer comes to twice");
             }
         }
         for (BoundOperationFact fact : held) {
             ValueName operation = fact.operation().operation();
+            if (writes(operation)) {
+                continue;   // what a body builds is proved of it, not read off a declaration
+            }
             for (OperationLaw<DeclaredArgument> law : derivedFrom(fact)) {
                 if (out.computeIfAbsent(operation, _ -> new LinkedHashMap<>())
-                        .put(law.observed(), new Settled.ByALaw(law, true)) != null) {
+                        .put(law.observed(), new Settled.ByALaw(law, new Grounds.WhatItBuilds()))
+                        != null) {
                     throw new IllegalStateException(operation + " is declared to be something"
                             + " that says what " + law.observed() + " of its answer comes to,"
                             + " and settles it again");
                 }
             }
         }
+        ProvingTheLibrary proving = new ProvingTheLibrary(stdlib, this, out, stated);
+        stated.forEach((operation, of) -> of.keySet().forEach(observed ->
+                out.computeIfAbsent(operation, _ -> new LinkedHashMap<>())
+                        .put(observed, proving.settle(operation, observed))));
         Map<ValueName, Map<OperationLaw.Observed, Settled>> fixed = new LinkedHashMap<>();
         out.forEach((operation, of) -> fixed.put(operation, Collections.unmodifiableMap(of)));
-        return Collections.unmodifiableMap(fixed);
+        return new Settling(Collections.unmodifiableMap(fixed), proving);
+    }
+
+    /** The settlings, with what proved those of the operations the library writes, which proves
+     *  what else is stated of them. */
+    private record Settling(Map<ValueName, Map<OperationLaw.Observed, Settled>> settled,
+                            ProvingTheLibrary proving) {}
+
+    /** Whether {@code operation} is one the library writes in the language. */
+    private boolean writes(ValueName operation) {
+        return operation instanceof ValueName.Stdlib.Operation library
+                && stdlib.helpers().containsKey(library);
+    }
+
+    private static void put(
+            Map<ValueName.Stdlib.Operation, Map<OperationLaw.Observed, ProvingTheLibrary.Stated>>
+                    stated, ValueName operation, OperationLaw.Observed observed,
+            ProvingTheLibrary.Stated what) {
+        if (stated.computeIfAbsent((ValueName.Stdlib.Operation) operation,
+                _ -> new LinkedHashMap<>()).put(observed, what) != null) {
+            throw new IllegalStateException(operation + " states what " + observed
+                    + " of its answer comes to twice");
+        }
+    }
+
+    /** What is stated of {@code operation}'s answer beside what other kernels answer, in the
+     *  words of a walk, for the proofs of the library's written operations. */
+    List<LawProposition<Slot>> relationsOf(ValueName operation) {
+        return operation == null ? List.of() : relations.getOrDefault(operation, List.of());
     }
 
     /**
@@ -467,6 +587,12 @@ public final class BoundOperationFacts {
     /** The operations that answer what a container holds accumulated. */
     public Set<ValueName> accumulates() {
         return ones(BoundOperationFact.AccumulatesItsContainer.class);
+    }
+
+    /** The number {@code operation} is declared to answer, taken of which of its arguments, or
+     *  null where none is declared. */
+    BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven numberTakenOf(ValueName operation) {
+        return one(BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven.class, operation);
     }
 
     /**

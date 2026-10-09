@@ -107,6 +107,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.proof.LibraryTerm.Operator#op",
                     "a library operation's body as the rules reading what it keeps read it, which"
                             + " carries the operators its source wrote"),
+            new Held("souther.compiler.proof.Value.Arithmetic#op",
+                    "a number a library operation's body computes as a proof reads it, which is"
+                            + " the operator its source wrote over the values it read"),
             new Held("souther.compiler.coverage.Settled.Operator#op",
                     "what a comparison of a body compares by, as part of saying what that body"
                             + " does: two bodies alike but for an operator do different things, so"
@@ -428,6 +431,26 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " it compares, not how"),
             new Held("souther.compiler.check.ArithmeticCheck.of",
                     "names the constants it has rules for, against the operator it was handed"),
+            new Held("souther.compiler.proof.Value.Arithmetic.op",
+                    "hands out the operator a number a body computes was written with"),
+            new Held("souther.compiler.proof.Value.Arithmetic.<init>",
+                    "takes the operator a number a body computes was written with"),
+            new Held("souther.compiler.proof.Reading.cases",
+                    "reads an operator a library body writes into what it computes or states"),
+            new Held("souther.compiler.proof.Reading.operated",
+                    "what an operator a library body writes comes to over the two values it was"
+                            + " handed: a number computed, or a statement of how they stand"),
+            new Held("souther.compiler.proof.Reading.negated",
+                    "names the subtraction from nought a negation is"),
+            new Held("souther.compiler.proof.Reading.relationOf",
+                    "the order or equality each comparing operator states"),
+            new Held("souther.compiler.proof.Reading.number",
+                    "names the addition and the subtraction a number of a proof is a sum of"),
+            new Held("souther.compiler.proof.Collect.visit",
+                    "walks into both operands of a number a body computes, without asking which"
+                            + " operator it is"),
+            new Held("souther.compiler.proof.LibraryProver.walksIn",
+                    "the same, looking for a walk among the operands"),
             new Held("souther.compiler.stdlib.TheWalksBody.isTheNext",
                     "names the addition the walk moves to its next index by"),
             new Held("souther.compiler.check.BinaryElaborator.operandBeside",

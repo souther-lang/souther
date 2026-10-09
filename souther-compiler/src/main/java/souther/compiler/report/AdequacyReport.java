@@ -3971,6 +3971,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     + " container at once";
             case WhyUnread.NoLawFor(var operation, var _) -> "a condition on what "
                     + operation.qualified() + " answers, whose declaration gives it no such side";
+            case WhyUnread.NotProvedOfItsBody(var operation, var _) -> "a condition on what "
+                    + operation.qualified() + " answers, whose law is stated and not proved of"
+                    + " its body";
             case WhyUnread.WhatARecursiveHelperAnswers _ -> "a condition on what a recursive"
                     + " helper answers";
             case WhyUnread.AClauseOfAnInvariant(var clause, var how) -> "an arm of an attempt,"
@@ -4568,6 +4571,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     case WhyUnread.TwoElementsOfOneContainer _ -> "two_elements_of_one_container";
                     case WhyUnread.NoLawFor _ -> "no_law_for_the_operation";
                     case WhyUnread.NoWordsFor _ -> "no_words_for_what_it_comes_to";
+                    case WhyUnread.NotProvedOfItsBody _ -> "not_proved_of_its_body";
                     case WhyUnread.NoFormOfWhatItAnswers _ -> "no_form_of_what_it_answers";
                     case WhyUnread.ANumberOfWhatAnOperationAnswers _ ->
                             "number_of_what_an_operation_answers";

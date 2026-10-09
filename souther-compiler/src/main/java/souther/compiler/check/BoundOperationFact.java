@@ -2,11 +2,13 @@ package souther.compiler.check;
 
 import souther.compiler.core.DeclaredOperation;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.proof.Slot;
 import souther.compiler.semantics.Accumulation;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.ElementShape;
+import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.MapPart;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.ResultBound;
@@ -17,6 +19,7 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -111,6 +114,25 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
      *  which no statement over the arguments can say. */
     record LeavesUnsaid(DeclaredOperation operation, OperationLaw.Observed observed,
                         Unsayable why)
+            implements SeveralAboutAnOperation {}
+
+    /**
+     * A law of an operation the library writes in the language, to be proved against its body:
+     * {@code states} held to the declaration as a law is, and what a walk in the body carries
+     * ({@code carries}) in the words of a walk ({@link Slot}).
+     */
+    record HasALemma(DeclaredOperation operation, OperationLaw<DeclaredArgument> states,
+                     List<LawProposition<Slot>> carries)
+            implements SeveralAboutAnOperation {
+
+        public HasALemma {
+            carries = List.copyOf(carries);
+        }
+    }
+
+    /** What a kernel answers stands to what others answer on its arguments as {@code holds} says,
+     *  over its arguments by place and any value ({@link Slot}). */
+    record IsRelated(DeclaredOperation operation, LawProposition<Slot> holds)
             implements SeveralAboutAnOperation {}
 
     /** The operation answers a list of {@code part} of what {@code map} holds. */

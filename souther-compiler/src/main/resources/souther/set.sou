@@ -41,7 +41,7 @@ let fold (step: ('acc, 'a) -> 'acc, seed: 'acc, s: Set<'a>): 'acc =
 let map (f: ('a) -> 'b, s: Set<'a>): Set<'b> = Set.fromList(List.map(f, Set.toList(s)))
 
 let filter (keep: ('a) -> Bool, s: Set<'a>): Set<'a> =
-    Set.fromList(List.filter(keep, Set.toList(s)))
+    Set.fold((acc, x) -> if keep(x) then Set.insert(x, acc) else acc, Set.empty, s)
 
 // `partition` answers the pair (kept, rest), the same shape `List.partition` gives.
 let partition (keep: ('a) -> Bool, s: Set<'a>): (Set<'a>, Set<'a>) =

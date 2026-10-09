@@ -931,6 +931,8 @@ final class Pullback {
             case null -> null;
             case BoundOperationFacts.Settled.Unsaid(Unsayable why) -> leaf(new Derivation.Stopped(
                     new WhyUnread.NoWordsFor(operation, aspect, why), fixed(e, reads)), stopsAt);
+            case BoundOperationFacts.Settled.Open _ -> leaf(new Derivation.Stopped(
+                    new WhyUnread.NotProvedOfItsBody(operation, aspect), fixed(e, reads)), stopsAt);
             case BoundOperationFacts.Settled.ByALaw(
                     OperationLaw.Observation<DeclaredArgument> law, var _) ->
                     new Derivation.ByALaw(operation, aspect,
@@ -1093,6 +1095,8 @@ final class Pullback {
                             : unread(e, reads, new WhyUnread.NotYetComposed(
                                     WhyUnread.NotYetComposed.Step.A_CLOSURE_BY_NAME));
                 }
+                case LawSubject.KeyOf<DeclaredArgument> _,
+                     LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(subject);
             };
         }
 
@@ -1116,6 +1120,8 @@ final class Pullback {
                                             : answerAt(value, in);
                         };
                 case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _ -> null;
+                case LawSubject.KeyOf<DeclaredArgument> _,
+                     LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(subject);
             };
         }
 
@@ -1284,6 +1290,8 @@ final class Pullback {
                             case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at) -> at;
                             case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(
                                     DeclaredArgument at) -> at;
+                            case LawSubject.KeyOf<DeclaredArgument> _,
+                                 LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(of);
                         };
                 case LawNumber.HowManyMeet<DeclaredArgument>(DeclaredArgument at, var _) -> at;
             };
@@ -1298,6 +1306,8 @@ final class Pullback {
                             case LawSubject.Argument<DeclaredArgument> _ -> 1;
                             case LawSubject.ElementOf<DeclaredArgument> _ -> 2;
                             case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _ -> 3;
+                            case LawSubject.KeyOf<DeclaredArgument> _,
+                                 LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(of);
                         };
                 case LawNumber.HowManyMeet<DeclaredArgument> _ -> 4;
             };
@@ -1378,6 +1388,8 @@ final class Pullback {
                             case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _ ->
                                     new Sized.NotSized(new WhyUnread.AtNoPosition(
                                             WhyUnread.AtNoPosition.Place.SUBJECT));
+                            case LawSubject.KeyOf<DeclaredArgument> _,
+                                 LawSubject.AnswerOf<DeclaredArgument> _ -> throw namedInNoLaw(of);
                         };
                 case LawNumber.HowManyMeet<DeclaredArgument> counted -> count(counted);
             };
@@ -2188,6 +2200,14 @@ final class Pullback {
             case ValueName.Helper _ -> new WhyUnread.WhatARecursiveHelperAnswers();
             default -> new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
         };
+    }
+
+    /** A law naming {@code subject}, which the binding of laws refuses: what another operation
+     *  answers, and the key an element is filed under, are named in lemmas and nowhere a reader
+     *  is handed. */
+    private static IllegalStateException namedInNoLaw(LawSubject<DeclaredArgument> subject) {
+        return new IllegalStateException("a law names " + subject
+                + ", which only a lemma about a library body may name");
     }
 
     /**

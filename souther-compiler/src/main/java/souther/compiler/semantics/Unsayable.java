@@ -34,12 +34,32 @@ public enum Unsayable {
 
     /** That no two elements of a container come to one key. A statement about some element is
      *  about one element at a time, and this is about every pair of them. */
-    NO_TWO_ELEMENTS_ALIKE("no two elements of a container coming to one key");
+    NO_TWO_ELEMENTS_ALIKE("no two elements of a container coming to one key"),
+
+    /** How many different values a list holds — what a set made of it holds as many of. A count is
+     *  of the elements meeting a statement about each of them, and whether two are one value is
+     *  about a pair of them. */
+    HOW_MANY_DIFFERENT_VALUES("how many different values a list holds");
 
     private final String proposition;
 
     Unsayable(String proposition) {
         this.proposition = proposition;
+    }
+
+    /**
+     * Whether a body that comes to {@code reached} comes to this proposition for want of the same
+     * words: the proposition itself, or one this is stated through. That no two elements are alike
+     * is a set of them holding as many as the list does, so it wants the words a count of
+     * different values wants.
+     */
+    public boolean standsOn(Unsayable reached) {
+        return switch (this) {
+            case NO_TWO_ELEMENTS_ALIKE -> reached == this || reached == HOW_MANY_DIFFERENT_VALUES;
+            case EVERY_CHARACTER_IS_WHITESPACE, A_KEY_OF_A_MAP, MADE_UP_OF_COPIES_OF_A_TEXT,
+                 A_STRING_INSIDE_ANOTHER, A_STRING_MATCHING_A_PATTERN, HOW_MANY_DIFFERENT_VALUES ->
+                    reached == this;
+        };
     }
 
     /** The proposition the domain has no words for, as a report names it. */
