@@ -887,8 +887,8 @@ sealed interface ComparisonAssessment {
         return switch (this) {
             case AtAPosition at -> at.places() == Places.ACROSS_THE_VALUE;
             case AcrossPositions over -> over.places() == Places.ACROSS_THE_VALUE
-                    || over.places() == Places.AT_THE_VALUE
-                            && over.cutting().of().singlesWithSides();
+                    || (over.places() == Places.AT_THE_VALUE
+                            && over.cutting().of().singlesWithSides());
             case Several several -> several.parts().stream()
                     .anyMatch(part -> part.line().drawsABorder());
             case AnswerDependent _, OnADependencysAnswer _, NoInput _, CutsNothing _,

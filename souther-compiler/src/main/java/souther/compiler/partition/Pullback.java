@@ -1049,7 +1049,7 @@ final class Pullback {
                         // Which of them hold is a choice for each, so the readings double with
                         // every one; past the readings one condition is read in, it is not read.
                         if (unsettled.size() >= Long.SIZE - 1
-                                || 1L << unsettled.size() > READINGS.maximum()) {
+                                || (1L << unsettled.size()) > READINGS.maximum()) {
                             yield new Sized.NotSized(new WhyUnread.MoreReadingsThanAreMade());
                         }
                         yield new Sized.AsAForm(new LinearForm<>(settled.constant(),

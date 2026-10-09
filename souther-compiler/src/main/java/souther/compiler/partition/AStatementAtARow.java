@@ -94,8 +94,8 @@ final class AStatementAtARow {
             case Proposition.Some some -> askable(some.ofTheElement());
             case Proposition.Compared compared -> switch (compared.relation()) {
                 case Relation.Affine affine -> WhatTheRulesLeave.ofTheInput(affine.form()) != null
-                        || countIn(affine) instanceof Quantity.HowManyMeet count
-                                && askable(count.ofTheElement());
+                        || (countIn(affine) instanceof Quantity.HowManyMeet count
+                                && askable(count.ofTheElement()));
                 case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place _, Rel _) ->
                         term.atOnePosition() != null;
                 case Relation.Ordered _ -> false;

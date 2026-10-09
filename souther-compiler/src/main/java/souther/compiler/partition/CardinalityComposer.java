@@ -329,7 +329,7 @@ final class CardinalityComposer {
                     if (term.subjectPath().isAtOrUnder(container.element())) {
                         if (!(term instanceof NumericTerm.ValueOf)
                                 || !term.subjectPath().equals(container.element())
-                                || own != null && !own.equals(term)) {
+                                || (own != null && !own.equals(term))) {
                             return null;
                         }
                         own = term;
@@ -426,9 +426,9 @@ final class CardinalityComposer {
 
     private static boolean inside(NumericDomain.Bounds run, Place at) {
         return (run.min() == null || run.min().at().compareTo(at) < 0
-                        || run.min().inclusive() && run.min().at().compareTo(at) == 0)
+                        || (run.min().inclusive() && run.min().at().compareTo(at) == 0))
                 && (run.max() == null || run.max().at().compareTo(at) > 0
-                        || run.max().inclusive() && run.max().at().compareTo(at) == 0);
+                        || (run.max().inclusive() && run.max().at().compareTo(at) == 0));
     }
 
     /**
