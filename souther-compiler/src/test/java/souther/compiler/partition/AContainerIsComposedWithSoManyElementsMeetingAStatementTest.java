@@ -4,9 +4,12 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Place;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -15,9 +18,11 @@ import souther.compiler.report.GeneratedRows;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
@@ -25,7 +30,6 @@ import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -214,33 +218,70 @@ class AContainerIsComposedWithSoManyElementsMeetingAStatementTest {
     }
 
     /**
-     * And a place no value is parts the values either side of it at digits enough to stay clear of
-     * the places beside it: the run below a thirtieth ends below it and the run above starts above
-     * it and below a fifteenth, though nothing written in tenths lies between the two.
+     * The values an element is chosen from are the runs the rules leave it, parted where a
+     * statement turns — and a place it turns at outside them parts nothing and is no value: an
+     * element held between 0.34 and 0.35 is above a third and below a half whichever of those it
+     * is, and one of them is chosen.
      */
     @Test
-    void aPlaceNoValueIsIsPartedClearOfThePlacesBesideIt() {
-        ExactRatio thirtieth = ExactRatio.of(BigInteger.ONE, BigInteger.valueOf(30));
-        ExactRatio fifteenth = ExactRatio.of(BigInteger.ONE, BigInteger.valueOf(15));
-        CardinalityComposer.Parting.Parts first = assertInstanceOf(
-                CardinalityComposer.Parting.Parts.class,
-                CardinalityComposer.partingAt(thirtieth, null, fifteenth));
-        assertTrue(exactly(first.below()).compareTo(thirtieth) < 0
-                        && exactly(first.above()).compareTo(thirtieth) > 0
-                        && exactly(first.above()).compareTo(fifteenth) < 0,
-                () -> "either side of a thirtieth and short of a fifteenth: " + first);
-        assertTrue(first.itself() == null, "no value is a thirtieth");
-        CardinalityComposer.Parting.Parts second = assertInstanceOf(
-                CardinalityComposer.Parting.Parts.class,
-                CardinalityComposer.partingAt(fifteenth, thirtieth, null));
-        assertTrue(exactly(second.below()).compareTo(thirtieth) > 0
-                        && exactly(second.below()).compareTo(fifteenth) < 0
-                        && exactly(second.above()).compareTo(fifteenth) > 0,
-                () -> "past a thirtieth and either side of a fifteenth: " + second);
+    void anElementIsChosenFromWhatTheRulesLeaveItPartedWhereTheStatementTurns() {
+        ExactRatio third = ExactRatio.of(BigInteger.ONE, BigInteger.valueOf(3));
+        ExactRatio half = ExactRatio.of(BigInteger.ONE, BigInteger.TWO);
+        NumericDomain.Bounds held = new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(new BigDecimal("0.34"))),
+                Endpoint.inclusive(Count.of(new BigDecimal("0.35"))));
+        List<Place> chosen = CardinalityComposer.valuesAlong(Carrier.DENSE, held,
+                List.of(third, half), 1, new LinkedHashSet<>());
+        assertFalse(chosen.isEmpty(), "a value between 0.34 and 0.35 is there to choose");
+        for (Place each : chosen) {
+            ExactRatio at = Count.number(each).exactly();
+            assertTrue(at.compareTo(ExactRatio.of(new BigDecimal("0.34"))) >= 0
+                            && at.compareTo(ExactRatio.of(new BigDecimal("0.35"))) <= 0,
+                    () -> "every value chosen is one the rules leave: " + chosen);
+        }
     }
 
-    private static ExactRatio exactly(Endpoint end) {
-        return Count.number(end.at()).exactly();
+    /**
+     * And a place it turns at inside them parts them there, however narrow the parts: an element
+     * held between 0.33 and 0.34 is below a third or above it, and a value is chosen on each side.
+     */
+    @Test
+    void aNarrowRunIsPartedWhereTheStatementTurnsInsideIt() {
+        ExactRatio third = ExactRatio.of(BigInteger.ONE, BigInteger.valueOf(3));
+        NumericDomain.Bounds held = new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(new BigDecimal("0.33"))),
+                Endpoint.inclusive(Count.of(new BigDecimal("0.34"))));
+        List<ExactRatio> chosen = CardinalityComposer.valuesAlong(Carrier.DENSE, held,
+                List.of(third), 1, new LinkedHashSet<>()).stream()
+                .map(each -> Count.number(each).exactly()).toList();
+        assertTrue(chosen.stream().anyMatch(at -> at.compareTo(third) < 0
+                        && at.compareTo(ExactRatio.of(new BigDecimal("0.33"))) >= 0),
+                () -> "a value from 0.33 up to a third: " + chosen);
+        assertTrue(chosen.stream().anyMatch(at -> at.compareTo(third) > 0
+                        && at.compareTo(ExactRatio.of(new BigDecimal("0.34"))) <= 0),
+                () -> "and one from past a third to 0.34: " + chosen);
+    }
+
+    /**
+     * And between two such places closer than one step of a digit, a value is chosen, at digits
+     * enough to stand between them: a thirtieth and a fifteenth, with nothing in tenths between.
+     */
+    @Test
+    void aValueIsChosenBetweenTwoPlacesNoValueIs() {
+        ExactRatio thirtieth = ExactRatio.of(BigInteger.ONE, BigInteger.valueOf(30));
+        ExactRatio fifteenth = ExactRatio.of(BigInteger.ONE, BigInteger.valueOf(15));
+        List<Place> chosen = CardinalityComposer.valuesAlong(Carrier.DENSE,
+                NumericDomain.Bounds.OPEN, List.of(thirtieth, fifteenth), 1,
+                new LinkedHashSet<>());
+        assertTrue(chosen.stream().map(each -> Count.number(each).exactly())
+                        .anyMatch(at -> at.compareTo(thirtieth) > 0 && at.compareTo(fifteenth) < 0),
+                () -> "one value between a thirtieth and a fifteenth: " + chosen);
+        assertTrue(chosen.stream().map(each -> Count.number(each).exactly())
+                        .anyMatch(at -> at.compareTo(thirtieth) < 0),
+                () -> "and one below the thirtieth: " + chosen);
+        assertTrue(chosen.stream().map(each -> Count.number(each).exactly())
+                        .anyMatch(at -> at.compareTo(fifteenth) > 0),
+                () -> "and one above the fifteenth: " + chosen);
     }
 
     /**
