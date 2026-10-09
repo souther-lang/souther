@@ -266,7 +266,7 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
         ConditionOccurrence reported = new ConditionOccurrence("b", 1);
         assertThrows(IllegalArgumentException.class, () -> new OnTheWay.Declined(declined,
                 new ConditionReportAnchor.WhereTheReadingMetIt("m", reported),
-                new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE)));
+                new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER)));
     }
 
     /**

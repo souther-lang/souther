@@ -17,7 +17,6 @@ import souther.compiler.query.Compilation;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -90,8 +89,11 @@ class ACallIsAValueOnlyWhenItIsTheConstructionTest {
                     said.at(),
                     each[0] + ": at the position's own values, which is what the rule bounds and"
                             + " what the side naming it came to");
-            assertInstanceOf(BlockReason.UnreadComparisonForm.class, said.why(),
-                    each[0] + ": for the form it is written in");
+            // What a dependency answered about a written string is a step the reading does not
+            // take yet, and that is what is said: not a form the author wrote.
+            assertEquals(new BlockReason.WhatItStatesIsNoLine(
+                            BlockReason.WhatItStatesIsNoLine.Why.A_PART_NOT_READ), said.why(),
+                    each[0] + ": for the part of it that was not read");
         }
     }
 }

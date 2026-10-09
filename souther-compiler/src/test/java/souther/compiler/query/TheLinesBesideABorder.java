@@ -117,8 +117,8 @@ final class TheLinesBesideABorder {
     static WayToTheBorder aWayWithAConditionNobodyRead() {
         return new WayToTheBorder(List.of(
                 new OnTheWay.Declined(new ConditionOccurrence("f", 0), anchor(),
-                        new WhyNotTaken.ProjectionIncomplete(
-                                WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE))));
+                        new WhyNotTaken.OutsideDomain(
+                                WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER))));
     }
 
     private static ConditionReportAnchor anchor() {

@@ -5,6 +5,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * A number a comparison is written over, told apart by which value it is.
@@ -129,15 +130,25 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
      * <p>A field read that reaches nowhere else — the value inside a newtype — is no step, so
      * {@code x.value} and {@code x} are one quantity, as they are one place.
      *
+     * <p>What the value was made from is no part of a statement about it, and is carried beside
+     * the binding only as far as a reader is owed: where the reading of it stopped, which is why
+     * the number is none of the input's. A reader that takes a fact about the value takes all the
+     * statement says, and one that cannot settle something past it says that this was what it
+     * could not read. Empty where nothing of the value was read to stop — an answer a dependency
+     * gave, what an attempt built — since there is nothing it is made of to read.
+     *
      * @param binding which binding names the value
      * @param steps   the steps read off it that go somewhere, outermost first
      * @param type    what stands there, which is how its numbers are spaced
+     * @param madeOf  why what the value was made from is no number of the input, where the
+     *                reading met it and stopped
      */
-    record OfABinding(BindingId binding, List<TermPath.Step> steps, Type type)
+    record OfABinding(BindingId binding, List<TermPath.Step> steps, Type type,
+                      Optional<WhyUnread> madeOf)
             implements Quantity {
 
         public OfABinding {
-            if (binding == null || type == null) {
+            if (binding == null || type == null || madeOf == null) {
                 throw new IllegalArgumentException("a bound number is some binding's, of some type");
             }
             steps = List.copyOf(steps);

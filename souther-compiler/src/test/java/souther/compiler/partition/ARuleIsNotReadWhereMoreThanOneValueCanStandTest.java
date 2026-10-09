@@ -32,15 +32,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * the reading is inside the helper's body when it meets the choice — which is where a relation that
  * stopped at names rather than at what they hold would already have answered.
  *
- * <p>Each of these is reported as a rule written in a form this compiler does not read, which is
- * the word such a position already had. A position holding a choice is not a new kind of thing to
- * tell a reader about.
+ * <p>Each of these is reported as a rule a part of which was not read, and the same however the
+ * choice is spelled. What follows from the choice is the language's to say — each arm answers one
+ * number — and the step that composes the comparison through the arms is not written yet. That is
+ * this compiler's to take and not a form the author should rewrite, and a name bound to the choice
+ * holds whichever arm was taken rather than one number the body bound.
  */
 class ARuleIsNotReadWhereMoreThanOneValueCanStandTest {
 
     /** The `n > 0` the choice is made on is a line of its own, and it is the only one. */
     private static final String ONLY_THE_CHOICE =
-            "[n/x <= 0, n/0 < x] unread [n UNSUPPORTED_SYNTAX]";
+            "[n/x <= 0, n/0 < x] unread [n RULE_MEANING_NOT_READ]";
 
     @Test
     void neitherArmAnswersForThePositionTheChoiceStandsAt() {

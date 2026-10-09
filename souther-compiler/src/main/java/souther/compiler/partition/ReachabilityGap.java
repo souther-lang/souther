@@ -7,6 +7,7 @@ import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -124,7 +125,7 @@ public sealed interface ReachabilityGap {
                 case Uncomposed(var _, Why.TwoNumbersAtOneLocation _) -> twoAtOneLocation = true;
                 case Uncomposed(var _, Why.NoValueComposedForItsPositions _),
                      Uncomposed(var _, Why.ElementsWrittenAlike _),
-                     Uncomposed(var _, Why.NoPositionHoldsTheValue _),
+                     Uncomposed(var _, Why.NoComposerWritesIt _),
                      ProvedImpossible _ -> { }
                 case Unstated _ -> throw new IllegalArgumentException(
                         "a way of writing a cut is one the walk stated: " + each);
@@ -220,10 +221,16 @@ public sealed interface ReachabilityGap {
         record TwoNumbersAtOneLocation() implements Why {}
 
         /**
-         * The condition is about a value the body works out, which no position of the row holds:
-         * there is nowhere to write it, and only the run says whether it held.
+         * The condition was read to the end and is of a kind no composer writes a row toward —
+         * a value the body works out, an element's truth, two subjects being one value — so only
+         * the run says whether it held.
          */
-        record NoPositionHoldsTheValue() implements Why {}
+        record NoComposerWritesIt(RowDemand.NoComposer what) implements Why {
+
+            public NoComposerWritesIt {
+                Objects.requireNonNull(what, "a statement no composer writes is of some kind");
+            }
+        }
 
         /**
          * A condition about a container's elements, which no row of elements written alike meets.

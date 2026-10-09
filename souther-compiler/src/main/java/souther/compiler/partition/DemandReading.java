@@ -49,11 +49,21 @@ final class DemandReading {
     private DemandReading() {
     }
 
-    /** What a condition asks of a row, or why this reading has no words for it. */
+    /**
+     * What a condition asks of a row, or why this reading has no words for it.
+     *
+     * <p>Two halves, and no third. What was taken ({@link Taken}) is the condition said in a row's
+     * words, whether or not anything composes a row for it; what was not ({@link Unread}) carries
+     * only why the meaning was not read or the words stop. Whether a row was then found, ran, or
+     * was shown impossible is the search's answer and is never written here.
+     */
     sealed interface Read {
 
+        /** What a condition asks of a row, said in a row's words. */
+        sealed interface Taken extends Read {}
+
         /** A demand a composer can build a row against. */
-        record Demands(RowDemand.OfACondition demand) implements Read {}
+        record Demands(RowDemand.OfACondition demand) implements Taken {}
 
         /**
          * Nothing to build against, because the answer is the same for every row: it asks nothing
@@ -64,13 +74,13 @@ final class DemandReading {
          * condition the source settles was read to the end, and taken for one that was not, a way
          * past it would be reported as a way this compiler fell short on.
          */
-        record Settled(boolean thisWay) implements Read {}
+        record Settled(boolean thisWay) implements Taken {}
 
         /**
          * The value at {@code at} being one of {@code cases}: a position read as some of its
          * cases, which a composer writes and the walk carries as a narrowing.
          */
-        record Narrows(TermPath at, CasesLeft cases) implements Read {
+        record Narrows(TermPath at, CasesLeft cases) implements Taken {
 
             public Narrows {
                 if (at == null || cases == null) {
@@ -87,7 +97,7 @@ final class DemandReading {
          * @param alternatives what each alternative asks, each once and in the order the parts are
          *                     kept; two or more, since one is no choice
          */
-        record OneOf(List<List<Read>> alternatives) implements Read {
+        record OneOf(List<List<Read>> alternatives) implements Taken {
 
             public OneOf {
                 alternatives = alternatives.stream().map(List::copyOf).distinct().toList();
@@ -114,8 +124,15 @@ final class DemandReading {
         }
     }
 
-    private static Read.Unread incomplete(WhyNotTaken.Shape shape) {
-        return new Read.Unread(new WhyNotTaken.ProjectionIncomplete(shape));
+    /** {@code stated}, read to the end, asked of a row as a statement only the run decides. */
+    private static Read forTheRun(Proposition stated, RowDemand.NoComposer why) {
+        return new Read.Demands(new RowDemand.ForTheRun(stated, why));
+    }
+
+    /** What a dependency answered, which a row stands in rather than writes. */
+    private static Read.Unread anAnswerARowStandsIn() {
+        return new Read.Unread(new WhyNotTaken.OutsideDomain(
+                WhyNotTaken.DomainLimit.AN_ANSWER_A_ROW_STANDS_IN));
     }
 
     private static Read.Unread aSizeNothingMeasures() {
@@ -319,7 +336,7 @@ final class DemandReading {
             case Proposition.Truth(DecisionSubject.AnAnswer _, boolean _, var _),
                  Proposition.InCases(DecisionSubject.AnAnswer _, var _, boolean _, var _),
                  Proposition.Present(DecisionSubject.AnAnswer _, boolean _, var _) ->
-                    List.of(incomplete(WhyNotTaken.Shape.WHAT_A_DEPENDENCY_ANSWERED));
+                    List.of(anAnswerARowStandsIn());
             case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
                                      boolean holds, var _) ->
                     List.of(holds ? new Read.Narrows(at, cases) : notOfItsCases(at, cases, read));
@@ -328,7 +345,7 @@ final class DemandReading {
                     List.of(new Read.Narrows(at,
                             CasesLeft.of(Refinement.of(new Case.Presence(holds)))));
             case Proposition.SameValue _ ->
-                    List.of(incomplete(WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE));
+                    List.of(forTheRun(stated, RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE));
             case Proposition.Unread unread -> List.of(new Read.Unread(
                     new WhyNotTaken.MeaningUnread(unread.why())));
             case Proposition.All all -> {
@@ -386,6 +403,9 @@ final class DemandReading {
         // Whether what is asked of the element is something no element meets, which leaves every
         // element meeting it to a container holding none and some element meeting it to nothing.
         boolean noElementMeetsIt = false;
+        // The first kind of part asked of the element that no composer writes toward, for which
+        // the whole is asked of the run beside what the rest asks.
+        RowDemand.NoComposer uncomposed = null;
         List<Proposition> parts = asked instanceof Proposition.All all ? all.parts()
                 : List.of(asked);
         for (Proposition part : parts) {
@@ -397,36 +417,57 @@ final class DemandReading {
                 continue;
             }
             for (Read each : projected(part, read)) {
-                switch (each) {
-                    case Read.Unread _ -> out.add(each);
+                RowDemand.NoComposer writtenByNoComposer = switch (each) {
+                    case Read.Unread _ -> {
+                        out.add(each);
+                        yield null;
+                    }
                     // Met by every element whatever it is, which holds the element to nothing.
-                    case Read.Settled(boolean thisWay) when thisWay -> { }
-                    case Read.Settled _ -> noElementMeetsIt = true;
+                    case Read.Settled(boolean thisWay) when thisWay -> null;
+                    case Read.Settled _ -> {
+                        noElementMeetsIt = true;
+                        yield null;
+                    }
+                    // Every element meeting a relation about more than the element: a container
+                    // holding none meets it whatever the rest says, and a composer writes the
+                    // elements apart from the numbers beside them.
                     case Read.Demands(RowDemand.Relational relation)
                             when everyElement && !aboutOnly(relation, element) ->
-                            out.add(incomplete(WhyNotTaken.Shape.EVERY_ELEMENT_AND_MORE));
+                            RowDemand.NoComposer.EVERY_ELEMENT_AND_MORE;
                     // About the element and nothing beside it, or about some element: what some
                     // element meets, the parts of it about nothing of the element hold of the row
                     // whichever element it is, so those are relations of the row like any other.
                     case Read.Demands(RowDemand.Relational relation)
-                            when everyElement || aboutAny(relation, element) ->
-                            ofTheElement.add(relation);
-                    case Read.Demands(RowDemand.Relational _) -> out.add(each);
+                            when everyElement || aboutAny(relation, element) -> {
+                        ofTheElement.add(relation);
+                        yield null;
+                    }
+                    case Read.Demands(RowDemand.Relational _) -> {
+                        out.add(each);
+                        yield null;
+                    }
                     // A quantifier inside a quantifier asks of an element's own elements, which is
                     // nothing a single relation of the outer element says.
                     case Read.Demands(RowDemand.Exists _), Read.Demands(RowDemand.ForAll _),
                          Read.Demands(RowDemand.SoMany _) ->
-                            out.add(incomplete(WhyNotTaken.Shape.A_QUANTIFIER_WITHIN_ONE));
-                    // A truth of the element is a value written into one element, which nothing
-                    // that composes a container's elements writes.
+                            RowDemand.NoComposer.A_QUANTIFIER_WITHIN_ONE;
+                    // A truth or a case of the element is a value written into one element, which
+                    // nothing that composes a container's elements writes.
                     case Read.Demands(RowDemand.ATruth _), Read.Narrows _ ->
-                            out.add(incomplete(WhyNotTaken.Shape.A_TRUTH_OF_AN_ELEMENT));
-                    case Read.Demands(RowDemand.OfAWorkedOutValue _) ->
-                            out.add(incomplete(WhyNotTaken.Shape.A_NUMBER_THE_BODY_BOUND));
-                    case Read.OneOf _ ->
-                            out.add(incomplete(WhyNotTaken.Shape.ONE_OF_SEVERAL_THINGS));
+                            RowDemand.NoComposer.A_TRUTH_OF_AN_ELEMENT;
+                    case Read.Demands(RowDemand.ForTheRun(var _, var why)) -> why;
+                    case Read.OneOf _ -> RowDemand.NoComposer.ONE_OF_SEVERAL_FOR_AN_ELEMENT;
+                };
+                if (uncomposed == null) {
+                    uncomposed = writtenByNoComposer;
                 }
             }
+        }
+        // What some or every element meets, asked of the run where a part of it is one no
+        // composer writes; the parts a composer does write are still asked, which every row past
+        // the whole meets.
+        if (uncomposed != null) {
+            out.add(forTheRun(some, uncomposed));
         }
         if (everyElement) {
             // Every element meeting what none meets is the container holding none, and nothing
@@ -537,17 +578,12 @@ final class DemandReading {
                         instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level)
                         ? new Read.Demands(new RowDemand.SoMany(count, met, level,
                                 anElementMeeting(count, read)))
-                        : new Read.Unread(WhyNotTaken.quantitiesNoRowWrites(affine.form()));
+                        : forTheRun(compared, RowDemand.NoComposer.A_COUNT_AGAINST_A_NUMBER_NOT_HELD);
             }
             case Relation.Affine(LinearForm<Quantity> form, Rel _) -> {
                 LinearForm<NumericTerm> against = WhatTheRulesLeave.ofTheInput(form);
-                // Over a value the body binds, beside numbers of the input: asked of a row as it
-                // stands, and the run says whether it held.
-                if (against == null && overWhatTheBodyWorksOut(form)) {
-                    yield new Read.Demands(new RowDemand.OfAWorkedOutValue(compared));
-                }
                 if (against == null) {
-                    yield new Read.Unread(WhyNotTaken.quantitiesNoRowWrites(form));
+                    yield overNoRowNumber(compared, form);
                 }
                 yield switch (read.quantities().region().assuming(against, met)) {
                     case SearchRegion.Assumption.Taken _ -> new Read.Demands(
@@ -561,26 +597,33 @@ final class DemandReading {
                     new Read.Demands(new RowDemand.Relational(TakenConstraint.Ordered.isABound(met)
                             ? new TakenConstraint.Ordered(term, at, met)
                             : new TakenConstraint.AwayFrom(term, at)));
-            case Relation.Ordered(DecisionAtom.OfAnAnswer _, var _, Rel _) ->
-                    incomplete(WhyNotTaken.Shape.A_NUMBER_A_DEPENDENCY_ANSWERED);
-            case Relation.Ordered _ -> incomplete(WhyNotTaken.Shape.AN_ORDER_OF_NO_ONE_POSITION);
+            case Relation.Ordered(DecisionAtom.OfAnAnswer _, var _, Rel _) -> anAnswerARowStandsIn();
+            case Relation.Ordered _ ->
+                    forTheRun(compared, RowDemand.NoComposer.AN_ORDER_OF_NO_ONE_POSITION);
         };
     }
 
-    /** Whether every quantity {@code form} is over is a number of the input or of a value the body
-     *  binds, and one of them is the second. */
-    private static boolean overWhatTheBodyWorksOut(LinearForm<Quantity> form) {
-        boolean bound = false;
+    /**
+     * What a relation over {@code form}, which is over some number no row writes, asks of a row.
+     *
+     * <p>What a dependency answered is no number a row writes, and is said as that. Otherwise the
+     * relation is asked of the run: a value the body works out, or how many elements meet
+     * something, is a number a row comes to and not one it writes, and only the count has a
+     * composer at all — for a count alone against a number, which this is not.
+     */
+    private static Read overNoRowNumber(Proposition.Compared compared, LinearForm<Quantity> form) {
+        boolean counted = false;
         for (Quantity atom : form.coefs().keySet()) {
             switch (atom) {
-                case DecisionAtom.OfTheInput _ -> { }
-                case Quantity.OfABinding _ -> bound = true;
-                case DecisionAtom.OfAnAnswer _, Quantity.HowManyMeet _, Quantity.HowManyHold _ -> {
-                    return false;
+                case DecisionAtom.OfAnAnswer _ -> {
+                    return anAnswerARowStandsIn();
                 }
+                case Quantity.HowManyMeet _, Quantity.HowManyHold _ -> counted = true;
+                case DecisionAtom.OfTheInput _, Quantity.OfABinding _ -> { }
             }
         }
-        return bound;
+        return forTheRun(compared, counted ? RowDemand.NoComposer.A_COUNT_OF_ELEMENTS
+                : RowDemand.NoComposer.A_VALUE_THE_BODY_WORKS_OUT);
     }
 
     /**

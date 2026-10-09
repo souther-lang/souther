@@ -126,7 +126,7 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
                     case RowDemand.Exists some -> some.container();
                     case RowDemand.ForAll every -> every.container();
                     case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                         RowDemand.OfAWorkedOutValue _ ->
+                         RowDemand.ForTheRun _ ->
                             throw new AssertionError("a membership is some element or every one: "
                                     + asked);
                 };
@@ -136,7 +136,7 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
                     case RowDemand.Exists some -> some.holdingOne();
                     case RowDemand.ForAll every -> every.holdingNone();
                     case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                         RowDemand.OfAWorkedOutValue _ -> Optional.empty();
+                         RowDemand.ForTheRun _ -> Optional.empty();
                 };
                 assertTrue(size.isPresent(), () -> "the size is a number here: " + asked);
                 for (NumericTerm term : size.get().terms()) {

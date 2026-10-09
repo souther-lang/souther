@@ -5135,11 +5135,11 @@ public final class Generator {
                         new CountsAsked(count, many.counts().values(), cut), CountsAsked::and);
                 continue;
             }
-            // A statement over a value the body works out, which no position holds: nothing is
-            // placed for it, and the run is what says whether the row met it.
-            if (cut.demand() instanceof RowDemand.OfAWorkedOutValue) {
+            // A statement no composer writes toward: nothing is placed for it, and the run is what
+            // says whether the row met it.
+            if (cut.demand() instanceof RowDemand.ForTheRun(var _, var why)) {
                 gaps.add(new ReachabilityGap.Uncomposed(cut,
-                        new ReachabilityGap.Why.NoPositionHoldsTheValue()));
+                        new ReachabilityGap.Why.NoComposerWritesIt(why)));
                 continue;
             }
             // What an element is asked with no relation among it has no number to place: that the
@@ -5321,8 +5321,8 @@ public final class Generator {
             case RowDemand.SoMany many -> throw new IllegalArgumentException(
                     "a count is composed where its container is and placed nowhere: " + many);
             // Passed over before it is asked, with what the way is owed about it.
-            case RowDemand.OfAWorkedOutValue worked -> throw new IllegalArgumentException(
-                    "a value the body works out is placed nowhere: " + worked);
+            case RowDemand.ForTheRun run -> throw new IllegalArgumentException(
+                    "a statement no composer writes toward is placed nowhere: " + run);
         };
     }
 
@@ -5370,8 +5370,8 @@ public final class Generator {
             case RowDemand.ATruth _ -> true;
             // A count, which places a count of the container and the numbers beside an element.
             case RowDemand.SoMany _ -> false;
-            // A value the body works out, which stands at no position to place a number at.
-            case RowDemand.OfAWorkedOutValue _ -> true;
+            // A statement no composer writes toward, which places nothing.
+            case RowDemand.ForTheRun _ -> true;
         };
     }
 

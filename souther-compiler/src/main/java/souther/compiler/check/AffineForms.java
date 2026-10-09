@@ -86,6 +86,15 @@ public final class AffineForms {
          *  null where the caller can say nothing about it. */
         LinearForm<A> leafOf(Core e, E at);
 
+        /**
+         * The same, told where the reading of what {@code e} is made of stopped — null where it
+         * did not — so a caller naming the value by its binding can say why its number is none of
+         * its own without reading the value again.
+         */
+        default LinearForm<A> leafOf(Core e, E at, Outcome.StoppedAt<A, E> inside) {
+            return leafOf(e, at);
+        }
+
         /** What {@code li}'s body is read in. The one place a binding is entered, so that what a
          *  name means is settled once and no reader interprets a binder for itself. */
         E inside(Core.LetIn li, E at);
@@ -350,7 +359,8 @@ public final class AffineForms {
         // so the leaf question is asked either way. Where it has none, what stopped the reading is
         // what was found inside the name rather than the name — that is the expression with no rule
         // here, and the one an author would have to change.
-        LinearForm<A> leaf = reading.leafOf(e, at);
+        LinearForm<A> leaf = reading.leafOf(e, at,
+                denoted instanceof Outcome.StoppedAt<A, E> inside ? inside : stopped.at);
         if (leaf != null) {
             return new Outcome.Composed<>(leaf);
         }
@@ -490,6 +500,11 @@ public final class AffineForms {
         @Override
         public LinearForm<A> leafOf(Core e, E at) {
             return of.leafOf(e, at);
+        }
+
+        @Override
+        public LinearForm<A> leafOf(Core e, E at, Outcome.StoppedAt<A, E> inside) {
+            return of.leafOf(e, at, inside);
         }
 
         @Override
@@ -939,7 +954,7 @@ public final class AffineForms {
         if (folded != null) {
             return new Outcome.Composed<>(LinearForm.constant(ExactRatio.of(folded)));
         }
-        LinearForm<A> leaf = reading.leafOf(p, at);
+        LinearForm<A> leaf = reading.leafOf(p, at, stopped.at);
         if (leaf != null) {
             return new Outcome.Composed<>(leaf);
         }

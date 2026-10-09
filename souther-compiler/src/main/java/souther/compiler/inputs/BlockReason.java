@@ -5,6 +5,7 @@ import souther.compiler.observe.RunSensitivity;
 import net.unit8.notation199x.pattern.Meter;
 
 import java.util.Comparator;
+import java.util.Objects;
 import souther.compiler.values.UnreadReason;
 
 /**
@@ -243,6 +244,7 @@ public sealed interface BlockReason {
                 case LineAtANumberNoRatioHolds _ -> 12;
                 case LineSideNotWorkedOut _ -> 13;
                 case SeveralLinesInOneRule _ -> 14;
+                case WhatItStatesIsNoLine(WhatItStatesIsNoLine.Why why) -> 15 + why.ordinal();
             };
         }
 
@@ -283,7 +285,7 @@ public sealed interface BlockReason {
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
                      ValueRuleRelatingTwoPositions _, CasePairingNotDetermined _,
-                     SeveralLinesInOneRule _ -> true;
+                     SeveralLinesInOneRule _, WhatItStatesIsNoLine _ -> true;
             };
         }
 
@@ -298,6 +300,11 @@ public sealed interface BlockReason {
                 // into, and the machines that say where the strings it admits stop. A run allowed
                 // more of either need not stop at the same rule.
                 case PatternTooCostly _, OrderedExtentTooCostly _ -> RunSensitivity.MAY_CHANGE;
+                // And the readings of what a statement means, which stop at a figure only where
+                // they were declined at how many of them are made.
+                case WhatItStatesIsNoLine(var why) ->
+                        why == WhatItStatesIsNoLine.Why.MORE_READINGS_THAN_ARE_MADE
+                                ? RunSensitivity.MAY_CHANGE : RunSensitivity.UNAFFECTED;
                 // And every other, where nothing was compared against anything. A form nothing
                 // takes apart, values no line can be drawn on, a rule about a value made from this
                 // one, a rule about an element of one of several containers, a relation between two
@@ -886,6 +893,48 @@ public sealed interface BlockReason {
      * meaning was read perfectly well.
      */
     record SeveralLinesInOneRule() implements RuleReadingStopped {}
+
+    /**
+     * A rule whose statement is no line on the input's numbers, for the reason {@code why} gives:
+     * read off what the rule states, and never off how it is written.
+     *
+     * <p>The reasons are owed different things. A part of the statement nothing read is lifted by a
+     * rule of the reading, or by a run allowed more readings where that is what declined it. A
+     * number no position holds — a value the body works out, or what a run of values comes to —
+     * and a statement of which case, truth or value a position holds are read to the end, and a
+     * line is the wrong word for them: they are divided by the position's cases, or by nothing a
+     * row writes.
+     *
+     * <p>A part left unread that is a form nothing takes apart, what an operation answered or a
+     * value the terms name no position for is not one of these: each place the rule is filed at
+     * words it, as {@link UnreadComparisonForm}, {@link UnreadComparisonDomain} or
+     * {@link RuleAboutADerivedValue}.
+     */
+    record WhatItStatesIsNoLine(Why why) implements RuleReadingStopped {
+
+        public WhatItStatesIsNoLine {
+            Objects.requireNonNull(why, "a statement is no line for some reason");
+        }
+
+        /** Why what a rule states is no line on the input's numbers. */
+        public enum Why {
+
+            /** A part read once for each application or case more times than the reading makes:
+             *  a figure of this compiler's work was reached. */
+            MORE_READINGS_THAN_ARE_MADE,
+
+            /** Some other part of what it states was not read. */
+            A_PART_NOT_READ,
+
+            /** It relates a number no position of the input holds: a value the body works out,
+             *  or what a run of values comes to. */
+            A_NUMBER_NO_POSITION_HOLDS,
+
+            /** It states which case, which truth or whether a value a position holds, or what
+             *  some element of a container meets — no relation of numbers at all. */
+            NO_RELATION_OF_NUMBERS
+        }
+    }
 
     /**
      * The comparison was read to the end and cuts no quantity at all.

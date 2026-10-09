@@ -71,10 +71,10 @@ class OneOfSeveralThingsSaysWhatStoppedEachTest {
 
     @Test
     void aDisjunctionSaysWhatStoppedEachPart() {
+        // The product stopped the reading; every line above a floor beside it was read to the end
+        // and is taken, as a statement the run decides, so it is no reason anything stopped.
         assertEquals(List.of(
-                        new WhyNotTaken.MeaningUnread(new WhyUnread.OutsideTheLinearFragment()),
-                        new WhyNotTaken.ProjectionIncomplete(
-                                WhyNotTaken.Shape.EVERY_ELEMENT_AND_MORE)),
+                        new WhyNotTaken.MeaningUnread(new WhyUnread.OutsideTheLinearFragment())),
                 whys("written", true));
         assertEquals(List.of(
                         new WhyNotTaken.MeaningUnread(new WhyUnread.OutsideTheLinearFragment())),

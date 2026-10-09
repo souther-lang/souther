@@ -773,9 +773,9 @@ public sealed interface AnotherLineTheRowsAllow {
                             return false;
                         }
                     }
-                    // A value the body works out from the row, which a step moving any number may
-                    // move: what it is worked out from is not followed.
-                    case OnTheWay.TakenIn(var _, RowDemand.OfAWorkedOutValue _) -> {
+                    // A statement no composer writes toward, which a step moving any number may
+                    // turn: which numbers it turns on is the run's to say.
+                    case OnTheWay.TakenIn(var _, RowDemand.ForTheRun _) -> {
                         if (!moved.isEmpty()) {
                             return false;
                         }

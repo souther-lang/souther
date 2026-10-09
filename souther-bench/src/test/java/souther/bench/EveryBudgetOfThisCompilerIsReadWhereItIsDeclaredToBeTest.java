@@ -184,12 +184,20 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/ValuesTried;)"
                             + "Lsouther/compiler/partition/Realization;",
                     "stops walking a line at the places it tries and says which figure"),
-            Map.entry("souther.compiler.query.Coverages$2#looked("
+            Map.entry("souther.compiler.query.Coverages$2#lookedAlong("
                             + "Lsouther/compiler/partition/Criterion;Ljava/lang/String;"
-                            + "Ljava/util/function/UnaryOperator;)"
+                            + "Ljava/util/function/UnaryOperator;"
+                            + "Lsouther/compiler/partition/Reachability$Reaching;)"
                             + "Lsouther/compiler/query/Coverages$2$Looked;",
-                    "stops asking a point for another value to stand a row on, and answers with"
-                            + " what the values it did try came to"),
+                    "stops asking a point for another value to stand a row on, along the whole way"
+                            + " or one of the ways it is, and answers with what the values it did"
+                            + " try came to"),
+            Map.entry("souther.compiler.partition.Reachability#of("
+                            + "Lsouther/compiler/partition/WayToTheBorder;"
+                            + "Lsouther/compiler/inputs/SearchRegion;)"
+                            + "Lsouther/compiler/partition/Reachability;",
+                    "past the figure looks along the way whole, which every row past it is on,"
+                            + " so the row is composed either way and nothing is left to carry"),
             Map.entry("souther.compiler.query.Coverages$2#endedBy("
                             + "Lsouther/compiler/query/SearchOutcomes;"
                             + "Lsouther/compiler/partition/Realization;)"
@@ -276,6 +284,17 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/meaning/Derivation;",
                     "counts the cases a comparison is split into, and past the figure carries"
                             + " the comparison out as a part nothing read, naming it"),
+            Map.entry("souther.compiler.partition.Pullback#caseOf("
+                            + "Lsouther/compiler/inputs/Denotation;"
+                            + "Lsouther/compiler/core/Core$Case;)"
+                            + "Lsouther/compiler/meaning/Derivation;",
+                    "counts the arms a value chosen by cases is read through, and past the figure"
+                            + " carries which case it is out as a part nothing read, naming it"),
+            Map.entry("souther.compiler.partition.Pullback#answered("
+                            + "Lsouther/compiler/inputs/Denotation;)"
+                            + "Lsouther/compiler/meaning/CasesOfAnAnswer$Answered;",
+                    "counts the arms a body's answer is read through, and past the figure carries"
+                            + " the answer out as unread, naming it"),
             Map.entry("souther.compiler.partition.Pullback$ALawRead#ofEachWrittenOut("
                             + "Lsouther/compiler/check/DeclaredArgument;"
                             + "Lsouther/compiler/core/Core$ListLit;"

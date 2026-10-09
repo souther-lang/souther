@@ -1585,6 +1585,13 @@ final class Pullback {
 
             @Override
             public LinearForm<Quantity> leafOf(Core node, InputReads at) {
+                return leafOf(node, at, null);
+            }
+
+            @Override
+            public LinearForm<Quantity> leafOf(
+                    Core node, InputReads at,
+                    AffineForms.Outcome.StoppedAt<Quantity, InputReads> inside) {
                 NumericTerm term = InputNumber.of(node, read.domain(), at, read.rules());
                 if (term != null) {
                     return LinearForm.atom(new DecisionAtom.OfTheInput(term));
@@ -1631,8 +1638,18 @@ final class Pullback {
                 }
                 return switch (at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())) {
                     case ReadMeaning.Element _, ReadMeaning.OneOf _, ReadMeaning.Position _ -> null;
-                    case ReadMeaning.Through _, ReadMeaning.Unknown _ -> LinearForm.atom(
-                            new Quantity.OfABinding(name.binding(), steps, node.type()));
+                    // A name given a choice between values holds whichever arm was taken, which
+                    // is a number for each case and not one the body bound.
+                    case ReadMeaning.Through(Denotation denotes) when choosesByCases(denotes) ->
+                            null;
+                    // A name read through to what it was given, which the reading stopped inside
+                    // where it did: the value is named by its binding, and why its number is none
+                    // of the input's goes with it.
+                    case ReadMeaning.Through _ -> LinearForm.atom(new Quantity.OfABinding(
+                            name.binding(), steps, node.type(),
+                            Optional.ofNullable(inside).map(Pullback.this::noFormOf)));
+                    case ReadMeaning.Unknown _ -> LinearForm.atom(new Quantity.OfABinding(
+                            name.binding(), steps, node.type(), Optional.empty()));
                 };
             }
 
@@ -2140,28 +2157,72 @@ final class Pullback {
         };
     }
 
+    /** Whether what {@code denotes} holds is one arm of a choice, under the accesses and the names
+     *  it is reached through. */
+    private boolean choosesByCases(Denotation denotes) {
+        Core e = Core.withoutStanding(denotes.value());
+        InputReads in = denotes.at();
+        while (true) {
+            switch (e) {
+                case Core.FieldProjection projection ->
+                        e = Core.withoutStanding(projection.lastAccess());
+                case Core.FieldAccess access -> e = Core.withoutStanding(access.target());
+                case Core.TupleGet get -> e = Core.withoutStanding(get.tuple());
+                case Core.LetIn let -> {
+                    in = in.and(let.binder(), let.value());
+                    e = Core.withoutStanding(let.body());
+                }
+                case Core.Read name -> {
+                    if (!(in.meaningOf(name, read.rules().symbols(), read.rules().newtypes())
+                            instanceof ReadMeaning.Through(Denotation given))) {
+                        return false;
+                    }
+                    e = Core.withoutStanding(given.value());
+                    in = given.at();
+                }
+                case Core.If _, Core.IfConstructed _, Core.Match _ -> {
+                    return true;
+                }
+                default -> {
+                    return false;
+                }
+            }
+        }
+    }
+
     /**
      * Why an expression the arithmetic has no rule for, read in {@code reads}, is no number of the
      * input: what stands at the end of the accesses it is made of.
      */
     private WhyUnread noRuleFor(Core stopped, InputReads reads) {
         Core e = Core.withoutStanding(stopped);
+        InputReads in = reads;
         while (true) {
             if (e instanceof Core.FieldProjection projection) {
                 e = Core.withoutStanding(projection.lastAccess());
             } else if (e instanceof Core.FieldAccess access) {
                 e = Core.withoutStanding(access.target());
+            } else if (e instanceof Core.TupleGet get) {
+                e = Core.withoutStanding(get.tuple());
+            } else if (e instanceof Core.LetIn let) {
+                // What a helper's body answers is what its last expression does, with its names
+                // given what they were bound to.
+                in = in.and(let.binder(), let.value());
+                e = Core.withoutStanding(let.body());
             } else {
                 break;
             }
         }
         if (e instanceof Core.Read name) {
-            return switch (reads.meaningOf(name, read.rules().symbols(), read.rules().newtypes())) {
+            return switch (in.meaningOf(name, read.rules().symbols(), read.rules().newtypes())) {
                 case ReadMeaning.Element _ ->
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER);
                 case ReadMeaning.OneOf _ -> new WhyUnread.NotYetComposed(
                         WhyUnread.NotYetComposed.Step.VALUES_WRITTEN_OUT);
-                case ReadMeaning.Unknown _, ReadMeaning.Position _, ReadMeaning.Through _ ->
+                // A name is what it was given, and that is what stopped the reading.
+                case ReadMeaning.Through(Denotation denotes) ->
+                        noRuleFor(denotes.value(), denotes.at());
+                case ReadMeaning.Unknown _, ReadMeaning.Position _ ->
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
             };
         }
@@ -2183,7 +2244,7 @@ final class Pullback {
         }
         BoundOperationFacts facts = DefaultBoundOperationFacts.get();
         return switch (applied.operation()) {
-            case ValueName.Behavior behavior -> whatABehaviorAnswers(behavior, reads);
+            case ValueName.Behavior behavior -> whatABehaviorAnswers(behavior, in);
             case ValueName.Helper _ -> new WhyUnread.WhatARecursiveHelperAnswers();
             case ValueName.Stdlib operation -> {
                 if (!facts.isDefinedByCases(operation).isEmpty()) {
@@ -2191,7 +2252,7 @@ final class Pullback {
                             WhyUnread.NotYetComposed.Step.A_CHOICE_BY_CASES);
                 }
                 if (facts.takenAs(operation) != null && !applied.args().isEmpty()) {
-                    yield noNumberOf(operation, applied.args().getFirst(), reads);
+                    yield noNumberOf(operation, applied.args().getFirst(), in);
                 }
                 yield new WhyUnread.NoFormOfWhatItAnswers(operation);
             }

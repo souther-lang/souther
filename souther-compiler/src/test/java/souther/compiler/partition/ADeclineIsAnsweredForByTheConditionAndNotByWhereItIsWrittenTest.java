@@ -63,7 +63,7 @@ class ADeclineIsAnsweredForByTheConditionAndNotByWhereItIsWrittenTest {
     /** A condition the walk had no words for, written where the one written condition is. */
     private static OnTheWay.Declined declined(ConditionOccurrence condition) {
         return new OnTheWay.Declined(condition, where(),
-                new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE));
+                new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER));
     }
 
     /** Where the one condition both of these came from is written. */

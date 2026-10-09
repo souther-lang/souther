@@ -121,7 +121,7 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
                 // would be left no number by a way that was not the one placed.
                 case RowDemand.ForAll every -> ofTheElement(every.relations(), term, within, on);
                 // Name no number, so the cut was passed over above.
-                case RowDemand.ATruth _, RowDemand.OfAWorkedOutValue _ -> ANYTHING;
+                case RowDemand.ATruth _, RowDemand.ForTheRun _ -> ANYTHING;
                 // How many elements meet a statement, which leaves any number it reads free: an
                 // element is chosen to meet it or not against whatever the others stand at.
                 case RowDemand.SoMany _ -> ANYTHING;

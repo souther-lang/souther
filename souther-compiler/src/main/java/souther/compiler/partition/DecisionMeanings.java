@@ -116,7 +116,7 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
                  OnTheWay.TakenIn(var _, RowDemand.ATruth _) -> true;
             case OnTheWay.TakenIn(var _, RowDemand.Exists _),
                  OnTheWay.TakenIn(var _, RowDemand.ForAll _),
-                 OnTheWay.TakenIn(var _, RowDemand.OfAWorkedOutValue _) -> false;
+                 OnTheWay.TakenIn(var _, RowDemand.ForTheRun _) -> false;
             case OnTheWay.Narrowed _, OnTheWay.Declined _,
                  OnTheWay.TakenIn(var _, RowDemand.SoMany _) -> true;
             // One of several ways is no relation, and the column is what the condition states.
@@ -201,7 +201,7 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
             // is one to ask.
             case OnTheWay.TakenIn(var _, RowDemand.Exists _),
                  OnTheWay.TakenIn(var _, RowDemand.ForAll _),
-                 OnTheWay.TakenIn(var _, RowDemand.OfAWorkedOutValue _) ->
+                 OnTheWay.TakenIn(var _, RowDemand.ForTheRun _) ->
                     asOneColumn(condition, held);
             // Which of two values stands at a position: the truth of that position, whichever
             // spelling asked it, read off the demand and not off the condition again. And what

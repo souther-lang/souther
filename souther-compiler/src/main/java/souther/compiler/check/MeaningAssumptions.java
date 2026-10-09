@@ -44,9 +44,11 @@ import java.util.function.Function;
  * reaches there.
  *
  * <p><b>What is not.</b> A disjunction, since which half holds is not known; that some element
- * meets something, since which element is not known; a case, a value being present, a relation on
- * an order, and a part nothing read. Each is left out, which is the sound answer with less: a path
- * that took nothing in has ruled nothing out.
+ * meets something, since which element is not known; what every element meets, which a path holds
+ * only as the closure it was written with; a case, a value being present, two values being one,
+ * a place on an order, a count of elements, a place this tree does not read, and a part nothing
+ * read. Each is left out with the limit of {@link Known} it meets, which is the sound answer with
+ * less: a path that took nothing in has ruled nothing out.
  */
 final class MeaningAssumptions {
 
@@ -136,8 +138,8 @@ final class MeaningAssumptions {
         notTaken.add(why);
     }
 
-    private void incomplete(WhyNotTaken.Shape shape) {
-        notTaken(new WhyNotTaken.ProjectionIncomplete(shape));
+    private void outside(WhyNotTaken.DomainLimit limit) {
+        notTaken(new WhyNotTaken.OutsideDomain(limit));
     }
 
     private void take(Proposition asked) {
@@ -155,11 +157,11 @@ final class MeaningAssumptions {
                             terms.kindsOf(over));
                     taken = true;
                 } else if (form.coefs().keySet().stream().anyMatch(atom ->
-                        atom instanceof DecisionAtom.OfAnAnswer
-                                || atom instanceof Quantity.HowManyMeet)) {
-                    WhyNotTaken.quantitiesNoRowWrites(form).forEach(this::notTaken);
+                        atom instanceof Quantity.HowManyMeet
+                                || atom instanceof Quantity.HowManyHold)) {
+                    outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS);
                 } else {
-                    incomplete(WhyNotTaken.Shape.A_POSITION_THE_PATH_HAS_NO_PLACE_FOR);
+                    outside(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
                 }
             }
             case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds, var _) -> {
@@ -168,20 +170,26 @@ final class MeaningAssumptions {
                     known = known.taking(place, holds, Known.Held.ON_THE_PATH);
                     taken = true;
                 } else {
-                    incomplete(WhyNotTaken.Shape.A_POSITION_THE_PATH_HAS_NO_PLACE_FOR);
+                    outside(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
                 }
             }
             case Proposition.Always _ -> { }
             // What a path knows is facts that all hold, and which of several holds, or which
             // element, is no fact of it.
-            case Proposition.Any _, Proposition.OnAnApplication _, Proposition.Some _ ->
+            case Proposition.Any _, Proposition.OnAnApplication _ ->
                     WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(
                             WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES), asked)
                             .forEach(this::notTaken);
+            // Some element is one of several; every element is a fact a path holds only as the
+            // closure it was written with.
+            case Proposition.Some some -> WhyNotTaken.declinedWhole(new WhyNotTaken.OutsideDomain(
+                    some.holds() ? WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES
+                            : WhyNotTaken.DomainLimit.A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN),
+                    asked).forEach(this::notTaken);
             case Proposition.Unread unread ->
                     notTaken(new WhyNotTaken.MeaningUnread(unread.why()));
             case Proposition.Compared(Relation.Ordered _, boolean _, var _) ->
-                    incomplete(WhyNotTaken.Shape.A_PLACE_ON_AN_ORDER);
+                    outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER);
             case Proposition.Truth(DecisionSubject.AnAnswer answer, boolean holds, var _) -> {
                 Core standing = answering(answer);
                 if (standing != null) {
@@ -189,15 +197,13 @@ final class MeaningAssumptions {
                             Known.Held.ON_THE_PATH);
                     taken = true;
                 } else {
-                    incomplete(WhyNotTaken.Shape.WHAT_A_DEPENDENCY_ANSWERED);
+                    outside(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
                 }
             }
-            case Proposition.InCases(DecisionSubject.AnAnswer _, var _, boolean _, var _),
-                 Proposition.Present(DecisionSubject.AnAnswer _, boolean _, var _) ->
-                    incomplete(WhyNotTaken.Shape.WHAT_A_DEPENDENCY_ANSWERED);
-            case Proposition.InCases _ -> incomplete(WhyNotTaken.Shape.THE_CASE_OF_A_SUBJECT);
-            case Proposition.Present _ -> incomplete(WhyNotTaken.Shape.A_VALUE_BEING_THERE);
-            case Proposition.SameValue _ -> incomplete(WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE);
+            case Proposition.InCases _, Proposition.Present _ ->
+                    outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_CASES);
+            case Proposition.SameValue _ ->
+                    outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_SAMENESS_OF_VALUES);
         }
     }
 
@@ -268,13 +274,14 @@ final class MeaningAssumptions {
      * The atom a number of a value the body bound is here, by the binding — the value the binding
      * stands for where the condition stands, and the fields read off it — or null where no binding
      * of that name is in force or its number is none the domain carries.
+     *
+     * <p>Taken in by which value it is, which is all the proposition says of it. What the value was
+     * made from is no part of the statement; where the reading of it stopped, a path does not know
+     * what the value can be, and an arm left unsettled past it is left there by that and says so.
      */
     private FactSubject boundAtom(Quantity.OfABinding bound) {
+        bound.madeOf().ifPresent(why -> notTaken(new WhyNotTaken.MeaningUnread(why)));
         FactSubject value = at.subject(bound.binding());
-        // Taken in by which value it is, and not read to the end: what the value was made from is
-        // not what the proposition says, so an arm this leaves unsettled is left by this reader's
-        // reach and says so.
-        incomplete(WhyNotTaken.Shape.A_NUMBER_THE_BODY_BOUND);
         RuleKey named = TermPath.ruleKeyOf(bound.steps());
         return value == null || named == null ? null
                 : terms.atomAt(terms.under(value, named), bound.type());

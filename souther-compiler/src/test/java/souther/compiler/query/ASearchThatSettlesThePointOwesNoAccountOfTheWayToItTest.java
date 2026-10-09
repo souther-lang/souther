@@ -42,7 +42,7 @@ class ASearchThatSettlesThePointOwesNoAccountOfTheWayToItTest {
 
     private static final OnTheWay.Declined LEFT_OUT = new OnTheWay.Declined(MET,
             new ConditionReportAnchor.WhereTheReadingMetIt("m", MET),
-            new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE));
+            new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER));
 
     /** One way to a point, with one condition on it that nothing took in. */
     private static WayToTheBorder way() {

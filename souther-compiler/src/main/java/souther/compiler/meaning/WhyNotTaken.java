@@ -1,7 +1,5 @@
 package souther.compiler.meaning;
 
-import souther.compiler.numeric.LinearForm;
-
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -11,12 +9,13 @@ import java.util.Set;
  * Why a reader of what a condition means did not take it into its own terms: what a row is asked
  * for, a column of a decision, what a path knows past a guard.
  *
- * <p>Three kinds, told apart by what it takes to lift one. The meaning was not read, which a rule
- * of the reading lifts; it was read and the domain the reader writes in has no words for it, which
- * widening the domain lifts; or it was read, the domain has the words, and the reader does not use
- * them yet, which a projection lifts. The last is never passed off as either of the others: what
- * this compiler has not written yet is not a fact about the model or the domain. None of them says
- * a row cannot be written, and one going away is a capability gained rather than a model changed.
+ * <p>Two kinds, told apart by what it takes to lift one. The meaning was not read, which a rule of
+ * the reading lifts; or it was read and the domain the reader writes in has no words for it, which
+ * widening that domain lifts. A meaning read to the end and in the reader's words is taken, and
+ * whether a row can then be built for it is no part of this: a composer that writes nothing
+ * toward a demand says so where rows are composed, beside the demand it was handed. None of these
+ * says a row cannot be written, and one going away is a capability gained rather than a model
+ * changed.
  *
  * <p>One reason each, and a reader keeps every one it met. A condition made of parts can be
  * declined for one reason in one part and another in the next — one part's meaning unread, the
@@ -24,27 +23,6 @@ import java.util.Set;
  * so none stands in for another.
  */
 public sealed interface WhyNotTaken {
-
-    /**
-     * Why a relation over {@code form} was not taken by a reader of the input's own numbers: one
-     * reason for each kind of quantity in it that is no number of the input, which the reader's
-     * domain could carry and does not yet.
-     */
-    static List<WhyNotTaken> quantitiesNoRowWrites(LinearForm<Quantity> form) {
-        Set<WhyNotTaken> out = new LinkedHashSet<>();
-        for (Quantity atom : form.coefs().keySet()) {
-            switch (atom) {
-                case DecisionAtom.OfTheInput _ -> { }
-                case DecisionAtom.OfAnAnswer _ ->
-                        out.add(new ProjectionIncomplete(Shape.A_NUMBER_A_DEPENDENCY_ANSWERED));
-                case Quantity.OfABinding _ ->
-                        out.add(new ProjectionIncomplete(Shape.A_NUMBER_THE_BODY_BOUND));
-                case Quantity.HowManyMeet _, Quantity.HowManyHold _ ->
-                        out.add(new ProjectionIncomplete(Shape.A_COUNT_OF_ELEMENTS));
-            }
-        }
-        return List.copyOf(out);
-    }
 
     /**
      * Why a reader declined all of {@code declined} without asking its parts: {@code because}, and
@@ -84,18 +62,13 @@ public sealed interface WhyNotTaken {
     }
 
     /**
-     * What the condition means was read, and the reader's domain could say it, and the reader does
-     * not yet. About this compiler and not about the model or the domain: what it takes is a
-     * projection written for {@code shape}.
+     * Where a reader's domain has no words for what a condition means.
+     *
+     * <p>Each names the reader whose domain it is. What a row is asked is written at the input's
+     * positions; what a path knows is relations of numbers, truths and what the elements of a
+     * container were written to meet, about the places of the tree it walks. The proposition
+     * language says every one of these; a limit here is where one of those two domains stops.
      */
-    record ProjectionIncomplete(Shape shape) implements WhyNotTaken {
-
-        public ProjectionIncomplete {
-            Objects.requireNonNull(shape, "a projection falls short of some shape");
-        }
-    }
-
-    /** Where a reader's domain has no words for what a condition means. */
     enum DomainLimit {
 
         /**
@@ -117,7 +90,8 @@ public sealed interface WhyNotTaken {
         /**
          * One of several things, or some element meeting something, as what a path knows: a path
          * knows a set of facts that all hold, and which of several holds, or which element, is no
-         * fact of it.
+         * fact of it. A limit of what a path knows and not of the propositions it is handed, which
+         * state the alternatives in full.
          */
         A_PATH_KNOWS_NO_ALTERNATIVES,
 
@@ -125,88 +99,45 @@ public sealed interface WhyNotTaken {
          * A position of the input the reading of it holds no place for: one under a value the
          * reading does not descend into, so nothing a row writes stands there to be narrowed.
          */
-        A_POSITION_THE_READING_HOLDS_NO_PLACE_FOR
-    }
-
-    /** A shape of what a condition means that a reader's domain could state and the reader does
-     *  not state yet. */
-    enum Shape {
+        A_POSITION_THE_READING_HOLDS_NO_PLACE_FOR,
 
         /**
-         * One of several things: a disjunction, a conjunction coming out false, or one statement
-         * on each application of a closure. Taking any one of them would exclude rows that arrive
-         * through another.
+         * What a dependency answered, asked of a row: a row writes the input, and stands a
+         * dependency in with an answer rather than writing one, so what is asked of the answer is
+         * a column of the decision the row is a row of and no demand on what it writes.
          */
-        ONE_OF_SEVERAL_THINGS,
+        AN_ANSWER_A_ROW_STANDS_IN,
 
         /**
-         * Every element of a container meeting something that says more than the element. Every
-         * element meeting it is also what an empty container does, whatever the rest says, so a
-         * row past it need not meet that part.
+         * A place the tree a path is walked over does not read: a position, an answer or a value
+         * the body bound that no expression of the condition stands for there, so there is no
+         * subject for a fact about it to be about.
          */
-        EVERY_ELEMENT_AND_MORE,
-
-        /** A quantifier inside a quantifier: what an element's own elements meet. */
-        A_QUANTIFIER_WITHIN_ONE,
-
-        /** A truth of an element, which nothing composing a container's elements writes. */
-        A_TRUTH_OF_AN_ELEMENT,
-
-        /** A truth, a value being there or a case of what a dependency answered, which a row
-         *  stands in and nothing composes against yet. */
-        WHAT_A_DEPENDENCY_ANSWERED,
-
-        /** Which case a subject is, outside an arm of a fork. */
-        THE_CASE_OF_A_SUBJECT,
-
-        /** An optional of the input holding a value. */
-        A_VALUE_BEING_THERE,
-
-        /** Two subjects being one value, outside what an element of a container is. */
-        TWO_SUBJECTS_ONE_VALUE,
-
-        /** A relation over a number a dependency answered. */
-        A_NUMBER_A_DEPENDENCY_ANSWERED,
-
-        /** A relation over a number of a value the body bound, which the reading named by its
-         *  binding rather than reading it through. */
-        A_NUMBER_THE_BODY_BOUND,
-
-        /** A relation over how many elements of a container meet something. */
-        A_COUNT_OF_ELEMENTS,
-
-        /** A place on an order, of a term that is no one position. */
-        AN_ORDER_OF_NO_ONE_POSITION,
-
-        /** Several demands that one column of a decision would have to be. */
-        SEVERAL_DEMANDS_IN_ONE_COLUMN,
-
-        /** Some or every element meeting something, as a column of a decision: which element did
-         *  is nothing a value at one position says. */
-        A_QUANTIFIER_AS_A_COLUMN,
+        A_PLACE_THE_PATH_DOES_NOT_READ,
 
         /**
-         * An arm of a fork read off the pattern and the scrutinee as written, which comes to no
-         * narrowing of a position: a pattern selecting no cases, or a scrutinee standing at none.
+         * Which case a value is, or whether an optional holds one, as what a path knows: a path
+         * knows relations of numbers and truths, and which arm a value takes is decided by the
+         * fork that enters it rather than kept as a fact.
          */
-        AN_ARM_READ_AS_WRITTEN,
+        A_PATH_KNOWS_NO_CASES,
 
-        /** An arm of an attempt, which the invariant a construction checks decides. */
-        AN_ARM_AN_INVARIANT_DECIDES,
+        /** Two values being one, as what a path knows, which is no relation of numbers. */
+        A_PATH_KNOWS_NO_SAMENESS_OF_VALUES,
 
-        /** A truth of the input, asked of what the rules leave that position: which of its two
-         *  values the rules let stand. */
-        A_TRUTH_ASKED_OF_THE_RULES,
+        /** A place on an order that is no number, as what a path knows. */
+        A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER,
 
-        /** Some or every element of a container meeting something, asked of what the rules leave
-         *  the container and its elements. */
-        SOME_ELEMENT_ASKED_OF_THE_RULES,
+        /** How many elements of a container meet something, as what a path knows: no subject of
+         *  the tree it walks is that count. */
+        A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS,
 
-        /** A number or a truth of the input at a position the tree a path is walked over holds
-         *  no place for. */
-        A_POSITION_THE_PATH_HAS_NO_PLACE_FOR,
-
-        /** A place on an order, as a fact of a path. */
-        A_PLACE_ON_AN_ORDER
+        /**
+         * Every element of a container meeting something, as what a path knows: a path holds what
+         * every element meets as the closure the quantifier was written with, so that it can be
+         * read again at the element another closure is handed, and a statement read off the
+         * meaning is no closure.
+         */
+        A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN
     }
 }

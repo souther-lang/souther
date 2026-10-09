@@ -116,8 +116,8 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                     case RowDemand.ForAll _ -> region;
                     // How many elements meet a statement, which is no number a region holds.
                     case RowDemand.SoMany _ -> region;
-                    // A value the body works out, which no position a region measures holds.
-                    case RowDemand.OfAWorkedOutValue _ -> region;
+                    // A statement no composer writes toward, which a region holds nothing of.
+                    case RowDemand.ForTheRun _ -> region;
                     // Which of two values stands at a position no region measures. The row is
                     // written with it where the row is composed, and the region says nothing of it.
                     case RowDemand.ATruth _ -> region;

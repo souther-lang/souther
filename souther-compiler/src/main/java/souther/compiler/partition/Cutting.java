@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedMap;
+import java.util.function.Supplier;
 
 /**
  * What one comparison cuts, and where — the one place that decides it.
@@ -396,7 +397,106 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 yield several != null ? several
                         : severalNotDrawn(comparison, read, reads, answering);
             }
-            default -> notALine(comparison, onTheInput.arithmetic().get(), read, reads, answering);
+            default -> noLine(comparison, stated.proposition(), onTheInput.arithmetic(), read,
+                    reads, answering);
+        };
+    }
+
+    /**
+     * A comparison whose statement is no line on the input, at each place it is filed at — or, where
+     * it names no position, at each place the values it compares came from.
+     *
+     * <p>Which kind of thing kept it from being a line is read off the statement
+     * ({@link #whatItStates}). Where that is a form nothing takes apart, an operation's answer or a
+     * value the terms name no position for, the word a place is left with is the place's: the
+     * carrier of a position whose own values the rule is about says whether a line could be drawn
+     * on it at all, and where the values came from says whether an operation made them
+     * ({@link GuardThresholds#whatEachPlaceIsLeftWith}). Every other kind is the statement's, and
+     * the same at each place.
+     */
+    private static Read noLine(StatedComparison comparison, Proposition stated,
+                               Supplier<AffineReading.OfAComparison> arithmetic,
+                               InputReading read, InputReads reads, Arrivals answering) {
+        BlockReason.WhatItStatesIsNoLine said = whatItStates(stated);
+        // A number no position holds is one the body bound, and where the arithmetic followed the
+        // binding to what it was made of and stopped there, that stop is what the place words.
+        boolean placeWords = said == null
+                || said.why() == BlockReason.WhatItStatesIsNoLine.Why.A_NUMBER_NO_POSITION_HOLDS;
+        if (placeWords
+                && arithmetic.get() instanceof AffineReading.OfAComparison.Stopped stopped) {
+            return new Read.Stopped(GuardThresholds.whatEachPlaceIsLeftWith(
+                    comparison, stopped, read, reads, answering));
+        }
+        BlockReason.WhatItStatesIsNoLine why = said != null ? said
+                : new BlockReason.WhatItStatesIsNoLine(
+                        BlockReason.WhatItStatesIsNoLine.Why.A_PART_NOT_READ);
+        List<FilingCoordinate> filed =
+                GuardThresholds.filedAt(comparison, read, reads, answering);
+        if (!filed.isEmpty()) {
+            return new Read.Stopped(ComparisonAssessment.atEachOf(filed, why));
+        }
+        // Where the values came from, and which of several containers' elements a value may be,
+        // which is a fact about where the rule is filed and stays as that. A value filed where it
+        // came from was made from what stands there, so a part that stood nowhere says less than
+        // that does, and the statement's own reason is taken only where it says more.
+        SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out =
+                new LinkedHashMap<>();
+        GuardThresholds.cameFrom(comparison, reads, read.newtypes(), out);
+        out.replaceAll((at, was) -> was instanceof BlockReason.RuleAboutADerivedValue
+                && why.why() != BlockReason.WhatItStatesIsNoLine.Why.A_PART_NOT_READ ? why : was);
+        return new Read.Stopped(out);
+    }
+
+    /**
+     * Why {@code stated}, which the cases above draw no line of, is no line on the input — or null
+     * where a part of it stopped at something each place it is filed at words for itself.
+     *
+     * <p>A part the place words is asked first: where one is in the statement, an author is sent to
+     * it before a step this compiler has not taken beside it. Then a part declined at how many
+     * readings are made, since a run allowed more may read it, and then any other part.
+     */
+    static BlockReason.WhatItStatesIsNoLine whatItStates(Proposition stated) {
+        List<WhyUnread> stops = Proposition.stopsIn(stated);
+        if (stops.stream().anyMatch(Cutting::wordedByThePlace)) {
+            return null;
+        }
+        if (stops.stream().anyMatch(WhyUnread.MoreReadingsThanAreMade.class::isInstance)) {
+            return new BlockReason.WhatItStatesIsNoLine(
+                    BlockReason.WhatItStatesIsNoLine.Why.MORE_READINGS_THAN_ARE_MADE);
+        }
+        if (!stops.isEmpty()) {
+            return new BlockReason.WhatItStatesIsNoLine(
+                    BlockReason.WhatItStatesIsNoLine.Why.A_PART_NOT_READ);
+        }
+        return new BlockReason.WhatItStatesIsNoLine(switch (stated) {
+            case Proposition.Compared _ ->
+                    BlockReason.WhatItStatesIsNoLine.Why.A_NUMBER_NO_POSITION_HOLDS;
+            case Proposition.Always _, Proposition.Unread _, Proposition.Truth _,
+                 Proposition.InCases _, Proposition.Present _, Proposition.SameValue _,
+                 Proposition.All _, Proposition.Any _, Proposition.Some _,
+                 Proposition.OnAnApplication _ ->
+                    BlockReason.WhatItStatesIsNoLine.Why.NO_RELATION_OF_NUMBERS;
+        });
+    }
+
+    /**
+     * Whether a part that stopped for {@code why} is worded by each place the rule is filed at: a
+     * form nothing takes apart, what an operation answered, or a value the terms name no position
+     * for. The rest are a step of the reading, a figure of its work or something a call or an
+     * invariant holds, and say the same at every place.
+     */
+    private static boolean wordedByThePlace(WhyUnread why) {
+        return switch (why) {
+            case WhyUnread.OutsideTheLinearFragment _, WhyUnread.NoNumberOnARun _,
+                 WhyUnread.TwoElementsOfOneContainer _, WhyUnread.NoLawFor _,
+                 WhyUnread.NoWordsFor _, WhyUnread.NoFormOfWhatItAnswers _,
+                 WhyUnread.ANumberOfWhatAnOperationAnswers _,
+                 WhyUnread.WhatARecursiveHelperAnswers _, WhyUnread.AtNoPosition _,
+                 WhyUnread.NoMeasureOfItsSize _ -> true;
+            case WhyUnread.MoreReadingsThanAreMade _, WhyUnread.ANumberNotHeld _,
+                 WhyUnread.AClauseOfAnInvariant _, WhyUnread.AnInvariantNotReached _,
+                 WhyUnread.InACalledBody _, WhyUnread.CopiesStateDifferentThings _,
+                 WhyUnread.NotMetByTheReading _, WhyUnread.NotYetComposed _ -> false;
         };
     }
 
@@ -530,23 +630,6 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     + " a line the order has no place for: " + at);
         }
         return cutsOrRefused(drawn);
-    }
-
-    /**
-     * What a comparison whose statement is no line on the input leaves at each place it is filed
-     * at: where the arithmetic over the input stopped, and why there.
-     *
-     * @param arithmetic what the arithmetic the statement was read through made of the comparison
-     */
-    private static Read notALine(StatedComparison comparison,
-                                 AffineReading.OfAComparison arithmetic, InputReading read,
-                                 InputReads reads, Arrivals answering) {
-        if (!(arithmetic instanceof AffineReading.OfAComparison.Stopped stopped)) {
-            throw new IllegalStateException("a comparison the arithmetic over the input read states"
-                    + " something that is no line on it: " + comparison);
-        }
-        return new Read.Stopped(GuardThresholds.whatEachPlaceIsLeftWith(
-                comparison, stopped, read, reads, answering));
     }
 
     /**
