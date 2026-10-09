@@ -963,6 +963,26 @@ public final class InputDomain {
             return new Reach(on, enumerating && !stopped, handedOn && !stopped);
         }
 
+        /**
+         * The same at the case {@code branch} of the sum at {@code sum}: the demands under the
+         * case, and a demand at a name that crosses into it ({@code crossing}), which is a demand
+         * at that name under the case — the value at the name is the one under whichever case the
+         * row is.
+         */
+        Reach intoTheCase(TermPath sum, Refinement branch, Set<String> crossing,
+                          boolean stopped) {
+            TermPath narrowed = sum.refine(branch);
+            List<TermPath> on = new ArrayList<>();
+            for (TermPath each : demanded) {
+                TermPath under = each.isAtOrUnder(narrowed) ? each
+                        : SharedNames.under(each, sum, branch, crossing);
+                if (under != null) {
+                    on.add(under);
+                }
+            }
+            return new Reach(on, enumerating && !stopped, handedOn && !stopped);
+        }
+
         /** Whether the reading goes on into the position this reaches. */
         boolean enters() {
             return enumerating || !demanded.isEmpty();
@@ -1175,7 +1195,9 @@ public final class InputDomain {
                     // Said of every case, including the ones this walk turns back at, because what
                     // a reader of a sum asks is answered over the whole list of them: a sum has a
                     // value wherever any case does.
-                    if (!reach.into(path.refine(branch.refinement()), stopped).enters()) {
+                    if (!reach.intoTheCase(path, branch.refinement(),
+                            readUnder(shared, input, branch.refinement(), reading.source()),
+                            stopped).enters()) {
                         // How far the walk goes, and not anything the model says about this case.
                         observed.became(path, branch.refinement(), new CaseOutcome.NotWalked());
                         continue;
@@ -1227,7 +1249,8 @@ public final class InputDomain {
                     walkBranch(branch, placed.root(), path, ancestry, reading, found, roots,
                             visited, handoffs, observed, reaching,
                             new RootOpening.Refined(placed.root(), crossing), account,
-                            reach.into(path.refine(branch.refinement()), stopped));
+                            reach.intoTheCase(path, branch.refinement(), crossing.names(),
+                                    stopped));
                     crossed(observed, crossing, found, before);
                     openedUnder.add(List.copyOf(roots.subList(rootsBefore, roots.size())));
                 }

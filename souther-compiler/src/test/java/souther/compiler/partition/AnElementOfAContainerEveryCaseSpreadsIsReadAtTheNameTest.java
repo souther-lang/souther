@@ -44,6 +44,17 @@ class AnElementOfAContainerEveryCaseSpreadsIsReadAtTheNameTest {
 
             behavior f : (e: Either) -> A | B
             let f (e) = if List.any(t -> t > 3, e.tags) then A else B
+
+            data Shared = { marks: List<Int> }
+            data Sprig = { ...Shared, size: Int }
+            data Limb = { ...Shared, under: Wood }
+            data Wood = Sprig | Limb
+
+            behavior g : (w: Wood) -> A | B
+            let g (w) =
+                match w with
+                    | Sprig -> B
+                    | Limb { under } -> if List.any(m -> m > 3, under.marks) then A else B
             """;
 
     private static final Compilation COMPILATION = compiled();
@@ -67,6 +78,25 @@ class AnElementOfAContainerEveryCaseSpreadsIsReadAtTheNameTest {
                 inputs.quantities(RuleReadings.of(COMPILATION, "probe.spread")).region()
                         .assuming(above, Rel.GT),
                 "the element at the name is named by the rules of the element");
+    }
+
+    /**
+     * And where the name is under a value the reading of the input stopped unfolding — a sum
+     * reached again inside one of its own cases — the condition naming it is what takes the
+     * reading under each case, and so to the element there.
+     */
+    @Test
+    void anElementUnderAValueReachedAgainIsReadAtTheNameAsWell() {
+        List<Axis> axes = COMPILATION.db().ask(new Adequacy.Divided("probe.spread", "g")).value()
+                .axes();
+        List<Axis> marks = axes.stream()
+                .filter(each -> each.path().toString().endsWith("under@Limb.marks[*]")
+                        || each.path().toString().endsWith("under@Sprig.marks[*]"))
+                .toList();
+        assertEquals(2, marks.size(), () -> "the element under each case of the value reached"
+                + " again: " + axes.stream().map(each -> each.path().toString()).toList());
+        marks.forEach(axis -> assertTrue(axis.classes().size() > 1,
+                () -> "the line at three divides it: " + axis));
     }
 
     @Test
