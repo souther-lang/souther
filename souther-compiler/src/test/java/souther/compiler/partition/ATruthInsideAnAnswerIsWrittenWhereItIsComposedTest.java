@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.RuleReadings;
+import souther.compiler.inputs.Evaluations;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.InjectedAnswer;
@@ -62,7 +63,8 @@ class ATruthInsideAnAnswerIsWrittenWhereItIsComposedTest {
 
     private static AnswerDemand truth(boolean held) {
         return new AnswerDemand.ATruth(
-                new InjectedAnswer(new ValueName.Behavior("example.answered", "look"), List.of()),
+                new InjectedAnswer(Evaluations.of(
+                        new ValueName.Behavior("example.answered", "look"), 0), List.of()),
                 new ConditionReportAnchor.WhereTheReadingMetIt("m", new ConditionOccurrence("b", 0)),
                 OK, held);
     }

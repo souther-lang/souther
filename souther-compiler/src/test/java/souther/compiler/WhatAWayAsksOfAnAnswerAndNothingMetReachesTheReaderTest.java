@@ -48,7 +48,10 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
 
             behavior decides : (at: Int) -> Answer
                 depends on look
-            let decides (at, look) = if look(at).k == look(at).j then Yes else No
+            let decides (at, look) = {
+                let found = look(at)
+                if found.k == found.j then Yes else No
+            }
             """;
 
     /** And one the reading has no way of stating at all: the answer against a number of the
@@ -105,7 +108,10 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
 
             behavior decides : (at: Int) -> Answer
                 depends on look
-            let decides (at, look) = if look(at).n < look(at).m then Yes else No
+            let decides (at, look) = {
+                let found = look(at)
+                if found.n < found.m then Yes else No
+            }
             """;
 
     /**
@@ -135,7 +141,10 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
 
             behavior decides : (r: R, at: Int) -> Answer
                 depends on look
-            let decides (r, at, look) = if look(at).n < look(at).m then Yes else No
+            let decides (r, at, look) = {
+                let found = look(at)
+                if found.n < found.m then Yes else No
+            }
             """;
 
     private static final String LEFT_OUT =
@@ -150,7 +159,7 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
         assertTrue(said.contains("a comparison of places inside an answer whose values stand on no"
                         + " order this measures them on"),
                 () -> "in the words of the stage that let it go: " + said);
-        assertTrue(said.contains("13:40"),
+        assertTrue(said.contains("15:16"),
                 () -> "and at the place the condition is written: " + said);
     }
 
@@ -189,6 +198,26 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
     void aConditionTheAnswerSideTookUpIsNotReportedAsLeftOut() {
         String page = human(NUMBERS_COMPARED);
 
+        assertFalse(page.contains(LEFT_OUT),
+                () -> "the demand was stated and a value was composed against it: " + page);
+    }
+
+    /**
+     * Two calls of one dependency are two answers, and a row stands the dependency in with one
+     * value that answers both — so a comparison of two places across them is a comparison inside
+     * that value, stated and composed against like one written over a single call.
+     */
+    @Test
+    void aComparisonAcrossTwoCallsOfOneDependencyIsComposedInsideTheOneValue() {
+        String twoCalls = NUMBERS_COMPARED.replace("""
+                let decides (at, look) = {
+                    let found = look(at)
+                    if found.n < found.m then Yes else No
+                }""", """
+                let decides (at, look) = if look(at).n < look(at).m then Yes else No""");
+        assertTrue(twoCalls.contains("look(at).n < look(at).m"), twoCalls);
+
+        String page = human(twoCalls);
         assertFalse(page.contains(LEFT_OUT),
                 () -> "the demand was stated and a value was composed against it: " + page);
     }

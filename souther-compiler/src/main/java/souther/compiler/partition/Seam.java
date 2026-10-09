@@ -105,8 +105,16 @@ public record Seam(CutPosition at, Level below, Level above) {
      *         Towards, Scale)} says it
      */
     public static ExactAnswer<Seam> where(BorderQuantity of, Level at, souther.compiler.check.ComparisonClaim claim) {
-        Towards belongsTo = claim instanceof souther.compiler.check.ComparisonClaim.Cut order
-                ? order.valueBelongs() : Towards.ABOVE;
+        return where(of, at, claim instanceof souther.compiler.check.ComparisonClaim.Cut order
+                ? order.valueBelongs() : Towards.ABOVE);
+    }
+
+    /**
+     * The same, with the value at the line on the side {@code belongsTo} says: which of the two
+     * places beside a value is asked about, for a reader that has no rule ordering the values to
+     * read it off.
+     */
+    static ExactAnswer<Seam> where(BorderQuantity of, Level at, Towards belongsTo) {
         souther.compiler.numeric.LinearForm<souther.compiler.inputs.NumericTerm> direction =
                 of.direction();
         ExactRatio per = QuantityKey.per(direction);

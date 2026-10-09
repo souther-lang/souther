@@ -177,7 +177,7 @@ public final class EnsuresThresholds {
                                 InputReading read,
                                 souther.compiler.coverage.Arrivals answering, Drawn out) {
         reportRuleWithoutLine(rule.ref(), it.stated(), rule.value(),
-                ComparisonAssessment.atEachOf(
+                ComparisonAssessment.leftAtEachOf(
                         GuardThresholds.mentionedIn(it.stated(), it.reads(), read.symbols(),
                                         read.newtypes(), answering).stream()
                                 .map(FilingCoordinate::at).toList(),
@@ -211,10 +211,17 @@ public final class EnsuresThresholds {
         // whole domain — which is what an arrival that restricts nothing reads as. And no
         // dependency: a clause is written against the declaration, and no row stands anything in
         // for it, so it is read where none is ({@link InputReads#ofWhatIsDeclared}).
-        ComparisonAssessment assessed = ComparisonAssessment.of(out.behavior(), comparison.stated(),
+        ComparisonAssessment whole = ComparisonAssessment.of(out.behavior(), comparison.stated(),
                 Citation.of(e.pos()), read,
                 reads, rule.value(), WhatAnAnswerTakesUp.of(read),
                 answering, false, new WhatConditionsState(read));
+        // A statement of several relations holds a line for each only where the statement turns
+        // on it, and a clause has nowhere to hold that: no way leads to it for a condition to be
+        // carried on. So its lines are said not to be drawn, rather than drawn and owed rows the
+        // clause answers alike on both sides.
+        ComparisonAssessment assessed =
+                whole instanceof ComparisonAssessment.Several several
+                        ? several.withNoWayForItsParts() : whole;
         // What the positions this names are left with, where the reading of lines drew none. Asked
         // of the assessment and not worked out per arm here: the same table stood in the guard
         // reader, and a case added to an assessment had to be answered in both.
@@ -223,7 +230,8 @@ public final class EnsuresThresholds {
         // And the geometry. Read the same way a guard reads it ({@link ComparisonGeometry}); only
         // where a line's origin comes from is this reader's own — a clause's is which conjunct
         // stated it, not a place a run met.
-        ComparisonGeometry geometry = ComparisonGeometry.of(assessed, cutting -> originOf(said, cutting));
+        ComparisonGeometry geometry = ComparisonGeometry.of(assessed,
+                (cutting, _) -> originOf(said, cutting));
         out.evidence().addAll(geometry.evidence());
         out.between().addAll(geometry.between());
     }
@@ -255,8 +263,7 @@ public final class EnsuresThresholds {
      * form is what stopped it: the one reason that does not turn on what two sides name.
      */
     private static void reportRuleWithoutLine(RuleRef.Ensures rule, Core statement, BindingId answer,
-                                     java.util.SequencedMap<FilingCoordinate,
-                                             BlockReason.RuleWithoutLineReason> left,
+                                     List<ComparisonAssessment.LeftAt> left,
                                      RulesWithNoLine.Gathered withoutALine) {
         if (ComparisonAssessment.readsAnswer(statement, answer)) {
             return;
@@ -267,11 +274,11 @@ public final class EnsuresThresholds {
         // reading finished. Nothing works out what such a clause raises about an input — what it
         // states is a relation the behavior is held to — so where the reading stopped there is
         // nothing that was determined.
-        left.forEach((named, why) -> {
-            if (why instanceof BlockReason.RuleReadingStopped stopped) {
-                withoutALine.unclassified(cited, named, stopped);
+        left.forEach(each -> {
+            if (each.why() instanceof BlockReason.RuleReadingStopped stopped) {
+                withoutALine.unclassified(cited, each.at(), stopped);
             } else {
-                withoutALine.add(cited, named, why);
+                withoutALine.add(cited, each.at(), each.why());
             }
         });
     }

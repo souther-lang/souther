@@ -871,14 +871,19 @@ public sealed interface BlockReason {
     record CasePairingNotDetermined() implements RuleReadingStopped {}
 
     /**
-     * What the rule states was read in full, and it is several lines held together — either of two
-     * comparisons, both of them, one under one condition and another under the other — where a
-     * partition of the input is drawn one line to a rule.
+     * What the rule states was read in full, and it is several lines held together whose lines are
+     * not drawn.
      *
-     * <p>Not a rule whose meaning went unread. {@code Int.max(a, b) > 5} states that {@code a > 5}
-     * or {@code b > 5}, and nothing about that is unknown; what this compiler does not yet do is
-     * divide the input by a statement made of several lines, so no line of it is drawn. Said as a
-     * form nothing took apart, an author would go looking for another way to write a rule whose
+     * <p>A statement of several relations is drawn as one rule with a line for each, and each line
+     * holds where the statement turns on it. Where that cannot be held, no line is: what a closure
+     * states on each application it is handed is a line of each application rather than of the
+     * row; a relation over what a dependency answered is no line on the input, and the others
+     * drawn alone would be drawn as though the statement were only them; and a clause has nowhere
+     * to hold where each of its lines decides, so a row against one of them would be counted at
+     * the line where the clause comes out the same on both sides.
+     *
+     * <p>Not a rule whose meaning went unread. Nothing about what it states is unknown, and said as
+     * a form nothing took apart, an author would go looking for another way to write a rule whose
      * meaning was read perfectly well.
      */
     record SeveralLinesInOneRule() implements RuleReadingStopped {}
@@ -925,6 +930,22 @@ public sealed interface BlockReason {
      * could read keeps its line and its rows.
      */
     record ComparisonNothingArrivesAtItsLine() implements ReadToEndWithoutLine {}
+
+    /**
+     * The comparison was read to the end and states several relations held together, and this is a
+     * line of one of them that rows arrive at — and wherever they do, the statement comes out the
+     * same on both sides of it.
+     *
+     * <p>{@code Int.max(a, a + 1) > 5} turns where {@code a} passes four. Its line where {@code a}
+     * passes five is one rows reach, and every one of them already has the other part holding, so
+     * nothing a row there does to {@code a} changes what the rule says. Not
+     * {@link ComparisonNothingArrivesAtItsLine}: nothing on the way rules the line out, and an
+     * author sent to the guards above it would find nothing there.
+     *
+     * <p>Said only on a proof: the line, with what has to hold beside it for the statement to turn
+     * on it, shown to hold no row.
+     */
+    record ComparisonLineTurningNothing() implements ReadToEndWithoutLine {}
 
     /**
      * The comparison relates two positions rather than dividing one.

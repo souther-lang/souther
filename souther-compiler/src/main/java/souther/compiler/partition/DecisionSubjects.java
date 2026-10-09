@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.AffineForms;
-import souther.compiler.check.Location;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.Symbols;
@@ -11,16 +10,13 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.PathResolution;
-import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionArgument;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.InjectedAnswer;
 import souther.compiler.types.Type;
-import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -76,45 +72,28 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
      * such thing.
      *
      * <p>The second half of {@link #of}, for a reader asking only this: what a position is takes
-     * resolving where {@code e} stands, and an answer is reached through fields and names alone.
+     * resolving where {@code e} stands, and which evaluation an answer is is
+     * {@link InputReads#answerAt}'s. A newtype's value is the value it wraps, one subject and not a
+     * step inside one: read as a step, {@code riskScore(c).value} and {@code riskScore(c)} would be
+     * two columns over one answer.
      */
     DecisionSubject.AnAnswer anAnswer(Core e, InputReads at) {
-        List<TermPath.Step> steps = new ArrayList<>();
-        Core under = e;
-        InputReads reads = at;
-        while (true) {
-            // Which answer a value is does not turn on the type it stands as.
-            under = Core.withoutStanding(under);
-            // A newtype's value is the value it wraps, which is one subject and not a step inside
-            // one. Read as a step, `riskScore(c).value` and `riskScore(c)` would be two columns
-            // over one answer.
-            // The same accesses held as one node, taken a name at a time from the last.
-            if (under instanceof Core.FieldProjection projection) {
-                under = projection.lastAccess();
-                continue;
-            }
-            if (under instanceof Core.FieldAccess field) {
-                if (Location.isStep(field.target().type(), field.field(), newtypes)) {
-                    steps.add(new TermPath.Step.Field(field.field()));
-                }
-                under = field.target();
-                continue;
-            }
-            if (under instanceof Core.Read name
-                    && reads.meaningOf(name, symbols, newtypes)
-                            instanceof ReadMeaning.Through through) {
-                under = through.denotes().value();
-                reads = through.denotes().at();
-                continue;
-            }
-            break;
-        }
-        InjectedAnswer answered = answerOf(under, reads);
-        if (answered == null) {
+        InputReads.AnAnswerAt found = at.answerAt(e, symbols, newtypes);
+        if (found == null) {
             return null;
         }
-        Collections.reverse(steps);
-        return new DecisionSubject.AnAnswer(answered, steps);
+        List<DecisionArgument> arguments = new ArrayList<>();
+        for (Core argument : found.arguments()) {
+            // An argument this reading cannot say leaves the answer unnamed: what a row pins it by
+            // and a report names it by is what it was asked about.
+            DecisionArgument asked = argumentOf(argument, found.at());
+            if (asked == null) {
+                return null;
+            }
+            arguments.add(asked);
+        }
+        return new DecisionSubject.AnAnswer(new InjectedAnswer(found.evaluation(), arguments),
+                found.steps());
     }
 
     /**
@@ -145,31 +124,6 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
         DecidedCondition.Stood truth = Core.withoutStanding(e).type() == Type.Prim.BOOL
                 ? truthOf(e, true, reads) : null;
         return truth != null && truth.condition().of() instanceof DecisionSubject.AnAnswer;
-    }
-
-    /**
-     * The answer {@code e} is, or null where it is not a call to a dependency of this behavior.
-     *
-     * <p>An argument this reading cannot say leaves the answer unnamed: two askings it cannot tell
-     * apart may be two questions, and one column for them would say a body that asks about two
-     * things asks about one.
-     */
-    private InjectedAnswer answerOf(Core e, InputReads at) {
-        if (!(Core.withoutStanding(e) instanceof Core.Call call
-                && call.fn() instanceof Core.Reached reached
-                && reached.denotes() instanceof ValueName.Behavior dependency
-                && at.standsIn(dependency))) {
-            return null;
-        }
-        List<DecisionArgument> arguments = new ArrayList<>();
-        for (Core argument : call.args()) {
-            DecisionArgument asked = argumentOf(argument, at);
-            if (asked == null) {
-                return null;
-            }
-            arguments.add(asked);
-        }
-        return new InjectedAnswer(dependency, arguments);
     }
 
     /**

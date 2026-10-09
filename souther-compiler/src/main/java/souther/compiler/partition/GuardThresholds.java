@@ -243,19 +243,23 @@ public final class GuardThresholds {
                     // emitted tree made of that construct has nothing to say about it — so a copy
                     // per materialisation would be one account under several names, and whoever
                     // asked would have to pick one of them with nothing to pick by.
-                    cuts.reached(stated, each.assumed());
+                    cuts.reached(stated, each.assumed(), each.whereEachDecides());
                     switch (each.standing()) {
                         case BoundaryPolicy.Standing.Admitted admitted ->
                                 // The same reading on the narrower region a row at the line is in:
                                 // what the way states, and what arrives at every place it is
                                 // watched. The line goes only where all of them prove nothing
                                 // reaches it, since a run through any one of them is a run through
-                                // the rule.
+                                // the rule. A line of a statement of several is asked again with
+                                // where it decides taken in.
                                 lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
                                         reaches,
                                         ComparisonAssessment.narrowedByWhatArrives(admitted.read(),
                                                 Reachability.of(
                                                         new WayToTheBorder(each.assumed()),
+                                                        read.quantities().region()),
+                                                part -> Reachability.of(
+                                                        new WayToTheBorder(each.wayTo(part)),
                                                         read.quantities().region()),
                                                 at.observations().stream()
                                                         .map(one -> one.arrival()).toList(), false),
@@ -677,7 +681,7 @@ public final class GuardThresholds {
         // same way a clause does. Only where a line's origin comes from is: a guard's is where
         // the run meets the comparison, which is this reading's own place to say.
         ComparisonGeometry geometry = ComparisonGeometry.of(read,
-                cutting -> originOf(behavior, stated, at, wrote, anchor, cutting));
+                (cutting, part) -> originOf(behavior, stated, at, wrote, anchor, part, cutting));
         out.addAll(geometry.evidence());
         between.addAll(geometry.between());
     }
@@ -714,11 +718,11 @@ public final class GuardThresholds {
         // nothing but whether its reading finished. There is no reading that says what a body's
         // comparison raises — a line it comes to owes its rows by having been read — so where the
         // reading stopped there is nothing that was determined and nothing that could have been.
-        read.whatEachPlaceIsLeftWith().forEach((at, why) -> {
-            if (why instanceof BlockReason.RuleReadingStopped stopped) {
-                out.unclassified(cited, at, stopped);
+        read.whatEachPlaceIsLeftWith().forEach(left -> {
+            if (left.why() instanceof BlockReason.RuleReadingStopped stopped) {
+                out.unclassified(cited, left.at(), stopped);
             } else {
-                out.add(cited, at, why);
+                out.add(cited, left.at(), left.why());
             }
         });
     }
@@ -727,7 +731,8 @@ public final class GuardThresholds {
      *  is getting the comparison to answer, because what it is about is a place in a body. */
     private static LineOrigin.ComparisonOrigin originOf(
             String behavior, ModelOccurrence stated, EmittedComparisonState.Instrumented at,
-            SourceConstructOrigin wrote, RuleReportAnchor anchor, Cutting cutting) {
+            SourceConstructOrigin wrote, RuleReportAnchor anchor,
+            Optional<WhereAPartDecides> part, Cutting cutting) {
         // Every place a run through the rule is written down, off the join rather than looked up
         // again: the join already asked the plan which of the rule's materialisations it numbered,
         // and asking a second time is a second answer to how many places there are. Whose rule it
@@ -739,7 +744,7 @@ public final class GuardThresholds {
                         new RuleRef.Comparison(behavior, wrote), stated, anchor,
                         at.observations().stream().map(EmittedComparisonState.Observation::site)
                                 .toList()),
-                new LineFacts(cutting.claim()));
+                part, new LineFacts(cutting.claim()));
     }
 
     /** Whether a line can be drawn on what this type carries, asked of the one place that says so. */

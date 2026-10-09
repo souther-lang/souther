@@ -8,6 +8,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
@@ -167,6 +168,9 @@ class EveryAnswerThisReadingPublishesCarriesWhatMakesItOneTest {
         }
         if (type == TermPath.class) {
             return TermPath.of("x");
+        }
+        if (type == AnEvaluation.class) {
+            return Evaluations.of(new ValueName.Behavior("example", "f"), 0);
         }
         if (type == Core.class) {
             return SOMETHING;

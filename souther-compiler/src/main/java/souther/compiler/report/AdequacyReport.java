@@ -112,6 +112,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.ArmDisposition;
 import souther.compiler.query.ArmExclusion;
 import souther.compiler.partition.WhereNothingIsAnswered;
+import souther.compiler.partition.WhichLine;
 import souther.compiler.query.ArmObligation;
 import souther.compiler.query.ArmSummary;
 import souther.compiler.query.BorderAssessment;
@@ -2730,7 +2731,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case UNRESOLVED_CASE_PAIRING -> "it reaches case-specific positions on both sides, and "
                     + "how those positions pair up is not worked out";
             case SEVERAL_LINES_IN_ONE_RULE -> "what it states was read, and it is several lines"
-                    + " held together, which this compiler does not yet divide the input by";
+                    + " held together, which this compiler does not divide the input by here";
             case UNSUPPORTED_PARTITION_SHAPE ->
                     "it relates two positions rather than dividing one";
             case RULE_ABOUT_A_RUN ->
@@ -2763,6 +2764,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case NOTHING_ARRIVES_AT_THE_RULES_LINE ->
                     "it was read to the end, and no row that arrives at it holds a value at its"
                             + " line — the conditions on the way there rule those values out";
+            case RULE_NEVER_TURNS_ON_THIS_LINE ->
+                    "it was read to the end and states several things at once, and wherever a row"
+                            + " reaches its line here the rest of it already decides the outcome";
             // And the four a position reaches, written about the position, because that is all
             // there is: nothing observed a rule to name. Which reasons reach which of the two is
             // settled by the authority a reason belongs to, so no reason is written both ways.
@@ -4929,18 +4933,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * <p>Which of the rule's lines says what named it, because the three kinds of rule do not
      * decompose alike: a declaration's clause is written in the parts its author joined, a part of a
      * behavior's clause states as many things as a reading of it finds, and a comparison in a body
-     * is a rule apiece with nothing under it. Written as one number, a reader was handed a count
-     * without being told which of the three made it, and no two of them mean the same.
+     * is a rule apiece with nothing under it unless it states several relations held together.
+     * Written as one number, a reader was handed a count without being told which of the three made
+     * it, and no two of them mean the same.
      *
      * <p>The rule stands inside the same object as the numbers that are counted within it, so what
-     * a document allows is what this compiler can build: a part number beside a body's comparison is
-     * not a shape a reader has to decide what to do with, because the schema has no such shape.
+     * a document allows is what this compiler can build: a statement number beside a body's
+     * comparison is not a shape a reader has to decide what to do with, because the schema has no
+     * such shape.
      */
     private static void authoredLineId(ObjectNode into,
                                        AuthoredLine line) {
         ObjectNode which = into.putObject("which");
         switch (line.which()) {
-            case souther.compiler.partition.WhichLine.OfADeclarationsLine it -> {
+            case WhichLine.OfADeclarationsLine it -> {
                 which.put("kind", "part");
                 ruleId(which.putObject("rule"), it.rule());
                 which.put("part", it.part().ordinal());
@@ -4952,7 +4958,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // here: a number this assigned would be a second answer to which line a line is.
                 declaredLine(which.putObject("line"), it.drawnBy());
             }
-            case souther.compiler.partition.WhichLine.OfAComparisonOfAPart it -> {
+            case WhichLine.OfAComparisonOfAPart it -> {
                 which.put("kind", "statement_of_part");
                 ruleId(which.putObject("rule"), it.rule());
                 which.put("part", it.statement().part().ordinal());
@@ -4962,9 +4968,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // the ones it can see and land somewhere else.
                 which.put("statement", it.statement().ordinal());
             }
-            case souther.compiler.partition.WhichLine.OfAComparison it -> {
+            case WhichLine.OfAComparison it -> {
                 which.put("kind", "comparison");
                 ruleId(which.putObject("rule"), it.rule());
+            }
+            // Which of the comparison's lines, as the reading that took the statement apart named
+            // it, and never a count this made of the lines it was handed.
+            case WhichLine.OfAPartOfAComparison it -> {
+                which.put("kind", "part_of_comparison");
+                ruleId(which.putObject("rule"), it.rule());
+                which.put("part", it.part().ordinal());
             }
         }
         ObjectNode facts = into.putObject("facts");

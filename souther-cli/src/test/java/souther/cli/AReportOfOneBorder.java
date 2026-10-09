@@ -51,6 +51,7 @@ import souther.compiler.types.TypeSymbols;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -134,6 +135,7 @@ final class AReportOfOneBorder {
                         new ModelOccurrence(wrote, ExpansionLineage.ORIGINAL),
                         new souther.compiler.check.RuleReportAnchor.ByTheModuleThatWroteIt(),
                         List.of(WHERE)),
+                Optional.empty(),
                 new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)));
         return Border.at(
                 BoundaryTarget.at(

@@ -802,10 +802,18 @@ public final class InteractionCells {
         return null;
     }
 
-    /** Which rule of the cut the one stated at {@code states} is. */
+    /**
+     * Which rule of the cut the one stated at {@code states} is, where which way it comes out is
+     * which side of the cut a value is.
+     *
+     * <p>Not a line of a statement of several. Which way {@code Int.max(a, b) > 5} came out says
+     * nothing about which side of {@code a = 5} the row was on, since {@code b} may have settled
+     * it — so such a line names no class, and the condition narrows nothing here.
+     */
     private static LineOrigin.ComparisonOrigin guardOf(Cut cut, ModelOccurrence states) {
         for (LineOrigin origin : cut.origins()) {
             if (origin instanceof LineOrigin.ComparisonOrigin guard
+                    && guard.comesOutBySides()
                     && guard.read().states().equals(states)) {
                 return guard;
             }

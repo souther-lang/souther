@@ -3,11 +3,13 @@ package souther.compiler.inputs;
 import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.ElementBindings;
+import souther.compiler.check.Location;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
+import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
@@ -399,6 +401,84 @@ public final class InputReads {
     /** Whether a call to {@code behavior} is a value a row stands in for, read here. */
     public boolean standsIn(ValueName.Behavior behavior) {
         return dependencies.contains(behavior);
+    }
+
+    /**
+     * What a dependency answered that {@code e} is, at a place inside the answer — or null where
+     * it is no such thing.
+     *
+     * <p>The one place a value is found to be an answer, and the only maker of an
+     * {@link AnEvaluation}. Fields read off it are steps inside the answer; a name is the value it
+     * was bound to only where its meaning is that value ({@link ReadMeaning.Through}), so
+     * {@code let y = x} is the answer {@code x} is and {@code x + 1} is no answer at all. A field of
+     * a newtype is the value it wraps and no step.
+     *
+     * @param e the value, in the tree {@code this} reads
+     * @return the evaluation, the call written for it, where that call's arguments are read, and
+     *         the fields read off the answer in the order they are written
+     */
+    public AnAnswerAt answerAt(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
+        // A body that stands nothing in has no answer anywhere in it, and the names it reads are
+        // not walked to find that out.
+        if (dependencies.isEmpty()) {
+            return null;
+        }
+        List<TermPath.Step> steps = new ArrayList<>();
+        Core under = e;
+        InputReads reads = this;
+        while (true) {
+            // Which answer a value is does not turn on the type it stands as.
+            under = Core.withoutStanding(under);
+            // The same accesses held as one node, taken a name at a time from the last.
+            if (under instanceof Core.FieldProjection projection) {
+                under = projection.lastAccess();
+                continue;
+            }
+            if (under instanceof Core.FieldAccess field) {
+                if (Location.isStep(field.target().type(), field.field(), newtypes)) {
+                    steps.addFirst(new TermPath.Step.Field(field.field()));
+                }
+                under = field.target();
+                continue;
+            }
+            if (under instanceof Core.Read name
+                    && reads.meaningOf(name, symbols, newtypes) instanceof ReadMeaning.Through through) {
+                under = through.denotes().value();
+                reads = through.denotes().at();
+                continue;
+            }
+            break;
+        }
+        if (!(under instanceof Core.Call call && call.fn() instanceof Core.Reached reached
+                && reached.denotes() instanceof ValueName.Behavior dependency
+                && reads.standsIn(dependency))) {
+            return null;
+        }
+        // A call inside one of the language's own operations is none the model writes.
+        Optional<ModelOccurrence> written = ModelOccurrence.statedAt(call.occurrence());
+        return written.isEmpty() ? null : new AnAnswerAt(
+                new AnEvaluation(dependency, written.get()), call.args(), reads, steps);
+    }
+
+    /**
+     * What {@link #answerAt} found.
+     *
+     * @param evaluation which evaluation of which dependency
+     * @param arguments  what the call written for it hands the dependency
+     * @param at         where those arguments are read
+     * @param steps      the fields read off the answer, in the order they are written
+     */
+    public record AnAnswerAt(AnEvaluation evaluation, List<Core> arguments, InputReads at,
+                             List<TermPath.Step> steps) {
+
+        public AnAnswerAt {
+            if (evaluation == null || arguments == null || at == null || steps == null) {
+                throw new IllegalArgumentException("an answer found is some evaluation, handed"
+                        + " something read somewhere, at some place inside it");
+            }
+            arguments = List.copyOf(arguments);
+            steps = List.copyOf(steps);
+        }
     }
 
     /**

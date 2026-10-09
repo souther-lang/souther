@@ -6713,7 +6713,7 @@
               } ]
             }, {
               "kind" : "case",
-              "condition" : "conformance.shipping.台帳へ書く(指示)",
+              "condition" : "conformance.shipping.台帳へ書く(指示)#0",
               "outcome" : "書けなかった"
             } ]
           },
@@ -6723,7 +6723,7 @@
             "behavior" : "出荷する",
             "conditions" : [ {
               "kind" : "comparison",
-              "condition" : "GE LinearForm[constant=-10000, coefs={conformance.catalog.現価を引く(指示.品目)=1}]",
+              "condition" : "GE LinearForm[constant=-10000, coefs={conformance.catalog.現価を引く(指示.品目)#1=1}]",
               "outcome" : "held"
             }, {
               "kind" : "comparison",
@@ -6742,7 +6742,7 @@
               } ]
             }, {
               "kind" : "case",
-              "condition" : "conformance.shipping.台帳へ書く(指示)",
+              "condition" : "conformance.shipping.台帳へ書く(指示)#0",
               "outcome" : "出荷済み"
             } ]
           },
@@ -6752,7 +6752,7 @@
             "behavior" : "出荷する",
             "conditions" : [ {
               "kind" : "comparison",
-              "condition" : "GE LinearForm[constant=-10000, coefs={conformance.catalog.現価を引く(指示.品目)=1}]",
+              "condition" : "GE LinearForm[constant=-10000, coefs={conformance.catalog.現価を引く(指示.品目)#1=1}]",
               "outcome" : "denied"
             }, {
               "kind" : "comparison",
@@ -6771,7 +6771,7 @@
               } ]
             }, {
               "kind" : "case",
-              "condition" : "conformance.shipping.台帳へ書く(指示)",
+              "condition" : "conformance.shipping.台帳へ書く(指示)#0",
               "outcome" : "出荷済み"
             } ]
           },

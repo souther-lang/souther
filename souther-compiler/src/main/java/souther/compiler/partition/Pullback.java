@@ -1298,13 +1298,15 @@ final class Pullback {
                         break;
                     }
                 }
-                // A number a dependency answered where the call is written, which a row stands in
-                // and so controls, named as the decision table names it. One a name holds is that
-                // binding's value, below ({@link #readThrough}).
+                // A number a dependency answered, which a row stands in and so controls, named as
+                // the decision table names it: the evaluation of the call, whether it is written
+                // here or a name for it is.
+                DecisionSubject.AnAnswer answered = answerAt(node, at);
+                if (answered != null) {
+                    return LinearForm.atom(new DecisionAtom.OfAnAnswer(answered));
+                }
                 if (!(under instanceof Core.Read name)) {
-                    DecisionSubject.AnAnswer answered = answerAt(node, at);
-                    return answered == null ? null
-                            : LinearForm.atom(new DecisionAtom.OfAnAnswer(answered));
+                    return null;
                 }
                 // A binding whose value turns on which application this is holds another value on
                 // the next, and its name would name them alike.
@@ -1326,17 +1328,11 @@ final class Pullback {
 
             @Override
             public AffineForms.ReadThrough<InputReads> readThrough(Core.Read name, InputReads at) {
-                AffineForms.ReadThrough<InputReads> through = NameAnswers.denoting(name, at,
-                        read.rules().symbols(), read.rules().newtypes());
-                // A name given what a dependency answered is that binding's value, and not read
-                // through to the call. Its binding is the identity a reader walking the tree
-                // follows, where each call to a dependency is an evaluation of its own: read as the
-                // answer, a value that reader could relate to the rest would be one it cannot name.
-                // What that costs is said here: one answer spelled both ways in one condition —
-                // through a name and as the call — is two atoms, and a relation between them is
-                // not read. Lifted when that reader names an answer as an answer.
-                return through != null && answerAt(through.value(), through.at()) != null
-                        ? null : through;
+                // A name given what a dependency answered is read through to the call, which is
+                // the evaluation it names ({@link InputReads#answerAt}): the answer a row stands in
+                // and a reader walking the tree relates by that evaluation.
+                return NameAnswers.denoting(name, at, read.rules().symbols(),
+                        read.rules().newtypes());
             }
 
             @Override

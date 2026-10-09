@@ -416,8 +416,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "types/BindingId;)Z", Reading.STRUCTURE, BINDINGS);
         row(out, c + "coverage/CoverageSites$Walk", "readsABindingOf", "(" + core + "L" + c
                 + "types/BindingOwner;)Z", Reading.STRUCTURE, BINDINGS);
-        row(out, c + "check/PathReachability", "gatherPositions", "(" + core + reads
-                + "Ljava/util/Map;)V", Reading.EACH_SUBEXPRESSION, ASKS_EACH);
+        row(out, c + "check/PathReachability", "gatherPlaces", "(" + core + reads
+                + "Ljava/util/Map;Ljava/util/Map;)V", Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         // Whether an answer a body can come to is the same on every run, asked of the body a run
         // goes through.
         row(out, c + "coverage/CoverageSites$Walk", "sameOnEveryRun", "(" + core + ")Z",
@@ -453,8 +453,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "partition/ConditionNumbering;)V", Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "partition/DecisionComparison$1", "readsThrough",
                 "(L" + CORE + "$FieldAccess;" + reads + ")Z", Reading.ONE_ACCESS, ONE);
-        row(out, c + "partition/DecisionSubjects", "anAnswer", "(" + core + reads + ")L" + c
-                + "meaning/DecisionSubject$AnAnswer;", Reading.NAMES, READS_THE_NAMES);
+        row(out, c + "inputs/InputReads", "answerAt", "(" + core + "L" + c + "check/Symbols;L"
+                + c + "check/DeclarationNewtypes;)L" + c + "inputs/InputReads$AnAnswerAt;",
+                Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/LiveFlow", "walk", "(" + core + "Ljava/util/Set;)V",
                 Reading.STRUCTURE, BINDINGS);
         row(out, c + "partition/MeaningsOfABodyReading", "walk", "(" + core + reads + ")V",

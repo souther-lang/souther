@@ -45,7 +45,8 @@ class EveryArmOfAPublishedLineIsPairedWithTheRuleThatHasThatKindTest {
     private static final Map<String, String> PAIRED_WITH = new TreeMap<>(Map.of(
             "part", "invariant",
             "statement_of_part", "ensures",
-            "comparison", "comparison"));
+            "comparison", "comparison",
+            "part_of_comparison", "comparison"));
 
     /**
      * And which numbers each of them carries beside the rule.
@@ -55,11 +56,16 @@ class EveryArmOfAPublishedLineIsPairedWithTheRuleThatHasThatKindTest {
      * branch and places an end on each of the numbers they are about. Carrying the part alone, the
      * document said the same of both — and the facts beside them do not tell them apart, since two
      * lower bounds admitting their own value say the same thing about two numbers.
+     *
+     * <p>A body's comparison carries nothing beside the rule where it is one line, and which of its
+     * lines where it states several relations held together — a number the reading that took the
+     * statement apart issued, and never a part of something an author wrote.
      */
     private static final Map<String, String> CARRIES = new TreeMap<>(Map.of(
             "part", "[kind, line, part, rule]",
             "statement_of_part", "[kind, part, rule, statement]",
-            "comparison", "[kind, rule]"));
+            "comparison", "[kind, rule]",
+            "part_of_comparison", "[kind, part, rule]"));
 
     @Test
     void everyArmPairsItsWordWithTheKindOfRuleThatIsDecomposedThatWay() throws IOException {
@@ -103,7 +109,7 @@ class EveryArmOfAPublishedLineIsPairedWithTheRuleThatHasThatKindTest {
         }
 
         assertEquals(new TreeMap<>(Map.of("OfADeclarationsLine", "", "OfAComparisonOfAPart", "",
-                        "OfAComparison", "")),
+                        "OfAComparison", "", "OfAPartOfAComparison", "")),
                 new TreeMap<>(arms),
                 "the arms a line of the model has, which is what the words above are the document's"
                         + " spelling of. An arm added here wants one, and this is where that is"

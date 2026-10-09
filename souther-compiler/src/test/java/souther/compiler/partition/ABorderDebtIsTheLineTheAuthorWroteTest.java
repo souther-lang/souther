@@ -30,6 +30,7 @@ import souther.compiler.query.Compilation;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -255,6 +256,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                                         occurrence, SourceConstruct.CALL)))),
                         new RuleReportAnchor.ByTheModuleThatWroteIt(),
                         List.of(WHERE.outcome(occurrence))),
+                Optional.empty(),
                 new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)));
     }
 

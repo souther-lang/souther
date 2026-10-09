@@ -138,8 +138,10 @@ class ARowThatStopsAtAGuardSaysWhyOverItTest {
      */
     @Test
     void waysPastNotReadAreSaidAsThisCompilersAndNotAsTheModels() {
+        // The guard is one rule with a line at each of its relations, so it divides the amount, and
+        // the row for the class between nought and four is the one it refuses.
         String said = over(offered(GOES_ON.replace("guard amount > 0",
-                "guard (if amount > 0 then amount else 0 - amount) > 4")), "kind=Express");
+                "guard (if amount > 0 then amount else 0 - amount) > 4")), "amount=0 < x <= 4");
         assertTrue(said.contains("the ways past it could not be read off the body")
                         && said.contains("which does not make it a guard no row goes past"),
                 () -> "the guard's ways were not read, said as such: " + said);

@@ -292,7 +292,8 @@ public final class PathReachability {
                 new PathReachability(engine, plan, read, ruleReading.source().symbols(),
                         ruleReading.source().newtypes(), out,
                         arriving, meanings, new MeaningAssumptions.InputPlaces(parameters,
-                                path -> read.typeAt(path, ruleReading.source()), Map.of()));
+                                path -> read.typeAt(path, ruleReading.source()), Map.of(),
+                                Map.of()));
         reading.entry = in.known();
         reading.entered = in.at();
         reading.walk(body, in.known(), in.at(),
@@ -468,7 +469,7 @@ public final class PathReachability {
         Optional<Proposition> stated = meanings.at(site);
         if (stated.isPresent()) {
             return engine.assuming(stated.get(), cond, k, in, positive,
-                    places.readBy(positionsReadBy(cond, reads)));
+                    readBy(cond, reads));
         }
         // A body with no analysis to read it off has its conditions read as they stand here,
         // which is the one reading such a body has. A body that has one and files nothing at a
@@ -480,30 +481,36 @@ public final class PathReachability {
     }
 
     /**
-     * The expression of {@code cond} that reads each position of the input, where {@code reads}
-     * places one: what a proposition about that position is about, in this tree.
+     * The places of {@code cond}: the expression that reads each position of the input, where
+     * {@code reads} places one, and the expression that is each place in an answer a dependency
+     * gave — what a proposition about either is about, in this tree.
      *
      * <p>Only what is read where the condition stands. Under a binding the condition makes, a name
      * is one the bindings in force here say nothing of, so nothing below one is taken.
      */
-    private Map<TermPath, Core> positionsReadBy(Core cond, InputReads reads) {
-        Map<TermPath, Core> out = new HashMap<>();
-        gatherPositions(cond, reads, out);
-        return out;
+    private MeaningAssumptions.InputPlaces readBy(Core cond, InputReads reads) {
+        Map<TermPath, Core> positions = new HashMap<>();
+        Map<MeaningAssumptions.AnswerPlace, Core> answers = new HashMap<>();
+        gatherPlaces(cond, reads, positions, answers);
+        return places.readBy(positions, answers);
     }
 
-    private void gatherPositions(Core standing, InputReads reads, Map<TermPath, Core> out) {
+    private void gatherPlaces(Core standing, InputReads reads, Map<TermPath, Core> positions,
+                              Map<MeaningAssumptions.AnswerPlace, Core> answers) {
         Core e = Core.withoutStanding(standing);
         for (Core each : Core.subexpressionsAt(e)) {
             if (reads.pathOf(each, newtypes) instanceof PathResolution.At(TermPath at)) {
-                out.putIfAbsent(at, each);
+                positions.putIfAbsent(at, each);
+            } else if (reads.answerAt(each, symbols, newtypes) instanceof InputReads.AnAnswerAt(
+                    var evaluation, var _, var _, var steps)) {
+                answers.putIfAbsent(new MeaningAssumptions.AnswerPlace(evaluation, steps), each);
             }
         }
         if (e instanceof Core.LetIn || e instanceof Core.Block || e instanceof Core.Match
                 || e instanceof Core.IfConstructed) {
             return;
         }
-        Core.forEachChild(e, child -> gatherPositions(child, reads, out));
+        Core.forEachChild(e, child -> gatherPlaces(child, reads, positions, answers));
     }
 
     /**

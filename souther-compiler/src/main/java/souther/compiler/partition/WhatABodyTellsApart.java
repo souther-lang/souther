@@ -291,6 +291,7 @@ final class WhatABodyTellsApart {
             case BlockReason.ComparisonCuttingNothing _,
                  BlockReason.ComparisonCuttingOutsideDomain _,
                  BlockReason.ComparisonNothingArrivesAtItsLine _,
+                 BlockReason.ComparisonLineTurningNothing _,
                  BlockReason.PredicateTellingNothingApart _ -> true;
             case BlockReason.ComparisonBetweenPositions _,
                  BlockReason.ComparisonOverARun _,

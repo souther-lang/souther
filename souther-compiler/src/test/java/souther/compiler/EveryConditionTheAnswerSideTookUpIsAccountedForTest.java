@@ -57,10 +57,12 @@ class EveryConditionTheAnswerSideTookUpIsAccountedForTest {
 
             behavior decides : (m: Int, n: Int) -> Answer
                 depends on look
-            let decides (m, n, look) =
-                if look(m).k == look(m).j then
+            let decides (m, n, look) = {
+                let found = look(m)
+                if found.k == found.j then
                     (if look(n).v > 0 then Yes else No)
                 else No
+            }
 
             let same = R { k = K { id = 1 }, j = K { id = 1 }, v = 1 }
 
@@ -83,10 +85,12 @@ class EveryConditionTheAnswerSideTookUpIsAccountedForTest {
             behavior decides : (m: Int) -> Answer
                 depends on first
                 depends on second
-            let decides (m, first, second) =
-                if first(m).k == first(m).j then
+            let decides (m, first, second) = {
+                let found = first(m)
+                if found.k == found.j then
                     (if second(m).v > 0 then Yes else No)
                 else No
+            }
             """;
 
     /**
@@ -105,10 +109,12 @@ class EveryConditionTheAnswerSideTookUpIsAccountedForTest {
             behavior decides : (m: Int) -> Answer
                 depends on first
                 depends on second
-            let decides (m, first, second) =
+            let decides (m, first, second) = {
+                let found = second(m)
                 if first(m).v > 0 then
-                    (if second(m).k == second(m).j then Yes else No)
+                    (if found.k == found.j then Yes else No)
                 else No
+            }
             """;
 
     /**

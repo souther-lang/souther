@@ -128,16 +128,35 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
      * comparison's own probe.
      *
      * @param read  which comparison this is, which reading of it, and where it was met
+     * @param part  which of the lines the comparison states this is, where it states several, as
+     *              the reading that took it apart named it — and where the statement turns on it,
+     *              which a row at the line has to be for it to say anything about the line. Which
+     *              line is part of the identity ({@link #authoredLine}); where it decides is this
+     *              reading's, as everything beside the rule is. Empty where the comparison is one
+     *              line
      * @param facts what the rule placed on the values ({@link souther.compiler.check.ComparisonClaim
      *              ComparisonClaim}), which decides which neighbour is the other class's edge:
      *              {@code <= 3000} leaves 3001 over there, {@code < 3000} leaves 2999
      */
-    record ComparisonOrigin(Read read, LineFacts facts) implements LineOrigin {
+    record ComparisonOrigin(Read read, Optional<WhereAPartDecides> part, LineFacts facts)
+            implements LineOrigin {
 
         public ComparisonOrigin {
-            if (read == null || facts == null) {
+            if (read == null || part == null || facts == null) {
                 throw new IllegalArgumentException("a line is what some comparison placed");
             }
+        }
+
+        /**
+         * Whether which way the comparison comes out is which side of this line a row is on.
+         *
+         * <p>Where the comparison is this one line. A line of a statement of several is not: which
+         * way {@code Int.max(a, b) > 5} comes out is not which side of {@code a = 5} a row is,
+         * since {@code b} may settle it — so a reader that reads a side off an outcome, or an
+         * outcome off a side, has nothing to read here.
+         */
+        public boolean comesOutBySides() {
+            return part.isEmpty();
         }
 
         /**
@@ -485,9 +504,13 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
                             lineFacts(), List.of());
             // The rule and nothing under it. A comparison is a rule apiece — a condition holding
             // three comparisons is three rules — so there is no second line of it to tell this one
-            // from, and a number here would be one this reading made up to fill a field.
-            case ComparisonOrigin g ->
-                    new AuthoredLine(new WhichLine.OfAComparison(g.rule()), lineFacts(), List.of());
+            // from, and a number here would be one this reading made up to fill a field. Unless it
+            // states several, where which of them this is was named by the reading that found them.
+            case ComparisonOrigin g -> new AuthoredLine(g.part()
+                    .<WhichLine>map(part ->
+                            new WhichLine.OfAPartOfAComparison(g.rule(), part.part()))
+                    .orElseGet(() -> new WhichLine.OfAComparison(g.rule())),
+                    lineFacts(), List.of());
             // The line this reading was drawn for, handed back. Taken apart into a rule and a
             // number and put together again here, the two halves would be free to be joined
             // differently from the way they were named.

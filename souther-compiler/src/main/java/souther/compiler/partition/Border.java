@@ -780,6 +780,16 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         boolean holdAt(Level level);
 
         /**
+         * Whether a value stands anywhere on the {@code side} of {@code level}: from the level on,
+         * where {@code including} it, and strictly past it where not.
+         *
+         * <p>What is asked of one side of a line, which is every value on that side and not the
+         * nearest of them. The nearest may be one the rules leave out — a position held away from
+         * five still has four below a line at five — and a decimal has no nearest value at all.
+         */
+        boolean holdOnSide(Level level, Towards side, boolean including);
+
+        /**
          * The values a range of the quantity leaves, as far as a range can say: how far it runs.
          *
          * <p>Whether a value stands at a level is more than a range holds, so it is answered as
@@ -799,8 +809,55 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                 public boolean holdAt(Level level) {
                     return extendTo(level);
                 }
+
+                // Over-stated the way {@link #holdAt} is: a range that runs as far as the level is
+                // taken to hold values on either side of it.
+                @Override
+                public boolean holdOnSide(Level level, Towards side, boolean including) {
+                    return extendTo(level);
+                }
             };
         }
+    }
+
+    /**
+     * Whether a row stands on each side of the line, where {@link #reaches} asks whether the values
+     * run to it on either.
+     *
+     * <p>What a line is asked where it has to be crossed and not only met: a row on each side, so
+     * that two rows differing in this line alone are there to be written.
+     */
+    static boolean reachesBothSides(Level cut, ExactAnswer<Seam> parts, Values values) {
+        return standsBeside(cut, parts, Towards.BELOW, values)
+                && standsBeside(cut, parts, Towards.ABOVE, values);
+    }
+
+    /**
+     * Whether a row stands anywhere on the {@code side} of the line, and not at the line.
+     *
+     * <p>Every value on that side, and not the nearest one: the nearest may be one the rules leave
+     * out, and the side is still there past it. Said in the two ways the order allows. Where it
+     * names a value beside the line, the side is that value and everything past it — the values a
+     * row can hold there, with nothing between the value and the line for a search to find. Where
+     * it names none, as a decimal does, the side is everything strictly past the line, and the line
+     * itself is on neither side of itself. Asked of the seam's own answer and not of what the seam
+     * leaves, which on such an order is the line.
+     *
+     * <p>A seam that was not worked out is no proof that nothing stands there.
+     */
+    static boolean standsBeside(Level cut, ExactAnswer<Seam> parts, Towards side,
+                                Values values) {
+        if (!(parts instanceof ExactAnswer.Held<Seam>(Seam seam))) {
+            return true;
+        }
+        Level beside = side == Towards.BELOW ? seam.below() : seam.above();
+        if (beside == null) {
+            return values.holdOnSide(cut, side, false);
+        }
+        return switch (seam.at().asWritten(beside)) {
+            case ExactAnswer.Unheld<Level> _ -> true;
+            case ExactAnswer.Held<Level>(Level written) -> values.holdOnSide(written, side, true);
+        };
     }
 
     /**

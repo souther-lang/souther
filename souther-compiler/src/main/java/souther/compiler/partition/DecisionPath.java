@@ -1,10 +1,12 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.InjectedAnswer;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -213,12 +215,19 @@ final class DecisionPath {
     }
 
     /**
-     * A comparison as a demand on one answer, or what stopped it from being one.
+     * A comparison as a demand on the value a row stands one dependency in with, or what stopped
+     * it from being one.
      *
-     * <p>Of one answer and of nothing beside it. A form over two answers, or over an answer and a
-     * number of the input, is one statement about the pair and nothing here composes two values to
-     * it together — so it is left unstated, which is what a way carries as a condition a row may
-     * not satisfy rather than as one that is not there.
+     * <p>Of one dependency and of nothing beside it. A row writes one value for a dependency, which
+     * answers every call of it, so a form over places of what two calls answered is a form over
+     * places of that one value — {@code look(at).k == look(at).j} asks for a value whose two fields
+     * agree. Not where two calls read one place: that is the value held against itself, which two
+     * answers are not, and it is left as what it says.
+     *
+     * <p>A form over two dependencies, or over an answer and a number of the input, is one statement
+     * about the pair and nothing here composes two values to it together — so it is left unstated,
+     * which is what a way carries as a condition a row may not satisfy rather than as one that is
+     * not there.
      *
      * <p>A form naming no answer at all is neither of those. It is the input's, and this side has
      * nothing to say about it.
@@ -226,6 +235,7 @@ final class DecisionPath {
     private static Asked compared(DecisionCondition.AComparison condition, boolean held,
                                   ConditionReportAnchor anchor) {
         InjectedAnswer only = null;
+        Set<List<TermPath.Step>> places = new HashSet<>();
         boolean anyOfAnAnswer = false;
         boolean everyAtomIsOfIt = true;
         for (DecisionAtom atom : condition.form().coefs().keySet()) {
@@ -234,11 +244,12 @@ final class DecisionPath {
                 continue;
             }
             anyOfAnAnswer = true;
-            if (only != null && !only.equals(at.answered())) {
+            if ((only != null && !only.dependency().equals(at.answered().dependency()))
+                    || !places.add(at.steps())) {
                 everyAtomIsOfIt = false;
                 break;
             }
-            only = at.answered();
+            only = only == null ? at.answered() : only;
         }
         if (!anyOfAnAnswer) {
             return OF_THE_INPUT;

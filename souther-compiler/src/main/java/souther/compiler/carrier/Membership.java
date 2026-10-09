@@ -65,6 +65,11 @@ public final class Membership<E> {
         return in.contains(Objects.requireNonNull(element, "an element"));
     }
 
+    /** Whether nothing is in, which is the same answer whatever order anything was handed in. */
+    public boolean isEmpty() {
+        return in.isEmpty();
+    }
+
     @Override
     public boolean equals(Object other) {
         return other instanceof Membership<?> membership && in.equals(membership.in);
