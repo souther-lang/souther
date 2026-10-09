@@ -164,7 +164,7 @@ class AConditionOnAContainersElementsIsComposedAsWhatItSaysTest {
                         domain("decide").quantities(rules()).ordersOf(gate.term()).answered(),
                         Count.of(1)))),
                 new Reachability.Reaching(region, Requirements.NONE, TruthsAsked.NONE,
-                        List.copyOf(way)),
+                        List.copyOf(way), Reachability.Ways.ONE),
                 Generator.CandidateCheck.ANY);
     }
 
@@ -186,7 +186,7 @@ class AConditionOnAContainersElementsIsComposedAsWhatItSaysTest {
         List<OnTheWay> stated = ReachingCuts.stating(Condition.of(analysis.core(), reads,
                         rules().symbols(), rules().newtypes(),
                         new ConditionNumbering(module(), behavior)),
-                reading, true, new WhatConditionsState(reading));
+                reading, true, WhatConditionsState.of(reading));
         assertEquals(1, stated.size(), () -> "one condition: " + stated);
         return assertInstanceOf(OnTheWay.TakenIn.class, stated.getFirst());
     }

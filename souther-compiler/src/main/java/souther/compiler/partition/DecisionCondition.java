@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -171,10 +172,43 @@ public sealed interface DecisionCondition {
     }
 
     /**
+     * A condition read to the end that no column above is: what it states over the input, as the
+     * column itself — some element of a container meeting something, several things asked at once,
+     * an arm entered where a computed value is of its case.
+     *
+     * <p>A statement and its denial are one column, and which of the two stands for it is the one
+     * whose spelling comes first ({@link #of}), so the two ways a condition comes out are the two
+     * answers of one column wherever each was met.
+     */
+    record AStatement(Proposition statement) implements DecisionCondition {
+
+        public AStatement {
+            if (statement == null || Proposition.leavesSomethingUnread(statement)) {
+                throw new IllegalArgumentException(
+                        "a statement is a column where all of it was read: " + statement);
+            }
+            if (statement.denied().key().compareTo(statement.key()) < 0) {
+                throw new IllegalArgumentException("a statement and its denial are one column,"
+                        + " read as " + statement.denied().key() + " rather than as "
+                        + statement.key());
+            }
+        }
+
+        /** {@code stated} coming out {@code held}, as the answer to the one column it and its
+         *  denial are. */
+        static DecidedCondition.Held of(Proposition stated, boolean held) {
+            Proposition denied = stated.denied();
+            return denied.key().compareTo(stated.key()) < 0
+                    ? new DecidedCondition.Held(new AStatement(denied), !held)
+                    : new DecidedCondition.Held(new AStatement(stated), held);
+        }
+    }
+
+    /**
      * A condition this reading has no words for, named by the reading that met it.
      *
-     * <p>The one shape told apart by a name. What the other two carry says what they mean, and two
-     * conditions nothing could read mean nothing to be told apart by — so without a name, two
+     * <p>The one shape told apart by a name. What the other shapes carry says what they mean, and
+     * two conditions nothing could read mean nothing to be told apart by — so without a name, two
      * distinctions this compiler does distinguish would be one column and the table would say a
      * body decides less than it does.
      *

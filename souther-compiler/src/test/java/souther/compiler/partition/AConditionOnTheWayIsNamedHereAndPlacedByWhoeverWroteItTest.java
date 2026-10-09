@@ -230,13 +230,11 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
                     else
                         n > 5
                 """;
-        List<OnTheWay.Declined> declined = new ArrayList<>();
+        List<OnTheWay.OneOf> declined = new ArrayList<>();
         for (List<OnTheWay> way : waysIn(compiledFrom(source), "calledTwice")) {
             for (OnTheWay each : way) {
-                if (each instanceof OnTheWay.Declined left
-                        && left.whys().contains(new WhyNotTaken.ProjectionIncomplete(
-                                WhyNotTaken.Shape.ONE_OF_SEVERAL_THINGS))) {
-                    declined.add(left);
+                if (each instanceof OnTheWay.OneOf several) {
+                    declined.add(several);
                 }
             }
         }
@@ -268,7 +266,7 @@ class AConditionOnTheWayIsNamedHereAndPlacedByWhoeverWroteItTest {
         ConditionOccurrence reported = new ConditionOccurrence("b", 1);
         assertThrows(IllegalArgumentException.class, () -> new OnTheWay.Declined(declined,
                 new ConditionReportAnchor.WhereTheReadingMetIt("m", reported),
-                new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE)));
+                new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER)));
     }
 
     /**

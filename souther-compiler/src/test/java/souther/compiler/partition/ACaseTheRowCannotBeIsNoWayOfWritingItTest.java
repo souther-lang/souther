@@ -107,7 +107,7 @@ class ACaseTheRowCannotBeIsNoWayOfWritingItTest {
                 new Reachability.Reaching(region, required, TruthsAsked.NONE,
                         List.of(new OnTheWay.TakenIn(new ConditionReportAnchor.WhereTheReadingMetIt(
                                 "m", new ConditionOccurrence("b", 0)),
-                                new RowDemand.Relational(ABOVE_TEN)))),
+                                new RowDemand.Relational(ABOVE_TEN))), Reachability.Ways.ONE),
                 Generator.CandidateCheck.ANY);
     }
 

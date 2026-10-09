@@ -1303,7 +1303,7 @@ final class Coverages {
                 // state anything here can be in: this runs because somebody asked.
                 if (probe == null) {
                     return new Looked(SearchOutcomes.of(new ItemAssessment.Attempt.Unavailable(
-                            ItemAssessment.Attempt.Reason.NO_CLASSES)), null);
+                            ItemAssessment.Attempt.Reason.NO_CLASSES)), null, Optional.empty());
                 }
                 // A way no value takes: one position would have to take two of its cases, or a
                 // condition on it comes out the other way for every row. Said in that word and not
@@ -1321,6 +1321,27 @@ final class Coverages {
                                 .A_CONDITION_NEVER_COMES_OUT_THAT_WAY);
                     }
                 }
+                // Where a condition on the way came out one of several ways, a row is looked for
+                // along each of them first, each narrower than the way whole. A row standing along
+                // one is a row of the way. Where none stands, what the point came to is what the
+                // way whole came to: one of them coming to nothing says nothing of the others, and
+                // the way whole is the account every one of them is inside.
+                if (able.along().isEmpty()) {
+                    return lookedAlong(criterion, label, narrowing, able);
+                }
+                for (Reachability.Reaching along : able.along()) {
+                    Looked one = lookedAlong(criterion, label, narrowing, along);
+                    if (one.witness().isPresent()) {
+                        return one;
+                    }
+                }
+                return lookedAlong(criterion, label, narrowing, able);
+            }
+
+            /** What looking for a row at {@code criterion} along {@code able} came to. */
+            private Looked lookedAlong(Criterion criterion, String label,
+                                       UnaryOperator<SearchRegion> narrowing,
+                                       Reachability.Reaching able) {
                 SearchRegion region = narrowing.apply(able.region());
                 // Where a row would have to stand is asked of the quantity, and finding one there of
                 // the realizer. What it composes is a candidate and no part of the item: another row
@@ -1338,8 +1359,8 @@ final class Coverages {
                 for (int value = 0;
                         value < CompositionBudget.VALUES_A_POINT_IS_TRIED_WITH.maximum(); value++) {
                     Searching came = searchingWith(criterion, label, able, region, tried);
-                    if (came.stood()) {
-                        return new Looked(came.outcomes(), came.realized());
+                    if (came.witness().isPresent()) {
+                        return new Looked(came.outcomes(), came.realized(), came.witness());
                     }
                     // Nothing was composed this time round. On the first asking that is the point's
                     // answer; on a later one it is the answer to a question this narrowed by
@@ -1347,7 +1368,7 @@ final class Coverages {
                     // composed came to — said with whatever of this compiler's ended the asking.
                     if (came.realized() == null) {
                         return new Looked(last == null ? came.outcomes()
-                                : endedBy(last, came.came()), first);
+                                : endedBy(last, came.came()), first, Optional.empty());
                     }
                     // The row a reader is offered is the first one composed. Every asking after it
                     // is put a narrower question — the values already tried are not there to be
@@ -1371,7 +1392,7 @@ final class Coverages {
                 //
                 // Nothing is put to the point here, so no value is tried and none is charged for.
                 return new Looked(endedBy(last, realizer.realize(quantity.standingAt(criterion),
-                        region, looking, tried)), first);
+                        region, looking, tried)), first, Optional.empty());
             }
 
             /**
@@ -1380,10 +1401,12 @@ final class Coverages {
              * <p>{@code came} is what the realizer answered, whatever that was; {@code realized} is
              * the same answer where it was a value with rows built from it, which is the one case
              * there is another value to ask for. Both, because what ended the asking is read off
-             * the first and what to do next off the second.
+             * the first and what to do next off the second. {@code witness} is a row built from it
+             * that ran and stood at the point, where one did.
              */
             private record Searching(Realization came, Realization.Found realized,
-                                     SearchOutcomes outcomes, boolean stood) {}
+                                     SearchOutcomes outcomes,
+                                     Optional<ItemAssessment.Attempt.Certified> witness) {}
 
             /**
              * What a walk over one region came to, and the assignment the row it composed was
@@ -1393,14 +1416,21 @@ final class Coverages {
              * another has been shown two answers about one search. {@code composed} is the
              * realization the row in {@code outcomes} was built from, and is null exactly where no
              * row was built.
+             *
+             * <p>{@code witness} is the row that ran and stood at the point, and is held as that row
+             * and not as a flag beside {@code composed}: a realization is where the search placed
+             * the demands, which a row built there may run past, so nothing here says a point was
+             * reached except a run that reached it.
              */
-            private record Looked(SearchOutcomes outcomes, Realization.Found composed) {}
+            private record Looked(SearchOutcomes outcomes, Realization.Found composed,
+                                  Optional<ItemAssessment.Attempt.Certified> witness) {}
 
             /** A way no value takes, said in the word for what the model settled it by. */
             private static Looked noRowTakes(String label, WayToTheBorder within,
                                              Generator.UnresolvedCombination.Reason why) {
                 return new Looked(SearchOutcomes.of(new ItemAssessment.Attempt.Unresolved(
-                        new Generator.UnresolvedCombination(List.of(label), why), within)), null);
+                        new Generator.UnresolvedCombination(List.of(label), why), within)), null,
+                        Optional.empty());
             }
 
             /**
@@ -1509,19 +1539,23 @@ final class Coverages {
                         if (made.isEmpty()) {
                             yield new Searching(answered, null,
                                     SearchOutcomes.of(whatCameOfIt(null, label, within, () -> null)),
-                                    false);
+                                    Optional.empty());
                         }
                         SearchOutcomes outcomes = SearchOutcomes.none();
-                        boolean stood = false;
+                        ItemAssessment.Attempt.Certified witness = null;
                         for (souther.compiler.partition.Generator.BoundaryAttempt each : made) {
                             ItemAssessment.Attempt came = whatCameOfIt(each, label, within,
                                     () -> standingThere(probe, line, criterion, site,
                                             (souther.compiler.partition.Generator
                                                     .BoundaryAttempt.Built) each));
-                            stood |= came instanceof ItemAssessment.Attempt.Certified;
+                            if (witness == null
+                                    && came instanceof ItemAssessment.Attempt.Certified certified) {
+                                witness = certified;
+                            }
                             outcomes = outcomes.plus(SearchOutcomes.of(came));
                         }
-                        yield new Searching(answered, found, outcomes, stood);
+                        yield new Searching(answered, found, outcomes,
+                                Optional.ofNullable(witness));
                     }
                     // And the two ways of finding nothing are not one answer. A walk of the whole
                     // of what the rules leave that reaches no value settles the point; a search
@@ -1534,7 +1568,7 @@ final class Coverages {
                                             souther.compiler.partition.Generator
                                                     .UnresolvedCombination.Reason
                                                     .THE_RULES_LEAVE_NOTHING_THERE), within)),
-                            false);
+                            Optional.empty());
                     // A walk that reached no placement. Where a budget of this compiler's is why it
                     // reached none, that travels: the point is one this declined to look further
                     // for, which is not the point being one nothing promises.
@@ -1545,7 +1579,8 @@ final class Coverages {
                     // nor a walk that narrowed nothing — read as the second, a pair this looked for
                     // in the one place such an order names came out as the rules leaving none.
                     case Realization.Unknown unknown -> new Searching(answered, null,
-                            SearchOutcomes.of(whatAWalkLeft(label, within, unknown)), false);
+                            SearchOutcomes.of(whatAWalkLeft(label, within, unknown)),
+                            Optional.empty());
                 };
             }
         };

@@ -4,6 +4,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.InjectedAnswer;
+import souther.compiler.meaning.Proposition;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -210,6 +211,13 @@ final class DecisionPath {
                                         new DemandGap.WhyNotStated.APlaceOnTheAnswersOwnOrder())
                                 : OF_THE_INPUT;
             };
+            // A statement of several parts: the input's where it is about nothing a dependency
+            // answered, and otherwise one this side composes no value to whole.
+            case DecidedCondition.Held(var condition, var _) ->
+                    Proposition.aboutAnAnswer(condition.statement())
+                            ? new Asked.NotStated(
+                                    new DemandGap.WhyNotStated.AStatementOfSeveralParts())
+                            : OF_THE_INPUT;
             case DecidedCondition.Unread _ -> OF_THE_INPUT;
         };
     }

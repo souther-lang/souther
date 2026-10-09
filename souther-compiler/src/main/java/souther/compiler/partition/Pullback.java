@@ -6,6 +6,8 @@ import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.Choice;
+import souther.compiler.check.ClauseName;
+import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredArgument;
@@ -26,6 +28,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.CasesOfAnAnswer;
 import souther.compiler.meaning.Conclusion;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -54,6 +57,8 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.HashSet;
@@ -62,6 +67,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.EnumSet;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -563,35 +569,351 @@ final class Pullback {
      */
     private Derivation.MatchArms armsOf(Core.Match match, InputReads reads,
                                         BiFunction<Core, InputReads, Derivation> states) {
-        Set<TypeSymbol> written = reads.casesWritten(match.scrutinee(),
-                read.rules().symbols(), read.rules().newtypes());
-        DecisionSubject subject = reads.pathOf(match.scrutinee(), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath at)
-                ? new DecisionSubject.AnInput(at) : answerAt(match.scrutinee(), reads);
+        List<Derivation> selections = selectionsOf(match, reads);
         List<Derivation.MatchArms.Arm> arms = new ArrayList<>();
-        for (Core.Case arm : match.cases()) {
-            Derivation selects;
-            Optional<Boolean> every = InputReads.whetherEveryRowTakes(arm, written);
-            if (every.isPresent()) {
-                selects = new Derivation.CasesWrittenOut(every.get());
-            } else if (arm.pattern() == null) {
-                selects = new Derivation.CasesWrittenOut(true);
-            } else if (subject != null) {
-                selects = new Derivation.CasesOfASubject(subject,
-                        CasesLeft.selectedBy(arm.pattern()));
-            } else {
-                // Which arm is taken is the match's own reader's to classify, and no part offered
-                // here: what is read is what the arms answer. Not the same whatever the input even
-                // over values the source wrote out, since what is matched is one of several of them
-                // and each may take another arm — one alone is settled above.
-                selects = new Derivation.Stopped(
-                        new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SCRUTINEE), false);
-            }
+        for (int i = 0; i < match.cases().size(); i++) {
+            Core.Case arm = match.cases().get(i);
             InputReads inside = reads.choosing(Choice.Decides.ofCase(match, arm),
                     read.rules().symbols(), read.rules().newtypes());
-            arms.add(new Derivation.MatchArms.Arm(selects, states.apply(arm.body(), inside)));
+            arms.add(new Derivation.MatchArms.Arm(selections.get(i),
+                    states.apply(arm.body(), inside)));
         }
         return new Derivation.MatchArms(arms);
+    }
+
+    /**
+     * Whether each arm of {@code match} selects the value it matches, in the order the arms are
+     * written — each on its own, and not yet that no arm before it does.
+     */
+    private List<Derivation> selectionsOf(Core.Match match, InputReads reads) {
+        Set<TypeSymbol> written = reads.casesWritten(match.scrutinee(),
+                read.rules().symbols(), read.rules().newtypes());
+        DecisionSubject subject = subjectOf(new Denotation(match.scrutinee(), reads));
+        // Which case the scrutinee is, read once for the match where no arm settles it on its own
+        // and it is no value a row controls: every arm selects off the same reading of it.
+        CasesOfAnAnswer.Answered scrutinee = null;
+        List<Derivation> out = new ArrayList<>();
+        for (Core.Case arm : match.cases()) {
+            Optional<Boolean> every = InputReads.whetherEveryRowTakes(arm, written);
+            if (every.isPresent()) {
+                out.add(new Derivation.CasesWrittenOut(every.get()));
+            } else if (arm.pattern() == null) {
+                out.add(new Derivation.CasesWrittenOut(true));
+            } else if (subject != null) {
+                out.add(new Derivation.CasesOfASubject(subject,
+                        CasesLeft.selectedBy(arm.pattern())));
+            } else {
+                if (scrutinee == null) {
+                    scrutinee = answered(new Denotation(match.scrutinee(), reads),
+                            WhyUnread.AtNoPosition.Place.SCRUTINEE);
+                }
+                out.add(selecting(scrutinee, arm));
+            }
+        }
+        return out;
+    }
+
+    /** What a row controls that {@code value} is, where it is one: a position of the input, or what
+     *  a dependency the row stands in answered. */
+    private DecisionSubject subjectOf(Denotation value) {
+        return value.at().pathOf(value.value(), read.rules().newtypes())
+                instanceof PathResolution.At(TermPath at)
+                ? new DecisionSubject.AnInput(at) : answerAt(value.value(), value.at());
+    }
+
+    /** Whether a value that is {@code answered}, read once wherever it stands, is of a case
+     *  {@code arm} selects. */
+    private static Derivation selecting(CasesOfAnAnswer.Answered answered, Core.Case arm) {
+        return switch (answered) {
+            // One of several values the source wrote out, each of which may take another arm.
+            case CasesOfAnAnswer.Answered.Written(var cases) ->
+                    InputReads.whetherEveryRowTakes(arm, cases)
+                            .<Derivation>map(Derivation.CasesWrittenOut::new)
+                            .orElseGet(() -> new Derivation.Stopped(new WhyUnread.AtNoPosition(
+                                    WhyUnread.AtNoPosition.Place.SCRUTINEE), false));
+            case CasesOfAnAnswer.Answered.AtAnInput(TermPath at) -> new Derivation.CasesOfASubject(
+                    new DecisionSubject.AnInput(at), CasesLeft.selectedBy(arm.pattern()));
+            case CasesOfAnAnswer.Answered.AtAnAnswer(var answer) -> new Derivation.CasesOfASubject(
+                    answer, CasesLeft.selectedBy(arm.pattern()));
+            case CasesOfAnAnswer.Answered.Unread(WhyUnread why) -> new Derivation.Stopped(why, false);
+            case CasesOfAnAnswer.Answered.ByItsArms(var arms) ->
+                    new Derivation.OneOfItsArms(arms.stream().map(each ->
+                            new Derivation.MatchArms.Arm(each.reached(),
+                                    selecting(each.answers(), arm))).toList());
+        };
+    }
+
+    /**
+     * Which case a behavior's body answers, over its own parameters ({@link CasesOfAnAnswer}), read
+     * off {@code body} once for every call of it.
+     *
+     * @param parameters the names the body reads its parameters by, in the order a call hands them
+     */
+    static CasesOfAnAnswer answerOf(Core body, List<String> parameters, InputReads reads,
+                                    InputReading read) {
+        Pullback reading = new Pullback(read, Optional.empty());
+        return new CasesOfAnAnswer(parameters, overItsOwnParameters(reading.answered(
+                new Denotation(body, reads), WhyUnread.AtNoPosition.Place.SUBJECT)));
+    }
+
+    /**
+     * {@code answered} as a body's answer read for every call of it: what a dependency answered is
+     * read where a call stands, and the body read once has no such place, so that part is unread.
+     */
+    private static CasesOfAnAnswer.Answered overItsOwnParameters(
+            CasesOfAnAnswer.Answered answered) {
+        return switch (answered) {
+            case CasesOfAnAnswer.Answered.AtAnAnswer _ -> new CasesOfAnAnswer.Answered.Unread(
+                    new WhyUnread.InACalledBody(
+                            WhyUnread.InACalledBody.What.WHAT_ITS_DEPENDENCY_ANSWERS));
+            case CasesOfAnAnswer.Answered.Written _, CasesOfAnAnswer.Answered.AtAnInput _,
+                 CasesOfAnAnswer.Answered.Unread _ -> answered;
+            case CasesOfAnAnswer.Answered.ByItsArms(var arms) ->
+                    new CasesOfAnAnswer.Answered.ByItsArms(arms.stream().map(arm ->
+                            new CasesOfAnAnswer.Answered.Arm(arm.reached(),
+                                    overItsOwnParameters(arm.answers()))).toList());
+        };
+    }
+
+    /**
+     * Which case {@code value} is, where it stands: written in arms where it is chosen by them, and
+     * at each arm what that arm answers.
+     *
+     * <p>The one reading of it, for a body's answer and for the value a {@code match} chooses its
+     * arm by alike.
+     *
+     * @param nowhere what the value is, as the place it stands at no position, where it is made of
+     *                nothing followed back to the input
+     */
+    private CasesOfAnAnswer.Answered answered(Denotation value,
+                                              WhyUnread.AtNoPosition.Place nowhere) {
+        Denotation chosen = chosenAt(value);
+        if (chosen != null) {
+            long most = READINGS.maximum();
+            if (value.at().readings() * readingsOf(value, most) > most) {
+                return new CasesOfAnAnswer.Answered.Unread(new WhyUnread.MoreReadingsThanAreMade());
+            }
+            return answeredByItsArms(chosen, nowhere);
+        }
+        Set<TypeSymbol> written = value.at().casesWritten(value.value(), read.rules().symbols(),
+                read.rules().newtypes());
+        if (written != null && !written.isEmpty()) {
+            return new CasesOfAnAnswer.Answered.Written(written);
+        }
+        if (value.at().pathOf(value.value(), read.rules().newtypes())
+                instanceof PathResolution.At(TermPath at)) {
+            return new CasesOfAnAnswer.Answered.AtAnInput(at);
+        }
+        DecisionSubject.AnAnswer answer = answerAt(value.value(), value.at());
+        if (answer != null) {
+            return new CasesOfAnAnswer.Answered.AtAnAnswer(answer);
+        }
+        CasesOfAnAnswer.Answered called = calledFor(value);
+        // Made of nothing followed back to the input: what an operation answers, or a value the
+        // source works out.
+        return called != null ? called : new CasesOfAnAnswer.Answered.Unread(
+                new WhyUnread.AtNoPosition(nowhere));
+    }
+
+    /** {@code chosen}'s arms, each reached where a run takes it and answering what it does. */
+    private CasesOfAnAnswer.Answered answeredByItsArms(Denotation chosen,
+                                                       WhyUnread.AtNoPosition.Place nowhere) {
+        InputReads where = chosen.at();
+        List<CasesOfAnAnswer.Answered.Arm> arms = new ArrayList<>();
+        switch (Core.withoutStanding(chosen.value())) {
+            case Core.If iff -> {
+                Derivation cond = observe(iff.cond(), AnswerAspect.TRUTH, where);
+                arms.add(new CasesOfAnAnswer.Answered.Arm(cond,
+                        answered(new Denotation(iff.then(), where), nowhere)));
+                arms.add(new CasesOfAnAnswer.Answered.Arm(new Derivation.UnderADenial(cond, true),
+                        answered(new Denotation(iff.els(), where), nowhere)));
+            }
+            case Core.Match match -> {
+                List<Derivation> selections = selectionsOf(match, where);
+                for (int i = 0; i < match.cases().size(); i++) {
+                    Core.Case arm = match.cases().get(i);
+                    InputReads inside = where.choosing(Choice.Decides.ofCase(match, arm),
+                            read.rules().symbols(), read.rules().newtypes());
+                    arms.add(new CasesOfAnAnswer.Answered.Arm(
+                            new Derivation.AnArmTaken(selections.subList(0, i), selections.get(i)),
+                            answered(new Denotation(arm.body(), inside), nowhere)));
+                }
+            }
+            case Core.IfConstructed attempt -> {
+                List<Derivation> taken = attempted(attempt, where);
+                List<Choice.Arm> choice = Choice.of(attempt).arms();
+                for (int i = 0; i < choice.size(); i++) {
+                    InputReads inside = where.choosing(choice.get(i).decidedBy(),
+                            read.rules().symbols(), read.rules().newtypes());
+                    arms.add(new CasesOfAnAnswer.Answered.Arm(taken.get(i),
+                            answered(new Denotation(choice.get(i).answers(), inside), nowhere)));
+                }
+            }
+            // A value one of whose arguments an operation of the library answers by how they
+            // stand, which is a number and of no case.
+            default -> {
+                return new CasesOfAnAnswer.Answered.Unread(new WhyUnread.NotYetComposed(
+                        WhyUnread.NotYetComposed.Step.A_CHOICE_BY_CASES));
+            }
+        }
+        return new CasesOfAnAnswer.Answered.ByItsArms(arms);
+    }
+
+    /**
+     * What {@code value} answers where it is a call of a behavior that is no dependency the row
+     * stands in — read once off that behavior's body and put in at this call — or null where it is
+     * no such call.
+     */
+    private CasesOfAnAnswer.Answered calledFor(Denotation value) {
+        Denotation stands = value.at().standing(value.value(), read.rules().symbols(),
+                read.rules().newtypes());
+        if (!(AnOperationApplied.of(Core.withoutStanding(stands.value()))
+                instanceof AnOperationApplied(ValueName.Behavior behavior, List<Core> args))
+                || stands.at().standsIn(behavior)) {
+            return null;
+        }
+        Optional<CasesOfAnAnswer> found = read.rules().declarations().answers().of(behavior);
+        if (found.isEmpty()) {
+            return new CasesOfAnAnswer.Answered.Unread(new WhyUnread.InACalledBody(
+                    WhyUnread.InACalledBody.What.AN_ANSWER_NOT_READ));
+        }
+        CasesOfAnAnswer cases = found.get();
+        if (cases.answered() instanceof CasesOfAnAnswer.Answered.Unread unread) {
+            return unread;
+        }
+        if (args.size() != cases.parameters().size()) {
+            return new CasesOfAnAnswer.Answered.Unread(new WhyUnread.InACalledBody(
+                    WhyUnread.InACalledBody.What.AN_ANSWER_NOT_READ));
+        }
+        Map<String, TermPath> handed = new HashMap<>();
+        Map<String, Set<TypeSymbol>> written = new HashMap<>();
+        for (int i = 0; i < args.size(); i++) {
+            String parameter = cases.parameters().get(i);
+            if (stands.at().pathOf(args.get(i), read.rules().newtypes())
+                    instanceof PathResolution.At(TermPath at)) {
+                handed.put(parameter, at);
+            } else {
+                Set<TypeSymbol> one = stands.at().casesWritten(args.get(i),
+                        read.rules().symbols(), read.rules().newtypes());
+                if (one != null && !one.isEmpty()) {
+                    written.put(parameter, one);
+                }
+            }
+        }
+        return atTheCall(cases.answered(), behavior, handed, written);
+    }
+
+    /**
+     * {@code answered}, read off a body over its parameters, at a call that handed each parameter
+     * named in {@code handed} the position there and each named in {@code written} a value written
+     * out: where the body's answer stands is moved to the same way into what the call handed, and
+     * where an arm is reached is said of what the call handed ({@link
+     * Derivation.ABehaviorsAnswerAtACall}).
+     */
+    private static CasesOfAnAnswer.Answered atTheCall(CasesOfAnAnswer.Answered answered,
+                                                      ValueName.Behavior behavior,
+                                                      Map<String, TermPath> handed,
+                                                      Map<String, Set<TypeSymbol>> written) {
+        return switch (answered) {
+            case CasesOfAnAnswer.Answered.Written _, CasesOfAnAnswer.Answered.Unread _ -> answered;
+            // A body's answer read for every call holds none ({@link CasesOfAnAnswer}).
+            case CasesOfAnAnswer.Answered.AtAnAnswer _ -> throw new IllegalArgumentException(
+                    "a body's answer over its own parameters names no dependency's answer: "
+                            + answered);
+            case CasesOfAnAnswer.Answered.AtAnInput(TermPath at) when handed.containsKey(at.head()) ->
+                    new CasesOfAnAnswer.Answered.AtAnInput(at.under(handed.get(at.head())));
+            case CasesOfAnAnswer.Answered.AtAnInput(TermPath at)
+                    when at.steps().isEmpty() && written.containsKey(at.head()) ->
+                    new CasesOfAnAnswer.Answered.Written(written.get(at.head()));
+            case CasesOfAnAnswer.Answered.AtAnInput _ -> new CasesOfAnAnswer.Answered.Unread(
+                    new WhyUnread.InACalledBody(
+                            WhyUnread.InACalledBody.What.AN_ARGUMENT_AT_NO_POSITION));
+            case CasesOfAnAnswer.Answered.ByItsArms(var arms) ->
+                    new CasesOfAnAnswer.Answered.ByItsArms(arms.stream().map(arm ->
+                            new CasesOfAnAnswer.Answered.Arm(
+                                    new Derivation.ABehaviorsAnswerAtACall(behavior,
+                                            arm.reached(), handed),
+                                    atTheCall(arm.answers(), behavior, handed, written)))
+                            .toList());
+        };
+    }
+
+    /**
+     * What a run entering each arm of {@code fork} — a {@code match}, or an attempted construction
+     * — states, where {@code fork} is read in {@code reads}.
+     *
+     * <p>Every arm at once, because what one arm states is a fact of the whole fork: the arms
+     * before it not taken and its own taken. So the fork is read once — a {@code match}'s
+     * selections, an attempt's clauses — and each arm concluded off that one reading.
+     *
+     * <p>The arms as {@link Choice} numbers them: a {@code match}'s in the order they are written,
+     * and an attempt's built arm first and then its departures as written.
+     *
+     * @param where the construct of the model the fork is, where the caller knows it
+     */
+    static List<Pulled> ofTheArms(Core fork, InputReads reads, InputReading read,
+                                  Optional<ModelOccurrence> where) {
+        Pullback reading = new Pullback(read, where);
+        return reading.entering(fork, reads).stream().map(reading::pulled).toList();
+    }
+
+    private List<Derivation> entering(Core fork, InputReads reads) {
+        return switch (Core.withoutStanding(fork)) {
+            case Core.Match match -> {
+                List<Derivation> selections = selectionsOf(match, reads);
+                List<Derivation> out = new ArrayList<>();
+                for (int part = 0; part < selections.size(); part++) {
+                    out.add(new Derivation.AnArmTaken(selections.subList(0, part),
+                            selections.get(part)));
+                }
+                yield out;
+            }
+            case Core.IfConstructed attempt -> attempted(attempt, reads);
+            default -> throw new IllegalArgumentException(fork.getClass().getSimpleName()
+                    + " at " + fork.pos() + " is no match or attempt with arms a run enters");
+        };
+    }
+
+    /**
+     * What each arm of {@code attempt} being taken states, in the order {@link Choice} numbers
+     * them: the value built, where every clause of the invariant holds of what the attempt hands
+     * it; and each departure, where the first clause not to hold is one it answers.
+     *
+     * <p>A departure naming a clause answers that clause, and one naming none answers every clause
+     * no other departure names. A clause this reading could not read stands in its place, since
+     * whether it holds decides the arms after it as much as one that was read.
+     */
+    private List<Derivation> attempted(Core.IfConstructed attempt, InputReads reads) {
+        ClausesInOrder clauses = ClausesInOrder.at(attempt.construct(), read.rules());
+        if (!clauses.everyRuleReached()) {
+            return Collections.nCopies(1 + attempt.els().size(), new Derivation.Stopped(
+                    new WhyUnread.AnInvariantNotReached(), false));
+        }
+        List<Derivation> holds = new ArrayList<>();
+        for (ClausesInOrder.OneClause clause : clauses.inOrder()) {
+            holds.add(switch (clause) {
+                case ClausesInOrder.OneClause.Stated stated ->
+                        observe(stated.states(), AnswerAspect.TRUTH, reads);
+                case ClausesInOrder.OneClause.Unread unread -> new Derivation.Stopped(
+                        new WhyUnread.AClauseOfAnInvariant(unread.clause(), unread.why()), false);
+            });
+        }
+        Set<ClauseName> named = new HashSet<>();
+        attempt.els().forEach(arm -> arm.clause().ifPresent(name ->
+                named.add(new ClauseName(name))));
+        List<Derivation> out = new ArrayList<>();
+        out.add(new Derivation.ItWasBuilt(holds));
+        for (Core.ElseArm arm : attempt.els()) {
+            Optional<ClauseName> answering = arm.clause().map(ClauseName::new);
+            List<Boolean> answers = clauses.inOrder().stream()
+                    .map(clause -> answering.isPresent()
+                            ? clause.clause().name().equals(answering)
+                            : clause.clause().name().map(name -> !named.contains(name))
+                                    .orElse(true))
+                    .toList();
+            out.add(new Derivation.ItDeparted(holds, answers));
+        }
+        return out;
     }
 
     /**
@@ -952,6 +1274,35 @@ final class Pullback {
             }
         }
 
+        /** The argument a number of a law is of. */
+        private static DeclaredArgument argumentOf(LawNumber<DeclaredArgument> number) {
+            return switch (number) {
+                case LawNumber.AnArgument<DeclaredArgument>(DeclaredArgument at) -> at;
+                case LawNumber.SizeOf<DeclaredArgument>(LawSubject<DeclaredArgument> of) ->
+                        switch (of) {
+                            case LawSubject.Argument<DeclaredArgument>(DeclaredArgument at) -> at;
+                            case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at) -> at;
+                            case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(
+                                    DeclaredArgument at) -> at;
+                        };
+                case LawNumber.HowManyMeet<DeclaredArgument>(DeclaredArgument at, var _) -> at;
+            };
+        }
+
+        /** What of its argument a number of a law is, in the order the kinds are declared in. */
+        private static int whatOfIt(LawNumber<DeclaredArgument> number) {
+            return switch (number) {
+                case LawNumber.AnArgument<DeclaredArgument> _ -> 0;
+                case LawNumber.SizeOf<DeclaredArgument>(LawSubject<DeclaredArgument> of) ->
+                        switch (of) {
+                            case LawSubject.Argument<DeclaredArgument> _ -> 1;
+                            case LawSubject.ElementOf<DeclaredArgument> _ -> 2;
+                            case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _ -> 3;
+                        };
+                case LawNumber.HowManyMeet<DeclaredArgument> _ -> 4;
+            };
+        }
+
         /** {@code form}, a number of the arguments, as a form over the quantities a condition is
          *  read over. */
         Sized number(LinearForm<LawNumber<DeclaredArgument>> form) {
@@ -962,22 +1313,41 @@ final class Pullback {
          *  them cancels. */
         private Sized number(LinearForm<LawNumber<DeclaredArgument>> form,
                              List<LinearForm<Quantity>> parts) {
-            LinearForm<Quantity> out = LinearForm.constant(form.constant());
-            for (Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> term : form.coefs().entrySet()) {
+            List<LinearForm<Quantity>> scaled = new ArrayList<>();
+            scaled.add(LinearForm.constant(form.constant()));
+            Set<UnheldNumber> unheld = EnumSet.noneOf(UnheldNumber.class);
+            // Walked by the argument each number is of, and then by what of it the number is, so
+            // that where two numbers have no form, which one the law is said to stop at is the law's
+            // and not the order a map keeps its numbers in.
+            List<Map.Entry<LawNumber<DeclaredArgument>, ExactRatio>> inOrder =
+                    new ArrayList<>(form.coefs().entrySet());
+            inOrder.sort(Comparator.comparingInt(
+                            (Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> each) ->
+                                    argumentOf(each.getKey()).position())
+                    .thenComparingInt(each -> whatOfIt(each.getKey())));
+            for (Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> term : inOrder) {
                 Sized part = atom(term.getKey());
                 if (!(part instanceof Sized.AsAForm(LinearForm<Quantity> each))) {
                     return part;
                 }
                 parts.add(each);
-                ExactAnswer<LinearForm<Quantity>> sum = each.times(term.getValue())
-                        instanceof ExactAnswer.Held<LinearForm<Quantity>>(var scaled)
-                        ? out.plus(scaled) : null;
-                if (!(sum instanceof ExactAnswer.Held<LinearForm<Quantity>>(var held))) {
-                    return new Sized.NotSized(new WhyUnread.OutsideTheLinearFragment());
+                switch (each.times(term.getValue())) {
+                    case ExactAnswer.Held<LinearForm<Quantity>> held -> scaled.add(held.value());
+                    case ExactAnswer.Unheld<LinearForm<Quantity>> not -> unheld.add(not.why());
                 }
-                out = held;
             }
-            return new Sized.AsAForm(out);
+            // Every part's weights added at once, so whether they are held does not turn on which
+            // part came first; and where some are not, which way is said of all of them, as a sum
+            // of forms says it ({@link LinearForm#sum}).
+            if (unheld.isEmpty()) {
+                switch (LinearForm.sum(scaled)) {
+                    case ExactAnswer.Held<LinearForm<Quantity>> held -> {
+                        return new Sized.AsAForm(held.value());
+                    }
+                    case ExactAnswer.Unheld<LinearForm<Quantity>> not -> unheld.add(not.why());
+                }
+            }
+            return new Sized.NotSized(new WhyUnread.ANumberNotHeld(UnheldNumber.ofAll(unheld)));
         }
 
         private Sized atom(LawNumber<DeclaredArgument> number) {
@@ -1285,6 +1655,13 @@ final class Pullback {
 
             @Override
             public LinearForm<Quantity> leafOf(Core node, InputReads at) {
+                return leafOf(node, at, null);
+            }
+
+            @Override
+            public LinearForm<Quantity> leafOf(
+                    Core node, InputReads at,
+                    AffineForms.Outcome.StoppedAt<Quantity, InputReads> inside) {
                 NumericTerm term = InputNumber.of(node, read.domain(), at, read.rules());
                 if (term != null) {
                     return LinearForm.atom(new DecisionAtom.OfTheInput(term));
@@ -1331,8 +1708,18 @@ final class Pullback {
                 }
                 return switch (at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())) {
                     case ReadMeaning.Element _, ReadMeaning.OneOf _, ReadMeaning.Position _ -> null;
-                    case ReadMeaning.Through _, ReadMeaning.Unknown _ -> LinearForm.atom(
-                            new Quantity.OfABinding(name.binding(), steps, node.type()));
+                    // A name given a choice between values holds whichever arm was taken, which
+                    // is a number for each case and not one the body bound.
+                    case ReadMeaning.Through(Denotation denotes)
+                            when Choice.of(underItsAccesses(denotes).value()) != null -> null;
+                    // A name read through to what it was given, which the reading stopped inside
+                    // where it did: the value is named by its binding, and why its number is none
+                    // of the input's goes with it.
+                    case ReadMeaning.Through _ -> LinearForm.atom(new Quantity.OfABinding(
+                            name.binding(), steps, node.type(),
+                            Optional.ofNullable(inside).map(Pullback.this::noFormOf)));
+                    case ReadMeaning.Unknown _ -> LinearForm.atom(new Quantity.OfABinding(
+                            name.binding(), steps, node.type(), Optional.empty()));
                 };
             }
 
@@ -1614,8 +2001,7 @@ final class Pullback {
                     && relationsDeciding(arm).stream().allMatch(
                             each -> each.left() != null && each.right() != null))
                     ? stands : null;
-            // Whether an attempt's invariant held is no condition this reading reads.
-            case AN_ATTEMPT -> null;
+            case AN_ATTEMPT -> stands;
         };
     }
 
@@ -1640,6 +2026,18 @@ final class Pullback {
                     compared.apply(new Denotation(iff.els(), where)));
             case Core.Match match -> armsOf(match, where,
                     (body, inside) -> compared.apply(new Denotation(body, inside)));
+            case Core.IfConstructed attempt -> {
+                List<Derivation> taken = attempted(attempt, where);
+                List<Choice.Arm> arms = Choice.of(attempt).arms();
+                List<Derivation.MatchArms.Arm> out = new ArrayList<>();
+                for (int i = 0; i < arms.size(); i++) {
+                    InputReads inside = where.choosing(arms.get(i).decidedBy(),
+                            read.rules().symbols(), read.rules().newtypes());
+                    out.add(new Derivation.MatchArms.Arm(taken.get(i),
+                            compared.apply(new Denotation(arms.get(i).answers(), inside))));
+                }
+                yield new Derivation.MatchArms(out);
+            }
             case Core e -> ofAnOperationsCases(e, Choice.of(e), where, at, compared);
         };
     }
@@ -1830,27 +2228,51 @@ final class Pullback {
     }
 
     /**
+     * What {@code value} takes a part of: what it stands as through the names and bindings it is
+     * reached by ({@link InputReads#standing}), and then what each access that takes a part of a
+     * value is of, as far as they go.
+     *
+     * <p>Where a reading has no rule for a value, what stopped it is what stands there, however the
+     * value was spelled on the way to it. Beside {@link #chosenAt}, which stops at the first access:
+     * a comparison is split into the cases of what it compares, which through an access it cannot
+     * yet be.
+     */
+    private Denotation underItsAccesses(Denotation value) {
+        Denotation at = value;
+        while (true) {
+            Denotation stands = at.at().standing(Core.withoutStanding(at.value()),
+                    read.rules().symbols(), read.rules().newtypes());
+            Core e = Core.withoutStanding(stands.value());
+            Core whole = switch (e) {
+                case Core.FieldProjection projection -> projection.lastAccess();
+                case Core.FieldAccess access -> access.target();
+                case Core.TupleGet get -> get.tuple();
+                default -> null;
+            };
+            if (whole == null) {
+                return new Denotation(e, stands.at());
+            }
+            at = new Denotation(whole, stands.at());
+        }
+    }
+
+    /**
      * Why an expression the arithmetic has no rule for, read in {@code reads}, is no number of the
      * input: what stands at the end of the accesses it is made of.
      */
     private WhyUnread noRuleFor(Core stopped, InputReads reads) {
-        Core e = Core.withoutStanding(stopped);
-        while (true) {
-            if (e instanceof Core.FieldProjection projection) {
-                e = Core.withoutStanding(projection.lastAccess());
-            } else if (e instanceof Core.FieldAccess access) {
-                e = Core.withoutStanding(access.target());
-            } else {
-                break;
-            }
-        }
+        Denotation end = underItsAccesses(new Denotation(stopped, reads));
+        Core e = Core.withoutStanding(end.value());
+        InputReads in = end.at();
         if (e instanceof Core.Read name) {
-            return switch (reads.meaningOf(name, read.rules().symbols(), read.rules().newtypes())) {
+            return switch (in.meaningOf(name, read.rules().symbols(), read.rules().newtypes())) {
                 case ReadMeaning.Element _ ->
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER);
                 case ReadMeaning.OneOf _ -> new WhyUnread.NotYetComposed(
                         WhyUnread.NotYetComposed.Step.VALUES_WRITTEN_OUT);
-                case ReadMeaning.Unknown _, ReadMeaning.Position _, ReadMeaning.Through _ ->
+                // A name read through is followed above to what it was given, so one that stands
+                // here came round to itself.
+                case ReadMeaning.Through _, ReadMeaning.Unknown _, ReadMeaning.Position _ ->
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
             };
         }
@@ -1872,7 +2294,7 @@ final class Pullback {
         }
         BoundOperationFacts facts = DefaultBoundOperationFacts.get();
         return switch (applied.operation()) {
-            case ValueName.Behavior behavior -> whatABehaviorAnswers(behavior, reads);
+            case ValueName.Behavior behavior -> whatABehaviorAnswers(behavior, in);
             case ValueName.Helper _ -> new WhyUnread.WhatARecursiveHelperAnswers();
             case ValueName.Stdlib operation -> {
                 if (!facts.isDefinedByCases(operation).isEmpty()) {
@@ -1880,7 +2302,7 @@ final class Pullback {
                             WhyUnread.NotYetComposed.Step.A_CHOICE_BY_CASES);
                 }
                 if (facts.takenAs(operation) != null && !applied.args().isEmpty()) {
-                    yield noNumberOf(operation, applied.args().getFirst(), reads);
+                    yield noNumberOf(operation, applied.args().getFirst(), in);
                 }
                 yield new WhyUnread.NoFormOfWhatItAnswers(operation);
             }

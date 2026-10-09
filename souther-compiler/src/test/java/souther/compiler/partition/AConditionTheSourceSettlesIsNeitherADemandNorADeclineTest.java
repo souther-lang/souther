@@ -205,7 +205,7 @@ class AConditionTheSourceSettlesIsNeitherADemandNorADeclineTest {
     private static OnTheWay only(String behavior, boolean holding) {
         InputReading read = domain(behavior).reading(rules());
         List<OnTheWay> stated = ReachingCuts.stating(conditionOf(behavior), read, holding,
-                new WhatConditionsState(read));
+                WhatConditionsState.of(read));
         assertEquals(1, stated.size(), () -> behavior + " is one condition: " + stated);
         return stated.getFirst();
     }

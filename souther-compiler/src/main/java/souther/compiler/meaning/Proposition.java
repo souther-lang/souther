@@ -455,6 +455,39 @@ public sealed interface Proposition {
         }
     }
 
+    /** Whether some part of {@code stated} is about what a dependency answered, rather than about
+     *  the input alone. */
+    static boolean aboutAnAnswer(Proposition stated) {
+        return switch (stated) {
+            case Always _, Unread _ -> false;
+            case Compared(Relation relation, boolean _, String _) -> switch (relation) {
+                case Relation.Affine affine -> affine.form().coefs().keySet().stream()
+                        .anyMatch(Proposition::anAnswerIn);
+                case Relation.Ordered ordered -> anAnswerIn(ordered.term());
+            };
+            case Truth truth -> truth.of() instanceof DecisionSubject.AnAnswer;
+            case InCases cases -> cases.of() instanceof DecisionSubject.AnAnswer;
+            case Present present -> present.of() instanceof DecisionSubject.AnAnswer;
+            case SameValue same -> same.one() instanceof DecisionSubject.AnAnswer
+                    || same.other() instanceof DecisionSubject.AnAnswer;
+            case All all -> all.parts().stream().anyMatch(Proposition::aboutAnAnswer);
+            case Any any -> any.parts().stream().anyMatch(Proposition::aboutAnAnswer);
+            case OnAnApplication applications ->
+                    applications.each().stream().anyMatch(Proposition::aboutAnAnswer);
+            case Some some -> aboutAnAnswer(some.ofTheElement());
+        };
+    }
+
+    private static boolean anAnswerIn(Quantity quantity) {
+        return switch (quantity) {
+            case DecisionAtom.OfAnAnswer _ -> true;
+            case DecisionAtom.OfTheInput _, Quantity.OfABinding _ -> false;
+            case Quantity.HowManyMeet count -> aboutAnAnswer(count.ofTheElement());
+            case Quantity.HowManyHold held -> held.each().stream()
+                    .anyMatch(Proposition::aboutAnAnswer);
+        };
+    }
+
     /**
      * {@code relation} held or failing as {@code holds}, written as what it comes to where it holds
      * a count of elements against nought ({@link #ofACount}).

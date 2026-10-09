@@ -7,11 +7,19 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.meaning.WhyUnread;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -84,7 +92,7 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
         return List.of(new Read(oneRelation(asked) && (!(condition instanceof Condition.Truth)
                 || oneRelation(asked(states.stating(condition, !held))))
                 ? answerOf(condition, asked.getFirst(), held)
-                : asOneColumn(condition, held, asked), stated));
+                : asOneColumn(condition, held), stated));
     }
 
     /** What was stated less what the source settles this way, which asks nothing of a row and is
@@ -107,9 +115,12 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
             case OnTheWay.TakenIn(var _, RowDemand.Relational _),
                  OnTheWay.TakenIn(var _, RowDemand.ATruth _) -> true;
             case OnTheWay.TakenIn(var _, RowDemand.Exists _),
-                 OnTheWay.TakenIn(var _, RowDemand.ForAll _) -> false;
+                 OnTheWay.TakenIn(var _, RowDemand.ForAll _),
+                 OnTheWay.TakenIn(var _, RowDemand.ForTheRun _) -> false;
             case OnTheWay.Narrowed _, OnTheWay.Declined _,
                  OnTheWay.TakenIn(var _, RowDemand.SoMany _) -> true;
+            // One of several ways is no relation, and the column is what the condition states.
+            case OnTheWay.OneOf _ -> false;
             // Taken off before a column is read ({@link #asked}): it asks nothing to read one off.
             case OnTheWay.Settled _ -> false;
         };
@@ -120,28 +131,57 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
      *
      * <p>One, because it is one condition: every element of a list meeting two things is two
      * relations a row is composed against and one distinction the body draws. No relation of them
-     * is the column, so it is the condition's own where what it is about is a subject a row
-     * controls, and otherwise one this reading has no column for — for that reason, and for
-     * whatever stopped a part of it on the way, each kept.
+     * is the column, so it is what the condition states ({@link #columnOf}).
      */
-    private DecidedCondition asOneColumn(Condition condition, boolean held, List<OnTheWay> asked) {
-        DecidedCondition read = ofASubject(condition, held);
-        if (read != null) {
-            return read;
+    private DecidedCondition asOneColumn(Condition condition, boolean held) {
+        return columnOf(states.statedBy(condition), held, condition.occurrence());
+    }
+
+    /**
+     * The column {@code stated} is, coming out {@code held}: a comparison or a truth where it is
+     * one, and otherwise the statement itself ({@link DecisionCondition.AStatement}).
+     *
+     * <p>Where part of it was not read, the column is named by the condition that met it, with what
+     * stopped each part: a statement only partly read is no column two conditions could share.
+     *
+     * @param met the condition that met it, which names a column nothing could read
+     */
+    static DecidedCondition columnOf(Proposition stated, boolean held, ConditionOccurrence met) {
+        List<WhyUnread> stops = Proposition.stopsIn(stated);
+        if (!stops.isEmpty()) {
+            return new DecidedCondition.Unread(new DecisionCondition.AConditionNotRead(met,
+                    stops.stream().<WhyNotTaken>map(WhyNotTaken.MeaningUnread::new).toList()),
+                    held);
         }
-        List<WhyNotTaken> whys = new ArrayList<>();
-        whys.add(new WhyNotTaken.ProjectionIncomplete(asked.size() == 1
-                && asked.getFirst() instanceof OnTheWay.TakenIn(var _, var demand)
-                && (demand instanceof RowDemand.Exists || demand instanceof RowDemand.ForAll)
-                ? WhyNotTaken.Shape.A_QUANTIFIER_AS_A_COLUMN
-                : WhyNotTaken.Shape.SEVERAL_DEMANDS_IN_ONE_COLUMN));
-        asked.forEach(each -> {
-            if (each instanceof OnTheWay.Declined declined) {
-                whys.addAll(declined.whys());
+        return switch (stated) {
+            case Proposition.Truth(DecisionSubject of, boolean holds, var _) ->
+                    new DecidedCondition.Stood(new DecisionCondition.ATruth(of), holds == held);
+            case Proposition.Compared(Relation.Ordered(DecisionAtom term, var at, Rel proposition),
+                                      boolean holds, var _) -> new DecidedCondition.Compared(
+                    new DecisionCondition.AnOrderedComparison(term, at, proposition),
+                    holds == held);
+            case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, Rel proposition),
+                                      boolean holds, var _) when overDecisionAtoms(form) ->
+                    new DecidedCondition.Compared(new DecisionCondition.AComparison(
+                            decisionForm(form), proposition), holds == held);
+            default -> DecisionCondition.AStatement.of(stated, held);
+        };
+    }
+
+    /** Whether every quantity {@code form} is over is a number a row controls. */
+    private static boolean overDecisionAtoms(LinearForm<Quantity> form) {
+        return form.coefs().keySet().stream().allMatch(DecisionAtom.class::isInstance);
+    }
+
+    /** {@code form}, every quantity of which is a number a row controls, as a form over them. */
+    private static LinearForm<DecisionAtom> decisionForm(LinearForm<Quantity> form) {
+        Map<DecisionAtom, ExactRatio> coefs = new LinkedHashMap<>();
+        form.coefs().forEach((atom, coef) -> {
+            if (atom instanceof DecisionAtom decided) {
+                coefs.put(decided, coef);
             }
         });
-        return new DecidedCondition.Unread(new DecisionCondition.AConditionNotRead(
-                condition.occurrence(), whys), held);
+        return new LinearForm<>(form.constant(), coefs);
     }
 
     /**
@@ -160,8 +200,9 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
             // reading has no column for. Only a condition the body asks is read this way, so there
             // is one to ask.
             case OnTheWay.TakenIn(var _, RowDemand.Exists _),
-                 OnTheWay.TakenIn(var _, RowDemand.ForAll _) ->
-                    asOneColumn(condition, held, List.of(one));
+                 OnTheWay.TakenIn(var _, RowDemand.ForAll _),
+                 OnTheWay.TakenIn(var _, RowDemand.ForTheRun _) ->
+                    asOneColumn(condition, held);
             // Which of two values stands at a position: the truth of that position, whichever
             // spelling asked it, read off the demand and not off the condition again. And what
             // came out is the position's value and not the condition's — `f == false` holding is
@@ -188,28 +229,28 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
                 };
                 yield new DecidedCondition.Compared(column, taken.rel() == proposition);
             }
+            // Which case a position is, asked by a condition and not by a fork, or one of several
+            // ways: the column is what the condition states.
+            case OnTheWay.Narrowed _ when condition != null -> asOneColumn(condition, held);
+            case OnTheWay.OneOf _ when condition != null -> asOneColumn(condition, held);
+            case OnTheWay.OneOf several -> throw new IllegalArgumentException(
+                    "one of several ways is read with the arm it is entering: " + several);
             // An arm's, and read with the fork it is an arm of ({@link #asTheArm}): what the column
             // is turns on the answers the other arms have.
             case OnTheWay.Narrowed narrowed -> throw new IllegalArgumentException(
                     "a narrowing is read as an arm of its fork: " + narrowed);
-            case OnTheWay.Declined declined -> {
-                // A fork brings no condition of the boolean grammar, and what it is about was
-                // asked where the arm is.
-                DecidedCondition read = condition == null ? null : ofASubject(condition, held);
-                yield read != null ? read
-                        : new DecidedCondition.Unread(new DecisionCondition.AConditionNotRead(
-                                declined.condition(), declined.whys()), held);
-            }
+            // What the arithmetic of the input could not take in is still what the condition
+            // states, and that is the column. A fork's arm brings no condition of the boolean
+            // grammar, and is read where the arm is ({@link #entering}).
+            case OnTheWay.Declined declined -> condition == null
+                    ? new DecidedCondition.Unread(new DecisionCondition.AConditionNotRead(
+                            declined.condition(), declined.whys()), held)
+                    : asOneColumn(condition, held);
             // How many elements meet a statement, which a row is composed for and no column over
             // the input's numbers is: which elements meet it is nothing a value at one position
-            // says.
-            case OnTheWay.TakenIn(var _, RowDemand.SoMany _) when condition != null -> {
-                DecidedCondition read = ofASubject(condition, held);
-                yield read != null ? read
-                        : new DecidedCondition.Unread(new DecisionCondition.AConditionNotRead(
-                                condition.occurrence(), List.of(new WhyNotTaken.ProjectionIncomplete(
-                                        WhyNotTaken.Shape.A_COUNT_OF_ELEMENTS))), held);
-            }
+            // says, so the column is the statement.
+            case OnTheWay.TakenIn(var _, RowDemand.SoMany _) when condition != null ->
+                    asOneColumn(condition, held);
             // A count is a comparison a condition states, and a fork states none.
             case OnTheWay.TakenIn(var _, RowDemand.SoMany many) -> throw new IllegalArgumentException(
                     "a count is stated by a condition, and a fork brings none: " + many);
@@ -218,22 +259,6 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
             // alike.
             case OnTheWay.Settled settled -> throw new IllegalArgumentException(
                     "a condition the source settles is no column: " + settled);
-        };
-    }
-
-    /**
-     * The column {@code condition} is where what it is about is a subject a row controls, or null.
-     *
-     * <p>Where the arithmetic of the input declined, which is where this reading has something of
-     * its own to say: the truth of such a subject, and a comparison over what one of them answered.
-     * A condition of any other shape is one this compiler read nothing of.
-     */
-    private DecidedCondition ofASubject(Condition condition, boolean held) {
-        return switch (condition) {
-            case Condition.Truth truth -> subjects.truthOf(truth.value(), held, truth.reads());
-            case Condition.Compares compares ->
-                    comparisons.of(compares.comparison(), compares.reads(), held);
-            case Condition.Joined _ -> null;
         };
     }
 
@@ -253,25 +278,23 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
      */
     Optional<Read> entering(Core.Match match, int part, InputReads reads,
                             ConditionNumbering numbering) {
-        OnTheWay onTheWay = states.entering(match, part, reads, numbering);
-        if (onTheWay instanceof OnTheWay.Settled settled && settled.thisWay()) {
+        List<OnTheWay> onTheWay = states.entering(match, part, reads, numbering);
+        if (onTheWay.size() == 1 && onTheWay.getFirst() instanceof OnTheWay.Settled settled
+                && settled.thisWay()) {
             return Optional.empty();
         }
         return Optional.of(asTheArm(match, part, reads, onTheWay));
     }
 
     /** The column taking arm {@code part} is, where it is one. */
-    private Read asTheArm(Core.Match match, int part, InputReads reads, OnTheWay onTheWay) {
-        if (onTheWay instanceof OnTheWay.Narrowed narrowed) {
+    private Read asTheArm(Core.Match match, int part, InputReads reads, List<OnTheWay> onTheWay) {
+        if (onTheWay.size() == 1 && onTheWay.getFirst() instanceof OnTheWay.Narrowed narrowed) {
             TermPath at = narrowed.position();
             // Where the value the fork is on stands: a name read on a value left several cases is
             // the name read at the sum, and not a name under the set of them.
             return new Read(new DecidedCondition.Narrowed(new DecisionCondition.ACase(
                     new DecisionSubject.AnInput(at.narrowedFrom().position()),
-                    states.answersOf(match, reads)), at.narrowing()), List.of(onTheWay));
-        }
-        if (!(onTheWay instanceof OnTheWay.Declined || onTheWay instanceof OnTheWay.Settled)) {
-            return new Read(answerOf(null, onTheWay, true), List.of(onTheWay));
+                    states.answersOf(match, reads)), at.narrowing()), onTheWay);
         }
         // Where the arithmetic had no position to narrow, the fork may still be on something a row
         // controls; and where the declarations leave the position none of the arm's case, there is
@@ -284,28 +307,48 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
         if (subject != null && narrowing != null) {
             return new Read(new DecidedCondition.Narrowed(
                     new DecisionCondition.ACase(subject, states.answersOf(match, reads)),
-                    narrowing), List.of(onTheWay));
+                    narrowing), onTheWay);
         }
-        return new Read(switch (onTheWay) {
-            case OnTheWay.Settled settled -> new DecidedCondition.Unread(
-                    new DecisionCondition.AConditionNotRead(settled.condition(),
-                            new WhyNotTaken.ProjectionIncomplete(
-                                    WhyNotTaken.Shape.AN_ARM_READ_AS_WRITTEN)), true);
-            case OnTheWay.Declined _, OnTheWay.Narrowed _, OnTheWay.TakenIn _ ->
-                    answerOf(null, onTheWay, true);
-        }, List.of(onTheWay));
+        // Otherwise the column is what entering the arm states: which case a value the body
+        // computed is of, under what.
+        return new Read(columnOf(states.entered(match, part, reads), true, metAt(onTheWay)),
+                onTheWay);
     }
 
     /**
-     * What taking arm {@code part} of {@code attempt} decides: a column this reading names and
-     * cannot say the meaning of, one per arm.
+     * What taking arm {@code part} of {@code attempt} decides: what the arm states, the clauses of
+     * the invariant it checks read over what it is handed, as the column it is.
      *
      * <p>One per arm because the arms are the answers. The success and each departure are
      * distinctions the body draws, and a rule through one is a rule through none of the others.
      */
-    Read attempting(Core.IfConstructed attempt, int part, SourcePos at,
+    Read attempting(Core.IfConstructed attempt, int part, SourcePos at, InputReads reads,
                     ConditionNumbering numbering) {
-        OnTheWay onTheWay = states.attempting(attempt, part, at, numbering);
-        return new Read(answerOf(null, onTheWay, true), List.of(onTheWay));
+        List<OnTheWay> onTheWay = states.attempting(attempt, part, at, reads, numbering);
+        return new Read(columnOf(states.entered(attempt, part, reads), true, metAt(onTheWay)),
+                onTheWay);
+    }
+
+    /**
+     * The condition that met an arm, as the way into it names it: which a column the arm's
+     * statement could not be read as is named by. Every arm whose statement stops somewhere puts
+     * that on the way as declined, so one is there to name it.
+     */
+    private static ConditionOccurrence metAt(List<OnTheWay> onTheWay) {
+        for (OnTheWay each : onTheWay) {
+            switch (each) {
+                case OnTheWay.Declined declined -> {
+                    return declined.condition();
+                }
+                case OnTheWay.Settled settled -> {
+                    return settled.condition();
+                }
+                case OnTheWay.OneOf several -> {
+                    return several.condition();
+                }
+                case OnTheWay.TakenIn _, OnTheWay.Narrowed _ -> { }
+            }
+        }
+        return null;
     }
 }

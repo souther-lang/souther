@@ -7,6 +7,7 @@ import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -48,6 +49,31 @@ public sealed interface ReachabilityGap {
      * the condition keeps the identity it was given.
      */
     record Uncomposed(OnTheWay.TakenIn condition, Why why) implements ReachabilityGap {
+
+        @Override
+        public ConditionReportAnchor anchor() {
+            return condition.anchor();
+        }
+    }
+
+    /**
+     * The walk stated it as one of several ways, and the row was looked for along the way whole
+     * past it rather than along each of them: the ways it and the others like it split the way into
+     * are more than {@code figure} lets this look along.
+     *
+     * <p>Said because it changes what a search finds. Along one of the ways a row is composed
+     * against that way's alternative as well, which along the whole it is not, so a row the search
+     * did not find here is one it may have found along one of them.
+     */
+    record LookedAlongWhole(OnTheWay.OneOf condition, CompositionBudget figure)
+            implements ReachabilityGap {
+
+        public LookedAlongWhole {
+            if (condition == null || figure == null) {
+                throw new IllegalArgumentException(
+                        "a way looked along whole is past some condition, at some figure");
+            }
+        }
 
         @Override
         public ConditionReportAnchor anchor() {
@@ -124,9 +150,10 @@ public sealed interface ReachabilityGap {
                 case Uncomposed(var _, Why.TwoNumbersAtOneLocation _) -> twoAtOneLocation = true;
                 case Uncomposed(var _, Why.NoValueComposedForItsPositions _),
                      Uncomposed(var _, Why.ElementsWrittenAlike _),
+                     Uncomposed(var _, Why.NoComposerWritesIt _),
                      ProvedImpossible _ -> { }
-                case Unstated _ -> throw new IllegalArgumentException(
-                        "a way of writing a cut is one the walk stated: " + each);
+                case Unstated _, LookedAlongWhole _ -> throw new IllegalArgumentException(
+                        "a way of writing a cut is one the walk stated as a cut: " + each);
             }
         }
         if (!stoppedBy.isEmpty() || !unheld.isEmpty()) {
@@ -217,6 +244,18 @@ public sealed interface ReachabilityGap {
          * positions hold no value.
          */
         record TwoNumbersAtOneLocation() implements Why {}
+
+        /**
+         * The condition was read to the end and is of a kind no composer writes a row toward —
+         * a value the body works out, an element's truth, two subjects being one value — so only
+         * the run says whether it held.
+         */
+        record NoComposerWritesIt(RowDemand.NoComposer what) implements Why {
+
+            public NoComposerWritesIt {
+                Objects.requireNonNull(what, "a statement no composer writes is of some kind");
+            }
+        }
 
         /**
          * A condition about a container's elements, which no row of elements written alike meets.

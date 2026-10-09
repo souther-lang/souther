@@ -265,7 +265,7 @@
       }
     },
     "ruleStoppedReadingReason": {
-      "description": "A rule this compiler read and could not use, which is what both surfaces below share. Such a rule is at a position — so a position's reading is short of it — and it is a shortfall about the rule, so a question the rule raised stands on it. Written once because the two surfaces really do share it, and not because their vocabularies happen to look alike. `exact_values_too_costly` is what a reader is told where working the values out was more than this compiler does. It is one published word over two facts this compiler tells apart: one rule names a set of strings whose machine it will not make, which is about that rule; or every rule was made into the set it names and what those come to between them was not, which is about the answer and names no rule. Sharing a word is not sharing a capability — what a document may say about the second is not what it may say about the first — so a reader is told what stopped and never which rule to go and change, and which of the two it was stays this compiler's question. Schema 22 had `pattern_too_deeply_nested`, for a pattern nested more deeply than the reading goes; a document of that version may carry that word, nothing writes it now, and such a pattern is refused where it is checked, so no document is written of a program holding one. Schema 23 wrote `rule_about_an_element_of_several_sequences` where this writes `rule_about_an_element_of_several_containers`: the element it is about is a map's key or value as well as a list's or a set's element, and the word says so. `line_at_a_number_no_ratio_holds` is a line with no place, and `line_side_not_worked_out` is a line that is placed with a value beside it this compiler could not write out — two facts that call for looking at different things in the rule. `several_lines_in_one_rule` is a rule whose meaning was read in full and is several lines held together, where those lines are not drawn: what a closure states on each application it is handed, a statement one of whose relations is about something no row writes, or a clause, which has nowhere to hold where each of its lines decides what the clause comes to; nothing about what it states is unknown, so it is not `unsupported_syntax`. `unread_alternative_of_a_choice` is a rule offering an alternative this compiler does not read, where what the rule leaves at the position is what its alternatives leave together — its own word beside `unsupported_syntax` because the rule written at the position was read and places what it places, so an author told that one would rewrite a clause that is not the difficulty and the branch beside it would stand as unread as it was.",
+      "description": "A rule this compiler read and could not use, which is what both surfaces below share. Such a rule is at a position — so a position's reading is short of it — and it is a shortfall about the rule, so a question the rule raised stands on it. Written once because the two surfaces really do share it, and not because their vocabularies happen to look alike. `exact_values_too_costly` is what a reader is told where working the values out was more than this compiler does. It is one published word over two facts this compiler tells apart: one rule names a set of strings whose machine it will not make, which is about that rule; or every rule was made into the set it names and what those come to between them was not, which is about the answer and names no rule. Sharing a word is not sharing a capability — what a document may say about the second is not what it may say about the first — so a reader is told what stopped and never which rule to go and change, and which of the two it was stays this compiler's question. Schema 22 had `pattern_too_deeply_nested`, for a pattern nested more deeply than the reading goes; a document of that version may carry that word, nothing writes it now, and such a pattern is refused where it is checked, so no document is written of a program holding one. Schema 23 wrote `rule_about_an_element_of_several_sequences` where this writes `rule_about_an_element_of_several_containers`: the element it is about is a map's key or value as well as a list's or a set's element, and the word says so. `line_at_a_number_no_ratio_holds` is a line with no place, and `line_side_not_worked_out` is a line that is placed with a value beside it this compiler could not write out — two facts that call for looking at different things in the rule. `several_lines_in_one_rule` is a rule whose meaning was read in full and is several lines held together, where those lines are not drawn: what a closure states on each application it is handed, a statement one of whose relations is about something no row writes, or a clause, which has nowhere to hold where each of its lines decides what the clause comes to; nothing about what it states is unknown, so it is not `unsupported_syntax`. `unread_alternative_of_a_choice` is a rule offering an alternative this compiler does not read, where what the rule leaves at the position is what its alternatives leave together — its own word beside `unsupported_syntax` because the rule written at the position was read and places what it places, so an author told that one would rewrite a clause that is not the difficulty and the branch beside it would stand as unread as it was. `rule_meaning_not_read` is a rule placed at the position, a part of whose meaning this compiler did not read where that part is neither a form nothing takes apart, which is `unsupported_syntax`, nor what an operation answered, which is `rule_about_a_derived_value` — which case a called behavior answers, a clause of an invariant an attempt checks, a step of the reading not yet written, or more readings than this compiler makes — so where a line would fall is not known.",
       "enum": [
         "unsupported_syntax",
         "unsupported_domain",
@@ -277,7 +277,8 @@
         "rule_about_a_derived_value",
         "rule_about_an_element_of_several_containers",
         "unread_alternative_of_a_choice",
-        "exact_values_too_costly"
+        "exact_values_too_costly",
+        "rule_meaning_not_read"
       ]
     },
     "ruleOfferShortfallReason": {
@@ -2521,11 +2522,12 @@
             "additionalProperties": false,
             "properties": {
               "kind": {
-                "description": "Which distinction the column is, over whatever the body decided on: a position of the input, or what a dependency answered — the two are written the same way and `condition` says which. `comparison` is a comparison the arithmetic took in, `truth` a value read for whether it holds, `case` a fork read as the case the subject turned out to be, and `not_read` a condition this compiler has no words for — told apart by the occurrence that met it, because two conditions nothing could read mean nothing to be told apart by.",
+                "description": "Which distinction the column is, over whatever the body decided on: a position of the input, or what a dependency answered — the two are written the same way and `condition` says which. `comparison` is a comparison the arithmetic took in, `truth` a value read for whether it holds, `case` a fork read as the case the subject turned out to be, `statement` a condition read to the end that is none of those — some element meeting something, several things asked at once, an arm a computed value decides — written as what it states, and `not_read` a condition this compiler has no words for — told apart by the occurrence that met it, because two conditions nothing could read mean nothing to be told apart by.",
                 "enum": [
                   "comparison",
                   "truth",
                   "case",
+                  "statement",
                   "not_read"
                 ]
               },
@@ -2540,7 +2542,7 @@
               "notRead": {
                 "type": "array",
                 "minItems": 1,
-                "description": "Why a condition nothing read was not, every reason once — written only for `not_read`, beside the identity and no part of it. `meaning_unread` is what the condition means not having been read, `outside_domain` the domain a row is written in having no words for what it means, and `projection_incomplete` this compiler not yet asking a row for something it could.",
+                "description": "Why a condition nothing read was not, every reason once — written only for `not_read`, beside the identity and no part of it. `meaning_unread` is what the condition means not having been read, and `outside_domain` the domain the reader writes in having no words for what it means. A condition read to the end and in the reader's words is taken, whether or not anything composes a row for it, so neither is written for what composing reaches.",
                 "items": {
                   "$ref": "#/$defs/conditionNotReadReason"
                 }
@@ -2571,7 +2573,7 @@
     },
     "conditionNotReadReason": {
       "type": "object",
-      "description": "One reason a condition nothing read was not: which of the three kinds, and the word within it. The kinds are told apart by what lifts one — a rule of the reading of what a condition means, a wider domain, or a projection this compiler writes — so a reason of the third kind is never a fact about the model.",
+      "description": "One reason a condition nothing read was not: which of the two kinds, and the word within it. The kinds are told apart by what lifts one — a rule of the reading of what a condition means, or a wider domain. Each `outside_domain` word names the reader whose domain stops: what a row is asked is written at the input's positions, so `answer_a_row_stands_in` is what a dependency answered; what a path knows is relations of numbers, truths and what every element was written to meet, about the places of the tree it walks, so the `path_` words and `place_the_path_does_not_read` are where that stops.",
       "required": [
         "kind",
         "reason"
@@ -2581,8 +2583,7 @@
         "kind": {
           "enum": [
             "meaning_unread",
-            "outside_domain",
-            "projection_incomplete"
+            "outside_domain"
           ]
         },
         "reason": {
@@ -2617,6 +2618,14 @@
                   "no_form_of_what_it_answers",
                   "number_of_what_an_operation_answers",
                   "what_a_recursive_helper_answers",
+                  "clause_with_no_form",
+                  "clause_over_a_field_left_out",
+                  "invariant_not_reached",
+                  "called_with_an_argument_at_no_position",
+                  "called_body_asks_a_dependency",
+                  "called_body_binds_a_value",
+                  "called_body_reaches_itself",
+                  "called_body_not_read",
                   "more_readings_than_are_made",
                   "copies_state_different_things",
                   "not_met_by_the_reading",
@@ -2644,44 +2653,16 @@
                 "enum": [
                   "quantity_on_no_order",
                   "size_nothing_measures",
-                  "path_knows_no_alternatives"
-                ]
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "kind": {
-                "const": "projection_incomplete"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "reason": {
-                "enum": [
-                  "one_of_several_things",
-                  "every_element_and_more",
-                  "quantifier_within_one",
-                  "truth_of_an_element",
-                  "what_a_dependency_answered",
-                  "case_of_a_subject",
-                  "value_being_there",
-                  "two_subjects_one_value",
-                  "number_a_dependency_answered",
-                  "number_the_body_bound",
-                  "count_of_elements",
-                  "order_of_no_one_position",
-                  "several_demands_in_one_column",
-                  "quantifier_as_a_column",
-                  "arm_read_as_written",
-                  "arm_an_invariant_decides",
-                  "truth_asked_of_the_rules",
-                  "some_element_asked_of_the_rules",
-                  "position_the_path_has_no_place_for",
-                  "place_on_an_order"
+                  "path_knows_no_alternatives",
+                  "position_the_reading_holds_no_place_for",
+                  "answer_a_row_stands_in",
+                  "place_the_path_does_not_read",
+                  "path_knows_no_cases",
+                  "path_knows_no_sameness_of_values",
+                  "path_knows_no_place_on_an_order",
+                  "path_knows_no_count_of_elements",
+                  "path_holds_element_facts_as_written",
+                  "number_the_path_cannot_hold"
                 ]
               }
             }

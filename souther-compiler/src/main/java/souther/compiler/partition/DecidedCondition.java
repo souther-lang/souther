@@ -62,6 +62,16 @@ public sealed interface DecidedCondition {
         }
     }
 
+    /** A statement over the input, holding or not ({@link DecisionCondition.AStatement#of}). */
+    record Held(DecisionCondition.AStatement condition, boolean held) implements DecidedCondition {
+
+        public Held {
+            if (condition == null) {
+                throw new IllegalArgumentException("an answer is about some statement");
+            }
+        }
+    }
+
     /**
      * A condition nothing could read, coming out one of its two ways.
      *

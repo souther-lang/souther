@@ -8,6 +8,9 @@ import souther.exact.ExactParts;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
 
@@ -334,6 +337,23 @@ public record ExactRatio(BigInteger numeratorWithoutUnits, BigInteger denominato
                 .multiply(BigInteger.TWO.modPow(twos, modulus))
                 .multiply(FIVE.modPow(fives, modulus))
                 .mod(modulus);
+    }
+
+    /**
+     * The sum of {@code terms}, or which way the arithmetic could not hold it — the same answer for
+     * the same terms in whatever order they are handed.
+     *
+     * <p>A sum of many is not a run of {@link #plus}: a run asks every partial sum to be held, and
+     * a partial sum can fail where the whole does not — two terms far apart in scale where a third
+     * cancels one of them, or two terms at the greatest exponent where the next two cancel both.
+     * The arithmetic's own sum of many forms no partial sum in canonical form and meets the terms by
+     * scale ({@link ExactArithmetic#sum}), so the answer is the terms' and not their order's, and a
+     * sum is refused only where it has no representation or no room to be formed.
+     */
+    public static ExactAnswer<ExactRatio> sum(Collection<ExactRatio> terms) {
+        List<ExactParts> parts = new ArrayList<>();
+        terms.forEach(each -> parts.add(each.parts()));
+        return ExactAnswer.of(() -> from(ExactArithmetic.sum(parts)));
     }
 
     /**

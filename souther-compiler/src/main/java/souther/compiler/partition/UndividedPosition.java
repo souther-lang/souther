@@ -310,15 +310,14 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         TYPE_UNRESOLVED,
         /**
-         * A rule is written about a value that came from this position rather than about it.
+         * A rule relates a number no position of the input holds — a value the body works out from
+         * this position, or what a run of its values comes to.
          *
-         * <p>The rule was read and where its value came from is known. What it says about the values
-         * at this position is not: an operation made them into something else first, and reading the
-         * rule back through that is a capability nothing here has.
+         * <p>What the rule states was read to the end, and it is a relation of that number, which is
+         * no line on the input's numbers: a line divides a position's values, and this number is
+         * worked out from them.
          *
          * <p>Its own word, so that a reader is not sent after a form this compiler cannot parse.
-         * What would lift it is a reading of what a closure does to a value, and not a wider
-         * fragment of comparisons.
          */
         RULE_ABOUT_A_DERIVED_VALUE,
         /**
@@ -407,7 +406,18 @@ public record UndividedPosition(TermPath at, Why why) {
          * Int.max(a, a + 1) > 5} already holds wherever {@code a} reaches five — so a reader looks
          * inside the rule and not above it.
          */
-        RULE_NEVER_TURNS_ON_THIS_LINE
+        RULE_NEVER_TURNS_ON_THIS_LINE,
+        /**
+         * A rule naming this position states something part of which was not read: what stopped it
+         * is the reading's, said where the rule's meaning is reported.
+         *
+         * <p>Its own word beside {@link #UNSUPPORTED_SYNTAX}, which is a form nothing takes apart,
+         * and {@link #RULE_ABOUT_A_DERIVED_VALUE}, which is what an operation answered: those keep
+         * their words when the part they name is what the statement left unread. This is every
+         * other part — which case a called behavior answers, a clause of an invariant an attempt
+         * checks, a step of the reading not yet written, more readings than are made.
+         */
+        RULE_MEANING_NOT_READ
     }
 
     /**

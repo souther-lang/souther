@@ -90,6 +90,15 @@ public sealed interface DemandGap {
          * a column has nowhere to go.
          */
         record APlaceOnTheAnswersOwnOrder() implements WhyNotStated {}
+
+        /**
+         * A statement about an answer that is no one comparison, truth or case of it: some element
+         * of what it holds meeting something, several things asked of it at once.
+         *
+         * <p>What this stage composes an answer against is one column of it at a time, so a
+         * statement made of several has nowhere to go whole.
+         */
+        record AStatementOfSeveralParts() implements WhyNotStated {}
     }
 
     /**

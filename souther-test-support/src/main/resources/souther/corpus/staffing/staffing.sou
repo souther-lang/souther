@@ -7,8 +7,8 @@
 // write, and neither is reachable by choosing a value for one position alone.
 module conformance.staffing exposing
     ( Rate, WorkDays, Days, Hours, Agreement, Standard, Extended
-    , Grant, NotEntitled, Within, Over
-    , grantLeave, judgeHours )
+    , Grant, NotEntitled, Within, Over, Paid, Unpaid
+    , grantLeave, judgeHours, settleOvertime )
 
 data Rate = Decimal
     invariant value >= 0.0m && value <= 1.0m
@@ -51,3 +51,15 @@ let judgeHours (agreement, hours) =
     match agreement with
         | Extended -> if hours > 100 then Over { limit = Hours(100) } else Within
         | Standard -> if hours > 45 then Over { limit = Hours(45) } else Within
+
+data Paid
+data Unpaid
+
+// And an arm taken by what another behavior answers. Which case `judgeHours` answers turns on what it
+// is handed, so the arm a row takes here is read off that body, with this call's values put in.
+behavior settleOvertime : (agreement: Agreement, hours: Hours) -> Paid | Unpaid
+
+let settleOvertime (agreement, hours) =
+    match judgeHours(agreement, hours) with
+        | Over -> Paid
+        | Within -> Unpaid

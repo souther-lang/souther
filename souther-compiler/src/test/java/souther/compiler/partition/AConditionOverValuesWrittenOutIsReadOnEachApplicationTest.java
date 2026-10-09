@@ -207,7 +207,7 @@ class AConditionOverValuesWrittenOutIsReadOnEachApplicationTest {
                 () -> model.inputs.reading(model.rules), model.reads, model.rules.symbols(),
                 model.rules.newtypes());
         List<Proposition> inside = meanings.stated().entrySet().stream()
-                .filter(each -> each.getKey().part() == MeaningsOfABody.Part.ITSELF)
+                .filter(each -> each.getKey().part() == MeaningsOfABody.Part.Asked.ITSELF)
                 .map(each -> each.getValue().states())
                 .toList();
         assertEquals(1, inside.size(), () -> "one comparison is written: " + inside);

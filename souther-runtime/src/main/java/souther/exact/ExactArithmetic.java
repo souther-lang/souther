@@ -2,6 +2,11 @@ package souther.exact;
 
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.util.Map;
+import java.util.NavigableMap;
+import java.util.NavigableSet;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.function.LongConsumer;
 
 /**
@@ -174,6 +179,51 @@ public final class ExactArithmetic {
     }
 
     /**
+     * The product of {@code factors}: one answer for the factors in whatever order they come, refused
+     * only where the product itself has no representation.
+     *
+     * <p>Not a run of {@link #times}, each of which asks its exponents to be held: two factors at the
+     * greatest exponent fail where they meet even where a third brings the product back. A canonical
+     * numerator and denominator hold no two and no five, so neither does their product, and the
+     * product's exponents are the factors' added up — so they are added up, and asked of once. And a
+     * product with a nought among its factors is nought, whatever the others' exponents add to.
+     *
+     * <p>The factors are walked and never gathered, twice: once for their exponents and whether one
+     * is nought, and once to multiply them out.
+     *
+     * @throws ExactRangeExceeded where the exponents the factors add up to are past sixty-four bits
+     */
+    public static ExactParts product(Iterable<ExactParts> factors) {
+        // Added up wider than a long, so that a sum that passes the end and comes back is the sum.
+        BigInteger allTwos = BigInteger.ZERO;
+        BigInteger allFives = BigInteger.ZERO;
+        for (ExactParts each : factors) {
+            if (each.isZero()) {
+                return ExactParts.ZERO;
+            }
+            allTwos = allTwos.add(BigInteger.valueOf(each.twos()));
+            allFives = allFives.add(BigInteger.valueOf(each.fives()));
+        }
+        if (allTwos.bitLength() >= Long.SIZE || allFives.bitLength() >= Long.SIZE) {
+            throw new ExactRangeExceeded("the exponents of a product are past sixty-four bits: "
+                    + allTwos + ", " + allFives);
+        }
+        long twos = allTwos.longValueExact();
+        long fives = allFives.longValueExact();
+        BigInteger numerator = BigInteger.ONE;
+        BigInteger denominator = BigInteger.ONE;
+        try {
+            for (ExactParts each : factors) {
+                numerator = numerator.multiply(each.numerator());
+                denominator = denominator.multiply(each.denominator());
+            }
+        } catch (ArithmeticException e) {
+            throw ExactPowers.hostLimit(e);
+        }
+        return canonical(numerator, denominator, twos, fives);
+    }
+
+    /**
      * The product. The exponents add and are never built, and the common factors of the two fractions are
      * taken off before the numerators and denominators are multiplied, so what is multiplied is no larger
      * than the answer.
@@ -238,6 +288,399 @@ public final class ExactArithmetic {
         }
         return new ExactParts(of.denominator(), of.numerator(),
                 ExactPowers.negated(of.twos()), ExactPowers.negated(of.fives()));
+    }
+
+    /**
+     * The sum of {@code terms}: one answer for the terms in whatever order they come, refused only
+     * where the sum itself has no representation or this run has no room to form it.
+     *
+     * <p>A run of {@link #plus} where that is held, and no more than that where it is not. Each of
+     * those answers in canonical form, which moves the factors of two and five of its sum into the
+     * exponents and refuses an exponent past sixty-four bits — so a run of them asks every partial
+     * sum to be representable, and two terms at the greatest exponent fail where they meet even
+     * where the next two cancel them. And each of them aligns its two terms, so a fine term and an
+     * ordinary one fail where they meet even where a third cancels the fine one. A run that is held
+     * is the exact sum whatever order it took, so it is the answer; a run that fails is not, and
+     * the sum is made again by scale.
+     *
+     * <p>Made by scale, nothing in between is put in canonical form. A partial sum is a fraction standing at
+     * the exponents of the terms it was made of, the lesser of each, which are exponents some term
+     * already has; the one canonical form made is the answer's, so the range is asked of the answer
+     * and of nothing else. And the terms meet by scale: terms of one scale first, which align
+     * nothing, then the two nearest in scale, so a cancellation is made before anything is aligned
+     * across it. What is aligned is then what the answer itself spans, or what is left once every
+     * term that could cancel has.
+     *
+     * @throws ExactRangeExceeded where the sum has no representation, or the terms left span more
+     *                            than a whole number the host holds
+     */
+    public static ExactParts sum(Iterable<ExactParts> terms) {
+        // The terms as they come first, which is the whole of nearly every sum: an exact sum that
+        // is held is the sum, whatever order made it. Only a sum that fails this way can turn on the
+        // order, so only that one is made again by scale.
+        try {
+            ExactParts total = ExactParts.ZERO;
+            for (ExactParts each : terms) {
+                total = total.isZero() ? each : plus(total, each);
+            }
+            return canonical(total.numerator(), total.denominator(), total.twos(), total.fives());
+        } catch (ExactFailure _) {
+            return byScale(terms, SumWork.NOBODY_PAYS);
+        }
+    }
+
+    /**
+     * The same sum, made by scale from the first, with {@code work} told what each piece of it
+     * costs before the piece is done — for a caller paying for what it does, to whom what the sum
+     * costs is as much its answer as the sum.
+     *
+     * <p>So what it costs is the terms' and not their order's. The terms are walked twice and never
+     * gathered: once for how much each scale holds, and once to add them up. Each term added at its
+     * scale is told with what every term of that scale holds together, which no partial sum of
+     * them is longer than whichever came first; each meeting of two scales is of partial sums that
+     * are each the exact sum of their scale's terms, in lowest terms, so the same whatever order
+     * they came in; and which two meet is the nearest pair, which the scales decide. A run of
+     * {@link #plus} first, as {@link #sum(Iterable)} makes, would cost what the order makes it —
+     * a fine term and an ordinary one aligned before the fine term's negation cancels it.
+     *
+     * @throws ExactRangeExceeded as {@link #sum(Iterable)} does
+     */
+    public static ExactParts sumByScale(Iterable<ExactParts> terms, SumWork work) {
+        return byScale(terms, work);
+    }
+
+    /**
+     * What a sum made by scale costs, told piece by piece before each piece is done
+     * ({@link #sumByScale}).
+     */
+    public interface SumWork {
+
+        /** Work nobody pays for. */
+        SumWork NOBODY_PAYS = new SumWork() {
+
+            @Override
+            public void atOneScale(ExactParts term, long numeratorAtMost, long denominatorAtMost) {
+            }
+
+            @Override
+            public void across(ExactParts one, ExactParts other) {
+            }
+        };
+
+        /**
+         * {@code term} added into the partial sum of its scale, which aligns nothing.
+         *
+         * <p>Told with how long a partial sum of that scale can be, whichever of its terms came
+         * first: a denominator no longer than every term's denominator multiplied together, and a
+         * numerator no longer than the longest numerator multiplied up to that denominator and
+         * carried once for each term. Of decimals, whose denominators are one, that is the longest
+         * of them and a carry — not every term's length together.
+         *
+         * @param numeratorAtMost   the bits no partial numerator of the scale holds more of
+         * @param denominatorAtMost the bits no partial denominator of the scale holds more of
+         */
+        void atOneScale(ExactParts term, long numeratorAtMost, long denominatorAtMost);
+
+        /** Two partial sums of different scales added, aligned at the lesser of each exponent. */
+        void across(ExactParts one, ExactParts other);
+    }
+
+    /** {@link #sumByScale} made: no partial sum in canonical form, terms of one scale first and
+     *  then the two nearest in scale. */
+    private static ExactParts byScale(Iterable<ExactParts> terms, SumWork work) {
+        try {
+            // How long a partial sum of each scale can be, read off the terms without adding any.
+            NavigableMap<Scale, Holds> holds = new TreeMap<>();
+            for (ExactParts each : terms) {
+                if (!each.isZero()) {
+                    holds.merge(Scale.of(each), Holds.of(each), Holds::and);
+                }
+            }
+            // Terms of one scale, as one fraction at that scale each. Exact, so it is the same
+            // fraction whichever of them came first.
+            NavigableMap<Scale, ExactParts> at = new TreeMap<>();
+            for (ExactParts each : terms) {
+                if (!each.isZero()) {
+                    Scale scale = Scale.of(each);
+                    Holds scaleHolds = holds.get(scale);
+                    work.atOneScale(each, scaleHolds.numeratorAtMost(),
+                            scaleHolds.denominatorAtMost());
+                    at.merge(scale, each, ExactArithmetic::aligned);
+                }
+            }
+            at.values().removeIf(ExactParts::isZero);
+            ExactParts only = new NearestFirst(at, work).met();
+            return only == null ? ExactParts.ZERO
+                    : canonical(only.numerator(), only.denominator(), only.twos(), only.fives());
+        } catch (ArithmeticException e) {
+            throw ExactPowers.hostLimit(e);
+        }
+    }
+
+    /**
+     * What the terms of one scale hold: how many there are, the longest numerator, and the bits
+     * their denominators multiplied together hold beyond one.
+     */
+    private record Holds(long count, long longestNumerator, long denominators) {
+
+        static Holds of(ExactParts term) {
+            return new Holds(1, term.numerator().bitLength(), term.denominator().bitLength() - 1L);
+        }
+
+        Holds and(Holds other) {
+            return new Holds(saturated(count, other.count),
+                    Math.max(longestNumerator, other.longestNumerator),
+                    saturated(denominators, other.denominators));
+        }
+
+        /** No partial denominator of the scale is longer than every denominator multiplied. */
+        long denominatorAtMost() {
+            return saturated(denominators, 1);
+        }
+
+        /** No partial numerator is longer than the longest raised to that denominator, carried
+         *  once for each term. */
+        long numeratorAtMost() {
+            return saturated(saturated(longestNumerator, denominatorAtMost()),
+                    Long.SIZE - Long.numberOfLeadingZeros(count));
+        }
+    }
+
+    private static long saturated(long a, long b) {
+        try {
+            return Math.addExact(a, b);
+        } catch (ArithmeticException _) {
+            return Long.MAX_VALUE;
+        }
+    }
+
+    /**
+     * Partial sums of distinct scales met two at a time, the two nearest in scale first — the first
+     * such pair in the order of scales where several are as near — until one is left.
+     *
+     * <p>Each scale keeps which other is nearest to it, and the nearest pair of all is the least
+     * of those. A meeting asks again only of the ones it touched — the scale the two met at, and
+     * any whose nearest was one of the two — since how far apart two scales are is the same either
+     * way: a scale's nearest is never made wrong by a sum made somewhere else, only beaten, and the
+     * new scale's own nearest says that. Which scale is nearest is asked of the scales at the
+     * powers of two near its own and not of all of them. Kept in trees and in no array, since how many scales there
+     * are is as many as the terms.
+     */
+    private static final class NearestFirst {
+
+        private final NavigableMap<Scale, ExactParts> at;
+        private final SumWork work;
+        /** The scales still here, as the powers of five each power of two stands with. */
+        private final NavigableMap<Long, NavigableSet<Long>> byTwos = new TreeMap<>();
+        /** Each scale's nearest, least first. */
+        private final NavigableSet<Pair> pairs = new TreeSet<>();
+        private final NavigableMap<Scale, Pair> nearestOf = new TreeMap<>();
+        /** Which scales each scale is the nearest of. */
+        private final NavigableMap<Scale, NavigableSet<Scale>> nearestTo = new TreeMap<>();
+
+        /** A scale and the scale nearest it, ordered by how far apart and then by the scales. */
+        private record Pair(long apart, Scale one, Scale other) implements Comparable<Pair> {
+
+            @Override
+            public int compareTo(Pair that) {
+                int byApart = Long.compare(apart, that.apart);
+                if (byApart != 0) {
+                    return byApart;
+                }
+                int byOne = one.compareTo(that.one);
+                return byOne != 0 ? byOne : other.compareTo(that.other);
+            }
+        }
+
+        /**
+         * The partial sums to meet, each with which other is nearest to it.
+         *
+         * @param at the partial sums by their scales, none of them nought
+         */
+        NearestFirst(NavigableMap<Scale, ExactParts> at, SumWork work) {
+            this.at = at;
+            this.work = work;
+            for (Scale each : at.keySet()) {
+                byTwos.computeIfAbsent(each.twos(), _ -> new TreeSet<>()).add(each.fives());
+            }
+            for (Scale each : at.keySet()) {
+                findNearest(each);
+            }
+        }
+
+        /** What is left once every term has met, or null where they came to nought. */
+        ExactParts met() {
+            while (at.size() > 1) {
+                Pair nearest = pairs.first();
+                Scale first = nearest.one().compareTo(nearest.other()) < 0
+                        ? nearest.one() : nearest.other();
+                Scale second = first.equals(nearest.one()) ? nearest.other() : nearest.one();
+                work.across(at.get(first), at.get(second));
+                ExactParts sum = aligned(at.get(first), at.get(second));
+                NavigableSet<Scale> asked = new TreeSet<>();
+                remove(first, asked);
+                remove(second, asked);
+                if (!sum.isZero()) {
+                    // What two scales meet at is the lesser of each exponent, which may be a scale
+                    // a third term already stands at: that one is nearest of all, at no distance.
+                    Scale made = Scale.of(sum);
+                    ExactParts there = at.get(made);
+                    if (there != null) {
+                        work.across(there, sum);
+                        sum = aligned(there, sum);
+                        remove(made, asked);
+                    }
+                    if (!sum.isZero()) {
+                        at.put(made, sum);
+                        byTwos.computeIfAbsent(made.twos(), _ -> new TreeSet<>()).add(made.fives());
+                        asked.add(made);
+                    }
+                }
+                for (Scale each : asked) {
+                    if (at.containsKey(each)) {
+                        findNearest(each);
+                    }
+                }
+            }
+            return at.isEmpty() ? null : at.firstEntry().getValue();
+        }
+
+        /** {@code scale} gone, and every scale whose nearest it was put in {@code asked}. */
+        private void remove(Scale scale, NavigableSet<Scale> asked) {
+            at.remove(scale);
+            NavigableSet<Long> withTwos = byTwos.get(scale.twos());
+            withTwos.remove(scale.fives());
+            if (withTwos.isEmpty()) {
+                byTwos.remove(scale.twos());
+            }
+            forgetNearestOf(scale);
+            NavigableSet<Scale> pointing = nearestTo.remove(scale);
+            if (pointing != null) {
+                asked.addAll(pointing);
+            }
+        }
+
+        private void forgetNearestOf(Scale scale) {
+            Pair was = nearestOf.remove(scale);
+            if (was != null) {
+                pairs.remove(was);
+                NavigableSet<Scale> pointing = nearestTo.get(was.other());
+                if (pointing != null) {
+                    pointing.remove(scale);
+                }
+            }
+        }
+
+        /**
+         * Which scale still here is nearest to {@code scale}, the first in their order where
+         * several are as near — asked of each power of two outward from its own until one is
+         * farther than the nearest found.
+         */
+        private void findNearest(Scale scale) {
+            forgetNearestOf(scale);
+            Nearest found = new Nearest(scale);
+            found.along(byTwos.tailMap(scale.twos(), true));
+            found.along(byTwos.headMap(scale.twos(), false).descendingMap());
+            if (found.best != null) {
+                Pair pair = new Pair(found.apart, scale, found.best);
+                pairs.add(pair);
+                nearestOf.put(scale, pair);
+                nearestTo.computeIfAbsent(found.best, _ -> new TreeSet<>()).add(scale);
+            }
+        }
+
+        /** The nearest scale to {@code of} found so far, looked for one power of two at a time. */
+        private static final class Nearest {
+
+            private final Scale of;
+            private Scale best;
+            private long apart = Long.MAX_VALUE;
+
+            Nearest(Scale of) {
+                this.of = of;
+            }
+
+            /** The powers of two of {@code side}, walked away from {@code of}'s own, until one is
+             *  farther than the nearest found. */
+            void along(NavigableMap<Long, NavigableSet<Long>> side) {
+                for (Map.Entry<Long, NavigableSet<Long>> withTwos : side.entrySet()) {
+                    long twosApart = distance(withTwos.getKey(), of.twos());
+                    if (best != null && twosApart > apart) {
+                        return;
+                    }
+                    boolean own = withTwos.getKey() == of.twos();
+                    NavigableSet<Long> fives = withTwos.getValue();
+                    consider(withTwos.getKey(), twosApart,
+                            own ? fives.lower(of.fives()) : fives.floor(of.fives()));
+                    consider(withTwos.getKey(), twosApart,
+                            own ? fives.higher(of.fives()) : fives.ceiling(of.fives()));
+                }
+            }
+
+            private void consider(long twos, long twosApart, Long fives) {
+                if (fives == null) {
+                    return;
+                }
+                Scale there = new Scale(twos, fives);
+                long here = saturated(twosApart, distance(fives, of.fives()));
+                if (best == null || here < apart || (here == apart && there.compareTo(best) < 0)) {
+                    best = there;
+                    apart = here;
+                }
+            }
+        }
+
+        /** How far apart two exponents are; the farthest a long holds stands for any farther. */
+        private static long distance(long a, long b) {
+            try {
+                return Math.absExact(Math.subtractExact(a, b));
+            } catch (ArithmeticException _) {
+                return Long.MAX_VALUE;
+            }
+        }
+    }
+
+    /** The powers of two and five a term stands at, which is what a sum aligns. */
+    private record Scale(long twos, long fives) implements Comparable<Scale> {
+
+        static Scale of(ExactParts parts) {
+            return new Scale(parts.twos(), parts.fives());
+        }
+
+        @Override
+        public int compareTo(Scale other) {
+            int byTwos = Long.compare(twos, other.twos);
+            return byTwos != 0 ? byTwos : Long.compare(fives, other.fives);
+        }
+    }
+
+    /**
+     * Two partial sums added at the lesser of each exponent, which some term has, and left in no
+     * canonical form: the factors of two and five the fraction comes to stay in it, so no exponent
+     * is moved and none can leave its range here. At one scale nothing is aligned.
+     */
+    private static ExactParts aligned(ExactParts a, ExactParts b) {
+        long commonTwos = Math.min(a.twos(), b.twos());
+        long commonFives = Math.min(a.fives(), b.fives());
+        BigInteger here = a.numerator().multiply(ExactPowers.powers(
+                ExactPowers.lessened(a.twos(), commonTwos),
+                ExactPowers.lessened(a.fives(), commonFives)));
+        BigInteger there = b.numerator().multiply(ExactPowers.powers(
+                ExactPowers.lessened(b.twos(), commonTwos),
+                ExactPowers.lessened(b.fives(), commonFives)));
+        // The denominators' common factor off before either is multiplied out, and the sum's
+        // common factor with its denominator after, so the fraction is no larger than it is.
+        BigInteger shared = a.denominator().gcd(b.denominator());
+        BigInteger overA = a.denominator().divide(shared);
+        BigInteger overB = b.denominator().divide(shared);
+        BigInteger sum = here.multiply(overB).add(there.multiply(overA));
+        BigInteger denominator = overA.multiply(b.denominator());
+        BigInteger common = sum.gcd(denominator);
+        if (common.signum() != 0 && !common.equals(BigInteger.ONE)) {
+            sum = sum.divide(common);
+            denominator = denominator.divide(common);
+        }
+        return new ExactParts(sum, denominator, commonTwos, commonFives);
     }
 
     /**

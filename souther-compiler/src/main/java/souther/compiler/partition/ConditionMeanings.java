@@ -9,6 +9,8 @@ import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 
+import souther.compiler.meaning.Proposition;
+
 import java.util.List;
 import java.util.Set;
 
@@ -54,7 +56,17 @@ record ConditionMeanings(souther.compiler.inputs.InputReading read) {
 
     /** What {@code condition} coming out {@code held} states, and where it states nothing, that. */
     List<OnTheWay> stating(Condition condition, boolean held) {
-        return ReachingCuts.stating(condition, read, held, new WhatConditionsState(read));
+        return ReachingCuts.stating(condition, read, held, WhatConditionsState.of(read));
+    }
+
+    /** What {@code condition} coming out true states, whole ({@link DemandReading#statedBy}). */
+    Proposition statedBy(Condition condition) {
+        return DemandReading.statedBy(condition, read, WhatConditionsState.of(read));
+    }
+
+    /** What a run entering arm {@code part} of {@code fork} states ({@link Pullback#ofTheArms}). */
+    Proposition entered(Core fork, int part, InputReads reads) {
+        return WhatConditionsState.of(read).arm(fork, part, reads).proposition();
     }
 
     /**
@@ -63,7 +75,8 @@ record ConditionMeanings(souther.compiler.inputs.InputReading read) {
      * <p>The environment is handed in rather than held, because it is a function of the program
      * point and this is not.
      */
-    OnTheWay entering(Core.Match match, int part, InputReads reads, ConditionNumbering numbering) {
+    List<OnTheWay> entering(Core.Match match, int part, InputReads reads,
+                            ConditionNumbering numbering) {
         return ReachingCuts.entering(match, match.cases().get(part), part, read, reads, numbering);
     }
 
@@ -74,8 +87,8 @@ record ConditionMeanings(souther.compiler.inputs.InputReading read) {
     }
 
     /** What taking arm {@code part} of {@code attempt}, written at {@code at}, says of the input. */
-    OnTheWay attempting(Core.IfConstructed attempt, int part, SourcePos at,
-                        ConditionNumbering numbering) {
-        return ReachingCuts.attempting(attempt, part, at, numbering);
+    List<OnTheWay> attempting(Core.IfConstructed attempt, int part, SourcePos at,
+                              InputReads reads, ConditionNumbering numbering) {
+        return ReachingCuts.attempting(attempt, part, at, read, reads, numbering);
     }
 }

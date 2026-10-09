@@ -94,6 +94,12 @@ public enum CompositionBudget {
      *  further and is carried out with the figure. */
     WAYS_UNDER_THE_CASES_TRIED(8),
 
+    /** How many ways one way to a border is split into where conditions on it came out one of
+     *  several ways, each a search looks along. What multiplies here is the alternatives of every
+     *  such condition on the way; past it the way is looked along whole, which narrows by none of
+     *  them, and nothing is proved of it from its alternatives. */
+    WAYS_A_WAY_IS_SPLIT_INTO(16),
+
     /** How many places along a line a pair is tried at, which is places the walk offered and not
      *  places it went past. What it costs to step over a place the anchored position may not stand
      *  at is {@link #PLACES_A_PAIR_IS_LOOKED_AT}. */
@@ -332,6 +338,7 @@ public enum CompositionBudget {
                  LEVELS_A_SIDE_IS_ASKED_AT, TIMES_THE_RULES_ARE_ASKED_AGAIN,
                  VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT, VALUES_A_POINT_IS_TRIED_WITH,
                  PATHS_OF_A_DECISION_READ, READINGS_OF_ONE_CONDITION,
+                 WAYS_A_WAY_IS_SPLIT_INTO,
                  DEPTH_A_CONSTRUCTION_PLAN_DESCENDS, NUMBERS_OF_A_SET_TRIED,
                  RUNS_REPAIRING_A_ROW -> null;
         };

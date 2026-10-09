@@ -704,6 +704,11 @@ public sealed interface AnotherLineTheRowsAllow {
                     case OnTheWay.Declined _ -> {
                         return false;
                     }
+                    // One of several ways, and which the row took is not followed through a step:
+                    // a step that keeps it on one may move it off it, and nothing here asks which.
+                    case OnTheWay.OneOf _ -> {
+                        return false;
+                    }
                     // Settled for every row: past it whatever a step moves, or past it for none.
                     case OnTheWay.Settled settled -> {
                         if (!settled.thisWay()) {
@@ -768,6 +773,13 @@ public sealed interface AnotherLineTheRowsAllow {
                             return false;
                         }
                     }
+                    // A statement no composer writes toward, which a step moving any number may
+                    // turn: which numbers it turns on is the run's to say.
+                    case OnTheWay.TakenIn(var _, RowDemand.ForTheRun _) -> {
+                        if (!moved.isEmpty()) {
+                            return false;
+                        }
+                    }
                 }
             }
             return true;
@@ -802,8 +814,7 @@ public sealed interface AnotherLineTheRowsAllow {
                 // which this method already has a word for: null, the same as any other condition
                 // nothing here can say.
                 case TakenConstraint.Affine(var form, var rel) -> {
-                    ExactRatio sum = OrderedAffineBoundary.along(form.coefs(), at).orNull();
-                    ExactRatio total = sum == null ? null : sum.plus(form.constant()).orNull();
+                    ExactRatio total = OrderedAffineBoundary.at(form, at).orNull();
                     yield total == null ? null : rel.holds(total.signum());
                 }
                 case TakenConstraint.Ordered(

@@ -116,6 +116,8 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                     case RowDemand.ForAll _ -> region;
                     // How many elements meet a statement, which is no number a region holds.
                     case RowDemand.SoMany _ -> region;
+                    // A statement no composer writes toward, which a region holds nothing of.
+                    case RowDemand.ForTheRun _ -> region;
                     // Which of two values stands at a position no region measures. The row is
                     // written with it where the row is composed, and the region says nothing of it.
                     case RowDemand.ATruth _ -> region;
@@ -201,14 +203,77 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     }
 
     /** The ones this reading could state in neither vocabulary, which is what a search composing
-     *  against both of them still does not represent. */
+     *  against both of them still does not represent — inside an alternative as much as beside
+     *  one. */
     public List<OnTheWay.Declined> declined() {
         List<OnTheWay.Declined> out = new ArrayList<>();
-        for (OnTheWay each : onTheWay) {
-            if (each instanceof OnTheWay.Declined left) {
-                out.add(left);
+        declined(onTheWay, out);
+        return List.copyOf(out);
+    }
+
+    private static void declined(List<OnTheWay> entries, List<OnTheWay.Declined> into) {
+        for (OnTheWay each : entries) {
+            switch (each) {
+                case OnTheWay.Declined left -> into.add(left);
+                case OnTheWay.OneOf several ->
+                        several.alternatives().forEach(one -> declined(one, into));
+                case OnTheWay.TakenIn _, OnTheWay.Narrowed _, OnTheWay.Settled _ -> { }
             }
         }
-        return List.copyOf(out);
+    }
+
+    /** The conditions on this way that came out one of several ways, in the order the walk met
+     *  them. */
+    public List<OnTheWay.OneOf> severalWays() {
+        return onTheWay.stream().filter(OnTheWay.OneOf.class::isInstance)
+                .map(OnTheWay.OneOf.class::cast).toList();
+    }
+
+    /**
+     * The ways this one is, each with one alternative of every condition of several ways taken in
+     * where it stands ({@link OnTheWay.OneOf}) — just itself where it has none — or empty where that
+     * is more than {@code most} ways.
+     *
+     * <p>Every row past this way is past one of them, since a row past a condition of several ways
+     * met one of its alternatives. So a row is looked for along each, and nothing reaches the border
+     * only where nothing reaches along any of them.
+     */
+    public Optional<List<WayToTheBorder>> eachWay(int most) {
+        List<List<OnTheWay>> ways = expanded(onTheWay, most);
+        return ways == null ? Optional.empty()
+                : Optional.of(ways.stream().map(WayToTheBorder::new).toList());
+    }
+
+    /** {@code entries} with each condition of several ways read as one of its alternatives, every
+     *  choice of them — or null where that is more than {@code most}. */
+    private static List<List<OnTheWay>> expanded(List<OnTheWay> entries, int most) {
+        List<List<OnTheWay>> ways = new ArrayList<>(List.of(List.of()));
+        for (OnTheWay each : entries) {
+            List<List<OnTheWay>> taken = new ArrayList<>();
+            List<List<OnTheWay>> choices = new ArrayList<>();
+            if (each instanceof OnTheWay.OneOf several) {
+                for (List<OnTheWay> alternative : several.alternatives()) {
+                    List<List<OnTheWay>> inside = expanded(alternative, most);
+                    if (inside == null) {
+                        return null;
+                    }
+                    choices.addAll(inside);
+                }
+            } else {
+                choices.add(List.of(each));
+            }
+            for (List<OnTheWay> way : ways) {
+                for (List<OnTheWay> choice : choices) {
+                    if (taken.size() == most) {
+                        return null;
+                    }
+                    List<OnTheWay> longer = new ArrayList<>(way);
+                    longer.addAll(choice);
+                    taken.add(longer);
+                }
+            }
+            ways = taken;
+        }
+        return ways;
     }
 }

@@ -145,10 +145,11 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
 
         WayToTheBorder way = new WayToTheBorder(List.of(
                 new OnTheWay.Declined(met(1), somewhere(1),
-                        new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE)),
+                        new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER)),
                 new OnTheWay.TakenIn(somewhere(2), new RowDemand.Relational(only)),
                 new OnTheWay.Declined(met(3), somewhere(3),
-                        new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.ONE_OF_SEVERAL_THINGS))));
+                        new WhyNotTaken.OutsideDomain(
+                                WhyNotTaken.DomainLimit.AN_ANSWER_A_ROW_STANDS_IN))));
         way.narrowing(region);
 
         assertEquals(List.of(only), region.told, "a decline is a record and not a cut");

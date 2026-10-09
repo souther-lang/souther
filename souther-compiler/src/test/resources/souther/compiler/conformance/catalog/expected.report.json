@@ -1449,13 +1449,9 @@
           "obligationId" : {
             "behavior" : "discount",
             "conditions" : [ {
-              "kind" : "not_read",
-              "condition" : "condition 0 of `discount`",
-              "outcome" : "held",
-              "notRead" : [ {
-                "kind" : "projection_incomplete",
-                "reason" : "number_the_body_bound"
-              } ]
+              "kind" : "statement",
+              "condition" : "!Affine[form=LinearForm[constant=-0.01, coefs={conformance.catalog.discount.2=1}], proposition=GE]",
+              "outcome" : "denied"
             } ]
           },
           "taken" : true
@@ -1463,13 +1459,9 @@
           "obligationId" : {
             "behavior" : "discount",
             "conditions" : [ {
-              "kind" : "not_read",
-              "condition" : "condition 0 of `discount`",
-              "outcome" : "denied",
-              "notRead" : [ {
-                "kind" : "projection_incomplete",
-                "reason" : "number_the_body_bound"
-              } ]
+              "kind" : "statement",
+              "condition" : "!Affine[form=LinearForm[constant=-0.01, coefs={conformance.catalog.discount.2=1}], proposition=GE]",
+              "outcome" : "held"
             } ]
           },
           "taken" : true
@@ -2774,17 +2766,13 @@
           "obligationId" : {
             "behavior" : "apportion",
             "conditions" : [ {
+              "kind" : "statement",
+              "condition" : "!Affine[form=LinearForm[constant=0, coefs={conformance.splitting.apportion.2=1}], proposition=GE]",
+              "outcome" : "denied"
+            }, {
               "kind" : "comparison",
               "condition" : "GE LinearForm[constant=-1, coefs={among=1}]",
               "outcome" : "held"
-            }, {
-              "kind" : "not_read",
-              "condition" : "condition 0 of `apportion`",
-              "outcome" : "held",
-              "notRead" : [ {
-                "kind" : "projection_incomplete",
-                "reason" : "number_the_body_bound"
-              } ]
             } ]
           },
           "taken" : true
@@ -2792,17 +2780,13 @@
           "obligationId" : {
             "behavior" : "apportion",
             "conditions" : [ {
+              "kind" : "statement",
+              "condition" : "!Affine[form=LinearForm[constant=0, coefs={conformance.splitting.apportion.2=1}], proposition=GE]",
+              "outcome" : "held"
+            }, {
               "kind" : "comparison",
               "condition" : "GE LinearForm[constant=-1, coefs={among=1}]",
               "outcome" : "held"
-            }, {
-              "kind" : "not_read",
-              "condition" : "condition 0 of `apportion`",
-              "outcome" : "denied",
-              "notRead" : [ {
-                "kind" : "projection_incomplete",
-                "reason" : "number_the_body_bound"
-              } ]
             } ]
           },
           "taken" : false,
@@ -3824,24 +3808,20 @@
           "obligationId" : {
             "behavior" : "apportionExactly",
             "conditions" : [ {
+              "kind" : "statement",
+              "condition" : "!Affine[form=LinearForm[constant=0, coefs={conformance.splitting.apportionExactly.2=1}], proposition=GE]",
+              "outcome" : "denied"
+            }, {
               "kind" : "comparison",
               "condition" : "GE LinearForm[constant=-1, coefs={among=1}]",
               "outcome" : "held"
             }, {
               "kind" : "not_read",
-              "condition" : "condition 0 of `apportionExactly`",
-              "outcome" : "held",
-              "notRead" : [ {
-                "kind" : "projection_incomplete",
-                "reason" : "number_the_body_bound"
-              } ]
-            }, {
-              "kind" : "not_read",
               "condition" : "condition 1 of `apportionExactly`",
               "outcome" : "held",
               "notRead" : [ {
-                "kind" : "projection_incomplete",
-                "reason" : "arm_read_as_written"
+                "kind" : "meaning_unread",
+                "reason" : "scrutinee_at_no_position"
               } ]
             } ]
           },
@@ -3850,24 +3830,20 @@
           "obligationId" : {
             "behavior" : "apportionExactly",
             "conditions" : [ {
+              "kind" : "statement",
+              "condition" : "!Affine[form=LinearForm[constant=0, coefs={conformance.splitting.apportionExactly.2=1}], proposition=GE]",
+              "outcome" : "held"
+            }, {
               "kind" : "comparison",
               "condition" : "GE LinearForm[constant=-1, coefs={among=1}]",
               "outcome" : "held"
             }, {
               "kind" : "not_read",
-              "condition" : "condition 0 of `apportionExactly`",
-              "outcome" : "denied",
-              "notRead" : [ {
-                "kind" : "projection_incomplete",
-                "reason" : "number_the_body_bound"
-              } ]
-            }, {
-              "kind" : "not_read",
               "condition" : "condition 1 of `apportionExactly`",
               "outcome" : "held",
               "notRead" : [ {
-                "kind" : "projection_incomplete",
-                "reason" : "arm_read_as_written"
+                "kind" : "meaning_unread",
+                "reason" : "scrutinee_at_no_position"
               } ]
             } ]
           },
@@ -3886,8 +3862,8 @@
               "condition" : "condition 2 of `apportionExactly`",
               "outcome" : "held",
               "notRead" : [ {
-                "kind" : "projection_incomplete",
-                "reason" : "arm_read_as_written"
+                "kind" : "meaning_unread",
+                "reason" : "scrutinee_at_no_position"
               } ]
             } ]
           },
@@ -6705,9 +6681,6 @@
               "condition" : "condition 4 of `出荷する`",
               "outcome" : "held",
               "notRead" : [ {
-                "kind" : "projection_incomplete",
-                "reason" : "one_of_several_things"
-              }, {
                 "kind" : "meaning_unread",
                 "reason" : "no_form_of_what_it_answers"
               } ]
@@ -6734,9 +6707,6 @@
               "condition" : "condition 4 of `出荷する`",
               "outcome" : "held",
               "notRead" : [ {
-                "kind" : "projection_incomplete",
-                "reason" : "one_of_several_things"
-              }, {
                 "kind" : "meaning_unread",
                 "reason" : "no_form_of_what_it_answers"
               } ]
@@ -6763,9 +6733,6 @@
               "condition" : "condition 4 of `出荷する`",
               "outcome" : "held",
               "notRead" : [ {
-                "kind" : "projection_incomplete",
-                "reason" : "one_of_several_things"
-              }, {
                 "kind" : "meaning_unread",
                 "reason" : "no_form_of_what_it_answers"
               } ]

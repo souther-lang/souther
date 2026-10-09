@@ -50,7 +50,7 @@ class ARunThatAnsweredAConditionBothWaysTookNoOneRuleTest {
 
     private static final DecisionCondition.AConditionNotRead CONDITION =
             new DecisionCondition.AConditionNotRead(AT,
-                    new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE));
+                    new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER));
 
     private static final DecisionRule THEN = rule(true);
 

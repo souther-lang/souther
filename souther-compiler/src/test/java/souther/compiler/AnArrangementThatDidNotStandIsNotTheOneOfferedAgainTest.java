@@ -32,10 +32,10 @@ class AnArrangementThatDidNotStandIsNotTheOneOfferedAgainTest {
      * A line over a form, above a condition the walk cannot represent.
      *
      * <p>The comparison puts a date, a time of day and a date-time on one order, which is a form
-     * over three positions. Above it stands an outcome that states one of two things — the walk has
-     * no cut for it, so the row is composed without it — and the arrangement the arithmetic reaches
-     * first is the one it refuses: the day the dates start at, at the second the times start at. A
-     * day or a second further on and the row arrives.
+     * over three positions. Above it stands a square of the date's day and the time's second —
+     * nothing here reads what a product comes to, so the row is composed without it — and the
+     * arrangement the arithmetic reaches first is the one it refuses: the first day of a month at
+     * the second the times start at. A day or a second further on and the row arrives.
      */
     private static final String A_FORM_UNDER_A_CONDITION_NOTHING_PLACED = """
             module demo
@@ -45,7 +45,7 @@ class AnArrangementThatDidNotStandIsNotTheOneOfferedAgainTest {
 
             behavior f : (d: Date, t: Time, b: DateTime) -> Ok | No
             let f (d, t, b) = {
-                guard d > Date("1970-01-01") || t > Time("00:00:00") else No
+                guard (Date.day(d) + Time.second(t)) * (Date.day(d) + Time.second(t)) > 1 else No
                 guard b > DateTime.fromDateAndTime(d, t) else No
                 Ok
             }
@@ -68,8 +68,7 @@ class AnArrangementThatDidNotStandIsNotTheOneOfferedAgainTest {
     void andTheFirstArrangementIsOneThatDoesNotStand() {
         String page = human(A_FORM_UNDER_A_CONDITION_NOTHING_PLACED);
 
-        assertTrue(page.contains("not yet asked of a row: an outcome that states one of several"
-                        + " things"),
+        assertTrue(page.contains("a comparison over a product of two values"),
                 () -> "the row is composed without the condition above the line: " + page);
     }
 

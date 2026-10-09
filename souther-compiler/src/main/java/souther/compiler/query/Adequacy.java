@@ -11,6 +11,8 @@ import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Classification;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.partition.LineOrigin;
+import souther.compiler.meaning.CasesOfAnAnswer;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.partition.MeaningsOfABodyReading;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementOwed;
@@ -993,6 +995,53 @@ public final class Adequacy {
                         read.declared(source), ElementBindings.of(analysis, source.newtypes()),
                         read.dependencies()),
                 source.symbols(), source.newtypes());
+    }
+
+    /**
+     * Which case one behavior's answer is, read once off its body over its own parameters
+     * ({@link CasesOfAnAnswer}), for every call of it to put in what that call handed.
+     *
+     * <p>Asked of the body as one behavior was checked and not as its module was: a module's check
+     * judges what its bodies claim, which reads the conditions of a body calling this one, so an
+     * answer asked of the module's would be asked while that module is being answered.
+     *
+     * <p>Absent where there is no body to read or no input it was read at. A behavior reached again
+     * while its own answer is being read answers that it was ({@link #onCycle}).
+     */
+    public record AnswerCases(ValueName.Behavior behavior) implements Key<CasesOfAnAnswer> {
+
+        @Override
+        public String module() {
+            return behavior.module();
+        }
+
+        @Override
+        public Answer<CasesOfAnAnswer> compute(Db db) {
+            String module = behavior.module();
+            Bodies.CheckedBody checked =
+                    db.ask(new Bodies.CheckedBehavior(module, behavior.name())).value();
+            Map<String, InputDomain> inputs = db.ask(new Inputs(module)).value();
+            Answer<RuleReadingSource> reading = Shapes.ruleReading(db, module);
+            InputDomain input = inputs == null ? null : inputs.get(behavior.name());
+            if (checked == null || checked.analysis() == null || input == null
+                    || !reading.present()) {
+                return Answer.absent();
+            }
+            AnalysisBody analysis = checked.analysis();
+            RuleReadingSource source = reading.value();
+            return Answer.of(MeaningsOfABodyReading.answerOf(analysis,
+                    input.parameters().stream().map(InputDomain.Parameter::name).toList(),
+                    readingOf(db, input, source),
+                    InputReads.ofParametersWhereCallsStand(input.parameterReads(),
+                            input.declared(source), ElementBindings.of(analysis,
+                                    source.newtypes()), input.dependencies())));
+        }
+
+        @Override
+        public Answer<CasesOfAnAnswer> onCycle(List<Key<?>> cycle) {
+            return Answer.of(new CasesOfAnAnswer(List.of(), new CasesOfAnAnswer.Answered.Unread(
+                    new WhyUnread.InACalledBody(WhyUnread.InACalledBody.What.ITSELF))));
+        }
     }
 
     /** What one behavior states about its answer, or nothing where it states none. A behavior
@@ -2470,6 +2519,16 @@ public final class Adequacy {
                 souther.compiler.partition.DecisionReading.Ruled ruled, Coverages.Probe probe,
                 souther.compiler.partition.RulesTaken taken,
                 souther.compiler.partition.Reachability.Reaching reaching) {
+            // Where a condition on the way came out one of several ways, a row is composed along
+            // each of them first. A row of one that the run places at the rule is a witness of it;
+            // anything else one of them comes to says nothing of the others, so the rule is then
+            // answered as the way whole answers it.
+            for (souther.compiler.partition.Reachability.Reaching along : reaching.along()) {
+                RuleSettlement one = whatASearchFinds(ruled, probe, taken, along);
+                if (one.requirement() instanceof RuleRequirement.Required) {
+                    return one;
+                }
+            }
             // Every way of standing the dependencies in, and what each of them established. Which
             // case a row carries where the way names none decides where the row goes, so a row
             // that went elsewhere says that of the case it carried and not of the rule.

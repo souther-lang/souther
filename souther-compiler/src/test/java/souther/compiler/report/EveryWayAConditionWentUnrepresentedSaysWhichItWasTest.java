@@ -119,12 +119,17 @@ class EveryWayAConditionWentUnrepresentedSaysWhichItWasTest {
                         Set.of(CompositionBudget.NUMBERS_OF_A_SET_TRIED), Set.of())));
         out.put(ReachabilityGap.Why.TwoNumbersAtOneLocation.class,
                 ofTheInput(new ReachabilityGap.Why.TwoNumbersAtOneLocation()));
+        out.put(ReachabilityGap.Why.NoComposerWritesIt.class,
+                ofTheInput(new ReachabilityGap.Why.NoComposerWritesIt(
+                        RowDemand.NoComposer.A_VALUE_THE_BODY_WORKS_OUT)));
         out.put(ReachabilityGap.Why.ElementsWrittenAlike.class,
                 ofTheInput(new ReachabilityGap.Why.ElementsWrittenAlike()));
         out.put(DemandGap.WhyNotStated.AFormOverMoreThanOneAnswer.class,
                 notStated(new DemandGap.WhyNotStated.AFormOverMoreThanOneAnswer()));
         out.put(DemandGap.WhyNotStated.APlaceOnTheAnswersOwnOrder.class,
                 notStated(new DemandGap.WhyNotStated.APlaceOnTheAnswersOwnOrder()));
+        out.put(DemandGap.WhyNotStated.AStatementOfSeveralParts.class,
+                notStated(new DemandGap.WhyNotStated.AStatementOfSeveralParts()));
         out.put(DemandGap.WhyNotComposed.NoOrderUnderATermOfTheAnswer.class,
                 notComposed(new DemandGap.WhyNotComposed.NoOrderUnderATermOfTheAnswer(
                         new NumericTerm.ValueOf(TermPath.of("x").then("id")))));

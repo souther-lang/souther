@@ -177,7 +177,7 @@ public final class AnAnswerComposed {
                     unaccounted);
         }
         return composed(subject, cuts, new Reachability.Reaching(region, required, truths,
-                cuts.stream().map(Taken::cut).toList()));
+                cuts.stream().map(Taken::cut).toList(), Reachability.Ways.ONE));
     }
 
     /**

@@ -151,8 +151,8 @@ final class Clauses {
     }
 
     /**
-     * What {@code clause} states where each field is given what {@code given} says, or {@code null}
-     * where it states nothing this check can read.
+     * What {@code clause} states where each field is given what {@code given} says, or why it
+     * states nothing this reading can read.
      *
      * <p>Taken from what the declaration that wrote the clause publishes, and not worked out from
      * the tree that declaration was written as. What a clause states is that declaration's answer,
@@ -167,16 +167,30 @@ final class Clauses {
      * that is not there, and the clause is left to the run-time check rather than read against
      * nothing.
      */
-    private AsStated statedAt(ClauseMeaning clause, TypeSymbol.AtModule named,
-                              Map<BindingId, Core> given) {
-        // Fail-open: a clause with no form leaves its run-time check standing, whichever way the
-        // form went missing. Which of the two it was matters to a reader that publishes a sentence
-        // about the clause, and this is not one.
-        if (!(clause instanceof ClauseMeaning.Stated it)
-                || !everyFieldRead(given, named, it.fieldsRead())) {
-            return null;
+    private ClausesInOrder.OneClause readAt(ClauseMeaning clause, TypeSymbol.AtModule named,
+                                            Map<BindingId, Core> given) {
+        return switch (clause) {
+            case ClauseMeaning.Stopped stopped -> new ClausesInOrder.OneClause.Unread(
+                    stopped.ref(), ClausesInOrder.WhyAClauseIsUnread.NO_FORM);
+            case ClauseMeaning.Stated it when !everyFieldRead(given, named, it.fieldsRead()) ->
+                    new ClausesInOrder.OneClause.Unread(it.ref(),
+                            ClausesInOrder.WhyAClauseIsUnread.A_FIELD_LEFT_OUT);
+            case ClauseMeaning.Stated it -> new ClausesInOrder.OneClause.Stated(it.ref(),
+                    substituted(it.states().termForClauseReading(), given), it.parts());
+        };
+    }
+
+    /**
+     * Every clause of {@code named} in the order a construction checks them, each read where its
+     * fields are given what {@code given} says or left unread with why ({@link ClausesInOrder}).
+     */
+    ClausesInOrder inOrder(TypeSymbol.AtModule named, Map<BindingId, Core> given) {
+        PublishedRules rules = of(named);
+        List<ClausesInOrder.OneClause> out = new ArrayList<>();
+        for (ClauseMeaning clause : rules.reached()) {
+            out.add(readAt(clause, named, given));
         }
-        return new AsStated(substituted(it.states().termForClauseReading(), given), it.parts());
+        return new ClausesInOrder(out, rules.everyRuleReached());
     }
 
     /**
@@ -253,16 +267,15 @@ final class Clauses {
     StatedClauses statedAt(TypeSymbol.AtModule named, Map<BindingId, Core> given) {
         List<Stated> stated = new ArrayList<>();
         List<RuleRef.Invariant> lost = new ArrayList<>();
-        for (ClauseMeaning inv : declared(named)) {
-            Clause.Ref clause = inv.ref();
-            AsStated one = statedAt(inv, named, given);
-            if (one != null) {
+        for (ClausesInOrder.OneClause one : inOrder(named, given).inOrder()) {
+            switch (one) {
                 // The clause as one reading, and the parts its author wrote as subtrees of that
                 // very reading. Read apart instead, a conjunct would be read without the conjunct
                 // beside it, and a branch one of them rules out would stand.
-                stated.add(new Stated(clause, one.states(), partsOf(one)));
-            } else {
-                lost.add(new RuleRef.Invariant(clause));
+                case ClausesInOrder.OneClause.Stated it -> stated.add(new Stated(it.clause(),
+                        it.states(), partsOf(new AsStated(it.states(), it.parts()))));
+                case ClausesInOrder.OneClause.Unread it ->
+                        lost.add(new RuleRef.Invariant(it.clause()));
             }
         }
         return new StatedClauses(List.copyOf(stated), List.copyOf(lost));

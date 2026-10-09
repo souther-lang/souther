@@ -21,14 +21,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * One of several things declined as a row's demand says what stopped each of them, however the
- * disjunction was written.
+ * One of several things asked of a row is each of them asked as an alternative, and an alternative
+ * says what stopped it, however the disjunction was written.
  *
  * <p>A disjunction written with {@code ||} is two conditions of the shape; the same disjunction
- * written as a denied conjunction is one condition whose proposition is the disjunction. Both name
- * no part a row is asked for, and both say why each part could not have been asked besides — one
- * part's meaning unread, another a quantifier this reading has no words for. Only the parts that
- * could be what holds: coming out false, the two are a conjunction and each part is asked.
+ * written as a denied conjunction is one condition whose proposition is the disjunction. Both are
+ * asked of a row as alternatives, and in each alternative what could not be asked says why — one
+ * part's meaning unread. Only the parts that could be what holds: coming out false, the two are a
+ * conjunction and each part is asked.
  */
 class OneOfSeveralThingsSaysWhatStoppedEachTest {
 
@@ -62,21 +62,19 @@ class OneOfSeveralThingsSaysWhatStoppedEachTest {
                 inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
                 inputs.dependencies());
         InputReading read = inputs.reading(rules);
-        return ReachingCuts.stating(Condition.of(analysis.core(), reads, rules.symbols(),
-                        rules.newtypes(), new ConditionNumbering(module, behavior)), read, holding,
-                        new WhatConditionsState(read)).stream()
-                .filter(each -> each instanceof OnTheWay.Declined)
-                .flatMap(each -> ((OnTheWay.Declined) each).whys().stream())
+        return new WayToTheBorder(ReachingCuts.stating(Condition.of(analysis.core(), reads,
+                        rules.symbols(), rules.newtypes(), new ConditionNumbering(module, behavior)),
+                        read, holding, WhatConditionsState.of(read))).declined().stream()
+                .flatMap(each -> each.whys().stream())
                 .toList();
     }
 
     @Test
     void aDisjunctionSaysWhatStoppedEachPart() {
+        // The product stopped the reading; every line above a floor beside it was read to the end
+        // and is taken, as a statement the run decides, so it is no reason anything stopped.
         assertEquals(List.of(
-                        new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.ONE_OF_SEVERAL_THINGS),
-                        new WhyNotTaken.MeaningUnread(new WhyUnread.OutsideTheLinearFragment()),
-                        new WhyNotTaken.ProjectionIncomplete(
-                                WhyNotTaken.Shape.EVERY_ELEMENT_AND_MORE)),
+                        new WhyNotTaken.MeaningUnread(new WhyUnread.OutsideTheLinearFragment())),
                 whys("written", true));
         assertEquals(List.of(
                         new WhyNotTaken.MeaningUnread(new WhyUnread.OutsideTheLinearFragment())),

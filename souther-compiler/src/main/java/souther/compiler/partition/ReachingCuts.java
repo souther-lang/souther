@@ -167,7 +167,8 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
             switch (each) {
                 case OnTheWay.TakenIn in -> demands.add(in.demand());
                 case OnTheWay.Settled _ -> { }
-                case OnTheWay.Declined _, OnTheWay.Narrowed _ -> {
+                // One of several ways is no set of demands a row is held to all of.
+                case OnTheWay.Declined _, OnTheWay.Narrowed _, OnTheWay.OneOf _ -> {
                     return Optional.empty();
                 }
             }
@@ -239,7 +240,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         // be carried.
         return DemandReading.stated(node, read, holding, conditions).stream()
                 .map(each -> onTheWay(each.where().occurrence(), each.where().anchor(),
-                        each.read()))
+                        each.read(), read))
                 .toList();
     }
 
@@ -267,8 +268,8 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
      * nothing and an arm nothing could be read of are the two answers a walk has to tell apart, and
      * a silence is both of them.
      */
-    static OnTheWay entering(Core.Match match, Core.Case arm, int part, InputReading read,
-                             InputReads reads, ConditionNumbering numbering) {
+    static List<OnTheWay> entering(Core.Match match, Core.Case arm, int part, InputReading read,
+                                   InputReads reads, ConditionNumbering numbering) {
         InputDomain inputs = read.domain();
         RuleReadingSource ruleSource = read.rules();
         ConditionOccurrence met = numbering.metEntering(match, part);
@@ -279,8 +280,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
         // declaration's to say below.
         CasesLeft selected = CasesLeft.selectedBy(arm.pattern());
         if (selected == null) {
-            return new OnTheWay.Declined(met, at, new WhyNotTaken.ProjectionIncomplete(
-                    WhyNotTaken.Shape.AN_ARM_READ_AS_WRITTEN));
+            return enteredWhole(match, part, read, reads, met, at);
         }
         // The arm is declined for either answer: a search composes against a position read as one
         // of its cases, and there is no position to narrow whether the scrutinee stands at none or
@@ -301,7 +301,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
             Optional<Boolean> taken = reads.whetherEveryRowTakes(arm, match.scrutinee(),
                     ruleSource.symbols(), ruleSource.newtypes());
             if (taken.isPresent()) {
-                return new OnTheWay.Settled(met, at, taken.get());
+                return List.of(new OnTheWay.Settled(met, at, taken.get()));
             }
         }
         // The position that is narrowed, and not the narrowed one. A case declaring no field has
@@ -315,15 +315,27 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                 : taking(inputs, inputs.declared(ruleSource), scrutinee,
                         match.scrutinee().type(), selected);
         if (taking == null) {
-            return new OnTheWay.Declined(met, at, new WhyNotTaken.ProjectionIncomplete(
-                    WhyNotTaken.Shape.AN_ARM_READ_AS_WRITTEN));
+            return enteredWhole(match, part, read, reads, met, at);
         }
-        return switch (taking) {
+        return List.of(switch (taking) {
             case DeclaredInput.Taking.Narrows(TermPath to) -> new OnTheWay.Narrowed(at, to,
                     inputs.reach().crossings(), onItsOrder(to, read));
             case DeclaredInput.Taking.Implied _ -> new OnTheWay.Settled(met, at, true);
             case DeclaredInput.Taking.Excluded _ -> new OnTheWay.Settled(met, at, false);
-        };
+        });
+    }
+
+    /**
+     * What entering arm {@code part} of {@code match} asks of a row where it narrows no one
+     * position: what the arm states ({@link Pullback#ofTheArms}) — which case a value a helper or
+     * another behavior answers is, under what; an optional's two carriers at once — asked as any
+     * condition is.
+     */
+    private static List<OnTheWay> enteredWhole(Core.Match match, int part, InputReading read,
+                                               InputReads reads, ConditionOccurrence met,
+                                               ConditionReportAnchor at) {
+        return armStated(WhatConditionsState.of(read).arm(match, part, reads).proposition(), met,
+                at, read);
     }
 
     /**
@@ -445,23 +457,27 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
     }
 
     /**
-     * What reaching arm {@code part} of {@code attempt} establishes about this input, which this
-     * reading cannot say.
-     *
-     * <p>The arm is decided by whether the construction's invariant held of the values it was
-     * given, and what that says of the input is the invariant read over those values. That is a
-     * reading of the invariant and not of anything this walk met, so the arm is declined rather than
-     * given a narrowing the walk did not establish. Declined and not left out: a rule through the
-     * arm still turns on it, and it is named so that the success and each departure are distinctions
-     * apart.
+     * What reaching arm {@code part} of {@code attempt} establishes about this input: what the arm
+     * states ({@link Pullback#ofTheArms}) — the clauses of the invariant it checks, read over the
+     * values the attempt hands it — asked of a row as any condition is.
      *
      * @param at where the arm is written, which is its body since an attempt writes no arm of its own
      */
-    static OnTheWay attempting(Core.IfConstructed attempt, int part, SourcePos at,
-                               ConditionNumbering numbering) {
+    static List<OnTheWay> attempting(Core.IfConstructed attempt, int part, SourcePos at,
+                                     InputReading read, InputReads reads,
+                                     ConditionNumbering numbering) {
         ConditionOccurrence met = numbering.metEntering(attempt, part);
-        return new OnTheWay.Declined(met, numbering.anchorOfArm(attempt.origin(), part, at, met),
-                new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.AN_ARM_AN_INVARIANT_DECIDES));
+        return armStated(WhatConditionsState.of(read).arm(attempt, part, reads).proposition(),
+                met, numbering.anchorOfArm(attempt.origin(), part, at, met), read);
+    }
+
+    /** What a run entering an arm that states {@code stated} asks of a row, each thing it asks put
+     *  on the way at the arm. */
+    private static List<OnTheWay> armStated(Proposition stated, ConditionOccurrence met,
+                                            ConditionReportAnchor at, InputReading read) {
+        return DemandReading.asked(stated, read).stream()
+                .map(each -> onTheWay(met, at, each, read))
+                .toList();
     }
 
     /**
@@ -476,7 +492,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
      */
     static List<OnTheWay> whereItDecides(Condition at, Proposition decides, InputReading read) {
         return DemandReading.asked(decides, read).stream()
-                .map(each -> onTheWay(at.occurrence(), at.anchor(), each))
+                .map(each -> onTheWay(at.occurrence(), at.anchor(), each, read))
                 .toList();
     }
 
@@ -485,12 +501,39 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
      * the condition with the reason where there is none.
      */
     private static OnTheWay onTheWay(ConditionOccurrence condition, ConditionReportAnchor at,
-                                     DemandReading.Read read) {
+                                     DemandReading.Read read, InputReading input) {
         return switch (read) {
             case DemandReading.Read.Demands(var demand) -> new OnTheWay.TakenIn(at, demand);
             case DemandReading.Read.Settled(var thisWay) ->
                     new OnTheWay.Settled(condition, at, thisWay);
+            case DemandReading.Read.Narrows(TermPath position, CasesLeft cases) ->
+                    narrowing(condition, at, position, cases, input);
+            case DemandReading.Read.OneOf(var alternatives) -> new OnTheWay.OneOf(condition, at,
+                    alternatives.stream().map(each -> each.stream()
+                            .map(one -> onTheWay(condition, at, one, input)).toList()).toList());
             case DemandReading.Read.Unread(var why) -> new OnTheWay.Declined(condition, at, why);
+        };
+    }
+
+    /**
+     * The value at {@code position} read as one of {@code cases}, as what the declarations leave it
+     * says: a narrowing where they leave it more than those, and settled where they leave it only
+     * those or none of them ({@link #taking}).
+     */
+    private static OnTheWay narrowing(ConditionOccurrence condition, ConditionReportAnchor at,
+                                      TermPath position, CasesLeft cases, InputReading read) {
+        InputDomain inputs = read.domain();
+        DeclaredInput.Taking taking = taking(inputs, inputs.declared(read.rules()), position,
+                inputs.typeAt(position, read.rules()), cases);
+        if (taking == null) {
+            return new OnTheWay.Declined(condition, at, new WhyNotTaken.OutsideDomain(
+                    WhyNotTaken.DomainLimit.A_POSITION_THE_READING_HOLDS_NO_PLACE_FOR));
+        }
+        return switch (taking) {
+            case DeclaredInput.Taking.Narrows(TermPath to) -> new OnTheWay.Narrowed(at, to,
+                    inputs.reach().crossings(), onItsOrder(to, read));
+            case DeclaredInput.Taking.Implied _ -> new OnTheWay.Settled(condition, at, true);
+            case DeclaredInput.Taking.Excluded _ -> new OnTheWay.Settled(condition, at, false);
         };
     }
 

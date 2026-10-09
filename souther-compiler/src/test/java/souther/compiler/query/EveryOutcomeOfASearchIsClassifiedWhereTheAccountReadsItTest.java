@@ -45,8 +45,8 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
     private static final WayToTheBorder WAY = new WayToTheBorder(List.of(
             new OnTheWay.Declined(MET,
                     new ConditionReportAnchor.WhereTheReadingMetIt("m", MET),
-                    new WhyNotTaken.ProjectionIncomplete(
-                            WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE))));
+                    new WhyNotTaken.OutsideDomain(
+                            WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER))));
 
     /** One of each outcome, by the leaf that names it. */
     private static Map<Class<?>, ItemAssessment.Attempt> oneOfEach() {

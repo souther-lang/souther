@@ -414,6 +414,19 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 behavior f : (n: N) -> Answer
                 let f (n) = if n.value < 0 - 5 then Yes else No
                 """.formatted(ANSWER)));
+        // A comparison through a choice between two constructions. Each arm answers one number,
+        // and the step that composes the comparison through the arms is not written yet.
+        out.put(UndividedPosition.Reason.RULE_MEANING_NOT_READ, of("""
+                module m
+                %s
+                data Big = { threshold: Int }
+
+                behavior f : (n: Int) -> Answer
+                let f (n) = {
+                    let k = if n > 0 then Big { threshold = 100 } else Big { threshold = 200 }
+                    if n >= k.threshold then Yes else No
+                }
+                """.formatted(ANSWER)));
         // And a line the declarations do leave values at, that no row arriving at the comparison
         // holds one of: the guard above it has already refused them.
         out.put(UndividedPosition.Reason.NOTHING_ARRIVES_AT_THE_RULES_LINE, of("""

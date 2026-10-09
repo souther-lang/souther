@@ -23,6 +23,7 @@ import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.values.UnreadReason;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -152,6 +153,16 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // unknown; what is missing is a division of the input by more than one line of one rule,
         // and a run allowed more of everything meets the same statement.
         table.put("SeveralLinesInOneRule", "SEVERAL_LINES_IN_ONE_RULE/UNAFFECTED");
+        // What the rule states was taken apart, and the reason no line came of it is read off that
+        // meaning. A part declined at how many readings are made is one a run allowed more may
+        // read; every other part not read, a number no position holds and a statement of which
+        // case, truth or value stands here are met again.
+        table.put("WhatItStatesIsNoLine:MORE_READINGS_THAN_ARE_MADE",
+                "RULE_MEANING_NOT_READ/MAY_CHANGE");
+        table.put("WhatItStatesIsNoLine:A_PART_NOT_READ", "RULE_MEANING_NOT_READ/UNAFFECTED");
+        table.put("WhatItStatesIsNoLine:A_NUMBER_NO_POSITION_HOLDS",
+                "RULE_ABOUT_A_DERIVED_VALUE/UNAFFECTED");
+        table.put("WhatItStatesIsNoLine:NO_RELATION_OF_NUMBERS", "UNSUPPORTED_DOMAIN/UNAFFECTED");
         // Read to the end. Whatever the rule places has been placed, and there is none to be owed —
         // and no measurement is weakened, so from here down there is no sensitivity to answer.
         table.put("ComparisonCuttingNothing", "RULE_CUTS_NOTHING/-");
@@ -258,7 +269,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     void everyRuleWithNoLineSaysWhatItLeavesAndWhatItIsCalled() {
         Map<String, String> said = new LinkedHashMap<>();
         for (BlockReason.RuleWithoutLineReason each : everyRuleWithoutALine()) {
-            said.put(each.getClass().getSimpleName(),
+            said.put(rowOf(each),
                     ReportedReason.of((BlockReason) each).name()
                             + "/" + sensitivityOf((BlockReason) each));
         }
@@ -414,6 +425,12 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         for (Class<?> each : seal.getPermittedSubclasses()) {
             if (each.isSealed()) {
                 out.addAll(reasons(each));
+            } else if (each == BlockReason.WhatItStatesIsNoLine.class) {
+                // A row for each reason it carries, since each is projected on its own.
+                for (BlockReason.WhatItStatesIsNoLine.Why why
+                        : BlockReason.WhatItStatesIsNoLine.Why.values()) {
+                    out.add("WhatItStatesIsNoLine:" + why);
+                }
             } else {
                 out.add(each.getSimpleName());
             }
@@ -433,7 +450,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
      * #everyReasonThereIsHasARowAbove} reads the seal.
      */
     private static List<BlockReason> everyReason() {
-        return List.of(
+        List<BlockReason> every = new ArrayList<>(List.of(
                 new BlockReason.UnreadComparisonForm(),
                 new BlockReason.UnreadComparisonDomain(),
                 new BlockReason.LineAtANumberNoRatioHolds(),
@@ -467,7 +484,12 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                                 new souther.compiler.types.TypeKey("g", "Chain")),
                         TermPath.of("c")),
                 new BlockReason.ValueRulesNotReached(),
-                new BlockReason.ValueRulesNotReachedPastDepthLimit());
+                new BlockReason.ValueRulesNotReachedPastDepthLimit()));
+        // One of each reason a statement is no line for, which a row is written for apiece.
+        for (BlockReason.WhatItStatesIsNoLine.Why why : BlockReason.WhatItStatesIsNoLine.Why.values()) {
+            every.add(new BlockReason.WhatItStatesIsNoLine(why));
+        }
+        return List.copyOf(every);
     }
 
     /** Those of them that are rules with no line, asked of each rather than listed. */
@@ -475,6 +497,13 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         return everyReason().stream()
                 .filter(BlockReason.RuleWithoutLineReason.class::isInstance)
                 .map(BlockReason.RuleWithoutLineReason.class::cast).toList();
+    }
+
+    /** The row a reason is written under: its kind, and which of its whys where it carries one. */
+    private static String rowOf(BlockReason.RuleWithoutLineReason reason) {
+        return reason instanceof BlockReason.WhatItStatesIsNoLine(var why)
+                ? "WhatItStatesIsNoLine:" + why
+                : reason.getClass().getSimpleName();
     }
 
     /**

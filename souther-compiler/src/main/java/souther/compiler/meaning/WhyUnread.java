@@ -1,5 +1,7 @@
 package souther.compiler.meaning;
 
+import souther.compiler.check.Clause;
+import souther.compiler.check.ClausesInOrder;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.Unsayable;
@@ -135,6 +137,61 @@ public sealed interface WhyUnread {
         public ANumberOfWhatAnOperationAnswers {
             Objects.requireNonNull(measure, "a number is taken by an operation");
             Objects.requireNonNull(madeBy, "of what an operation answered");
+        }
+    }
+
+    /**
+     * A clause of the invariant an attempt checks, which could not be read where the attempt
+     * builds its value: whether it holds there is what decides between the attempt's arms.
+     */
+    record AClauseOfAnInvariant(Clause.Ref clause, ClausesInOrder.WhyAClauseIsUnread why)
+            implements WhyUnread {
+
+        public AClauseOfAnInvariant {
+            Objects.requireNonNull(clause, "a clause left unread is some clause");
+            Objects.requireNonNull(why, "a clause is left unread for some reason");
+        }
+    }
+
+    /**
+     * The invariant an attempt checks, where a declaration whose clauses govern the value built
+     * could not be reached: which clauses there are, and so which of them fails first, is not
+     * known.
+     */
+    record AnInvariantNotReached() implements WhyUnread {}
+
+    /**
+     * Which case a behavior called by name answers turns, in its body, on something a call is not
+     * the place to say anything about.
+     */
+    record InACalledBody(What what) implements WhyUnread {
+
+        public InACalledBody {
+            Objects.requireNonNull(what, "the body turns on something");
+        }
+
+        /** What the called body's answer turns on, that the call cannot say. */
+        public enum What {
+
+            /** A value the call handed it that stands at no position of the caller's input. */
+            AN_ARGUMENT_AT_NO_POSITION,
+
+            /**
+             * What one of its own dependencies answers. A row stands in the caller's dependencies
+             * and not the called behavior's, and which answer it is was named by an evaluation in
+             * that body, which each call makes afresh.
+             */
+            WHAT_ITS_DEPENDENCY_ANSWERS,
+
+            /** A number of a value the body bound for itself, which each call works out afresh. */
+            A_VALUE_IT_BINDS,
+
+            /** The behavior itself, reached again while its own answer is being read. */
+            ITSELF,
+
+            /** Nothing: the body of the behavior was not read, or it is called with some other
+             *  number of values than it takes. */
+            AN_ANSWER_NOT_READ
         }
     }
 

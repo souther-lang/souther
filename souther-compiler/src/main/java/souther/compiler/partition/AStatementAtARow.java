@@ -466,8 +466,7 @@ final class AStatementAtARow {
 
             @Override
             public ExactAnswer<Boolean> holdsAt(Map<NumericTerm, Place> values) {
-                return OrderedAffineBoundary.along(form.coefs(), values)
-                        .flatMap(sum -> sum.plus(form.constant()))
+                return OrderedAffineBoundary.at(form, values)
                         .map(sum -> rel.holds(sum.signum()));
             }
         }

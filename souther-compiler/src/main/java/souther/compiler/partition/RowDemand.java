@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
@@ -447,6 +448,83 @@ public sealed interface RowDemand {
         public Set<TermPath> valuesRead() {
             return Set.of();
         }
+    }
+
+    /**
+     * A statement read to the end that no composer writes a row toward, which the run of a row
+     * says whether it held.
+     *
+     * <p>Asked of a row all the same: a row past the condition is one whose run comes out this way,
+     * whatever it took to compose it. What is missing is a composer for {@code why}, which is a
+     * limit of composing and not of what the condition says — so nothing is placed for it, and the
+     * row is put to the run ({@link ReachabilityGap.Why.NoComposerWritesIt}).
+     *
+     * @param statement what the condition states, coming out the way the row is to
+     * @param why       which kind of statement no composer writes toward
+     */
+    record ForTheRun(Proposition statement, NoComposer why) implements OfACondition {
+
+        public ForTheRun {
+            Objects.requireNonNull(statement, "a statement about some value");
+            Objects.requireNonNull(why, "a statement no composer writes is of some kind");
+        }
+
+        /** None: a composer places nothing for this, and the run says whether it held. */
+        @Override
+        public Set<NumericTerm> terms() {
+            return Set.of();
+        }
+
+        @Override
+        public Set<TermPath> positions() {
+            return Set.of();
+        }
+
+        @Override
+        public Set<TermPath> valuesRead() {
+            return Set.of();
+        }
+    }
+
+    /**
+     * Which kind of statement read to the end no composer writes a row toward.
+     *
+     * <p>Each is what composing reaches and not what a condition says: the statement was read and
+     * is asked of a row, and the composer that would write a row meeting it is the part missing.
+     */
+    enum NoComposer {
+
+        /** A relation over a number the body works out, which no position of a row holds. */
+        A_VALUE_THE_BODY_WORKS_OUT,
+
+        /** How many elements of a container meet something, where no container is composed to the
+         *  count: held against more than one number, or counted for what no element is composed
+         *  to meet. */
+        A_COUNT_OF_ELEMENTS,
+
+        /** How many elements of a container meet something, held against a number no exact
+         *  ratio holds. */
+        A_COUNT_AGAINST_A_NUMBER_NOT_HELD,
+
+        /** Every element meeting a relation about more than the element: a composer writes the
+         *  elements and the numbers beside them apart. */
+        EVERY_ELEMENT_AND_MORE,
+
+        /** What the elements of each element of a container meet. */
+        A_QUANTIFIER_WITHIN_ONE,
+
+        /** A truth or a case of an element of a container, which a composer writing the elements
+         *  writes no value for. */
+        A_TRUTH_OF_AN_ELEMENT,
+
+        /** One of several things an element of a container meets. */
+        ONE_OF_SEVERAL_FOR_AN_ELEMENT,
+
+        /** Two subjects of a row being one value. */
+        TWO_SUBJECTS_ONE_VALUE,
+
+        /** A place on an order, of a term that is no one position. */
+        AN_ORDER_OF_NO_ONE_POSITION
     }
 
     /**

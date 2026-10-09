@@ -67,7 +67,7 @@ class OneRuleIsOneWayHoweverTheWalkMetItsConditionsTest {
                 List.of(new OnTheWay.Declined(new ConditionOccurrence("b", against),
                         new ConditionReportAnchor.WhereTheReadingMetIt(
                                 "b", new ConditionOccurrence("b", against)),
-                        new WhyNotTaken.ProjectionIncomplete(
-                                WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE))));
+                        new WhyNotTaken.OutsideDomain(
+                                WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER))));
     }
 }

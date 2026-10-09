@@ -15,9 +15,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * comparison on the way to both rules under {@code then} is one the reading declines — so a row
  * composed for either is composed against less than the way asks.
  *
- * <p>The attempt's own arm is declined on every way, the departure's included. Which arm an attempt
- * takes is decided by its invariant, which this reading does not read as anything about the input,
- * and a way that left the arm off would say its region is all there is to it.
+ * <p>The attempt's own arm is taken in on every way, the departure's included: which arm an attempt
+ * takes is decided by its invariant, read over what it is handed, so the success is {@code x >= 0}
+ * and the departure {@code x < 0}.
  */
 class ADecisionThroughWhatAnAttemptBuiltTakesItsComparisonInTest {
 
@@ -33,8 +33,8 @@ class ADecisionThroughWhatAnAttemptBuiltTakesItsComparisonInTest {
             let size (x) = if Q(x) as q then (if q.value > 10 then Big else Small) else Nope
             """;
 
-    /** Each way under {@code then} takes the comparison in, and what any way declines is the
-     *  attempt's arm and nothing else. */
+    /** Each way under {@code then} takes the comparison in beside the attempt's arm, and nothing on
+     *  any way is declined. */
     @Test
     void theComparisonUnderThenIsTakenInOnBothWays() {
         DecisionReading read = DecisionReadings.of(MODEL, "size");
@@ -46,10 +46,7 @@ class ADecisionThroughWhatAnAttemptBuiltTakesItsComparisonInTest {
                 .sorted()
                 .toList();
 
-        assertEquals(List.of(
-                "[Declined [ProjectionIncomplete[shape=AN_ARM_AN_INVARIANT_DECIDES]], TakenIn]",
-                "[Declined [ProjectionIncomplete[shape=AN_ARM_AN_INVARIANT_DECIDES]], TakenIn]",
-                "[Declined [ProjectionIncomplete[shape=AN_ARM_AN_INVARIANT_DECIDES]]]"), onTheWay);
+        assertEquals(List.of("[TakenIn, TakenIn]", "[TakenIn, TakenIn]", "[TakenIn]"), onTheWay);
     }
 
     private static String said(OnTheWay each) {

@@ -88,7 +88,7 @@ class WhatAComparisonIsARuleAboutTest {
                 ClosureApplications.OUTSIDE, rule.value(),
                 WhatAnAnswerTakesUp.of(reading),
                 Arrivals.inTheTree(read), false,
-                new WhatConditionsState(reading));
+                WhatConditionsState.of(reading));
     }
 
     /** The same over two {@code Int} positions, which is what most of the table is written over. */

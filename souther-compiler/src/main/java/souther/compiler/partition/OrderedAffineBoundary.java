@@ -10,7 +10,9 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -147,24 +149,44 @@ public record OrderedAffineBoundary(LinearQuantity of, Seam seam, Towards satisf
      */
     public static ExactAnswer<ExactRatio> along(Map<NumericTerm, ExactRatio> direction,
                                                 Map<NumericTerm, Place> values) {
-        ExactRatio at = ExactRatio.ZERO;
-        // Walked by the terms. What the sum comes to does not depend on the order, but which
-        // position is named where a row holds no number at one of them does, and a direction says
-        // which positions it weighs without saying which was written first.
+        return summed(direction, values, ExactRatio.ZERO);
+    }
+
+    /**
+     * What {@code form} comes to at a row: its constant and what each position holds weighed by its
+     * coefficient, as one sum — or which way the exact arithmetic could not hold it.
+     */
+    public static ExactAnswer<ExactRatio> at(LinearForm<NumericTerm> form,
+                                             Map<NumericTerm, Place> values) {
+        return summed(form.coefs(), values, form.constant());
+    }
+
+    /**
+     * {@code constant} and each weighed number, added as one sum ({@link ExactRatio#sum}), so
+     * whether it is held does not turn on which term came first.
+     */
+    private static ExactAnswer<ExactRatio> summed(Map<NumericTerm, ExactRatio> direction,
+                                                  Map<NumericTerm, Place> values,
+                                                  ExactRatio constant) {
+        List<ExactRatio> terms = new ArrayList<>();
+        terms.add(constant);
+        // Walked by the terms: which position is named where a row holds no number at one of them
+        // turns on the order, and a direction says which positions it weighs without saying which
+        // was written first.
         for (Map.Entry<NumericTerm, ExactRatio> each : NumericTerms.entriesInOrder(direction)) {
             Place held = values.get(each.getKey());
             if (held == null) {
                 throw new IllegalArgumentException("a row read at a quantity holds a number at each"
                         + " of its positions, and holds none at " + each.getKey());
             }
-            ExactAnswer<ExactRatio> summed =
-                    Count.number(held).exactly().times(each.getValue()).flatMap(at::plus);
-            if (summed instanceof ExactAnswer.Unheld<ExactRatio> unheld) {
-                return ExactAnswer.unheld(unheld.why());
+            switch (Count.number(held).exactly().times(each.getValue())) {
+                case ExactAnswer.Held<ExactRatio> weighed -> terms.add(weighed.value());
+                case ExactAnswer.Unheld<ExactRatio> unheld -> {
+                    return ExactAnswer.unheld(unheld.why());
+                }
             }
-            at = summed.orNull();
         }
-        return ExactAnswer.held(at);
+        return ExactRatio.sum(terms);
     }
 
     /** The left of the {@code left = right} a report names this line by, which is the quantity's

@@ -178,19 +178,21 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
 
     /**
      * What every element has to meet is not narrowed on where it is about more than the element:
-     * an empty list meets it whatever the rest says. Where it is about nothing of the element at
-     * all, every element meeting it is it or the list holding none, which is one of two things.
+     * an empty list meets it whatever the rest says. It is taken all the same, as a statement the
+     * run of a row decides, since nothing composes elements together with the number beside them.
+     * Where it is about nothing of the element at all, every element meeting it is it or the list
+     * holding none, which is one of two things — asked as its two alternatives.
      */
     @Test
-    void everyElementMeetingWhatIsNotAboutTheElementIsDeclined() {
-        OnTheWay.Declined beside = assertInstanceOf(OnTheWay.Declined.class,
+    void everyElementMeetingWhatIsNotAboutTheElementIsNotNarrowedOn() {
+        OnTheWay.TakenIn beside = assertInstanceOf(OnTheWay.TakenIn.class,
                 only("allAboveTheirFloor", true));
-        assertEquals(List.of(new WhyNotTaken.ProjectionIncomplete(
-                WhyNotTaken.Shape.EVERY_ELEMENT_AND_MORE)), beside.whys());
-        OnTheWay.Declined apart = assertInstanceOf(OnTheWay.Declined.class,
+        assertEquals(RowDemand.NoComposer.EVERY_ELEMENT_AND_MORE,
+                assertInstanceOf(RowDemand.ForTheRun.class, beside.demand()).why());
+        OnTheWay.OneOf apart = assertInstanceOf(OnTheWay.OneOf.class,
                 only("allAboveTheFloor", true));
-        assertEquals(List.of(new WhyNotTaken.ProjectionIncomplete(
-                WhyNotTaken.Shape.ONE_OF_SEVERAL_THINGS)), apart.whys());
+        assertEquals(2, apart.alternatives().size(),
+                () -> "the list holding none, or the floor above: " + apart);
     }
 
     /**
@@ -296,7 +298,7 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
         List<OnTheWay> stating(boolean holding) {
             return ReachingCuts.stating(Condition.of(body, reads, rules.symbols(),
                     rules.newtypes(), new ConditionNumbering(module, behavior)), read, holding,
-                    new WhatConditionsState(read));
+                    WhatConditionsState.of(read));
         }
     }
 

@@ -9,6 +9,7 @@ import souther.exact.ExactRoomExceeded;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.List;
 import java.util.function.LongConsumer;
 
 /**
@@ -301,19 +302,111 @@ public record Rational(BigInteger numerator, BigInteger denominator, long twos, 
      * no representation and says so.
      */
     public Rational plus(Rational other, WorkCheckpoint checkpoint) {
-        if (checkpoint != WorkCheckpoint.NONE && !isZero() && !other.isZero()) {
-            long here = powerBits(twos, Math.min(twos, other.twos), fives, Math.min(fives, other.fives));
-            long there = powerBits(other.twos, Math.min(twos, other.twos),
-                    other.fives, Math.min(fives, other.fives));
-            long over = HostWork.bits(denominator) + HostWork.bits(other.denominator);
-            long sum = Math.max(HostWork.bits(numerator) + here, HostWork.bits(other.numerator) + there) + over;
-            HostWork.pay(checkpoint, Math.max(here, there) + sum,
-                    HostWork.power(here) + HostWork.power(there)
-                            + HostWork.product(HostWork.bits(numerator), here)
-                            + HostWork.product(HostWork.bits(other.numerator), there)
-                            + HostWork.product(sum, over) + HostWork.product(sum, sum));
-        }
+        payForASum(parts(), other.parts(), checkpoint);
         return plus(other);
+    }
+
+    /**
+     * The sum of {@code terms}: the empty list is nought, and the answer is the terms' in whatever
+     * order they come, refused only where the sum itself is ({@link ExactArithmetic#sum}).
+     *
+     * <p>Not a run of {@link #plus}: a run asks every partial sum to be held, and two terms can have
+     * no sum where the terms after them cancel it, so a list whose sum is a value would end the run
+     * or not depending on the order its elements were written in.
+     *
+     * <p>Held to an allowance, what the sum costs is seen as well as the sum, and is the terms' too:
+     * it is made by scale from the first and each piece paid for to {@code checkpoint} before it is
+     * done ({@link ExactArithmetic#sumByScale}). A run tried first would pay for a fine term and an
+     * ordinary one aligned before the fine term's negation cancels it, and run out of the allowance
+     * that the same terms in another order fit in.
+     */
+    public static Rational sum(List<Rational> terms, WorkCheckpoint checkpoint) {
+        // Walked as they stand and never copied: a list holds more elements than an array does.
+        Iterable<ExactParts> parts = () -> terms.stream().map(Rational::parts).iterator();
+        try {
+            return from(checkpoint == WorkCheckpoint.NONE ? ExactArithmetic.sum(parts)
+                    : ExactArithmetic.sumByScale(parts, new PaidSum(checkpoint)));
+        } catch (ExactFailure failure) {
+            throw translated(failure);
+        }
+    }
+
+    /**
+     * The product of {@code factors}: the empty list is one, and the answer is the factors' in
+     * whatever order they come, refused only where the product itself is
+     * ({@link ExactArithmetic#product}).
+     *
+     * <p>Paid for to {@code checkpoint} before anything is multiplied, a factor at a time, each as
+     * multiplied into a product as long as every factor together — which no partial product is
+     * longer than, whichever came first — and the product taken to lowest terms once. So what it
+     * costs is the factors' and not their order's.
+     */
+    public static Rational product(List<Rational> factors, WorkCheckpoint checkpoint) {
+        Iterable<ExactParts> parts = () -> factors.stream().map(Rational::parts).iterator();
+        if (checkpoint != WorkCheckpoint.NONE) {
+            long all = 0;
+            for (Rational each : factors) {
+                all = all > Long.MAX_VALUE - each.stored() ? Long.MAX_VALUE : all + each.stored();
+            }
+            for (Rational each : factors) {
+                checkpoint.spend(HostWork.product(each.stored(), all));
+            }
+            checkpoint.spend(HostWork.product(all, all));
+        }
+        try {
+            return from(ExactArithmetic.product(parts));
+        } catch (ExactFailure failure) {
+            throw translated(failure);
+        }
+    }
+
+    /** A sum made by scale, paid for to {@code checkpoint} a piece at a time as {@link #plus} pays
+     *  for its two terms — for any exact sum this run time makes of many, a rational's or a
+     *  decimal's. */
+    record PaidSum(WorkCheckpoint checkpoint) implements ExactArithmetic.SumWork {
+
+        @Override
+        public void atOneScale(ExactParts term, long numeratorAtMost, long denominatorAtMost) {
+            payForASum(numeratorAtMost, denominatorAtMost, 0, HostWork.bits(term.numerator()),
+                    HostWork.bits(term.denominator()), 0, checkpoint);
+        }
+
+        @Override
+        public void across(ExactParts one, ExactParts other) {
+            payForASum(one, other, checkpoint);
+        }
+    }
+
+    /** What adding {@code a} and {@code b} costs, paid to {@code checkpoint}: each side's
+     *  numerator multiplied by the powers it holds beyond what the two share, and the two brought
+     *  over one denominator. */
+    private static void payForASum(ExactParts a, ExactParts b, WorkCheckpoint checkpoint) {
+        if (checkpoint == WorkCheckpoint.NONE || a.isZero() || b.isZero()) {
+            return;
+        }
+        long commonTwos = Math.min(a.twos(), b.twos());
+        long commonFives = Math.min(a.fives(), b.fives());
+        payForASum(HostWork.bits(a.numerator()), HostWork.bits(a.denominator()),
+                powerBits(a.twos(), commonTwos, a.fives(), commonFives),
+                HostWork.bits(b.numerator()), HostWork.bits(b.denominator()),
+                powerBits(b.twos(), commonTwos, b.fives(), commonFives), checkpoint);
+    }
+
+    /** What adding two fractions of these lengths costs, each numerator raised by the bits of the
+     *  powers it is aligned by. */
+    private static void payForASum(long numeratorA, long denominatorA, long here,
+                                   long numeratorB, long denominatorB, long there,
+                                   WorkCheckpoint checkpoint) {
+        if (checkpoint == WorkCheckpoint.NONE) {
+            return;
+        }
+        long over = denominatorA + denominatorB;
+        long sum = Math.max(numeratorA + here, numeratorB + there) + over;
+        HostWork.pay(checkpoint, Math.max(here, there) + sum,
+                HostWork.power(here) + HostWork.power(there)
+                        + HostWork.product(numeratorA, here)
+                        + HostWork.product(numeratorB, there)
+                        + HostWork.product(sum, over) + HostWork.product(sum, sum));
     }
 
     /** {@link #minus}, paid for to {@code checkpoint} first. */

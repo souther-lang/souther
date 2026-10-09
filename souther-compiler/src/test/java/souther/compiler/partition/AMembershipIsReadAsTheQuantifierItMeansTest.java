@@ -125,7 +125,8 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
                 TermPath container = switch (asked) {
                     case RowDemand.Exists some -> some.container();
                     case RowDemand.ForAll every -> every.container();
-                    case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _ ->
+                    case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
+                         RowDemand.ForTheRun _ ->
                             throw new AssertionError("a membership is some element or every one: "
                                     + asked);
                 };
@@ -134,8 +135,8 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
                 Optional<RowDemand.Relational> size = switch (asked) {
                     case RowDemand.Exists some -> some.holdingOne();
                     case RowDemand.ForAll every -> every.holdingNone();
-                    case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _ ->
-                            Optional.empty();
+                    case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
+                         RowDemand.ForTheRun _ -> Optional.empty();
                 };
                 assertTrue(size.isPresent(), () -> "the size is a number here: " + asked);
                 for (NumericTerm term : size.get().terms()) {
@@ -224,7 +225,7 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
         List<OnTheWay> stated = ReachingCuts.stating(Condition.of(analysis.core(), reads,
                         rules().symbols(), rules().newtypes(),
                         new ConditionNumbering(module(), behavior)),
-                reading, holding, new WhatConditionsState(reading));
+                reading, holding, WhatConditionsState.of(reading));
         return stated;
     }
 

@@ -141,7 +141,8 @@ class AMembershipIsComposedIntoTheRowTest {
         List<String> row = written(Generator.probeFixing(subject("direct"), "size 2",
                 Map.of(new RealizationTarget.AtOnePosition(size.atOnePosition()), Count.of(2)),
                 NumbersAskedFor.of(LevelRegion.point(new Level.OnACarrier(on, Count.of(2)))),
-                new Reachability.Reaching(region, Requirements.NONE, TruthsAsked.NONE, way),
+                new Reachability.Reaching(region, Requirements.NONE, TruthsAsked.NONE, way,
+                        Reachability.Ways.ONE),
                 Generator.CandidateCheck.ANY));
         List<String> campaigns = elementsOf(row.get(0), "campaigns");
         assertEquals(2, campaigns.size(), () -> "the size the point fixes: " + row);
@@ -277,7 +278,8 @@ class AMembershipIsComposedIntoTheRowTest {
                 .narrowing(domain(behavior).quantities(rules()).region());
         return Generator.probeFixing(subject(behavior), "past " + behavior, Map.of(),
                 NumbersAskedFor.ANYTHING,
-                new Reachability.Reaching(region, Requirements.NONE, TruthsAsked.NONE, way),
+                new Reachability.Reaching(region, Requirements.NONE, TruthsAsked.NONE, way,
+                        Reachability.Ways.ONE),
                 check);
     }
 
@@ -300,7 +302,7 @@ class AMembershipIsComposedIntoTheRowTest {
         List<OnTheWay> stated = ReachingCuts.stating(Condition.of(analysis.core(), reads,
                         rules().symbols(), rules().newtypes(),
                         new ConditionNumbering(module(), behavior)),
-                reading, holding, new WhatConditionsState(reading));
+                reading, holding, WhatConditionsState.of(reading));
         assertFalse(stated.isEmpty(), () -> "the body asks something of a row: " + behavior);
         return stated;
     }

@@ -226,6 +226,7 @@ class EverySchemaWordIsAccountedForTest {
         spelling.put("AnOrderedComparison", "comparison");
         spelling.put("ATruth", "truth");
         spelling.put("ACase", "case");
+        spelling.put("AStatement", "statement");
         spelling.put("AConditionNotRead", "not_read");
         Set<String> words = new LinkedHashSet<>();
         for (Class<?> shape

@@ -186,6 +186,16 @@ public final class ReportedReason {
         return switch (reason) {
             case BlockReason.RuleAboutADerivedValue _ ->
                     UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE;
+            // What the rule states, read off the statement: the word for a number no position
+            // holds, one for a part not read, and for a statement that is no relation of numbers
+            // the word for values that carry no order to draw a line on.
+            case BlockReason.WhatItStatesIsNoLine(var why) -> switch (why) {
+                case MORE_READINGS_THAN_ARE_MADE, A_PART_NOT_READ ->
+                        UndividedPosition.Reason.RULE_MEANING_NOT_READ;
+                case A_NUMBER_NO_POSITION_HOLDS ->
+                        UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE;
+                case NO_RELATION_OF_NUMBERS -> UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
+            };
             case BlockReason.RuleAboutAnElementOfSeveralContainers _ ->
                     UndividedPosition.Reason.RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_CONTAINERS;
             case BlockReason.TypeUnresolved _ -> UndividedPosition.Reason.TYPE_UNRESOLVED;

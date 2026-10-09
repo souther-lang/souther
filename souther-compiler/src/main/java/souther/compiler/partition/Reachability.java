@@ -4,6 +4,7 @@ import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -46,6 +47,40 @@ public sealed interface Reachability {
      * @param declarations what the declarations leave, which the way narrows
      */
     static Reachability of(WayToTheBorder way, SearchRegion declarations) {
+        Reachability whole = taking(way, declarations, Ways.ONE);
+        if (!(whole instanceof Reaching)) {
+            return whole;
+        }
+        // Where a condition on the way came out one of several ways, a row is past it along one
+        // of them: the way is each of them as well, and a search looks along each. Every row is
+        // along one, so where none of them reaches, nothing does.
+        CompositionBudget figure = CompositionBudget.WAYS_A_WAY_IS_SPLIT_INTO;
+        Optional<List<WayToTheBorder>> each = way.eachWay(figure.maximum());
+        if (each.isEmpty()) {
+            // More ways than are looked along: the way is looked along whole, which every row past
+            // it is on, and the conditions it was not split at say so.
+            return taking(way, declarations, new Ways.Whole(way.severalWays(), figure));
+        }
+        if (each.get().size() == 1) {
+            return whole;
+        }
+        List<Reaching> along = new ArrayList<>();
+        Reachability closed = null;
+        for (WayToTheBorder one : each.get()) {
+            switch (taking(one, declarations, Ways.ONE)) {
+                case Reaching open -> along.add(open);
+                case Reachability shut -> {
+                    if (closed == null) {
+                        closed = shut;
+                    }
+                }
+            }
+        }
+        return along.isEmpty() ? closed : taking(way, declarations, new Ways.Each(along));
+    }
+
+    /** {@code way} read in its own vocabularies, split as {@code ways} says. */
+    private static Reachability taking(WayToTheBorder way, SearchRegion declarations, Ways ways) {
         Optional<OnTheWay.Settled> never = way.neverComesOut();
         if (never.isPresent()) {
             return new NothingComesOutThatWay(never.get());
@@ -59,7 +94,7 @@ public sealed interface Reachability {
         }
         return switch (way.truths()) {
             case TruthsAsked.Merge.Merged(var truths) -> new Reaching(
-                    way.narrowing(declarations), required, truths, way.takenIn());
+                    way.narrowing(declarations), required, truths, way.takenIn(), ways);
             case TruthsAsked.Merge.Conflict(var at) -> new NothingReaches(new TwoAtOnce.Truths(at));
         };
     }
@@ -72,7 +107,67 @@ public sealed interface Reachability {
      * answer and no arm for the other one to arrive by.
      */
     static Reaching untouched(SearchRegion declarations) {
-        return new Reaching(declarations, Requirements.NONE, TruthsAsked.NONE, List.of());
+        return new Reaching(declarations, Requirements.NONE, TruthsAsked.NONE, List.of(),
+                Ways.ONE);
+    }
+
+    /**
+     * Whether a way is looked along as each of the ways a condition of several ways on it splits
+     * it into ({@link OnTheWay.OneOf}).
+     *
+     * <p>Three answers and not a list that is sometimes empty. A way not split because nothing on
+     * it came out one of several ways, and one not split because they were more than are looked
+     * along, are looked for the same way and are not the same news: along each, a row is composed
+     * against more than along the whole, so the second may be missing a row the first would have.
+     */
+    sealed interface Ways {
+
+        /** Not split, and nothing in it to split at: no condition on it came out one of several
+         *  ways. */
+        Ways ONE = new One();
+
+        /** What a search looks along: each way this is split into, or none past this one. */
+        default List<Reaching> along() {
+            return List.of();
+        }
+
+        /** Not split, and nothing in it to split at. */
+        record One() implements Ways {}
+
+        /**
+         * Split into each way some row may take, every one narrower than the way whole. A way the
+         * rules leave nothing along is not among them, so one alone is left where the rules close
+         * every other.
+         *
+         * @param along one or more
+         */
+        record Each(List<Reaching> along) implements Ways {
+
+            public Each {
+                along = List.copyOf(along);
+                if (along.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a way split is split into the ways some row may take, and has one");
+                }
+            }
+        }
+
+        /**
+         * Not split, though {@code unsplit} came out one of several ways: the ways they split it
+         * into are more than {@code figure} lets this look along, so it is looked along whole.
+         *
+         * @param unsplit the conditions of several ways on it, in the order the walk met them
+         */
+        record Whole(List<OnTheWay.OneOf> unsplit, CompositionBudget figure) implements Ways {
+
+            public Whole {
+                unsplit = List.copyOf(unsplit);
+                if (unsplit.isEmpty() || figure == null) {
+                    throw new IllegalArgumentException("a way looked along whole past a figure has"
+                            + " a condition of several ways on it, and a figure it met");
+                }
+            }
+        }
     }
 
     /**
@@ -88,16 +183,25 @@ public sealed interface Reachability {
      *                        positions is one statement about the pair, and a composer holding a
      *                        bag of positions has no way to tell which of them it may settle apart
      *                        from the others
+     * @param ways            where a condition on the way came out one of several ways, whether it
+     *                        is split into each way some row may take ({@link Ways})
      */
     record Reaching(SearchRegion region, Requirements requirements, TruthsAsked truths,
-                    List<OnTheWay.TakenIn> boundedOnTheWay) implements Reachability {
+                    List<OnTheWay.TakenIn> boundedOnTheWay, Ways ways)
+            implements Reachability {
 
         public Reaching {
-            if (region == null || requirements == null || truths == null) {
+            if (region == null || requirements == null || truths == null || ways == null) {
                 throw new IllegalArgumentException(
                         "a way a row reaches leaves it somewhere and asks something of it");
             }
             boundedOnTheWay = List.copyOf(boundedOnTheWay);
+        }
+
+        /** The ways this is split into, each narrower than this one; none where it is not
+         *  split. */
+        public List<Reaching> along() {
+            return ways.along();
         }
     }
 

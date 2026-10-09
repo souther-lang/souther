@@ -740,6 +740,9 @@ public final class Generator {
                              // It stops a reading of what a condition means, and what it stopped
                              // is carried as a part nothing read, naming it.
                              READINGS_OF_ONE_CONDITION,
+                             // Past it the way is looked along whole, the row is composed either
+                             // way, and what was not split is carried with the row's account.
+                             WAYS_A_WAY_IS_SPLIT_INTO,
                              // What it stops is the looking for a way past a guard, beside a row
                              // already found, and what it stopped is carried beside that row.
                              RUNS_REPAIRING_A_ROW -> throw new IllegalArgumentException(
@@ -4736,8 +4739,13 @@ public final class Generator {
                         SearchShortfall.NONE, Map.of()));
                 return false;
             }
+            // One way under one choice of cases, which is never split again: the ways a condition
+            // of several ways split this into were each handed here apart. A way looked along whole
+            // stays one that was, so what was not split is still said of its row.
             Reachability.Reaching thisWay = new Reachability.Reaching(reaching.region(),
-                    way.taken(), truths, reaching.boundedOnTheWay());
+                    way.taken(), truths, reaching.boundedOnTheWay(),
+                    reaching.ways() instanceof Reachability.Ways.Whole whole ? whole
+                            : Reachability.Ways.ONE);
             ParameterCameToNothing one = new InOrder(subject, order, composed, standing, writes,
                     settled, thisWay, check, way.contents()).from(0, Map.of());
             if (one == null) {
@@ -5122,12 +5130,24 @@ public final class Generator {
         // it, gathered by which count it is before any is taken in: two conditions on one count
         // are met where both are, and which count that is cannot be read off either alone.
         Map<CountedElements.Identity, CountsAsked> countsOnTheWay = new LinkedHashMap<>();
+        // A condition of several ways the way was not split at is composed past along the whole,
+        // and says so: along one of its ways the row would be composed against more.
+        if (reaching.ways() instanceof Reachability.Ways.Whole(var unsplit, var figure)) {
+            unsplit.forEach(each -> gaps.add(new ReachabilityGap.LookedAlongWhole(each, figure)));
+        }
         for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
             if (cut.demand() instanceof RowDemand.SoMany many) {
                 CountedElements count = CountedElements.of(subject.behavior(), many.count(),
                         subject.quantities(), many.anElementMeeting());
                 countsOnTheWay.merge(count.identity(),
                         new CountsAsked(count, many.counts().values(), cut), CountsAsked::and);
+                continue;
+            }
+            // A statement no composer writes toward: nothing is placed for it, and the run is what
+            // says whether the row met it.
+            if (cut.demand() instanceof RowDemand.ForTheRun(var _, var why)) {
+                gaps.add(new ReachabilityGap.Uncomposed(cut,
+                        new ReachabilityGap.Why.NoComposerWritesIt(why)));
                 continue;
             }
             // What an element is asked with no relation among it has no number to place: that the
@@ -5308,6 +5328,9 @@ public final class Generator {
             // Taken in beside the rest, as a demand on the container ({@link #alsoOnTheWay}).
             case RowDemand.SoMany many -> throw new IllegalArgumentException(
                     "a count is composed where its container is and placed nowhere: " + many);
+            // Passed over before it is asked, with what the way is owed about it.
+            case RowDemand.ForTheRun run -> throw new IllegalArgumentException(
+                    "a statement no composer writes toward is placed nowhere: " + run);
         };
     }
 
@@ -5355,6 +5378,8 @@ public final class Generator {
             case RowDemand.ATruth _ -> true;
             // A count, which places a count of the container and the numbers beside an element.
             case RowDemand.SoMany _ -> false;
+            // A statement no composer writes toward, which places nothing.
+            case RowDemand.ForTheRun _ -> true;
         };
     }
 

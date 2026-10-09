@@ -149,6 +149,32 @@ public sealed interface OnTheWay {
     }
 
     /**
+     * A condition that came out one of several ways a row can take: past it, a row met everything
+     * on one of {@code alternatives}.
+     *
+     * <p>Narrows nothing on its own, since no one alternative is what every arriving row met. What
+     * each alternative asks is a way of its own ({@link WayToTheBorder#eachWay}), and a row is
+     * looked for along each of them; nothing reaches past the condition only where nothing reaches
+     * along any of them.
+     *
+     * @param alternatives what each alternative asks, in the order they are kept; two or more
+     */
+    record OneOf(ConditionOccurrence condition, ConditionReportAnchor anchor,
+                 List<List<OnTheWay>> alternatives) implements OnTheWay {
+
+        public OneOf {
+            if (condition == null) {
+                throw new IllegalArgumentException(
+                        "a condition of several ways is some condition the reading met");
+            }
+            alternatives = alternatives.stream().map(List::copyOf).toList();
+            if (alternatives.size() < 2) {
+                throw new IllegalArgumentException("one of several ways is two or more");
+            }
+        }
+    }
+
+    /**
      * A condition nothing here could turn into a cut, and what stopped it.
      *
      * <p><b>One that has to say which condition it is.</b> What a demand or a narrowing carries

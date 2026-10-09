@@ -30,6 +30,9 @@ class WhatAPathCannotHoldSaysWhatStoppedItsPartsTest {
     private static final WhyNotTaken NO_ALTERNATIVES =
             new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_ALTERNATIVES);
 
+    private static final WhyNotTaken ELEMENT_FACTS_AS_WRITTEN = new WhyNotTaken.OutsideDomain(
+            WhyNotTaken.DomainLimit.A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN);
+
     private static Proposition unread(int ordinal, WhyUnread why) {
         return new Proposition.Unread(Optional.empty(), ordinal, why, false, true);
     }
@@ -53,11 +56,15 @@ class WhatAPathCannotHoldSaysWhatStoppedItsPartsTest {
         for (Proposition stated : declined) {
             for (boolean positive : List.of(true, false)) {
                 Proposition asked = positive ? stated : stated.denied();
-                // A denied disjunction is a conjunction, which a path takes part by part.
+                // A denied disjunction is a conjunction, which a path takes part by part; and no
+                // element meeting something is what every element meets, which a path holds only
+                // as the closure it was written with.
+                WhyNotTaken whole = asked instanceof Proposition.Some some && !some.holds()
+                        ? ELEMENT_FACTS_AS_WRITTEN : NO_ALTERNATIVES;
                 List<WhyNotTaken> expected = asked instanceof Proposition.All
                         ? List.of(new WhyNotTaken.MeaningUnread(NO_SIZE),
                                 new WhyNotTaken.MeaningUnread(NOT_LINEAR))
-                        : List.of(NO_ALTERNATIVES, new WhyNotTaken.MeaningUnread(NO_SIZE),
+                        : List.of(whole, new WhyNotTaken.MeaningUnread(NO_SIZE),
                                 new WhyNotTaken.MeaningUnread(NOT_LINEAR));
                 assertEquals(expected, notTaken(stated, positive),
                         stated.key() + " coming out " + positive);

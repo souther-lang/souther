@@ -50,17 +50,17 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
 
     private static final DecisionRule NO_DISTINCTION = new DecisionRule(Map.of());
 
-    /** Why the condition below is not read: a shape this reading does not ask of a row yet. */
-    private static final WhyNotTaken TWO_SUBJECTS =
-            new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE);
+    /** Why the condition below is not read: a quantity on no order a region measures. */
+    private static final WhyNotTaken ON_NO_ORDER =
+            new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER);
 
     /** A rule that turns on one condition this reading has no words for, so it is not
      *  {@link #NO_DISTINCTION} and a finding about one is not a finding about the other. */
     private static final DecisionRule ONE_DISTINCTION = new DecisionRule(Map.of(
             new DecisionCondition.AConditionNotRead(new ConditionOccurrence("decides", 0),
-                    TWO_SUBJECTS),
+                    ON_NO_ORDER),
             new DecidedCondition.Unread(new DecisionCondition.AConditionNotRead(
-                    new ConditionOccurrence("decides", 0), TWO_SUBJECTS),
+                    new ConditionOccurrence("decides", 0), ON_NO_ORDER),
                     true)));
 
     @Test

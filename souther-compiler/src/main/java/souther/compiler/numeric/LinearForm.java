@@ -1,7 +1,11 @@
 package souther.compiler.numeric;
 
+import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Function;
 
@@ -84,6 +88,47 @@ public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
      */
     public static <A> LinearForm<A> atomMinusConstant(A a, ExactRatio c) {
         return new LinearForm<>(c.negated(), Map.of(a, ExactRatio.ONE));
+    }
+
+    /**
+     * The sum of {@code forms}, or which way the exact arithmetic could not hold it — the same
+     * answer for the same forms in whatever order they are handed.
+     *
+     * <p>Every weight an atom has in any of them is added at once ({@link ExactRatio#sum}), and the
+     * constants likewise. Added as a run of {@link #plus}, two weights of one atom far apart in
+     * scale would fail where they met even where a third cancels one of them, so the answer would
+     * turn on which form came first. Where the weights of several atoms cannot be held, more room
+     * answers the sum only where it answers every one of them.
+     */
+    public static <A> ExactAnswer<LinearForm<A>> sum(List<LinearForm<A>> forms) {
+        List<ExactRatio> constants = new ArrayList<>();
+        Map<A, List<ExactRatio>> weights = new HashMap<>();
+        for (LinearForm<A> each : forms) {
+            constants.add(each.constant);
+            each.coefs.forEach((atom, weight) ->
+                    weights.computeIfAbsent(atom, _ -> new ArrayList<>()).add(weight));
+        }
+        Set<UnheldNumber> unheld = EnumSet.noneOf(UnheldNumber.class);
+        ExactRatio constant = ExactRatio.ZERO;
+        switch (ExactRatio.sum(constants)) {
+            case ExactAnswer.Held<ExactRatio> held -> constant = held.value();
+            case ExactAnswer.Unheld<ExactRatio> not -> unheld.add(not.why());
+        }
+        Map<A, ExactRatio> coefs = new HashMap<>();
+        for (Map.Entry<A, List<ExactRatio>> each : weights.entrySet()) {
+            switch (ExactRatio.sum(each.getValue())) {
+                case ExactAnswer.Held<ExactRatio> held -> {
+                    if (!held.value().isZero()) {
+                        coefs.put(each.getKey(), held.value());
+                    }
+                }
+                case ExactAnswer.Unheld<ExactRatio> not -> unheld.add(not.why());
+            }
+        }
+        if (!unheld.isEmpty()) {
+            return ExactAnswer.unheld(UnheldNumber.ofAll(unheld));
+        }
+        return ExactAnswer.held(new LinearForm<>(constant, coefs));
     }
 
     /**

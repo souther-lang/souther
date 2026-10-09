@@ -191,7 +191,7 @@ class ANumberIsWrittenWhereTheReadingAnsweredForThePlaceTest {
                 NumbersAskedFor.of(LevelRegion.point(new Level.OnACarrier(
                         quantities(source).ordersOf(fixed.term()).answered(), four))),
                 new Reachability.Reaching(quantities(source).region(), Requirements.NONE,
-                        TruthsAsked.NONE, List.of(onTheWayOver(at))),
+                        TruthsAsked.NONE, List.of(onTheWayOver(at)), Reachability.Ways.ONE),
                 Generator.CandidateCheck.ANY);
     }
 
