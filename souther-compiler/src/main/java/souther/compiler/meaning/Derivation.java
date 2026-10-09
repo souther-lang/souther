@@ -7,6 +7,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.LawProposition;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ValueName;
 
@@ -374,19 +375,107 @@ public sealed interface Derivation {
     /**
      * An operation whose answer comes out on {@code aspect}'s holding side exactly where its law
      * says of the arguments, read as {@code ofTheArguments}.
+     *
+     * <p>The law is held beside its reading, and the reading has to be of it: every connective of
+     * the law is the step that joins the same parts the same way, every side it names of a subject
+     * is that side, and every statement it makes about some element is a statement about some
+     * element of the law's own statement of the element — or the place the reading of a part
+     * stopped, which is said rather than read. So a step claiming a law it does not instantiate is
+     * refused where it is made, and what a reader walks back from a conclusion to is the law.
+     *
+     * @param law the statement the law makes of the arguments, which {@code ofTheArguments} reads
+     *            at the call
      */
-    record ByALaw(ValueName.Stdlib operation, AnswerAspect aspect, Derivation ofTheArguments)
+    record ByALaw(ValueName.Stdlib operation, AnswerAspect aspect, LawProposition<?> law,
+                  Derivation ofTheArguments)
             implements Derivation {
 
         public ByALaw {
             Objects.requireNonNull(operation, "a law is of an operation");
             Objects.requireNonNull(aspect, "a law is about one side of what it answers");
+            Objects.requireNonNull(law, "a law states something of its arguments");
             Objects.requireNonNull(ofTheArguments, "and comes to something of its arguments");
+            if (!reads(law, ofTheArguments)) {
+                throw new IllegalArgumentException(ofTheArguments + " is no reading of what the"
+                        + " law of " + operation + " states: " + law);
+            }
         }
 
         @Override
         public Proposition conclusion(Conclusion numbering) {
             return numbering.of(ofTheArguments);
+        }
+
+        /** Whether {@code read} is a reading of {@code law}, part for part. */
+        private static boolean reads(LawProposition<?> law, Derivation read) {
+            // A part the reading stopped at is said where it stopped, whatever the law states.
+            if (read instanceof Stopped) {
+                return true;
+            }
+            return switch (law) {
+                case LawProposition.Always<?>(boolean holds) ->
+                        read instanceof ALawSettles(boolean settled) && settled == holds;
+                case LawProposition.All<?> all -> joins(all.parts(), read, true);
+                case LawProposition.Any<?> any -> joins(any.parts(), read, false);
+                case LawProposition.Observed<?> observed ->
+                        read instanceof OnTheSideALawNames(Derivation _, boolean holds)
+                                && holds == observed.side().holds();
+                case LawProposition.Same<?> same ->
+                        read instanceof TheSameValue(var _, var _, boolean holds)
+                                && holds == same.holds();
+                case LawProposition.SomeElement<?> some -> some.holds()
+                        ? meets(some.ofTheElement(), read)
+                        : read instanceof OnTheSideALawNames(Derivation meeting, boolean holds)
+                                && !holds && meets(some.ofTheElement(), meeting);
+                case LawProposition.Compared<?> _ -> aComparison(read);
+            };
+        }
+
+        /** Whether {@code read} joins a reading of each of {@code parts}, in order, as
+         *  {@code every} says. */
+        private static boolean joins(List<? extends LawProposition<?>> parts, Derivation read,
+                                     boolean every) {
+            if (!(read instanceof ALawJoins(List<Derivation> joined, boolean all)) || all != every
+                    || joined.size() != parts.size()) {
+                return false;
+            }
+            for (int i = 0; i < parts.size(); i++) {
+                if (!reads(parts.get(i), joined.get(i))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /**
+         * Whether {@code read} is some element meeting a reading of {@code element}: of the
+         * element standing at a container's element, or of the values a container was written
+         * with, each of which is read on its own application.
+         */
+        private static boolean meets(LawProposition<?> element, Derivation read) {
+            return switch (read) {
+                case Stopped _ -> true;
+                case SomeElementMeeting(var _, Derivation ofTheElement, boolean holds, var _) ->
+                        holds && reads(element, ofTheElement);
+                case OverElementsWrittenOut(var _, boolean holds) -> holds;
+                default -> false;
+            };
+        }
+
+        /**
+         * Whether {@code read} is a comparison the law states, read over the arguments: a relation
+         * read by a law, one that cuts nothing, or one read on each way into an argument chosen by
+         * cases or answered through a body — each of which is a step of its own rule over
+         * comparisons read the same way.
+         */
+        private static boolean aComparison(Derivation read) {
+            return switch (read) {
+                case AComparisonRead(ComparisonReading by, var _, boolean _, var _) ->
+                        by == ComparisonReading.BY_A_LAW;
+                case ACutThatCutsNothing _, AComparisonOfAChoice _, OnEachApplication _,
+                     AnOperationsCases _, ABehaviorsBody _, ThroughABinding _ -> true;
+                default -> false;
+            };
         }
     }
 

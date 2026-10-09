@@ -920,7 +920,7 @@ final class Pullback {
                     new WhyUnread.NotProvedOfItsBody(operation, aspect), fixed(e, reads)), stopsAt);
             case BoundOperationFacts.Settled.ByALaw(
                     OperationLaw.Observation<DeclaredArgument> law, var _) ->
-                    new Derivation.ByALaw(operation, aspect,
+                    new Derivation.ByALaw(operation, aspect, law.equivalentTo(),
                             new ALawRead(applied, e, reads).of(law.equivalentTo()));
             case BoundOperationFacts.Settled.ByALaw(OperationLaw.Size<DeclaredArgument> _, var _) ->
                     throw new IllegalStateException(operation + " settles a side of its answer"

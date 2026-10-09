@@ -5,6 +5,9 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ConditionJoin;
+import souther.compiler.semantics.LawProposition;
+import souther.compiler.semantics.LawSubject;
+import souther.compiler.semantics.SideAnswered;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
@@ -26,6 +29,13 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
     private static final TermPath B = TermPath.of("b");
     private static final TermPath C = TermPath.of("c");
     private static final TermPath XS = TermPath.of("xs");
+
+    /** What {@code List.any}'s law states of whether its answer holds: some element of the list
+     *  is one the closure answers true for. */
+    private static final LawProposition<String> SOME_ELEMENT_IS_TRUE =
+            new LawProposition.SomeElement<>("xs", new LawProposition.Observed<>(
+                    new LawSubject.WhatTheClosureAnswers<>("p"),
+                    new SideAnswered(AnswerAspect.TRUTH, true)), true);
 
     private static Derivation truthAt(TermPath at) {
         return new Derivation.ATruthOfASubject(new DecisionSubject.AnInput(at), true);
@@ -75,19 +85,45 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
 
     @Test
     void aLawStatesWhatItsArgumentsWereReadAsOnTheSideItNames() {
-        Derivation some = new Derivation.SomeElementMeeting(XS, truthAt(XS.element()), true,
+        Derivation some = new Derivation.SomeElementMeeting(XS,
+                new Derivation.OnTheSideALawNames(truthAt(XS.element()), true), true,
                 Optional.empty());
         Proposition someElement = new Proposition.Some(XS, truth(XS.element()), true);
         ValueName.Stdlib any = new ValueName.Stdlib.Operation("List", "any");
-        assertEquals(someElement, concluded(new Derivation.ByALaw(any, AnswerAspect.TRUTH, some)));
+        assertEquals(someElement, concluded(new Derivation.ByALaw(any, AnswerAspect.TRUTH,
+                SOME_ELEMENT_IS_TRUE, some)));
         assertEquals(someElement.denied(), concluded(new Derivation.ByALaw(any,
-                AnswerAspect.TRUTH, new Derivation.OnTheSideALawNames(some, false))));
+                AnswerAspect.TRUTH, SOME_ELEMENT_IS_TRUE.denied(),
+                new Derivation.OnTheSideALawNames(some, false))));
         assertEquals(new Proposition.Always(true),
                 concluded(new Derivation.ALawSettles(true)));
         assertEquals(Proposition.any(List.of(truth(A), truth(B))), concluded(
                 new Derivation.ALawJoins(List.of(truthAt(A), truthAt(B)), false)));
         assertEquals(Proposition.all(List.of(truth(A), truth(B))), concluded(
                 new Derivation.ALawJoins(List.of(truthAt(A), truthAt(B)), true)));
+    }
+
+    /**
+     * A step claiming a law its reading is not of is refused where it is made: every element
+     * where the law says some, the other side of what the closure answers, a reading that is no
+     * step of a law at all — and a part the reading stopped at is said wherever it stands.
+     */
+    @Test
+    void aLawIsHeldToTheReadingOfIt() {
+        ValueName.Stdlib any = new ValueName.Stdlib.Operation("List", "any");
+        Derivation onTheSide = new Derivation.OnTheSideALawNames(truthAt(XS.element()), true);
+        Derivation offTheSide = new Derivation.OnTheSideALawNames(truthAt(XS.element()), false);
+        for (Derivation notOfIt : List.of(
+                new Derivation.SomeElementMeeting(XS, onTheSide, false, Optional.empty()),
+                new Derivation.SomeElementMeeting(XS, offTheSide, true, Optional.empty()),
+                truthAt(XS.element()),
+                new Derivation.ALawSettles(true))) {
+            assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(any,
+                    AnswerAspect.TRUTH, SOME_ELEMENT_IS_TRUE, notOfIt), () -> "refused: " + notOfIt);
+        }
+        new Derivation.ByALaw(any, AnswerAspect.TRUTH, SOME_ELEMENT_IS_TRUE,
+                new Derivation.SomeElementMeeting(XS, new Derivation.Stopped(
+                        new WhyUnread.NotMetByTheReading(), false), true, Optional.empty()));
     }
 
     /**
