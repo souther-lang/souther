@@ -90,12 +90,12 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
      */
     @Test
     void aWalkThatAnswersNoValuePerElementLeavesAnElement() {
-        String model = """
+        Compilation compilation = compiled("""
                 behavior busy : (cs: Set<Int>, atLeast: Int) -> Set<Int>
                 let busy (cs, atLeast) = Set.filter(c -> c >= atLeast, Set.map(x -> x + 1, cs))
-                """;
-        assertEquals(List.of(), linesOf(model));
-        List<String> notRead = notReadIn(model);
+                """);
+        assertEquals(List.of(), linesOf(compilation));
+        List<String> notRead = notReadIn(compilation);
         assertTrue(notRead.contains("cs[*] " + UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
                 () -> "filed where the values came from: " + notRead);
         assertEquals(List.of("atLeast " + UndividedPosition.Reason.UNSUPPORTED_SYNTAX),
@@ -110,16 +110,16 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
      */
     @Test
     void aValueAFoldWorkedOutIsNoStep() {
-        String model = """
+        Compilation compilation = compiled("""
                 let countsOf (xs: List<String>): Map<String, Int> =
                     List.fold((acc, x) -> Map.updateOrInsert(x, 1, n -> n + 1, acc), Map.empty, xs)
 
                 behavior busy : (xs: List<String>, atLeast: Int) -> Map<String, Int>
                 let busy (xs, atLeast) =
                     Map.filterEntries((_, count) -> count >= atLeast, countsOf(xs))
-                """;
-        assertEquals(List.of(), linesOf(model));
-        List<String> notRead = notReadIn(model);
+                """);
+        assertEquals(List.of(), linesOf(compilation));
+        List<String> notRead = notReadIn(compilation);
         assertEquals(List.of("atLeast " + UndividedPosition.Reason.UNSUPPORTED_SYNTAX),
                 notRead.stream().filter(each -> each.startsWith("atLeast ")).toList(),
                 () -> "the position the rule is about keeps its own word: " + notRead);
@@ -127,15 +127,18 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
 
     /** Every line the comparison in {@code body} draws, as its label. */
     private static List<String> linesOf(String body) {
-        Compilation compilation = compiled(body);
+        return linesOf(compiled(body));
+    }
+
+    private static List<String> linesOf(Compilation compilation) {
         return Adequacy.readingsOf(compilation.db(), "probe").get("busy").stream()
                 .map(BorderAssessment::label)
                 .toList();
     }
 
-    /** Every place the rules of {@code body} were not read at, with the reason. */
-    private static List<String> notReadIn(String body) {
-        PartitionEvidence measured = compiled(body).db()
+    /** Every place the rules of what was compiled were not read at, with the reason. */
+    private static List<String> notReadIn(Compilation compilation) {
+        PartitionEvidence measured = compilation.db()
                 .ask(new Adequacy.Coverage("probe")).value().get("busy");
         return measured.notRead().stream()
                 .map(each -> each.at() + " " + each.reason())
