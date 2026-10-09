@@ -73,6 +73,45 @@ final class Collect {
         }
     }
 
+    /** Every count {@code holds} takes, inside what it says of an element as well. */
+    static Set<LawNumber<Value>> counts(LawProposition<Value> holds) {
+        Set<LawNumber<Value>> out = new LinkedHashSet<>();
+        numbers(holds, number -> {
+            if (number instanceof LawNumber.HowManyMeet<Value>) {
+                out.add(number);
+            }
+        });
+        return out;
+    }
+
+    /** Every container whose elements {@code statement} counts, inside what it says of an
+     *  element as well. */
+    static <A> void counted(LawProposition<A> statement, Consumer<A> each) {
+        numbers(statement, number -> {
+            if (number instanceof LawNumber.HowManyMeet<A>(A container, var _)) {
+                each.accept(container);
+            }
+        });
+    }
+
+    private static <A> void numbers(LawProposition<A> statement, Consumer<LawNumber<A>> each) {
+        switch (statement) {
+            case LawProposition.Always<A> _, LawProposition.Observed<A> _,
+                 LawProposition.Same<A> _ -> { }
+            case LawProposition.All<A>(var parts) -> parts.forEach(part -> numbers(part, each));
+            case LawProposition.Any<A>(var parts) -> parts.forEach(part -> numbers(part, each));
+            case LawProposition.Compared<A>(LinearForm<LawNumber<A>> form, var _) ->
+                    form.coefs().keySet().forEach(number -> {
+                        each.accept(number);
+                        if (number instanceof LawNumber.HowManyMeet<A>(var _, var ofTheElement)) {
+                            numbers(ofTheElement, each);
+                        }
+                    });
+            case LawProposition.SomeElement<A>(var _, var ofTheElement, var _) ->
+                    numbers(ofTheElement, each);
+        }
+    }
+
     /** Every argument word {@code statement} names, wherever it names one. */
     static <A> void slots(LawProposition<A> statement, Consumer<A> each) {
         switch (statement) {

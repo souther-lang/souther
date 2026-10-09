@@ -62,6 +62,27 @@ public enum Unsayable {
         };
     }
 
+    /**
+     * Whether what this says of a container, where it is about one, holds of what a construction
+     * of {@code shape} builds of that container wherever it held of the container itself.
+     *
+     * <p>That no two elements are alike is about which elements a container holds and how many
+     * times, so the same elements in another order have it, and so does any part of them, since a
+     * pair alike among a part was a pair alike in the whole. Nothing else here is about a
+     * container's elements at all.
+     */
+    public boolean survives(ElementShape shape) {
+        return switch (this) {
+            case NO_TWO_ELEMENTS_ALIKE -> switch (shape) {
+                case PERMUTES, SUBSET -> true;
+                case MAPS, COLLAPSES -> false;
+            };
+            case EVERY_CHARACTER_IS_WHITESPACE, A_KEY_OF_A_MAP, MADE_UP_OF_COPIES_OF_A_TEXT,
+                 A_STRING_INSIDE_ANOTHER, A_STRING_MATCHING_A_PATTERN, HOW_MANY_DIFFERENT_VALUES ->
+                    false;
+        };
+    }
+
     /** The proposition the domain has no words for, as a report names it. */
     public String proposition() {
         return proposition;

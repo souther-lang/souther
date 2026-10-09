@@ -90,7 +90,7 @@ public final class LibraryProver {
                 if (walks.size() != 1) {
                     return new Outcome.Open(new Unproved.NotOverItsArguments());
                 }
-                induction = new Induction(operation, lemma, reading, params,
+                induction = new Induction(operation, lemma.carries(), reading, params,
                         walks.iterator().next());
                 if (!induction.overItsArguments()) {
                     return new Outcome.Open(new Unproved.NotOverItsArguments());
@@ -139,7 +139,115 @@ public final class LibraryProver {
         }
     }
 
-    private static Outcome stoppedAt(Reading.Stopped stopped) {
+    /**
+     * Whether {@code holds}, a statement about what {@code operation} answers beside what it was
+     * handed and what kernels answer, is proved against its body: of every case the body answers
+     * by, where a walk in the body ends as one of {@code carries} says it carries.
+     *
+     * <p>The statement names the answer as the operation's answer handed its own arguments, which
+     * is how it is read where the operation is called; here that answer is what the body comes to.
+     * Each of {@code carries} is a statement of what the walk carries, proved on its own of where
+     * the walk starts and of each step; the first under which the statement follows is the proof.
+     */
+    public Outcome relates(ValueName.Stdlib.Operation operation, LawProposition<Slot> holds,
+                           List<List<LawProposition<Slot>>> carries) {
+        LawProposition<Slot> statement = TheAnswer.named(holds, operation,
+                library.takes(operation).size());
+        Outcome last = new Outcome.Open(new Unproved.NoInvariantGiven());
+        for (List<LawProposition<Slot>> carried : walking(carries)) {
+            Reading reading = new Reading(library, readThrough);
+            try {
+                List<Value> params = arguments(operation);
+                List<Reading.Case> cases = reading.cases(reading.bodyOf(operation),
+                        new Reading.Frame(params, Map.of()));
+                Set<Value.Made> walks = new LinkedHashSet<>();
+                cases.forEach(each -> walksIn(each.is(), walks));
+                if (walks.size() > 1) {
+                    return new Outcome.Open(new Unproved.NotOverItsArguments());
+                }
+                List<Universal> ends = List.of();
+                if (!walks.isEmpty()) {
+                    if (carried.isEmpty()) {
+                        continue;
+                    }
+                    Induction induction = new Induction(operation, carried, reading, params,
+                            walks.iterator().next());
+                    if (!induction.overItsArguments()) {
+                        return new Outcome.Open(new Unproved.NotOverItsArguments());
+                    }
+                    Failed failed = induction.prove();
+                    if (failed != null) {
+                        last = outcomeOf(failed, reading);
+                        continue;
+                    }
+                    ends = induction.whereItEnds();
+                }
+                Failed failed = null;
+                for (Reading.Case each : cases) {
+                    LawProposition<Value> goal = reading.proposition(statement, operation,
+                            slot -> switch (slot) {
+                                case Slot.Place(int position) -> params.get(position);
+                                case Slot.Answer _ -> each.is();
+                                case Slot.Every(int which) -> new Value.Fresh(100 + which,
+                                        "any value");
+                                case Slot.Carried _, Slot.Walked _ -> throw new IllegalStateException(
+                                        "a statement about an answer names no walk");
+                            }, Reading.Elements.none());
+                    if (!follows(reading, List.of(each.when()), ends, goal,
+                            spacing(operation, Map.of()))) {
+                        failed = new Failed(Unproved.Obligation.THE_STATEMENT, goal);
+                        break;
+                    }
+                }
+                if (failed == null) {
+                    Set<Proof.Used> used = reading.used();
+                    return new Outcome.Proved(walks.isEmpty()
+                            ? new Proof.ByTheBody(operation, used)
+                            : new Proof.ByInduction(operation, carried, used));
+                }
+                last = outcomeOf(failed, reading);
+            } catch (Reading.Stopped stopped) {
+                last = stoppedAt(stopped);
+            }
+        }
+        return last;
+    }
+
+    /** The statements of what a walk carries to try, in order, with none at all first for a body
+     *  that walks nothing. */
+    private static List<List<LawProposition<Slot>>> walking(
+            List<List<LawProposition<Slot>>> carries) {
+        List<List<LawProposition<Slot>>> out = new ArrayList<>();
+        out.add(List.of());
+        for (List<LawProposition<Slot>> each : carries) {
+            if (!each.isEmpty() && !out.contains(each)) {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Whether {@code operation}'s answer holds no fewer than its argument at {@code container}, as
+     * what is settled of it says — the law of how many it holds, or how that stands beside what
+     * kernels answer, each proved of the body.
+     */
+    public Outcome noSmallerThan(ValueName.Stdlib.Operation operation, int container) {
+        Reading reading = new Reading(library, readThrough);
+        try {
+            List<Value> params = arguments(operation);
+            LawProposition<Value> goal = Props.compared(
+                    reading.size(new Value.Made(operation, params)), Rel.GE,
+                    reading.size(params.get(container)));
+            return follows(reading, List.of(), goal, spacing(operation, Map.of()))
+                    ? new Outcome.Proved(new Proof.ByTheBody(operation, reading.used()))
+                    : outcomeOf(new Failed(Unproved.Obligation.THE_STATEMENT, goal), reading);
+        } catch (Reading.Stopped stopped) {
+            return stoppedAt(stopped);
+        }
+    }
+
+    static Outcome stoppedAt(Reading.Stopped stopped) {
         return switch (stopped.why()) {
             case Library.Settled.Unsaid(Unsayable why) -> new Outcome.Unsaid(why);
             case Library.Settled.Open(Unproved why) -> new Outcome.Open(why);
@@ -248,21 +356,24 @@ public final class LibraryProver {
                     for (LawProposition<Slot> relation : library.relations(one.operation())) {
                         holding.add(new Universal(one.operation(), relation, slot -> switch (slot) {
                             case Slot.Place(int position) -> one.args().get(position);
-                            case Slot.Every _, Slot.Carried _, Slot.Walked _ -> null;
+                            case Slot.Every _, Slot.Carried _, Slot.Walked _, Slot.Answer _ -> null;
                         }));
                     }
                 }
             }
             Set<Value> handed = new LinkedHashSet<>();
             about.forEach(each -> handed.addAll(Collect.alike(each)));
+            Set<LawNumber<Value>> counts = new LinkedHashSet<>();
+            about.forEach(each -> counts.addAll(Collect.counts(each)));
             boolean more = false;
             for (Universal each : holding) {
-                for (Map<Integer, Value> way : everyWay(each.statement(), made, handed)) {
+                for (Map<Integer, Value> way : everyWay(each.statement(), made, handed, counts)) {
                     LawProposition<Value> instance = reading.proposition(each.statement(),
                             each.operation(), slot -> slot instanceof Slot.Every(int which)
                                     ? way.get(which) : each.place().apply(slot),
                             Reading.Elements.none());
-                    if (taken.add(instance)) {
+                    if (countsOnlyWhatIsCounted(each.statement(), way, instance, counts)
+                            && taken.add(instance)) {
                         known.add(instance);
                         more = true;
                     }
@@ -300,12 +411,14 @@ public final class LibraryProver {
     }
 
     /**
-     * Every way of taking each value {@code statement} holds of every one of: as a value handed, in
-     * the statements it is asked among, to an operation the statement names an answer of at that
-     * value's place — or, where it names none there, as any of {@code handed}.
+     * Every way of taking each value {@code statement} holds of every one of: where the statement
+     * counts its elements, as a container the statements it is asked among already count; as a
+     * value handed, there, to an operation the statement names an answer of at that value's place;
+     * or, where it names none there, as any of {@code handed}.
      */
     private static List<Map<Integer, Value>> everyWay(LawProposition<Slot> statement,
-                                                      Set<Value.Made> made, Set<Value> handed) {
+                                                      Set<Value.Made> made, Set<Value> handed,
+                                                      Set<LawNumber<Value>> counts) {
         Set<Integer> every = new TreeSet<>();
         Collect.slots(statement, slot -> {
             if (slot instanceof Slot.Every(int which)) {
@@ -315,6 +428,15 @@ public final class LibraryProver {
         Map<Integer, Set<Value>> taken = new HashMap<>();
         for (int which : every) {
             Set<Value> candidates = new LinkedHashSet<>();
+            if (Triggers.counts(statement, which)) {
+                counts.forEach(count -> {
+                    if (count instanceof LawNumber.HowManyMeet<Value>(Value container, var _)) {
+                        candidates.add(container);
+                    }
+                });
+                taken.put(which, candidates);
+                continue;
+            }
             Triggers.of(statement, which).forEach((operation, at) -> made.forEach(one -> {
                 if (one.operation().equals(operation) && at < one.args().size()) {
                     candidates.add(one.args().get(at));
@@ -326,6 +448,34 @@ public final class LibraryProver {
             taken.put(which, candidates);
         }
         return everyWay(every, taken);
+    }
+
+    /**
+     * Whether {@code instance}, {@code statement} taken {@code way}, counts the elements of a
+     * value it was taken of only as the statements it is asked among already do: what it says of
+     * such a count is worth saying of that count, and a count it would bring in is one nothing
+     * asked about.
+     */
+    private static boolean countsOnlyWhatIsCounted(LawProposition<Slot> statement,
+                                                   Map<Integer, Value> way,
+                                                   LawProposition<Value> instance,
+                                                   Set<LawNumber<Value>> counts) {
+        Set<Value> countedOver = new LinkedHashSet<>();
+        way.forEach((which, value) -> {
+            if (Triggers.counts(statement, which)) {
+                countedOver.add(value);
+            }
+        });
+        if (countedOver.isEmpty()) {
+            return true;
+        }
+        for (LawNumber<Value> count : Collect.counts(instance)) {
+            if (count instanceof LawNumber.HowManyMeet<Value>(Value container, var _)
+                    && countedOver.contains(container) && !counts.contains(count)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Every way of taking each value {@code statement} holds of every one of as one of
@@ -414,16 +564,16 @@ public final class LibraryProver {
     private final class Induction {
 
         private final ValueName.Stdlib.Operation operation;
-        private final Lemma lemma;
+        private final List<LawProposition<Slot>> carries;
         private final Reading reading;
         private final List<Value> params;
         private final Value.Made walk;
         private final TheWalk shape;
 
-        Induction(ValueName.Stdlib.Operation operation, Lemma lemma, Reading reading,
-                  List<Value> params, Value.Made walk) {
+        Induction(ValueName.Stdlib.Operation operation, List<LawProposition<Slot>> carries,
+                  Reading reading, List<Value> params, Value.Made walk) {
             this.operation = operation;
-            this.lemma = lemma;
+            this.carries = carries;
             this.reading = reading;
             this.params = params;
             this.walk = walk;
@@ -486,12 +636,12 @@ public final class LibraryProver {
          *  holding of every value. */
         private List<Universal> universal(Value carried, Value walked) {
             List<Universal> out = new ArrayList<>();
-            for (LawProposition<Slot> clause : lemma.carries()) {
+            for (LawProposition<Slot> clause : carries) {
                 out.add(new Universal(operation, clause, slot -> switch (slot) {
                     case Slot.Place(int position) -> params.get(position);
                     case Slot.Carried(List<Integer> path) -> at(carried, path);
                     case Slot.Walked _ -> walked;
-                    case Slot.Every _ -> null;
+                    case Slot.Every _, Slot.Answer _ -> null;
                 }));
             }
             return out;
@@ -502,7 +652,7 @@ public final class LibraryProver {
         private LawProposition<Value> carried(Value carried, Value walked,
                                               Function<Integer, Value> every) {
             List<LawProposition<Value>> clauses = new ArrayList<>();
-            for (LawProposition<Slot> clause : lemma.carries()) {
+            for (LawProposition<Slot> clause : carries) {
                 clauses.add(of(clause, carried, walked, every));
             }
             return Props.all(clauses);
@@ -515,6 +665,8 @@ public final class LibraryProver {
                 case Slot.Carried(List<Integer> path) -> at(carried, path);
                 case Slot.Walked _ -> walked;
                 case Slot.Every(int which) -> every.apply(which);
+                case Slot.Answer _ -> throw new IllegalStateException(
+                        "what a walk carries is stated of the walk, and names no answer");
             }, Reading.Elements.none());
         }
 
@@ -583,7 +735,7 @@ public final class LibraryProver {
          *  part a statement of the lemma names. */
         private Map<Value, Value> startedAs(Value carried) {
             Map<Value, Value> out = new HashMap<>();
-            for (LawProposition<Slot> clause : lemma.carries()) {
+            for (LawProposition<Slot> clause : carries) {
                 Collect.slots(clause, slot -> {
                     if (slot instanceof Slot.Carried(List<Integer> path)) {
                         out.put(at(carried, path), at(seed(), path));

@@ -225,6 +225,9 @@ public final class OperationFacts {
             about("List", "sort", keeps(at(0), SizeAgainstItsSource.SAME)),
             about("List", "sortBy", keeps(CONTAINER, SizeAgainstItsSource.SAME)),
             about("List", "map", maps(CONTAINER, SizeAgainstItsSource.SAME)),
+            // And in the order of the list it was handed, which is what a reader writing the
+            // answer out itself takes.
+            about("List", "map", new OperationFact.KeepsTheOrderOf(CONTAINER)),
             about("List", "mapIndexed", maps(CONTAINER, SizeAgainstItsSource.SAME)),
             about("Map", "mapValues", maps(CONTAINER, SizeAgainstItsSource.SAME)),
             about("List", "filter", keeps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
@@ -240,6 +243,10 @@ public final class OperationFacts {
             about("Map", "difference", keeps(at(0), SizeAgainstItsSource.AT_MOST)),
             about("Set", "intersection", keeps(at(0), SizeAgainstItsSource.AT_MOST)),
             about("Set", "difference", keeps(at(0), SizeAgainstItsSource.AT_MOST)),
+            // And the two that put one value in what they are handed: a set holds it once, and a
+            // map holds it under the key, in place of what was there.
+            about("Set", "insert", putsIn(at(0), at(1))),
+            about("Map", "insert", putsIn(at(1), at(2))),
             // Every value in the answer came from the map it was given: the one under the key is
             // what the closure made of it, and every other is the value that was there. Read as a
             // closure result alone, what is true of one value would be said of all of them.
@@ -336,7 +343,8 @@ public final class OperationFacts {
             // What it was handed holding anything, where its size is not its source's: a set
             // made of a list or of what a closure answered holds one of each repeated value, a
             // distinct list one of each, a grouping one key per value it was keyed by.
-            about("Set", "map", lemma(law(AnswerAspect.EMPTINESS, holdsSomething(CONTAINER)))),
+            about("Set", "map", lemma(law(AnswerAspect.EMPTINESS, holdsSomething(CONTAINER)),
+                    iff(holdsSomething(CARRIED), holdsSomething(WALKED)))),
             about("Set", "fromList", law(AnswerAspect.EMPTINESS, holdsSomething(at(0)))),
             about("Set", "fromList", new OperationFact.LeavesUnsaid(OperationLaw.Observed.SIZE,
                     Unsayable.HOW_MANY_DIFFERENT_VALUES)),
@@ -405,6 +413,20 @@ public final class OperationFacts {
                     any(holdsSomething(at(0)), holdsSomething(at(1)))),
                     iff(holdsSomething(CARRIED),
                             any(holdsSomething(at(0)), holdsSomething(WALKED))))),
+            // As many as the first map, and one more for each entry of the second under a key the
+            // first does not have: the walk over the second keeps the first's keys and adds the
+            // ones it meets, each key of a map met once.
+            about("Map", "union", lemma(related(equalToTheSum(
+                    sizeOf(answerOf("Map", "union", the(at(0)), the(at(1)))), sizeOf(at(0)),
+                    howManyMeet(at(1), isTrue(answerOf("Map", "containsKey",
+                            new LawSubject.KeyOf<>(at(1)), the(at(0)))).denied()))),
+                    equalToTheSum(sizeOf(the(CARRIED)), sizeOf(at(0)),
+                            howManyMeet(WALKED, isTrue(answerOf("Map", "containsKey",
+                                    new LawSubject.KeyOf<>(WALKED), the(at(0)))).denied())),
+                    iff(isTrue(answerOf("Map", "containsKey", the(ANY), the(CARRIED))),
+                            any(isTrue(answerOf("Map", "containsKey", the(ANY), the(at(0)))),
+                                    some(WALKED, alike(new LawSubject.KeyOf<>(WALKED),
+                                            the(ANY))))))),
             about("List", "zipShortest", lemma(law(AnswerAspect.EMPTINESS,
                     all(holdsSomething(at(0)), holdsSomething(at(1)))),
                     equal(number(carried(0)), sizeOf(WALKED), 0),
@@ -472,6 +494,16 @@ public final class OperationFacts {
             about("Map", "containsKey", related(any(
                     isTrue(answerOf("Map", "containsKey", the(at(0)), the(at(1)))).denied(),
                     holdsSomething(at(1))))),
+            about("Map", "containsKey", related(iff(
+                    isTrue(answerOf("Map", "containsKey", the(at(0)), the(at(1)))),
+                    some(at(1), alike(new LawSubject.KeyOf<>(at(1)), the(at(0))))))),
+            // A map holds each of its keys once, so of another map's entries no more are under
+            // keys it holds than it holds: with the ones under keys it does not hold, they are no
+            // more than it and those.
+            about("Map", "containsKey", related(atLeast(sizeOf(at(1)), 1,
+                    howManyMeet(ANY, isTrue(answerOf("Map", "containsKey",
+                            new LawSubject.KeyOf<>(ANY), the(at(1)))).denied()), 1,
+                    sizeOf(ANY), -1, 0))),
             about("Map", "get", related(iff(
                     holdsAValue(answerOf("Map", "get", the(at(0)), the(at(1)))),
                     isTrue(answerOf("Map", "containsKey", the(at(0)), the(at(1))))))),
@@ -691,6 +723,11 @@ public final class OperationFacts {
         return new OperationFact.ResultIsNoSmallerThan(container);
     }
 
+    /** The answer is {@code into} with {@code value} put in. */
+    private static OperationFact putsIn(ArgumentRef value, ArgumentRef into) {
+        return new OperationFact.PutsAValueIn(value, into);
+    }
+
     /** The answer is keyed by keys {@code map} was keyed by. */
     private static OperationFact keepsTheKeysOf(ArgumentRef map) {
         return new OperationFact.KeepsTheKeysOf(map);
@@ -741,17 +778,24 @@ public final class OperationFacts {
     }
 
     /**
-     * {@code law}, a law of an operation the library writes in the language, as the lemma it is: to
-     * be proved against the body, with what a walk in the body carries at every step stated by
-     * {@code carries}.
+     * {@code stated}, a law of an operation the library writes in the language or what it answers
+     * beside what others answer, as the lemma it is: to be proved against the body, with what a
+     * walk in the body carries at every step stated by {@code carries}.
      */
     @SafeVarargs
-    private static OperationFact lemma(OperationFact law, LawProposition<ArgumentRef>... carries) {
+    private static OperationFact lemma(OperationFact stated,
+                                       LawProposition<ArgumentRef>... carries) {
         List<LawProposition<ArgumentRef>> clauses = new ArrayList<>();
         for (LawProposition<ArgumentRef> clause : carries) {
             clauses.add(clause);
         }
-        return new OperationFact.IsALemma(((OperationFact.HasALaw) law).law(), clauses);
+        return switch (stated) {
+            case OperationFact.HasALaw law -> new OperationFact.IsALemma(law.law(), clauses);
+            case OperationFact.IsRelated related ->
+                    new OperationFact.IsRelatedInALemma(related.holds(), clauses);
+            default -> throw new IllegalArgumentException(
+                    "a lemma states a law or a relation: " + stated);
+        };
     }
 
     /** What a kernel's answer comes to beside what other kernels answer on its arguments. */
@@ -811,6 +855,15 @@ public final class OperationFacts {
 
     private static LawNumber<ArgumentRef> sizeOf(LawSubject<ArgumentRef> subject) {
         return new LawNumber.SizeOf<>(subject);
+    }
+
+    /** {@code whole} being {@code one} and {@code other} added. */
+    private static LawProposition<ArgumentRef> equalToTheSum(LawNumber<ArgumentRef> whole,
+                                                             LawNumber<ArgumentRef> one,
+                                                             LawNumber<ArgumentRef> other) {
+        return new LawProposition.Compared<>(new LinearForm<>(ExactRatio.ZERO,
+                Map.of(whole, ExactRatio.ONE, one, ExactRatio.of(-1), other, ExactRatio.of(-1))),
+                Rel.EQ);
     }
 
     /** What an observation of the answer on {@code aspect} comes to is {@code why}, which the
@@ -888,6 +941,16 @@ public final class OperationFacts {
                                                        long constant) {
         return new LawProposition.Compared<>(new LinearForm<>(ExactRatio.of(constant),
                 Map.of(a, ExactRatio.of(by))), Rel.GE);
+    }
+
+    /** {@code byA · a + byB · b + byC · c + constant >= 0}. */
+    private static LawProposition<ArgumentRef> atLeast(LawNumber<ArgumentRef> a, long byA,
+                                                       LawNumber<ArgumentRef> b, long byB,
+                                                       LawNumber<ArgumentRef> c, long byC,
+                                                       long constant) {
+        return new LawProposition.Compared<>(new LinearForm<>(ExactRatio.of(constant),
+                Map.of(a, ExactRatio.of(byA), b, ExactRatio.of(byB), c, ExactRatio.of(byC))),
+                Rel.GE);
     }
 
     /** {@code byA · a + byB · b + constant >= 0}. */

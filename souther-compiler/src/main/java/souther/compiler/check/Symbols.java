@@ -68,14 +68,6 @@ public sealed interface Symbols extends NameSense permits ResolvedSymbols, Deriv
     TheWalk theWalk();
 
     /**
-     * The one operation the library publishes that states elements are distinct, which an invariant
-     * written over is a constraint rather than a call.
-     *
-     * <p>Handed on for the reason {@link #theWalk} is.
-     */
-    ValueName.Stdlib.Operation theDistinctnessPredicate();
-
-    /**
      * Which kernel {@code operation} is declared to be, or null where it is not a kernel.
      *
      * <p>The question a pass asks when it recognises an operation by what it does rather than by

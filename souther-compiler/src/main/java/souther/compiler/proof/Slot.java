@@ -29,4 +29,8 @@ public sealed interface Slot {
 
     /** Any value at all, the same wherever {@code which} names it in one statement. */
     record Every(int which) implements Slot {}
+
+    /** What the operation answers, in a statement about it proved against its body; read off
+     *  the operation's answer handed its own arguments, which is how the statement names it. */
+    record Answer() implements Slot {}
 }

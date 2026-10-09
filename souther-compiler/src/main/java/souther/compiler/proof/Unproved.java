@@ -41,6 +41,10 @@ public sealed interface Unproved {
         /** That a step from where the statement of a walk holds ends where it holds. */
         A_STEP,
         /** That every case the body answers by is one the statement names. */
-        THE_CASES
+        THE_CASES,
+        /** That every element of the answer came from where the statement says. */
+        WHERE_ITS_ELEMENTS_CAME_FROM,
+        /** That the answer holds as many elements as the statement says. */
+        HOW_MANY_IT_HOLDS
     }
 }

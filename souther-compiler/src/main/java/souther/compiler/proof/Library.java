@@ -1,6 +1,7 @@
 package souther.compiler.proof;
 
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ClosurePositions;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
@@ -49,6 +50,21 @@ public interface Library {
      * each holding wherever the operation answers. Axioms of a kernel, held to what it computes.
      */
     List<LawProposition<Slot>> relations(ValueName.Stdlib.Operation operation);
+
+    /**
+     * Where the elements of {@code operation}'s answer came from and how many there are, over its
+     * arguments by place — declared of a kernel, proved of an operation the library writes — or
+     * null where nothing settles it.
+     */
+    BuiltFrom<Integer> builtFrom(ValueName.Stdlib.Operation operation);
+
+    /** Which argument {@code operation} puts in which, where it answers a container with one value
+     *  put in — an axiom of a kernel — or null where it does not. */
+    Put puts(ValueName.Stdlib.Operation operation);
+
+    /** An answer that is what the argument at {@code into} holds with the one at {@code value} put
+     *  in: at most one element more, and each element one of the two's. */
+    record Put(int value, int into) {}
 
     /** The types of {@code operation}'s arguments, in order. */
     default List<Type> takes(ValueName.Stdlib.Operation operation) {

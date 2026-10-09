@@ -367,28 +367,6 @@ public final class Stdlib {
     private static final ValueName.Stdlib.Operation AN_ELEMENT_AT_AN_INDEX =
             ValueName.Stdlib.operation("List", "get");
 
-    /**
-     * The one operation this library publishes that states elements are distinct: that a list holds
-     * no two of them with the same key.
-     *
-     * <p>The one that states it, not the only one about distinctness — {@code distinct} and
-     * {@code distinctBy} build a list that is, and say nothing of the list they were given. An
-     * invariant is a clause, so what a backend can represent as a constraint is the claim, and this
-     * is the operation that makes it.
-     *
-     * <p>Here for the reason {@link #theWalk} is: it has a Souther body and so no kernel to ask
-     * about, and a pass spelling it out would be deciding what this library publishes it as.
-     *
-     * <p>That this library has it is checked while the library is built.
-     */
-    public ValueName.Stdlib.Operation theDistinctnessPredicate() {
-        return THE_DISTINCTNESS_PREDICATE;
-    }
-
-    /** Which operation states distinctness. Named beside the walk for the same reason. */
-    private static final ValueName.Stdlib.Operation THE_DISTINCTNESS_PREDICATE =
-            ValueName.Stdlib.operation("List", "allDistinctBy");
-
     /** What the language declares of its kernels, as the one value everything emitting a call to
      *  one reads. What a checked program carries across the boundary and what a backend derives its
      *  descriptors from is this, so neither is reading a library of its own. */
@@ -608,12 +586,9 @@ public final class Stdlib {
             Map<String, ValueName.Stdlib.Operation> named = new LinkedHashMap<>(operations);
             SUGARED.forEach(sugar -> named.put(sugar.written().qualified(), sugar.written()));
             SequencedMap<String, PublishedSignature> surface = surface(sugars);
-            for (ValueName.Stdlib.Operation ascribed
-                    : List.of(THE_WALK, THE_DISTINCTNESS_PREDICATE)) {
-                if (!helpers.containsKey(ascribed)) {
-                    throw new IllegalStateException("a library publishes `" + ascribed
-                            + "` as a body of its own, and this one publishes no such body");
-                }
+            if (!helpers.containsKey(THE_WALK)) {
+                throw new IllegalStateException("a library publishes `" + THE_WALK
+                        + "` as a body of its own, and this one publishes no such body");
             }
             return new Stdlib(
                     Collections.unmodifiableSequencedMap(new LinkedHashMap<>(entries)),

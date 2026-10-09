@@ -43,6 +43,19 @@ public sealed interface Proof {
         }
     }
 
+    /**
+     * Where every element of the answer came from, read off what the body builds it with: a walk
+     * putting in at most one value for each element it is handed, an argument as it stands, or what
+     * another operation is settled to build.
+     */
+    record ByWhatItsBodyBuilds(ValueName.Stdlib.Operation operation, Set<Used> used)
+            implements Proof {
+
+        public ByWhatItsBodyBuilds {
+            used = Set.copyOf(used);
+        }
+    }
+
     /** What a proof took of {@code operation}. */
     record Used(ValueName.Stdlib.Operation operation, Taken taken) {
 
@@ -65,6 +78,10 @@ public sealed interface Proof {
         /** The number it answers, as a number of its arguments. */
         THE_NUMBER_IT_ANSWERS,
         /** That its answer lists every element of an argument, each once. */
-        WHAT_IT_LISTS
+        WHAT_IT_LISTS,
+        /** Where the elements of its answer came from, and how many there are. */
+        WHAT_IT_BUILDS,
+        /** That its answer is a container with one value put in. */
+        WHAT_IT_PUTS_IN
     }
 }

@@ -33,7 +33,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.function.Predicate;
 
 /**
  * What one binding of the declarations came to: every fact about the language's operations, held to
@@ -96,48 +95,56 @@ public final class BoundOperationFacts {
     BoundOperationFacts(Stdlib stdlib, List<BoundOperationFact> bound) {
         this.stdlib = stdlib;
         this.held = List.copyOf(bound);
+        // What is stated of an operation the library writes is filed once its body proves it and
+        // not before: a proof reads what is filed here, and a statement not proved is no fact.
+        List<BoundOperationFact> awaiting = new ArrayList<>();
         for (BoundOperationFact fact : held) {
-            ValueName key = fact.operation().operation();
-            // No default. A family added is a family this has to say how to collect.
-            switch (fact) {
-                case BoundOperationFact.OneAboutAnOperation one -> {
-                    Map<ValueName, BoundOperationFact.OneAboutAnOperation> byOperation =
-                            ones.computeIfAbsent(one.getClass(), _ -> new LinkedHashMap<>());
-                    if (byOperation.put(key, one) != null) {
-                        throw new IllegalStateException(key + " is declared to "
-                                + one.getClass().getSimpleName() + " twice");
-                    }
-                }
-                case BoundOperationFact.SeveralAboutAnOperation many ->
-                        several.computeIfAbsent(many.getClass(), _ -> new LinkedHashMap<>())
-                                .computeIfAbsent(key, _ -> new ArrayList<>()).add(many);
+            if (writes(fact.operation().operation())) {
+                awaiting.add(fact);
+            } else {
+                file(fact);
             }
         }
+        writtenAs = writtenAs();
+        relations = projected(BoundOperationFact.IsRelated.class, BoundOperationFact.IsRelated::holds);
+        Settling settling = settle(awaiting);
+        settled = settling.settled();
+        // One the body does not prove is an obligation, held apart, and no reader takes it.
+        List<BoundOperationFact> unproved = new ArrayList<>();
+        for (BoundOperationFact fact : awaiting) {
+            if (settling.proving().proves(fact)) {
+                file(fact);
+            } else {
+                unproved.add(fact);
+            }
+        }
+        notProvedOfTheirBodies = List.copyOf(unproved);
         // What each query over a family answers with, projected once from what was filed.
         noSmallerThan = projected(BoundOperationFact.ResultIsNoSmallerThan.class,
                 BoundOperationFact.ResultIsNoSmallerThan::container);
-        writtenAs = writtenAs();
-        relations = projected(BoundOperationFact.IsRelated.class, BoundOperationFact.IsRelated::holds);
-        Settling settling = settle();
-        settled = settling.settled();
-        // A bound or a case of an operation the library writes is one only where its body proves
-        // it; one it does not is an obligation, held apart, and no reader takes it.
-        List<BoundOperationFact> unproved = new ArrayList<>();
         bounds = projected(BoundOperationFact.BoundsItsResult.class,
-                BoundOperationFact.BoundsItsResult::bound,
-                each -> !writes(each.operation().operation())
-                        || settling.proving().bounds(asWritten(each), each.bound()),
-                unproved);
+                BoundOperationFact.BoundsItsResult::bound);
         cases = projected(BoundOperationFact.IsDefinedByCases.class,
-                BoundOperationFact.IsDefinedByCases::one,
-                each -> !writes(each.operation().operation())
-                        || settling.proving().answersInTheCase(asWritten(each), each.one()),
-                unproved);
-        notProvedOfTheirBodies = List.copyOf(unproved);
+                BoundOperationFact.IsDefinedByCases::one);
     }
 
-    private static ValueName.Stdlib.Operation asWritten(BoundOperationFact fact) {
-        return (ValueName.Stdlib.Operation) fact.operation().operation();
+    /** Files {@code fact} under its operation, in its family. */
+    private void file(BoundOperationFact fact) {
+        ValueName key = fact.operation().operation();
+        // No default. A family added is a family this has to say how to collect.
+        switch (fact) {
+            case BoundOperationFact.OneAboutAnOperation one -> {
+                Map<ValueName, BoundOperationFact.OneAboutAnOperation> byOperation =
+                        ones.computeIfAbsent(one.getClass(), _ -> new LinkedHashMap<>());
+                if (byOperation.put(key, one) != null) {
+                    throw new IllegalStateException(key + " is declared to "
+                            + one.getClass().getSimpleName() + " twice");
+                }
+            }
+            case BoundOperationFact.SeveralAboutAnOperation many ->
+                    several.computeIfAbsent(many.getClass(), _ -> new LinkedHashMap<>())
+                            .computeIfAbsent(key, _ -> new ArrayList<>()).add(many);
+        }
     }
 
     /** Which operation computes what each operator computes, read off the arithmetic each of them
@@ -162,30 +169,15 @@ public final class BoundOperationFacts {
     /** The facts of {@code kind} an operation carries, each read as {@code part}, by operation. */
     private <F extends BoundOperationFact.SeveralAboutAnOperation, V> Map<ValueName, List<V>>
             projected(Class<F> kind, Function<F, V> part) {
-        return projected(kind, part, _ -> true, new ArrayList<>());
-    }
-
-    /** The facts of {@code kind} an operation carries that are {@code taken}, each read as
-     *  {@code part}, by operation; those that are not go to {@code left}. */
-    private <F extends BoundOperationFact.SeveralAboutAnOperation, V> Map<ValueName, List<V>>
-            projected(Class<F> kind, Function<F, V> part, Predicate<F> taken,
-                      List<BoundOperationFact> left) {
         Map<ValueName, List<BoundOperationFact.SeveralAboutAnOperation>> byOperation =
                 several.getOrDefault(kind, Map.of());
         Map<ValueName, List<V>> out = new LinkedHashMap<>();
         byOperation.forEach((operation, facts) -> {
             List<V> parts = new ArrayList<>(facts.size());
             for (BoundOperationFact.SeveralAboutAnOperation each : facts) {
-                F fact = kind.cast(each);
-                if (taken.test(fact)) {
-                    parts.add(part.apply(fact));
-                } else {
-                    left.add(fact);
-                }
+                parts.add(part.apply(kind.cast(each)));
             }
-            if (!parts.isEmpty()) {
-                out.put(operation, List.copyOf(parts));
-            }
+            out.put(operation, List.copyOf(parts));
         });
         return Collections.unmodifiableMap(out);
     }
@@ -287,6 +279,21 @@ public final class BoundOperationFacts {
     /** A map an operation answers a list of what it holds, and which part of it. */
     public record Listed(DeclaredArgument map, MapPart part) {}
 
+    /** The argument the elements of {@code operation}'s answer stand in the order of, or null
+     *  where nothing says they do. */
+    public DeclaredArgument keepsTheOrderOf(ValueName operation) {
+        BoundOperationFact.KeepsTheOrderOf held =
+                one(BoundOperationFact.KeepsTheOrderOf.class, operation);
+        return held == null ? null : held.source();
+    }
+
+    /** Which argument {@code operation} puts in which, or null where it puts nothing in. Read by
+     *  the proofs of what the library's written operations build, and by no reader of a
+     *  condition. */
+    BoundOperationFact.PutsAValueIn putsAValueIn(ValueName operation) {
+        return one(BoundOperationFact.PutsAValueIn.class, operation);
+    }
+
     /** The map whose keys {@code operation} answers a map keyed by, or null where it keeps none. */
     public DeclaredArgument keepsTheKeysOf(ValueName operation) {
         BoundOperationFact.KeepsTheKeysOf held =
@@ -309,8 +316,8 @@ public final class BoundOperationFacts {
         return of == null ? null : of.get(observed);
     }
 
-    /** The bounds and cases stated of operations the library writes that their bodies do not
-     *  prove, and that no query answers with. */
+    /** What is stated of operations the library writes that their bodies do not prove, and that
+     *  no query answers with. */
     List<BoundOperationFact> notProvedOfTheirBodies() {
         return notProvedOfTheirBodies;
     }
@@ -354,7 +361,7 @@ public final class BoundOperationFacts {
     /** Every settling, read once off the facts: what is declared of the kernels and what follows
      *  from what they are declared to build, and what is proved of the operations the library
      *  writes in the language. */
-    private Settling settle() {
+    private Settling settle(List<BoundOperationFact> awaiting) {
         Map<ValueName, Map<OperationLaw.Observed, Settled>> out = new LinkedHashMap<>();
         Map<ValueName.Stdlib.Operation, Map<OperationLaw.Observed, ProvingTheLibrary.Stated>>
                 stated = new LinkedHashMap<>();
@@ -406,7 +413,7 @@ public final class BoundOperationFacts {
                 }
             }
         }
-        ProvingTheLibrary proving = new ProvingTheLibrary(stdlib, this, out, stated);
+        ProvingTheLibrary proving = new ProvingTheLibrary(stdlib, this, out, stated, awaiting);
         stated.forEach((operation, of) -> of.keySet().forEach(observed ->
                 out.computeIfAbsent(operation, _ -> new LinkedHashMap<>())
                         .put(observed, proving.settle(operation, observed))));
@@ -507,6 +514,44 @@ public final class BoundOperationFacts {
     public Set<ValueName> isStatedOverAProjection() {
         return ones(BoundOperationFact.IsStatedOverAProjection.class);
     }
+
+    /**
+     * Whether {@code operation} comes out true exactly where its first argument does not: a
+     * denial, as the law settling its truth says.
+     */
+    public boolean deniesItsArgument(ValueName operation) {
+        return settled(operation, OperationLaw.Observed.TRUTH)
+                instanceof Settled.ByALaw(OperationLaw.Observation<DeclaredArgument>(
+                        AnswerAspect aspect, LawProposition.Observed<DeclaredArgument>(
+                                LawSubject.Argument<DeclaredArgument>(DeclaredArgument of),
+                                SideAnswered side)), var _)
+                && aspect == AnswerAspect.TRUTH && side.aspect() == AnswerAspect.TRUTH
+                && !side.holds() && of.position() == 0;
+    }
+
+    /**
+     * Where {@code operation} comes out true exactly where no two elements of a container it is
+     * handed come to one answer of a closure it is handed: which argument is the container and
+     * which the closure — or null where it states no such thing.
+     *
+     * <p>Read off what its body is proved to come to: a closing of its truth as no two elements
+     * alike, which its proof shows is about its container and its closure, so the operation reads
+     * that container and is stated over that closure.
+     */
+    public NoTwoAlike statesNoTwoAlike(ValueName operation) {
+        if (!(settled(operation, OperationLaw.Observed.TRUTH)
+                instanceof Settled.Unsaid(Unsayable why))
+                || why != Unsayable.NO_TWO_ELEMENTS_ALIKE) {
+            return null;
+        }
+        DeclaredArgument by = isStatedOverAProjection(operation);
+        BoundOperationFact.ReadsItsContainer reads = readsItsContainer(operation);
+        return by == null || reads == null ? null : new NoTwoAlike(reads.container(), by);
+    }
+
+    /** The container no two elements of which are alike, and the closure whose answers they are
+     *  alike by. */
+    public record NoTwoAlike(DeclaredArgument container, DeclaredArgument by) {}
 
     /** Whether {@code operation} states its predicate of every element. */
     public boolean statesItsPredicateOfEveryElement(ValueName operation) {

@@ -95,8 +95,10 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     record BuildsItsResultFrom(DeclaredOperation operation, BuiltFrom<DeclaredArgument> built)
             implements OneAboutAnOperation {}
 
-    /** The operation answers a map keyed by keys {@code map} was keyed by, each the same value. */
-    record KeepsTheKeysOf(DeclaredOperation operation, DeclaredArgument map)
+    /** The operation answers a map keyed by keys {@code map} was keyed by, each the same value;
+     *  {@code states} is that, beside what a map answers asked whether it holds a key. */
+    record KeepsTheKeysOf(DeclaredOperation operation, DeclaredArgument map,
+                          LawProposition<Slot> states)
             implements OneAboutAnOperation {}
 
     /**
@@ -130,10 +132,34 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
         }
     }
 
+    /**
+     * What an operation the library writes answers stands to what it was handed and what others
+     * answer as {@code holds} says, to be proved against its body, with what a walk in the body
+     * carries ({@code carries}) in the words of a walk ({@link Slot}).
+     */
+    record HasARelatedLemma(DeclaredOperation operation, LawProposition<Slot> holds,
+                            List<LawProposition<Slot>> carries)
+            implements SeveralAboutAnOperation {
+
+        public HasARelatedLemma {
+            carries = List.copyOf(carries);
+        }
+    }
+
     /** What a kernel answers stands to what others answer on its arguments as {@code holds} says,
      *  over its arguments by place and any value ({@link Slot}). */
     record IsRelated(DeclaredOperation operation, LawProposition<Slot> holds)
             implements SeveralAboutAnOperation {}
+
+    /** The elements of the operation's answer stand in the order of the elements of {@code source}
+     *  they came from. */
+    record KeepsTheOrderOf(DeclaredOperation operation, DeclaredArgument source)
+            implements OneAboutAnOperation {}
+
+    /** The operation answers what {@code into} holds with {@code value} put in: at most one element
+     *  more, each element one of {@code into}'s or {@code value}. */
+    record PutsAValueIn(DeclaredOperation operation, DeclaredArgument value, DeclaredArgument into)
+            implements OneAboutAnOperation {}
 
     /** The operation answers a list of {@code part} of what {@code map} holds. */
     record ListsAPartOf(DeclaredOperation operation, DeclaredArgument map,

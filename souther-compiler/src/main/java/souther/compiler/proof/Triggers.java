@@ -11,13 +11,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Where a statement holding of every value hands that value to an operation: which operation, and
- * at which of its arguments.
+ * Where a statement holding of every value hands that value to an operation, or counts its
+ * elements: which operation and at which of its arguments, or whether it is a container counted.
  *
  * <p>What a statement of every value is worth taking of is a value some other statement already
  * hands that operation there — a key a map is asked whether it holds is worth asking the statement
- * of keys of — and nothing else, since taking it of every value about would take it of values it
- * says nothing useful of, and there are many.
+ * of keys of — or a container some other statement already counts the elements of, the same way;
+ * and nothing else, since taking it of every value about would take it of values it says nothing
+ * useful of, and there are many.
  */
 final class Triggers {
 
@@ -29,6 +30,17 @@ final class Triggers {
         Map<ValueName.Stdlib.Operation, Integer> out = new LinkedHashMap<>();
         in(statement, which, out);
         return out;
+    }
+
+    /** Whether {@code statement} counts the elements of {@link Slot.Every} {@code which}. */
+    static boolean counts(LawProposition<Slot> statement, int which) {
+        boolean[] found = {false};
+        Collect.counted(statement, container -> {
+            if (container instanceof Slot.Every(int every) && every == which) {
+                found[0] = true;
+            }
+        });
+        return found[0];
     }
 
     private static void in(LawProposition<Slot> statement, int which,

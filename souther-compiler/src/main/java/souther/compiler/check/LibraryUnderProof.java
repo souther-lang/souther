@@ -4,6 +4,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.proof.AppliedClosures;
 import souther.compiler.proof.Library;
 import souther.compiler.proof.Slot;
+import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ClosurePositions;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
@@ -15,6 +16,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.List;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 
 /**
  * The library as a proof about one of its operations may take it: the kernels' facts as they are
@@ -29,13 +31,19 @@ final class LibraryUnderProof implements Library {
     private final Stdlib stdlib;
     private final BoundOperationFacts facts;
     private final BiFunction<ValueName.Stdlib.Operation, OperationLaw.Observed, Settled> settling;
+    private final Function<ValueName.Stdlib.Operation, BuiltFrom<Integer>> building;
+    private final Function<ValueName.Stdlib.Operation, List<LawProposition<Slot>>> relating;
 
     LibraryUnderProof(Stdlib stdlib, BoundOperationFacts facts,
                       BiFunction<ValueName.Stdlib.Operation, OperationLaw.Observed, Settled>
-                              settling) {
+                              settling,
+                      Function<ValueName.Stdlib.Operation, BuiltFrom<Integer>> building,
+                      Function<ValueName.Stdlib.Operation, List<LawProposition<Slot>>> relating) {
         this.stdlib = stdlib;
         this.facts = facts;
         this.settling = settling;
+        this.building = building;
+        this.relating = relating;
     }
 
     @Override
@@ -71,6 +79,17 @@ final class LibraryUnderProof implements Library {
 
     @Override
     public List<LawProposition<Slot>> relations(ValueName.Stdlib.Operation operation) {
-        return facts.relationsOf(operation);
+        return relating.apply(operation);
+    }
+
+    @Override
+    public BuiltFrom<Integer> builtFrom(ValueName.Stdlib.Operation operation) {
+        return building.apply(operation);
+    }
+
+    @Override
+    public Put puts(ValueName.Stdlib.Operation operation) {
+        BoundOperationFact.PutsAValueIn puts = facts.putsAValueIn(operation);
+        return puts == null ? null : new Put(puts.value().position(), puts.into().position());
     }
 }

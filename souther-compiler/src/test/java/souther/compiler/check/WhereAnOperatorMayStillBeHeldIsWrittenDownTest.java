@@ -451,6 +451,12 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " operator it is"),
             new Held("souther.compiler.proof.LibraryProver.walksIn",
                     "the same, looking for a walk among the operands"),
+            new Held("souther.compiler.proof.Substituted.value",
+                    "puts one value in place of another in both operands of a number a body"
+                            + " computes, keeping the operator it was written with"),
+            new Held("souther.compiler.proof.WhatItAccumulates.combined",
+                    "names the operator a body writes the step of an accumulation with, which is"
+                            + " what the accumulation it is stated to be says the step is"),
             new Held("souther.compiler.stdlib.TheWalksBody.isTheNext",
                     "names the addition the walk moves to its next index by"),
             new Held("souther.compiler.check.BinaryElaborator.operandBeside",

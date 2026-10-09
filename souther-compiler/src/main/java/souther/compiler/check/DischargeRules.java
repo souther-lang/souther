@@ -83,8 +83,11 @@ final class DischargeRules {
         }
     }
 
-    /** Denial, which the analysis representation keeps as the call it is. */
-    static final ValueName NOT = op("Bool", "not");
+    /** Whether {@code operation} denies its argument, which the analysis representation keeps as
+     *  the call it is: read off the law its truth is settled by. */
+    static boolean denies(ValueName operation) {
+        return facts().deniesItsArgument(operation);
+    }
 
     /** The operations each table has a rule for. */
     static Set<ValueName> builtOperations() {
@@ -477,7 +480,7 @@ final class DischargeRules {
     static boolean readsAsATerm(ValueName operation) {
         return answersANumberTakenOfItsArgument(operation) || builtOperations().contains(operation)
                 || carryingOperations().contains(operation) || isQuantifier(operation)
-                || NOT.equals(operation);
+                || denies(operation);
     }
 
     /** The one container {@code e} asks the size of, or null where it is not a size call over one

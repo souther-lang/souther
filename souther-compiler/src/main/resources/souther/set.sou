@@ -25,8 +25,8 @@ let toList (s: Set<'a>): List<'a> = intrinsic "set.toList"
 let fromList (xs: List<'a>): Set<'a> = intrinsic "set.fromList"
 
 // The higher-order operations (Elm `Set.map` / `filter` / `foldl` / `partition`). Like `Map`, `Set`
-// adds no loop of its own: each one goes out through `toList`, uses the List combinator, and comes
-// back through `fromList`, so `List.fold` stays the single primitive. The round trip is what a
+// adds no loop of its own: each one goes out through `toList`, uses the List combinator, and puts
+// what it keeps back with `insert`, so `List.fold` stays the single primitive. The round trip is what a
 // caller would otherwise write at every call site, and writing it there is what pushed set-shaped
 // work into List land — `openIssue` in the issuetracker example cleaned its labels as a list purely
 // because a set could not be mapped.
@@ -38,7 +38,8 @@ let fromList (xs: List<'a>): Set<'a> = intrinsic "set.fromList"
 let fold (step: ('acc, 'a) -> 'acc, seed: 'acc, s: Set<'a>): 'acc =
     List.fold(step, seed, Set.toList(s))
 
-let map (f: ('a) -> 'b, s: Set<'a>): Set<'b> = Set.fromList(List.map(f, Set.toList(s)))
+let map (f: ('a) -> 'b, s: Set<'a>): Set<'b> =
+    Set.fold((acc, x) -> Set.insert(f(x), acc), Set.empty, s)
 
 let filter (keep: ('a) -> Bool, s: Set<'a>): Set<'a> =
     Set.fold((acc, x) -> if keep(x) then Set.insert(x, acc) else acc, Set.empty, s)

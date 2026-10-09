@@ -199,11 +199,6 @@ public final class DerivedSymbols implements Symbols {
     }
 
     @Override
-    public ValueName.Stdlib.Operation theDistinctnessPredicate() {
-        return resolved.theDistinctnessPredicate();
-    }
-
-    @Override
     public Kernel kernelOf(ValueName.Stdlib.Operation operation) {
         return resolved.kernelOf(operation);
     }

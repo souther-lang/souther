@@ -98,6 +98,12 @@ final class Reading {
         return Set.copyOf(used);
     }
 
+    /** That what is read rests on {@code taken} as well, where a proof took it beside the
+     *  reading. */
+    void took(Proof.Used taken) {
+        used.add(taken);
+    }
+
     Library library() {
         return library;
     }

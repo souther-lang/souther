@@ -140,7 +140,10 @@ final class OperationFactBinder {
                         "the map the keys were kept from");
                 holdTheAnswerTo(declaration, map, Type::keyOf, Type::keyOf,
                         "a map keyed by the keys of that map");
-                yield new BoundOperationFact.KeepsTheKeysOf(operation, map);
+                yield new BoundOperationFact.KeepsTheKeysOf(operation, map,
+                        slots(stdlib, declaration, kept.states(
+                                theLibraryOperation(operation.operation()),
+                                declaration.params().size()), false));
             }
             case OperationFact.HasALaw stated -> {
                 // A law beside a body is a second account of what the body does: what is stated
@@ -162,6 +165,17 @@ final class OperationFactBinder {
                 yield new BoundOperationFact.HasALemma(operation,
                         ((BoundOperationFact.HasALaw) holdLaw(declaration, operation,
                                 lemma.states())).law(),
+                        lemma.carries().stream().map(clause ->
+                                slots(stdlib, declaration, clause, true)).toList());
+            }
+            case OperationFact.IsRelatedInALemma lemma -> {
+                if (!stdlib.helpers().containsKey(theLibraryOperation(operation.operation()))) {
+                    throw new IllegalStateException(operation.operation() + " is a kernel, with no"
+                            + " body for a lemma to be proved against: what is stated of it beside"
+                            + " other kernels is an axiom");
+                }
+                yield new BoundOperationFact.HasARelatedLemma(operation,
+                        slots(stdlib, declaration, lemma.holds(), false),
                         lemma.carries().stream().map(clause ->
                                 slots(stdlib, declaration, clause, true)).toList());
             }
@@ -197,6 +211,33 @@ final class OperationFactBinder {
                         holdToTheDeclaration(declaration, bounded.container(),
                                 new ArgumentRef.TheContainer(), TypeRequirement.SIZED,
                                 "what the result is no smaller than"));
+            }
+            // An order is of a sequence, and of the answer's elements as it is of the source's.
+            case OperationFact.KeepsTheOrderOf kept -> {
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
+                        "what keeps the order of what it was built from");
+                yield new BoundOperationFact.KeepsTheOrderOf(operation,
+                        holdToTheDeclaration(declaration, kept.source(),
+                                new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
+                                "what the order is of"));
+            }
+            // What a value is put in answers a container like it, and what is put in is one of what
+            // such a container holds.
+            case OperationFact.PutsAValueIn puts -> {
+                if (stdlib.intrinsicOf(theLibraryOperation(operation.operation())) == null) {
+                    throw new IllegalStateException(operation.operation() + " is written in the"
+                            + " language, and what it puts in is declared beside its body: what a"
+                            + " body builds is proved of it");
+                }
+                DeclaredArgument into = holdToTheDeclaration(declaration, puts.into(), null,
+                        TypeRequirement.CONTAINER, "what a value is put in");
+                DeclaredArgument value = holdToTheDeclaration(declaration, puts.value(), null,
+                        TypeRequirement.ANY, "the value put in");
+                holdTheAnswerTo(declaration, into, UnaryOperator.identity(),
+                        UnaryOperator.identity(), "the same kind of container");
+                holdTheAnswerTo(declaration, value, Type::elementOfAContainer,
+                        UnaryOperator.identity(), "a container and one of what it holds");
+                yield new BoundOperationFact.PutsAValueIn(operation, value, into);
             }
             case OperationFact.ReadsItsContainer reads ->
                     new BoundOperationFact.ReadsItsContainer(operation,

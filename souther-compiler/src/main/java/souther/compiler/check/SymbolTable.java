@@ -100,10 +100,6 @@ final class SymbolTable<D> {
         return stdlib.walk();
     }
 
-    ValueName.Stdlib.Operation theDistinctnessPredicate() {
-        return stdlib.theDistinctnessPredicate();
-    }
-
     Kernel kernelOf(ValueName.Stdlib.Operation operation) {
         Stdlib.Intrinsic intrinsic = stdlib.intrinsicOf(operation);
         return intrinsic == null ? null : intrinsic.kernel();

@@ -128,6 +128,8 @@ final class Validity {
                         for (LawNumber<Value> number : form.coefs().keySet()) {
                             if (known.add(number)) {
                                 standing(number).forEach(todo::push);
+                                countsBetween(number, known, todo);
+                                numberCongruent(number, truths, known, todo);
                             }
                         }
                         where = where.assume(numbered(form), states, spacings(form));
@@ -296,36 +298,181 @@ final class Validity {
                 }
             }
         }
+        congruent(atom, holds, truths, known, todo);
         return true;
+    }
+
+    /**
+     * What two values being one says of the truths and numbers taken: two of them that are one
+     * once the one value is put in place of the other are one. Asked where two values are taken to
+     * be one, of every two truths and every two numbers already taken; and where a truth or a
+     * number is taken, of it and each already taken, under every two values already taken to be
+     * one.
+     *
+     * <p>Between what is taken and nothing else. A truth about something made of the one value is
+     * not made up for the other where nothing asked about it, so this adds no atom to the search.
+     * And not where one of the two values is made of the other, since putting it in place of the
+     * other changes what it is put in.
+     */
+    private static void congruent(Atom atom, boolean holds, Map<Atom, Boolean> truths,
+                                  Set<Object> known, Deque<LawProposition<Value>> todo) {
+        if (atom instanceof Atom.Alike(Set<Value> values)) {
+            if (!holds) {
+                return;
+            }
+            List<Value> two = List.copyOf(values);
+            if (inside(two.get(0), two.get(1)) || inside(two.get(1), two.get(0))) {
+                return;
+            }
+            Map<LawProposition<Value>, LawProposition<Value>> byImage = new HashMap<>();
+            for (Atom taken : List.copyOf(truths.keySet())) {
+                if (!taken.equals(atom)) {
+                    LawProposition<Value> statement = statementOf(taken);
+                    LawProposition<Value> first = byImage.putIfAbsent(
+                            Substituted.proposition(statement, two.get(0), two.get(1)), statement);
+                    if (first != null) {
+                        todo.push(Props.same(first, statement));
+                    }
+                }
+            }
+            Map<LawNumber<Value>, LawNumber<Value>> numbersByImage = new HashMap<>();
+            for (LawNumber<Value> number : numbersIn(known)) {
+                LawNumber<Value> first = numbersByImage.putIfAbsent(
+                        Substituted.number(number, two.get(0), two.get(1)), number);
+                if (first != null) {
+                    todo.push(equal(first, number));
+                }
+            }
+            return;
+        }
+        LawProposition<Value> statement = statementOf(atom);
+        for (List<Value> two : alike(truths)) {
+            LawProposition<Value> image =
+                    Substituted.proposition(statement, two.get(0), two.get(1));
+            for (Atom taken : List.copyOf(truths.keySet())) {
+                if (!taken.equals(atom) && !(taken instanceof Atom.Alike)) {
+                    LawProposition<Value> other = statementOf(taken);
+                    if (image.equals(Substituted.proposition(other, two.get(0), two.get(1)))) {
+                        todo.push(Props.same(statement, other));
+                    }
+                }
+            }
+        }
+    }
+
+    /** What every two values already taken to be one say of {@code number}, just taken, and each
+     *  number taken before it. */
+    private static void numberCongruent(LawNumber<Value> number, Map<Atom, Boolean> truths,
+                                        Set<Object> known, Deque<LawProposition<Value>> todo) {
+        for (List<Value> two : alike(truths)) {
+            LawNumber<Value> image = Substituted.number(number, two.get(0), two.get(1));
+            for (LawNumber<Value> other : numbersIn(known)) {
+                if (!other.equals(number)
+                        && image.equals(Substituted.number(other, two.get(0), two.get(1)))) {
+                    todo.push(equal(number, other));
+                }
+            }
+        }
+    }
+
+    /** Every two values taken to be one, where neither is made of the other. */
+    private static List<List<Value>> alike(Map<Atom, Boolean> truths) {
+        List<List<Value>> out = new ArrayList<>();
+        truths.forEach((atom, holds) -> {
+            if (holds && atom instanceof Atom.Alike(Set<Value> values)) {
+                List<Value> two = List.copyOf(values);
+                if (!inside(two.get(0), two.get(1)) && !inside(two.get(1), two.get(0))) {
+                    out.add(two);
+                }
+            }
+        });
+        return out;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<LawNumber<Value>> numbersIn(Set<Object> known) {
+        List<LawNumber<Value>> out = new ArrayList<>();
+        for (Object each : known) {
+            if (each instanceof LawNumber<?> number) {
+                out.add((LawNumber<Value>) number);
+            }
+        }
+        return out;
+    }
+
+    private static LawProposition<Value> equal(LawNumber<Value> one, LawNumber<Value> other) {
+        return Props.compared(Props.minus(LinearForm.atom(one), LinearForm.atom(other)), Rel.EQ);
+    }
+
+    /** Whether {@code part} stands somewhere inside {@code whole}, other than as all of it. */
+    private static boolean inside(Value part, Value whole) {
+        return !part.equals(whole) && !Substituted.value(whole, part, new Value.NothingYet())
+                .equals(whole);
+    }
+
+    /** The statement that {@code atom} holds. */
+    private static LawProposition<Value> statementOf(Atom atom) {
+        return switch (atom) {
+            case Atom.Holds(Value value, AnswerAspect aspect) -> new LawProposition.Observed<>(
+                    new LawSubject.Argument<>(value), new SideAnswered(aspect, true));
+            case Atom.Some(Value container, LawProposition<Value> ofTheElement) ->
+                    new LawProposition.SomeElement<>(container, ofTheElement, true);
+            case Atom.Alike(Set<Value> values) -> {
+                List<Value> two = List.copyOf(values);
+                yield new LawProposition.Same<>(new LawSubject.Argument<>(two.get(0)),
+                        new LawSubject.Argument<>(two.get(1)), true);
+            }
+        };
     }
 
     /**
      * What one statement about some element of a container says of another about the same
      * container: where what the one says of an element is enough for the other's, that some element
-     * meets the one is enough for some element meeting the other, and the count of the one is no
-     * more than the count of the other.
+     * meets the one is enough for some element meeting the other.
      */
     private List<LawProposition<Value>> between(Atom.Some one, Atom.Some other) {
         List<LawProposition<Value>> out = new ArrayList<>();
         if (enough(one.ofTheElement(), other.ofTheElement())) {
-            out.addAll(implying(one, other));
+            out.add(Props.either(new LawProposition.SomeElement<>(one.container(),
+                    one.ofTheElement(), false), new LawProposition.SomeElement<>(
+                    other.container(), other.ofTheElement(), true)));
         }
         if (enough(other.ofTheElement(), one.ofTheElement())) {
-            out.addAll(implying(other, one));
+            out.add(Props.either(new LawProposition.SomeElement<>(other.container(),
+                    other.ofTheElement(), false), new LawProposition.SomeElement<>(
+                    one.container(), one.ofTheElement(), true)));
         }
         return out;
     }
 
-    private static List<LawProposition<Value>> implying(Atom.Some one, Atom.Some other) {
-        return List.of(
-                Props.either(new LawProposition.SomeElement<>(one.container(), one.ofTheElement(),
-                        false), new LawProposition.SomeElement<>(other.container(),
-                        other.ofTheElement(), true)),
-                Props.compared(Props.minus(
-                        LinearForm.atom(new LawNumber.HowManyMeet<>(other.container(),
-                                other.ofTheElement())),
-                        LinearForm.atom(new LawNumber.HowManyMeet<>(one.container(),
-                                one.ofTheElement()))), Rel.GE));
+    /**
+     * The same of the counts, where {@code number} is a count just taken: of each count of the same
+     * container already taken, where what one says of an element is enough for the other's, the
+     * one counts no more than the other.
+     *
+     * <p>Asked of counts and not of every statement that some element meets something, since a
+     * count is a number the search has to carry and a statement nothing counts is not.
+     */
+    private void countsBetween(LawNumber<Value> number, Set<Object> known,
+                               Deque<LawProposition<Value>> todo) {
+        if (!(number instanceof LawNumber.HowManyMeet<Value>(Value container,
+                LawProposition<Value> ofTheElement))
+                || container instanceof Value.Listed) {
+            return;
+        }
+        for (LawNumber<Value> other : numbersIn(known)) {
+            if (other instanceof LawNumber.HowManyMeet<Value>(Value them, var theirs)
+                    && them.equals(container) && !other.equals(number)) {
+                if (enough(ofTheElement, theirs)) {
+                    todo.push(Props.compared(Props.minus(LinearForm.atom(other),
+                            LinearForm.atom(number)), Rel.GE));
+                }
+                if (enough(theirs, ofTheElement)) {
+                    todo.push(Props.compared(Props.minus(LinearForm.atom(number),
+                            LinearForm.atom(other)), Rel.GE));
+                }
+            }
+        }
     }
 
     /** Whether {@code one}, said of an element, is enough for {@code other} said of it. */
@@ -357,13 +504,10 @@ final class Validity {
                     List.of(Props.same(holds(value), Props.compared(
                             Props.minus(sizeOf(value), Props.constant(1)), Rel.GE)));
             case Atom.Holds _ -> List.of();
+            // How many elements meet it is said where the count is taken, beside the count.
             case Atom.Some(Value container, LawProposition<Value> ofTheElement) -> List.of(
                     Props.either(new LawProposition.SomeElement<>(container, ofTheElement, false),
-                            holds(container)),
-                    Props.same(new LawProposition.SomeElement<>(container, ofTheElement, true),
-                            Props.compared(Props.minus(LinearForm.atom(
-                                    new LawNumber.HowManyMeet<>(container, ofTheElement)),
-                                    Props.constant(1)), Rel.GE)));
+                            holds(container)));
             case Atom.Alike _ -> List.of();
         };
     }
@@ -379,10 +523,14 @@ final class Validity {
                                     LinearForm.atom(number), Props.constant(1)), Rel.EQ)),
                             Props.both(ofTheElement.denied(), Props.compared(
                                     LinearForm.atom(number), Rel.EQ))));
-            case LawNumber.HowManyMeet<Value>(Value container, var _) -> List.of(
+            case LawNumber.HowManyMeet<Value>(Value container, LawProposition<Value> ofTheElement)
+                    -> List.of(
                     Props.compared(LinearForm.atom(number), Rel.GE),
                     Props.compared(Props.minus(sizeOf(container), LinearForm.atom(number)),
-                            Rel.GE));
+                            Rel.GE),
+                    Props.same(new LawProposition.SomeElement<>(container, ofTheElement, true),
+                            Props.compared(Props.minus(LinearForm.atom(number),
+                                    Props.constant(1)), Rel.GE)));
             case LawNumber.AnArgument<Value> _ -> List.of();
         };
     }

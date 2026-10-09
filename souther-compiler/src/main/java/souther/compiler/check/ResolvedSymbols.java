@@ -157,11 +157,6 @@ public final class ResolvedSymbols implements Symbols {
     }
 
     @Override
-    public ValueName.Stdlib.Operation theDistinctnessPredicate() {
-        return table.theDistinctnessPredicate();
-    }
-
-    @Override
     public Kernel kernelOf(ValueName.Stdlib.Operation operation) {
         return table.kernelOf(operation);
     }
