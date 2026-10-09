@@ -115,8 +115,9 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // A count's two: the sizes a container is tried at and the containers offered for one
             // count, each said under its own figure in what the composing comes back with.
             Map.entry("souther.compiler.partition.CardinalityComposer#<clinit>()V",
-                    "how many elements a container composed for a count holds, and how many"
-                            + " containers are offered for one"),
+                    "how many elements a container composed for a count holds, how many"
+                            + " containers are offered for one, and how many ways of sharing its"
+                            + " elements out are looked at"),
             Map.entry("souther.compiler.partition.CardinalityComposer#compose("
                             + "Lsouther/compiler/types/Type;Ljava/util/List;"
                             + "Ljava/util/SequencedMap;"
@@ -129,6 +130,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.LevelRealizer#ofACount("
                             + "Lsouther/compiler/partition/Standing$OfACount;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/partition/WitnessSearch;"
                             + "Lsouther/compiler/partition/ValuesTried;)"
                             + "Lsouther/compiler/partition/Realization;",
                     "says the counts were offered short where the source of them stopped, as a"

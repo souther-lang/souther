@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Containers with so many of their elements meeting each of some statements.
@@ -65,6 +66,9 @@ final class CardinalityComposer {
     private static final int MOST_OFFERED =
             CompositionBudget.CONTAINERS_A_COUNT_IS_OFFERED.maximum();
 
+    private static final int MOST_SHARES =
+            CompositionBudget.SHARES_A_COUNT_IS_TRIED_AT.maximum();
+
     /**
      * Containers of {@code sourceType} meeting every one of {@code counts} at the set {@code
      * demands} asks it for, with some element standing in the set asked of each of {@code
@@ -86,13 +90,16 @@ final class CardinalityComposer {
         RuleReadingSource ruleSource = reading.source();
         TermPath container = counts.getFirst().count().container();
         List<Asked> asked = new ArrayList<>();
+        // Each count as the counts it is asked for, and not as the one a row was named at: the
+        // item and every condition on the way that ask for it leave a region, and which count of
+        // it the container holds is chosen here.
         for (RealizationTarget.ACount each : counts) {
             AskedAt at = demands.get(each);
-            if (at == null || at.walking() == null) {
+            if (at == null) {
                 return none("nothing says how many elements of `" + container + "` are to meet `"
                         + each + "`");
             }
-            asked.add(new Asked.SoManyMeeting(each.count().perElement(), at.walking()));
+            asked.add(new Asked.SoManyMeeting(each.count().perElement(), at.about().values()));
         }
         NumericSet size = null;
         if (manyItHolds != null) {
@@ -156,27 +163,34 @@ final class CardinalityComposer {
                 ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums());
         List<FixtureTemplate> built = new ArrayList<>();
         Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
-        Sharing sharing = new Sharing(groups, asked, size, distinct);
-        sizes:
+        Sharing sharing = new Sharing(groups, asked, size, distinct, MOST_SHARES);
         for (int elements = 0; ; elements++) {
             if (elements > MOST_ELEMENTS) {
                 refused.add(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
                 break;
             }
-            for (int[] share : sharing.at(elements)) {
+            // Each sharing is built as it is found, so what stops the walk is a container offered
+            // or a sharing looked at, and never a list of them made first.
+            boolean walkedThem = sharing.each(elements, share -> {
                 if (built.size() == MOST_OFFERED) {
-                    refused.add(CompositionBudget.CONTAINERS_A_COUNT_IS_OFFERED);
-                    break sizes;
+                    return false;
                 }
                 List<Place> values = groups.drawn(share, distinct);
-                if (!readsAsAsked(asked, container, element, written, values)) {
-                    continue;
+                if (readsAsAsked(asked, container, element, written, values)) {
+                    FixtureTemplate one = holdingThese(values, element.carrier(), view,
+                            ofTheElement, ruleSource);
+                    if (one != null) {
+                        built.add(one);
+                    }
                 }
-                FixtureTemplate one = holdingThese(values, element.carrier(), view,
-                        ofTheElement, ruleSource);
-                if (one != null) {
-                    built.add(one);
-                }
+                return true;
+            });
+            // Stopped with a sharing in front of it: for the sharings this looks at, or else for the
+            // containers it offers, which is the one other thing that turns a sharing away.
+            if (!walkedThem) {
+                refused.add(sharing.spent() ? CompositionBudget.SHARES_A_COUNT_IS_TRIED_AT
+                        : CompositionBudget.CONTAINERS_A_COUNT_IS_OFFERED);
+                break;
             }
         }
         CompositionShortfall rest = CompositionShortfall.of(refused,
@@ -222,7 +236,7 @@ final class CardinalityComposer {
                                      BorderQuantity.Observation row);
 
         /** How many elements meet {@code perElement}: one of the counts {@code wanted} holds. */
-        record SoManyMeeting(AStatementAtARow perElement, NumericSet wanted) implements Asked {
+        record SoManyMeeting(AStatementAtARow perElement, LevelRegion wanted) implements Asked {
 
             @Override
             public AStatementAtARow.Answer at(Place value, BorderQuantity.Observation row) {
@@ -241,7 +255,7 @@ final class CardinalityComposer {
 
             @Override
             public boolean asMany(int meeting) {
-                return wanted.holds(Count.of(meeting), Carrier.WHOLE);
+                return wanted.contains(new Level.OfTheQuantity(ExactRatio.of(meeting)));
             }
 
             @Override
@@ -484,31 +498,70 @@ final class CardinalityComposer {
      * Every way of sharing a size out among the groups that meets every count, in the order the
      * groups were found and with the first group's share largest first.
      */
-    private record Sharing(Groups groups, List<Asked> asked, NumericSet size,
-                           boolean distinct) {
+    private static final class Sharing {
 
-        List<int[]> at(int elements) {
-            List<int[]> out = new ArrayList<>();
-            if (size != null && !size.holds(Count.of(elements), Carrier.WHOLE)) {
-                return out;
-            }
-            share(new int[groups.answers().size()], 0, elements, out);
-            return out;
+        private final Groups groups;
+        private final List<Asked> asked;
+        private final NumericSet size;
+        private final boolean distinct;
+
+        /** How many more sharings this may look at, over every size it is asked for. */
+        private int left;
+
+        /** Whether a sharing was in front of the walk when there was no room left for it. */
+        private boolean stopped;
+
+        /** @param most how many sharings this looks at, over every size it is asked for */
+        Sharing(Groups groups, List<Asked> asked, NumericSet size, boolean distinct, int most) {
+            this.groups = groups;
+            this.asked = asked;
+            this.size = size;
+            this.distinct = distinct;
+            this.left = most;
         }
 
-        private void share(int[] share, int g, int left, List<int[]> out) {
-            if (g == share.length) {
-                if (left == 0 && meetsEveryCount(share)) {
-                    out.add(share.clone());
-                }
-                return;
+        /**
+         * Hands each sharing of {@code elements} that meets every count to {@code take}, in order,
+         * until {@code take} answers that it has enough or the sharings this may look at are
+         * spent.
+         *
+         * @return whether every sharing of that size was looked at
+         */
+        boolean each(int elements, Predicate<int[]> take) {
+            if (size != null && !size.holds(Count.of(elements), Carrier.WHOLE)) {
+                return true;
             }
-            int most = distinct ? Math.min(left, groups.values().get(g).size()) : left;
+            return share(new int[groups.answers().size()], 0, elements, take);
+        }
+
+        /** Whether a sharing was left unlooked at for the figure, which is what the walk was
+         *  stopped by and not the sharings running out. */
+        boolean spent() {
+            return stopped;
+        }
+
+        private boolean share(int[] share, int g, int remaining, Predicate<int[]> take) {
+            if (g == share.length) {
+                if (remaining != 0) {
+                    return true;
+                }
+                if (left == 0) {
+                    stopped = true;
+                    return false;
+                }
+                left--;
+                return !meetsEveryCount(share) || take.test(share.clone());
+            }
+            int most = distinct ? Math.min(remaining, groups.values().get(g).size()) : remaining;
             for (int n = most; n >= 0; n--) {
                 share[g] = n;
-                share(share, g + 1, left - n, out);
+                if (!share(share, g + 1, remaining - n, take)) {
+                    share[g] = 0;
+                    return false;
+                }
             }
             share[g] = 0;
+            return true;
         }
 
         private boolean meetsEveryCount(int[] share) {

@@ -12,6 +12,7 @@ import souther.compiler.report.GeneratedRows;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Predicate;
@@ -20,6 +21,7 @@ import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -168,6 +170,78 @@ class AContainerIsComposedWithSoManyElementsMeetingAStatementTest {
                 "one is two values above nought");
         assertTrue(pointsAt(ofTheCount.getFirst(), "off").getFirst().path("hit").asBoolean(),
                 "and nought is none");
+    }
+
+    /**
+     * The numbers a statement reads beside an element are placed together, with an element that
+     * meets it: an element above {@code a} and below {@code b} is there only where {@code b} is
+     * two past {@code a}, which neither of them says alone.
+     */
+    @Test
+    void theNumbersBesideAnElementArePlacedTogetherWithAnElementMeetingTheStatement() {
+        JsonNode count = only(countBorders(reportOf("""
+                module probe
+
+                behavior between : (xs: List<Int>, a: Int, b: Int) -> Int
+                let between (xs, a, b) =
+                    if a > 5 then
+                        if List.length(List.filter(x -> x > a && x < b, xs)) == 1 then 1 else 0
+                    else 2
+                """)));
+        assertComposedAtEveryPointButBelowNone(count);
+    }
+
+    /**
+     * Two conditions on one count are met where both are: past two and past three is past three,
+     * and a row composed for the first alone never reaches the line under the second.
+     */
+    @Test
+    void twoConditionsOnOneCountAreMetTogether() {
+        JsonNode y = onlyLineOn(reportOf("""
+                module probe
+
+                behavior both : (xs: List<Int>, y: Int) -> Int
+                let both (xs, y) =
+                    if List.length(List.filter(x -> x > 0, xs)) >= 2 then
+                        if List.length(List.filter(x -> x > 0, xs)) >= 3 then
+                            if y > 0 then 1 else 0
+                        else 2
+                    else 3
+                """), "both/y");
+        for (JsonNode item : y.path("items")) {
+            if (item.has("against")) {
+                assertTrue(item.path("knownWritable").asBoolean(),
+                        () -> "a row with three above nought reaches the line: " + item);
+            }
+        }
+    }
+
+    /**
+     * A count asked for far past what a container is composed with is answered at once, and as a
+     * search that stopped rather than as a way no row passes.
+     */
+    @Test
+    void aCountFarPastAnyContainerComposedIsAnsweredAtOnce() {
+        JsonNode y = assertTimeoutPreemptively(Duration.ofSeconds(30), () -> onlyLineOn(reportOf("""
+                module probe
+
+                behavior many : (xs: List<Int>, y: Int) -> Int
+                let many (xs, y) =
+                    if List.length(List.filter(x -> x > 0, xs)) >= 1000000000 then
+                        if y > 0 then 1 else 0
+                    else 2
+                """), "many/y"));
+        for (JsonNode item : y.path("items")) {
+            assertTrue(item.path("notOwed").isMissingNode(),
+                    () -> "a count no container here holds is not one the rules refuse: " + item);
+        }
+    }
+
+    private static JsonNode onlyLineOn(JsonNode report, String axis) {
+        List<JsonNode> out = new ArrayList<>();
+        collect(report, out, node -> axis.equals(node.path("axis").asString()));
+        assertEquals(1, out.size(), () -> "one line on " + axis + ": " + out);
+        return out.getFirst();
     }
 
     private static void assertComposedAtEveryPointButBelowNone(JsonNode count) {

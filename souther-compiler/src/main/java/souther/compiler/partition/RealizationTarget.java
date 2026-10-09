@@ -37,7 +37,8 @@ import souther.compiler.inputs.TermPath;
 public sealed interface RealizationTarget {
 
     /**
-     * The location whose whole value is rebuilt so that {@link #term} answers what was asked.
+     * The location whose whole value is rebuilt so that what is asked of it is answered: the
+     * number a {@link OfANumber} names, or how many elements an {@link ACount} counts.
      *
      * <p>Not where the number is written. {@code List.sum(lines[*].amount)} is answered by no
      * location and its root is {@code lines}, at which no total is written and out of which every

@@ -217,6 +217,27 @@ final class DemandReading {
         return projected(stated, read);
     }
 
+    /**
+     * What an element of {@code count}'s container is held to where it meets what is counted, as
+     * the relations a region is narrowed by: the reading a condition that some element meets it
+     * comes to.
+     *
+     * @return empty where what is counted is no relations about the element and the numbers beside
+     *         it alone — a statement over another container's elements, or one an element meets
+     *         one of several ways
+     */
+    static Optional<List<TakenConstraint>> anElementMeeting(Quantity.HowManyMeet count,
+                                                            InputReading read) {
+        List<Read> reads = asked(count.someMeets(), read);
+        if (reads.size() != 1
+                || !(reads.getFirst() instanceof Read.Demands(RowDemand.Exists exists))
+                || exists.relations().size() != exists.ofAnElement().size()) {
+            return Optional.empty();
+        }
+        return Optional.of(exists.relations().stream()
+                .map(RowDemand.Relational::constraint).toList());
+    }
+
     private static Proposition holdingAs(Proposition stated, boolean holding) {
         return holding ? stated : stated.denied();
     }
@@ -439,7 +460,8 @@ final class DemandReading {
                 ExactRatio weight = affine.form().coefs().values().iterator().next();
                 yield affine.form().constant().negated().dividedBy(weight)
                         instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level)
-                        ? new Read.Demands(new RowDemand.SoMany(count, met, level))
+                        ? new Read.Demands(new RowDemand.SoMany(count, met, level,
+                                anElementMeeting(count, read)))
                         : new Read.Unread(WhyNotTaken.quantitiesNoRowWrites(affine.form()));
             }
             case Relation.Affine(LinearForm<Quantity> form, Rel _) -> {

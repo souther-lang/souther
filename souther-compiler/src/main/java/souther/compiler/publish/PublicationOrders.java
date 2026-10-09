@@ -295,6 +295,7 @@ public final class PublicationOrders {
                     CompositionBudget.SHAPES_OF_A_TOTAL_OFFERED,
                     CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH,
                     CompositionBudget.CONTAINERS_A_COUNT_IS_OFFERED,
+                    CompositionBudget.SHARES_A_COUNT_IS_TRIED_AT,
                     CompositionBudget.WAYS_DOWN_TO_A_TOTAL_TRIED,
                     CompositionBudget.WAYS_UNDER_THE_CASES_TRIED,
                     CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,

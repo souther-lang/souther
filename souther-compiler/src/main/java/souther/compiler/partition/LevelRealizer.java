@@ -136,7 +136,7 @@ public final class LevelRealizer {
             case Standing.OfOneCoordinate one -> ofOne(one, within, runs, looking, tried);
             case Standing.OfTwoOnOneCarrier two -> ofTwo(two, within, runs, looking, tried);
             case Standing.OfAForm over -> ofAForm(over, within, runs, tried);
-            case Standing.OfACount count -> ofACount(count, within, tried);
+            case Standing.OfACount count -> ofACount(count, within, looking, tried);
         };
     }
 
@@ -150,14 +150,19 @@ public final class LevelRealizer {
      * the rules as any item's are. Which counts to try is {@link LevelCandidateSource}'s, as it is
      * for any item.
      *
+     * <p>The numbers beside an element are placed together, with an element meeting the statement
+     * where the count is one or more ({@link CountedElements#placesBeside}).
+     *
      * <p>Never a proof. That no container holds so many elements meeting the statement is not
      * something a walk over counts settles: the elements are the composing's to choose, and a count
-     * nothing here composed is a count left open.
+     * nothing here composed is a count left open — even where no element the region leaves meets
+     * the statement, since the region was narrowed by the statement here and not by the rules.
      */
     private Realization ofACount(Standing.OfACount count, SearchRegion within,
-                                 ValuesTried tried) {
+                                 WitnessSearch looking, ValuesTried tried) {
         RealizationTarget.ACount counted = new RealizationTarget.ACount(count.count());
         Set<CompositionBudget> stoppedBy = java.util.EnumSet.noneOf(CompositionBudget.class);
+        Set<CompositionCapacity> unheld = new HashSet<>();
         LevelCandidateSource.Offered offered =
                 LevelCandidateSource.forItem(count.where(), count.count().levels());
         if (offered.stoppedShort()) {
@@ -169,74 +174,31 @@ public final class LevelRealizer {
                     || written.isEmpty() || written.get().at().signum() < 0) {
                 continue;
             }
-            Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
-            fixing.put(counted, written.get());
-            if (besideAnElement(count, within, fixing, tried)) {
-                Realization made = found(fixing, within, tried);
-                if (made instanceof Realization.Found) {
-                    return made;
+            switch (count.count().placesBeside(within, written.get().at().signum() > 0,
+                    looking)) {
+                case NumericWitness.Standing.Found beside -> {
+                    Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
+                    fixing.put(counted, written.get());
+                    for (NumericWitness.Standing.Found.Placed each : beside.inFixingOrder()) {
+                        if (!each.position().subjectPath().insideAContainer()) {
+                            fixing.put(RealizationTarget.of(each.position()), each.place());
+                        }
+                    }
+                    Realization made = found(fixing, within, tried);
+                    if (made instanceof Realization.Found) {
+                        return made;
+                    }
+                }
+                case NumericWitness.Standing.ProvedImpossible _ -> { }
+                case NumericWitness.Standing.NotFound(var figures, var held) -> {
+                    stoppedBy.addAll(figures);
+                    unheld.addAll(held);
                 }
             }
         }
         return Realization.Unknown.leftOpen(
                 Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
-                stoppedBy, Set.of(), Set.of());
-    }
-
-    /**
-     * Puts a place for each number the statement reads beside an element into {@code fixing}, and
-     * says whether every one of them got one.
-     *
-     * <p>One at a time, with the region told what came before, as the way to a point places them.
-     * The last is walked up from where the rules leave it past every place an assignment was
-     * already built with and did not stand: the same count with the numbers beside it somewhere
-     * else is a row nothing has tried.
-     *
-     * <p>A number of another container's elements has no one place to fix, and is left to be read
-     * element by element where the statement is asked.
-     */
-    private static boolean besideAnElement(Standing.OfACount count, SearchRegion within,
-                                           Map<RealizationTarget, Place> fixing,
-                                           ValuesTried tried) {
-        List<NumericTerm> beside = new java.util.ArrayList<>();
-        for (NumericTerm term : count.numbers()) {
-            if (!term.subjectPath().insideAContainer()) {
-                beside.add(term);
-            }
-        }
-        SearchRegion here = within;
-        for (int i = 0; i < beside.size(); i++) {
-            NumericTerm term = beside.get(i);
-            Carrier on = count.count().on().get(term);
-            if (on == null || !(here.projectionOf(term)
-                    instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds held))) {
-                return false;
-            }
-            NumericDomain.Bounds run = held == null ? NumericDomain.Bounds.OPEN : held;
-            RealizationTarget.OfANumber target = RealizationTarget.of(term);
-            boolean last = i == beside.size() - 1;
-            Endpoint from = run.min();
-            Place at = null;
-            // Every assignment tried is one place this may have to walk past, and none more.
-            for (int walked = 0; walked <= tried.rejected().size(); walked++) {
-                Place next = on.somethingInside(from, run.max());
-                if (next == null) {
-                    break;
-                }
-                fixing.put(target, next);
-                if (!last || !tried.holds(fixing)) {
-                    at = next;
-                    break;
-                }
-                from = Endpoint.exclusive(next);
-            }
-            if (at == null) {
-                fixing.remove(target);
-                return false;
-            }
-            here = here.given(term, at);
-        }
-        return true;
+                stoppedBy, Set.of(), unheld);
     }
 
     /**

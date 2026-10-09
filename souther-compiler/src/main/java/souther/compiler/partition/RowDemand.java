@@ -3,8 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Quantity;
-import souther.compiler.numeric.Count;
-import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
@@ -391,39 +389,32 @@ public sealed interface RowDemand {
      * with as many elements meeting the statement as this leaves it, written together with every
      * other count of that container a row is asked for ({@link CardinalityComposer}).
      *
-     * @param count what is counted: the container, and what an element is counted for meeting
-     * @param met   how the count stands to {@code level} on every row this holds of
-     * @param level the number the count is held against
+     * @param count             what is counted: the container, and what an element is counted
+     *                          for meeting
+     * @param met               how the count stands to {@code level} on every row this holds of
+     * @param level             the number the count is held against
+     * @param anElementMeeting  what an element meeting what is counted is held to, as relations,
+     *                          where it is that ({@link DemandReading#anElementMeeting})
      */
-    record SoMany(Quantity.HowManyMeet count, Rel met, ExactRatio level)
+    record SoMany(Quantity.HowManyMeet count, Rel met, ExactRatio level,
+                  Optional<List<TakenConstraint>> anElementMeeting)
             implements OfACondition {
 
         public SoMany {
             Objects.requireNonNull(count, "a count of the elements of some container");
             Objects.requireNonNull(met, "a count held against a number some way");
             Objects.requireNonNull(level, "a count held against some number");
+            Objects.requireNonNull(anElementMeeting,
+                    "what an element meeting it is held to is said, or said to be nothing read");
         }
 
         /**
-         * The least count this leaves, or null where it leaves none: a count is a whole number
-         * from none up, and past {@code level} every count stands to it the same way.
+         * The counts this leaves, as what a count a row is composed at is one of.
+         *
+         * <p>A region and not one of its counts. Several conditions on one count are met where
+         * their regions cross, and which count of that a container is composed at is the
+         * composing's to choose.
          */
-        public Count least() {
-            for (long n = 0; ; n++) {
-                ExactRatio at = ExactRatio.of(n);
-                if (!(at.minus(level) instanceof ExactAnswer.Held<ExactRatio>(ExactRatio apart))) {
-                    return null;
-                }
-                if (met.holds(apart.signum())) {
-                    return Count.of(n);
-                }
-                if (apart.signum() > 0) {
-                    return null;
-                }
-            }
-        }
-
-        /** The counts this leaves, as what a count a row is composed at is one of. */
         public NumbersAskedFor counts() {
             Level at = new Level.OfTheQuantity(level);
             return NumbersAskedFor.of(switch (met) {

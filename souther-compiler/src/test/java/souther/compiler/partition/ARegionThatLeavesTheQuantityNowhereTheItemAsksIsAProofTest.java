@@ -30,6 +30,7 @@ import souther.compiler.query.ReadAs;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -203,7 +204,8 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
         atMost.put(new DecisionAtom.OfTheInput(element), ExactRatio.ONE.negated());
         CountedElements counted = CountedElements.of("counted", new Quantity.HowManyMeet(xs,
                 new Proposition.Compared(new Relation.Affine(
-                        new LinearForm<>(ExactRatio.ZERO, atMost), Rel.GE), false)), measuring);
+                        new LinearForm<>(ExactRatio.ZERO, atMost), Rel.GE), false)), measuring,
+                Optional.empty());
         assertTrue(holdingNothing.emptiness().isEmpty(),
                 () -> "the region admits rows: " + holdingNothing.emptiness());
         assertInstanceOf(NumericDomain.FormProjection.NothingIsLeft.class,

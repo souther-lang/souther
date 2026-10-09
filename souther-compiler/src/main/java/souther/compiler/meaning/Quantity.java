@@ -88,6 +88,14 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
             }
         }
 
+        /**
+         * That some element meets what is counted: the count being one or more, which is what it
+         * is wherever a count is held against nought ({@link Proposition#compared}).
+         */
+        public Proposition someMeets() {
+            return new Proposition.Some(container, ofTheElement, true);
+        }
+
         @Override
         public String spelled() {
             return "#" + container + " [" + ofTheElement.key() + "]";

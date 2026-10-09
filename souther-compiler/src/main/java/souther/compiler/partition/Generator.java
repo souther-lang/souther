@@ -27,6 +27,8 @@ import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
@@ -710,7 +712,8 @@ public final class Generator {
                              PLACES_A_PAIR_IS_LOOKED_AT -> NOTHING_COMPOSES_ONE;
                         case PAIRINGS_BUILT_AT_ONCE, ELEMENTS_A_TOTAL_IS_SPREAD_OVER,
                              SHAPES_OF_A_TOTAL_OFFERED, ELEMENTS_A_COUNT_IS_COMPOSED_WITH,
-                             CONTAINERS_A_COUNT_IS_OFFERED, WAYS_DOWN_TO_A_TOTAL_TRIED,
+                             CONTAINERS_A_COUNT_IS_OFFERED, SHARES_A_COUNT_IS_TRIED_AT,
+                             WAYS_DOWN_TO_A_TOTAL_TRIED,
                              WAYS_UNDER_THE_CASES_TRIED,
                              STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
                              VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
@@ -5106,18 +5109,23 @@ public final class Generator {
             }
             assumed = both;
         }
+        // The count the item itself asks for, which is the one count its level is.
+        for (Map.Entry<RealizationTarget, Place> each : fixing.entrySet()) {
+            if (each.getKey() instanceof RealizationTarget.ACount count) {
+                counted.put(count, NumbersAskedFor.of(LevelRegion.point(
+                        new Level.OfTheQuantity(Count.number(each.getValue()).exactly()))));
+            }
+        }
+        // How many elements of a container meet a statement, as every condition on the way asks
+        // it, gathered before any is taken in: two conditions on one count are met where both
+        // are, and which count that is cannot be read off either of them alone.
+        Map<CountedElements, CountsAsked> countsOnTheWay = new LinkedHashMap<>();
         for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
-            // How many elements of a container meet a statement, which no region holds. The count
-            // goes in beside the row's other demands, so the container is composed with it and
-            // with every other count of it at once.
             if (cut.demand() instanceof RowDemand.SoMany many) {
-                SearchRegion withIt = counted(subject, here, out, routed, counted, many);
-                if (withIt == null) {
-                    gaps.add(new ReachabilityGap.Uncomposed(cut,
-                            new ReachabilityGap.Why.NoValueComposedForItsPositions()));
-                } else {
-                    here = withIt;
-                }
+                CountedElements count = CountedElements.of(subject.behavior(), many.count(),
+                        subject.quantities(), many.anElementMeeting());
+                countsOnTheWay.merge(count, new CountsAsked(many.counts().values(), cut),
+                        CountsAsked::and);
                 continue;
             }
             // What an element is asked with no relation among it has no number to place: that the
@@ -5154,64 +5162,78 @@ public final class Generator {
                 }
             }
         }
+        // Each count the way asks for, taken in whole or not at all: the counts every condition
+        // on it leaves, and a place for each number its statement reads beside an element.
+        for (Map.Entry<CountedElements, CountsAsked> each : countsOnTheWay.entrySet()) {
+            CountedElements count = each.getKey();
+            RealizationTarget.ACount target = new RealizationTarget.ACount(count);
+            OnTheWay.TakenIn cut = each.getValue().first();
+            LevelRegion asked = each.getValue().counts();
+            NumbersAskedFor itemAsks = counted.get(target);
+            if (itemAsks != null) {
+                asked = asked.meet(itemAsks.values());
+            }
+            // No count the conditions leave together — and the item's own, where it asks for this
+            // one — is a way no row passes, which the counts settle by themselves.
+            Count least = leastCount(count, asked);
+            if (least == null) {
+                gaps.add(new ReachabilityGap.ProvedImpossible(cut));
+                continue;
+            }
+            // The item's own count was placed with the numbers beside it where the item was.
+            if (itemAsks != null) {
+                counted.put(target, NumbersAskedFor.of(asked));
+                continue;
+            }
+            switch (count.placesBeside(here,
+                    !asked.contains(new Level.OfTheQuantity(ExactRatio.ZERO)), looking)) {
+                case NumericWitness.Standing.Found beside -> {
+                    for (NumericWitness.Standing.Found.Placed placed : beside.inFixingOrder()) {
+                        if (placed.position().subjectPath().insideAContainer()) {
+                            continue;
+                        }
+                        RealizationTarget.OfANumber at = RealizationTarget.of(placed.position());
+                        // Placed on the way, so what it is one of is what the rules leave it
+                        // there. A number already standing was given to the region, so it is
+                        // placed where it stands.
+                        if (out.putIfAbsent(at, placed.place()) == null) {
+                            routed.put(placed.position(), at);
+                            here = here.given(placed.position(), placed.place());
+                        }
+                    }
+                    out.put(target, least);
+                    counted.put(target, NumbersAskedFor.of(asked));
+                }
+                // Not placed, and no proof either: the region was narrowed by the statement here
+                // and not by the rules.
+                case NumericWitness.Standing.ProvedImpossible _,
+                     NumericWitness.Standing.NotFound _ ->
+                        gaps.add(new ReachabilityGap.Uncomposed(cut,
+                                new ReachabilityGap.Why.NoValueComposedForItsPositions()));
+            }
+        }
         return new Standing(out, routed, counted, Set.copyOf(someElement),
                 CompositionAccount.ofTheInput(gaps));
     }
 
     /**
-     * The least count a condition on the way leaves, put into {@code out} as a demand on the
-     * container, beside a place for each number the statement reads next to an element that
-     * nothing has placed yet.
-     *
-     * <p>The least, because a count is met at the least size that holds it and a reader is handed
-     * the smallest container that reaches the line. Each number beside an element is placed one at
-     * a time in what the region leaves, as the way to a point places them.
-     *
-     * @return the region told where those numbers stand, or null where the condition leaves no
-     *         count or one of them has nowhere to stand
+     * The counts every condition on the way asks of one count, and the first of them, which is the
+     * condition a reader is sent to where they cannot be taken in.
      */
-    private static SearchRegion counted(MeasuredInput subject, SearchRegion here,
-                                        Map<RealizationTarget, Place> out,
-                                        Map<NumericTerm.FromOnePosition, RealizationTarget> routed,
-                                        Map<RealizationTarget.ACount, NumbersAskedFor> counted,
-                                        RowDemand.SoMany many) {
-        Count least = many.least();
-        if (least == null) {
-            return null;
+    private record CountsAsked(LevelRegion counts, OnTheWay.TakenIn first) {
+
+        CountsAsked and(CountsAsked other) {
+            return new CountsAsked(counts.meet(other.counts), first);
         }
-        CountedElements count = CountedElements.of(subject.behavior(), many.count(),
-                subject.quantities());
-        SearchRegion now = here;
-        for (NumericTerm term : count.numbers()) {
-            RealizationTarget.OfANumber target = RealizationTarget.of(term);
-            if (term.subjectPath().insideAContainer() || out.containsKey(target)) {
-                continue;
-            }
-            Carrier on = count.on().get(term);
-            if (on == null || !(now.projectionOf(term)
-                    instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds held))) {
-                return null;
-            }
-            NumericDomain.Bounds run = held == null ? NumericDomain.Bounds.OPEN : held;
-            Place at = on.somethingInside(run.min(), run.max());
-            if (at == null) {
-                return null;
-            }
-            out.put(target, at);
-            // Placed on the way, so what it is one of is what the rules leave it there.
-            if (term.atOnePosition() != null) {
-                routed.put(term.atOnePosition(), target);
-            }
-            now = now.given(term, at);
-        }
-        // Where the item itself asks for this count it is already standing, at the place the item
-        // asks and one of what the item leaves; a count two conditions ask for is one of what both
-        // leave.
-        RealizationTarget.ACount target = new RealizationTarget.ACount(count);
-        if (out.putIfAbsent(target, least) == null || counted.containsKey(target)) {
-            counted.merge(target, many.counts(), NumbersAskedFor::meet);
-        }
-        return now;
+    }
+
+    /** The least count {@code asked} holds, as the count a row is named at, or null where it
+     *  holds none. Which count of them the container is composed at is the composing's. */
+    private static Count leastCount(CountedElements count, LevelRegion asked) {
+        Level least = count.leastIn(asked);
+        return least != null && Count.written(least.asAnExactNumber())
+                instanceof ExactAnswer.Held<Optional<Count>>(Optional<Count> written)
+                ? written.orElse(null) : null;
     }
 
     /**
@@ -5269,7 +5291,7 @@ public final class Generator {
             // Passed over before it is asked: it places no number ({@link #placesNoNumber}).
             case RowDemand.ATruth truth -> throw new IllegalArgumentException(
                     "a truth is written where the row is composed and placed nowhere: " + truth);
-            // Taken in before it is asked, as a demand on the container ({@link #counted}).
+            // Taken in beside the rest, as a demand on the container ({@link #alsoOnTheWay}).
             case RowDemand.SoMany many -> throw new IllegalArgumentException(
                     "a count is composed where its container is and placed nowhere: " + many);
         };
@@ -5680,11 +5702,11 @@ public final class Generator {
      *
      * <p><b>The one place a number read at a sum becomes the number under the case it is written
      * at.</b> The rules and the report are about the number where the rules name it, and that is
-     * what {@link RealizationTarget#term} keeps. What a value chosen for it is held to is another
-     * question: the rules of the value it is written into, which for a name every case of a sum
-     * spreads are the rules of the case. The region answers a question with the rules of the values
-     * its positions stand under, so the number is put to it named under the case — and named at the
-     * sum, it would be answered as though the row could be any of the cases.
+     * what {@link RealizationTarget.OfANumber#term} keeps. What a value chosen for it is held to
+     * is another question: the rules of the value it is written into, which for a name every case
+     * of a sum spreads are the rules of the case. The region answers a question with the rules of
+     * the values its positions stand under, so the number is put to it named under the case — and
+     * named at the sum, it would be answered as though the row could be any of the cases.
      *
      * <p>Asked where a value is chosen for a number of the way, which is the one place the case
      * reaches a value. What is built afterwards is built at the place chosen here, which is inside
@@ -6268,8 +6290,9 @@ public final class Generator {
         for (RealizationTarget each : fixing.keySet()) {
             out.put(each, asking);
         }
-        // Every count a condition on the way asked for, which is one of the counts it leaves.
-        out.putAll(counted);
+        // Every count the row stands at, which is one of the counts the item and every condition
+        // on the way leave it.
+        counted.forEach((target, counts) -> out.merge(target, counts, NumbersAskedFor::meet));
         // Every number a place was chosen for on the way, and not every number a cut names. A cut
         // may be met more than one way — every element meeting a condition, or a container holding
         // none — and what the row stands at is whichever way was placed; asked of the cut's numbers

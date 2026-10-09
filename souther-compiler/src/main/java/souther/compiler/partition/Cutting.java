@@ -350,8 +350,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
         ComparisonClaim claim = ComparisonClaim.stating(
                 holds ? affine.proposition() : affine.proposition().denied());
-        BorderQuantity.HowMany of = new BorderQuantity.HowMany(
-                CountedElements.of(behavior, count, read.quantities()));
+        BorderQuantity.HowMany of = new BorderQuantity.HowMany(CountedElements.of(behavior, count,
+                read.quantities(), DemandReading.anElementMeeting(count, read)));
         Cutting drawn = made(of, new Level.OfTheQuantity(level), claim, read.quantities());
         return drawn == null ? null : cutsOrRefused(drawn);
     }
