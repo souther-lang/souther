@@ -1209,8 +1209,10 @@ public final class InputDomain {
                 if (!stopped) {
                     handoffs.passesTo(placed.root(), path, passedTo);
                 }
+                List<List<RuleRoot>> openedUnder = new ArrayList<>();
                 for (StructuralInspection.Branch branch : standing) {
                     int before = found.size();
+                    int rootsBefore = roots.size();
                     // What the value above calls the positions under this case, where it calls them
                     // anything: the names a value of the sum, or of a case of it holding this one,
                     // reads — and nothing else.
@@ -1227,9 +1229,88 @@ public final class InputDomain {
                             new RootOpening.Refined(placed.root(), crossing), account,
                             reach.into(path.refine(branch.refinement()), stopped));
                     crossed(observed, crossing, found, before);
+                    openedUnder.add(List.copyOf(roots.subList(rootsBefore, roots.size())));
                 }
+                roots.addAll(elementsAtTheSharedNames(path, shared, standing, openedUnder,
+                        placed.root()));
             }
         }
+    }
+
+    /**
+     * The elements of a container every case of the sum at {@code sum} holds under a name they all
+     * spread, opened at the name as values of their own.
+     *
+     * <p>A condition reads such an element at the name — {@code List.any(t -> t > 3, e.tags)} over
+     * a sum whose cases all spread {@code tags} — and the reading of each case opens it only under
+     * that case. What an element's rules say is written in the element's type and holds of every
+     * element wherever the container stands, so where every case opened the same element as the
+     * same type, it is opened at the name too, inside the container the name is; a term read there
+     * is then one these rules name, and not one under nothing this behavior takes.
+     *
+     * <p>Only an element reached from the name by fields and containers. A narrowing below the
+     * name is a case of a value the cases each hold, and opened at the name it would be every case
+     * at once.
+     *
+     * @param openedUnder what the reading of each of {@code standing} opened, in the same order
+     * @param outer       where the rules of the value the sum stands in were read
+     */
+    private static List<RuleRoot> elementsAtTheSharedNames(
+            TermPath sum, List<String> shared, List<StructuralInspection.Branch> standing,
+            List<List<RuleRoot>> openedUnder, TermPath outer) {
+        if (shared.isEmpty() || standing.isEmpty()) {
+            return List.of();
+        }
+        Map<TermPath, Type> agreed = null;
+        for (int i = 0; i < standing.size(); i++) {
+            TermPath narrowed = sum.refine(standing.get(i).refinement());
+            Map<TermPath, Type> here = new LinkedHashMap<>();
+            for (RuleRoot each : openedUnder.get(i)) {
+                TermPath atTheName = each.opening() instanceof RootOpening.Inside
+                        ? atTheName(each.at(), narrowed, sum, shared) : null;
+                if (atTheName != null) {
+                    here.putIfAbsent(atTheName, each.type());
+                }
+            }
+            if (agreed == null) {
+                agreed = here;
+            } else {
+                agreed.entrySet().removeIf(each -> !each.getValue().equals(here.get(each.getKey())));
+            }
+        }
+        List<RuleRoot> out = new ArrayList<>();
+        agreed.forEach((at, type) -> out.add(new RuleRoot(at, type,
+                new RootOpening.Inside(outer, containerOf(at)))));
+        return List.copyOf(out);
+    }
+
+    /**
+     * {@code under}, a place below the case {@code narrowed} of the sum at {@code sum}, as the name
+     * the sum's value reads it at — or null where it is reached by no name every case spreads, or
+     * by a narrowing below one.
+     */
+    private static TermPath atTheName(TermPath under, TermPath narrowed, TermPath sum,
+                                      List<String> shared) {
+        if (!under.isAtOrUnder(narrowed) || under.steps().size() == narrowed.steps().size()) {
+            return null;
+        }
+        List<TermPath.Step> below =
+                under.steps().subList(narrowed.steps().size(), under.steps().size());
+        if (!(below.getFirst() instanceof TermPath.Step.Field first)
+                || !shared.contains(first.name())
+                || below.stream().anyMatch(TermPath.Step.Refine.class::isInstance)) {
+            return null;
+        }
+        List<TermPath.Step> steps = new ArrayList<>(sum.steps());
+        steps.addAll(below);
+        return new TermPath(sum.head(), steps);
+    }
+
+    /** The container an element opened at {@code element} is an element of: the path without the
+     *  step into it. */
+    private static TermPath containerOf(TermPath element) {
+        return new TermPath(element.head(),
+                element.steps().subList(0, element.steps().size() - 1));
     }
 
     /** One position inside a container: where it is, and what stands there. */
