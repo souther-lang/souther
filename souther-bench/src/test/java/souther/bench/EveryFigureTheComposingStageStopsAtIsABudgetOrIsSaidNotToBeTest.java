@@ -82,7 +82,11 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             Map.entry("souther.compiler.partition.Generator.MOST_RUNS_PER_INTERPRETATION",
                     "how many runs one reading of a row's values is given"),
             Map.entry("souther.compiler.partition.StandingAtAPoint.MOST_READINGS",
-                    "how many element-wise readings of one row a point is tried against")));
+                    "how many element-wise readings of one row a point is tried against"),
+            // Not a search either: how far what a condition means is read, which says where it
+            // stopped as a reading the meaning did not make and not as a figure a search met.
+            Map.entry("souther.compiler.partition.Pullback.MOST_WRITTEN_OUT_COUNTED",
+                    "how many values written out a count is read as which of them hold over")));
 
     /**
      * A number written into a composing class is a budget's, or is one of the above.

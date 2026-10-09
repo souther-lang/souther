@@ -52,8 +52,9 @@ final class AStatementAtARow {
         /** A number the relations are over could not be read at the row, for these reasons. */
         record CouldNotTell(Set<ReadingGap> why) implements Answer {
 
+            /** In the order the reasons were met, which is the order a reader is told them in. */
             public CouldNotTell {
-                why = Set.copyOf(why);
+                why = Collections.unmodifiableSet(new LinkedHashSet<>(why));
             }
         }
 
@@ -284,8 +285,9 @@ final class AStatementAtARow {
      */
     record HowManyAtARow(int meet, int unread, Set<ReadingGap> why) {
 
+        /** The reasons in the order they were met, as {@link Answer.CouldNotTell} keeps them. */
         public HowManyAtARow {
-            why = Set.copyOf(why);
+            why = Collections.unmodifiableSet(new LinkedHashSet<>(why));
         }
 
         /**

@@ -81,6 +81,10 @@ class AReaderOfHowAnArmWasDecidedNamesEveryWayThereIsTest {
             "souther.compiler.reading.CoverageNaming#forkArm", "how a way into the arm is written"
                     + " for the reading a row is composed against: the position a condition is on"
                     + " where it is on one, and the arm itself where it is not",
+            "souther.compiler.partition.ClosureApplications#mayEnter", "which of the applications"
+                    + " a closure is handed enter an arm: an arm of a case leaves out one whose"
+                    + " value is known not to take it, and every other way of deciding an arm"
+                    + " turns on what the row holds, so each application may enter it",
             "souther.compiler.partition.Pullback#relationsDeciding", "what choosing a case of a"
                     + " library operation states, in the vocabulary of what a condition means: the"
                     + " same question Conditions#settledBy answers as constraints over the check's"

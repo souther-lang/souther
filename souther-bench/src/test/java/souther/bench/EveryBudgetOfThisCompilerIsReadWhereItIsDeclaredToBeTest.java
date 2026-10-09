@@ -112,6 +112,27 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "stops building an element along a way with another choice of the values"
                             + " asked inside it, under the figure the ways down are counted by,"
                             + " and hands it over the same way"),
+            // A count's two: the sizes a container is tried at and the containers offered for one
+            // count, each said under its own figure in what the composing comes back with.
+            Map.entry("souther.compiler.partition.CardinalityComposer#<clinit>()V",
+                    "how many elements a container composed for a count holds, and how many"
+                            + " containers are offered for one"),
+            Map.entry("souther.compiler.partition.CardinalityComposer#compose("
+                            + "Lsouther/compiler/types/Type;Ljava/util/List;"
+                            + "Ljava/util/SequencedMap;"
+                            + "Lsouther/compiler/partition/RealizationTarget$OfANumber;"
+                            + "Ljava/util/List;Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/check/RuleReadingContext;)"
+                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+                    "stops at a size or at the containers offered, and hands the figure over in"
+                            + " the shortfall it comes back with"),
+            Map.entry("souther.compiler.partition.LevelRealizer#ofACount("
+                            + "Lsouther/compiler/partition/Standing$OfACount;"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/partition/ValuesTried;)"
+                            + "Lsouther/compiler/partition/Realization;",
+                    "says the counts were offered short where the source of them stopped, as a"
+                            + " side's levels are"),
             Map.entry("souther.compiler.partition.Generator#inputsFrom("
                             + "Lsouther/compiler/partition/Generator$RowBeingComposed;I"
                             + "[Lsouther/compiler/partition/FixtureTemplate;"

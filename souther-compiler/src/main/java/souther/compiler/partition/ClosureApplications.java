@@ -175,13 +175,29 @@ sealed interface ClosureApplications {
             return this;
         }
         List<Application> entering = each.stream()
-                .filter(one -> !(decidedBy instanceof Choice.Decides.ACase(var arm, var scrutinee)
-                        && one.reads().whetherEveryRowTakes(arm, scrutinee, symbols, newtypes)
-                                .equals(Optional.of(false))))
+                .filter(one -> mayEnter(one, decidedBy, symbols, newtypes))
                 .map(one -> new Application(one.reads().choosing(decidedBy, symbols, newtypes),
                         one.reached()))
                 .toList();
         return entering.isEmpty() ? new NotSaid() : new Each(entering);
+    }
+
+    /**
+     * Whether {@code one} may enter the arm {@code decidedBy} decides: everywhere but an arm of a
+     * case its value is known not to take. Every other way of deciding an arm turns on what the row
+     * holds, and an application is read in it as one the row may take.
+     */
+    private static boolean mayEnter(Application one, Choice.Decides decidedBy, Symbols symbols,
+                                    DeclarationNewtypes newtypes) {
+        return switch (decidedBy) {
+            case Choice.Decides.ACase arm -> !one.reads()
+                    .whetherEveryRowTakes(arm.arm(), arm.scrutinee(), symbols, newtypes)
+                    .equals(Optional.of(false));
+            case Choice.Decides.ACondition _ -> true;
+            case Choice.Decides.ItWasBuilt _ -> true;
+            case Choice.Decides.ItDeparted _ -> true;
+            case Choice.Decides.ByArgumentRelations _ -> true;
+        };
     }
 
     private ClosureApplications moved(UnaryOperator<InputReads> step) {

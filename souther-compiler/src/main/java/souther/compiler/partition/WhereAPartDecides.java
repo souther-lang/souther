@@ -3,6 +3,8 @@ package souther.compiler.partition;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.meaning.Proposition;
 
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
 
@@ -45,8 +47,9 @@ public record WhereAPartDecides(PartOfAComparison part, Proposition decides) {
         /** A number the relations are over could not be read at the row, for these reasons. */
         record CouldNotTell(Set<ReadingGap> why) implements AtARow {
 
+            /** In the order the reasons were met, which is the order a reader is told them in. */
             public CouldNotTell {
-                why = Set.copyOf(why);
+                why = Collections.unmodifiableSet(new LinkedHashSet<>(why));
             }
         }
 
