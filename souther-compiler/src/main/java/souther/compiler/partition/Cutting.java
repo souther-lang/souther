@@ -513,12 +513,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
         return switch (claim) {
             case ComparisonClaim.Cut _ -> Border.reachesBothSides(at, seam(), values);
-            // The value it names and one beside it. With the value put above the seam, the seam
-            // parts it from the nearest value below; put below, from the nearest value above.
-            case ComparisonClaim.Singled _ ->
-                    Border.reachesBothSides(at, Seam.where(of, at, Towards.ABOVE), values)
-                            || Border.reachesBothSides(at, Seam.where(of, at, Towards.BELOW),
-                                    values);
+            // The value it names and a row beside it on either side. With the value put above the
+            // seam, the seam parts it from what is below; put below, from what is above.
+            case ComparisonClaim.Singled _ -> values.holdAt(at)
+                    && (Border.standsBeside(at, Seam.where(of, at, Towards.ABOVE), Towards.BELOW,
+                            values)
+                            || Border.standsBeside(at, Seam.where(of, at, Towards.BELOW),
+                                    Towards.ABOVE, values));
         };
     }
 
@@ -552,6 +553,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 }
                 // An equation this region cannot carry is no proof that nothing stands there.
                 return atTheLevel(region, level)
+                        .map(there -> there.emptiness().isEmpty()).orElse(true);
+            }
+
+            @Override
+            public boolean holdBeyond(Level level, Towards side) {
+                // The region with the quantity held strictly past the level, asked whether
+                // anything is left. A relation it cannot carry is no proof that nothing is there.
+                return against(region, level, side == Towards.ABOVE ? Rel.GT : Rel.LT)
                         .map(there -> there.emptiness().isEmpty()).orElse(true);
             }
         };
@@ -608,12 +617,20 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * arithmetic holds, or a region with no way to carry it.
      */
     private Optional<SearchRegion> atTheLevel(SearchRegion region, Level level) {
+        return against(region, level, Rel.EQ);
+    }
+
+    /**
+     * {@code region} with this quantity taken to stand {@code rel} {@code level}, in whichever
+     * vocabulary the level is in — or empty where that cannot be said, as {@link #atTheLevel} is.
+     */
+    private Optional<SearchRegion> against(SearchRegion region, Level level, Rel rel) {
         LinearForm<NumericTerm> direction = of.direction();
         ExactRatio number = level.asANumber();
         if (number != null) {
             LinearForm<NumericTerm> form = direction.minus(LinearForm.constant(number)).orNull();
             return form != null
-                    && region.assuming(form, Rel.EQ)
+                    && region.assuming(form, rel)
                             instanceof SearchRegion.Assumption.Taken(SearchRegion there)
                     ? Optional.of(there) : Optional.empty();
         }
@@ -623,7 +640,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         Map.Entry<NumericTerm, ExactRatio> only = direction.coefs().entrySet().iterator().next();
         NumericTerm.FromOnePosition position = only.getKey().atOnePosition();
         return position == null || !only.getValue().equals(ExactRatio.ONE) ? Optional.empty()
-                : Optional.of(region.assuming(position, level.asAPlace(), Rel.EQ));
+                : Optional.of(region.assuming(position, level.asAPlace(), rel));
     }
 
     /**

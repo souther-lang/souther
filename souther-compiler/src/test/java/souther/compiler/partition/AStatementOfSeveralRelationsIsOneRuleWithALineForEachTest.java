@@ -4,6 +4,10 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -114,6 +118,88 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
     }
 
     /**
+     * A line the input can stand only at is crossed by no row, on an order that counts and on one
+     * that names no value beside a line alike.
+     *
+     * <p>{@code a} is one and nothing else, so {@code max(a, b) <= 1} turns on the line through
+     * {@code b} and never on the line through {@code a}: no row stands past one. On whole numbers
+     * the value past it is two, and a row at two is what is asked for; on decimals there is no
+     * nearest value, and what is asked for is a row anywhere above one — never a row at one, which
+     * is on neither side of the line.
+     */
+    @Test
+    void aLineTheInputStandsOnlyAtTurnsNothingWhetherOrNotItsOrderCounts() {
+        for (String[] kind : new String[][] {{"Int", "1", "Int.max"},
+                {"Decimal", "1.0m", "Decimal.max"}}) {
+            JsonNode report = reportOfSource(("""
+                    module probe
+
+                    data Low
+                    data High
+                    data One = KIND
+                        invariant value >= ONE && value <= ONE
+
+                    behavior pick : (a: One, b: KIND) -> Low | High
+                    let pick (a, b) = if MAX(a.value, b) <= ONE then High else Low
+                    """).replace("KIND", kind[0]).replace("ONE", kind[1])
+                    .replace("MAX", kind[2]));
+            assertTrue(reasonsAt(report, "a").contains("rule_never_turns_on_this_line"),
+                    () -> kind[0] + ": the line through a is never crossed: "
+                            + reasonsAt(report, "a"));
+            assertTrue(obligationsOfParts(report).stream().noneMatch(each ->
+                            each.path("readings").get(0).path("axis").asString()
+                                    .equals("pick/a")),
+                    () -> kind[0] + ": and no row is owed at it");
+        }
+    }
+
+    /** And where decimals do run past the line on both sides, the line is crossed and kept. */
+    @Test
+    void aDecimalLineTheValuesRunPastOnBothSidesIsKept() {
+        JsonNode report = reportOfSource("""
+                module probe
+
+                data Low
+                data High
+
+                behavior pick : (a: Decimal, b: Decimal) -> Low | High
+                let pick (a, b) = if Decimal.max(a, b) <= 1.0m then High else Low
+                """);
+        Set<String> axes = new TreeSet<>();
+        for (JsonNode obligation : obligationsOfParts(report)) {
+            axes.add(obligation.path("readings").get(0).path("axis").asString());
+        }
+        assertEquals(Set.of("pick/a", "pick/b"), axes, "a line through each");
+    }
+
+    /**
+     * A side nobody could work out is not a side nothing stands on: where the place beside a line
+     * was not worked out, the side is taken to have a row, and the line stays.
+     */
+    @Test
+    void aSideNotWorkedOutIsNoProofThatNothingStandsThere() {
+        Border.Values none = new Border.Values() {
+            @Override
+            public boolean extendTo(Level level) {
+                return false;
+            }
+
+            @Override
+            public boolean holdAt(Level level) {
+                return false;
+            }
+
+            @Override
+            public boolean holdBeyond(Level level, Towards side) {
+                return false;
+            }
+        };
+        assertTrue(Border.reachesBothSides(new Level.OfTheQuantity(ExactRatio.ONE),
+                        ExactAnswer.unheld(UnheldNumber.MORE_ROOM_COULD_ANSWER), none),
+                "a seam that was not worked out keeps both sides");
+    }
+
+    /**
      * A relation that names a value is crossed between that value and one beside it, and is a line
      * of the statement where a row can stand at both in one case.
      *
@@ -189,8 +275,11 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
     }
 
     private static JsonNode reportOf(String guard, String examples) {
-        Compilation compilation = Compilation.ofSource(
-                MODEL.replace("GUARD", guard) + "\n" + examples, "Main");
+        return reportOfSource(MODEL.replace("GUARD", guard) + "\n" + examples);
+    }
+
+    private static JsonNode reportOfSource(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertTrue(compilation.errors().isEmpty(), () -> "compiles: " + compilation.errors());

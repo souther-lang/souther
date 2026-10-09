@@ -780,6 +780,17 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         boolean holdAt(Level level);
 
         /**
+         * Whether a value stands strictly on the {@code side} of {@code level} — some value past
+         * it, and not the level itself.
+         *
+         * <p>What is asked beside a line on an order that names no value beside it: a decimal below
+         * a line has every value up to it and no greatest one, so there is no one value to ask
+         * {@link #holdAt} about, and asking it of the line asks about the line and not about a
+         * side.
+         */
+        boolean holdBeyond(Level level, Towards side);
+
+        /**
          * The values a range of the quantity leaves, as far as a range can say: how far it runs.
          *
          * <p>Whether a value stands at a level is more than a range holds, so it is answered as
@@ -799,22 +810,54 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                 public boolean holdAt(Level level) {
                     return extendTo(level);
                 }
+
+                // Over-stated the way {@link #holdAt} is: a range that runs as far as the level is
+                // taken to hold values past it.
+                @Override
+                public boolean holdBeyond(Level level, Towards side) {
+                    return extendTo(level);
+                }
             };
         }
     }
 
     /**
-     * Whether a row stands at the value beside the line on each side of it, where {@link #reaches}
-     * asks whether the values run to it on either.
+     * Whether a row stands on each side of the line, where {@link #reaches} asks whether the values
+     * run to it on either.
      *
      * <p>What a line is asked where it has to be crossed and not only met: a row on each side, so
-     * that two rows differing in this line alone are there to be written. Asked as whether a row
-     * stands at each value, and not whether the values run to it: a run that stops strictly short
-     * of a value reaches its place and holds no row there, and that row is the one asked for.
+     * that two rows differing in this line alone are there to be written.
      */
     static boolean reachesBothSides(Level cut, ExactAnswer<Seam> parts, Values values) {
-        return standsAt(values::holdAt, cut, parts, Towards.BELOW)
-                && standsAt(values::holdAt, cut, parts, Towards.ABOVE);
+        return standsBeside(cut, parts, Towards.BELOW, values)
+                && standsBeside(cut, parts, Towards.ABOVE, values);
+    }
+
+    /**
+     * Whether a row stands on the {@code side} of the line, and not at the line.
+     *
+     * <p>Where the order names a value beside the line on that side, a row at that value — asked as
+     * whether one stands there and not whether the values run to it, since a run that stops
+     * strictly short of a value reaches its place and holds no row there. Where it names none, a
+     * row anywhere past the line on that side: a decimal has no nearest value, and the line itself
+     * is on neither side of itself. Asked of the seam's own answer and not of what the seam leaves,
+     * which on such an order is the line.
+     *
+     * <p>A seam that was not worked out is no proof that nothing stands there.
+     */
+    static boolean standsBeside(Level cut, ExactAnswer<Seam> parts, Towards side,
+                                Values values) {
+        if (!(parts instanceof ExactAnswer.Held<Seam>(Seam seam))) {
+            return true;
+        }
+        Level beside = side == Towards.BELOW ? seam.below() : seam.above();
+        if (beside == null) {
+            return values.holdBeyond(cut, side);
+        }
+        return switch (seam.at().asWritten(beside)) {
+            case ExactAnswer.Unheld<Level> _ -> true;
+            case ExactAnswer.Held<Level>(Level written) -> values.holdAt(written);
+        };
     }
 
     /**
