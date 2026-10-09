@@ -126,8 +126,7 @@ public record LinearForm<A>(ExactRatio constant, Map<A, ExactRatio> coefs) {
             }
         }
         if (!unheld.isEmpty()) {
-            return ExactAnswer.unheld(unheld.equals(EnumSet.of(UnheldNumber.MORE_ROOM_COULD_ANSWER))
-                    ? UnheldNumber.MORE_ROOM_COULD_ANSWER : UnheldNumber.NO_REPRESENTATION_EXISTS);
+            return ExactAnswer.unheld(UnheldNumber.ofAll(unheld));
         }
         return ExactAnswer.held(new LinearForm<>(constant, coefs));
     }

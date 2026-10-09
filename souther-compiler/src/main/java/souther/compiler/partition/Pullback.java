@@ -58,6 +58,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.HashSet;
@@ -66,6 +67,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.EnumSet;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -1272,6 +1274,35 @@ final class Pullback {
             }
         }
 
+        /** The argument a number of a law is of. */
+        private static DeclaredArgument argumentOf(LawNumber<DeclaredArgument> number) {
+            return switch (number) {
+                case LawNumber.AnArgument<DeclaredArgument>(DeclaredArgument at) -> at;
+                case LawNumber.SizeOf<DeclaredArgument>(LawSubject<DeclaredArgument> of) ->
+                        switch (of) {
+                            case LawSubject.Argument<DeclaredArgument>(DeclaredArgument at) -> at;
+                            case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at) -> at;
+                            case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(
+                                    DeclaredArgument at) -> at;
+                        };
+                case LawNumber.HowManyMeet<DeclaredArgument>(DeclaredArgument at, var _) -> at;
+            };
+        }
+
+        /** What of its argument a number of a law is, in the order the kinds are declared in. */
+        private static int whatOfIt(LawNumber<DeclaredArgument> number) {
+            return switch (number) {
+                case LawNumber.AnArgument<DeclaredArgument> _ -> 0;
+                case LawNumber.SizeOf<DeclaredArgument>(LawSubject<DeclaredArgument> of) ->
+                        switch (of) {
+                            case LawSubject.Argument<DeclaredArgument> _ -> 1;
+                            case LawSubject.ElementOf<DeclaredArgument> _ -> 2;
+                            case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _ -> 3;
+                        };
+                case LawNumber.HowManyMeet<DeclaredArgument> _ -> 4;
+            };
+        }
+
         /** {@code form}, a number of the arguments, as a form over the quantities a condition is
          *  read over. */
         Sized number(LinearForm<LawNumber<DeclaredArgument>> form) {
@@ -1284,7 +1315,17 @@ final class Pullback {
                              List<LinearForm<Quantity>> parts) {
             List<LinearForm<Quantity>> scaled = new ArrayList<>();
             scaled.add(LinearForm.constant(form.constant()));
-            for (Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> term : form.coefs().entrySet()) {
+            Set<UnheldNumber> unheld = EnumSet.noneOf(UnheldNumber.class);
+            // Walked by the argument each number is of, and then by what of it the number is, so
+            // that where two numbers have no form, which one the law is said to stop at is the law's
+            // and not the order a map keeps its numbers in.
+            List<Map.Entry<LawNumber<DeclaredArgument>, ExactRatio>> inOrder =
+                    new ArrayList<>(form.coefs().entrySet());
+            inOrder.sort(Comparator.comparingInt(
+                            (Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> each) ->
+                                    argumentOf(each.getKey()).position())
+                    .thenComparingInt(each -> whatOfIt(each.getKey())));
+            for (Map.Entry<LawNumber<DeclaredArgument>, ExactRatio> term : inOrder) {
                 Sized part = atom(term.getKey());
                 if (!(part instanceof Sized.AsAForm(LinearForm<Quantity> each))) {
                     return part;
@@ -1292,18 +1333,21 @@ final class Pullback {
                 parts.add(each);
                 switch (each.times(term.getValue())) {
                     case ExactAnswer.Held<LinearForm<Quantity>> held -> scaled.add(held.value());
-                    case ExactAnswer.Unheld<LinearForm<Quantity>> unheld -> {
-                        return new Sized.NotSized(new WhyUnread.ANumberNotHeld(unheld.why()));
-                    }
+                    case ExactAnswer.Unheld<LinearForm<Quantity>> not -> unheld.add(not.why());
                 }
             }
             // Every part's weights added at once, so whether they are held does not turn on which
-            // part came first.
-            return switch (LinearForm.sum(scaled)) {
-                case ExactAnswer.Held<LinearForm<Quantity>> held -> new Sized.AsAForm(held.value());
-                case ExactAnswer.Unheld<LinearForm<Quantity>> unheld ->
-                        new Sized.NotSized(new WhyUnread.ANumberNotHeld(unheld.why()));
-            };
+            // part came first; and where some are not, which way is said of all of them, as a sum
+            // of forms says it ({@link LinearForm#sum}).
+            if (unheld.isEmpty()) {
+                switch (LinearForm.sum(scaled)) {
+                    case ExactAnswer.Held<LinearForm<Quantity>> held -> {
+                        return new Sized.AsAForm(held.value());
+                    }
+                    case ExactAnswer.Unheld<LinearForm<Quantity>> not -> unheld.add(not.why());
+                }
+            }
+            return new Sized.NotSized(new WhyUnread.ANumberNotHeld(UnheldNumber.ofAll(unheld)));
         }
 
         private Sized atom(LawNumber<DeclaredArgument> number) {

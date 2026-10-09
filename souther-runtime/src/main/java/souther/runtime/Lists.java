@@ -288,12 +288,12 @@ public final class Lists {
     /** {@link #sumRational(List)}, passing {@code checkpoint} once for each element and paying for
      *  each sum. */
     public static Rational sumRational(List<Rational> xs, WorkCheckpoint checkpoint) {
-        Rational acc = Rational.ZERO;
-        for (Rational x : xs) {
+        for (int i = 0; i < xs.size(); i++) {
             checkpoint.pass();
-            acc = acc.plus(x, checkpoint);
         }
-        return acc;
+        // One sum of the elements and not a run of two-term sums, so whether a list's sum is a value
+        // does not turn on the order its elements are in.
+        return Rational.sum(xs, checkpoint);
     }
 
     /** The product of a list of {@code Rational}; the empty list is one. */

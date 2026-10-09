@@ -14,6 +14,8 @@ import souther.compiler.semantics.TakenAs;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -232,7 +234,7 @@ final class TermReading {
         if (elements == null) {
             return new Reading.NotNumber();
         }
-        ExactRatio total = ExactRatio.ZERO;
+        List<ExactRatio> terms = new ArrayList<>();
         for (ObservedValue each : values) {
             Membership.Incomplete unread = Membership.unread(each);
             if (unread != null) {
@@ -247,17 +249,21 @@ final class TermReading {
             if (!(read instanceof Count count)) {
                 return new Reading.NotNumber();
             }
-            // A container may hold a model's own decimals, spaced as widely apart in scale as any
-            // two of them this compiler ever adds — the same hazard `check.ConstantAlgebra` guards
-            // against when a rule adds two of them. The values are numbers and the sum is a number
-            // of them; what a sum this wide meets is the exact arithmetic's own limit and not a
-            // question about whether this term is one, so it is read as `NotWorkedOut` rather than
-            // let throw or folded into a sentence that says the values are not numbers at all.
-            ExactAnswer<ExactRatio> summed = total.plus(count.exactly());
-            if (summed instanceof ExactAnswer.Unheld<ExactRatio> unheld) {
+            terms.add(count.exactly());
+        }
+        // A container may hold a model's own decimals, spaced as widely apart in scale as any two
+        // of them this compiler ever adds — the same hazard `check.ConstantAlgebra` guards against
+        // when a rule adds two of them. The values are numbers and the sum is a number of them;
+        // what a sum this wide meets is the exact arithmetic's own limit and not a question about
+        // whether a term is one, so it is read as `NotWorkedOut` rather than let throw or folded
+        // into a sentence that says the values are not numbers at all. One sum of them all, so
+        // whether it is held does not turn on the order the container holds them in.
+        ExactRatio total;
+        switch (ExactRatio.sum(terms)) {
+            case ExactAnswer.Held<ExactRatio> held -> total = held.value();
+            case ExactAnswer.Unheld<ExactRatio> unheld -> {
                 return new Reading.NotWorkedOut(unheld.why());
             }
-            total = ((ExactAnswer.Held<ExactRatio>) summed).value();
         }
         return switch (total.writtenDecimal()) {
             case ExactAnswer.Unheld<Optional<BigDecimal>> unheld ->

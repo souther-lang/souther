@@ -45,6 +45,23 @@ class ASumOfManyTermsIsOneAnswerWhateverOrderTheyComeInTest {
         }
     }
 
+    /**
+     * Terms at the greatest exponent that cancel are nought, though two of them alone add to a
+     * number whose exponent is past the range: a partial sum is never asked to be held, only the
+     * sum.
+     */
+    @Test
+    void termsAtTheGreatestExponentThatCancelAreNoughtWhateverTheOrder() {
+        ExactRatio greatest = new ExactRatio(BigInteger.ONE, BigInteger.ONE, Long.MAX_VALUE, 0);
+        assertInstanceOf(ExactAnswer.Unheld.class, greatest.plus(greatest),
+                "two of them alone add past the range");
+        for (List<ExactRatio> order : orders(List.of(greatest, greatest, greatest.negated(),
+                greatest.negated()))) {
+            assertEquals(ExactAnswer.held(ExactRatio.ZERO), ExactRatio.sum(order),
+                    () -> "summed in the order " + order);
+        }
+    }
+
     @Test
     void aSumNoNumberHoldsIsRefusedWhateverTheOrder() {
         for (List<ExactRatio> order : orders(List.of(FINE, ExactRatio.ONE))) {

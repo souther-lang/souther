@@ -25,7 +25,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashSet;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -220,7 +220,10 @@ final class MeaningAssumptions {
         record Unnamed(Set<WhyNotTaken.DomainLimit> edges) implements FormAt {
 
             public Unnamed {
-                edges = Collections.unmodifiableSet(new LinkedHashSet<>(edges));
+                // In the order the edges are declared in, and not the order the form's numbers
+                // came in, so what a path says it did not take is the same however it was spelled.
+                edges = edges.isEmpty() ? edges
+                        : Collections.unmodifiableSet(EnumSet.copyOf(edges));
                 if (edges.isEmpty()) {
                     throw new IllegalArgumentException("a form not named meets some edge");
                 }
@@ -254,7 +257,7 @@ final class MeaningAssumptions {
     static FormAt formOver(LinearForm<Quantity> form, Function<Quantity, AtomAt> naming) {
         List<LinearForm<FactSubject>> terms = new ArrayList<>();
         terms.add(LinearForm.constant(form.constant()));
-        Set<WhyNotTaken.DomainLimit> edges = new LinkedHashSet<>();
+        Set<WhyNotTaken.DomainLimit> edges = EnumSet.noneOf(WhyNotTaken.DomainLimit.class);
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
             switch (naming.apply(each.getKey())) {
                 case AtomAt.AtTheEdge(var edge) -> edges.add(edge);

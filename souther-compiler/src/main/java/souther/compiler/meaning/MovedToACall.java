@@ -7,6 +7,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -129,7 +130,12 @@ final class MovedToACall {
     private Moved<LinearForm<Quantity>> form(LinearForm<Quantity> form) {
         List<LinearForm<Quantity>> terms = new ArrayList<>();
         terms.add(LinearForm.constant(form.constant()));
-        for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
+        // Walked in the order the atoms are spelled, the one order a form's atoms have: where two
+        // of them stop, which one the statement stops for is then the form's and not the order a
+        // map happens to keep them in.
+        List<Map.Entry<Quantity, ExactRatio>> inOrder = new ArrayList<>(form.coefs().entrySet());
+        inOrder.sort(Comparator.comparing(each -> each.getKey().spelled()));
+        for (Map.Entry<Quantity, ExactRatio> each : inOrder) {
             Moved<Quantity> atom = quantity(each.getKey());
             if (atom.stopped() != null) {
                 return Moved.stoppedAt(atom);

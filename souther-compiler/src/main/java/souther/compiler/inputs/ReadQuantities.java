@@ -11,7 +11,6 @@ import souther.compiler.numeric.ClosedStates;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
-import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
@@ -1252,22 +1251,17 @@ final class ReadQuantities implements Quantities {
      */
     private LinearForm<InputAtom> over(
             LinearForm<NumericTerm> form, StructuralContext under) {
-        Map<InputAtom, ExactRatio> coefs = new LinkedHashMap<>();
-        // A caller's own two spellings of one number can weigh it by two coefficients a model's own
+        List<LinearForm<InputAtom>> terms = new ArrayList<>();
+        terms.add(LinearForm.constant(form.constant()));
+        form.coefs().forEach((term, coef) ->
+                terms.add(LinearForm.weighing(called(term, under), coef)));
+        // A caller's own spellings of one number can weigh it by coefficients a model's own
         // decimals put too far apart in scale for the exact arithmetic to add. Null, then, in the
         // one word every reader of a `LinearForm` already has for "not a form" — this is a fold and
         // not a renaming, so there is no single coefficient to fall back on that would not be a
-        // second answer to a question the caller did not ask.
-        boolean[] everyTermWasComposed = {true};
-        form.coefs().forEach((term, coef) -> coefs.merge(called(term, under), coef, (a, b) -> {
-            ExactAnswer<ExactRatio> sum = a.plus(b);
-            if (sum instanceof ExactAnswer.Held<ExactRatio> held) {
-                return held.value();
-            }
-            everyTermWasComposed[0] = false;
-            return a;
-        }));
-        return everyTermWasComposed[0] ? new LinearForm<>(form.constant(), coefs) : null;
+        // second answer to a question the caller did not ask. Added as one sum, so whether they are
+        // held does not turn on which spelling came first.
+        return LinearForm.sum(terms).orNull();
     }
 
     @Override

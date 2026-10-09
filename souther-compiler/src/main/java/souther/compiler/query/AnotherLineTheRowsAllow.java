@@ -814,8 +814,7 @@ public sealed interface AnotherLineTheRowsAllow {
                 // which this method already has a word for: null, the same as any other condition
                 // nothing here can say.
                 case TakenConstraint.Affine(var form, var rel) -> {
-                    ExactRatio sum = OrderedAffineBoundary.along(form.coefs(), at).orNull();
-                    ExactRatio total = sum == null ? null : sum.plus(form.constant()).orNull();
+                    ExactRatio total = OrderedAffineBoundary.at(form, at).orNull();
                     yield total == null ? null : rel.holds(total.signum());
                 }
                 case TakenConstraint.Ordered(
