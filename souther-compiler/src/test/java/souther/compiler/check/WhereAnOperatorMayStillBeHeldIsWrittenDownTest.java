@@ -332,8 +332,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.ConstantAlgebra.settledByTheLeft",
                     "which operators answer from their left operand alone, which is what says"
                             + " whether the one beside it is read at all"),
-            new Held("souther.compiler.check.DischargeRules.noSmallerThan",
-                    "which operands a string joined by another is no shorter than"),
             new Held("souther.compiler.check.AnOperationApplied.of",
                     "which operation the joining operator is, which the library declares it as,"
                             + " so what that operation says is said of the operator"),
@@ -430,7 +428,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " it compares, not how"),
             new Held("souther.compiler.check.ArithmeticCheck.of",
                     "names the constants it has rules for, against the operator it was handed"),
-            new Held("souther.compiler.core.TheWalk.isTheNext",
+            new Held("souther.compiler.stdlib.TheWalksBody.isTheNext",
                     "names the addition the walk moves to its next index by"),
             new Held("souther.compiler.check.BinaryElaborator.operandBeside",
                     "names the two that scale a newtype"),

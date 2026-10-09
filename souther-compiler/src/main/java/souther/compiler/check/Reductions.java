@@ -2,7 +2,9 @@ package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
 import souther.compiler.core.Core;
+import souther.compiler.proof.TheWalkEnds;
 import souther.compiler.proof.WalksFromASeed;
+import souther.compiler.semantics.OperationLaw;
 import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashMap;
@@ -79,9 +81,28 @@ final class Reductions {
         return Derived.RULES.keySet();
     }
 
+    /**
+     * Whether {@code operation} is a recursion of the library's own proved to end, from any index it
+     * starts at ({@link TheWalkEnds}) — which the library's walk is and nothing else the library
+     * writes is.
+     */
+    static boolean endsWhereverItStarts(ValueName.Stdlib.Operation operation) {
+        return Derived.WALK_ENDS && DefaultStdlib.get().walk().operation().equals(operation);
+    }
+
     /** Read once. The library is the same library for every module compiled. */
     private static final class Derived {
         private static final Map<ValueName.Stdlib.Operation, Reduction> RULES = read();
+        private static final boolean WALK_ENDS = walkEnds();
+    }
+
+    /** Whether the walk ends, read off the law of what it reads an element at its index with,
+     *  which it hands its index first and its list second. */
+    private static boolean walkEnds() {
+        return DefaultBoundOperationFacts.get().settled(DefaultStdlib.get().walk().reads(),
+                        OperationLaw.Observed.PRESENCE)
+                instanceof BoundOperationFacts.Settled.ByALaw(var law, var _)
+                && TheWalkEnds.proved(law, 0, 1, DeclaredArgument::position);
     }
 
     /** Each walk the bodies are, in the positions this hands about. The holder above is the only

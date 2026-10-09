@@ -9,6 +9,10 @@ package souther.compiler.semantics;
  * Where the arguments are is read off the signature ({@link Combinator}); whether and how far the
  * closure is applied is read off the operation's body, or declared of a kernel and held to what the
  * kernel computes.
+ *
+ * <p>A second fact beside the first, and apart from it: that what the closure is handed is an
+ * element of the container ({@link Combinator}). A reader crediting a value as part of the container
+ * asks that one and never this; a reader asking which applications a run makes asks this.
  */
 public enum HowAClosureIsApplied {
 
@@ -25,5 +29,8 @@ public enum HowAClosureIsApplied {
      * To one element at most — the one the call picks out by something else it was handed, if the
      * container holds it — and to no other. Which element, and whether any, is not said.
      */
-    AT_MOST_ONE
+    AT_MOST_ONE,
+
+    /** To some of the elements, on some runs: which, and how many, is not said. */
+    TO_SOME
 }

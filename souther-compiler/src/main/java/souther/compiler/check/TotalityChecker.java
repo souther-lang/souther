@@ -37,8 +37,9 @@ import java.util.Set;
  * lexicographic recursion. A {@code partial} helper opts out (it is not checked and may not terminate);
  * if any member of a mutually-recursive group is {@code partial} the whole group is skipped — a cycle
  * through an unchecked member cannot be certified, so its other members are not independently certified
- * either. The stdlib's {@code List.foldFrom} (index recursion) is trusted total and exempt — only the
- * helpers this module declared are checked, whatever else it emits beside them. Numeric
+ * either. The stdlib's {@code List.foldFrom} (index recursion) is proved to end where the library is
+ * read, from its body and the law of reading an element at an index — only the helpers this module
+ * declared are checked here, whatever else it emits beside them. Numeric
  * ({@code n - 1}) and index ({@code i + 1}) recursion are not structural (Souther has no inductive
  * {@code Nat}) and must be {@code partial}.
  */
@@ -76,12 +77,19 @@ final class TotalityChecker {
                 throw new IllegalStateException("`" + reference.rendered()
                         + "` is a recursive helper of this module and is held nowhere in it");
             }
-            // Only what this module declared is checked. A recursive helper it took on to emit — a
-            // prelude `List.foldFrom`, one another module published — carries its declaring module's
-            // guarantee (ADR-0098), and its own module proved it. Asked of the declaration: the name
-            // it is reached by here says nothing about who wrote it, and `List.foldFrom` does not
-            // even hold the module it came from.
+            // Only what this module declared is checked here. A recursive helper another module
+            // published carries its declaring module's guarantee (ADR-0098), and its own module
+            // proved it. The library's are proved where the library is read: its walk ends from
+            // any index by its own body and the law of reading an element, and a recursion of the
+            // library's nothing proved is refused rather than taken on trust. Asked of the
+            // declaration: the name it is reached by here says nothing about who wrote it, and
+            // `List.foldFrom` does not even hold the module it came from.
             if (!h.declaredBy(inliner.moduleName())) {
+                if (reference instanceof ReachName.OfLibrary(var library)
+                        && !Reductions.endsWhereverItStarts(library)) {
+                    throw new IllegalStateException("`" + reference.rendered() + "` is a recursion"
+                            + " of the library's, and nothing proves it ends");
+                }
                 continue;
             }
             if (!handled.add(reference)) {

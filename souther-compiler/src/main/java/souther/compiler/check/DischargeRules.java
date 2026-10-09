@@ -370,24 +370,22 @@ final class DischargeRules {
     /**
      * The containers {@code e}'s result is no smaller than, in the order the rule names them.
      *
-     * <p>{@code a ++ b} is here beside the table rather than in it. The library declares
-     * {@code List.append} as {@code a ++ b}, so the two spellings are one operation and a rule about
-     * one is a rule about the other; and a {@code String} has no {@code append} at all, so the
-     * operator is the only spelling its concatenation has. A rule keyed by operation reaches neither,
-     * both being written as an operator and not as a call.
+     * <p>Read of the operation applied in whatever shape it is ({@link AnOperationApplied}): the
+     * operator {@code a ++ b} is the append of what it joins, and what is true of that operation is
+     * true of the operator.
      */
     static List<Core> noSmallerThan(Core standing) {
-        Core e = Core.withoutStanding(standing);
-        if (e instanceof Core.Binary b && b.op() == BinOp.CONCAT) {
-            return List.of(b.left(), b.right());
-        }
-        if (!(e instanceof Core.PreservedCall call)) {
+        AnOperationApplied applied = AnOperationApplied.of(standing);
+        if (applied == null) {
             return List.of();
         }
-        List<DeclaredArgument> reads = facts().resultIsNoSmallerThan(call.operation());
+        List<DeclaredArgument> reads = facts().resultIsNoSmallerThan(applied.operation());
         List<Core> containers = new ArrayList<>(reads.size());
         for (DeclaredArgument one : reads) {
-            containers.add(CallArguments.of(one, call));
+            Core argument = applied.argument(one);
+            if (argument != null) {
+                containers.add(argument);
+            }
         }
         return containers;
     }

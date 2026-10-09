@@ -424,6 +424,8 @@ public final class OperationFacts {
             // alone would be a second statement for one operation. The bound is what they share.
             about("List", "append", noSmallerThan(at(0))),
             about("List", "append", noSmallerThan(at(1))),
+            about("String", "append", noSmallerThan(at(0))),
+            about("String", "append", noSmallerThan(at(1))),
             about("Set", "union", noSmallerThan(at(0))),
             about("Set", "union", noSmallerThan(at(1))),
             about("Map", "union", noSmallerThan(at(0))),

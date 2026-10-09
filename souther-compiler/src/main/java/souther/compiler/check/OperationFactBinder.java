@@ -157,12 +157,14 @@ final class OperationFactBinder {
             }
             // What is no smaller than a container is one: a size is what the two are compared by.
             case OperationFact.ResultIsNoSmallerThan bounded -> {
-                holdTheResultToTheDeclaration(declaration, TypeRequirement.CONTAINER,
-                        "what is no smaller than a container");
+                // Of anything holding a number of things, a string as much as a container: how many
+                // a value holds is what the bound is about.
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.SIZED,
+                        "what is no smaller than what it was built from");
                 yield new BoundOperationFact.ResultIsNoSmallerThan(operation,
                         holdToTheDeclaration(declaration, bounded.container(),
-                                new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
-                                "a container the result is no smaller than"));
+                                new ArgumentRef.TheContainer(), TypeRequirement.SIZED,
+                                "what the result is no smaller than"));
             }
             case OperationFact.ReadsItsContainer reads ->
                     new BoundOperationFact.ReadsItsContainer(operation,

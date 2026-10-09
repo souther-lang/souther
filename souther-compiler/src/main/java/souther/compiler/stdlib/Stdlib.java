@@ -229,7 +229,7 @@ public final class Stdlib {
         this.kernels = KernelSignatures.of(declared);
         this.kernelOperations = kernelOperations;
         this.helpers = helpers;
-        this.walk = TheWalk.readOff(THE_WALK, helpers.get(THE_WALK), AN_ELEMENT_AT_AN_INDEX);
+        this.walk = TheWalksBody.readOff(THE_WALK, helpers.get(THE_WALK), AN_ELEMENT_AT_AN_INDEX);
         this.surface = surface;
         this.candidates = candidates;
         // Rendered here and not held rendered: resolution is given spellings and answers with

@@ -324,8 +324,9 @@ public final class InputReads {
             return new Applications.NoneHanded();
         }
         // An operation applying its closure to one element at most picks it out by something else
-        // it was handed, so which of the values is the one is not said.
-        if (how == HowAClosureIsApplied.AT_MOST_ONE) {
+        // it was handed, and one applying it to some of them says not which, so which of the
+        // values is handed is not said.
+        if (how == HowAClosureIsApplied.AT_MOST_ONE || how == HowAClosureIsApplied.TO_SOME) {
             return new Applications.Unsaid();
         }
         // Applications made of every value of each of several parameters are made in an order no

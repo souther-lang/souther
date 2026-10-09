@@ -16,7 +16,7 @@ import java.util.List;
  * <p>Where the library's resolved tree is read for what an operation keeps. Names are already
  * resolved there, so a parameter and a binding are told apart by what they reach and never by how
  * they are written; a sugar is rewritten as the library rewrites it everywhere else. The walk's own
- * body is read where the library is built ({@code core.TheWalk}), since an output lowers it from
+ * body is read where the library is built ({@code stdlib.TheWalksBody}), since an output lowers it from
  * there, and what is read here takes the walk as that reading found it.
  */
 public final class LibraryTerms {

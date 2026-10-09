@@ -264,36 +264,33 @@ public final class AppliedClosures {
         }
 
         /**
-         * What the sites come to: how far the closure is applied is said by a site the inner
-         * closure reaches on every run, or by the one site there is; every other site applies it
-         * again to the same element, in the same places.
+         * What the sites come to. Where the closure is handed is the same at every site, or nothing
+         * is said. How far it is applied is said by a site the inner closure reaches on every run,
+         * every other site applying it again to the same element; where none is reached on every
+         * run, by the one site applying it to at most one element; and otherwise it is applied to
+         * some of them, which is all that is said.
          */
         Optional<Combinator> rule() {
             if (unread || sites.isEmpty()) {
                 return Optional.empty();
             }
-            Combinator decided = null;
+            Combinator first = sites.get(0).rule();
             for (Site site : sites) {
-                if (site.always()) {
-                    decided = site.rule();
-                    break;
-                }
-            }
-            if (decided == null) {
-                if (sites.size() > 1) {
+                if (!site.rule().positions().equals(first.positions())) {
                     return Optional.empty();
-                }
-                decided = sites.get(0).rule();
-                if (decided.applied() != HowAClosureIsApplied.AT_MOST_ONE) {
-                    return Optional.empty();   // applied on some runs of the step and not others
                 }
             }
             for (Site site : sites) {
-                if (!site.rule().positions().equals(decided.positions())) {
-                    return Optional.empty();
+                if (site.always()) {
+                    return Optional.of(site.rule());
                 }
             }
-            return Optional.of(decided);
+            if (sites.size() == 1 && first.applied() == HowAClosureIsApplied.AT_MOST_ONE) {
+                return Optional.of(first);
+            }
+            return Optional.of(new Combinator(first.closureArg(), first.elementParam(),
+                    first.containerArg(), first.keyParam(), HowAClosureIsApplied.TO_SOME,
+                    Combinator.FROM_THE_FIRST));
         }
 
         private boolean isTheClosure(LibraryTerm term) {

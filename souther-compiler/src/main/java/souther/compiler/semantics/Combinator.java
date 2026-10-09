@@ -11,6 +11,12 @@ package souther.compiler.semantics;
  * ({@code check.Combinators}). A signature alone says a closure could be handed an element, and
  * never that it is.
  *
+ * <p>Two facts, and a reader asks the one it needs. That there is a rule at all says what the closure
+ * is handed on {@code elementParam} is an element of {@code containerArg} — whatever else it does,
+ * it hands it nothing else there. How many of the elements it is handed is {@code applied}, which
+ * may say nothing more than some. A check crediting the value as a part of the container reads the
+ * first; a reading of which applications a run makes reads the second.
+ *
  * <p>The numbers are positions of the operation's arguments, so one is meaningful only beside a
  * call to that operation. Nothing here reads them; they are read where an {@link ArgumentRef} is
  * resolved.
