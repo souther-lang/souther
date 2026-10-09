@@ -257,37 +257,55 @@ public final class Lists {
     /**
      * {@link #productInt(List)}, passing {@code checkpoint} once for each element.
      *
-     * <p>The product is what is asked to be an {@code Int}. Every factor but nought is at least one
-     * in size, so a partial product past the range leaves the product past it — unless a later
-     * factor is nought, and then the product is nought: {@code [max, 2, 0]} is nought as
-     * {@code [0, max, 2]} is.
+     * <p>The product is what is asked to be an {@code Int}, and not each partial product on the way
+     * to it. A partial product past the range is kept exactly, since an {@code Int} is not the same
+     * size both ways round: two to the sixty-third is past the range and its negation is not, so
+     * {@code [min, -1, -1]} is {@code min} as {@code [-1, -1, min]} is. Past that size no factor but
+     * nought brings it back — every other one is at least one in size — so from there only whether
+     * a nought follows is kept, and a nought makes the product nought: {@code [max, 2, 0]} is
+     * nought as {@code [0, max, 2]} is.
      */
     public static long productInt(List<Long> xs, WorkCheckpoint checkpoint) {
         long acc = 1;
-        boolean past = false;
+        BigInteger wide = null;
+        boolean pastAnyInt = false;
+        boolean nought = false;
         for (long x : xs) {
             checkpoint.pass();
             if (x == 0) {
-                acc = 0;
-                past = false;
+                nought = true;
+            }
+            if (nought || pastAnyInt) {
                 continue;
             }
-            if (past || acc == 0) {
-                continue;
+            if (wide == null) {
+                try {
+                    acc = Math.multiplyExact(acc, x);
+                    continue;
+                } catch (ArithmeticException _) {
+                    wide = BigInteger.valueOf(acc);
+                }
             }
-            try {
-                acc = Math.multiplyExact(acc, x);
-            } catch (ArithmeticException _) {
-                past = true;
-            }
+            wide = wide.multiply(BigInteger.valueOf(x));
+            // Past two to the sixty-third in size, no Int is the product but nought.
+            pastAnyInt = wide.abs().compareTo(BEYOND_EVERY_INT) > 0;
         }
-        if (past) {
+        if (nought) {
+            return 0;
+        }
+        if (wide == null) {
+            return acc;
+        }
+        if (pastAnyInt || wide.bitLength() >= Long.SIZE) {
             // Said of the list and not of the factor it was passed at, which is the order's.
             throw new ConstraintViolation("Int overflow: the product of a list is past what an Int"
                     + " holds");
         }
-        return acc;
+        return wide.longValueExact();
     }
+
+    /** Two to the sixty-third: the size of the least {@code Int}, and of no greater one. */
+    private static final BigInteger BEYOND_EVERY_INT = BigInteger.ONE.shiftLeft(Long.SIZE - 1);
 
     /** The sum of a list of {@code Decimal}; the empty list is 0. What adding them a {@code +} at
      *  a time comes to ({@link DecimalMath#sum}): at the greatest scale any of them is written at,

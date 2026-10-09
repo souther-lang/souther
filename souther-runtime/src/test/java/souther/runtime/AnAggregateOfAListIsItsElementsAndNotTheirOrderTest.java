@@ -55,6 +55,52 @@ class AnAggregateOfAListIsItsElementsAndNotTheirOrderTest {
         }
     }
 
+    /**
+     * An {@code Int} is not the same size both ways round: two to the sixty-third is past the range
+     * and its negation is not. A partial answer of that size, the wrong way round, is not past the
+     * range of the answer.
+     */
+    @Test
+    void theLeastIntIsAnAnswerWhicheverWayRoundItWasReached() {
+        for (List<Long> order : orders(List.of(Long.MIN_VALUE, -1L, -1L))) {
+            assertEquals(Long.MIN_VALUE, Lists.productInt(order, WorkCheckpoint.NONE),
+                    () -> "in the order " + order);
+        }
+        for (List<Long> order : orders(List.of(Long.MIN_VALUE, -1L))) {
+            assertThrows(ConstraintViolation.class,
+                    () -> Lists.productInt(order, WorkCheckpoint.NONE),
+                    () -> "two to the sixty-third is no Int, in the order " + order);
+        }
+        for (List<Long> order : orders(List.of(Long.MIN_VALUE, -1L, 2L, 0L))) {
+            assertEquals(0L, Lists.productInt(order, WorkCheckpoint.NONE),
+                    () -> "in the order " + order);
+        }
+        for (List<Long> order : orders(List.of(Long.MIN_VALUE, -1L, 1L))) {
+            assertEquals(Long.MIN_VALUE, Lists.sumInt(order, WorkCheckpoint.NONE),
+                    () -> "in the order " + order);
+        }
+    }
+
+    /**
+     * Decimals at the far end of the scale cancel whatever the order, held to an allowance or not:
+     * a fine term raised to an ordinary one's scale is no number the host builds, and a sum that
+     * raised it before its negation came would refuse a list whose sum is nought.
+     */
+    @Test
+    void decimalsAtTheEndOfTheScaleCancelWhateverTheOrder() {
+        BigDecimal fine = new BigDecimal(BigInteger.ONE, Integer.MAX_VALUE);
+        for (List<BigDecimal> order : orders(List.of(fine, BigDecimal.ONE, fine.negate(),
+                BigDecimal.ONE.negate()))) {
+            for (WorkCheckpoint checkpoint : List.<WorkCheckpoint>of(WorkCheckpoint.NONE,
+                    pieces -> { })) {
+                BigDecimal sum = Lists.sumDecimal(order, checkpoint);
+                assertEquals(0, sum.signum(), () -> "nought, in the order " + order);
+                assertEquals(Integer.MAX_VALUE, sum.scale(),
+                        () -> "at the greatest scale, in the order " + order);
+            }
+        }
+    }
+
     @Test
     void anIntProductWithANoughtIsNoughtWhateverTheOrder() {
         for (List<Long> order : orders(List.of(Long.MAX_VALUE, 2L, 0L))) {
