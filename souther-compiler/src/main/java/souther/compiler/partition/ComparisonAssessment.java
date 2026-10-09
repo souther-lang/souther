@@ -12,6 +12,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.FilingCoordinate;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.Place;
@@ -27,6 +28,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedMap;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * What one comparison comes to on the input space: one reading, and everything read off it.
@@ -522,32 +524,43 @@ sealed interface ComparisonAssessment {
         if (cutting == null) {
             return read;
         }
-        // A way no row takes is one no row arrives at the line by, wherever the tree that runs
-        // holds the rule.
+        return arrivesAtSomePlace(cutting, way, arrivals,
+                region -> cutting.reachedIn(region, drawnByAnInvariant))
+                ? read : new NothingArrivesAtItsLine(cutting);
+    }
+
+    /**
+     * Whether some place the rule is watched at leaves {@code asked} true of the region a row
+     * arriving there is in.
+     *
+     * <p>A way no row takes is one no row arrives at the line by, wherever the tree that runs holds
+     * the rule. Otherwise every place the rule is watched at, and the answer is no only where all of
+     * them proved it. One rule may be written into the tree that runs more than once, and a run
+     * through any of the copies is a run through the rule — so a proof about one of them is a proof
+     * about that copy, and the line is what the model states about all of them.
+     *
+     * <p>Which is why one place that could not be projected leaves the question to the declarations
+     * and the way: what a walk did not settle is not a proof that nothing arrives, and a line has to
+     * be dropped by a proof rather than by the absence of one.
+     */
+    private static boolean arrivesAtSomePlace(Cutting cutting, Reachability way,
+                                              List<ComparisonArrival> arrivals,
+                                              Predicate<SearchRegion> asked) {
         if (!(way instanceof Reachability.Reaching reaching)) {
-            return new NothingArrivesAtItsLine(cutting);
+            return false;
         }
-        // Every place the rule is watched at, and the line goes only where all of them proved
-        // nothing reaches it. One rule may be written into the tree that runs more than once, and a
-        // run through any of the copies is a run through the rule — so a proof about one of them is
-        // a proof about that copy, and the line is what the model states about all of them.
-        //
-        // Which is why one place that could not be projected leaves the line to the declarations
-        // and the way: what a walk did not settle is not a proof that nothing arrives, and the line
-        // has to be dropped by a proof rather than by the absence of one.
         for (ComparisonArrival arrival : arrivals) {
             boolean reaches = switch (arrival) {
                 case ComparisonArrival.NothingArrives _ -> false;
-                case ComparisonArrival.Values values -> cutting.reachedIn(
-                        cutting.narrowedBy(values, reaching.region()), drawnByAnInvariant);
-                case ComparisonArrival.NoProjection _ ->
-                        cutting.reachedIn(reaching.region(), drawnByAnInvariant);
+                case ComparisonArrival.Values values ->
+                        asked.test(cutting.narrowedBy(values, reaching.region()));
+                case ComparisonArrival.NoProjection _ -> asked.test(reaching.region());
             };
             if (reaches) {
-                return read;
+                return true;
             }
         }
-        return new NothingArrivesAtItsLine(cutting);
+        return false;
     }
 
     /** One line of a statement of several, on the way and then in each case where it decides. */
@@ -557,22 +570,23 @@ sealed interface ComparisonAssessment {
                                               boolean drawnByAnInvariant) {
         ComparisonAssessment arrived = narrowedByWhatArrives(part.line(), way, _ -> way, arrivals,
                 drawnByAnInvariant);
-        if (arrived instanceof NothingArrivesAtItsLine) {
+        // Only where it is a line at all: a line refused, outside what the declarations leave, or
+        // one nothing arrives at, is that whatever the cases are.
+        if (!(arrived instanceof AtAPosition || arrived instanceof AcrossPositions)) {
             return new Several.Part(part.id(), arrived, part.cases());
         }
+        // Each case where a row on each side of the line can stand in it. Rows on the two sides in
+        // one case differ in this line alone, so the statement turns between them; a case only one
+        // side has rows in is a case crossing the line leaves, and turns nothing there.
+        Cutting cutting = cuttingOf(arrived);
         List<Proposition> reached = new ArrayList<>();
         for (WhereAPartDecides each : part.readings()) {
-            Reachability there = wayToAPart.apply(each);
-            if (!(narrowedByWhatArrives(part.line(), there, _ -> there, arrivals,
-                    drawnByAnInvariant) instanceof NothingArrivesAtItsLine)) {
+            if (arrivesAtSomePlace(cutting, wayToAPart.apply(each), arrivals,
+                    cutting::crossedIn)) {
                 reached.add(each.decides());
             }
         }
-        // Only where it is a line at all: a line refused, or outside what the declarations leave,
-        // is that whatever the cases are.
-        Cutting cutting = arrived instanceof AtAPosition || arrived instanceof AcrossPositions
-                ? cuttingOf(arrived) : null;
-        return cutting != null && reached.isEmpty()
+        return reached.isEmpty()
                 ? new Several.Part(part.id(), new TurnsNothing(cutting), List.of())
                 : new Several.Part(part.id(), arrived, reached);
     }

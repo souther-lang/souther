@@ -487,14 +487,56 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      *                           has no far side for anything to stand on
      */
     boolean reachedIn(SearchRegion region, boolean drawnByAnInvariant) {
+        Border.Values values = valuesIn(region);
+        return values != null
+                && Border.reaches(at, this::seam, claim, drawnByAnInvariant, values);
+    }
+
+    /**
+     * Whether the rows {@code region} holds stand on both sides of this line — at the value a rule
+     * names and beside it, for a rule that names one.
+     *
+     * <p>What a line of a statement of several is asked in each case of where it decides. A case is
+     * other relations holding or failing, and a row on one side of the line and a row on the other,
+     * both in the case, differ in this relation alone — so the statement comes out differently for
+     * them. Asked of one side only, a case could hold of the rows on one side and of none on the
+     * other: {@code Int.min(a, 11 - a) > 5} decides on {@code 11 - a > 5} where {@code a > 5}, and
+     * crossing from six to five takes {@code a > 5} with it, so the statement never turns there.
+     *
+     * <p>A side that was not worked out is not a proof that no row stands on it, as it is not in
+     * {@link #reachedIn}.
+     */
+    boolean crossedIn(SearchRegion region) {
+        Border.Values values = valuesIn(region);
+        if (values == null) {
+            return false;
+        }
+        return switch (claim) {
+            case ComparisonClaim.Cut order -> Border.reachesBothSides(at, seam(), order, values);
+            // The value it names and one beside it: a seam drawn with the value on either side
+            // names the nearest value below and the nearest above.
+            case ComparisonClaim.Singled _ -> values.holdAt(at)
+                    && (Border.reachesBothSides(at, seam(),
+                            new ComparisonClaim.Cut(Towards.ABOVE, true), values)
+                            || Border.reachesBothSides(at,
+                                    Seam.where(of, at, new ComparisonClaim.Cut(Towards.BELOW, true)),
+                                    new ComparisonClaim.Cut(Towards.BELOW, true), values));
+        };
+    }
+
+    /**
+     * What {@code region} leaves this quantity, as the two questions a line asks of it — or null
+     * where it leaves the quantity nothing at all.
+     */
+    private Border.Values valuesIn(SearchRegion region) {
         NumericDomain.FormProjection runs = region.projectionOf(of.direction());
         if (runs instanceof NumericDomain.FormProjection.NothingIsLeft) {
-            return false;
+            return null;
         }
         Border.Values extent = Border.Values.within(
                 runs instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds range)
                         ? range : null);
-        return Border.reaches(at, this::seam, claim, drawnByAnInvariant, new Border.Values() {
+        return new Border.Values() {
             @Override
             public boolean extendTo(Level level) {
                 return extent.extendTo(level);
@@ -514,7 +556,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 return atTheLevel(region, level)
                         .map(there -> there.emptiness().isEmpty()).orElse(true);
             }
-        });
+        };
     }
 
     /**

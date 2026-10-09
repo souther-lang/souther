@@ -57,8 +57,10 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
             rules.add(obligation.at("/obligationId/line/which/rule").toString());
         }
         assertEquals(1, rules.size(), () -> "one comparison, one rule: " + rules);
-        assertEquals(Set.of(0, 1, 2), parts,
-                "the line on a, the line on b, and the line between the two arms of max");
+        // And not the line between the two arms of max, which the reading also holds: where a
+        // crosses b.v the answer does not jump, so no row on either side of it is in a case where
+        // the statement turns.
+        assertEquals(Set.of(0, 1), parts, "the line on a and the line on b");
         assertTrue(reasonsAt(report, "a").stream()
                         .noneMatch("several_lines_in_one_rule"::equals),
                 "the statement is drawn, not held back");
@@ -89,6 +91,26 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
         JsonNode report = reportOf("Int.max(0, a) <= b.v", "");
         assertTrue(reasonsAt(report, "a").contains("rule_never_turns_on_this_line"),
                 () -> "the line between the arms decides nowhere: " + reasonsAt(report, "a"));
+    }
+
+    /**
+     * A line turns the statement only where rows on both sides of it are in one case of where it
+     * decides, and not where the case holds on one side alone.
+     *
+     * <p>{@code Int.min(a, 11 - a) > 5} is {@code a > 5} and {@code 11 - a > 5}, and it holds of no
+     * whole number. Read part against part, the line on {@code 11 - a > 5} decides where
+     * {@code a > 5} — and six is above five — but a row crossing that line goes from six to five,
+     * taking {@code a > 5} across with it, and the statement is false on both sides. So neither
+     * line is one the statement turns on, and neither is owed a row.
+     */
+    @Test
+    void aLineTurnsTheStatementOnlyWhereBothItsSidesAreInOneCase() {
+        JsonNode report = reportOf("Int.min(a, 11 - a) > 5", "");
+        assertEquals(List.of("rule_never_turns_on_this_line"),
+                reasonsAt(report, "a").stream().distinct().toList(),
+                () -> "neither line turns the statement: " + reasonsAt(report, "a"));
+        assertTrue(obligationsOfParts(report).isEmpty(),
+                () -> "and no row is owed at either: " + obligationsOfParts(report));
     }
 
     /**

@@ -30,6 +30,13 @@ import java.util.TreeMap;
  * set of parts a row can be composed to meet together, so a line looked for under each case is
  * looked for where it decides and nowhere else — and a line no case leaves a row at is one the
  * statement never turns on. None at all is a line that decides nowhere, whatever the row.
+ *
+ * <p><b>What this says is the relation turning alone, which is not yet a row crossing it.</b> The
+ * parts are read as though each could come out either way with the others held still, and two of
+ * them over the same number cannot: {@code Int.min(a, 11 - a) > 5} decides on {@code 11 - a > 5}
+ * where {@code a > 5}, and every row that crosses that line from six to five takes {@code a > 5}
+ * across with it. So a case is where the line decides only where rows on both sides of the line
+ * can be in it, which is asked of the rows and not here.
  */
 public final class WhereEachLineDecides {
 
@@ -42,6 +49,16 @@ public final class WhereEachLineDecides {
      * against.
      */
     private static final int MOST_PARTS_READ_TOGETHER = 12;
+
+    /**
+     * How many places parts stand at, over every way the parts can come out, the statement is read
+     * at before it is said as one case instead.
+     *
+     * <p>The work of reading it part against part is every way times every place a part stands, and
+     * a statement can be long over few parts as readily as short over many. Bounded by the parts
+     * alone, a statement written out over a dozen of them took as long to read as a module.
+     */
+    private static final long MOST_PLACES_READ = 1L << 17;
 
     /** How many cases where a line decides is said in before it is said as one. */
     private static final int MOST_CASES = 16;
@@ -87,6 +104,7 @@ public final class WhereEachLineDecides {
             index.put(named.get(i).key(), i);
         }
         boolean[] table = named.size() <= MOST_PARTS_READ_TOGETHER
+                && (1L << named.size()) * placesIn(stated) <= MOST_PLACES_READ
                 ? tabulated(stated, leaves, index, named.size()) : null;
         List<Decides> out = new ArrayList<>();
         for (int at = 0; at < named.size(); at++) {
@@ -140,6 +158,17 @@ public final class WhereEachLineDecides {
         return holds ? part : part.denied();
     }
 
+    /** How many places a part stands at in {@code stated}, each counted every time it stands. */
+    private static long placesIn(Proposition stated) {
+        return switch (stated) {
+            case Proposition.All all ->
+                    all.parts().stream().mapToLong(WhereEachLineDecides::placesIn).sum();
+            case Proposition.Any any ->
+                    any.parts().stream().mapToLong(WhereEachLineDecides::placesIn).sum();
+            default -> 1;
+        };
+    }
+
     /** What {@code stated} comes to for every way its {@code count} parts can come out, the
      *  {@code i}th part held where bit {@code i} is set. */
     private static boolean[] tabulated(Proposition stated, Map<String, Literal> leaves,
@@ -181,8 +210,7 @@ public final class WhereEachLineDecides {
             decides[ways] = (ways & line) == 0 && table[ways] != table[ways | line];
         }
         List<List<Proposition>> cases = new ArrayList<>();
-        split(decides, line, 0, 0, new ArrayList<>(), named, at, cases);
-        if (cases.size() > MOST_CASES) {
+        if (!split(decides, line, 0, 0, new ArrayList<>(), named, at, cases)) {
             return null;
         }
         return cases.stream().map(Proposition::all).toList();
@@ -190,11 +218,12 @@ public final class WhereEachLineDecides {
 
     /**
      * The cases under {@code asked}, the parts whose bits are {@code fixed} coming out as
-     * {@code values} says.
+     * {@code values} says — or false as soon as there are more than {@link #MOST_CASES}, so the
+     * limit bounds the work and not only what is kept.
      */
-    private static void split(boolean[] decides, int line, int fixed, int values,
-                              List<Proposition> asked, List<Proposition> named, int at,
-                              List<List<Proposition>> into) {
+    private static boolean split(boolean[] decides, int line, int fixed, int values,
+                                 List<Proposition> asked, List<Proposition> named, int at,
+                                 List<List<Proposition>> into) {
         boolean some = false;
         boolean every = true;
         for (int ways = 0; ways < decides.length; ways++) {
@@ -204,11 +233,11 @@ public final class WhereEachLineDecides {
             }
         }
         if (!some) {
-            return;
+            return true;
         }
         if (every) {
             into.add(List.copyOf(asked));
-            return;
+            return into.size() <= MOST_CASES;
         }
         for (int part = 0; part < named.size(); part++) {
             int its = 1 << part;
@@ -217,11 +246,12 @@ public final class WhereEachLineDecides {
             }
             List<Proposition> held = new ArrayList<>(asked);
             held.add(named.get(part));
-            split(decides, line, fixed | its, values | its, held, named, at, into);
+            if (!split(decides, line, fixed | its, values | its, held, named, at, into)) {
+                return false;
+            }
             List<Proposition> failing = new ArrayList<>(asked);
             failing.add(named.get(part).denied());
-            split(decides, line, fixed | its, values, failing, named, at, into);
-            return;
+            return split(decides, line, fixed | its, values, failing, named, at, into);
         }
         throw new IllegalStateException("where a line decides turns on some part where it is"
                 + " neither everywhere nor nowhere");

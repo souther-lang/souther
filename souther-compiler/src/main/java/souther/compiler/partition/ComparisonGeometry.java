@@ -41,6 +41,8 @@ record ComparisonGeometry(List<LineEvidence> evidence, List<LineDrawn> between) 
     interface OriginOf {
 
         /**
+         * The origin of the line drawn on {@code cutting}.
+         *
          * @param part which of the comparison's lines this is and the case of where it decides it
          *             is read in, or empty where the comparison states one
          */

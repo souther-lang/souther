@@ -804,6 +804,22 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
     }
 
     /**
+     * Whether a row stands at the value beside the line on each side of it, where {@link #reaches}
+     * asks whether the values run to it on either.
+     *
+     * <p>What a line is asked where it has to be crossed and not only met: a row on each side, so
+     * that two rows differing in this line alone are there to be written. Asked as whether a row
+     * stands at each value, and not whether the values run to it: a run that stops strictly short
+     * of a value reaches its place and holds no row there, and that row is the one asked for.
+     */
+    static boolean reachesBothSides(Level cut, ExactAnswer<Seam> parts,
+                                    ComparisonClaim.Cut order, Values values) {
+        Towards kept = order.satisfyingSide();
+        return standsAt(values::holdAt, cut, parts, kept)
+                && standsAt(values::holdAt, cut, parts, kept.opposite());
+    }
+
+    /**
      * Whether the rules leave a value where this line parts them on one side.
      *
      * <p>The line itself where the seam has nothing to name there in the quantity's own units, which
