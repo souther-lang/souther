@@ -131,7 +131,7 @@ class AnAggregateOfAListIsItsElementsAndNotTheirOrderTest {
         assertEquals(byRunExactly, Lists.sumRational(rationals, pieces -> one[0] += pieces));
         long ran = run[0];
         long summed = one[0];
-        assertTrue(summed <= 4 * ran + 4 * 2 * decimals.size(),
+        assertTrue(summed <= 4 * ran + 8L * decimals.size(),
                 () -> "one sum costs " + summed + " where a run of them costs " + ran);
     }
 
