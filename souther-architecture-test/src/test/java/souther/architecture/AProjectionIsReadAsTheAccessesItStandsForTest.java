@@ -393,7 +393,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "core/GrowingFold", "count", "(" + core + "Ljava/util/function/Predicate;[I)V",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/GrowingFold", "rewrite", "(" + core + "L" + c
-                + "types/ValueName$Stdlib$Operation;)" + core, Reading.THE_TREE_THAT_RUNS, RUNS);
+                + "core/TheWalk;)" + core, Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "coverage/AnswerEmissionIndex", "walk", "(" + core + "L" + c
                 + "coverage/CoverageSites$Plan;Ljava/util/Map;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "coverage/ArmEmissionIndex", "walk", "(" + core + "L" + c

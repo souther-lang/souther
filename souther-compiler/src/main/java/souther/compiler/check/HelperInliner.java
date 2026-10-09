@@ -1,8 +1,9 @@
 package souther.compiler.check;
 
 import souther.compiler.stdlib.Stdlib;
+import souther.compiler.core.TheWalk;
 import souther.compiler.semantics.BuiltFrom;
-import souther.compiler.semantics.Combinator;
+import souther.compiler.semantics.ClosurePositions;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.StructuralCost;
@@ -764,7 +765,7 @@ public final class HelperInliner {
             return null;
         }
         int parameter = CallArguments.positionOf(which, expansion.callee());
-        Combinator handed = Combinators.of(expansion.callee());
+        ClosurePositions handed = Combinators.positionsOf(expansion.callee());
         int at = parameter - (handed != null && handed.closureArg() < parameter ? 1 : 0);
         return at < 0 || at >= expansion.bound().size() ? null
                 : expansion.bound().get(at).binder().id();
@@ -899,20 +900,6 @@ public final class HelperInliner {
     public Hir.FnDef applied(Hir.Apply call) {
         return appliedHelper(call);
     }
-
-    /**
-     * Which argument of the walk holds its block.
-     *
-     * <p>The walk is the one privileged loop primitive that takes a block (spec §stdlib-list); its
-     * block is the first argument and has two parameters (`(acc, x)`, spec §pipe). A bare name
-     * passed in its place is sugar for a block that wraps a call. The other combinators
-     * (map/filter/all/any) are ordinary prelude helpers derived from the walk (ADR-0028), so they
-     * need no such desugaring — a name reaches their function parameter directly.
-     *
-     * <p>Which argument, and not which operation: what the walk is, the library says
-     * ({@link Stdlib#theWalk}).
-     */
-    private static final int BLOCK_ARG_OF_THE_WALK = 0;
 
     /**
      * The rewrite {@code call} takes, or null where it takes none.
@@ -3329,9 +3316,10 @@ public final class HelperInliner {
         if (call.answered() == null) {
             return call;   // it reaches nothing, so it is no named block to desugar
         }
-        // Only the walk takes a block, and which operation that is, the library says.
-        Integer idx = table.library().theWalk().equals(call.answered().denotes())
-                ? BLOCK_ARG_OF_THE_WALK : null;
+        // Only the walk takes a block, and which operation that is and which of its arguments the
+        // block is, the library says.
+        TheWalk walk = table.library().walk();
+        Integer idx = walk.operation().equals(call.answered().denotes()) ? walk.step() : null;
         if (idx == null || idx >= call.args().size()
                 || !(call.args().get(idx) instanceof Hir.Var.Denoting named)) {
             return call;

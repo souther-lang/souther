@@ -323,6 +323,11 @@ public final class InputReads {
         if (handed.isEmpty()) {
             return new Applications.NoneHanded();
         }
+        // An operation applying its closure to one element at most picks it out by something else
+        // it was handed, so which of the values is the one is not said.
+        if (how == HowAClosureIsApplied.AT_MOST_ONE) {
+            return new Applications.Unsaid();
+        }
         // Applications made of every value of each of several parameters are made in an order no
         // operation here states, so where one of them stops is not said either.
         if (handed.size() > 1 && how != HowAClosureIsApplied.TO_EVERY_ELEMENT) {

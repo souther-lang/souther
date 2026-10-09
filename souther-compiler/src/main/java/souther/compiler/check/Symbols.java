@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Kernel;
 import souther.compiler.stdlib.Stdlib;
+import souther.compiler.core.TheWalk;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -64,7 +65,7 @@ public sealed interface Symbols extends NameSense permits ResolvedSymbols, Deriv
      * where reaching {@link #library()} would be an output that could put any question to the
      * library, which {@code TheBackendEmitsAgainstTheLanguageItWasHanded} keeps closed.
      */
-    ValueName.Stdlib.Operation theWalk();
+    TheWalk theWalk();
 
     /**
      * The one operation the library publishes that states elements are distinct, which an invariant

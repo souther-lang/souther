@@ -166,6 +166,14 @@ public sealed interface ElementLineage<A> {
      *
      * <p>The one lineage a rule about the output can be pushed back through as it stands, since
      * there is nothing between the two values to push it through.
+     *
+     * <p><b>Each element of the output is a different one of the source's.</b> Two places in the
+     * output are two places in the source, so no element of the source is answered twice: a list
+     * holding {@code [x, x]} built from {@code [x, y]} is no list this is true of, though every
+     * element of it is the source's own. That is what lets a count say more than a count: as many
+     * elements as the source, each a different one of its own, is every one of them once
+     * ({@link ElementShape#PERMUTES}), and no more of them is some of them, each once
+     * ({@link ElementShape#SUBSET}).
      */
     record SameAs<A>(Source<A> source) implements ElementLineage<A> {
 

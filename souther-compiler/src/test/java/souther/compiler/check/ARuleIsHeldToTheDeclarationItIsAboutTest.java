@@ -222,7 +222,7 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
         // `List.contains(value, xs)` applies no closure, so there is no container it hands one.
         IllegalStateException e = assertThrows(IllegalStateException.class,
                 () -> bindCarried("List.contains", new ArgumentRef.TheContainer()));
-        assertTrue(e.getMessage().contains("hands one nothing a container holds"), e.getMessage());
+        assertTrue(e.getMessage().contains("puts no closure beside a container"), e.getMessage());
     }
 
     @Test

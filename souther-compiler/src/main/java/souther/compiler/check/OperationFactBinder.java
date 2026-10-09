@@ -9,6 +9,7 @@ import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.ArgumentsStand;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
+import souther.compiler.semantics.ClosurePositions;
 import souther.compiler.semantics.Combinator;
 import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.LawNumber;
@@ -236,7 +237,8 @@ final class OperationFactBinder {
                     + library.qualified() + " is " + Type.show(stands) + ", not " + required
                     + "; it is named as " + role);
         }
-        if (at instanceof ArgumentRef.At && derived != null && Combinators.of(library) != null
+        if (at instanceof ArgumentRef.At && derived != null
+                && Combinators.positionsOf(library) != null
                 && positionIn(derived, library) == position) {
             throw new IllegalStateException("the rule about " + role + " for "
                     + library.qualified()
@@ -262,12 +264,12 @@ final class OperationFactBinder {
         };
     }
 
-    private static Combinator handing(ValueName operation, String part) {
-        Combinator handed = Combinators.of(operation);
+    private static ClosurePositions handing(ValueName operation, String part) {
+        ClosurePositions handed = Combinators.positionsOf(operation);
         if (handed == null) {
             throw new IllegalStateException("a rule about " + operation + " names " + part
-                    + " of what it hands its closure, and its signature says it hands one nothing"
-                    + " a container holds");
+                    + " of what it hands its closure, and its signature puts no closure beside a"
+                    + " container");
         }
         return handed;
     }
@@ -1019,7 +1021,7 @@ final class OperationFactBinder {
                 yield new LawSubject.ElementOf<>(container);
             }
             case LawSubject.WhatTheClosureAnswers<ArgumentRef>(ArgumentRef at) -> {
-                Combinator walks = Combinators.of(library);
+                ClosurePositions walks = Combinators.positionsOf(library);
                 if (walks == null) {
                     throw new IllegalStateException(library.qualified() + " hands no closure"
                             + " the elements of a container, so no law of it names what one"

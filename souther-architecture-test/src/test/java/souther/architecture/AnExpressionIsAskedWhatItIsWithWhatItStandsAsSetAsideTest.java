@@ -600,7 +600,7 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "core/GrowingFold", "reads", "(" + core + "Ljava/util/Set;)I", 1,
                 COUNTS_THROUGH_IT);
         row(out, c + "core/GrowingFold", "rewrite",
-                "(" + core + "L" + c + "types/ValueName$Stdlib$Operation;)" + core, 3,
+                "(" + core + "L" + c + "core/TheWalk;)" + core, 3,
                 REWRITES_UNDER_IT);
         row(out, c + "core/GrowingFold", "uses", "(" + core + "L" + c + "types/BindingId;)I", 1,
                 COUNTS_THROUGH_IT);

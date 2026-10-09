@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Kernel;
 import souther.compiler.stdlib.Stdlib;
+import souther.compiler.core.TheWalk;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -95,8 +96,8 @@ final class SymbolTable<D> {
         return scope.module();
     }
 
-    ValueName.Stdlib.Operation theWalk() {
-        return stdlib.theWalk();
+    TheWalk theWalk() {
+        return stdlib.walk();
     }
 
     ValueName.Stdlib.Operation theDistinctnessPredicate() {

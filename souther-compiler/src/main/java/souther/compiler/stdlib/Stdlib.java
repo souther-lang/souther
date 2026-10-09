@@ -5,6 +5,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
 import souther.compiler.core.KernelSignatures;
+import souther.compiler.core.TheWalk;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -190,6 +191,7 @@ public final class Stdlib {
      *  library rather than the declaration it would have to open to find out. */
     private final Map<ValueName.Stdlib.Operation, Intrinsic> kernelOperations;
     private final Map<ValueName.Stdlib.Operation, Hir.FnDef> helpers;
+    private final TheWalk walk;
     /** Every published name with how it is called. The names are its keys, so a name published
      *  with no signature cannot be held. */
     private final SequencedMap<String, PublishedSignature> surface;
@@ -227,6 +229,7 @@ public final class Stdlib {
         this.kernels = KernelSignatures.of(declared);
         this.kernelOperations = kernelOperations;
         this.helpers = helpers;
+        this.walk = TheWalk.readOff(THE_WALK, helpers.get(THE_WALK), AN_ELEMENT_AT_AN_INDEX);
         this.surface = surface;
         this.candidates = candidates;
         // Rendered here and not held rendered: resolution is given spellings and answers with
@@ -349,10 +352,20 @@ public final class Stdlib {
         return THE_WALK;
     }
 
+    /** What the walk does and where each of its arguments is, read off its body while the library
+     *  was built ({@link TheWalk}). */
+    public TheWalk walk() {
+        return walk;
+    }
+
     /** Which operation the walk is. Named where the library is described, so a library that
      *  published it under another alias is refused rather than silently lowered as a call. */
     private static final ValueName.Stdlib.Operation THE_WALK =
             ValueName.Stdlib.operation("List", "foldFrom");
+
+    /** What the walk reads the element at an index with. */
+    private static final ValueName.Stdlib.Operation AN_ELEMENT_AT_AN_INDEX =
+            ValueName.Stdlib.operation("List", "get");
 
     /**
      * The one operation this library publishes that states elements are distinct: that a list holds

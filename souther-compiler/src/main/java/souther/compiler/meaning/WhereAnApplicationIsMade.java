@@ -50,6 +50,9 @@ public final class WhereAnApplicationIsMade {
                 case TO_EVERY_ELEMENT -> { }
                 case UNTIL_ONE_HOLDS -> before.add(answers.get(at).denied());
                 case UNTIL_ONE_FAILS -> before.add(answers.get(at));
+                case AT_MOST_ONE -> throw new IllegalArgumentException("which value an operation"
+                        + " applies its closure to at most once is not said, so no application of"
+                        + " it is placed among the others");
             }
         }
         return List.copyOf(out);
