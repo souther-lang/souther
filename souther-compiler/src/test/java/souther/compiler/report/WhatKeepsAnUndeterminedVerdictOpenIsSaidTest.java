@@ -37,12 +37,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A verdict of {@code undetermined} says whether measuring again with more would answer any of it.
  *
- * <p>The model here forks on whether a list computed from its input is empty, where the library
- * says nothing about what that emptiness turns on: {@code List.drop} answers a shorter list, and
- * nothing it declares says which of what it was given decides whether that list holds anything.
- * Every class of the position is derived and every one of them is covered, both arms are reached,
- * both outputs are specified — and the measure stays partial, because the fork is about a value made
- * from the position and nothing works out what it says about the values there.
+ * <p>The model here forks on whether a string computed from its input is empty, where the library
+ * has no words for what that emptiness turns on: {@code String.trim} answers the string without
+ * the white space at its ends, and it is empty exactly where every character was white space,
+ * which is no statement this compiler reads. Both arms are reached and both outputs are specified
+ * — and the measure stays partial, because the fork is about a value made from the position and
+ * nothing works out what it says about the values there.
  *
  * <p>Nothing anybody writes closes that, and nothing any allowance changes either. Before this, the
  * report said {@code undetermined} and stopped, which is the same word it says over a row that did
@@ -56,22 +56,18 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
     private static final String MODEL = """
             module probe.empty
 
-            data 一般
-            data 管理職
-            data 役職 = 一般 | 管理職
-
-            data 申請 = { 役職: List<役職> }
+            data 申請 = { 理由: String }
 
             data 理由あり
             data 理由なし
 
             behavior 判定する : (申請: 申請) -> 理由あり | 理由なし
             let 判定する (申請) =
-                if List.isEmpty(List.drop(1, 申請.役職)) then 理由なし else 理由あり
+                if String.isEmpty(String.trim(申請.理由)) then 理由なし else 理由あり
 
             example 判定する
-                | "一人なら理由がない" : (申請 { 役職 = [ 一般 ] })         -> 理由なし
-                | "二人なら理由がある" : (申請 { 役職 = [ 一般, 管理職 ] }) -> 理由あり
+                | "空白だけなら理由がない" : (申請 { 理由 = " " })    -> 理由なし
+                | "書いてあれば理由がある" : (申請 { 理由 = "出張" }) -> 理由あり
             """;
 
     private static AdequacyReport measured() {
@@ -115,7 +111,7 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
     }
 
     /**
-     * And it is the fork on the emptiness of the dropped list, named as such.
+     * And it is the fork on the emptiness of the trimmed string, named as such.
      *
      * <p>The count alone would pass over a model whose verdict was held open by something else
      * entirely, so the one fact is read as well: this is a reproduction and it is meant to keep
@@ -242,7 +238,7 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
      * about how much was measured.
      */
     private static AdequacyReport refused() {
-        return reportOf(MODEL.substring(0, MODEL.lastIndexOf("    | \"二人なら理由がある\"")));
+        return reportOf(MODEL.substring(0, MODEL.lastIndexOf("    | \"書いてあれば理由がある\"")));
     }
 
     /**

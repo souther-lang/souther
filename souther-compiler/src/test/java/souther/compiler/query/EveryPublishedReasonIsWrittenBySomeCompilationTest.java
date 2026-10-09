@@ -299,7 +299,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 let f (a, n) = if Int.max(a, a + n.value) > 5 then Yes else No
                 """.formatted(ANSWER)));
         // A line between two positions, which divides neither.
-        out.put(UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE, of("""
+        out.put(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES, of("""
                 module m
                 %s
                 behavior f : (a: Int, b: Int) -> Answer

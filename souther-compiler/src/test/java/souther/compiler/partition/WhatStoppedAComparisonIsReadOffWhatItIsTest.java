@@ -32,9 +32,9 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
      */
     @Test
     void arithmeticOverTwoPositionsRelatesThem() {
-        assertEquals(List.of(UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE),
+        assertEquals(List.of(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES),
                 whyAt(guard("a: Int, b: Int", "Int.add(a, b) > 10"), "a"));
-        assertEquals(List.of(UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE),
+        assertEquals(List.of(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES),
                 whyAt(guard("a: Int, b: Int", "Int.subtract(b, a) > 10"), "b"));
     }
 

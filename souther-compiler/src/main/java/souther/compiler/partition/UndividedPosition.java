@@ -256,14 +256,16 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         SEVERAL_LINES_IN_ONE_RULE,
         /**
-         * The comparison relates two positions rather than dividing one.
+         * The rule relates the value here to another value rather than dividing the values here.
          *
-         * <p>`+x < y+` says where one position stands against another, and a class here is a set of
-         * values of one position. Nothing is missing from the carrier — both sides are ordered and a
+         * <p>{@code x < y} says where one position stands against another, and a class here is a
+         * set of values of one position. The other value may be no position at all — what an
+         * operation looked up, an element a walk was handed, the index it is at — and the rule says
+         * the same kind of thing. Nothing is missing from the carrier — both sides are ordered and a
          * line drawn on either against a number would be read — so saying the values cannot carry a
          * line would send a reader after the wrong thing entirely.
          */
-        UNSUPPORTED_PARTITION_SHAPE,
+        RULE_RELATING_TWO_VALUES,
         /**
          * The rule draws its line on a number taken over a run of this position's values, so it
          * divides none of them.

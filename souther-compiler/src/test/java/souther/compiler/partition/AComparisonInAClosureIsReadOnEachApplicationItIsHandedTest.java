@@ -125,15 +125,42 @@ class AComparisonInAClosureIsReadOnEachApplicationItIsHandedTest {
     }
 
     /**
-     * Where an application is made is said in what a row's numbers answer, or no line is drawn.
+     * Where an application is made is said in what a row's values answer, or no line is drawn.
      *
-     * <p>{@code List.any(x -> x > 5 || flag, [a, b])} applies the closure to {@code b} only where
-     * {@code flag} is false, and a truth is no number of a row: a row at the line on {@code b}
-     * could not be asked whether the closure got to {@code b}. So the comparison is held back with
-     * its reason, and not drawn as though the second application were made on every run.
+     * <p>{@code List.any(x -> x > 5 || isVip(a), [a, b])} applies the closure to {@code b} only
+     * where the dependency answered false, and a row stands a dependency in rather than writing
+     * what it answers: a row at the line on {@code b} could not be asked whether the closure got
+     * to {@code b}. So the comparison is held back with its reason, and not drawn as though the
+     * second application were made on every run.
      */
     @Test
-    void whereAnApplicationIsMadeSaidOfNoNumberDrawsNoLine() {
+    void whereAnApplicationIsMadeSaidOfNoValueOfARowDrawsNoLine() {
+        JsonNode report = reportOfSource("""
+                module probe
+
+                data Low
+                data High
+
+                behavior isVip : (n: Int) -> Bool
+
+                behavior pick : (a: Int, b: Int) -> Low | High
+                    depends on isVip
+                let pick (a, b, isVip) =
+                    if List.any(x -> x > 5 || isVip(a), [a, b]) then High else Low
+                """);
+        assertTrue(obligationsOfParts(report).isEmpty(),
+                () -> "no line is drawn: " + obligationsOfParts(report));
+        assertTrue(reasonsAt(report, "b", "comparison").contains("several_lines_in_one_rule"),
+                () -> "and the comparison says why: " + reasonsAt(report, "b", "comparison"));
+    }
+
+    /**
+     * And where it is said in a truth of the input, a row says it: {@code List.any(x -> x > 5 ||
+     * flag, [a, b])} applies the closure to {@code b} where {@code flag} is false, which a row
+     * writes, so the line on {@code b} is drawn deciding there.
+     */
+    @Test
+    void whereAnApplicationIsMadeSaidOfATruthOfTheInputDrawsTheLine() {
         JsonNode report = reportOfSource("""
                 module probe
 
@@ -143,10 +170,9 @@ class AComparisonInAClosureIsReadOnEachApplicationItIsHandedTest {
                 behavior pick : (a: Int, b: Int, flag: Bool) -> Low | High
                 let pick (a, b, flag) = if List.any(x -> x > 5 || flag, [a, b]) then High else Low
                 """);
-        assertTrue(obligationsOfParts(report).isEmpty(),
-                () -> "no line is drawn: " + obligationsOfParts(report));
-        assertTrue(reasonsAt(report, "b", "comparison").contains("several_lines_in_one_rule"),
-                () -> "and the comparison says why: " + reasonsAt(report, "b", "comparison"));
+        assertFalse(obligationsOfParts(report).isEmpty(), "the line on b is drawn");
+        assertFalse(reasonsAt(report, "b", "comparison").contains("several_lines_in_one_rule"),
+                () -> "and not held back: " + reasonsAt(report, "b", "comparison"));
     }
 
     /**

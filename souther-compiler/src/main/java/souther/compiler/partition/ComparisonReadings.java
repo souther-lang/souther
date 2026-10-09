@@ -12,10 +12,12 @@ import souther.compiler.check.ValueTemplates;
 import souther.compiler.core.Core;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.ConstructOccurrence;
+import souther.compiler.types.Type;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.PathResolution;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.semantics.ConditionJoin;
 
 import java.util.ArrayList;
@@ -25,6 +27,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
@@ -197,7 +200,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                   cited by — a comparison, or an application of an operation the library says
      *                   means one
      * @param statement  what that construct states. Not a node: an emptiness check states its size
-     *                   against nought, which no source wrote and which stands nowhere
+     *                   against nought, which no source wrote and which stands nowhere, and an
+     *                   application states what the library's law for it says
      * @param assumed    every condition on the way here, each with what became of it. Empty says
      *                   nothing stood on the way, which a comparison at the top of a body is; one
      *                   this reading has no arithmetic for is on the list as a decline, so the two
@@ -206,7 +210,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                   beside the way — one case of where the statement turns on the line — put on
      *                   the way at this comparison; empty where the comparison is one line
      */
-    record Reading(ConstructOccurrence occurrence, StatedComparison statement, Citation at,
+    record Reading(ConstructOccurrence occurrence, Stated statement, Citation at,
                    InputReads reads,
                    List<OnTheWay> assumed, BoundaryPolicy.Standing standing,
                    Map<WhereAPartDecides, List<OnTheWay>> whereEachDecides) {
@@ -233,13 +237,34 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     }
 
     /**
-     * A comparison some construct of the model states, and that construct.
+     * What a construct of the model states that lines are drawn on.
+     *
+     * <p>A comparison, as the checker reads one ({@link BooleanMeaning#asAComparison}); or the
+     * truth an application of an operation answers, where that is relations read to the end and
+     * one of them is stated by the application and by nothing else written there — {@code
+     * List.all} over a closure that never reads its element holds where the container is empty,
+     * and no comparison anywhere says so.
+     */
+    sealed interface Stated {
+
+        /** A comparison, read where the walk meets it. */
+        record AComparison(StatedComparison comparison) implements Stated {}
+
+        /**
+         * An application, and what it answers comes to on the input: the lines it draws, or the
+         * values it relates ({@link Cutting#ofAnApplication}).
+         */
+        record AnApplication(Core application, Cutting.Read read) implements Stated {}
+    }
+
+    /**
+     * What some construct of the model states, and that construct.
      *
      * <p>Two facts and not one, because they come apart. A comparison the source wrote is both, and
      * an emptiness check is an application the author wrote stating a comparison they did not: the
      * line is drawn on what is stated, and the rule is the construct that was written.
      */
-    private record StatedAt(ConstructOccurrence written, StatedComparison statement) { }
+    private record StatedAt(ConstructOccurrence written, Stated statement) { }
 
 
     /**
@@ -256,7 +281,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     private record Body(String behavior, InputReading read,
                         souther.compiler.coverage.Arrivals answering, Templates templates,
                         List<TruthMet> truths, List<ForkDecided> decided,
-                        WhatAnAnswerTakesUp dependencies, CarriedPast carried,
+                        WhatAnAnswerTakesUp dependencies, StatedHere stated,
                         WhatConditionsState conditions) {
 
         Symbols symbols() {
@@ -297,12 +322,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         // — a condition inside a helper spliced in from elsewhere is still one this reading met.
         ConditionNumbering numbering =
                 new ConditionNumbering(read.symbols().module(), behavior);
-        CarriedPast carried = new CarriedPast();
+        StatedHere stated = new StatedHere(behavior);
         WhatConditionsState conditions = WhatConditionsState.of(read);
         walk(body, new Body(behavior, read,
                         souther.compiler.coverage.Arrivals.inTheTree(body,
                                 analysis.templates()::bodyOf),
-                        templates, truths, decided, dependencies, carried, conditions),
+                        templates, truths, decided, dependencies, stated, conditions),
                 reads, ClosureApplications.OUTSIDE,
                 LiveFlow.of(body), List.of(), true, readings, forks, numbering);
         // What each value the body builds states, read once. A value means the same wherever it is
@@ -315,7 +340,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 walk(template, new Body(behavior, read,
                                 souther.compiler.coverage.Arrivals.inTheTree(template,
                                         analysis.templates()::bodyOf),
-                        templates, truths, decided, dependencies, carried, conditions),
+                        templates, truths, decided, dependencies, stated, conditions),
                         insideATemplate, ClosureApplications.OUTSIDE, LiveFlow.of(template),
                         entry.assumed(), entry.live(),
                         readings, forks, numbering);
@@ -398,7 +423,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                              List<Reading> out, List<ForkMet> forks,
                              ConditionNumbering numbering) {
         Symbols symbols = in.symbols();
-        StatedAt stated = statedAt(e, () -> WhatNamesStandFor.in(reads, in.read()), in.carried());
+        StatedAt stated = statedAt(e, () -> WhatNamesStandFor.in(reads, in.read()), in.stated());
         if (stated != null) {
             // Which construct of the model it is, off the node. The two readings of a body hold
             // different copies of it and agree about this, so it is what a reader below joins on.
@@ -410,9 +435,16 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             BoundaryPolicy.Standing standing = BoundaryPolicy.refuses(live)
                     .<BoundaryPolicy.Standing>map(BoundaryPolicy.Standing.Refused::new)
                     .orElseGet(() -> new BoundaryPolicy.Standing.Admitted(
-                            ComparisonAssessment.of(in.behavior(), stated.statement(), where,
-                                    in.read(), reads, applying, null, in.dependencies(),
-                                    in.answering(), false, in.conditions())));
+                            switch (stated.statement()) {
+                                case Stated.AComparison(var comparison) ->
+                                        ComparisonAssessment.of(in.behavior(), comparison, where,
+                                                in.read(), reads, applying, null,
+                                                in.dependencies(), in.answering(), false,
+                                                in.conditions());
+                                case Stated.AnApplication(var _, var answered) ->
+                                        ComparisonAssessment.ofAnApplication(answered, where,
+                                                in.read());
+                            }));
             out.add(new Reading(stands, stated.statement(), where, reads, assumed, standing,
                     whereEachDecides(e, standing, reads, in, numbering)));
         }
@@ -487,7 +519,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     for (Denotation part : ConditionSkeleton.atoms(iff.cond(),
                             WhatNamesStandFor.in(reads, in.read()))) {
                         Denotation atom = part.at().denotes(part.value(), symbols, in.newtypes());
-                        atoms.add(new Atom(atom, statedElsewhere(atom, in.read(), in.carried())));
+                        atoms.add(new Atom(atom, statedElsewhere(atom, in.read(), in.stated())));
                     }
                     forks.add(new ForkMet(iff.occurrence(), iff.cond(), Citation.of(iff.pos()),
                             atoms));
@@ -651,8 +683,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     }
 
     /**
-     * The comparison of the model {@code e} states and the construct it is written as, or null
-     * where it states none.
+     * What {@code e} states and the construct it is written as, or null where it states nothing
+     * lines are drawn on.
      *
      * <p>What a construct means is the checker's answer ({@link BooleanMeaning#asAComparison}),
      * asked once: a comparison states itself, and an operation the library says means a size
@@ -666,9 +698,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * Pullback#carriesPast}): the rules there are the ones it was carried to, and the fork around it
      * is what turns on them. The names are asked for only there: this is asked at every node a
      * walk meets, and nearly all of them are no construct that states one.
+     *
+     * <p>An application answering a truth that is no comparison states the lines its law draws
+     * where one of them is its own ({@link StatedHere#ofAnApplication}).
      */
     private static StatedAt statedAt(Core e, Supplier<WhatNamesStandFor> names,
-                                     CarriedPast carried) {
+                                     StatedHere here) {
         ConstructOccurrence written = switch (e) {
             case Core.Binary binary -> binary.occurrence();
             case Core.PreservedCall call -> call.occurrence();
@@ -677,22 +712,28 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         if (written == null || !written.isWritten()) {
             return null;
         }
-        return BooleanMeaning.asAComparison(e)
-                .filter(statement -> !carried.carriesPast(e, statement, names))
-                .map(statement -> new StatedAt(written, statement)).orElse(null);
+        Optional<StatedComparison> compared = BooleanMeaning.asAComparison(e);
+        if (compared.isPresent()) {
+            return here.carriesPast(e, compared.get(), names) ? null
+                    : new StatedAt(written, new Stated.AComparison(compared.get()));
+        }
+        Cutting.Read answered = e instanceof Core.PreservedCall call
+                && Type.BOOL.equals(call.type()) ? here.ofAnApplication(call, names) : null;
+        return answered == null ? null
+                : new StatedAt(written, new Stated.AnApplication(e, answered));
     }
 
     /**
-     * Whether what a comparison states is carried past it ({@link Pullback#carriesPast}), asked
-     * once per comparison and reading of its names over one reading of a body.
+     * What the constructs one reading of a body meets state, asked once per construct and
+     * reading of its names.
      *
-     * <p>A comparison is met where the walk reaches it and again as a part of each fork that turns
+     * <p>A construct is met where the walk reaches it and again as a part of each fork that turns
      * on it, and the answer is a reading of what it states. Read under names that are the same
      * value, it is the same reading; so it is kept, and the walk and every fork are answered by it.
      */
-    private static final class CarriedPast {
+    private static final class StatedHere {
 
-        /** A comparison, by the node it is, under a reading of its names, by what that holds. */
+        /** A construct, by the node it is, under a reading of its names, by what that holds. */
         private record Asked(Core node, InputReads reads) {
 
             @Override
@@ -706,16 +747,50 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             }
         }
 
-        private final Map<Asked, Boolean> answered = new HashMap<>();
+        private final String behavior;
+        private final Map<Asked, Boolean> carried = new HashMap<>();
+        private final Map<Asked, Optional<Cutting.Read>> applications = new HashMap<>();
 
+        StatedHere(String behavior) {
+            this.behavior = behavior;
+        }
+
+        /** Whether what a comparison states is carried past it ({@link Pullback#carriesPast}). */
         boolean carriesPast(Core e, StatedComparison statement,
                             Supplier<WhatNamesStandFor> names) {
             if (!Pullback.mayBeCarriedPast(statement)) {
                 return false;
             }
             WhatNamesStandFor standing = names.get();
-            return answered.computeIfAbsent(new Asked(e, standing.reads()),
-                    _ -> Pullback.carriesPast(statement, standing.reads(), standing.read()));
+            return carried.computeIfAbsent(new Asked(e, standing.reads()),
+                    _ -> Pullback.carriesPast(statement, e, standing.reads(), standing.read()));
+        }
+
+        /**
+         * What the truth {@code application} answers comes to on the input, or null where it
+         * states nothing of its own.
+         *
+         * <p>Its own where a part of what it states was read off the application itself: a part
+         * read off a comparison inside it, or off a position, is that comparison's or that
+         * position's, and a statement made only of those is theirs. And only a statement read to
+         * the end that is lines on the input or values it relates
+         * ({@link Cutting#ofAnApplication}): anything short of that is a fork's to say, at the
+         * positions it came from.
+         */
+        Cutting.Read ofAnApplication(Core.PreservedCall application,
+                                     Supplier<WhatNamesStandFor> names) {
+            WhatNamesStandFor standing = names.get();
+            return applications.computeIfAbsent(new Asked(application, standing.reads()), _ -> {
+                Pullback.Pulled stated = WhatConditionsState.of(standing.read())
+                        .truth(application, standing.reads(), standing.read());
+                boolean itsOwn = stated.turnsOn().stream().anyMatch(leaf ->
+                        Core.withoutStanding(leaf.from().value()) == application);
+                if (!itsOwn || Proposition.leavesSomethingUnread(stated.proposition())) {
+                    return Optional.empty();
+                }
+                return Optional.ofNullable(Cutting.ofAnApplication(behavior, application,
+                        stated.proposition(), standing.read(), standing.reads()));
+            }).orElse(null);
         }
     }
 
@@ -752,14 +827,29 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * reads, and the fork around the operation states the second whoever owns the first. Answered
      * as "something in there is owned", the second went with the first — which is the same partial
      * ownership a condition's own parts are cut along, lost one step past the operation.
+     *
+     * <p><b>None, where the part is a construct that states what it decides, read to the
+     * end.</b> Every relation its statement holds is one of its lines, whichever node it was read
+     * off: {@code List.length(List.take(n, xs)) >= 1} holds where {@code n} is at least one and
+     * {@code xs} holds something, and the comparison draws both. A statement with a part nobody
+     * read leaves that part where it was read off, as any other part is.
      */
     private static List<Denotation> statedElsewhere(Denotation atom, InputReading read,
-                                                    CarriedPast carried) {
+                                                    StatedHere here) {
+        StatedAt whole = statedAt(atom.value(), () -> WhatNamesStandFor.in(atom.at(), read), here);
+        if (whole != null && switch (whole.statement()) {
+            case Stated.AnApplication _ -> true;
+            case Stated.AComparison(var comparison) -> !Proposition.leavesSomethingUnread(
+                    WhatConditionsState.of(read).comparison(comparison, atom.at(), read)
+                            .stated().proposition());
+        }) {
+            return List.of();
+        }
         List<Denotation> left = new ArrayList<>();
         for (Denotation part : WhatAForkTests.partsOfTheAnswer(atom.value(),
                 WhatNamesStandFor.in(atom.at(), read))) {
             // Which rule the part is, by the node; where it stands, in the reading it is written in.
-            if (statedAt(part.value(), () -> WhatNamesStandFor.in(part.at(), read), carried) == null
+            if (statedAt(part.value(), () -> WhatNamesStandFor.in(part.at(), read), here) == null
                     && !(part.at().pathOf(part.value(), read.rules().newtypes())
                             instanceof PathResolution.At)) {
                 left.add(part);

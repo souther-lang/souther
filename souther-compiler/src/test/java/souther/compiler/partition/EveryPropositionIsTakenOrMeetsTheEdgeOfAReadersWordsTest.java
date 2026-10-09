@@ -50,6 +50,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * of a statement that was read to the end: that would be a reader's shortfall passed off as the
  * reading's, and a statement read to the end is the reading's whole answer.
  *
+ * <p>The partition is the fourth, and is held to the same where it reads: off the constructs a
+ * body writes, each handed a condition stating one kind of statement
+ * ({@link EveryStatementReadToTheEndIsDrawnOrSaidAsTheModelsTest}).
+ *
  * <p>And where one of them has no words, which edge it met is one of the words that name that
  * reader's domain. A row is written at the input's positions, so where a row reader stops is a
  * fact about the input's words — a quantity on no order, a size nothing measures, a position the

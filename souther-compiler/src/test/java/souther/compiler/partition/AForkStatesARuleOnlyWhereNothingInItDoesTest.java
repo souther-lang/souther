@@ -172,10 +172,14 @@ class AForkStatesARuleOnlyWhereNothingInItDoesTest {
      * fork turns on it all the same, and what it turns on being a fork the author wrote is not what
      * makes it owned: read that way, the outer fork would be answered for by a rule that does not
      * exist and the question it leaves would go with it.
+     *
+     * <p>What owns the outer fork is the application: a closure answering true on every element
+     * makes {@code List.any} answer whether {@code xs} holds anything, and that is a line it draws
+     * on how many {@code xs} holds.
      */
     @Test
     void aForkThatStatesNoRuleOwnsNothing() {
-        assertEquals(new Owned(0, 1), read("""
+        assertEquals(new Owned(1, 0), read("""
                 behavior pick : (xs: List<Int>) -> Low | High
                 let pick (xs) =
                     if List.any(n -> if List.isEmpty([1, 2, 3]) then false else true, xs)

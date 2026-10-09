@@ -65,7 +65,7 @@ class OneProjectionWritesTheWordADocumentReadsTest {
                         souther.compiler.inputs.TermPath.of("c")),
                 new BlockReason.UnreadComparisonForm(),
                 new BlockReason.UnreadComparisonDomain(),
-                new BlockReason.ComparisonBetweenPositions());
+                new BlockReason.ComparisonRelatingTwoValues());
 
         for (BlockReason each : all) {
             assertFalse(ReportedReason.of(each) == null, each + " has a word");

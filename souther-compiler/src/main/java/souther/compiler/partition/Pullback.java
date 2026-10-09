@@ -261,19 +261,42 @@ final class Pullback {
      * states. And one is carried past only where the container it asks about is no position of its
      * own and every part it was carried to was read — one that stopped on the way is a rule about a
      * value made from the input, which the comparison still is.
+     *
+     * <p>And not where what it states is relations — beside what a row answers of its own values,
+     * if anything — some of which nothing else written there states. Those are lines, and the
+     * check draws them: {@code List.isEmpty(List.take(n, xs))}
+     * holds where {@code n} is below one or {@code xs} is empty, and neither is a comparison
+     * anybody wrote. Relations every one of which was read off a comparison written inside it are
+     * that comparison's lines, as {@code List.isEmpty(List.filter(x -> x > 5, [a, b]))} is the
+     * closure's on each value.
+     *
+     * @param check the node the check is written as
      */
-    static boolean carriesPast(StatedComparison comparison, InputReads reads, InputReading read) {
+    static boolean carriesPast(StatedComparison comparison, Core check, InputReads reads,
+                               InputReading read) {
         return mayBeCarriedPast(comparison)
-                && carriesPast(ofAComparison(comparison, reads, read, Optional.empty()));
+                && carriesPast(ofAComparison(comparison, reads, read, Optional.empty()), check);
     }
 
-    /** The same, of what an emptiness check was read to state. */
-    static boolean carriesPast(Pulled read) {
+    /** The same, of what an emptiness check written as {@code check} was read to state. */
+    static boolean carriesPast(Pulled read, Core check) {
         // Unread anywhere in what is stated, and not among the parts it turns on: a part nothing
         // read that is the same on every run turns on nothing, and is still not read.
         Proposition stated = read.proposition();
-        return !(stated instanceof Proposition.Compared)
-                && !Proposition.leavesSomethingUnread(stated);
+        if (Proposition.leavesSomethingUnread(stated)) {
+            return false;
+        }
+        return !Cutting.onlyRelations(stated) && !Cutting.drawsLines(stated)
+                || read.turnsOn().stream()
+                        .allMatch(leaf -> aComparisonWrittenInside(leaf.from().value(), check));
+    }
+
+    /** Whether {@code from} is a comparison written inside {@code check}, which draws its own
+     *  lines. */
+    private static boolean aComparisonWrittenInside(Core from, Core check) {
+        Core node = Core.withoutStanding(from);
+        return node != Core.withoutStanding(check) && node instanceof Core.Binary
+                && BooleanMeaning.asAComparison(node).isPresent();
     }
 
     /**

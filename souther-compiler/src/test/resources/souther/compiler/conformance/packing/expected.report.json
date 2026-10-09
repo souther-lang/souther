@@ -1921,7 +1921,7 @@
         "notDerivable" : [ ],
         "notRead" : [ {
           "position" : "bars",
-          "reason" : "unsupported_partition_shape",
+          "reason" : "rule_relating_two_values",
           "rule" : "comparison@0:34:49",
           "ruleId" : {
             "kind" : "comparison",
@@ -1933,7 +1933,7 @@
           }
         }, {
           "position" : "straws",
-          "reason" : "unsupported_partition_shape",
+          "reason" : "rule_relating_two_values",
           "rule" : "comparison@0:34:49",
           "ruleId" : {
             "kind" : "comparison",
@@ -2058,7 +2058,7 @@
           "ordinal" : 7,
           "lowered" : 0
         },
-        "reason" : "unsupported_partition_shape"
+        "reason" : "rule_relating_two_values"
       }, {
         "kind" : "partition_not_read",
         "disposition" : "reported",
@@ -2071,7 +2071,7 @@
           "ordinal" : 7,
           "lowered" : 0
         },
-        "reason" : "unsupported_partition_shape"
+        "reason" : "rule_relating_two_values"
       } ]
     }, {
       "name" : "bookSlot",
@@ -3132,7 +3132,7 @@
         "notDerivable" : [ ],
         "notRead" : [ {
           "position" : "from",
-          "reason" : "unsupported_partition_shape",
+          "reason" : "rule_relating_two_values",
           "rule" : "comparison@0:47:36",
           "ruleId" : {
             "kind" : "comparison",
@@ -3144,7 +3144,7 @@
           }
         }, {
           "position" : "until",
-          "reason" : "unsupported_partition_shape",
+          "reason" : "rule_relating_two_values",
           "rule" : "comparison@0:47:36",
           "ruleId" : {
             "kind" : "comparison",
@@ -3269,7 +3269,7 @@
           "ordinal" : 2,
           "lowered" : 0
         },
-        "reason" : "unsupported_partition_shape"
+        "reason" : "rule_relating_two_values"
       }, {
         "kind" : "partition_not_read",
         "disposition" : "reported",
@@ -3282,7 +3282,7 @@
           "ordinal" : 2,
           "lowered" : 0
         },
-        "reason" : "unsupported_partition_shape"
+        "reason" : "rule_relating_two_values"
       } ]
     } ]
   } ],

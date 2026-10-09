@@ -139,11 +139,11 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // declaration that was never the matter. A group again, so no rule is named as the
         // expensive one, and a run allowed more may get past it.
         table.put("BehaviorDistinctionsTooCostly", "BEHAVIOR_DISTINCTIONS_TOO_COSTLY/MAY_CHANGE");
-        // One word with `ComparisonBetweenPositions` below, and on purpose: they are the two
+        // One word with `ComparisonRelatingTwoValues` below, and on purpose: they are the two
         // readings of `a < b`, opposite sentences about this compiler, and a document promises
         // its reader which kind of thing stopped a derivation rather than which reader stopped.
         table.put("ValueRuleRelatingTwoPositions",
-                "UNSUPPORTED_PARTITION_SHAPE/UNAFFECTED");
+                "RULE_RELATING_TWO_VALUES/UNAFFECTED");
         // Read to the end, and placed nowhere. Its own word beside the two above: the comparison
         // was taken apart, a line came out of it and every name it is between reached positions —
         // what was not reached is which of those positions the line runs between. Both measures are
@@ -177,7 +177,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // And its own word beside that one: rows arrive at the line, and the rest of the statement
         // it is a line of decides the outcome wherever they do. Nothing is owed there either.
         table.put("ComparisonLineTurningNothing", "RULE_NEVER_TURNS_ON_THIS_LINE/-");
-        table.put("ComparisonBetweenPositions", "UNSUPPORTED_PARTITION_SHAPE/-");
+        table.put("ComparisonRelatingTwoValues", "RULE_RELATING_TWO_VALUES/-");
         // Its own word beside the one above, because what a reader does about it differs: a rule
         // between two positions is waiting on a class about the pair, and a rule about what the
         // values at one come to has nothing to wait for — the position has no class from it and
@@ -324,7 +324,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
      * Whether a wider run could get past {@code reason}, asked of whichever capability holds it.
      *
      * <p>Asked of the reason and never of the word a document writes for it, which is what makes
-     * the fourth column worth having. {@code UNSUPPORTED_PARTITION_SHAPE} is one word over a rule
+     * the fourth column worth having. {@code RULE_RELATING_TWO_VALUES} is one word over a rule
      * this read partway and a rule it read to the end, so a sensitivity worked out from the word
      * would have to be the same for both — and it is not; the same is now true of
      * {@code RULES_NOT_READ_AT_ALL}.
@@ -473,7 +473,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.ComparisonCuttingOutsideDomain(),
                 new BlockReason.ComparisonNothingArrivesAtItsLine(),
                 new BlockReason.ComparisonLineTurningNothing(),
-                new BlockReason.ComparisonBetweenPositions(),
+                new BlockReason.ComparisonRelatingTwoValues(),
                 new BlockReason.ComparisonOverARun(),
                 new BlockReason.RuleRestrictingToAdmittedValues(),
                 new BlockReason.PredicateTellingNothingApart(),

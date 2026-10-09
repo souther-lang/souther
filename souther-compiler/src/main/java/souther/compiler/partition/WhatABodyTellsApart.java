@@ -293,7 +293,7 @@ final class WhatABodyTellsApart {
                  BlockReason.ComparisonNothingArrivesAtItsLine _,
                  BlockReason.ComparisonLineTurningNothing _,
                  BlockReason.PredicateTellingNothingApart _ -> true;
-            case BlockReason.ComparisonBetweenPositions _,
+            case BlockReason.ComparisonRelatingTwoValues _,
                  BlockReason.ComparisonOverARun _,
                  BlockReason.RuleRestrictingToAdmittedValues _,
                  BlockReason.ClassesNotComposed _ -> false;

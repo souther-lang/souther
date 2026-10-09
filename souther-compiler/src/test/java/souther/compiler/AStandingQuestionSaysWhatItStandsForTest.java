@@ -125,7 +125,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
     void aQuestionWithTwoCausesSaysBothOfThemInTheOrderTheyAreWritten() {
         assertEquals("      · not accounted for: invariant Pair (both)"
                         + " — which values may stand at p.a:"
-                        + " it relates two positions rather than dividing one;"
+                        + " it relates the value here to another value rather than dividing the values here;"
                         + " written in a form this compiler does not read",
                 about(reportOf("""
                         module probe.two
@@ -139,7 +139,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
         assertEquals("      · not accounted for: invariant Pair (both)"
                         + " — which values may stand at p.a:"
                         + " written in a form this compiler does not read;"
-                        + " it relates two positions rather than dividing one",
+                        + " it relates the value here to another value rather than dividing the values here",
                 about(reportOf("""
                         module probe.two
 
@@ -251,7 +251,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
                 behavior read : (h: Held) -> Ok
                 """));
 
-        assertEquals(List.of("unsupported_partition_shape", "unsupported_syntax"),
+        assertEquals(List.of("rule_relating_two_values", "unsupported_syntax"),
                 stoppedInDocument("""
                         module probe.two
 
@@ -261,7 +261,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
                         behavior read : (p: Pair) -> Ok
                         """));
 
-        assertEquals(List.of("unsupported_syntax", "unsupported_partition_shape"),
+        assertEquals(List.of("unsupported_syntax", "rule_relating_two_values"),
                 stoppedInDocument("""
                         module probe.two
 

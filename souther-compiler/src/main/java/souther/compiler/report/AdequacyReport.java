@@ -2733,8 +2733,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     + "how those positions pair up is not worked out";
             case SEVERAL_LINES_IN_ONE_RULE -> "what it states was read, and it is several lines"
                     + " held together, which this compiler does not divide the input by here";
-            case UNSUPPORTED_PARTITION_SHAPE ->
-                    "it relates two positions rather than dividing one";
+            case RULE_RELATING_TWO_VALUES ->
+                    "it relates the value here to another value rather than dividing the values here";
             case RULE_ABOUT_A_RUN ->
                     "it is about what the values here come to rather than about any one of them,"
                             + " so it draws its line and divides none of them";

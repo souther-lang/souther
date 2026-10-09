@@ -314,8 +314,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                   onSpan                   implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not applicable (the rules of this behavior divide no position)
-                      · no line: invariant Span #1 — it relates two positions rather than dividing one, about `v.startsAt`
-                      · no line: invariant Span #1 — it relates two positions rather than dividing one, about `v.endsAt`
+                      · no line: invariant Span #1 — it relates the value here to another value rather than dividing the values here, about `v.startsAt`
+                      · no line: invariant Span #1 — it relates the value here to another value rather than dividing the values here, about `v.endsAt`
                     border      borders 1   obligations 0/0
                       · no OFF point is owed at v.startsAt = v.endsAt (invariant Span #1): excluded — the rules leave no value there
                       · no OUT point is owed at v.startsAt = v.endsAt (invariant Span #1): excluded — the rules leave no value there
@@ -339,8 +339,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                   onFloor                  implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not applicable (the rules of this behavior divide no position)
-                      · no line: invariant Floor #1 — it relates two positions rather than dividing one, about `v.n`
-                      · no line: invariant Floor #1 — it relates two positions rather than dividing one, about `v.min`
+                      · no line: invariant Floor #1 — it relates the value here to another value rather than dividing the values here, about `v.n`
+                      · no line: invariant Floor #1 — it relates the value here to another value rather than dividing the values here, about `v.min`
                     border      borders 1   obligations 0/0
                       · no OFF point is owed at v.n = v.min (invariant Floor #1): excluded — the rules leave no value there
                       · no OUT point is owed at v.n = v.min (invariant Floor #1): excluded — the rules leave no value there
