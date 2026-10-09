@@ -1,6 +1,8 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.Choice;
+import souther.compiler.check.ClauseName;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.ScopeStep;
@@ -8,6 +10,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.meaning.CasesOfAnAnswer;
 import souther.compiler.meaning.Conclusion;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.MeaningsOfABody;
@@ -27,8 +30,10 @@ import java.util.function.Supplier;
  *
  * <p>Three places a truth is asked, because those are the three a reader of the tree that runs
  * takes one in at: a fork's condition, the left operand of a short-circuit, and a comparison whose
- * outcome a run records. Each is read where it stands — under the bindings, arms and closures
- * above it — which is the one reading of what it states ({@link Pullback}).
+ * outcome a run records. And each arm of a fork that chooses its arm by no condition — a
+ * {@code match}, an attempted construction — since entering one is a truth of its own. Each is read
+ * where it stands — under the bindings, arms and closures above it — which is the one reading of
+ * what it states ({@link Pullback}).
  */
 public final class MeaningsOfABodyReading {
 
@@ -61,6 +66,18 @@ public final class MeaningsOfABodyReading {
         MeaningsOfABodyReading reading = new MeaningsOfABodyReading(read, symbols, newtypes);
         reading.walk(analysis.core(), reads);
         return reading.filed.filed();
+    }
+
+    /**
+     * Which case the behavior {@code analysis} is the body of answers, over its own parameters
+     * ({@link CasesOfAnAnswer}), its names read as {@code reads} has them — read once, for every
+     * call of it to put in what that call handed.
+     *
+     * @param parameters the names the body reads its parameters by, in the order a call hands them
+     */
+    public static CasesOfAnAnswer answerOf(AnalysisBody analysis, List<String> parameters,
+                                           InputReading read, InputReads reads) {
+        return Pullback.answerOf(analysis.core(), parameters, reads, read);
     }
 
     private InputReading read() {
@@ -100,12 +117,17 @@ public final class MeaningsOfABodyReading {
             }
         }
         switch (Core.withoutStanding(e)) {
-            case Core.If iff -> asked(iff.place().occurrence(), MeaningsOfABody.Part.CONDITION,
-                    iff.cond(), reads);
+            case Core.If iff -> asked(iff.place().occurrence(),
+                    MeaningsOfABody.Part.Asked.CONDITION, iff.cond(), reads);
             case Core.Binary binary when ConditionJoin.of(binary.op()).isPresent() ->
-                    asked(binary.occurrence(), MeaningsOfABody.Part.LEFT, binary.left(), reads);
+                    asked(binary.occurrence(), MeaningsOfABody.Part.Asked.LEFT, binary.left(),
+                            reads);
             case Core.Binary binary when Comparison.of(binary).isPresent() ->
-                    asked(binary.occurrence(), MeaningsOfABody.Part.ITSELF, binary, reads);
+                    asked(binary.occurrence(), MeaningsOfABody.Part.Asked.ITSELF, binary, reads);
+            case Core.Match match -> entered(match, match.place().occurrence(),
+                    match.cases().size(), reads);
+            case Core.IfConstructed attempt -> entered(attempt, attempt.occurrence(),
+                    1 + attempt.els().size(), reads);
             default -> { }
         }
         ScopeStep.forEachChild(e, (child, step) -> walk(child,
@@ -121,16 +143,58 @@ public final class MeaningsOfABodyReading {
     }
 
     /** What {@code truth} states, filed at {@code part} of the construct {@code at} is one of. */
-    private void asked(ConstructOccurrence at, MeaningsOfABody.Part part, Core truth,
+    private void asked(ConstructOccurrence at, MeaningsOfABody.Part.Asked part, Core truth,
                        InputReads reads) {
         Optional<ModelOccurrence> construct = ModelOccurrence.statedAt(at);
         if (construct.isEmpty()) {
             return;
         }
-        MeaningsOfABody.Site site = new MeaningsOfABody.Site(construct.get(), part);
-        filed.met(site, pastTheFigure
-                ? new Conclusion(construct).meaningOf(new Derivation.Stopped(
-                        new WhyUnread.MoreReadingsThanAreMade(), false))
+        filed.met(new MeaningsOfABody.Site(construct.get(), part), pastTheFigure
+                ? declined(construct)
                 : Pullback.ofATruth(truth, reads, read(), construct).meaning());
+    }
+
+    /**
+     * What a run entering each of {@code fork}'s {@code arms} arms states, each filed at that arm
+     * of the construct {@code at} is one of.
+     */
+    private void entered(Core fork, ConstructOccurrence at, int arms, InputReads reads) {
+        Optional<ModelOccurrence> construct = ModelOccurrence.statedAt(at);
+        if (construct.isEmpty()) {
+            return;
+        }
+        for (int part = 0; part < arms; part++) {
+            filed.met(new MeaningsOfABody.Site(construct.get(), armOf(fork, part)), pastTheFigure
+                    ? declined(construct)
+                    : Pullback.ofAnArm(fork, part, reads, read(), construct).meaning());
+        }
+    }
+
+    /** What a site inside a closure applied more times than a condition is read on states. */
+    private static MeaningsOfABody.Meaning declined(Optional<ModelOccurrence> construct) {
+        return new Conclusion(construct).meaningOf(new Derivation.Stopped(
+                new WhyUnread.MoreReadingsThanAreMade(), false));
+    }
+
+    /**
+     * Which arm of {@code fork} its arm {@code part} is, as {@link Choice} numbers them, named as a
+     * site names it ({@link MeaningsOfABody.Part.Arm}): a case of a {@code match} by where it is
+     * written, and an arm of an attempt by the clause it answers.
+     *
+     * @throws IllegalArgumentException where {@code fork} is no {@code match} or attempt with such
+     *                                  an arm
+     */
+    public static MeaningsOfABody.Part.Arm armOf(Core fork, int part) {
+        return switch (Core.withoutStanding(fork)) {
+            case Core.Match match when part >= 0 && part < match.cases().size() ->
+                    new MeaningsOfABody.Part.OfACase(part);
+            case Core.IfConstructed _ when part == 0 -> new MeaningsOfABody.Part.Built();
+            case Core.IfConstructed attempt when part > 0 && part <= attempt.els().size() ->
+                    new MeaningsOfABody.Part.Departed(
+                            attempt.els().get(part - 1).clause().map(ClauseName::new));
+            default -> throw new IllegalArgumentException("arm " + part + " of "
+                    + fork.getClass().getSimpleName() + " at " + fork.pos()
+                    + " is no arm of a match or an attempt");
+        };
     }
 }

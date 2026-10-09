@@ -332,6 +332,13 @@
           "against" : "0",
           "status" : "unavailable",
           "reason" : "no_rows"
+        }, {
+          "behavior" : "settleOvertime",
+          "axis" : "settleOvertime/hours",
+          "relation" : "=",
+          "against" : "0",
+          "status" : "unavailable",
+          "reason" : "no_rows"
         } ]
       }, {
         "obligationId" : {
@@ -390,6 +397,153 @@
           "axis" : "judgeHours/hours",
           "relation" : "=",
           "against" : "200",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        }, {
+          "behavior" : "settleOvertime",
+          "axis" : "settleOvertime/hours",
+          "relation" : "=",
+          "against" : "200",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        } ]
+      }, {
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.staffing",
+                "declaredOn" : "Hours",
+                "clause" : 0
+              },
+              "part" : 0,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "0"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "above"
+          },
+          "stops" : {
+            "kind" : "at_the_domain",
+            "at" : {
+              "kind" : "a_count",
+              "at" : "200"
+            },
+            "per" : "1",
+            "inclusive" : true
+          }
+        },
+        "point" : "in",
+        "rule" : "invariant Hours #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.staffing",
+          "declaredOn" : "Hours",
+          "clause" : 0
+        },
+        "relation" : "in",
+        "axis" : "value",
+        "against" : "0 < value <= 200",
+        "knownWritable" : true,
+        "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+        "status" : "unavailable",
+        "reason" : "no_rows",
+        "disposition" : "undecided",
+        "undecidedAbout" : [ "whether_a_row_is_at_it" ],
+        "readings" : [ {
+          "behavior" : "settleOvertime",
+          "axis" : "settleOvertime/hours",
+          "relation" : "in",
+          "against" : "0 < hours <= 200",
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        } ]
+      }, {
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "part",
+              "rule" : {
+                "kind" : "invariant",
+                "declaredIn" : "conformance.staffing",
+                "declaredOn" : "Hours",
+                "clause" : 0
+              },
+              "part" : 1,
+              "line" : {
+                "kind" : "statement",
+                "statement" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : true,
+              "holdsAtTheValue" : true,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "200"
+          },
+          "location" : {
+            "kind" : "in_the_region",
+            "side" : "below"
+          },
+          "stops" : {
+            "kind" : "at_the_domain",
+            "at" : {
+              "kind" : "a_count",
+              "at" : "0"
+            },
+            "per" : "1",
+            "inclusive" : true
+          }
+        },
+        "point" : "in",
+        "rule" : "invariant Hours #1",
+        "ruleId" : {
+          "kind" : "invariant",
+          "declaredIn" : "conformance.staffing",
+          "declaredOn" : "Hours",
+          "clause" : 0
+        },
+        "relation" : "in",
+        "axis" : "value",
+        "against" : "0 <= value < 200",
+        "knownWritable" : true,
+        "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+        "status" : "unavailable",
+        "reason" : "no_rows",
+        "disposition" : "undecided",
+        "undecidedAbout" : [ "whether_a_row_is_at_it" ],
+        "readings" : [ {
+          "behavior" : "settleOvertime",
+          "axis" : "settleOvertime/hours",
+          "relation" : "in",
+          "against" : "0 <= hours < 200",
           "status" : "unavailable",
           "reason" : "no_rows"
         } ]
@@ -3539,6 +3693,393 @@
             "kind" : "case",
             "condition" : "agreement",
             "outcome" : "Standard"
+          } ]
+        },
+        "code" : "E1935"
+      } ]
+    }, {
+      "name" : "settleOvertime",
+      "implementation" : "implemented",
+      "rows" : 0,
+      "pending" : 0,
+      "rowObligations" : [ ],
+      "status" : "complete",
+      "signature" : {
+        "status" : "unavailable",
+        "reason" : "no_rows",
+        "output" : {
+          "declared" : [ "Paid", "Unpaid" ],
+          "obligations" : [ {
+            "obligationId" : {
+              "behavior" : "settleOvertime",
+              "case" : "Paid"
+            }
+          }, {
+            "obligationId" : {
+              "behavior" : "settleOvertime",
+              "case" : "Unpaid"
+            }
+          } ],
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        },
+        "inputs" : [ {
+          "declared" : [ "Extended", "Standard" ],
+          "excluded" : [ ],
+          "obligations" : [ ],
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        }, {
+          "declared" : [ ],
+          "excluded" : [ ],
+          "obligations" : [ ],
+          "status" : "unavailable",
+          "reason" : "not_a_sum"
+        } ]
+      },
+      "partition" : {
+        "axesMeasure" : {
+          "status" : "complete"
+        },
+        "boundariesMeasure" : {
+          "status" : "complete"
+        },
+        "axes" : [ {
+          "axis" : "settleOvertime/agreement",
+          "path" : "agreement",
+          "read" : {
+            "extent" : "complete"
+          },
+          "classes" : [ "Standard", "Extended" ],
+          "excluded" : [ ],
+          "unprovenClaims" : [ ],
+          "status" : "unavailable",
+          "reason" : "no_rows"
+        } ],
+        "claimsOffAxis" : [ ],
+        "boundaries" : [ {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.staffing",
+                  "declaredOn" : "Hours",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "0"
+            }
+          },
+          "lineId" : {
+            "target" : {
+              "behavior" : "settleOvertime",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "hours"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "0"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.staffing",
+                  "declaredOn" : "Hours",
+                  "clause" : 0
+                },
+                "part" : 0,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
+          "axis" : "settleOvertime/hours",
+          "origin" : "invariant Hours #1",
+          "kind" : "at_value",
+          "value" : "0",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "0",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "0 < hours <= 200",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.staffing",
+                  "declaredOn" : "Hours",
+                  "clause" : 0
+                },
+                "part" : 1,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "200"
+            }
+          },
+          "lineId" : {
+            "target" : {
+              "behavior" : "settleOvertime",
+              "quantity" : {
+                "shape" : "at_value",
+                "terms" : [ {
+                  "term" : {
+                    "kind" : "value",
+                    "position" : "hours"
+                  },
+                  "orders" : {
+                    "observed" : {
+                      "kind" : "whole"
+                    },
+                    "answered" : {
+                      "kind" : "whole"
+                    }
+                  },
+                  "coefficient" : "1"
+                } ]
+              },
+              "level" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "200"
+              }
+            },
+            "line" : {
+              "which" : {
+                "kind" : "part",
+                "rule" : {
+                  "kind" : "invariant",
+                  "declaredIn" : "conformance.staffing",
+                  "declaredOn" : "Hours",
+                  "clause" : 0
+                },
+                "part" : 1,
+                "line" : {
+                  "kind" : "statement",
+                  "statement" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : true,
+                "holdsAtTheValue" : true,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            }
+          },
+          "axis" : "settleOvertime/hours",
+          "origin" : "invariant Hours #1",
+          "kind" : "at_value",
+          "value" : "200",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "200",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "above"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "relation" : "in",
+            "against" : "0 <= hours < 200",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "status" : "unavailable",
+            "reason" : "no_rows"
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          } ]
+        } ],
+        "obligations" : [ ],
+        "pairs" : {
+          "total" : 0,
+          "between" : [ ],
+          "status" : "complete",
+          "covered" : 0,
+          "unknown" : 0
+        },
+        "notDerivable" : [ ],
+        "notRead" : [ ]
+      },
+      "branch" : {
+        "status" : "unavailable",
+        "reason" : "no_rows"
+      },
+      "decision" : {
+        "coverage" : {
+          "status" : "complete"
+        },
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "settleOvertime",
+            "conditions" : [ {
+              "kind" : "not_read",
+              "condition" : "condition 0 of `settleOvertime`",
+              "outcome" : "held",
+              "notRead" : [ {
+                "kind" : "projection_incomplete",
+                "reason" : "arm_read_as_written"
+              } ]
+            } ]
+          },
+          "taken" : false,
+          "requirement" : "unsettled",
+          "because" : "a_composed_row_was_short_of_the_way"
+        }, {
+          "obligationId" : {
+            "behavior" : "settleOvertime",
+            "conditions" : [ {
+              "kind" : "not_read",
+              "condition" : "condition 1 of `settleOvertime`",
+              "outcome" : "held",
+              "notRead" : [ {
+                "kind" : "projection_incomplete",
+                "reason" : "arm_read_as_written"
+              } ]
+            } ]
+          },
+          "taken" : false,
+          "requirement" : "required"
+        } ]
+      },
+      "replacement" : {
+        "status" : "unavailable",
+        "reason" : "no_rows"
+      },
+      "findings" : [ {
+        "kind" : "decision_rule_uncovered",
+        "disposition" : "refused",
+        "subject" : "settleOvertime",
+        "obligationId" : {
+          "behavior" : "settleOvertime",
+          "conditions" : [ {
+            "kind" : "not_read",
+            "condition" : "condition 1 of `settleOvertime`",
+            "outcome" : "held",
+            "notRead" : [ {
+              "kind" : "projection_incomplete",
+              "reason" : "arm_read_as_written"
+            } ]
           } ]
         },
         "code" : "E1935"

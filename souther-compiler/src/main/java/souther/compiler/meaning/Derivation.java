@@ -12,6 +12,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -118,6 +119,149 @@ public sealed interface Derivation {
                 before.add(selects);
             }
             return Proposition.any(taken);
+        }
+    }
+
+    /**
+     * An arm of a {@code match} entered: it selects the value, and no arm written before it does.
+     *
+     * @param before whether each arm written before it selects the value, in the order they are
+     *               written
+     */
+    record AnArmTaken(List<Derivation> before, Derivation selects) implements Derivation {
+
+        public AnArmTaken {
+            before = List.copyOf(before);
+            Objects.requireNonNull(selects, "an arm selects some values");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            List<Proposition> arrives = new ArrayList<>();
+            for (Derivation each : before) {
+                arrives.add(numbering.of(each).denied());
+            }
+            arrives.add(numbering.of(selects));
+            return Proposition.all(arrives);
+        }
+    }
+
+    /**
+     * An attempt that built its value: every clause of the invariant it checks held where it was
+     * given what the attempt hands it.
+     *
+     * @param clauses whether each clause holds, in the order a construction checks them
+     */
+    record ItWasBuilt(List<Derivation> clauses) implements Derivation {
+
+        public ItWasBuilt {
+            clauses = List.copyOf(clauses);
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return Proposition.all(clauses.stream().map(numbering::of).toList());
+        }
+    }
+
+    /**
+     * An attempt that departed by one of its departures: the first clause of the invariant not to
+     * hold is one the departure answers. A clause is checked only where every clause before it held,
+     * so the departure is taken where, for some clause it answers, every clause before that one holds
+     * and that one does not.
+     *
+     * @param clauses  whether each clause holds, in the order a construction checks them
+     * @param answers  whether the departure answers each clause, beside it in {@code clauses}
+     */
+    record ItDeparted(List<Derivation> clauses, List<Boolean> answers) implements Derivation {
+
+        public ItDeparted {
+            clauses = List.copyOf(clauses);
+            answers = List.copyOf(answers);
+            if (clauses.size() != answers.size()) {
+                throw new IllegalArgumentException("a departure answers each clause or does not");
+            }
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            List<Proposition> holds = clauses.stream().map(numbering::of).toList();
+            List<Proposition> firstFailing = new ArrayList<>();
+            for (int i = 0; i < holds.size(); i++) {
+                if (answers.get(i)) {
+                    List<Proposition> taken = new ArrayList<>(holds.subList(0, i));
+                    taken.add(holds.get(i).denied());
+                    firstFailing.add(Proposition.all(taken));
+                }
+            }
+            return Proposition.any(firstFailing);
+        }
+    }
+
+    /**
+     * Arms a run takes one of: an arm holds where it is reached and what it answers holds there. The
+     * arms exclude each other, each written with every arm before it, so no arm is reached where
+     * another is.
+     */
+    record OneOfItsArms(List<MatchArms.Arm> arms) implements Derivation {
+
+        public OneOfItsArms {
+            if (arms == null || arms.isEmpty()) {
+                throw new IllegalArgumentException("a value chosen by arms has an arm");
+            }
+            arms = List.copyOf(arms);
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            List<Proposition> taken = new ArrayList<>();
+            for (MatchArms.Arm arm : arms) {
+                taken.add(Proposition.all(List.of(numbering.of(arm.selects()),
+                        numbering.of(arm.states()))));
+            }
+            return Proposition.any(taken);
+        }
+    }
+
+    /**
+     * What a behavior's body states over its own parameters, at one call of it: each place of its
+     * input moved to the same way into what the call handed that parameter ({@link MovedToACall}).
+     * The body's statement is read once, of the definition; this is the one step that is the
+     * call's.
+     *
+     * @param handed which position of the caller's input each parameter was handed, by the name the
+     *               body reads it by; a parameter handed anything else is not in it
+     */
+    record ABehaviorsAnswerAtACall(ValueName.Behavior behavior, Derivation inItsBody,
+                                   Map<String, TermPath> handed) implements Derivation {
+
+        public ABehaviorsAnswerAtACall {
+            Objects.requireNonNull(behavior, "a call is of some behavior");
+            Objects.requireNonNull(inItsBody, "a body states something");
+            handed = Map.copyOf(handed);
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return MovedToACall.of(numbering.of(inItsBody), handed,
+                    why -> numbering.unread(new Stopped(why, false)));
+        }
+    }
+
+    /**
+     * Which case a value chosen by cases is: the choice, with which case each arm's value is in that
+     * arm's place. A value is what the arm taken answers, so it is of a case exactly where what that
+     * arm answers is.
+     */
+    record ACaseOfAChoice(Derivation byItsCases) implements Derivation {
+
+        public ACaseOfAChoice {
+            Objects.requireNonNull(byItsCases, "a choice is made by its cases");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.of(byItsCases);
         }
     }
 

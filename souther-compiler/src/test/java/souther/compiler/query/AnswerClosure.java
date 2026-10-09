@@ -908,6 +908,14 @@ final class AnswerClosure {
                     part("souther.compiler.partition.BehaviorInputs", "rules"),
                     part("souther.compiler.check.RuleReadingSource", "declarations"),
                     part("souther.compiler.check.DeclarationAccess", "enumerations")),
+            // And which case each behavior's answer is. One input, and the answer is read off the
+            // body of the behavior asked about, so what a reading holds is a way to ask.
+            generationReader("souther.compiler.check.BehaviorAnswers",
+                    Traversal.Why.NOTHING_CLOSES_IT,
+                    part("souther.compiler.partition.MeasuredInput", "written"),
+                    part("souther.compiler.partition.BehaviorInputs", "rules"),
+                    part("souther.compiler.check.RuleReadingSource", "declarations"),
+                    part("souther.compiler.check.DeclarationAccess", "answers")),
             generationReader("souther.compiler.inputs.ReadQuantities",
                     part("souther.compiler.partition.MeasuredInput", "quantities"),
                     arm("souther.compiler.inputs.ReadQuantities")),

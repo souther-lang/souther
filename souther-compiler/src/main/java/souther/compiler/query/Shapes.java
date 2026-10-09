@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.BehaviorAnswers;
 import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.BoundaryConstraints;
@@ -80,6 +81,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -2129,7 +2131,17 @@ public final class Shapes {
     public static DeclarationAccess declarationAccess(Db db) {
         return new DeclarationAccess(publishedDeclarations(db), declarationKinds(db),
                 newtypeInners(db), effectiveFieldTypes(db), fieldLayout(db), sumCases(db),
-                listedCases(db), enumerationListings(db));
+                listedCases(db), enumerationListings(db), behaviorAnswers(db));
+    }
+
+    /**
+     * Which case any behavior's answer is, for a reader of a call to one.
+     *
+     * <p>One of these for the whole compilation, for the reason {@link #expandedClauses} gives. A
+     * reader taking one depends on the bodies of the behaviors it asks about and on nothing else.
+     */
+    public static BehaviorAnswers behaviorAnswers(Db db) {
+        return behavior -> Optional.ofNullable(db.ask(new Adequacy.AnswerCases(behavior)).value());
     }
 
     /**

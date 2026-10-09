@@ -458,7 +458,7 @@ public final class PathReachability {
      * one of the language's operations is no condition of the model, and the path takes nothing in
      * there. One the reading of the model has nothing filed for is read as it stands here.
      */
-    private Predicates.Assumed assuming(ConstructOccurrence at, MeaningsOfABody.Part part,
+    private Predicates.Assumed assuming(ConstructOccurrence at, MeaningsOfABody.Part.Asked part,
                                         Core cond, Known k, Denotations in, InputReads reads,
                                         boolean positive) {
         Optional<ModelOccurrence> construct = ModelOccurrence.statedAt(at);
@@ -560,7 +560,8 @@ public final class PathReachability {
                 // against conditions nothing on the way to it established.
                 boolean reachedWhen = binary.op().rightRunsWhenLeftIs();
                 Predicates.Assumed reaching = assuming(binary.occurrence(),
-                        MeaningsOfABody.Part.LEFT, binary.left(), k, at, reads, reachedWhen);
+                        MeaningsOfABody.Part.Asked.LEFT, binary.left(), k, at, reads,
+                        reachedWhen);
                 walk(binary.right(), reaching.known(), at, reads,
                         with(decided, reaching, binary.left().pos(), reachedWhen), nothingAbove);
             }
@@ -703,7 +704,7 @@ public final class PathReachability {
                 continue;
             }
             Predicates.Assumed taken = assuming(comparison.occurrence(),
-                    MeaningsOfABody.Part.ITSELF, comparison, k, at, reads, result);
+                    MeaningsOfABody.Part.Asked.ITSELF, comparison, k, at, reads, result);
             out.put(where.get(), taken.known().reachesNothing()
                     ? new Reachability.Unreachable(Proof.conditionsThatCannotAllHold(
                             with(decided, taken, comparison.pos(), result)))
@@ -755,7 +756,7 @@ public final class PathReachability {
     private Proof why(Core.If iff, boolean holds,
                       List<PathDecision> under, InputReads reads) {
         Core cond = iff.cond();
-        if (assuming(iff.place().occurrence(), MeaningsOfABody.Part.CONDITION, cond, entry,
+        if (assuming(iff.place().occurrence(), MeaningsOfABody.Part.Asked.CONDITION, cond, entry,
                 entered, reads, holds).known().reachesNothing()) {
             TermPath position = comparedPositionIn(cond, reads);
             NumericDomain.Bounds admits = position == null ? null : valueBoundsAt(position);
@@ -882,7 +883,7 @@ public final class PathReachability {
                           Known k, Denotations at, InputReads reads, List<PathDecision> decided,
                           boolean holds) {
         Predicates.Assumed taken = assuming(iff.place().occurrence(),
-                MeaningsOfABody.Part.CONDITION, iff.cond(), k, at, reads, holds);
+                MeaningsOfABody.Part.Asked.CONDITION, iff.cond(), k, at, reads, holds);
         Known inside = taken.known();
         List<PathDecision> under = with(decided, taken, iff.cond().pos(), holds);
         if (arms != null && index < arms.length) {

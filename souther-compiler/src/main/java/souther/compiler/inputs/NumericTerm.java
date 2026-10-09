@@ -16,6 +16,8 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.util.function.UnaryOperator;
+
 /**
  * The number a rule compares, and where that number is read from.
  *
@@ -71,10 +73,19 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
             return position();
         }
 
+        /** The same number, of the one value standing where {@code moved} puts {@link
+         *  #position()}: never null, since one place moved is one place. */
+        @Override
+        FromOnePosition movedTo(UnaryOperator<TermPath> moved);
     }
 
     /** The number a location holds: a numeric parameter, a field of one, a numeric newtype's value. */
     record ValueOf(TermPath position) implements FromOnePosition {
+
+        @Override
+        public ValueOf movedTo(UnaryOperator<TermPath> moved) {
+            return new ValueOf(moved.apply(position));
+        }
 
         @Override
         public String toString() {
@@ -207,6 +218,14 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
             return operation;
         }
 
+        /** The same taking, of the value at the place {@code moved} puts this one's. What stands
+         *  there is a value of the same type, so the account the operation is taken by holds of it
+         *  as it did here. */
+        @Override
+        public TakenOf movedTo(UnaryOperator<TermPath> moved) {
+            return new TakenOf(operation, moved.apply(position), arguments);
+        }
+
         /** What it was given beside the value at {@link #position()}, read as constants — and
          *  nothing where it was given nothing. */
         public TakenArguments arguments() {
@@ -311,6 +330,15 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
             return source;
         }
 
+        /** The same taking, over the run read from where {@code moved} puts this one's — or null
+         *  where what stands there is no one run, as a run inside an element of another container
+         *  is not. */
+        @Override
+        public TakenOver movedTo(UnaryOperator<TermPath> moved) {
+            RunSource at = RunSource.overTheOccurrencesAt(moved.apply(source.subjectPath()));
+            return at == null ? null : new TakenOver(operation, at);
+        }
+
         /** What this operation takes of what it is given. Never null: one of these cannot be made
          *  for an operation that declares none. */
         public TakenAs takenAs() {
@@ -354,6 +382,13 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
      * reading one as the other is what this type exists to stop.
      */
     TermPath subjectPath();
+
+    /**
+     * The same number, of the value standing where {@code moved} puts each place it is read from —
+     * or null where that is no such number. What a behavior states of a number of its parameter is
+     * what it states of the same number of whatever a call handed that parameter.
+     */
+    NumericTerm movedTo(UnaryOperator<TermPath> moved);
 
     /**
      * This number where one input position answers it, or null where no single place does.

@@ -1,5 +1,6 @@
 package souther.compiler.meaning;
 
+import souther.compiler.check.ClauseName;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.HashSet;
@@ -39,14 +40,57 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous) {
         ambiguous = Set.copyOf(ambiguous);
     }
 
-    /** Which part of a construct is asked whether it holds. */
-    public enum Part {
-        /** The condition a fork chooses its arm by. */
-        CONDITION,
-        /** The left operand of a short-circuit, which decides whether the right one runs. */
-        LEFT,
-        /** The construct itself, a comparison whose outcome a run records. */
-        ITSELF
+    /**
+     * Which part of a construct is asked whether it holds: a truth the construct asks, or an arm of
+     * a fork a run enters.
+     */
+    public sealed interface Part permits Part.Asked, Part.Arm {
+
+        /** A truth a construct asks. */
+        enum Asked implements Part {
+            /** The condition a fork chooses its arm by. */
+            CONDITION,
+            /** The left operand of a short-circuit, which decides whether the right one runs. */
+            LEFT,
+            /** The construct itself, a comparison whose outcome a run records. */
+            ITSELF
+        }
+
+        /**
+         * An arm of a fork, which holds where a run enters it.
+         *
+         * <p>Named by what the source names it by, so that an arm is the same arm in every copy of
+         * the fork and after an edit that moves another: a case of a {@code match} by where it is
+         * written among the cases, and an arm of an attempt by the clause of the invariant it
+         * answers.
+         */
+        sealed interface Arm extends Part {}
+
+        /** The arm of a {@code match} written {@code arm}-th among its cases, from nought. */
+        record OfACase(int arm) implements Arm {
+
+            public OfACase {
+                if (arm < 0) {
+                    throw new IllegalArgumentException("a case is written somewhere among the cases");
+                }
+            }
+        }
+
+        /** The arm of an attempt taken where every clause of the invariant held and the value was
+         *  built. */
+        record Built() implements Arm {}
+
+        /**
+         * A departure of an attempt: the one answering the clause named {@code clause} — the first
+         * clause not to hold — or, where empty, the one answering every failure no other departure
+         * names.
+         */
+        record Departed(Optional<ClauseName> clause) implements Arm {
+
+            public Departed {
+                Objects.requireNonNull(clause, "a departure names a clause or names none");
+            }
+        }
     }
 
     /**

@@ -202,6 +202,16 @@ public record TermPath(String head, List<Step> steps) {
         return append(new Step.Field(field));
     }
 
+    /**
+     * The same way in, taken into what stands at {@code root} instead of into what {@link #head}
+     * names: a way into a behavior's parameter, as the same way into what a call handed it.
+     */
+    public TermPath under(TermPath root) {
+        List<Step> moved = new ArrayList<>(root.steps);
+        moved.addAll(steps);
+        return new TermPath(root.head, moved);
+    }
+
     /** The same path, inside the container it has reached. */
     public TermPath element() {
         return append(new Step.Element());

@@ -29,7 +29,7 @@ class ACopyIsOneStatementWhereItStatesOneThingTest {
     private static final MeaningsOfABody.Site SITE = new MeaningsOfABody.Site(
             new ModelOccurrence(new SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 0, 0,
                     SourceConstruct.IF), ExpansionLineage.ORIGINAL),
-            MeaningsOfABody.Part.CONDITION);
+            MeaningsOfABody.Part.Asked.CONDITION);
 
     private static final Derivation DIRECTLY =
             new Derivation.ATruthOfASubject(new DecisionSubject.AnInput(TermPath.of("flag")), true);

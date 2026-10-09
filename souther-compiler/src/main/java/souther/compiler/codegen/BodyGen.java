@@ -6,6 +6,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.BehaviorAnswers;
 import souther.compiler.check.CheckContext;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.DeclarationAccess;
@@ -276,7 +277,8 @@ final class BodyGen {
             return new CheckContext(symbols, new DeclarationAccess(ctx.published, ctx.kinds,
                     ctx.inners, EffectiveFieldTypes.asWritten(symbols),
                     FieldLayout.asWritten(symbols), ctx.sums, ctx.listed,
-                    EnumerationListings.asWritten(symbols, ctx.kinds, ctx.sums)),
+                    EnumerationListings.asWritten(symbols, ctx.kinds, ctx.sums),
+                    BehaviorAnswers.NONE),
                     ReachedValueLocations.NOT_HELD, data, reqSigs());
         }
 

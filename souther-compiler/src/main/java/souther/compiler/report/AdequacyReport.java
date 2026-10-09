@@ -3959,6 +3959,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     + operation.qualified() + " answers, whose declaration gives it no such side";
             case WhyUnread.WhatARecursiveHelperAnswers _ -> "a condition on what a recursive"
                     + " helper answers";
+            case WhyUnread.AClauseOfAnInvariant(var clause, var how) -> "an arm of an attempt,"
+                    + " decided by a clause of `" + clause.id().declaredOn().name() + "`"
+                    + clause.name().map(name -> " named `" + name + "`").orElse("") + switch (how) {
+                        case NO_FORM -> ", which this compiler has no form for";
+                        case A_FIELD_LEFT_OUT -> ", which reads a field the construction leaves out";
+                    };
+            case WhyUnread.AnInvariantNotReached _ -> "an arm of an attempt, decided by an"
+                    + " invariant whose declarations were not all reached";
+            case WhyUnread.InACalledBody(var what) -> "a case of what another behavior answers, "
+                    + switch (what) {
+                        case AN_ARGUMENT_AT_NO_POSITION -> "turning on a value it was handed that"
+                                + " stands at no position";
+                        case WHAT_ITS_DEPENDENCY_ANSWERS -> "turning on what its own dependency"
+                                + " answers";
+                        case A_VALUE_IT_BINDS -> "turning on a value its body works out";
+                        case ITSELF -> "which reaches itself while it is read";
+                        case AN_ANSWER_NOT_READ -> "whose body was not read";
+                    };
             // Its own words: what the condition comes to is known, and it is the domain that has
             // no words for it.
             case WhyUnread.NoWordsFor(var operation, var _, var proposition) ->
@@ -4534,6 +4552,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             "number_of_what_an_operation_answers";
                     case WhyUnread.WhatARecursiveHelperAnswers _ ->
                             "what_a_recursive_helper_answers";
+                    case WhyUnread.AClauseOfAnInvariant(var _, var how) -> switch (how) {
+                        case NO_FORM -> "clause_with_no_form";
+                        case A_FIELD_LEFT_OUT -> "clause_over_a_field_left_out";
+                    };
+                    case WhyUnread.AnInvariantNotReached _ -> "invariant_not_reached";
+                    case WhyUnread.InACalledBody(var what) -> switch (what) {
+                        case AN_ARGUMENT_AT_NO_POSITION -> "called_with_an_argument_at_no_position";
+                        case WHAT_ITS_DEPENDENCY_ANSWERS -> "called_body_asks_a_dependency";
+                        case A_VALUE_IT_BINDS -> "called_body_binds_a_value";
+                        case ITSELF -> "called_body_reaches_itself";
+                        case AN_ANSWER_NOT_READ -> "called_body_not_read";
+                    };
                     case WhyUnread.MoreReadingsThanAreMade _ -> "more_readings_than_are_made";
                     case WhyUnread.CopiesStateDifferentThings _ ->
                             "copies_state_different_things";

@@ -99,7 +99,7 @@ final class NumberWays implements ComparisonWays {
         // One that has a reading and states nothing at this fork is not read a second way: the
         // fork is not ruled out, for the reason nothing is stated there.
         MeaningsOfABody.Site site =
-                new MeaningsOfABody.Site(construct.get(), MeaningsOfABody.Part.CONDITION);
+                new MeaningsOfABody.Site(construct.get(), MeaningsOfABody.Part.Asked.CONDITION);
         return Optional.of(meanings.at(site)
                 .map(proposition -> WhatTheRulesLeave.admits(proposition, want, quantities))
                 .orElseGet(() -> new AWayThrough.NotRuledOut(List.of(

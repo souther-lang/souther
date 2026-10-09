@@ -5,8 +5,8 @@ import souther.compiler.types.TypeKey;
 /**
  * What a check asks of a declaration it did not write: what the declaration says, which form it
  * is, what it wraps, what each field it reaches holds, the order a value of it lays those fields
- * out in, what a value of a sum can be, which cases a sum lists, and which enumerations list it
- * among their cases.
+ * out in, what a value of a sum can be, which cases a sum lists, which enumerations list it among
+ * their cases, and which case a behavior's answer is.
  *
  * <p>Each is its own because each is settled at its own point and moves at its own time, and a
  * check handed the declaration instead would be reading every one of them out of the tree — which
@@ -20,10 +20,10 @@ import souther.compiler.types.TypeKey;
  *
  * <p>Held together because they travel together, and for no reason beyond that. Nothing here reads
  * one of them off another: a reader handed this asks the ones it uses, and an edit that moves one
- * answer leaves a reader of the others where it was. What the eight share is only that the readers
- * carrying one of them carry all eight down the same walk, and threaded as eight arguments each of
- * those walks said so once per step. A reader handed this asks it and does not work one of them
- * out again from the scope beside it.
+ * answer leaves a reader of the others where it was. What they share is only that the readers
+ * carrying one of them carry all of them down the same walk, and threaded as an argument each,
+ * each of those walks said so once per step. A reader handed this asks it and does not work one of
+ * them out again from the scope beside it.
  *
  * <p>The scope is not one of them. What a name written here means is the module's, and these are
  * about a declaration wherever it was written — which is why a reader holds the two side by side
@@ -32,21 +32,22 @@ import souther.compiler.types.TypeKey;
 public record DeclarationAccess(PublishedDeclarations published, DeclarationKinds kinds,
                                 NewtypeInners inners, EffectiveFieldTypes fieldTypes,
                                 FieldLayout layout, SumCases sums, ListedCases listed,
-                                EnumerationListings enumerations) {
+                                EnumerationListings enumerations, BehaviorAnswers answers) {
 
     /** Nothing declared anywhere — for a reading over primitives, which asks of no declaration. */
     public static final DeclarationAccess NONE = new DeclarationAccess(PublishedDeclarations.NONE,
             DeclarationKinds.NONE, NewtypeInners.NONE, EffectiveFieldTypes.NONE, FieldLayout.NONE,
-            SumCases.NONE, ListedCases.NONE, EnumerationListings.NONE);
+            SumCases.NONE, ListedCases.NONE, EnumerationListings.NONE, BehaviorAnswers.NONE);
 
     public DeclarationAccess {
         if (published == null || kinds == null || inners == null || fieldTypes == null
-                || layout == null || sums == null || listed == null || enumerations == null) {
+                || layout == null || sums == null || listed == null || enumerations == null
+                || answers == null) {
             throw new IllegalArgumentException("a check reads what the declarations it is written"
                     + " against say, which form each of them is, what each of them wraps, what its"
                     + " fields hold, where they stand, what a value of a sum can be, which cases a"
-                    + " sum lists and which enumerations list it, so it is handed somewhere to read"
-                    + " every one of them");
+                    + " sum lists, which enumerations list it and which case a behavior answers,"
+                    + " so it is handed somewhere to read every one of them");
         }
     }
 
@@ -58,8 +59,11 @@ public record DeclarationAccess(PublishedDeclarations published, DeclarationKind
      * <p>Those six are read off {@code symbols} and the declarations instead, each by the walk that
      * owns the question. What a declaration says and which form it is are still asked for: each
      * sits beside the scope and not inside it, so a reader that wants them from the scope says so
-     * where it builds them rather than here. A reader that could have been handed all eight and
+     * where it builds them rather than here. A reader that could have been handed all of them and
      * reaches for this is one whose dependency on the declarations nothing has cut.
+     *
+     * <p>No behavior's answer is read: a body is read for that by the compilation, and a reader
+     * handed none of its answers reads a call to a behavior as one whose answer it was not given.
      */
     public static DeclarationAccess asWritten(Symbols symbols, PublishedDeclarations published,
                                               DeclarationKinds kinds) {
@@ -67,7 +71,7 @@ public record DeclarationAccess(PublishedDeclarations published, DeclarationKind
         SumCases sums = SumCases.asWritten(kinds, listed);
         return new DeclarationAccess(published, kinds, NewtypeInners.asWritten(symbols),
                 EffectiveFieldTypes.asWritten(symbols), FieldLayout.asWritten(symbols), sums,
-                listed, EnumerationListings.asWritten(symbols, kinds, sums));
+                listed, EnumerationListings.asWritten(symbols, kinds, sums), BehaviorAnswers.NONE);
     }
 
     /**
@@ -90,6 +94,6 @@ public record DeclarationAccess(PublishedDeclarations published, DeclarationKind
                 ? PublishedDeclarations.THE_ONE_THAT_MAKES_THEM.of(declaration)
                 : published.of(declaration);
         return new DeclarationAccess(besidesIt, kinds, inners, fieldTypes, layout, sums, listed,
-                enumerations);
+                enumerations, answers);
     }
 }
