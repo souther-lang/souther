@@ -18,7 +18,6 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -132,14 +131,15 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
                 };
                 assertTrue(asked.positions().contains(container),
                         () -> "the container itself: " + asked.positions());
-                Optional<RowDemand.Relational> size = switch (asked) {
+                RowDemand.Relational size = switch (asked) {
                     case RowDemand.Exists some -> some.holdingOne();
                     case RowDemand.ForAll every -> every.holdingNone();
                     case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _,
-                         RowDemand.ForTheRun _ -> Optional.empty();
+                         RowDemand.ForTheRun _ ->
+                            throw new AssertionError("a membership is some element or every one: "
+                                    + asked);
                 };
-                assertTrue(size.isPresent(), () -> "the size is a number here: " + asked);
-                for (NumericTerm term : size.get().terms()) {
+                for (NumericTerm term : size.terms()) {
                     assertTrue(asked.positions().stream()
                                     .anyMatch(at -> term.subjectPath().isAtOrUnder(at)),
                             () -> "a move of " + term + " turns it on: " + asked.positions());
@@ -156,7 +156,9 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
     void aContainerEveryCaseSpreadsIsReadAtItsNameWithItsSize() {
         RowDemand.Exists some = assertInstanceOf(RowDemand.Exists.class, asked("spread", true));
         assertEquals("lead.campaigns", some.container().toString());
-        assertTrue(some.holdingOne().isPresent(), () -> "the size is a number here: " + some);
+        assertTrue(some.holdingOne().terms().stream()
+                        .allMatch(each -> each.subjectPath().toString().equals("lead.campaigns")),
+                () -> "the size is a number of the name here: " + some);
     }
 
     /**

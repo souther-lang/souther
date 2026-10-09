@@ -81,25 +81,12 @@ public sealed interface WhyNotTaken {
         A_QUANTITY_ON_NO_ORDER,
 
         /**
-         * What a container's elements are asked for comes to how many it holds, and no type
-         * measures that container's size: some element meeting what every element meets is the
-         * container holding one, and every element meeting what none meets is it holding none.
-         */
-        A_SIZE_NOTHING_MEASURES,
-
-        /**
          * One of several things, or some element meeting something, as what a path knows: a path
          * knows a set of facts that all hold, and which of several holds, or which element, is no
          * fact of it. A limit of what a path knows and not of the propositions it is handed, which
          * state the alternatives in full.
          */
         A_PATH_KNOWS_NO_ALTERNATIVES,
-
-        /**
-         * A position of the input the reading of it holds no place for: one under a value the
-         * reading does not descend into, so nothing a row writes stands there to be narrowed.
-         */
-        A_POSITION_THE_READING_HOLDS_NO_PLACE_FOR,
 
         /**
          * What a dependency answered, asked of a row: a row writes the input, and stands a
@@ -156,8 +143,7 @@ public sealed interface WhyNotTaken {
          */
         public Domain domain() {
             return switch (this) {
-                case A_QUANTITY_ON_NO_ORDER, A_SIZE_NOTHING_MEASURES,
-                     A_POSITION_THE_READING_HOLDS_NO_PLACE_FOR, AN_ANSWER_A_ROW_STANDS_IN ->
+                case A_QUANTITY_ON_NO_ORDER, AN_ANSWER_A_ROW_STANDS_IN ->
                         Domain.WHAT_A_ROW_IS_WRITTEN_IN;
                 case A_PATH_KNOWS_NO_ALTERNATIVES, A_PLACE_THE_PATH_DOES_NOT_READ,
                      A_PATH_KNOWS_NO_CASES, A_PATH_KNOWS_NO_SAMENESS_OF_VALUES,

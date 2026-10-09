@@ -17,7 +17,6 @@ import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
-import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -523,12 +522,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
     private static OnTheWay narrowing(ConditionOccurrence condition, ConditionReportAnchor at,
                                       TermPath position, CasesLeft cases, InputReading read) {
         InputDomain inputs = read.domain();
-        DeclaredInput.Taking taking = taking(position, cases, read);
-        if (taking == null) {
-            return new OnTheWay.Declined(condition, at, new WhyNotTaken.OutsideDomain(
-                    WhyNotTaken.DomainLimit.A_POSITION_THE_READING_HOLDS_NO_PLACE_FOR));
-        }
-        return switch (taking) {
+        return switch (taking(position, cases, read)) {
             case DeclaredInput.Taking.Narrows(TermPath to) -> new OnTheWay.Narrowed(at, to,
                     inputs.reach().crossings(), onItsOrder(to, read));
             case DeclaredInput.Taking.Implied _ -> new OnTheWay.Settled(condition, at, true);
@@ -539,15 +533,25 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
     /**
      * What the value at {@code position} read as one of {@code cases} comes to, as what the
      * declarations leave it says ({@link #taking(InputDomain, DeclaredInput, TermPath, Type,
-     * CasesLeft)}) — or null where this reading cannot say.
+     * CasesLeft)}).
      *
      * <p>Asked where the value is one an element holds as much as where a way passes a fork on
      * it: the declarations leave a position inside an element what they leave every element.
+     *
+     * <p>And there is always an answer. The statement was read off a value at a position of the
+     * input, and the reading of the input holds every position a condition names — under every
+     * case, where the name is one the cases of a sum share — so a position it holds no place for
+     * is the reading contradicting what it read, and is said as that.
      */
     static DeclaredInput.Taking taking(TermPath position, CasesLeft cases, InputReading read) {
         InputDomain inputs = read.domain();
-        return taking(inputs, inputs.declared(read.rules()), position,
+        DeclaredInput.Taking taking = taking(inputs, inputs.declared(read.rules()), position,
                 inputs.typeAt(position, read.rules()), cases);
+        if (taking == null) {
+            throw new IllegalStateException("a statement of which case the value at `" + position
+                    + "` is was read, and the reading of the input holds no place there");
+        }
+        return taking;
     }
 
     /** These conditions, with the rule stated at {@code states} reached under {@code assumed}. */

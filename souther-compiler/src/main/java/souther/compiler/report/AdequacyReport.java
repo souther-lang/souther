@@ -3906,12 +3906,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit limit) -> switch (limit) {
                 case A_QUANTITY_ON_NO_ORDER ->
                         "a comparison whose quantity stands on no order this compiler measures";
-                case A_SIZE_NOTHING_MEASURES -> "a condition about what a container holds that"
-                        + " comes to how many it holds, which no type measures";
                 case A_PATH_KNOWS_NO_ALTERNATIVES -> "a condition that comes to one of several"
                         + " things, or to some element, which no fact a path knows says";
-                case A_POSITION_THE_READING_HOLDS_NO_PLACE_FOR -> "a condition on a position"
-                        + " under a value the reading of the input does not descend into";
                 case AN_ANSWER_A_ROW_STANDS_IN -> "a condition on what a dependency answered,"
                         + " which a row stands in rather than writes";
                 case A_PLACE_THE_PATH_DOES_NOT_READ -> "a condition on a place the path does not"
@@ -4579,10 +4575,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 out.put("kind", "outside_domain");
                 out.put("reason", switch (limit) {
                     case A_QUANTITY_ON_NO_ORDER -> "quantity_on_no_order";
-                    case A_SIZE_NOTHING_MEASURES -> "size_nothing_measures";
                     case A_PATH_KNOWS_NO_ALTERNATIVES -> "path_knows_no_alternatives";
-                    case A_POSITION_THE_READING_HOLDS_NO_PLACE_FOR ->
-                            "position_the_reading_holds_no_place_for";
                     case AN_ANSWER_A_ROW_STANDS_IN -> "answer_a_row_stands_in";
                     case A_PLACE_THE_PATH_DOES_NOT_READ -> "place_the_path_does_not_read";
                     case A_PATH_KNOWS_NO_CASES -> "path_knows_no_cases";

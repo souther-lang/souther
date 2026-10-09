@@ -144,11 +144,6 @@ final class DemandReading {
                 WhyNotTaken.DomainLimit.AN_ANSWER_A_ROW_STANDS_IN));
     }
 
-    private static Read.Unread aSizeNothingMeasures() {
-        return new Read.Unread(new WhyNotTaken.OutsideDomain(
-                WhyNotTaken.DomainLimit.A_SIZE_NOTHING_MEASURES));
-    }
-
     /** One thing a condition asks, and which condition of the shape asks it. */
     record Stated(Condition where, Read read) {}
 
@@ -310,12 +305,15 @@ final class DemandReading {
      * share stands at one position under each case and at none of its own, and what its type
      * divides into is the same under every one of them — so the cases left are said of the name,
      * and a composer writes them under whichever case the row is.
+     *
+     * <p>A type stands there: the statement was read off a value at a position of the input, and
+     * the reading of the input holds every position a condition names.
      */
     private static Read notOfItsCases(TermPath at, CasesLeft cases, InputReading read) {
         Type type = read.domain().typeAt(at.position(), read.rules());
         if (type == null) {
-            return new Read.Unread(new WhyNotTaken.OutsideDomain(
-                    WhyNotTaken.DomainLimit.A_POSITION_THE_READING_HOLDS_NO_PLACE_FOR));
+            throw new IllegalStateException("a statement of which case the value at `" + at
+                    + "` is was read, and the reading of the input holds no type there");
         }
         List<Refinement> others = new ArrayList<>();
         for (Case each : Distinctions.ofType(TypeView.shapeOf(type, read.rules().inners(),
@@ -551,16 +549,12 @@ final class DemandReading {
                                     inner.ofAnElement()))
                             : AnElementsWay.ofTheRow(each));
             // And every element of such a container meeting something is two ways: elements
-            // that meet it, and the container holding none — which, where its size is no number
-            // of this input, is a way this reading cannot state.
+            // that meet it, and the container holding none.
             case Read.Demands(RowDemand.ForAll inner) ->
                     everyElement || anyInside(inner.positions(), element)
                             ? List.of(AnElementsWay.asking(within(inner.container(), false,
                                             inner.ofEachElement())),
-                                    inner.holdingNone()
-                                            .map(AnElementsWay::asking)
-                                            .orElseGet(() -> AnElementsWay.ofTheRow(
-                                                    aSizeNothingMeasures())))
+                                    AnElementsWay.asking(inner.holdingNone()))
                             : List.of(AnElementsWay.ofTheRow(each));
             case Read.Demands(RowDemand.SoMany count) ->
                     List.of(everyElement || anyInside(count.positions(), element)
@@ -587,12 +581,7 @@ final class DemandReading {
      */
     private static List<AnElementsWay> aCaseOfTheElement(TermPath at, CasesLeft cases,
                                                          InputReading read) {
-        DeclaredInput.Taking taking = ReachingCuts.taking(at, cases, read);
-        if (taking == null) {
-            return List.of(AnElementsWay.ofTheRow(new Read.Unread(new WhyNotTaken.OutsideDomain(
-                    WhyNotTaken.DomainLimit.A_POSITION_THE_READING_HOLDS_NO_PLACE_FOR))));
-        }
-        return List.of(switch (taking) {
+        return List.of(switch (ReachingCuts.taking(at, cases, read)) {
             case DeclaredInput.Taking.Narrows(TermPath to) -> {
                 List<RowDemand.OfAnElement> asked = new ArrayList<>();
                 asked.add(new RowDemand.InCases(to, read.domain().reach().crossings()));
@@ -633,17 +622,11 @@ final class DemandReading {
             return List.of(new Read.Settled(false));
         }
         List<Read> out = new ArrayList<>(way.ofTheRow());
-        Optional<RowDemand.Relational> holdingOne =
-                Optional.ofNullable(sizeAgainst(held, read, true));
+        RowDemand.Relational holdingOne = sizeAgainst(held, read, true);
         // An element meeting nothing this reading could state is still the container holding
-        // one, which every row past it does — and where that cannot be said either, it is said
-        // that it could not, rather than nothing being asked.
-        if (!way.ofTheElement().isEmpty()) {
-            out.add(new Read.Demands(new RowDemand.Exists(held, way.ofTheElement(), holdingOne)));
-        } else {
-            out.add(holdingOne.<Read>map(Read.Demands::new)
-                    .orElseGet(DemandReading::aSizeNothingMeasures));
-        }
+        // one, which every row past it does.
+        out.add(new Read.Demands(way.ofTheElement().isEmpty() ? holdingOne
+                : new RowDemand.Exists(held, way.ofTheElement(), holdingOne)));
         return List.copyOf(out);
     }
 
@@ -653,13 +636,12 @@ final class DemandReading {
         // Every element meeting what none meets is the container holding none, and nothing else
         // of the predicate is asked of an element that is not there.
         if (way.never()) {
-            RowDemand.Relational none = sizeAgainst(held, read, false);
-            return List.of(none != null ? new Read.Demands(none) : aSizeNothingMeasures());
+            return List.of(new Read.Demands(sizeAgainst(held, read, false)));
         }
         List<Read> out = new ArrayList<>(way.ofTheRow());
         if (!way.ofTheElement().isEmpty()) {
             out.add(new Read.Demands(new RowDemand.ForAll(held, way.ofTheElement(),
-                    Optional.ofNullable(sizeAgainst(held, read, false)))));
+                    sizeAgainst(held, read, false))));
         }
         // Every element meeting what every element meets, whatever the container holds.
         return out.isEmpty() ? List.of(new Read.Settled(true)) : List.copyOf(out);
@@ -691,11 +673,14 @@ final class DemandReading {
 
     /**
      * That the container at {@code held} holds at least one, or none, as its size against one or
-     * against nought — or null where its size is no term of this input or the region cannot
-     * carry it.
+     * against nought.
      *
      * <p>The size is the one that counts what a value of the container's type holds
-     * ({@link NumericMeasures#takenOf}).
+     * ({@link NumericMeasures#takenOf}), and there always is one. A statement about some element
+     * of a container is read off a container standing at a position of the input, every type a
+     * container can be measures how many it holds, and the reading of the input holds every
+     * position a condition names — so a container whose size this cannot say is the reading
+     * contradicting what it read, and is said as that.
      */
     private static RowDemand.Relational sizeAgainst(TermPath held, InputReading read,
                                                     boolean atLeastOne) {
@@ -705,17 +690,21 @@ final class DemandReading {
         NumericTerm.TakenOf count = size == null ? null : NumericTerm.TakenOf.of(size, held,
                 container, read.rules().inners(), read.rules().symbols());
         if (count == null) {
-            return null;
+            throw new IllegalStateException("a statement about the elements of `" + held
+                    + "` was read, and the reading of the input measures no size of it: "
+                    + container);
         }
         // `count - 1 >= 0`, or `count <= 0`.
         LinearForm<NumericTerm> form = atLeastOne
                 ? LinearForm.<NumericTerm>atomMinusConstant(count, ExactRatio.ONE)
                 : LinearForm.<NumericTerm>atom(count);
         Rel rel = atLeastOne ? Rel.GE : Rel.LE;
-        return read.quantities().region().assuming(form, rel)
-                instanceof SearchRegion.Assumption.Taken
-                ? new RowDemand.Relational(new TakenConstraint.Affine(form, rel))
-                : null;
+        return switch (read.quantities().region().assuming(form, rel)) {
+            case SearchRegion.Assumption.Taken _ ->
+                    new RowDemand.Relational(new TakenConstraint.Affine(form, rel));
+            case SearchRegion.Assumption.Refused(var why) -> throw new IllegalStateException(
+                    "how many `" + held + "` holds is a count, and a region refused it: " + why);
+        };
     }
 
     /**

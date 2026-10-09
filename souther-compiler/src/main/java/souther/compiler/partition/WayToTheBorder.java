@@ -105,8 +105,8 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                     // That some element meets these says nothing every row past it holds of each
                     // element, so the region is narrowed only by the container holding one. What
                     // the element meets is composed where the row is.
-                    case RowDemand.Exists(var _, var _, var holdingOne) -> holdingOne.isPresent()
-                            ? holdingOne.get().constraint().narrowing(region) : region;
+                    case RowDemand.Exists(var _, var _, var holdingOne) ->
+                            holdingOne.constraint().narrowing(region);
                     // That every element meets these, which a container holding none does. A
                     // region reads a term inside the elements as the value of one that is there,
                     // so narrowed on, it would leave nothing where the rules leave the element

@@ -58,9 +58,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>And where one of them has no words, which edge it met is one of the words that name that
  * reader's domain. A row is written at the input's positions, so where a row reader stops is a
- * fact about the input's words — a quantity on no order, a size nothing measures, a position the
- * reading holds no place for, an answer a row stands in. A limit of what a path knows is not
- * one of those, and coming out of a row reader it would send an author to the wrong reader.
+ * fact about the input's words — a quantity on no order, an answer a row stands in. A limit of
+ * what a path knows is not one of those, and coming out of a row reader it would send an author to
+ * the wrong reader. Which model meets each is {@link EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest}'s.
  *
  * <p>The kinds are taken from the sealed hierarchy and not from a list here, so a kind of
  * statement added without a sample below is a failure rather than a statement nobody handed to

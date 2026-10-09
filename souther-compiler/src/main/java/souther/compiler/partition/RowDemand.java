@@ -373,15 +373,16 @@ public sealed interface RowDemand {
      * @param container   the container an element of which is to meet them
      * @param ofAnElement what the element is to meet, every one of it about the element and what
      *                    is inside it, and the numbers beside it a relation reads
-     * @param holdingOne  the container's size at least one, where the size is a number of this
-     *                    input a region can carry
+     * @param holdingOne  the container's size at least one, which is a number of this input: a
+     *                    container an element of which is asked something is a position, and
+     *                    every type a container can be measures how many it holds
      */
-    record Exists(TermPath container, List<OfAnElement> ofAnElement,
-                  Optional<Relational> holdingOne)
+    record Exists(TermPath container, List<OfAnElement> ofAnElement, Relational holdingOne)
             implements OfACondition {
 
         public Exists {
             Objects.requireNonNull(container, "a container an element of which meets them");
+            Objects.requireNonNull(holdingOne, "the container holding one, which it does");
             ofAnElement = List.copyOf(ofAnElement);
             if (ofAnElement.isEmpty()) {
                 throw new IllegalArgumentException(
@@ -437,15 +438,15 @@ public sealed interface RowDemand {
      * @param ofEachElement what every element is to meet, which may be about what stands beside
      *                      the element as much as about the element: a container holding none
      *                      meets all of it whatever that says
-     * @param holdingNone   the container's size at most nought, where the size is a number of this
-     *                      input a region can carry — the way to meet this with no element at all
+     * @param holdingNone   the container's size at most nought — the way to meet this with no
+     *                      element at all, which is a number of this input as {@link Exists}'s is
      */
-    record ForAll(TermPath container, List<OfAnElement> ofEachElement,
-                  Optional<Relational> holdingNone)
+    record ForAll(TermPath container, List<OfAnElement> ofEachElement, Relational holdingNone)
             implements OfACondition {
 
         public ForAll {
             Objects.requireNonNull(container, "a container every element of which meets them");
+            Objects.requireNonNull(holdingNone, "the container holding none, which it may");
             ofEachElement = List.copyOf(ofEachElement);
             if (ofEachElement.isEmpty()) {
                 throw new IllegalArgumentException(
@@ -464,7 +465,7 @@ public sealed interface RowDemand {
         @Override
         public Set<NumericTerm> terms() {
             Set<NumericTerm> out = termsOf(ofEachElement);
-            holdingNone.ifPresent(none -> out.addAll(none.terms()));
+            out.addAll(holdingNone.terms());
             return Collections.unmodifiableSet(out);
         }
 

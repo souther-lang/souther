@@ -5328,14 +5328,13 @@ public final class Generator {
             // the rules allow meets them, and the container cannot hold none.
             case RowDemand.ForAll every -> {
                 List<RowDemand.Relational> ofEachElement = every.relations();
-                Optional<RowDemand.Relational> holdingNone = every.holdingNone();
                 Placed some = placedIn(subject, looking, here, alreadyStanding, someElement,
                         assumed, cut, constraints(ofEachElement), true);
-                if (some instanceof Placed.AtAll || holdingNone.isEmpty()) {
-                    yield asComposedOnly(cut, some, false);
+                if (some instanceof Placed.AtAll) {
+                    yield some;
                 }
                 Placed none = placedIn(subject, looking, here, alreadyStanding, someElement,
-                        assumed, cut, List.of(holdingNone.get().constraint()), true);
+                        assumed, cut, List.of(every.holdingNone().constraint()), true);
                 if (none instanceof Placed.AtAll) {
                     yield none;
                 }

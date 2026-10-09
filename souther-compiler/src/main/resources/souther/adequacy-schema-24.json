@@ -2573,7 +2573,7 @@
     },
     "conditionNotReadReason": {
       "type": "object",
-      "description": "One reason a condition nothing read was not: which of the two kinds, and the word within it. The kinds are told apart by what lifts one — a rule of the reading of what a condition means, or a wider domain. Each `outside_domain` word names the reader whose domain stops: what a row is asked is written at the input's positions, so `answer_a_row_stands_in` is what a dependency answered; what a path knows is relations of numbers, truths and what every element was written to meet, about the places of the tree it walks, so the `path_` words and `place_the_path_does_not_read` are where that stops.",
+      "description": "One reason a condition nothing read was not: which of the two kinds, and the word within it. The kinds are told apart by what lifts one — a rule of the reading of what a condition means, or a wider domain. Each `outside_domain` word names the reader whose domain stops: what a row is asked is written at the input's positions, so `answer_a_row_stands_in` is what a dependency answered; what a path knows is relations of numbers, truths and what every element was written to meet, about the places of the tree it walks, so the `path_` words and `place_the_path_does_not_read` are where that stops. `size_nothing_measures` and `position_the_reading_holds_no_place_for` are no longer written — every container a condition asks about has a size that is a number of the input, and the reading of the input holds every position a condition names — and a document of this version may still carry them.",
       "required": [
         "kind",
         "reason"

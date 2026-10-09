@@ -13,6 +13,7 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
+import souther.compiler.numeric.Rel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -164,13 +165,17 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
         assertEquals(1, every.size(), () -> "every element, or none: " + every);
         RowDemand.ForAll each = assertInstanceOf(RowDemand.ForAll.class, every.getFirst(),
                 "what every element meets, which a list holding none does");
-        assertTrue(each.holdingNone().isPresent(), "with the list holding none as a way to it");
+        assertEquals(Rel.LE, assertInstanceOf(TakenConstraint.Affine.class,
+                        each.holdingNone().constraint()).rel(),
+                "with the list holding none as a way to it");
 
         List<RowDemand> some = demandsOf("someDear", true);
         assertEquals(1, some.size(), () -> "an element, with the container holding it: " + some);
         RowDemand.Exists element = assertInstanceOf(RowDemand.Exists.class, some.getFirst(),
                 "an element that meets the predicate");
-        assertTrue(element.holdingOne().isPresent(), "and the container holding at least one");
+        assertEquals(Rel.GE, assertInstanceOf(TakenConstraint.Affine.class,
+                        element.holdingOne().constraint()).rel(),
+                "and the container holding at least one");
         assertNotEquals(each.ofEachElement().getFirst(), element.ofAnElement().getFirst(),
                 "what some element meets is the predicate, and what every element meets when it"
                         + " fails is its denial");
@@ -191,7 +196,9 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
                 "what every element meets, with the number beside it");
         assertTrue(every.positions().stream().anyMatch(each -> each.toString().equals("o.floor")),
                 () -> "the floor is placed with the element: " + every);
-        assertTrue(every.holdingNone().isPresent(), "and the list holding none is a way to it");
+        assertEquals(Rel.LE, assertInstanceOf(TakenConstraint.Affine.class,
+                        every.holdingNone().constraint()).rel(),
+                "and the list holding none is a way to it");
         OnTheWay.OneOf apart = assertInstanceOf(OnTheWay.OneOf.class,
                 only("allAboveTheFloor", true));
         assertEquals(2, apart.alternatives().size(),
