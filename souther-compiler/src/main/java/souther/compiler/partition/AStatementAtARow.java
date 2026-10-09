@@ -8,6 +8,7 @@ import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -143,6 +144,42 @@ final class AStatementAtARow {
                     relation -> OneRelation.of(relation, behavior, quantities));
             default -> throw new IllegalStateException("a statement put to rows is over relations"
                     + " of the input's own numbers, and this is " + stated);
+        }
+    }
+
+    /**
+     * Every number of the input {@code stated} reads, the numbers of the elements it reads among
+     * them; for a statement {@link #askable} says a row can be asked.
+     */
+    static Set<NumericTerm> numbersOf(Proposition stated) {
+        Set<NumericTerm> out = new LinkedHashSet<>();
+        gatherNumbers(stated, out);
+        return Collections.unmodifiableSet(out);
+    }
+
+    private static void gatherNumbers(Proposition stated, Set<NumericTerm> into) {
+        switch (stated) {
+            case Proposition.All all -> all.parts().forEach(part -> gatherNumbers(part, into));
+            case Proposition.Any any -> any.parts().forEach(part -> gatherNumbers(part, into));
+            case Proposition.Some some -> gatherNumbers(some.ofTheElement(), into);
+            case Proposition.Compared compared
+                    when compared.relation() instanceof Relation.Affine affine
+                    && countIn(affine) instanceof Quantity.HowManyMeet count ->
+                    gatherNumbers(count.ofTheElement(), into);
+            case Proposition.Compared compared -> {
+                switch (compared.relation()) {
+                    case Relation.Affine affine -> {
+                        LinearForm<NumericTerm> form = WhatTheRulesLeave.ofTheInput(affine.form());
+                        if (form != null) {
+                            into.addAll(form.coefs().keySet());
+                        }
+                    }
+                    case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place _,
+                                          Rel _) -> into.add(term);
+                    case Relation.Ordered _ -> { }
+                }
+            }
+            default -> { }
         }
     }
 
@@ -354,6 +391,60 @@ final class AStatementAtARow {
             return new Answer.CouldNotTell(unread);
         }
         return every ? Answer.HOLDS : Answer.FAILS;
+    }
+
+    /**
+     * Where each relation this reads over {@code term} turns over, with every other number it reads
+     * standing where {@code beside} says: the value of the term at which the relation's two sides
+     * meet.
+     *
+     * <p>Between two of these, and past the last of them, every relation reads any value of the
+     * term the same way. So a value from each run between them and each of them itself are every
+     * way a value of the term can answer the relations.
+     *
+     * <p>Statements about the elements of a container are no relation over the term and turn
+     * nowhere here; whether a value meets one is read element by element where it is asked.
+     *
+     * @return null where a relation over the term reads a number {@code beside} does not hold, or
+     *         turns at a number that could not be worked out: where it turns is not known, and a
+     *         value chosen from a run could answer it either way
+     */
+    List<ExactRatio> turnsAt(NumericTerm term, Map<NumericTerm, Place> beside) {
+        List<ExactRatio> out = new ArrayList<>();
+        for (OneRelation each : relations.values()) {
+            switch (each) {
+                case OneRelation.OfAForm(LinearQuantity _, LinearForm<NumericTerm> form, Rel _) -> {
+                    ExactRatio weight = form.coefs().get(term);
+                    if (weight == null) {
+                        continue;
+                    }
+                    ExactAnswer<ExactRatio> rest = ExactAnswer.held(form.constant());
+                    for (Map.Entry<NumericTerm, ExactRatio> other : form.coefs().entrySet()) {
+                        if (other.getKey().equals(term)) {
+                            continue;
+                        }
+                        Place at = beside.get(other.getKey());
+                        if (at == null) {
+                            return null;
+                        }
+                        ExactRatio by = other.getValue();
+                        rest = rest.flatMap(sum -> by.times(Count.number(at).exactly())
+                                .flatMap(sum::plus));
+                    }
+                    if (!(rest.flatMap(sum -> sum.negated().dividedBy(weight))
+                            instanceof ExactAnswer.Held<ExactRatio>(ExactRatio at))) {
+                        return null;
+                    }
+                    out.add(at);
+                }
+                case OneRelation.OnAnOrder(LinearQuantity _, NumericTerm on, Place at, Rel _) -> {
+                    if (on.equals(term)) {
+                        out.add(Count.number(at).exactly());
+                    }
+                }
+            }
+        }
+        return out;
     }
 
     /** A statement about the elements of a container: the container, and what each is asked. */

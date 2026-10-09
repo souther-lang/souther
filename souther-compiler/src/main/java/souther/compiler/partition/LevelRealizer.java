@@ -136,10 +136,107 @@ public final class LevelRealizer {
             case Standing.OfOneCoordinate one -> ofOne(one, within, runs, looking, tried);
             case Standing.OfTwoOnOneCarrier two -> ofTwo(two, within, runs, looking, tried);
             case Standing.OfAForm over -> ofAForm(over, within, runs, tried);
-            // A count is held by elements and not by a number written somewhere, and composing
-            // so many elements meeting a statement is not a value of a position this realizes.
-            case Standing.OfACount _ -> Realization.Unknown.nothingComposedOne();
+            case Standing.OfACount count -> ofACount(count, within, tried);
         };
+    }
+
+    /**
+     * A count the item asks for, and a place for each number the statement reads beside an
+     * element.
+     *
+     * <p>Not which elements. A count is met by many containers, and which of them a row holds is
+     * the composing's choice ({@link CardinalityComposer}); a count and the numbers beside it are
+     * what a row is asked to be built at, and the numbers are numbers of the row and are put to
+     * the rules as any item's are. Which counts to try is {@link LevelCandidateSource}'s, as it is
+     * for any item.
+     *
+     * <p>Never a proof. That no container holds so many elements meeting the statement is not
+     * something a walk over counts settles: the elements are the composing's to choose, and a count
+     * nothing here composed is a count left open.
+     */
+    private Realization ofACount(Standing.OfACount count, SearchRegion within,
+                                 ValuesTried tried) {
+        RealizationTarget.ACount counted = new RealizationTarget.ACount(count.count());
+        Set<CompositionBudget> stoppedBy = java.util.EnumSet.noneOf(CompositionBudget.class);
+        LevelCandidateSource.Offered offered =
+                LevelCandidateSource.forItem(count.where(), count.count().levels());
+        if (offered.stoppedShort()) {
+            stoppedBy.add(CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT);
+        }
+        for (Level level : offered.levels()) {
+            if (!(Count.written(level.asAnExactNumber())
+                    instanceof ExactAnswer.Held<Optional<Count>>(Optional<Count> written))
+                    || written.isEmpty() || written.get().at().signum() < 0) {
+                continue;
+            }
+            Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
+            fixing.put(counted, written.get());
+            if (besideAnElement(count, within, fixing, tried)) {
+                Realization made = found(fixing, within, tried);
+                if (made instanceof Realization.Found) {
+                    return made;
+                }
+            }
+        }
+        return Realization.Unknown.leftOpen(
+                Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
+                stoppedBy, Set.of(), Set.of());
+    }
+
+    /**
+     * Puts a place for each number the statement reads beside an element into {@code fixing}, and
+     * says whether every one of them got one.
+     *
+     * <p>One at a time, with the region told what came before, as the way to a point places them.
+     * The last is walked up from where the rules leave it past every place an assignment was
+     * already built with and did not stand: the same count with the numbers beside it somewhere
+     * else is a row nothing has tried.
+     *
+     * <p>A number of another container's elements has no one place to fix, and is left to be read
+     * element by element where the statement is asked.
+     */
+    private static boolean besideAnElement(Standing.OfACount count, SearchRegion within,
+                                           Map<RealizationTarget, Place> fixing,
+                                           ValuesTried tried) {
+        List<NumericTerm> beside = new java.util.ArrayList<>();
+        for (NumericTerm term : count.numbers()) {
+            if (!term.subjectPath().insideAContainer()) {
+                beside.add(term);
+            }
+        }
+        SearchRegion here = within;
+        for (int i = 0; i < beside.size(); i++) {
+            NumericTerm term = beside.get(i);
+            Carrier on = count.count().on().get(term);
+            if (on == null || !(here.projectionOf(term)
+                    instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds held))) {
+                return false;
+            }
+            NumericDomain.Bounds run = held == null ? NumericDomain.Bounds.OPEN : held;
+            RealizationTarget.OfANumber target = RealizationTarget.of(term);
+            boolean last = i == beside.size() - 1;
+            Endpoint from = run.min();
+            Place at = null;
+            // Every assignment tried is one place this may have to walk past, and none more.
+            for (int walked = 0; walked <= tried.rejected().size(); walked++) {
+                Place next = on.somethingInside(from, run.max());
+                if (next == null) {
+                    break;
+                }
+                fixing.put(target, next);
+                if (!last || !tried.holds(fixing)) {
+                    at = next;
+                    break;
+                }
+                from = Endpoint.exclusive(next);
+            }
+            if (at == null) {
+                fixing.remove(target);
+                return false;
+            }
+            here = here.given(term, at);
+        }
+        return true;
     }
 
     /** Every position the item asks a value at: where the item names them in an order, that one,
@@ -452,7 +549,7 @@ public final class LevelRealizer {
         // were recorded in is a hash order — and which position is solved last decides whether the
         // walk finds an answer inside its budget, so an answer that depended on it would depend on
         // nothing a reader can see.
-        List<Map.Entry<RealizationTarget, ExactRatio>> terms = new java.util.ArrayList<>();
+        List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms = new java.util.ArrayList<>();
         for (Map.Entry<NumericTerm, ExactRatio> each : AffineReading.ordered(over.form())) {
             // Every number is realized by rebuilding one value, so what the walk assigns is a demand
             // and there is one for each term of the form. Whether anything writes such a value is
@@ -591,7 +688,7 @@ public final class LevelRealizer {
      */
     private final class Search {
 
-        private final List<Map.Entry<RealizationTarget, ExactRatio>> terms;
+        private final List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms;
         /**
          * The order each position is read and written on, in the order the terms are walked.
          *
@@ -657,7 +754,7 @@ public final class LevelRealizer {
             return true;
         }
 
-        Search(List<Map.Entry<RealizationTarget, ExactRatio>> terms,
+        Search(List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms,
                Map<NumericTerm, Carrier> on, SearchRegion within,
                Map<NumericTerm, NumericDomain.Bounds> runs, ValuesTried tried) {
             this.tried = tried;
@@ -1567,7 +1664,12 @@ public final class LevelRealizer {
     private boolean theRulesHaveNotRefused(Map<RealizationTarget, Place> fixing,
                                            SearchRegion within) {
         Map<NumericTerm, Place> standing = new LinkedHashMap<>();
-        fixing.forEach((target, at) -> standing.put(target.term(), at));
+        // A count is no number the region holds a range of; the numbers fixed beside it are.
+        fixing.forEach((target, at) -> {
+            if (target instanceof RealizationTarget.OfANumber number) {
+                standing.put(number.term(), at);
+            }
+        });
         return standing.isEmpty() || within.given(standing).emptiness().isEmpty();
     }
 }

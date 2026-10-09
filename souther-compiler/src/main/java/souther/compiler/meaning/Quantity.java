@@ -17,7 +17,44 @@ import java.util.List;
  * and only the second leaves a comparison over it with nothing to say.
  */
 public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
-        Quantity.HowManyMeet {
+        Quantity.HowManyMeet, Quantity.HowManyHold {
+
+    /**
+     * How many of these statements hold: what a closure states of each value a container was
+     * written with, one statement for each.
+     *
+     * <p>No count of a container the input holds. The values are written out, so each is a
+     * statement of its own about the input, and how many of them hold against a number is which of
+     * them hold — said that way where it is compared ({@link Proposition#compared}). Of statements
+     * none of which is settled: one that is settled is already a number, and is added beside this.
+     */
+    record HowManyHold(List<Proposition> each) implements Quantity {
+
+        public HowManyHold {
+            each = List.copyOf(each);
+            if (each.isEmpty()) {
+                throw new IllegalArgumentException("how many of no statements hold is none");
+            }
+            if (each.stream().anyMatch(one -> one instanceof Proposition.Always)) {
+                throw new IllegalArgumentException("a settled statement is a number, and not one"
+                        + " of these: " + each);
+            }
+        }
+
+        @Override
+        public String spelled() {
+            StringBuilder out = new StringBuilder("#[");
+            for (int i = 0; i < each.size(); i++) {
+                out.append(i == 0 ? "" : ", ").append(each.get(i).key());
+            }
+            return out.append("]").toString();
+        }
+
+        @Override
+        public String toString() {
+            return spelled();
+        }
+    }
 
     /**
      * How many elements of the container at {@code container} meet {@code ofTheElement}: never

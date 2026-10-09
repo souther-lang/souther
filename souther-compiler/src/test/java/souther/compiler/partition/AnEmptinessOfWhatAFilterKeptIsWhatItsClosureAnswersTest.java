@@ -277,19 +277,20 @@ class AnEmptinessOfWhatAFilterKeptIsWhatItsClosureAnswersTest {
     }
 
     /**
-     * How many were kept is no answer the closure gives, and is not read as one — nor is a
-     * comparison that does not part nought from every size above it.
+     * How many were kept of values written out is which of them were: read through, as what the
+     * closure answers for each — and with one of those a truth no row's numbers answer, held as
+     * several lines and not drawn, at each position the rule is about.
      */
     @Test
-    void howManyWereKeptIsAValueMadeFromTheInput() {
+    void howManyWereKeptIsWhichOfThemWere() {
         for (String count : List.of(">= 2", "== 1", "<= 1", "/= 1")) {
             PartitionEvidence counted = measured(compiled(TRIP + APPLIES + """
                     let submit (t) =
                         if List.length(List.filter(r -> applies(t, r), [High, Abroad])) %s
                         then 2 else 1
                     """.formatted(count)));
-            assertEquals(List.of("t.cost RULE_ABOUT_A_DERIVED_VALUE",
-                            "t.abroad RULE_ABOUT_A_DERIVED_VALUE"),
+            assertEquals(List.of("t.cost SEVERAL_LINES_IN_ONE_RULE",
+                            "t.abroad SEVERAL_LINES_IN_ONE_RULE"),
                     counted.notRead().stream().map(each -> each.at() + " " + each.reason())
                             .toList(), count);
         }

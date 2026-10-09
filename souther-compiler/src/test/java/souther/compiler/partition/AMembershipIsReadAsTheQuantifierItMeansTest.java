@@ -125,15 +125,17 @@ class AMembershipIsReadAsTheQuantifierItMeansTest {
                 TermPath container = switch (asked) {
                     case RowDemand.Exists some -> some.container();
                     case RowDemand.ForAll every -> every.container();
-                    case RowDemand.Relational _, RowDemand.ATruth _ -> throw new AssertionError(
-                            "a demand on the elements: " + asked);
+                    case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _ ->
+                            throw new AssertionError("a membership is some element or every one: "
+                                    + asked);
                 };
                 assertTrue(asked.positions().contains(container),
                         () -> "the container itself: " + asked.positions());
                 Optional<RowDemand.Relational> size = switch (asked) {
                     case RowDemand.Exists some -> some.holdingOne();
                     case RowDemand.ForAll every -> every.holdingNone();
-                    case RowDemand.Relational _, RowDemand.ATruth _ -> Optional.empty();
+                    case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _ ->
+                            Optional.empty();
                 };
                 assertTrue(size.isPresent(), () -> "the size is a number here: " + asked);
                 for (NumericTerm term : size.get().terms()) {

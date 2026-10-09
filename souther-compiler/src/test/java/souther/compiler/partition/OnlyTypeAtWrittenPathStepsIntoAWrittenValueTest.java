@@ -101,6 +101,7 @@ class OnlyTypeAtWrittenPathStepsIntoAWrittenValueTest {
                         + " calls");
         assertEquals(Set.of("souther.compiler.partition.Generator#edgeAt("
                         + "Lsouther/compiler/partition/MeasuredInput;"
+                        + "Lsouther/compiler/inputs/TermPath;"
                         + "Ljava/util/SequencedMap;"
                         + "Lsouther/compiler/inputs/SearchRegion;"
                         + "Lsouther/compiler/partition/DemandsInside;)"

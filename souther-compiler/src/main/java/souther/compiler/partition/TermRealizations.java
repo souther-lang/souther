@@ -8,6 +8,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Dates;
@@ -38,6 +39,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 /**
  * The values that put a term at a number, which is the other direction of reading a
@@ -279,25 +281,40 @@ final class TermRealizations {
         // solving for either: said as that, a caller that asked for nothing is told about this
         // compiler's repertoire.
         assert !targets.isEmpty() : "a group is the numbers of one location and has one of them";
-        if (targets.size() == 1) {
-            return new JointRealization.Supported(new JointBuilder.OneNumberOnItsOwn());
+        // How many elements meet a statement, which is answered by choosing elements and not by a
+        // number standing anywhere. Every count of one container is one question about which
+        // elements it holds, so they are composed together, with how many it holds beside them.
+        List<RealizationTarget.ACount> counts = new ArrayList<>();
+        List<RealizationTarget.OfANumber> numbers = new ArrayList<>();
+        for (RealizationTarget target : targets) {
+            switch (target) {
+                case RealizationTarget.ACount count -> counts.add(count);
+                case RealizationTarget.OfANumber number -> numbers.add(number);
+            }
         }
-        SequencedMap<RealizationTarget, TakenAs.TimePart> times = new LinkedHashMap<>();
-        SequencedMap<RealizationTarget, TakenAs.DatePart> dates = new LinkedHashMap<>();
-        SequencedMap<RealizationTarget, BigDecimal> quotients = new LinkedHashMap<>();
+        if (!counts.isEmpty()) {
+            return countsOf(targets, counts, numbers);
+        }
+        if (targets.size() == 1) {
+            return new JointRealization.Supported(
+                    new JointBuilder.OneNumberOnItsOwn(numbers.getFirst()));
+        }
+        SequencedMap<RealizationTarget.OfANumber, TakenAs.TimePart> times = new LinkedHashMap<>();
+        SequencedMap<RealizationTarget.OfANumber, TakenAs.DatePart> dates = new LinkedHashMap<>();
+        SequencedMap<RealizationTarget.OfANumber, BigDecimal> quotients = new LinkedHashMap<>();
         // What stands at the place, where the group asks for it as well as for numbers taken of
         // it. One group has at most one of these: what a number of a place is taken of is the
         // place, so a second value asked for is a second place and is another group's.
-        RealizationTarget itself = null;
-        List<RealizationTarget> takenOfIt = new ArrayList<>();
+        RealizationTarget.OfANumber itself = null;
+        List<RealizationTarget.OfANumber> takenOfIt = new ArrayList<>();
         // How many the container holds and what it comes to, which are the two numbers a container
         // is composed out of rather than read for.
-        RealizationTarget manyItHolds = null;
-        RealizationTarget whatItComesTo = null;
+        RealizationTarget.OfANumber manyItHolds = null;
+        RealizationTarget.OfANumber whatItComesTo = null;
         // Every target read before any of them is answered, because what the group is turns on all
         // of them. Decided as they come, a value asked for beside a length would be the group the
         // length is in or the group the value is in depending on which of them was read first.
-        for (RealizationTarget target : targets) {
+        for (RealizationTarget.OfANumber target : numbers) {
             switch (target.term()) {
                 case NumericTerm.ValueOf _ -> itself = target;
                 // A number taken over the values a walk came to is a number of a run, and a value
@@ -342,7 +359,7 @@ final class TermRealizations {
         // those values is what reading that value comes to — so the candidates are that demand's
         // and the rest of the group is read off each of them.
         if (itself != null) {
-            RealizationTarget stands = itself;
+            RealizationTarget.OfANumber stands = itself;
             List<RealizationTarget> owned = new ArrayList<>(takenOfIt);
             owned.add(stands);
             return wholly(targets, owned,
@@ -352,8 +369,8 @@ final class TermRealizations {
         // the sizes it may be are the ones the first number leaves, and filling one of those to
         // the second is what a total is composed by anyway.
         if (manyItHolds != null && whatItComesTo != null) {
-            RealizationTarget many = manyItHolds;
-            RealizationTarget total = whatItComesTo;
+            RealizationTarget.OfANumber many = manyItHolds;
+            RealizationTarget.OfANumber total = whatItComesTo;
             return wholly(targets, List.of(many, total),
                     () -> new JointBuilder.HoldingThatManyAndAddingUpToThat(many, total));
         }
@@ -385,6 +402,48 @@ final class TermRealizations {
     }
 
     /**
+     * How many elements of one container meet each of some statements, with how many it holds
+     * where the group asks that too.
+     *
+     * <p>One container. A count is of the elements of the container it names, and counts of two
+     * containers written at one location are a value composed out of two collections at once,
+     * which nothing here writes. Beside them, a value asked at the element itself is some element
+     * standing there, which is one more thing the elements are chosen for; anything else asked
+     * inside an element is not, and the group is one nothing here writes.
+     */
+    private static JointRealization countsOf(Collection<RealizationTarget> group,
+                                             List<RealizationTarget.ACount> counts,
+                                             List<RealizationTarget.OfANumber> numbers) {
+        TermPath container = counts.getFirst().count().container();
+        for (RealizationTarget.ACount each : counts) {
+            if (!each.count().container().equals(container)) {
+                return nothingSolvesAGroup();
+            }
+        }
+        List<RealizationTarget.OfANumber> holding = new ArrayList<>();
+        List<RealizationTarget.OfANumber> elements = new ArrayList<>();
+        for (RealizationTarget.OfANumber each : numbers) {
+            switch (each.term()) {
+                case NumericTerm.TakenOf taken
+                        when taken.takenAs() instanceof TakenAs.HowManyItHolds
+                        && taken.position().equals(container) -> holding.add(each);
+                case NumericTerm.ValueOf value
+                        when value.position().equals(container.element()) -> elements.add(each);
+                default -> {
+                    return nothingSolvesAGroup();
+                }
+            }
+        }
+        // How many it holds is one number of one container, so a second is a second target.
+        if (holding.size() > 1) {
+            return nothingSolvesAGroup();
+        }
+        RealizationTarget.OfANumber many = holding.isEmpty() ? null : holding.getFirst();
+        return wholly(group, Stream.concat(counts.stream(), numbers.stream()).toList(),
+                () -> new JointBuilder.SoManyMeetingEach(counts, many, elements));
+    }
+
+    /**
      * That way of writing one value, where the numbers it is a way for are the whole group.
      *
      * <p><b>One place asks it, because it is one contract.</b> What comes back of a group is a way
@@ -401,7 +460,7 @@ final class TermRealizations {
      * to write.
      */
     private static JointRealization wholly(Collection<RealizationTarget> group,
-                                           Collection<RealizationTarget> owned,
+                                           Collection<? extends RealizationTarget> owned,
                                            Supplier<JointBuilder> way) {
         return Set.copyOf(owned).equals(Set.copyOf(group))
                 ? new JointRealization.Supported(way.get()) : nothingSolvesAGroup();
@@ -475,21 +534,20 @@ final class TermRealizations {
          * RuleReadingContext)} does — it is that way, reached by the one road a caller takes to any
          * group.
          */
-        record OneNumberOnItsOwn() implements JointBuilder {
+        record OneNumberOnItsOwn(RealizationTarget.OfANumber number) implements JointBuilder {
 
             @Override
             public Realization from(Type sourceType,
                                     SequencedMap<RealizationTarget, AskedAt> demands,
                                     Quantities measuring, SearchRegion within,
                                     RuleReadingContext reading, DemandsInside inside) {
-                Map.Entry<RealizationTarget, AskedAt> one = demands.firstEntry();
-                return satisfying(sourceType, measuring.ordersOf(one.getKey().term()),
-                        one.getValue(), within, reading, inside);
+                return satisfying(sourceType, measuring.ordersOf(number.term()),
+                        demands.get(number), within, reading, inside);
             }
         }
 
         /** The parts of a time, each standing at what its own set admits. */
-        record AtThoseTimeParts(SequencedMap<RealizationTarget, TakenAs.TimePart> parts)
+        record AtThoseTimeParts(SequencedMap<RealizationTarget.OfANumber, TakenAs.TimePart> parts)
                 implements JointBuilder {
 
             public AtThoseTimeParts {
@@ -507,7 +565,8 @@ final class TermRealizations {
                                     RuleReadingContext reading, DemandsInside inside) {
                 nothingInside(inside);
                 Map<TakenAs.TimePart, NumericSet> asked = new LinkedHashMap<>();
-                for (Map.Entry<RealizationTarget, TakenAs.TimePart> each : parts.entrySet()) {
+                for (Map.Entry<RealizationTarget.OfANumber, TakenAs.TimePart> each
+                        : parts.entrySet()) {
                     asked.put(each.getValue(), demands.get(each.getKey()).walking());
                 }
                 return atThoseParts(asked, sourceType, rootOf(parts.keySet(), measuring),
@@ -516,7 +575,7 @@ final class TermRealizations {
         }
 
         /** The parts of a date, solved over the calendar. */
-        record OnThoseDateParts(SequencedMap<RealizationTarget, TakenAs.DatePart> parts)
+        record OnThoseDateParts(SequencedMap<RealizationTarget.OfANumber, TakenAs.DatePart> parts)
                 implements JointBuilder {
 
             public OnThoseDateParts {
@@ -534,7 +593,8 @@ final class TermRealizations {
                                     RuleReadingContext reading, DemandsInside inside) {
                 nothingInside(inside);
                 Map<TakenAs.DatePart, NumericSet> asked = new LinkedHashMap<>();
-                for (Map.Entry<RealizationTarget, TakenAs.DatePart> each : parts.entrySet()) {
+                for (Map.Entry<RealizationTarget.OfANumber, TakenAs.DatePart> each
+                        : parts.entrySet()) {
                     asked.put(each.getValue(), demands.get(each.getKey()).walking());
                 }
                 return onThoseParts(asked, sourceType, rootOf(parts.keySet(), measuring),
@@ -560,7 +620,7 @@ final class TermRealizations {
          * carrier names one place instead and what comes back says which population that was one
          * of.
          */
-        record SolvingForTheirQuotients(SequencedMap<RealizationTarget, BigDecimal> by)
+        record SolvingForTheirQuotients(SequencedMap<RealizationTarget.OfANumber, BigDecimal> by)
                 implements JointBuilder {
 
             public SolvingForTheirQuotients {
@@ -583,7 +643,7 @@ final class TermRealizations {
                             Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
                 }
                 NumericDomain.Bounds lies = NumericDomain.Bounds.OPEN;
-                for (Map.Entry<RealizationTarget, BigDecimal> each : by.entrySet()) {
+                for (Map.Entry<RealizationTarget.OfANumber, BigDecimal> each : by.entrySet()) {
                     // The quotients as ends that hold nothing else. The walk below counts the
                     // numbers it admits, and a hole in the quotients is as many numbers of the
                     // place as the divisor is wide — so a set with one is a population nothing here
@@ -636,8 +696,8 @@ final class TermRealizations {
          * ({@link Realization.None}), so a value refused by a number taken of it is not read back
          * as a class the rules leave nothing at.
          */
-        record ItsOwnValueAndWhatIsTakenOfIt(RealizationTarget itself,
-                                            List<RealizationTarget> takenOfIt)
+        record ItsOwnValueAndWhatIsTakenOfIt(RealizationTarget.OfANumber itself,
+                                            List<RealizationTarget.OfANumber> takenOfIt)
                 implements JointBuilder {
 
             public ItsOwnValueAndWhatIsTakenOfIt {
@@ -668,7 +728,7 @@ final class TermRealizations {
                 // worked it out per candidate would ask the same questions again at every value
                 // and answer them the same way.
                 List<Asked> readOfEach = new ArrayList<>();
-                for (RealizationTarget each : takenOfIt) {
+                for (RealizationTarget.OfANumber each : takenOfIt) {
                     TermOrders of = measuring.ordersOf(each.term());
                     AskedAt at = demands.get(each);
                     NumericSet wanted = at == null ? null : at.walking();
@@ -719,8 +779,8 @@ final class TermRealizations {
          * demand refuses is no candidate, and a walk that filled one would spend a figure of this
          * compiler's on a container nobody asked for.
          */
-        record HoldingThatManyAndAddingUpToThat(RealizationTarget manyItHolds,
-                                                RealizationTarget whatItComesTo)
+        record HoldingThatManyAndAddingUpToThat(RealizationTarget.OfANumber manyItHolds,
+                                                RealizationTarget.OfANumber whatItComesTo)
                 implements JointBuilder {
 
             @Override
@@ -757,6 +817,43 @@ final class TermRealizations {
         }
 
         /**
+         * A container with so many of its elements meeting each statement, and holding as many
+         * elements as {@code manyItHolds} asks where it asks.
+         *
+         * <p>Composed out of the counts and read for none of them. Which elements a container holds
+         * is what every count of it turns on together, so they are one question and the container
+         * is written once ({@link CardinalityComposer}).
+         *
+         * @param manyItHolds how many elements the container holds, or null where nothing asks
+         * @param standingAt  the element itself, each asked to stand in a set — which some element
+         *                    of the container does
+         */
+        record SoManyMeetingEach(List<RealizationTarget.ACount> counts,
+                                 RealizationTarget.OfANumber manyItHolds,
+                                 List<RealizationTarget.OfANumber> standingAt)
+                implements JointBuilder {
+
+            public SoManyMeetingEach {
+                if (counts.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a container composed for its counts is asked for at least one");
+                }
+                counts = List.copyOf(counts);
+                standingAt = List.copyOf(standingAt);
+            }
+
+            @Override
+            public Realization from(Type sourceType,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
+                return CardinalityComposer.compose(sourceType, counts, demands, manyItHolds,
+                        standingAt, within, reading);
+            }
+        }
+
+        /**
          * The carrier the group's root is observed on, or null where a term of it is not measured.
          *
          * <p>One root has one, so this is read off each term and is the same answer every time
@@ -764,9 +861,10 @@ final class TermRealizations {
          * because a term measured somewhere else is a term whose value would be written on a
          * carrier a caller found elsewhere.
          */
-        private static Carrier rootOf(Collection<RealizationTarget> group, Quantities measuring) {
+        private static Carrier rootOf(Collection<RealizationTarget.OfANumber> group,
+                                      Quantities measuring) {
             Carrier observed = null;
-            for (RealizationTarget target : group) {
+            for (RealizationTarget.OfANumber target : group) {
                 TermOrders orders = measuring.ordersOf(target.term());
                 if (orders == null) {
                     return null;
@@ -852,13 +950,16 @@ final class TermRealizations {
         }
         return switch (builder) {
             case JointBuilder.HoldingThatManyAndAddingUpToThat _ -> true;
-            case JointBuilder.OneNumberOnItsOwn _ -> switch (group.iterator().next().term()) {
+            case JointBuilder.OneNumberOnItsOwn only -> switch (only.number().term()) {
                 case NumericTerm.TakenOver over ->
                         over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
                 case NumericTerm.TakenOf taken ->
                         taken.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
                 case NumericTerm.ValueOf _ -> false;
             };
+            // Each element is chosen for what it answers of the statements, out of values of the
+            // element's own number; nothing else inside it is planned.
+            case JointBuilder.SoManyMeetingEach _ -> false;
             case JointBuilder.AtThoseTimeParts _, JointBuilder.OnThoseDateParts _,
                  JointBuilder.SolvingForTheirQuotients _,
                  JointBuilder.ItsOwnValueAndWhatIsTakenOfIt _ -> false;
@@ -943,7 +1044,7 @@ final class TermRealizations {
         // Which number is being written for, read off the answer that says which number it is of.
         // Handed in beside it, it was a second name for the same thing and a caller could give two
         // — and this would then write a value for one number on the order of another.
-        RealizationTarget target = RealizationTarget.of(orders.term());
+        RealizationTarget.OfANumber target = RealizationTarget.of(orders.term());
         return switch (target.term()) {
             // Written by the carrier the line was drawn on, and wearing every name the position
             // declares. Read off the boundary's own shape instead, a count on one carrier could be
@@ -1473,13 +1574,14 @@ final class TermRealizations {
      * reads back as something else.
      */
     private static boolean readsBackIntoEveryOne(Place at,
-                                                 SequencedMap<RealizationTarget, BigDecimal> by,
+                                                 SequencedMap<RealizationTarget.OfANumber,
+                                                         BigDecimal> by,
                                                  SequencedMap<RealizationTarget, AskedAt> asked,
                                                  Carrier observed) {
         if (!(at instanceof Count count)) {
             return false;
         }
-        for (Map.Entry<RealizationTarget, BigDecimal> each : by.entrySet()) {
+        for (Map.Entry<RealizationTarget.OfANumber, BigDecimal> each : by.entrySet()) {
             AskedAt of = asked.get(each.getKey());
             NumericSet wanted = of == null ? null : of.walking();
             // A candidate whose quotient the exact arithmetic could not hold is one this cannot say

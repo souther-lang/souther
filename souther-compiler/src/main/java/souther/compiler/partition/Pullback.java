@@ -99,6 +99,13 @@ import java.util.function.Supplier;
 final class Pullback {
 
     /**
+     * How many values written out a count is read over where none of them settles whether it
+     * meets the statement. How many of them hold is read as which of them do, a choice for each,
+     * so the reading doubles with every one.
+     */
+    private static final int MOST_WRITTEN_OUT_COUNTED = 6;
+
+    /**
      * A part of what a condition states, and the expression it was read off, where it stands.
      *
      * @param part what the part states, the way round it was met
@@ -1019,26 +1026,40 @@ final class Pullback {
             Core over = applied.argument(counted.container());
             Denotation container = reads.standing(over, read.rules().symbols(),
                     read.rules().newtypes());
-            // Of values written out, how many meet the statement is a number where each of them
-            // settles whether it does, and turns on the input in no linear way where one does not.
+            // Of values written out, how many meet the statement is how many of the statements
+            // about each of them hold: a number where each of them settles whether it does, and
+            // beside that how many of the rest hold, which is read as which of them do where it is
+            // compared.
             if (Core.withoutStanding(container.value()) instanceof Core.ListLit list) {
                 return switch (ofEachWrittenOut(counted.container(), list, container.at(),
                         counted.ofTheElement())) {
                     case WrittenOutRead.Stops(WhyUnread why) -> new Sized.NotSized(why);
                     case WrittenOutRead.Each(List<Derivation> each) -> {
                         long meeting = 0;
+                        List<Proposition> unsettled = new ArrayList<>();
                         for (Derivation one : each) {
                             Proposition stated = trying.of(one);
                             WhyUnread stopped = Proposition.firstStopIn(stated);
                             if (stopped != null) {
                                 yield new Sized.NotSized(stopped);
                             }
-                            if (!(stated instanceof Proposition.Always(boolean holds))) {
-                                yield new Sized.NotSized(new WhyUnread.OutsideTheLinearFragment());
+                            if (stated instanceof Proposition.Always(boolean holds)) {
+                                meeting += holds ? 1 : 0;
+                            } else {
+                                unsettled.add(stated);
                             }
-                            meeting += holds ? 1 : 0;
                         }
-                        yield new Sized.AsAForm(LinearForm.constant(ExactRatio.of(meeting)));
+                        LinearForm<Quantity> settled = LinearForm.constant(ExactRatio.of(meeting));
+                        if (unsettled.isEmpty()) {
+                            yield new Sized.AsAForm(settled);
+                        }
+                        // Which of them hold is a choice for each, and past this many the choices
+                        // are more readings than the reading of a condition makes.
+                        if (unsettled.size() > MOST_WRITTEN_OUT_COUNTED) {
+                            yield new Sized.NotSized(new WhyUnread.MoreReadingsThanAreMade());
+                        }
+                        yield new Sized.AsAForm(new LinearForm<>(settled.constant(),
+                                Map.of(new Quantity.HowManyHold(unsettled), ExactRatio.ONE)));
                     }
                 };
             }

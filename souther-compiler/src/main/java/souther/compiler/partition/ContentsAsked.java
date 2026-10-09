@@ -50,7 +50,9 @@ record ContentsAsked(List<Asked> asked) {
         List<Asked> out = new ArrayList<>();
         for (OnTheWay.TakenIn each : way) {
             switch (each.demand()) {
-                case RowDemand.Relational _, RowDemand.ATruth _ -> { }
+                // A count is composed with the container's other numbers, where its value is
+                // written ({@link CardinalityComposer}), and asks no value written into it here.
+                case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.SoMany _ -> { }
                 case RowDemand.Exists exists -> {
                     for (RowDemand.OfAnElement one : exists.ofAnElement()) {
                         if (one instanceof RowDemand.SameAs(TermPath value)) {

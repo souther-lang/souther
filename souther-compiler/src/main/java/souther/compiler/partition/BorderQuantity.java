@@ -21,6 +21,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -493,9 +494,9 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
             if (!form.coefs().containsKey(from) || form.coefs().containsKey(landed)) {
                 return null;
             }
-            Map<NumericTerm, ExactRatio> coefs = new java.util.LinkedHashMap<>();
+            Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
             form.coefs().forEach((term, coef) -> coefs.put(term.equals(from) ? landed : term, coef));
-            Map<NumericTerm, TermOrders> moved = new java.util.LinkedHashMap<>();
+            Map<NumericTerm, TermOrders> moved = new LinkedHashMap<>();
             on.forEach((term, its) -> moved.put(term.equals(from) ? landed : term,
                     term.equals(from) ? to : its));
             return new OverAForm(behavior,
@@ -695,27 +696,24 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
      */
     final class HowMany implements BorderQuantity {
 
+        private final CountedElements counted;
         private final String behavior;
         private final TermPath container;
         private final Proposition meeting;
         private final AStatementAtARow perElement;
 
-        /**
-         * @param container  the container the elements are counted in
-         * @param meeting    what an element is counted for meeting, over the element's own
-         *                   numbers and the input's
-         * @param perElement {@code meeting} put to rows, which is what an element is asked
-         */
-        HowMany(String behavior, TermPath container, Proposition meeting,
-                AStatementAtARow perElement) {
-            if (behavior == null || container == null || meeting == null || perElement == null) {
-                throw new IllegalArgumentException("a count is a behavior's count of the elements"
-                        + " of some container meeting something");
-            }
-            this.behavior = behavior;
-            this.container = container;
-            this.meeting = meeting;
-            this.perElement = perElement;
+        /** @param counted what is counted, which is the whole of which count this is */
+        HowMany(CountedElements counted) {
+            this.counted = counted;
+            this.behavior = counted.behavior();
+            this.container = counted.container();
+            this.meeting = counted.meeting();
+            this.perElement = counted.perElement();
+        }
+
+        /** What is counted, for a reader asking that and not which quantity a border is on. */
+        CountedElements counted() {
+            return counted;
         }
 
         /** The container the elements are counted in. */
@@ -737,7 +735,7 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
          *  ({@link #runsWithin}). */
         @Override
         public LevelSpace levels() {
-            return LevelSpace.steppingBy(ExactRatio.ONE);
+            return counted.levels();
         }
 
         /**
@@ -778,7 +776,7 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
 
         @Override
         public Standing standingAt(Criterion where) {
-            return new Standing.OfACount(container, meeting, numbers(), where);
+            return new Standing.OfACount(counted, numbers(), where);
         }
 
         @Override
@@ -862,14 +860,12 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof HowMany that && behavior.equals(that.behavior)
-                    && container.equals(that.container) && meeting.equals(that.meeting)
-                    && perElement.equals(that.perElement);
+            return other instanceof HowMany that && counted.equals(that.counted);
         }
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(behavior, container, meeting, perElement);
+            return counted.hashCode();
         }
 
         @Override

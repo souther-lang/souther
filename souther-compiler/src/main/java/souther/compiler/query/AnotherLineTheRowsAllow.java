@@ -754,6 +754,13 @@ public sealed interface AnotherLineTheRowsAllow {
                             return false;
                         }
                     }
+                    // How many elements meet a statement, for the same reason: a step moving a
+                    // number the statement reads may move which elements meet it.
+                    case OnTheWay.TakenIn(var _, RowDemand.SoMany many) -> {
+                        if (movesAnyOf(many.positions())) {
+                            return false;
+                        }
+                    }
                     // Which of two values stands at a position, and a step moves numbers: what
                     // stands there is what the row had.
                     case OnTheWay.TakenIn(var _, RowDemand.ATruth truth) -> {

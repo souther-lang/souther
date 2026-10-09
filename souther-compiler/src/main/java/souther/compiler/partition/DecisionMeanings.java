@@ -108,7 +108,8 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
                  OnTheWay.TakenIn(var _, RowDemand.ATruth _) -> true;
             case OnTheWay.TakenIn(var _, RowDemand.Exists _),
                  OnTheWay.TakenIn(var _, RowDemand.ForAll _) -> false;
-            case OnTheWay.Narrowed _, OnTheWay.Declined _ -> true;
+            case OnTheWay.Narrowed _, OnTheWay.Declined _,
+                 OnTheWay.TakenIn(var _, RowDemand.SoMany _) -> true;
             // Taken off before a column is read ({@link #asked}): it asks nothing to read one off.
             case OnTheWay.Settled _ -> false;
         };
@@ -199,6 +200,19 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
                         : new DecidedCondition.Unread(new DecisionCondition.AConditionNotRead(
                                 declined.condition(), declined.whys()), held);
             }
+            // How many elements meet a statement, which a row is composed for and no column over
+            // the input's numbers is: which elements meet it is nothing a value at one position
+            // says.
+            case OnTheWay.TakenIn(var _, RowDemand.SoMany _) when condition != null -> {
+                DecidedCondition read = ofASubject(condition, held);
+                yield read != null ? read
+                        : new DecidedCondition.Unread(new DecisionCondition.AConditionNotRead(
+                                condition.occurrence(), List.of(new WhyNotTaken.ProjectionIncomplete(
+                                        WhyNotTaken.Shape.A_COUNT_OF_ELEMENTS))), held);
+            }
+            // A count is a comparison a condition states, and a fork states none.
+            case OnTheWay.TakenIn(var _, RowDemand.SoMany many) -> throw new IllegalArgumentException(
+                    "a count is stated by a condition, and a fork brings none: " + many);
             // A condition the source settles is no distinction, and is taken off before a column
             // is asked for, the condition's ({@link #deciding}) and the arm's ({@link #entering})
             // alike.

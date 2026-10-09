@@ -88,13 +88,13 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
     }
 
     /** How many values written out meet a statement is a number where each of them settles it,
-     *  and no linear one of the input where one turns on it. */
+     *  and which of the rest meet it where one turns on it. */
     @Test
     void aCountOfValuesWrittenOutIsANumberWhereEachSettlesIt() {
         assertEquals(new Proposition.Always(true), stated(
                 "if List.length(List.filter(x -> x > 0, [1, 2, -1])) == 2 then 1 else 0"));
-        assertInstanceOf(WhyUnread.OutsideTheLinearFragment.class, Proposition.firstStopIn(
-                stated("if List.length(List.filter(x -> x > 0, [b.n, 1])) == 2 then 1 else 0")));
+        assertEquals(stated("if b.n > 0 then 1 else 0"),
+                stated("if List.length(List.filter(x -> x > 0, [b.n, 1])) == 2 then 1 else 0"));
     }
 
     /** What a set holds once a value is taken out is some other value, read as the quantifier over

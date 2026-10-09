@@ -3,8 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
-import souther.compiler.inputs.TermPath;
-import souther.compiler.meaning.Proposition;
 
 import java.util.List;
 
@@ -111,11 +109,11 @@ public sealed interface Standing {
      * whatever the run leaves room for. Not a value at a position — the count is written nowhere,
      * and a search that wrote a number at the container would write a list of the wrong kind.
      *
-     * @param container the container the elements are counted in
-     * @param meeting   what an element is counted for meeting
-     * @param numbers   every number of a row the statement reads, the element's own among them
+     * @param count   the count: the container its elements are counted in, and what an element is
+     *                counted for meeting
+     * @param numbers every number of a row the statement reads, the element's own among them
      */
-    record OfACount(TermPath container, Proposition meeting, List<NumericTerm> numbers,
+    record OfACount(CountedElements count, List<NumericTerm> numbers,
                     Criterion where) implements Standing {
 
         public OfACount {

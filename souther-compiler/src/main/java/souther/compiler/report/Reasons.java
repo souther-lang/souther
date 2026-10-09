@@ -150,6 +150,10 @@ final class Reasons {
                 case ELEMENTS_A_TOTAL_IS_SPREAD_OVER ->
                         "how many elements a total is spread over";
                 case SHAPES_OF_A_TOTAL_OFFERED -> "how many containers are offered for one total";
+                case ELEMENTS_A_COUNT_IS_COMPOSED_WITH ->
+                        "how many elements a container composed for a count holds";
+                case CONTAINERS_A_COUNT_IS_OFFERED ->
+                        "how many containers are offered for one count";
                 case WAYS_DOWN_TO_A_TOTAL_TRIED ->
                         "how many ways down to what a total adds up are tried";
                 case WAYS_UNDER_THE_CASES_TRIED ->
@@ -201,6 +205,8 @@ final class Reasons {
                         "the values that answer several of their own numbers";
                 case PLACES_IN_A_RUN_THAT_ARE_NAMED ->
                         "the places inside one run a value is named at";
+                case ELEMENTS_CHOSEN_FOR_A_COUNT ->
+                        "the elements chosen for how many of them meet a statement";
             });
         }
         return String.join(", ", out);

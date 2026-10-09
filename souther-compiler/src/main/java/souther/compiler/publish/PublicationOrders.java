@@ -293,6 +293,8 @@ public final class PublicationOrders {
                     CompositionBudget.PAIRINGS_BUILT_AT_ONCE,
                     CompositionBudget.ELEMENTS_A_TOTAL_IS_SPREAD_OVER,
                     CompositionBudget.SHAPES_OF_A_TOTAL_OFFERED,
+                    CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH,
+                    CompositionBudget.CONTAINERS_A_COUNT_IS_OFFERED,
                     CompositionBudget.WAYS_DOWN_TO_A_TOTAL_TRIED,
                     CompositionBudget.WAYS_UNDER_THE_CASES_TRIED,
                     CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
@@ -333,6 +335,7 @@ public final class PublicationOrders {
                             // what one value holds, where the three below are about which value out
                             // of a range, a line or a group of numbers this compiler names at all.
                             CompositionRepertoire.VALUES_THAT_ANSWER_SEVERAL_OF_THEIR_NUMBERS,
+                            CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT,
                             CompositionRepertoire.PLACES_IN_A_RUN_THAT_ARE_NAMED,
                             CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE));
 

@@ -2,7 +2,12 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -375,6 +380,68 @@ public sealed interface RowDemand {
         @Override
         public Set<TermPath> valuesRead() {
             return valuesReadOf(ofEachElement);
+        }
+    }
+
+    /**
+     * That so many elements of a container meet a statement: the count against a number.
+     *
+     * <p>Not a relation a region can be narrowed by, for the reason {@link Exists} is not, and more:
+     * the count is no number of the row at all. What is done with this is compose — a container
+     * with as many elements meeting the statement as this leaves it, written together with every
+     * other count of that container a row is asked for ({@link CardinalityComposer}).
+     *
+     * @param count what is counted: the container, and what an element is counted for meeting
+     * @param met   how the count stands to {@code level} on every row this holds of
+     * @param level the number the count is held against
+     */
+    record SoMany(Quantity.HowManyMeet count, Rel met, ExactRatio level)
+            implements OfACondition {
+
+        public SoMany {
+            Objects.requireNonNull(count, "a count of the elements of some container");
+            Objects.requireNonNull(met, "a count held against a number some way");
+            Objects.requireNonNull(level, "a count held against some number");
+        }
+
+        /**
+         * The least count this leaves, or null where it leaves none: a count is a whole number
+         * from none up, and past {@code level} every count stands to it the same way.
+         */
+        public Count least() {
+            for (long n = 0; ; n++) {
+                ExactRatio at = ExactRatio.of(n);
+                if (!(at.minus(level) instanceof ExactAnswer.Held<ExactRatio>(ExactRatio apart))) {
+                    return null;
+                }
+                if (met.holds(apart.signum())) {
+                    return Count.of(n);
+                }
+                if (apart.signum() > 0) {
+                    return null;
+                }
+            }
+        }
+
+        /** The numbers the statement reads, of the elements and beside them. */
+        @Override
+        public Set<NumericTerm> terms() {
+            return AStatementAtARow.numbersOf(count.ofTheElement());
+        }
+
+        @Override
+        public Set<TermPath> positions() {
+            Set<TermPath> out = new LinkedHashSet<>();
+            out.add(count.container());
+            terms().forEach(term -> out.add(term.subjectPath()));
+            return Collections.unmodifiableSet(out);
+        }
+
+        /** None: a row held to this writes the container and whatever the statement reads beside
+         *  an element. */
+        @Override
+        public Set<TermPath> valuesRead() {
+            return Set.of();
         }
     }
 

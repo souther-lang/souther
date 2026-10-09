@@ -9,7 +9,9 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -82,6 +84,8 @@ public sealed interface Proposition {
             case DecisionAtom.OfAnAnswer _, Quantity.OfABinding _ -> true;
             case Quantity.HowManyMeet(TermPath counted, Proposition each) ->
                     isAnElementOf(counted, container) || each.mayTurnOnAnElementOf(container);
+            case Quantity.HowManyHold(List<Proposition> each) -> each.stream()
+                    .anyMatch(one -> one.mayTurnOnAnElementOf(container));
         };
     }
 
@@ -457,8 +461,53 @@ public sealed interface Proposition {
      */
     static Proposition compared(Relation relation, boolean holds) {
         Proposition counted = ofACount(relation);
+        if (counted == null) {
+            counted = whichOfThemHold(relation);
+        }
         Proposition held = counted != null ? counted : new Compared(relation, true);
         return holds ? held : held.denied();
+    }
+
+    /**
+     * What a relation over how many of some statements hold says: some choice of which of them hold
+     * and which do not that puts the number where the relation does — or null where the relation is
+     * over anything else, or a number of them the arithmetic could not hold.
+     *
+     * <p>A choice that has one statement holding and not holding at once is none: the same value
+     * written twice meets a statement twice or not at all.
+     */
+    private static Proposition whichOfThemHold(Relation relation) {
+        if (!(relation instanceof Relation.Affine(LinearForm<Quantity> form, Rel rel))
+                || form.coefs().size() != 1
+                || !(form.coefs().keySet().iterator().next()
+                        instanceof Quantity.HowManyHold(List<Proposition> each))) {
+            return null;
+        }
+        ExactRatio by = form.coefs().values().iterator().next();
+        List<Proposition> ways = new ArrayList<>();
+        choices:
+        for (int chosen = 0; chosen < 1 << each.size(); chosen++) {
+            if (!(by.times(ExactRatio.of(Integer.bitCount(chosen)))
+                    .flatMap(weighed -> weighed.plus(form.constant()))
+                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio at))) {
+                return null;
+            }
+            if (!rel.holds(at.signum())) {
+                continue;
+            }
+            Map<String, Boolean> holding = new HashMap<>();
+            List<Proposition> parts = new ArrayList<>();
+            for (int i = 0; i < each.size(); i++) {
+                boolean holds = (chosen & 1 << i) != 0;
+                Boolean before = holding.putIfAbsent(each.get(i).key(), holds);
+                if (before != null && before != holds) {
+                    continue choices;
+                }
+                parts.add(holds ? each.get(i) : each.get(i).denied());
+            }
+            ways.add(all(parts));
+        }
+        return any(ways);
     }
 
     /**
