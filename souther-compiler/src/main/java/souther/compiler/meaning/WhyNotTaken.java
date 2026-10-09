@@ -147,6 +147,35 @@ public sealed interface WhyNotTaken {
          * representation at all. The statement was read to the end; what stops is the number a
          * path would keep the fact in.
          */
-        A_NUMBER_THE_PATH_CANNOT_HOLD
+        A_NUMBER_THE_PATH_CANNOT_HOLD;
+
+        /**
+         * Whose domain stops here: the one each limit names, said where the limit is declared so
+         * that a limit added is a domain chosen, and a reader held to its own limits is held to
+         * this answer rather than to a list kept beside it.
+         */
+        public Domain domain() {
+            return switch (this) {
+                case A_QUANTITY_ON_NO_ORDER, A_SIZE_NOTHING_MEASURES,
+                     A_POSITION_THE_READING_HOLDS_NO_PLACE_FOR, AN_ANSWER_A_ROW_STANDS_IN ->
+                        Domain.WHAT_A_ROW_IS_WRITTEN_IN;
+                case A_PATH_KNOWS_NO_ALTERNATIVES, A_PLACE_THE_PATH_DOES_NOT_READ,
+                     A_PATH_KNOWS_NO_CASES, A_PATH_KNOWS_NO_SAMENESS_OF_VALUES,
+                     A_PATH_KNOWS_NO_PLACE_ON_AN_ORDER, A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS,
+                     A_PATH_HOLDS_ELEMENT_FACTS_AS_WRITTEN, A_NUMBER_THE_PATH_CANNOT_HOLD ->
+                        Domain.WHAT_A_PATH_KNOWS;
+            };
+        }
+
+        /** The domains a reader writes in, each of which a limit is the edge of. */
+        public enum Domain {
+
+            /** The input's positions, which a row is written at. */
+            WHAT_A_ROW_IS_WRITTEN_IN,
+
+            /** Relations of numbers, truths and what every element was written to meet, about
+             *  the places of the tree a path walks. */
+            WHAT_A_PATH_KNOWS
+        }
     }
 }

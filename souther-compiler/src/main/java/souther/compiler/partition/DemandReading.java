@@ -1,12 +1,13 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.Distinctions;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.Position;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
@@ -16,6 +17,7 @@ import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -127,7 +129,13 @@ final class DemandReading {
 
     /** {@code stated}, read to the end, asked of a row as a statement only the run decides. */
     private static Read forTheRun(Proposition stated, RowDemand.NoComposer why) {
-        return new Read.Demands(new RowDemand.ForTheRun(stated, why));
+        return forTheRun(stated, why, List.of());
+    }
+
+    /** The same, with where the reading of what the values it is over were made from stopped. */
+    private static Read forTheRun(Proposition stated, RowDemand.NoComposer why,
+                                  List<WhyUnread> past) {
+        return new Read.Demands(new RowDemand.ForTheRun(stated, why, past));
     }
 
     /** What a dependency answered, which a row stands in rather than writes. */
@@ -297,16 +305,22 @@ final class DemandReading {
     /**
      * The value at {@code at} being none of {@code cases}: one of the others its type divides into
      * ({@link Distinctions#ofType}), which no row is where there are none.
+     *
+     * <p>Read off the type that stands there and not off a position. A name the cases of a sum
+     * share stands at one position under each case and at none of its own, and what its type
+     * divides into is the same under every one of them — so the cases left are said of the name,
+     * and a composer writes them under whichever case the row is.
      */
     private static Read notOfItsCases(TermPath at, CasesLeft cases, InputReading read) {
-        Position position = read.domain().at(at.position());
-        if (position == null) {
+        Type type = read.domain().typeAt(at.position(), read.rules());
+        if (type == null) {
             return new Read.Unread(new WhyNotTaken.OutsideDomain(
                     WhyNotTaken.DomainLimit.A_POSITION_THE_READING_HOLDS_NO_PLACE_FOR));
         }
         List<Refinement> others = new ArrayList<>();
-        for (Case each : Distinctions.ofType(position.view().shape(), read.rules().symbols(),
-                read.rules().kinds(), read.rules().sums())) {
+        for (Case each : Distinctions.ofType(TypeView.shapeOf(type, read.rules().inners(),
+                        read.rules().symbols(), read.rules().kinds(), read.rules().sums()),
+                read.rules().symbols(), read.rules().kinds(), read.rules().sums())) {
             Refinement one = Refinement.of(each);
             if (one != null && !cases.atoms().contains(one)) {
                 others.add(one);
@@ -387,9 +401,25 @@ final class DemandReading {
      * are two demands and not four. Neither is a relation a region can be narrowed by: a region
      * reads a term inside the elements as the value of one that is there, and what every element
      * meets is met by a container holding none ({@link RowDemand.ForAll}), while what some element
-     * meets is met by one element and not the rest ({@link RowDemand.Exists}). Every element
-     * meeting a relation about something beside the element is declined, since an empty container
-     * meets it whatever that part says.
+     * meets is met by one element and not the rest ({@link RowDemand.Exists}).
+     *
+     * <p>What the element is asked is said in the words an element is written in: a relation, a
+     * truth or a case of a position inside it, and what a quantifier over a container inside it
+     * asks of that container's elements, which are positions inside the element too. What every
+     * element meets may be about what stands beside the element as well, since a container holding
+     * none meets it whatever that part says, and that is the other way {@link RowDemand.ForAll}
+     * is met.
+     *
+     * <p>Where the element may meet it several ways, each is an alternative of its own: one of
+     * several things the element meets, or a container inside it holding none where the rest of
+     * it is what every element of that container meets. Some element meeting one of several
+     * things is some element meeting one of them, exactly. Every element meeting one of several
+     * things is more than every element meeting the same one of them: a row whose elements meet
+     * different ones is past the whole and along no alternative here, and a composer writing the
+     * elements of a container alike writes no such row either way. What closes an alternative is
+     * the rules every element is held to leaving no element that meets it, and where that holds
+     * of every alternative no element meets any of them — so a way closed along every alternative
+     * is still one no row takes.
      *
      * <p>The element is what stands at the container's elements — and of a map, at its keys as
      * well, since an entry is its key and its value.
@@ -399,106 +429,240 @@ final class DemandReading {
         List<TermPath> element = elementOf(held);
         boolean everyElement = !some.holds();
         Proposition asked = everyElement ? some.ofTheElement().denied() : some.ofTheElement();
-        List<Read> out = new ArrayList<>();
-        List<RowDemand.OfAnElement> ofTheElement = new ArrayList<>();
-        // Whether what is asked of the element is something no element meets, which leaves every
-        // element meeting it to a container holding none and some element meeting it to nothing.
-        boolean noElementMeetsIt = false;
-        // Each kind of part asked of the element that no composer writes toward, for which the
-        // whole is asked of the run beside what the rest asks — every kind, so what is missing is
-        // said whichever part of the statement stands first.
-        Set<RowDemand.NoComposer> uncomposed = new LinkedHashSet<>();
         List<Proposition> parts = asked instanceof Proposition.All all ? all.parts()
                 : List.of(asked);
+        List<AnElementsWay> ways = List.of(AnElementsWay.ASKING_NOTHING);
         for (Proposition part : parts) {
             // What a container holding a value asks of an element is that it be that value, which
             // a composer writes into the container and no region narrows by.
-            if (part instanceof Proposition.SameValue(var _, DecisionSubject.AnInput(TermPath at),
-                    boolean holds, var _)) {
-                ofTheElement.add(holds ? new RowDemand.SameAs(at) : new RowDemand.DifferentFrom(at));
-                continue;
-            }
-            for (Read each : projected(part, read)) {
-                RowDemand.NoComposer writtenByNoComposer = switch (each) {
-                    case Read.Unread _ -> {
-                        out.add(each);
-                        yield null;
-                    }
-                    // Met by every element whatever it is, which holds the element to nothing.
-                    case Read.Settled(boolean thisWay) when thisWay -> null;
-                    case Read.Settled _ -> {
-                        noElementMeetsIt = true;
-                        yield null;
-                    }
-                    // Every element meeting a relation about more than the element: a container
-                    // holding none meets it whatever the rest says, and a composer writes the
-                    // elements apart from the numbers beside them.
-                    case Read.Demands(RowDemand.Relational relation)
-                            when everyElement && !aboutOnly(relation, element) ->
-                            RowDemand.NoComposer.EVERY_ELEMENT_AND_MORE;
-                    // About the element and nothing beside it, or about some element: what some
-                    // element meets, the parts of it about nothing of the element hold of the row
-                    // whichever element it is, so those are relations of the row like any other.
-                    case Read.Demands(RowDemand.Relational relation)
-                            when everyElement || aboutAny(relation, element) -> {
-                        ofTheElement.add(relation);
-                        yield null;
-                    }
-                    case Read.Demands(RowDemand.Relational _) -> {
-                        out.add(each);
-                        yield null;
-                    }
-                    // A quantifier inside a quantifier asks of an element's own elements, which is
-                    // nothing a single relation of the outer element says.
-                    case Read.Demands(RowDemand.Exists _), Read.Demands(RowDemand.ForAll _),
-                         Read.Demands(RowDemand.SoMany _) ->
-                            RowDemand.NoComposer.A_QUANTIFIER_WITHIN_ONE;
-                    // A truth or a case of the element is a value written into one element, which
-                    // nothing that composes a container's elements writes.
-                    case Read.Demands(RowDemand.ATruth _), Read.Narrows _ ->
-                            RowDemand.NoComposer.A_TRUTH_OF_AN_ELEMENT;
-                    case Read.Demands(RowDemand.ForTheRun(var _, var why)) -> why;
-                    case Read.OneOf _ -> RowDemand.NoComposer.ONE_OF_SEVERAL_FOR_AN_ELEMENT;
-                };
-                if (writtenByNoComposer != null) {
-                    uncomposed.add(writtenByNoComposer);
+            List<AnElementsWay> choices = part instanceof Proposition.SameValue(var _,
+                    DecisionSubject.AnInput(TermPath at), boolean holds, var _)
+                    ? List.of(AnElementsWay.asking(holds ? new RowDemand.SameAs(at)
+                            : new RowDemand.DifferentFrom(at)))
+                    : waysOf(projected(part, read), element, everyElement, some, read);
+            ways = AnElementsWay.eachOf(ways, choices);
+        }
+        List<List<Read>> alternatives = new ArrayList<>();
+        for (AnElementsWay way : ways) {
+            alternatives.add(everyElement ? everyElementMeeting(held, way, read)
+                    : someElementMeeting(held, way, read));
+        }
+        return oneOf(alternatives, each -> each, each -> each);
+    }
+
+    /**
+     * One way an element may meet what is asked of it: what it is asked, what is asked of the row
+     * beside it, and whether no element meets it at all.
+     *
+     * @param ofTheElement what the element is asked
+     * @param ofTheRow     what is asked of the row whichever element it is — a part about nothing
+     *                     of the element, one this reading could not state, or one only the run
+     *                     decides
+     * @param never        whether something asked of the element is something no element meets
+     */
+    private record AnElementsWay(List<RowDemand.OfAnElement> ofTheElement, List<Read> ofTheRow,
+                                 boolean never) {
+
+        static final AnElementsWay ASKING_NOTHING = new AnElementsWay(List.of(), List.of(), false);
+
+        static final AnElementsWay NEVER = new AnElementsWay(List.of(), List.of(), true);
+
+        AnElementsWay {
+            ofTheElement = List.copyOf(ofTheElement);
+            ofTheRow = List.copyOf(ofTheRow);
+        }
+
+        static AnElementsWay asking(RowDemand.OfAnElement one) {
+            return new AnElementsWay(List.of(one), List.of(), false);
+        }
+
+        static AnElementsWay asking(List<RowDemand.OfAnElement> these) {
+            return new AnElementsWay(these, List.of(), false);
+        }
+
+        static AnElementsWay ofTheRow(Read one) {
+            return new AnElementsWay(List.of(), List.of(one), false);
+        }
+
+        /** Every way of {@code ways} taken together with every one of {@code choices}. */
+        static List<AnElementsWay> eachOf(List<AnElementsWay> ways, List<AnElementsWay> choices) {
+            List<AnElementsWay> out = new ArrayList<>();
+            for (AnElementsWay way : ways) {
+                for (AnElementsWay choice : choices) {
+                    List<RowDemand.OfAnElement> element = new ArrayList<>(way.ofTheElement);
+                    element.addAll(choice.ofTheElement);
+                    List<Read> row = new ArrayList<>(way.ofTheRow);
+                    row.addAll(choice.ofTheRow);
+                    out.add(new AnElementsWay(element, row, way.never || choice.never));
                 }
             }
+            return List.copyOf(out);
         }
-        // What some or every element meets, asked of the run where a part of it is one no
-        // composer writes, once for each composer missing; the parts a composer does write are
-        // still asked, which every row past the whole meets.
-        uncomposed.forEach(kind -> out.add(forTheRun(some, kind)));
-        if (everyElement) {
-            // Every element meeting what none meets is the container holding none, and nothing
-            // else of the predicate is asked of an element that is not there.
-            if (noElementMeetsIt) {
-                RowDemand.Relational none = sizeAgainst(held, read, false);
-                return List.of(none != null ? new Read.Demands(none) : aSizeNothingMeasures());
-            }
-            if (!ofTheElement.isEmpty()) {
-                out.add(new Read.Demands(new RowDemand.ForAll(held, ofTheElement,
-                        Optional.ofNullable(sizeAgainst(held, read, false)))));
-            }
-            // Every element meeting what every element meets, whatever the container holds.
-            return out.isEmpty() ? List.of(new Read.Settled(true)) : List.copyOf(out);
+    }
+
+    /**
+     * The ways an element may meet what {@code reads} asks of it, each part of it taken together
+     * with every other.
+     *
+     * @param whole what the quantifier states, which is what a part only the run decides asks of
+     *              the run
+     */
+    private static List<AnElementsWay> waysOf(List<Read> reads, List<TermPath> element,
+                                              boolean everyElement, Proposition.Some whole,
+                                              InputReading read) {
+        List<AnElementsWay> ways = List.of(AnElementsWay.ASKING_NOTHING);
+        for (Read each : reads) {
+            ways = AnElementsWay.eachOf(ways,
+                    choicesOf(each, element, everyElement, whole, read));
         }
+        return ways;
+    }
+
+    /**
+     * The ways an element may meet what one entry asks.
+     *
+     * <p>What some element meets, the parts of it about nothing of the element hold of the row
+     * whichever element it is, so those are what the row is asked like any other. What every
+     * element meets is asked of the element whatever it is about, since a container holding none
+     * meets all of it.
+     */
+    private static List<AnElementsWay> choicesOf(Read each, List<TermPath> element,
+                                                 boolean everyElement, Proposition.Some whole,
+                                                 InputReading read) {
+        return switch (each) {
+            case Read.Unread _ -> List.of(AnElementsWay.ofTheRow(each));
+            // Met by every element whatever it is, which holds the element to nothing.
+            case Read.Settled(boolean thisWay) ->
+                    List.of(thisWay ? AnElementsWay.ASKING_NOTHING : AnElementsWay.NEVER);
+            case Read.Demands(RowDemand.Relational relation) ->
+                    List.of(everyElement || aboutAny(relation, element)
+                            ? AnElementsWay.asking(relation) : AnElementsWay.ofTheRow(each));
+            case Read.Demands(RowDemand.ATruth truth) ->
+                    List.of(everyElement || inside(truth.at(), element)
+                            ? AnElementsWay.asking(truth) : AnElementsWay.ofTheRow(each));
+            case Read.Narrows(TermPath at, var cases) -> everyElement || inside(at, element)
+                    ? aCaseOfTheElement(at, cases, read)
+                    : List.of(AnElementsWay.ofTheRow(each));
+            // A quantifier over a container: what it asks of its own elements is asked of
+            // positions inside the element, where the container is inside it.
+            case Read.Demands(RowDemand.Exists inner) ->
+                    List.of(everyElement || anyInside(inner.positions(), element)
+                            ? AnElementsWay.asking(within(inner.container(), true,
+                                    inner.ofAnElement()))
+                            : AnElementsWay.ofTheRow(each));
+            // And every element of such a container meeting something is two ways: elements
+            // that meet it, and the container holding none — which, where its size is no number
+            // of this input, is a way this reading cannot state.
+            case Read.Demands(RowDemand.ForAll inner) ->
+                    everyElement || anyInside(inner.positions(), element)
+                            ? List.of(AnElementsWay.asking(within(inner.container(), false,
+                                            inner.ofEachElement())),
+                                    inner.holdingNone()
+                                            .map(AnElementsWay::asking)
+                                            .orElseGet(() -> AnElementsWay.ofTheRow(
+                                                    aSizeNothingMeasures())))
+                            : List.of(AnElementsWay.ofTheRow(each));
+            case Read.Demands(RowDemand.SoMany count) ->
+                    List.of(everyElement || anyInside(count.positions(), element)
+                            ? AnElementsWay.ofTheRow(forTheRun(whole,
+                                    RowDemand.NoComposer.A_COUNT_WITHIN_AN_ELEMENT))
+                            : AnElementsWay.ofTheRow(each));
+            case Read.Demands(RowDemand.ForTheRun(var _, var why, var past)) ->
+                    List.of(AnElementsWay.ofTheRow(forTheRun(whole, why, past)));
+            case Read.OneOf(var alternatives) -> {
+                List<AnElementsWay> out = new ArrayList<>();
+                for (List<Read> alternative : alternatives) {
+                    out.addAll(waysOf(alternative, element, everyElement, whole, read));
+                }
+                yield List.copyOf(out);
+            }
+        };
+    }
+
+    /**
+     * The element's value at {@code at} being one of {@code cases}, as what the declarations leave
+     * every element says: asked of the element where they leave it more than those — with the
+     * places on its order the cases left out, as a narrowing on the way carries them — met by
+     * every element where they leave it only those, and by none where they leave it none of them.
+     */
+    private static List<AnElementsWay> aCaseOfTheElement(TermPath at, CasesLeft cases,
+                                                         InputReading read) {
+        DeclaredInput.Taking taking = ReachingCuts.taking(at, cases, read);
+        if (taking == null) {
+            return List.of(AnElementsWay.ofTheRow(new Read.Unread(new WhyNotTaken.OutsideDomain(
+                    WhyNotTaken.DomainLimit.A_POSITION_THE_READING_HOLDS_NO_PLACE_FOR))));
+        }
+        return List.of(switch (taking) {
+            case DeclaredInput.Taking.Narrows(TermPath to) -> {
+                List<RowDemand.OfAnElement> asked = new ArrayList<>();
+                asked.add(new RowDemand.InCases(to, read.domain().reach().crossings()));
+                for (TakenConstraint.AwayFrom hole : ReachingCuts.onItsOrder(to, read)) {
+                    asked.add(new RowDemand.Relational(hole));
+                }
+                yield AnElementsWay.asking(asked);
+            }
+            case DeclaredInput.Taking.Implied _ -> AnElementsWay.ASKING_NOTHING;
+            case DeclaredInput.Taking.Excluded _ -> AnElementsWay.NEVER;
+        });
+    }
+
+    /**
+     * What a quantifier over the container at {@code container} asks of its elements, as what is
+     * asked of positions inside the element of the outer one: what names its own position as it
+     * is, and an element being another position's value as that of the inner container.
+     */
+    private static List<RowDemand.OfAnElement> within(TermPath container, boolean some,
+                                                      List<RowDemand.OfAnElement> asked) {
+        List<RowDemand.OfAnElement> out = new ArrayList<>();
+        for (RowDemand.OfAnElement each : asked) {
+            out.add(switch (each) {
+                case RowDemand.SameAs _, RowDemand.DifferentFrom _ ->
+                        new RowDemand.WithinIt(container, some, each);
+                case RowDemand.Relational _, RowDemand.ATruth _, RowDemand.InCases _,
+                     RowDemand.WithinIt _ -> each;
+            });
+        }
+        return List.copyOf(out);
+    }
+
+    /** What some element meeting what {@code way} asks of it asks of a row. */
+    private static List<Read> someElementMeeting(TermPath held, AnElementsWay way,
+                                                 InputReading read) {
         // Some element meeting what none meets is no row's.
-        if (noElementMeetsIt) {
+        if (way.never()) {
             return List.of(new Read.Settled(false));
         }
+        List<Read> out = new ArrayList<>(way.ofTheRow());
         Optional<RowDemand.Relational> holdingOne =
                 Optional.ofNullable(sizeAgainst(held, read, true));
         // An element meeting nothing this reading could state is still the container holding
         // one, which every row past it does — and where that cannot be said either, it is said
         // that it could not, rather than nothing being asked.
-        if (!ofTheElement.isEmpty()) {
-            out.add(new Read.Demands(new RowDemand.Exists(held, ofTheElement, holdingOne)));
+        if (!way.ofTheElement().isEmpty()) {
+            out.add(new Read.Demands(new RowDemand.Exists(held, way.ofTheElement(), holdingOne)));
         } else {
             out.add(holdingOne.<Read>map(Read.Demands::new)
                     .orElseGet(DemandReading::aSizeNothingMeasures));
         }
         return List.copyOf(out);
+    }
+
+    /** What every element meeting what {@code way} asks of it asks of a row. */
+    private static List<Read> everyElementMeeting(TermPath held, AnElementsWay way,
+                                                  InputReading read) {
+        // Every element meeting what none meets is the container holding none, and nothing else
+        // of the predicate is asked of an element that is not there.
+        if (way.never()) {
+            RowDemand.Relational none = sizeAgainst(held, read, false);
+            return List.of(none != null ? new Read.Demands(none) : aSizeNothingMeasures());
+        }
+        List<Read> out = new ArrayList<>(way.ofTheRow());
+        if (!way.ofTheElement().isEmpty()) {
+            out.add(new Read.Demands(new RowDemand.ForAll(held, way.ofTheElement(),
+                    Optional.ofNullable(sizeAgainst(held, read, false)))));
+        }
+        // Every element meeting what every element meets, whatever the container holds.
+        return out.isEmpty() ? List.of(new Read.Settled(true)) : List.copyOf(out);
     }
 
     /**
@@ -509,10 +673,14 @@ final class DemandReading {
         return List.of(held.element(), held.key());
     }
 
-    /** Whether every term {@code relation} is over stands inside the element. */
-    private static boolean aboutOnly(RowDemand.Relational relation, List<TermPath> element) {
-        return relation.constraint().terms().stream().allMatch(term ->
-                element.stream().anyMatch(term.subjectPath()::isAtOrUnder));
+    /** Whether {@code at} stands inside the element. */
+    private static boolean inside(TermPath at, List<TermPath> element) {
+        return element.stream().anyMatch(at::isAtOrUnder);
+    }
+
+    /** Whether some of {@code positions} stands inside the element. */
+    private static boolean anyInside(Set<TermPath> positions, List<TermPath> element) {
+        return positions.stream().anyMatch(each -> inside(each, element));
     }
 
     /** Whether some term {@code relation} is over stands inside the element. */
@@ -613,17 +781,19 @@ final class DemandReading {
      */
     private static Read overNoRowNumber(Proposition.Compared compared, LinearForm<Quantity> form) {
         boolean counted = false;
+        List<WhyUnread> past = new ArrayList<>();
         for (Quantity atom : form.coefs().keySet()) {
             switch (atom) {
                 case DecisionAtom.OfAnAnswer _ -> {
                     return anAnswerARowStandsIn();
                 }
                 case Quantity.HowManyMeet _, Quantity.HowManyHold _ -> counted = true;
-                case DecisionAtom.OfTheInput _, Quantity.OfABinding _ -> { }
+                case Quantity.OfABinding bound -> bound.madeOf().ifPresent(past::add);
+                case DecisionAtom.OfTheInput _ -> { }
             }
         }
-        return forTheRun(compared, counted ? RowDemand.NoComposer.A_COUNT_OF_ELEMENTS
-                : RowDemand.NoComposer.A_VALUE_THE_BODY_WORKS_OUT);
+        return counted ? forTheRun(compared, RowDemand.NoComposer.A_COUNT_OF_ELEMENTS)
+                : forTheRun(compared, RowDemand.NoComposer.A_VALUE_THE_BODY_WORKS_OUT, past);
     }
 
     /**

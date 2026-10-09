@@ -178,17 +178,20 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
 
     /**
      * What every element has to meet is not narrowed on where it is about more than the element:
-     * an empty list meets it whatever the rest says. It is taken all the same, as a statement the
-     * run of a row decides, since nothing composes elements together with the number beside them.
-     * Where it is about nothing of the element at all, every element meeting it is it or the list
-     * holding none, which is one of two things — asked as its two alternatives.
+     * an empty list meets it whatever the rest says. It is composed as what every element meets,
+     * the number beside the element placed with it, and the list holding none is the other way
+     * to it. Where it is about nothing of the element at all, every element meeting it is it or
+     * the list holding none, which is one of two things — asked as its two alternatives.
      */
     @Test
     void everyElementMeetingWhatIsNotAboutTheElementIsNotNarrowedOn() {
         OnTheWay.TakenIn beside = assertInstanceOf(OnTheWay.TakenIn.class,
                 only("allAboveTheirFloor", true));
-        assertEquals(RowDemand.NoComposer.EVERY_ELEMENT_AND_MORE,
-                assertInstanceOf(RowDemand.ForTheRun.class, beside.demand()).why());
+        RowDemand.ForAll every = assertInstanceOf(RowDemand.ForAll.class, beside.demand(),
+                "what every element meets, with the number beside it");
+        assertTrue(every.positions().stream().anyMatch(each -> each.toString().equals("o.floor")),
+                () -> "the floor is placed with the element: " + every);
+        assertTrue(every.holdingNone().isPresent(), "and the list holding none is a way to it");
         OnTheWay.OneOf apart = assertInstanceOf(OnTheWay.OneOf.class,
                 only("allAboveTheFloor", true));
         assertEquals(2, apart.alternatives().size(),

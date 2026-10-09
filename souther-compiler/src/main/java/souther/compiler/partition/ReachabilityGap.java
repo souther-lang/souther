@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 
@@ -247,13 +248,19 @@ public sealed interface ReachabilityGap {
 
         /**
          * The condition was read to the end and is of a kind no composer writes a row toward —
-         * a value the body works out, an element's truth, two subjects being one value — so only
-         * the run says whether it held.
+         * a value the body works out, two subjects being one value — so only the run says whether
+         * it held.
+         *
+         * @param past where the reading of what the values it is over were made from stopped
+         *             ({@link RowDemand.ForTheRun#past}), which is what a row would have to be
+         *             composed past
          */
-        record NoComposerWritesIt(RowDemand.NoComposer what) implements Why {
+        record NoComposerWritesIt(RowDemand.NoComposer what, List<WhyUnread> past)
+                implements Why {
 
             public NoComposerWritesIt {
                 Objects.requireNonNull(what, "a statement no composer writes is of some kind");
+                past = List.copyOf(past);
             }
         }
 

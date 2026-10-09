@@ -1,9 +1,12 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
@@ -74,13 +77,18 @@ public sealed interface RowDemand {
     }
 
     /**
-     * What an element of a container is to meet, about the element and nothing beside it but the
-     * values it is compared with.
+     * What an element of a container is to meet.
      *
-     * <p>Two vocabularies, because a composer meets them two ways. A relation over the element's
-     * numbers or its own order is placed by a region, the way every relation is; that the element
-     * is the value at another position is no relation a region carries — two strings differ by a
-     * distance on nothing — and is met by writing that value into the container, or keeping it out.
+     * <p>Three vocabularies, because a composer meets them three ways. A relation over the
+     * element's numbers, or the numbers beside it, or its own order is placed by a region, the way
+     * every relation is. That the element — or a container inside it — holds the value at another
+     * position is no relation a region carries — two strings differ by a distance on nothing — and
+     * is met by writing that value into the container, or keeping it out. And a truth or a case of
+     * a position inside it is a value written into the element.
+     *
+     * <p>A composer writes the elements of a container alike, so what is asked of one element is
+     * written into each; two elements asked for two things are a row it does not write, and never
+     * a row the model does not have.
      */
     sealed interface OfAnElement {
 
@@ -138,10 +146,14 @@ public sealed interface RowDemand {
      * beside the numbers it places; two of these asking one position for both values are a way no
      * row takes ({@link Reachability.NothingReaches}).
      *
+     * <p>Asked of an element as well, where the position is inside it: a composer writing the
+     * elements of a container alike writes it into every one of them
+     * ({@link ElementWrites}).
+     *
      * @param at   the position the truth is read at
      * @param held which of the two values a row passing the condition holds there
      */
-    record ATruth(TermPath at, boolean held) implements OfACondition {
+    record ATruth(TermPath at, boolean held) implements OfACondition, OfAnElement {
 
         public ATruth {
             Objects.requireNonNull(at, "the position a truth is read at");
@@ -158,10 +170,92 @@ public sealed interface RowDemand {
             return Set.of(at);
         }
 
+        @Override
+        public Set<TermPath> positions(TermPath element) {
+            return positions();
+        }
+
         /** None: a row held to this writes the value it asks for. */
         @Override
         public Set<TermPath> valuesRead() {
             return Set.of();
+        }
+    }
+
+    /**
+     * That the value at a position inside an element is one of the cases {@code position} is
+     * narrowed to.
+     *
+     * <p>What a narrowing is on the way ({@link OnTheWay.Narrowed}), asked of an element. Not
+     * carried as one: what a way narrows is what every row past it is, and this is what an element
+     * is — so a composer writing the elements of a container alike writes every one of them as
+     * one of these ({@link ElementWrites}), and two elements asked for two cases are two elements
+     * and not a way no row takes.
+     *
+     * @param position  the narrowed position, the cases it is narrowed to written on it
+     * @param crossings where the names the input's cases share are written, as a narrowing on the
+     *                  way carries them
+     */
+    record InCases(TermPath position, List<NameReach.Crossing> crossings) implements OfAnElement {
+
+        public InCases {
+            if (position == null || !position.narrowsWhatItReaches()) {
+                throw new IllegalArgumentException(
+                        "a case of an element is a position read as one of its cases: " + position);
+            }
+            crossings = Requirements.of(position, crossings).crossings();
+        }
+
+        /** What has to hold of the parameter for the element to be one of these cases. */
+        public Requirements requirements() {
+            return Requirements.of(position, crossings);
+        }
+
+        @Override
+        public Set<TermPath> positions(TermPath element) {
+            return Set.of(position.narrowedFrom().position());
+        }
+
+        /** None: a row held to this writes the value it asks for. */
+        @Override
+        public Set<TermPath> valuesRead() {
+            return Set.of();
+        }
+    }
+
+    /**
+     * That some element of the container at {@code container}, inside an element — or every
+     * element of it, not {@code some} — is or is not another position's value.
+     *
+     * <p>What a quantifier over a container inside the element asks in the vocabulary that names
+     * no position of the element ({@link SameAs}, {@link DifferentFrom}): the inner container is
+     * named here, since what is that value is its element and not the outer one.
+     *
+     * @param container the container inside the element
+     * @param some      whether some element of it is asked this, or every one
+     * @param asked     what that element is asked: a {@link SameAs} or a {@link DifferentFrom}
+     */
+    record WithinIt(TermPath container, boolean some, OfAnElement asked) implements OfAnElement {
+
+        public WithinIt {
+            Objects.requireNonNull(container, "the container inside an element");
+            if (!(asked instanceof SameAs) && !(asked instanceof DifferentFrom)) {
+                throw new IllegalArgumentException("what names a position of the element names"
+                        + " it already, and is asked of the element as it is: " + asked);
+            }
+        }
+
+        @Override
+        public Set<TermPath> positions(TermPath element) {
+            Set<TermPath> out = new LinkedHashSet<>();
+            out.add(container);
+            out.addAll(asked.positions(container.element()));
+            return Collections.unmodifiableSet(out);
+        }
+
+        @Override
+        public Set<TermPath> valuesRead() {
+            return asked.valuesRead();
         }
     }
 
@@ -277,7 +371,8 @@ public sealed interface RowDemand {
      * the terms would be no container at all there.
      *
      * @param container   the container an element of which is to meet them
-     * @param ofAnElement what the element is to meet, every one of it about the element alone
+     * @param ofAnElement what the element is to meet, every one of it about the element and what
+     *                    is inside it, and the numbers beside it a relation reads
      * @param holdingOne  the container's size at least one, where the size is a number of this
      *                    input a region can carry
      */
@@ -339,7 +434,9 @@ public sealed interface RowDemand {
      * where no element can be written that does, the container holding none.
      *
      * @param container     the container every element of which is to meet them
-     * @param ofEachElement what every element is to meet, every one of it about the element alone
+     * @param ofEachElement what every element is to meet, which may be about what stands beside
+     *                      the element as much as about the element: a container holding none
+     *                      meets all of it whatever that says
      * @param holdingNone   the container's size at most nought, where the size is a number of this
      *                      input a region can carry — the way to meet this with no element at all
      */
@@ -459,14 +556,22 @@ public sealed interface RowDemand {
      * limit of composing and not of what the condition says — so nothing is placed for it, and the
      * row is put to the run ({@link ReachabilityGap.Why.NoComposerWritesIt}).
      *
+     * <p>A value the body works out is no number of the input because the reading of what it was
+     * made from stopped somewhere ({@link Quantity.OfABinding#madeOf}), and that is what a row
+     * would have to be composed past: it travels with this, so what is said of the row says where.
+     *
      * @param statement what the condition states, coming out the way the row is to
      * @param why       which kind of statement no composer writes toward
+     * @param past      where the reading of what the values it is over were made from stopped,
+     *                  each once; empty where nothing of them was read to stop
      */
-    record ForTheRun(Proposition statement, NoComposer why) implements OfACondition {
+    record ForTheRun(Proposition statement, NoComposer why, List<WhyUnread> past)
+            implements OfACondition {
 
         public ForTheRun {
             Objects.requireNonNull(statement, "a statement about some value");
             Objects.requireNonNull(why, "a statement no composer writes is of some kind");
+            past = List.copyOf(new LinkedHashSet<>(past));
         }
 
         /** None: a composer places nothing for this, and the run says whether it held. */
@@ -506,19 +611,8 @@ public sealed interface RowDemand {
          *  ratio holds. */
         A_COUNT_AGAINST_A_NUMBER_NOT_HELD,
 
-        /** Every element meeting a relation about more than the element: a composer writes the
-         *  elements and the numbers beside them apart. */
-        EVERY_ELEMENT_AND_MORE,
-
-        /** What the elements of each element of a container meet. */
-        A_QUANTIFIER_WITHIN_ONE,
-
-        /** A truth or a case of an element of a container, which a composer writing the elements
-         *  writes no value for. */
-        A_TRUTH_OF_AN_ELEMENT,
-
-        /** One of several things an element of a container meets. */
-        ONE_OF_SEVERAL_FOR_AN_ELEMENT,
+        /** How many elements of a container inside an element of another meet something. */
+        A_COUNT_WITHIN_AN_ELEMENT,
 
         /** Two subjects of a row being one value. */
         TWO_SUBJECTS_ONE_VALUE,

@@ -104,12 +104,12 @@ class ARowIsNotOfferedForAPointItIsNotSeenToStandAtTest {
                     ItemAssessment.Attempt.Searched.class,
                     ((ItemAssessment.Owed) item).searches().only());
             assertTrue(no.way().takenIn().stream().allMatch(each ->
-                            each.demand() instanceof RowDemand.ForTheRun(var _, var why)
+                            each.demand() instanceof RowDemand.ForTheRun(var _, var why, var _)
                                     && why == RowDemand.NoComposer.A_VALUE_THE_BODY_WORKS_OUT),
                     "the condition is a value the body works out: " + no.way().onTheWay());
             assertTrue(no.uncomposed().onTheWay().stream().anyMatch(each ->
                             each instanceof ReachabilityGap.Uncomposed(var _,
-                                    ReachabilityGap.Why.NoComposerWritesIt(var what))
+                                    ReachabilityGap.Why.NoComposerWritesIt(var what, var _))
                                     && what == RowDemand.NoComposer.A_VALUE_THE_BODY_WORKS_OUT),
                     "and the composer says it wrote nothing for it: " + no.uncomposed());
         }

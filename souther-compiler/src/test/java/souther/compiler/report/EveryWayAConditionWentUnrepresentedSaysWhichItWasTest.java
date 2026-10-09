@@ -121,7 +121,7 @@ class EveryWayAConditionWentUnrepresentedSaysWhichItWasTest {
                 ofTheInput(new ReachabilityGap.Why.TwoNumbersAtOneLocation()));
         out.put(ReachabilityGap.Why.NoComposerWritesIt.class,
                 ofTheInput(new ReachabilityGap.Why.NoComposerWritesIt(
-                        RowDemand.NoComposer.A_VALUE_THE_BODY_WORKS_OUT)));
+                        RowDemand.NoComposer.A_VALUE_THE_BODY_WORKS_OUT, List.of())));
         out.put(ReachabilityGap.Why.ElementsWrittenAlike.class,
                 ofTheInput(new ReachabilityGap.Why.ElementsWrittenAlike()));
         out.put(DemandGap.WhyNotStated.AFormOverMoreThanOneAnswer.class,

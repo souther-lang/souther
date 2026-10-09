@@ -393,7 +393,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
      * question a comparison of the position against a written case is read through, so that the
      * places a narrowing leaves out are the places a comparison names.
      */
-    private static List<TakenConstraint.AwayFrom> onItsOrder(TermPath narrowed, InputReading read) {
+    static List<TakenConstraint.AwayFrom> onItsOrder(TermPath narrowed, InputReading read) {
         NumericTerm.ValueOf term = new NumericTerm.ValueOf(narrowed.narrowedFrom().position());
         TermOrders orders = read.quantities().ordersOf(term);
         if (orders == null || !(orders.answered() instanceof Carrier.Ordinal ordinal)) {
@@ -523,8 +523,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
     private static OnTheWay narrowing(ConditionOccurrence condition, ConditionReportAnchor at,
                                       TermPath position, CasesLeft cases, InputReading read) {
         InputDomain inputs = read.domain();
-        DeclaredInput.Taking taking = taking(inputs, inputs.declared(read.rules()), position,
-                inputs.typeAt(position, read.rules()), cases);
+        DeclaredInput.Taking taking = taking(position, cases, read);
         if (taking == null) {
             return new OnTheWay.Declined(condition, at, new WhyNotTaken.OutsideDomain(
                     WhyNotTaken.DomainLimit.A_POSITION_THE_READING_HOLDS_NO_PLACE_FOR));
@@ -535,6 +534,20 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
             case DeclaredInput.Taking.Implied _ -> new OnTheWay.Settled(condition, at, true);
             case DeclaredInput.Taking.Excluded _ -> new OnTheWay.Settled(condition, at, false);
         };
+    }
+
+    /**
+     * What the value at {@code position} read as one of {@code cases} comes to, as what the
+     * declarations leave it says ({@link #taking(InputDomain, DeclaredInput, TermPath, Type,
+     * CasesLeft)}) — or null where this reading cannot say.
+     *
+     * <p>Asked where the value is one an element holds as much as where a way passes a fork on
+     * it: the declarations leave a position inside an element what they leave every element.
+     */
+    static DeclaredInput.Taking taking(TermPath position, CasesLeft cases, InputReading read) {
+        InputDomain inputs = read.domain();
+        return taking(inputs, inputs.declared(read.rules()), position,
+                inputs.typeAt(position, read.rules()), cases);
     }
 
     /** These conditions, with the rule stated at {@code states} reached under {@code assumed}. */

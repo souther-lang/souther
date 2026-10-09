@@ -3800,8 +3800,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                 "a condition on a container's elements that no row of elements"
                                         + " written alike meets";
                         // Asked of the run and of nothing composed: the condition was read to the
-                        // end, and what is missing is a composer for its kind.
-                        case ReachabilityGap.Why.NoComposerWritesIt(var what) ->
+                        // end, and what is missing is a composer for its kind — with where the
+                        // reading of what its values were made from stopped, which is what a row
+                        // would have to be composed past.
+                        case ReachabilityGap.Why.NoComposerWritesIt(var what, var past) ->
                                 "a condition the run decides, since nothing here composes a row"
                                         + " for " + switch (what) {
                                     case A_VALUE_THE_BODY_WORKS_OUT ->
@@ -3811,20 +3813,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                     case A_COUNT_AGAINST_A_NUMBER_NOT_HELD ->
                                             "a count of elements held against a number with no"
                                                     + " exact representation";
-                                    case EVERY_ELEMENT_AND_MORE ->
-                                            "every element meeting something about more than the"
-                                                    + " element";
-                                    case A_QUANTIFIER_WITHIN_ONE ->
-                                            "what the elements of each element meet";
-                                    case A_TRUTH_OF_AN_ELEMENT ->
-                                            "a truth or a case of an element";
-                                    case ONE_OF_SEVERAL_FOR_AN_ELEMENT ->
-                                            "one of several things an element meets";
+                                    case A_COUNT_WITHIN_AN_ELEMENT ->
+                                            "how many elements of a container inside an"
+                                                    + " element of another meet something";
                                     case TWO_SUBJECTS_ONE_VALUE -> "two values being one";
                                     case AN_ORDER_OF_NO_ONE_POSITION ->
                                             "a place on an order of a term that is no one"
                                                     + " position";
-                                };
+                                } + (past.isEmpty() ? "" : ", made from what the reading stopped"
+                                        + " at: " + String.join("; ", past.stream()
+                                                .map(AdequacyReport::whyNotRead).toList()));
                         // What stopped the looking, and not that nothing was found. An author does
                         // nothing about the first and may do something about the second.
                         // A value it could not hold is said after the figures and apart from them,
