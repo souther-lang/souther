@@ -10,8 +10,10 @@ import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -23,9 +25,11 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -151,17 +155,13 @@ final class MeaningAssumptions {
             case Proposition.All all -> all.parts().forEach(this::take);
             case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, Rel p),
                                       boolean holds, var _) -> {
-                LinearForm<FactSubject> over = formAt(form);
-                if (over != null) {
-                    known = known.taking(over, holds ? p : p.denied(), Known.Held.ON_THE_PATH,
-                            terms.kindsOf(over));
-                    taken = true;
-                } else if (form.coefs().keySet().stream().anyMatch(atom ->
-                        atom instanceof Quantity.HowManyMeet
-                                || atom instanceof Quantity.HowManyHold)) {
-                    outside(WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS);
-                } else {
-                    outside(WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ);
+                switch (formAt(form)) {
+                    case FormAt.Named(LinearForm<FactSubject> over) -> {
+                        known = known.taking(over, holds ? p : p.denied(),
+                                Known.Held.ON_THE_PATH, terms.kindsOf(over));
+                        taken = true;
+                    }
+                    case FormAt.Unnamed(Set<WhyNotTaken> whys) -> whys.forEach(this::notTaken);
                 }
             }
             case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds, var _) -> {
@@ -207,22 +207,60 @@ final class MeaningAssumptions {
         }
     }
 
-    /** {@code form} over the atoms this tree names, or null where one of them it cannot name. */
-    private LinearForm<FactSubject> formAt(LinearForm<Quantity> form) {
-        Map<FactSubject, ExactRatio> coefs = new HashMap<>();
-        for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
-            FactSubject atom = switch (each.getKey()) {
-                case DecisionAtom.OfTheInput(NumericTerm term) -> atomOf(term);
-                case DecisionAtom.OfAnAnswer(DecisionSubject.AnAnswer answer) -> answerAtom(answer);
-                case Quantity.OfABinding bound -> boundAtom(bound);
-                // Not asked: what no row writes was said before a form was made of it.
-                case Quantity.HowManyMeet _, Quantity.HowManyHold _ -> null;
-            };
-            if (atom == null || coefs.putIfAbsent(atom, each.getValue()) != null) {
-                return null;
+    /** {@code form} over the atoms this tree names, or why it is none: what each atom it cannot
+     *  name met, said where the atom was met. */
+    private sealed interface FormAt {
+
+        record Named(LinearForm<FactSubject> form) implements FormAt {}
+
+        record Unnamed(Set<WhyNotTaken> whys) implements FormAt {
+
+            public Unnamed {
+                whys = Collections.unmodifiableSet(new LinkedHashSet<>(whys));
+                if (whys.isEmpty()) {
+                    throw new IllegalArgumentException("a form not named is not named for a reason");
+                }
             }
         }
-        return new LinearForm<>(form.constant(), coefs);
+    }
+
+    /**
+     * {@code form} over the atoms this tree names.
+     *
+     * <p>Two numbers of the statement this tree names as one fact are one value, and their weights
+     * add. An atom it cannot name meets an edge of what a path knows: a count of elements is no
+     * fact a path holds, and a place, an answer or a binding this tree has no subject for is a place
+     * it does not read. Every edge the form's atoms meet is said, once each, so which is said does
+     * not turn on the order the atoms stand in.
+     */
+    private FormAt formAt(LinearForm<Quantity> form) {
+        LinearForm<FactSubject> over = LinearForm.constant(form.constant());
+        Set<WhyNotTaken> whys = new LinkedHashSet<>();
+        for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
+            FactSubject atom;
+            switch (each.getKey()) {
+                case DecisionAtom.OfTheInput(NumericTerm term) -> atom = atomOf(term);
+                case DecisionAtom.OfAnAnswer(DecisionSubject.AnAnswer answer) ->
+                        atom = answerAtom(answer);
+                case Quantity.OfABinding bound -> atom = boundAtom(bound);
+                case Quantity.HowManyMeet _, Quantity.HowManyHold _ -> {
+                    whys.add(new WhyNotTaken.OutsideDomain(
+                            WhyNotTaken.DomainLimit.A_PATH_KNOWS_NO_COUNT_OF_ELEMENTS));
+                    continue;
+                }
+            }
+            if (atom == null) {
+                whys.add(new WhyNotTaken.OutsideDomain(
+                        WhyNotTaken.DomainLimit.A_PLACE_THE_PATH_DOES_NOT_READ));
+                continue;
+            }
+            switch (over.plus(LinearForm.weighing(atom, each.getValue()))) {
+                case ExactAnswer.Held<LinearForm<FactSubject>> sum -> over = sum.value();
+                case ExactAnswer.Unheld<LinearForm<FactSubject>> unheld -> whys.add(
+                        new WhyNotTaken.MeaningUnread(new WhyUnread.ANumberNotHeld(unheld.why())));
+            }
+        }
+        return whys.isEmpty() ? new FormAt.Named(over) : new FormAt.Unnamed(whys);
     }
 
     /**

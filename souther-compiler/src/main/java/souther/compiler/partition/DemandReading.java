@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -403,9 +404,10 @@ final class DemandReading {
         // Whether what is asked of the element is something no element meets, which leaves every
         // element meeting it to a container holding none and some element meeting it to nothing.
         boolean noElementMeetsIt = false;
-        // The first kind of part asked of the element that no composer writes toward, for which
-        // the whole is asked of the run beside what the rest asks.
-        RowDemand.NoComposer uncomposed = null;
+        // Each kind of part asked of the element that no composer writes toward, for which the
+        // whole is asked of the run beside what the rest asks — every kind, so what is missing is
+        // said whichever part of the statement stands first.
+        Set<RowDemand.NoComposer> uncomposed = new LinkedHashSet<>();
         List<Proposition> parts = asked instanceof Proposition.All all ? all.parts()
                 : List.of(asked);
         for (Proposition part : parts) {
@@ -458,17 +460,15 @@ final class DemandReading {
                     case Read.Demands(RowDemand.ForTheRun(var _, var why)) -> why;
                     case Read.OneOf _ -> RowDemand.NoComposer.ONE_OF_SEVERAL_FOR_AN_ELEMENT;
                 };
-                if (uncomposed == null) {
-                    uncomposed = writtenByNoComposer;
+                if (writtenByNoComposer != null) {
+                    uncomposed.add(writtenByNoComposer);
                 }
             }
         }
         // What some or every element meets, asked of the run where a part of it is one no
-        // composer writes; the parts a composer does write are still asked, which every row past
-        // the whole meets.
-        if (uncomposed != null) {
-            out.add(forTheRun(some, uncomposed));
-        }
+        // composer writes, once for each composer missing; the parts a composer does write are
+        // still asked, which every row past the whole meets.
+        uncomposed.forEach(kind -> out.add(forTheRun(some, kind)));
         if (everyElement) {
             // Every element meeting what none meets is the container holding none, and nothing
             // else of the predicate is asked of an element that is not there.

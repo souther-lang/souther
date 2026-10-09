@@ -244,7 +244,12 @@ public sealed interface BlockReason {
                 case LineAtANumberNoRatioHolds _ -> 12;
                 case LineSideNotWorkedOut _ -> 13;
                 case SeveralLinesInOneRule _ -> 14;
-                case WhatItStatesIsNoLine(WhatItStatesIsNoLine.Why why) -> 15 + why.ordinal();
+                case WhatItStatesIsNoLine(WhatItStatesIsNoLine.Why why) -> switch (why) {
+                    case MORE_READINGS_THAN_ARE_MADE -> 15;
+                    case A_PART_NOT_READ -> 16;
+                    case A_NUMBER_NO_POSITION_HOLDS -> 17;
+                    case NO_RELATION_OF_NUMBERS -> 18;
+                };
             };
         }
 

@@ -587,6 +587,9 @@ final class Pullback {
         Set<TypeSymbol> written = reads.casesWritten(match.scrutinee(),
                 read.rules().symbols(), read.rules().newtypes());
         DecisionSubject subject = subjectOf(new Denotation(match.scrutinee(), reads));
+        // Which case the scrutinee is, read once for the match where no arm settles it on its own
+        // and it is no value a row controls: every arm selects off the same reading of it.
+        CasesOfAnAnswer.Answered scrutinee = null;
         List<Derivation> out = new ArrayList<>();
         for (Core.Case arm : match.cases()) {
             Optional<Boolean> every = InputReads.whetherEveryRowTakes(arm, written);
@@ -598,7 +601,11 @@ final class Pullback {
                 out.add(new Derivation.CasesOfASubject(subject,
                         CasesLeft.selectedBy(arm.pattern())));
             } else {
-                out.add(caseOf(new Denotation(match.scrutinee(), reads), arm));
+                if (scrutinee == null) {
+                    scrutinee = answered(new Denotation(match.scrutinee(), reads),
+                            WhyUnread.AtNoPosition.Place.SCRUTINEE);
+                }
+                out.add(selecting(scrutinee, arm));
             }
         }
         return out;
@@ -612,44 +619,11 @@ final class Pullback {
                 ? new DecisionSubject.AnInput(at) : answerAt(value.value(), value.at());
     }
 
-    /**
-     * Whether {@code value} is of a case {@code arm} selects, where it is no value a row controls:
-     * a value chosen by cases is of it where the value its arm taken answers is ({@link
-     * Derivation.ACaseOfAChoice}), and a value written out is or is not, whatever the input.
-     */
-    private Derivation caseOf(Denotation value, Core.Case arm) {
-        if (chosenAt(value) != null) {
-            long most = READINGS.maximum();
-            if (value.at().readings() * readingsOf(value, most) > most) {
-                return new Derivation.Stopped(new WhyUnread.MoreReadingsThanAreMade(), false);
-            }
-            return new Derivation.ACaseOfAChoice(
-                    byItsCases(value, value, side -> caseOf(side, arm)));
-        }
-        Optional<Boolean> every = InputReads.whetherEveryRowTakes(arm,
-                value.at().casesWritten(value.value(), read.rules().symbols(),
-                        read.rules().newtypes()));
-        if (every.isPresent()) {
-            return new Derivation.CasesWrittenOut(every.get());
-        }
-        DecisionSubject subject = subjectOf(value);
-        if (subject != null) {
-            return new Derivation.CasesOfASubject(subject, CasesLeft.selectedBy(arm.pattern()));
-        }
-        CasesOfAnAnswer.Answered called = calledFor(value);
-        if (called != null) {
-            return selecting(called, arm);
-        }
-        // What is matched is made of nothing followed back to the input: one of several values the
-        // source wrote out, each of which may take another arm, or what an operation answers.
-        return new Derivation.Stopped(
-                new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SCRUTINEE), false);
-    }
-
-    /** Whether what a called behavior answers, put in at the call, is of a case {@code arm}
-     *  selects. */
+    /** Whether a value that is {@code answered}, read once wherever it stands, is of a case
+     *  {@code arm} selects. */
     private static Derivation selecting(CasesOfAnAnswer.Answered answered, Core.Case arm) {
         return switch (answered) {
+            // One of several values the source wrote out, each of which may take another arm.
             case CasesOfAnAnswer.Answered.Written(var cases) ->
                     InputReads.whetherEveryRowTakes(arm, cases)
                             .<Derivation>map(Derivation.CasesWrittenOut::new)
@@ -657,6 +631,8 @@ final class Pullback {
                                     WhyUnread.AtNoPosition.Place.SCRUTINEE), false));
             case CasesOfAnAnswer.Answered.AtAnInput(TermPath at) -> new Derivation.CasesOfASubject(
                     new DecisionSubject.AnInput(at), CasesLeft.selectedBy(arm.pattern()));
+            case CasesOfAnAnswer.Answered.AtAnAnswer(var answer) -> new Derivation.CasesOfASubject(
+                    answer, CasesLeft.selectedBy(arm.pattern()));
             case CasesOfAnAnswer.Answered.Unread(WhyUnread why) -> new Derivation.Stopped(why, false);
             case CasesOfAnAnswer.Answered.ByItsArms(var arms) ->
                     new Derivation.OneOfItsArms(arms.stream().map(each ->
@@ -674,19 +650,48 @@ final class Pullback {
     static CasesOfAnAnswer answerOf(Core body, List<String> parameters, InputReads reads,
                                     InputReading read) {
         Pullback reading = new Pullback(read, Optional.empty());
-        return new CasesOfAnAnswer(parameters, reading.answered(new Denotation(body, reads)));
+        return new CasesOfAnAnswer(parameters, overItsOwnParameters(reading.answered(
+                new Denotation(body, reads), WhyUnread.AtNoPosition.Place.SUBJECT)));
     }
 
-    /** Which case {@code value} is, as a body's answer: written in arms where it is chosen by
-     *  them, and at each arm what that arm answers. */
-    private CasesOfAnAnswer.Answered answered(Denotation value) {
+    /**
+     * {@code answered} as a body's answer read for every call of it: what a dependency answered is
+     * read where a call stands, and the body read once has no such place, so that part is unread.
+     */
+    private static CasesOfAnAnswer.Answered overItsOwnParameters(
+            CasesOfAnAnswer.Answered answered) {
+        return switch (answered) {
+            case CasesOfAnAnswer.Answered.AtAnAnswer _ -> new CasesOfAnAnswer.Answered.Unread(
+                    new WhyUnread.InACalledBody(
+                            WhyUnread.InACalledBody.What.WHAT_ITS_DEPENDENCY_ANSWERS));
+            case CasesOfAnAnswer.Answered.Written _, CasesOfAnAnswer.Answered.AtAnInput _,
+                 CasesOfAnAnswer.Answered.Unread _ -> answered;
+            case CasesOfAnAnswer.Answered.ByItsArms(var arms) ->
+                    new CasesOfAnAnswer.Answered.ByItsArms(arms.stream().map(arm ->
+                            new CasesOfAnAnswer.Answered.Arm(arm.reached(),
+                                    overItsOwnParameters(arm.answers()))).toList());
+        };
+    }
+
+    /**
+     * Which case {@code value} is, where it stands: written in arms where it is chosen by them, and
+     * at each arm what that arm answers.
+     *
+     * <p>The one reading of it, for a body's answer and for the value a {@code match} chooses its
+     * arm by alike.
+     *
+     * @param nowhere what the value is, as the place it stands at no position, where it is made of
+     *                nothing followed back to the input
+     */
+    private CasesOfAnAnswer.Answered answered(Denotation value,
+                                              WhyUnread.AtNoPosition.Place nowhere) {
         Denotation chosen = chosenAt(value);
         if (chosen != null) {
             long most = READINGS.maximum();
             if (value.at().readings() * readingsOf(value, most) > most) {
                 return new CasesOfAnAnswer.Answered.Unread(new WhyUnread.MoreReadingsThanAreMade());
             }
-            return answeredByItsArms(chosen);
+            return answeredByItsArms(chosen, nowhere);
         }
         Set<TypeSymbol> written = value.at().casesWritten(value.value(), read.rules().symbols(),
                 read.rules().newtypes());
@@ -697,26 +702,29 @@ final class Pullback {
                 instanceof PathResolution.At(TermPath at)) {
             return new CasesOfAnAnswer.Answered.AtAnInput(at);
         }
-        if (answerAt(value.value(), value.at()) != null) {
-            return new CasesOfAnAnswer.Answered.Unread(new WhyUnread.InACalledBody(
-                    WhyUnread.InACalledBody.What.WHAT_ITS_DEPENDENCY_ANSWERS));
+        DecisionSubject.AnAnswer answer = answerAt(value.value(), value.at());
+        if (answer != null) {
+            return new CasesOfAnAnswer.Answered.AtAnAnswer(answer);
         }
         CasesOfAnAnswer.Answered called = calledFor(value);
+        // Made of nothing followed back to the input: what an operation answers, or a value the
+        // source works out.
         return called != null ? called : new CasesOfAnAnswer.Answered.Unread(
-                new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT));
+                new WhyUnread.AtNoPosition(nowhere));
     }
 
     /** {@code chosen}'s arms, each reached where a run takes it and answering what it does. */
-    private CasesOfAnAnswer.Answered answeredByItsArms(Denotation chosen) {
+    private CasesOfAnAnswer.Answered answeredByItsArms(Denotation chosen,
+                                                       WhyUnread.AtNoPosition.Place nowhere) {
         InputReads where = chosen.at();
         List<CasesOfAnAnswer.Answered.Arm> arms = new ArrayList<>();
         switch (Core.withoutStanding(chosen.value())) {
             case Core.If iff -> {
                 Derivation cond = observe(iff.cond(), AnswerAspect.TRUTH, where);
                 arms.add(new CasesOfAnAnswer.Answered.Arm(cond,
-                        answered(new Denotation(iff.then(), where))));
+                        answered(new Denotation(iff.then(), where), nowhere)));
                 arms.add(new CasesOfAnAnswer.Answered.Arm(new Derivation.UnderADenial(cond, true),
-                        answered(new Denotation(iff.els(), where))));
+                        answered(new Denotation(iff.els(), where), nowhere)));
             }
             case Core.Match match -> {
                 List<Derivation> selections = selectionsOf(match, where);
@@ -726,7 +734,7 @@ final class Pullback {
                             read.rules().symbols(), read.rules().newtypes());
                     arms.add(new CasesOfAnAnswer.Answered.Arm(
                             new Derivation.AnArmTaken(selections.subList(0, i), selections.get(i)),
-                            answered(new Denotation(arm.body(), inside))));
+                            answered(new Denotation(arm.body(), inside), nowhere)));
                 }
             }
             case Core.IfConstructed attempt -> {
@@ -736,7 +744,7 @@ final class Pullback {
                     InputReads inside = where.choosing(choice.get(i).decidedBy(),
                             read.rules().symbols(), read.rules().newtypes());
                     arms.add(new CasesOfAnAnswer.Answered.Arm(taken.get(i),
-                            answered(new Denotation(choice.get(i).answers(), inside))));
+                            answered(new Denotation(choice.get(i).answers(), inside), nowhere)));
                 }
             }
             // A value one of whose arguments an operation of the library answers by how they
@@ -806,6 +814,10 @@ final class Pullback {
                                                       Map<String, Set<TypeSymbol>> written) {
         return switch (answered) {
             case CasesOfAnAnswer.Answered.Written _, CasesOfAnAnswer.Answered.Unread _ -> answered;
+            // A body's answer read for every call holds none ({@link CasesOfAnAnswer}).
+            case CasesOfAnAnswer.Answered.AtAnAnswer _ -> throw new IllegalArgumentException(
+                    "a body's answer over its own parameters names no dependency's answer: "
+                            + answered);
             case CasesOfAnAnswer.Answered.AtAnInput(TermPath at) when handed.containsKey(at.head()) ->
                     new CasesOfAnAnswer.Answered.AtAnInput(at.under(handed.get(at.head())));
             case CasesOfAnAnswer.Answered.AtAnInput(TermPath at)
@@ -825,28 +837,36 @@ final class Pullback {
     }
 
     /**
-     * What a run entering arm {@code part} of {@code fork} — a {@code match}, or an attempted
-     * construction — states, where {@code fork} is read in {@code reads}.
+     * What a run entering each arm of {@code fork} — a {@code match}, or an attempted construction
+     * — states, where {@code fork} is read in {@code reads}.
      *
-     * <p>The arm's arms as {@link Choice} numbers them: a {@code match}'s in the order they are
-     * written, and an attempt's built arm first and then its departures as written.
+     * <p>Every arm at once, because what one arm states is a fact of the whole fork: the arms
+     * before it not taken and its own taken. So the fork is read once — a {@code match}'s
+     * selections, an attempt's clauses — and each arm concluded off that one reading.
+     *
+     * <p>The arms as {@link Choice} numbers them: a {@code match}'s in the order they are written,
+     * and an attempt's built arm first and then its departures as written.
      *
      * @param where the construct of the model the fork is, where the caller knows it
      */
-    static Pulled ofAnArm(Core fork, int part, InputReads reads, InputReading read,
-                          Optional<ModelOccurrence> where) {
+    static List<Pulled> ofTheArms(Core fork, InputReads reads, InputReading read,
+                                  Optional<ModelOccurrence> where) {
         Pullback reading = new Pullback(read, where);
-        return reading.pulled(reading.entering(fork, part, reads));
+        return reading.entering(fork, reads).stream().map(reading::pulled).toList();
     }
 
-    private Derivation entering(Core fork, int part, InputReads reads) {
+    private List<Derivation> entering(Core fork, InputReads reads) {
         return switch (Core.withoutStanding(fork)) {
             case Core.Match match -> {
                 List<Derivation> selections = selectionsOf(match, reads);
-                yield new Derivation.AnArmTaken(selections.subList(0, part),
-                        selections.get(part));
+                List<Derivation> out = new ArrayList<>();
+                for (int part = 0; part < selections.size(); part++) {
+                    out.add(new Derivation.AnArmTaken(selections.subList(0, part),
+                            selections.get(part)));
+                }
+                yield out;
             }
-            case Core.IfConstructed attempt -> attempted(attempt, reads).get(part);
+            case Core.IfConstructed attempt -> attempted(attempt, reads);
             default -> throw new IllegalArgumentException(fork.getClass().getSimpleName()
                     + " at " + fork.pos() + " is no match or attempt with arms a run enters");
         };
@@ -1640,8 +1660,8 @@ final class Pullback {
                     case ReadMeaning.Element _, ReadMeaning.OneOf _, ReadMeaning.Position _ -> null;
                     // A name given a choice between values holds whichever arm was taken, which
                     // is a number for each case and not one the body bound.
-                    case ReadMeaning.Through(Denotation denotes) when choosesByCases(denotes) ->
-                            null;
+                    case ReadMeaning.Through(Denotation denotes)
+                            when Choice.of(underItsAccesses(denotes).value()) != null -> null;
                     // A name read through to what it was given, which the reading stopped inside
                     // where it did: the value is named by its binding, and why its number is none
                     // of the input's goes with it.
@@ -2157,36 +2177,32 @@ final class Pullback {
         };
     }
 
-    /** Whether what {@code denotes} holds is one arm of a choice, under the accesses and the names
-     *  it is reached through. */
-    private boolean choosesByCases(Denotation denotes) {
-        Core e = Core.withoutStanding(denotes.value());
-        InputReads in = denotes.at();
+    /**
+     * What {@code value} takes a part of: what it stands as through the names and bindings it is
+     * reached by ({@link InputReads#standing}), and then what each access that takes a part of a
+     * value is of, as far as they go.
+     *
+     * <p>Where a reading has no rule for a value, what stopped it is what stands there, however the
+     * value was spelled on the way to it. Beside {@link #chosenAt}, which stops at the first access:
+     * a comparison is split into the cases of what it compares, which through an access it cannot
+     * yet be.
+     */
+    private Denotation underItsAccesses(Denotation value) {
+        Denotation at = value;
         while (true) {
-            switch (e) {
-                case Core.FieldProjection projection ->
-                        e = Core.withoutStanding(projection.lastAccess());
-                case Core.FieldAccess access -> e = Core.withoutStanding(access.target());
-                case Core.TupleGet get -> e = Core.withoutStanding(get.tuple());
-                case Core.LetIn let -> {
-                    in = in.and(let.binder(), let.value());
-                    e = Core.withoutStanding(let.body());
-                }
-                case Core.Read name -> {
-                    if (!(in.meaningOf(name, read.rules().symbols(), read.rules().newtypes())
-                            instanceof ReadMeaning.Through(Denotation given))) {
-                        return false;
-                    }
-                    e = Core.withoutStanding(given.value());
-                    in = given.at();
-                }
-                case Core.If _, Core.IfConstructed _, Core.Match _ -> {
-                    return true;
-                }
-                default -> {
-                    return false;
-                }
+            Denotation stands = at.at().standing(Core.withoutStanding(at.value()),
+                    read.rules().symbols(), read.rules().newtypes());
+            Core e = Core.withoutStanding(stands.value());
+            Core whole = switch (e) {
+                case Core.FieldProjection projection -> projection.lastAccess();
+                case Core.FieldAccess access -> access.target();
+                case Core.TupleGet get -> get.tuple();
+                default -> null;
+            };
+            if (whole == null) {
+                return new Denotation(e, stands.at());
             }
+            at = new Denotation(whole, stands.at());
         }
     }
 
@@ -2195,34 +2211,18 @@ final class Pullback {
      * input: what stands at the end of the accesses it is made of.
      */
     private WhyUnread noRuleFor(Core stopped, InputReads reads) {
-        Core e = Core.withoutStanding(stopped);
-        InputReads in = reads;
-        while (true) {
-            if (e instanceof Core.FieldProjection projection) {
-                e = Core.withoutStanding(projection.lastAccess());
-            } else if (e instanceof Core.FieldAccess access) {
-                e = Core.withoutStanding(access.target());
-            } else if (e instanceof Core.TupleGet get) {
-                e = Core.withoutStanding(get.tuple());
-            } else if (e instanceof Core.LetIn let) {
-                // What a helper's body answers is what its last expression does, with its names
-                // given what they were bound to.
-                in = in.and(let.binder(), let.value());
-                e = Core.withoutStanding(let.body());
-            } else {
-                break;
-            }
-        }
+        Denotation end = underItsAccesses(new Denotation(stopped, reads));
+        Core e = Core.withoutStanding(end.value());
+        InputReads in = end.at();
         if (e instanceof Core.Read name) {
             return switch (in.meaningOf(name, read.rules().symbols(), read.rules().newtypes())) {
                 case ReadMeaning.Element _ ->
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER);
                 case ReadMeaning.OneOf _ -> new WhyUnread.NotYetComposed(
                         WhyUnread.NotYetComposed.Step.VALUES_WRITTEN_OUT);
-                // A name is what it was given, and that is what stopped the reading.
-                case ReadMeaning.Through(Denotation denotes) ->
-                        noRuleFor(denotes.value(), denotes.at());
-                case ReadMeaning.Unknown _, ReadMeaning.Position _ ->
+                // A name read through is followed above to what it was given, so one that stands
+                // here came round to itself.
+                case ReadMeaning.Through _, ReadMeaning.Unknown _, ReadMeaning.Position _ ->
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.SUBJECT);
             };
         }

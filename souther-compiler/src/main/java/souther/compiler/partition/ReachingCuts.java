@@ -327,15 +327,15 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
 
     /**
      * What entering arm {@code part} of {@code match} asks of a row where it narrows no one
-     * position: what the arm states ({@link Pullback#ofAnArm}) — which case a value a helper or
+     * position: what the arm states ({@link Pullback#ofTheArms}) — which case a value a helper or
      * another behavior answers is, under what; an optional's two carriers at once — asked as any
      * condition is.
      */
     private static List<OnTheWay> enteredWhole(Core.Match match, int part, InputReading read,
                                                InputReads reads, ConditionOccurrence met,
                                                ConditionReportAnchor at) {
-        return armStated(Pullback.ofAnArm(match, part, reads, read, Optional.empty())
-                .proposition(), met, at, read);
+        return armStated(WhatConditionsState.of(read).arm(match, part, reads).proposition(), met,
+                at, read);
     }
 
     /**
@@ -458,7 +458,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
 
     /**
      * What reaching arm {@code part} of {@code attempt} establishes about this input: what the arm
-     * states ({@link Pullback#ofAnArm}) — the clauses of the invariant it checks, read over the
+     * states ({@link Pullback#ofTheArms}) — the clauses of the invariant it checks, read over the
      * values the attempt hands it — asked of a row as any condition is.
      *
      * @param at where the arm is written, which is its body since an attempt writes no arm of its own
@@ -467,9 +467,8 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                                      InputReading read, InputReads reads,
                                      ConditionNumbering numbering) {
         ConditionOccurrence met = numbering.metEntering(attempt, part);
-        return armStated(Pullback.ofAnArm(attempt, part, reads, read, Optional.empty())
-                        .proposition(), met,
-                numbering.anchorOfArm(attempt.origin(), part, at, met), read);
+        return armStated(WhatConditionsState.of(read).arm(attempt, part, reads).proposition(),
+                met, numbering.anchorOfArm(attempt.origin(), part, at, met), read);
     }
 
     /** What a run entering an arm that states {@code stated} asks of a row, each thing it asks put

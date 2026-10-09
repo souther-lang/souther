@@ -469,10 +469,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/Pullback$1", "readsThrough",
                 "(L" + CORE + "$FieldAccess;" + reads + ")Z", Reading.ONE_ACCESS, ONE);
-        row(out, c + "partition/Pullback", "noRuleFor", "(" + core + reads + ")L" + c
-                + "meaning/WhyUnread;", Reading.NAMES, READS_THE_NAMES);
-        row(out, c + "partition/Pullback", "choosesByCases", "(L" + c + "inputs/Denotation;)Z",
-                Reading.NAMES, READS_THE_NAMES);
+        row(out, c + "partition/Pullback", "underItsAccesses", "(L" + c + "inputs/Denotation;)L"
+                + c + "inputs/Denotation;", Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/PredicateReadings", "walk", "(" + core + "Ljava/lang/String;L" + c
                 + "inputs/InputReading;" + reads + "L" + c + "partition/LiveFlow;ZLjava/util/List;L"
                 + c + "partition/RuleReachNumbering;Ljava/util/Set;L" + c

@@ -181,7 +181,7 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
                 NumbersAskedFor.of(LevelRegion.point(
                         new Level.OnACarrier(Carrier.WHOLE, Count.of(100)))),
                 new Reachability.Reaching(within, Requirements.NONE, TruthsAsked.NONE,
-                        List.of(cut), List.of()),
+                        List.of(cut), Reachability.Ways.ONE),
                 Generator.CandidateCheck.ANY);
     }
 

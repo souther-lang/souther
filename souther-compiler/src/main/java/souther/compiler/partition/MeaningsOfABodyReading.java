@@ -20,6 +20,7 @@ import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -163,10 +164,14 @@ public final class MeaningsOfABodyReading {
         if (construct.isEmpty()) {
             return;
         }
+        // Every arm read off one reading of the fork, since what one states is the whole fork's.
+        List<MeaningsOfABody.Meaning> entered = pastTheFigure
+                ? Collections.nCopies(arms, declined(construct))
+                : Pullback.ofTheArms(fork, reads, read(), construct).stream()
+                        .map(Pullback.Pulled::meaning).toList();
         for (int part = 0; part < arms; part++) {
-            filed.met(new MeaningsOfABody.Site(construct.get(), armOf(fork, part)), pastTheFigure
-                    ? declined(construct)
-                    : Pullback.ofAnArm(fork, part, reads, read(), construct).meaning());
+            filed.met(new MeaningsOfABody.Site(construct.get(), armOf(fork, part)),
+                    entered.get(part));
         }
     }
 

@@ -298,7 +298,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         ConditionNumbering numbering =
                 new ConditionNumbering(read.symbols().module(), behavior);
         CarriedPast carried = new CarriedPast();
-        WhatConditionsState conditions = new WhatConditionsState(read);
+        WhatConditionsState conditions = WhatConditionsState.of(read);
         walk(body, new Body(behavior, read,
                         souther.compiler.coverage.Arrivals.inTheTree(body,
                                 analysis.templates()::bodyOf),

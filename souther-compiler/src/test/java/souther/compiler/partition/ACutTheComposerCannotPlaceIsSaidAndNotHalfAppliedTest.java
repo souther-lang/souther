@@ -189,7 +189,8 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
                 NumbersAskedFor.of(LevelRegion.point(new Level.OnACarrier(
                         domain().quantities(rules()).ordersOf(axis.term()).answered(), at))),
                 new Reachability.Reaching(domain().quantities(rules()).region(),
-                        Requirements.NONE, TruthsAsked.NONE, List.of(taken), List.of()),
+                        Requirements.NONE, TruthsAsked.NONE, List.of(taken),
+                        Reachability.Ways.ONE),
                 Generator.CandidateCheck.ANY);
     }
 

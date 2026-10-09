@@ -57,6 +57,31 @@ public sealed interface ReachabilityGap {
     }
 
     /**
+     * The walk stated it as one of several ways, and the row was looked for along the way whole
+     * past it rather than along each of them: the ways it and the others like it split the way into
+     * are more than {@code figure} lets this look along.
+     *
+     * <p>Said because it changes what a search finds. Along one of the ways a row is composed
+     * against that way's alternative as well, which along the whole it is not, so a row the search
+     * did not find here is one it may have found along one of them.
+     */
+    record LookedAlongWhole(OnTheWay.OneOf condition, CompositionBudget figure)
+            implements ReachabilityGap {
+
+        public LookedAlongWhole {
+            if (condition == null || figure == null) {
+                throw new IllegalArgumentException(
+                        "a way looked along whole is past some condition, at some figure");
+            }
+        }
+
+        @Override
+        public ConditionReportAnchor anchor() {
+            return condition.anchor();
+        }
+    }
+
+    /**
      * The walk stated it, and the rules of the way it is on leave nothing.
      *
      * <p>Apart from {@link Uncomposed} and not one of its reasons, because it is not one. Every
@@ -127,8 +152,8 @@ public sealed interface ReachabilityGap {
                      Uncomposed(var _, Why.ElementsWrittenAlike _),
                      Uncomposed(var _, Why.NoComposerWritesIt _),
                      ProvedImpossible _ -> { }
-                case Unstated _ -> throw new IllegalArgumentException(
-                        "a way of writing a cut is one the walk stated: " + each);
+                case Unstated _, LookedAlongWhole _ -> throw new IllegalArgumentException(
+                        "a way of writing a cut is one the walk stated as a cut: " + each);
             }
         }
         if (!stoppedBy.isEmpty() || !unheld.isEmpty()) {

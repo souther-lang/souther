@@ -27,8 +27,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * on the way that nothing could state makes rows harder to compose — and cannot make a row that
  * does not stand at a point be offered for it.
  *
- * <p>Held against a condition this reading declines rather than one it takes in, because that is the
- * case the second half exists for. A model whose way is understood composes a row that reaches and
+ * <p>Held against a condition no composer writes a row for rather than one it composes against,
+ * because that is the case the second half exists for. A condition of several ways is looked for
+ * along each of them ({@link ARowPastOneOfSeveralThingsIsLookedForAlongEachOfThemTest}). A model whose way is understood composes a row that reaches and
  * the walk agrees with it; the run worth writing down is the one where the composer was told
  * nothing and guessed.
  *
@@ -68,7 +69,7 @@ class ARowIsNotOfferedForAPointItIsNotSeenToStandAtTest {
             """;
 
     /** Where the line behind the product is drawn, which is the one this is about. */
-    private static final Count BEHIND_THE_DISJUNCTION = Count.of(5);
+    private static final Count BEHIND_THE_PRODUCT = Count.of(5);
 
     /**
      * Every point of that line is owed a row and offered none, and the reason names the walk.
@@ -153,7 +154,7 @@ class ARowIsNotOfferedForAPointItIsNotSeenToStandAtTest {
         List<ItemAssessment> out = new java.util.ArrayList<>();
         for (BorderAssessment each : edges) {
             if (each.border().origin().comparisonAt().isEmpty()
-                    || !isAt(each.border().obligation().at(), BEHIND_THE_DISJUNCTION)) {
+                    || !isAt(each.border().obligation().at(), BEHIND_THE_PRODUCT)) {
                 continue;
             }
             for (PointRole role : PointRole.values()) {

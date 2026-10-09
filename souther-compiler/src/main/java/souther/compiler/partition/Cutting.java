@@ -418,8 +418,9 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                Supplier<AffineReading.OfAComparison> arithmetic,
                                InputReading read, InputReads reads, Arrivals answering) {
         BlockReason.WhatItStatesIsNoLine said = whatItStates(stated);
-        // A number no position holds is one the body bound, and where the arithmetic followed the
-        // binding to what it was made of and stopped there, that stop is what the place words.
+        // A number no position holds is all the statement says of what it relates. Which number
+        // that is — one the body worked out, what a dependency answered, what an operation did —
+        // is what the arithmetic over the input met where it stopped, and the place says it.
         boolean placeWords = said == null
                 || said.why() == BlockReason.WhatItStatesIsNoLine.Why.A_NUMBER_NO_POSITION_HOLDS;
         if (placeWords

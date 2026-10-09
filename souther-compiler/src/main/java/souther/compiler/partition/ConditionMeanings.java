@@ -12,7 +12,6 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.Proposition;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -57,17 +56,17 @@ record ConditionMeanings(souther.compiler.inputs.InputReading read) {
 
     /** What {@code condition} coming out {@code held} states, and where it states nothing, that. */
     List<OnTheWay> stating(Condition condition, boolean held) {
-        return ReachingCuts.stating(condition, read, held, new WhatConditionsState(read));
+        return ReachingCuts.stating(condition, read, held, WhatConditionsState.of(read));
     }
 
     /** What {@code condition} coming out true states, whole ({@link DemandReading#statedBy}). */
     Proposition statedBy(Condition condition) {
-        return DemandReading.statedBy(condition, read, new WhatConditionsState(read));
+        return DemandReading.statedBy(condition, read, WhatConditionsState.of(read));
     }
 
-    /** What a run entering arm {@code part} of {@code fork} states ({@link Pullback#ofAnArm}). */
+    /** What a run entering arm {@code part} of {@code fork} states ({@link Pullback#ofTheArms}). */
     Proposition entered(Core fork, int part, InputReads reads) {
-        return Pullback.ofAnArm(fork, part, reads, read, Optional.empty()).proposition();
+        return WhatConditionsState.of(read).arm(fork, part, reads).proposition();
     }
 
     /**

@@ -249,23 +249,6 @@ public sealed interface Derivation {
     }
 
     /**
-     * Which case a value chosen by cases is: the choice, with which case each arm's value is in that
-     * arm's place. A value is what the arm taken answers, so it is of a case exactly where what that
-     * arm answers is.
-     */
-    record ACaseOfAChoice(Derivation byItsCases) implements Derivation {
-
-        public ACaseOfAChoice {
-            Objects.requireNonNull(byItsCases, "a choice is made by its cases");
-        }
-
-        @Override
-        public Proposition conclusion(Conclusion numbering) {
-            return numbering.of(byItsCases);
-        }
-    }
-
-    /**
      * A comparison of a value chosen by cases: the choice, with the comparison of what each case
      * answers in that case's place. A value is what the case taken answers, so a comparison of it
      * holds exactly where the comparison of that answer does.

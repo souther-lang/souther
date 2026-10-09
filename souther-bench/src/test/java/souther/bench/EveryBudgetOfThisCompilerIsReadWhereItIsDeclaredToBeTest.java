@@ -197,7 +197,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/inputs/SearchRegion;)"
                             + "Lsouther/compiler/partition/Reachability;",
                     "past the figure looks along the way whole, which every row past it is on,"
-                            + " so the row is composed either way and nothing is left to carry"),
+                            + " and keeps the conditions it did not split at, which the row's"
+                            + " account says"),
             Map.entry("souther.compiler.query.Coverages$2#endedBy("
                             + "Lsouther/compiler/query/SearchOutcomes;"
                             + "Lsouther/compiler/partition/Realization;)"
@@ -284,17 +285,13 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/meaning/Derivation;",
                     "counts the cases a comparison is split into, and past the figure carries"
                             + " the comparison out as a part nothing read, naming it"),
-            Map.entry("souther.compiler.partition.Pullback#caseOf("
-                            + "Lsouther/compiler/inputs/Denotation;"
-                            + "Lsouther/compiler/core/Core$Case;)"
-                            + "Lsouther/compiler/meaning/Derivation;",
-                    "counts the arms a value chosen by cases is read through, and past the figure"
-                            + " carries which case it is out as a part nothing read, naming it"),
             Map.entry("souther.compiler.partition.Pullback#answered("
-                            + "Lsouther/compiler/inputs/Denotation;)"
+                            + "Lsouther/compiler/inputs/Denotation;"
+                            + "Lsouther/compiler/meaning/WhyUnread$AtNoPosition$Place;)"
                             + "Lsouther/compiler/meaning/CasesOfAnAnswer$Answered;",
-                    "counts the arms a body's answer is read through, and past the figure carries"
-                            + " the answer out as unread, naming it"),
+                    "counts the arms a value chosen by cases is read through — a body's answer, or"
+                            + " what a match chooses by — and past the figure carries which case it"
+                            + " is out as unread, naming it"),
             Map.entry("souther.compiler.partition.Pullback$ALawRead#ofEachWrittenOut("
                             + "Lsouther/compiler/check/DeclaredArgument;"
                             + "Lsouther/compiler/core/Core$ListLit;"

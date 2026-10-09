@@ -3779,6 +3779,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // sentence naming this one as the impossible condition would say more than was shown.
             case ReachabilityGap.ProvedImpossible _ ->
                     "a condition on a way whose conditions leave nothing standing together";
+            // What stopped the looking, as a figure is said: raising it looks along each way.
+            case ReachabilityGap.LookedAlongWhole(var _, var figure) ->
+                    "a condition that is one of several things, past which a row was looked for"
+                            + " along the whole way and not along each of them ("
+                            + Reasons.said(PublicationOrders.COMPOSITION_BUDGETS.keep(
+                                    List.of(figure))) + ")";
             case ReachabilityGap.Uncomposed(var _, var why) ->
                     switch (why) {
                         case ReachabilityGap.Why

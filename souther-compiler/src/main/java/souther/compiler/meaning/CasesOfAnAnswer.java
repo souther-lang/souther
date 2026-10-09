@@ -27,10 +27,41 @@ public record CasesOfAnAnswer(List<String> parameters, Answered answered) {
     public CasesOfAnAnswer {
         parameters = List.copyOf(parameters);
         Objects.requireNonNull(answered, "a body answers something");
+        if (heldAtACall(answered)) {
+            throw new IllegalArgumentException("a body's answer over its own parameters names no"
+                    + " answer of a dependency, which is read where a call stands: " + answered);
+        }
     }
 
-    /** Which case a value a body answers is. */
+    /** Whether some part of {@code answered} is what a dependency answered where the value was
+     *  read ({@link Answered.AtAnAnswer}). */
+    private static boolean heldAtACall(Answered answered) {
+        return switch (answered) {
+            case Answered.AtAnAnswer _ -> true;
+            case Answered.Written _, Answered.AtAnInput _, Answered.Unread _ -> false;
+            case Answered.ByItsArms(var arms) ->
+                    arms.stream().anyMatch(arm -> heldAtACall(arm.answers()));
+        };
+    }
+
+    /**
+     * Which case a value is, read where it stands: a body's answer over its own parameters, or the
+     * value a {@code match} chooses its arm by.
+     *
+     * <p>One reading for both. What differs is only what a body's answer may be published as: what
+     * a dependency answered is read where the value stands ({@link AtAnAnswer}), and a body read
+     * for every call of it says that part unread instead.
+     */
     public sealed interface Answered {
+
+        /** What a dependency the row stands in answered, whichever case that is — said where the
+         *  value is read, and never of a body's answer over its own parameters. */
+        record AtAnAnswer(DecisionSubject.AnAnswer answer) implements Answered {
+
+            public AtAnAnswer {
+                Objects.requireNonNull(answer, "a dependency answered at some call");
+            }
+        }
 
         /** One of {@code cases}, whatever the input: a value the body writes out, or a name standing
          *  for one of several it does. */

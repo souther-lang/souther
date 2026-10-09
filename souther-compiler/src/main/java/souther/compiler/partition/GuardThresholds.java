@@ -276,7 +276,7 @@ public final class GuardThresholds {
         // And every truth a fork's condition asks, under the construct of the model that answers
         // it, which is the construct a run is seen coming out of. A truth asked of a name the body
         // was handed is answered by no construct, and no run is seen at it.
-        WhatConditionsState conditions = new WhatConditionsState(read);
+        WhatConditionsState conditions = WhatConditionsState.of(read);
         for (ComparisonReadings.TruthMet each : comparisons.truths()) {
             List<OnTheWay> holding = ReachingCuts.stating(each.condition(), read, true, conditions);
             List<OnTheWay> failing =

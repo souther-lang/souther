@@ -7,6 +7,7 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -27,16 +28,28 @@ import java.util.Optional;
  *
  * <p>Of one reading of the input, which is held and asked for: a statement is read against the
  * input's declarations as well as its names, and an answer under one reading is no answer under
- * another.
+ * another. And one for that reading, kept with it ({@link InputReading#derived}): the readers of
+ * one input — the lines drawn, the ways to them, the decisions, the guards — ask about the same
+ * conditions, and one kept by each of them would read every condition once per reader.
+ *
+ * <p>The arms of a fork that chooses by no condition are kept here too, every arm of a fork at
+ * once ({@link Pullback#ofTheArms}): what one arm states is a fact of the whole fork, so it is
+ * read once for the fork and not once for each arm a reader asks about.
  */
 final class WhatConditionsState {
 
     private final InputReading read;
     private final Map<AComparison, Pullback.OnTheInput> comparisons = new HashMap<>();
-    private final Map<ATruth, Pullback.Pulled> truths = new HashMap<>();
+    private final Map<ANode, Pullback.Pulled> truths = new HashMap<>();
+    private final Map<ANode, List<Pullback.Pulled>> arms = new HashMap<>();
 
-    WhatConditionsState(InputReading read) {
+    private WhatConditionsState(InputReading read) {
         this.read = read;
+    }
+
+    /** What the conditions met over {@code read} state, kept for that reading. */
+    static WhatConditionsState of(InputReading read) {
+        return read.derived(WhatConditionsState.class, WhatConditionsState::new);
     }
 
     /** A comparison, by the nodes its sides are and what its operator placed, under names. */
@@ -57,12 +70,12 @@ final class WhatConditionsState {
         }
     }
 
-    /** A truth, by the node it is, under names. */
-    private record ATruth(Core value, InputReads reads) {
+    /** A truth, or a fork whose arms are entered, by the node it is, under names. */
+    private record ANode(Core value, InputReads reads) {
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof ATruth that && value == that.value && reads.equals(that.reads);
+            return other instanceof ANode that && value == that.value && reads.equals(that.reads);
         }
 
         @Override
@@ -85,8 +98,15 @@ final class WhatConditionsState {
      *  {@code read}. */
     Pullback.Pulled truth(Core truth, InputReads reads, InputReading read) {
         heldTo(read);
-        return truths.computeIfAbsent(new ATruth(truth, reads),
+        return truths.computeIfAbsent(new ANode(truth, reads),
                 _ -> Pullback.ofATruth(truth, reads, read, Optional.empty()));
+    }
+
+    /** What a run entering arm {@code part} of {@code fork} states with its names as {@code reads}
+     *  has them ({@link Pullback#ofTheArms}). */
+    Pullback.Pulled arm(Core fork, int part, InputReads reads) {
+        return arms.computeIfAbsent(new ANode(fork, reads),
+                _ -> Pullback.ofTheArms(fork, reads, read, Optional.empty())).get(part);
     }
 
     private void heldTo(InputReading asked) {

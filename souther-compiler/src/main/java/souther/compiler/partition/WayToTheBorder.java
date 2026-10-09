@@ -222,6 +222,13 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
         }
     }
 
+    /** The conditions on this way that came out one of several ways, in the order the walk met
+     *  them. */
+    public List<OnTheWay.OneOf> severalWays() {
+        return onTheWay.stream().filter(OnTheWay.OneOf.class::isInstance)
+                .map(OnTheWay.OneOf.class::cast).toList();
+    }
+
     /**
      * The ways this one is, each with one alternative of every condition of several ways taken in
      * where it stands ({@link OnTheWay.OneOf}) — just itself where it has none — or empty where that

@@ -113,7 +113,7 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
         InputReading read = inputs.reading(rules);
         return ReachingCuts.stating(Condition.of(body, reads, rules.symbols(), rules.newtypes(),
                 new ConditionNumbering(module, behavior)), read, holding,
-                new WhatConditionsState(read));
+                WhatConditionsState.of(read));
     }
 
     /** Whether {@code cut} holds where {@code x} and {@code y} stand at these values. */

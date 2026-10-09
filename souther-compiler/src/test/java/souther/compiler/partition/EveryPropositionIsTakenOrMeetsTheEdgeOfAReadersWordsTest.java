@@ -131,6 +131,30 @@ class EveryPropositionIsTakenOrMeetsTheEdgeOfAReadersWordsTest {
         }
     }
 
+    /**
+     * Some element meeting parts no composer writes toward asks the run once for each composer
+     * missing, so what is missing is said whichever part stands first.
+     */
+    @Test
+    void everyComposerMissingForAnElementIsSaid() {
+        InputReading read = reading();
+        Proposition element = new Proposition.Compared(new Relation.Affine(
+                LinearForm.<Quantity>atom(new DecisionAtom.OfTheInput(
+                        new NumericTerm.ValueOf(TermPath.of("xs").element()))), Rel.GT), true);
+        Proposition some = new Proposition.Some(TermPath.of("xs"), new Proposition.All(List.of(
+                new Proposition.Any(List.of(element, element.denied())),
+                new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of("b")), true))),
+                true);
+        List<RowDemand.NoComposer> missing = new ArrayList<>();
+        for (DemandReading.Read each : DemandReading.asked(some, read)) {
+            if (each instanceof DemandReading.Read.Demands(RowDemand.ForTheRun(var _, var why))) {
+                missing.add(why);
+            }
+        }
+        assertEquals(List.of(RowDemand.NoComposer.ONE_OF_SEVERAL_FOR_AN_ELEMENT,
+                RowDemand.NoComposer.A_TRUTH_OF_AN_ELEMENT), missing);
+    }
+
     /** What the three readers decline {@code stated} coming out {@code way} for, together. */
     private static List<WhyNotTaken> everyReaderSays(Proposition stated, boolean way,
                                                      InputReading read) {
