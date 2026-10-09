@@ -13,6 +13,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -172,6 +173,25 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
         assertFalse(realize(pairAt(new Criterion.AtTheLevel(Level.OfTheQuantity.of(1))), region())
                         instanceof Realization.Impossible,
                 "the declarations leave the distance every value it has");
+    }
+
+    /**
+     * A count is never proved out of reach by a region, however narrow.
+     *
+     * <p>A region holds a range of each number of the row, and how many elements meet a statement
+     * is none of them: which elements a container holds is the composing's to choose. So a region
+     * leaving {@code x} at nought and below says nothing about whether one element meets something,
+     * and the count is left to the search.
+     */
+    @Test
+    void aCountIsNoNumberARegionCanRefuse() {
+        Standing count = new Standing.OfACount(new CountedElements("read", pathOf("x"),
+                new Proposition.Always(true),
+                AStatementAtARow.of(new Proposition.Always(true), "read",
+                        READ.input().quantities(READ.rules())),
+                Map.of()), List.of(), new Criterion.AtTheLevel(Level.OfTheQuantity.of(1)));
+        assertFalse(realize(count, xIsNoMoreThanNought()) instanceof Realization.Impossible,
+                "nothing a region holds says how many elements meet a statement");
     }
 
     /** The item's line, as far as a row for it is concerned. */
