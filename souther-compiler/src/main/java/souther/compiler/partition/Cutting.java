@@ -498,7 +498,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case WhyUnread.MoreReadingsThanAreMade _, WhyUnread.ANumberNotHeld _,
                  WhyUnread.AClauseOfAnInvariant _, WhyUnread.AnInvariantNotReached _,
                  WhyUnread.InACalledBody _, WhyUnread.CopiesStateDifferentThings _,
-                 WhyUnread.NotMetByTheReading _, WhyUnread.NotYetComposed _ -> false;
+                 WhyUnread.NotMetByTheReading _ -> false;
         };
     }
 

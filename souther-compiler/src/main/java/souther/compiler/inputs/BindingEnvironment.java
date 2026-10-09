@@ -226,6 +226,16 @@ final class BindingEnvironment {
                 callsStand);
     }
 
+    /**
+     * The same, where the body of a behavior a call names is read as well: what that body binds to
+     * the elements of what, beside what this one does. Its bindings are its own, so none of them is
+     * one of these.
+     */
+    BindingEnvironment entering(ElementBindings called) {
+        return new BindingEnvironment(roots, handed, table, newest, elements.and(called),
+                callsStand);
+    }
+
     /** The parameters as positions, which is what a name in a tree stands for. */
     static Map<BindingId, TermPath> rooted(Map<BindingId, String> named) {
         Map<BindingId, TermPath> out = new LinkedHashMap<>();

@@ -11,8 +11,6 @@ import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Classification;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.partition.LineOrigin;
-import souther.compiler.meaning.CasesOfAnAnswer;
-import souther.compiler.meaning.WhyUnread;
 import souther.compiler.partition.MeaningsOfABodyReading;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementOwed;
@@ -40,6 +38,8 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.examples.FixtureReader;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.CalledBody;
+import souther.compiler.core.Core;
 import souther.compiler.check.BehaviorBodies;
 import souther.compiler.check.FakeTables;
 import souther.compiler.check.AtomSpace;
@@ -998,17 +998,17 @@ public final class Adequacy {
     }
 
     /**
-     * Which case one behavior's answer is, read once off its body over its own parameters
-     * ({@link CasesOfAnAnswer}), for every call of it to put in what that call handed.
+     * The body of one behavior as a call of it is read ({@link CalledBody}): the tree its analysis
+     * reads, the bindings its parameters arrive on in the order a call hands them, and what it binds
+     * to the elements of what — each read in its own module, where the declarations it names were
+     * written.
      *
      * <p>Asked of the body as one behavior was checked and not as its module was: a module's check
      * judges what its bodies claim, which reads the conditions of a body calling this one, so an
-     * answer asked of the module's would be asked while that module is being answered.
-     *
-     * <p>Absent where there is no body to read or no input it was read at. A behavior reached again
-     * while its own answer is being read answers that it was ({@link #onCycle}).
+     * answer asked of the module's would be asked while that module is being answered. Absent where
+     * there is no body to read, no input it was read at, or a parameter its body does not bind.
      */
-    public record AnswerCases(ValueName.Behavior behavior) implements Key<CasesOfAnAnswer> {
+    public record BodyAtACall(ValueName.Behavior behavior) implements Key<CalledBody> {
 
         @Override
         public String module() {
@@ -1016,7 +1016,7 @@ public final class Adequacy {
         }
 
         @Override
-        public Answer<CasesOfAnAnswer> compute(Db db) {
+        public Answer<CalledBody> compute(Db db) {
             String module = behavior.module();
             Bodies.CheckedBody checked =
                     db.ask(new Bodies.CheckedBehavior(module, behavior.name())).value();
@@ -1027,20 +1027,16 @@ public final class Adequacy {
                     || !reading.present()) {
                 return Answer.absent();
             }
+            List<Core.Binder> parameters = new ArrayList<>();
+            for (InputDomain.Parameter parameter : input.parameters()) {
+                if (parameter.binding() == null) {
+                    return Answer.absent();
+                }
+                parameters.add(new Core.Binder(parameter.name(), parameter.binding()));
+            }
             AnalysisBody analysis = checked.analysis();
-            RuleReadingSource source = reading.value();
-            return Answer.of(MeaningsOfABodyReading.answerOf(analysis,
-                    input.parameters().stream().map(InputDomain.Parameter::name).toList(),
-                    readingOf(db, input, source),
-                    InputReads.ofParametersWhereCallsStand(input.parameterReads(),
-                            input.declared(source), ElementBindings.of(analysis,
-                                    source.newtypes()), input.dependencies())));
-        }
-
-        @Override
-        public Answer<CasesOfAnAnswer> onCycle(List<Key<?>> cycle) {
-            return Answer.of(new CasesOfAnAnswer(List.of(), new CasesOfAnAnswer.Answered.Unread(
-                    new WhyUnread.InACalledBody(WhyUnread.InACalledBody.What.ITSELF))));
+            return Answer.of(new CalledBody(analysis.core(), parameters,
+                    ElementBindings.of(analysis, reading.value().newtypes())));
         }
     }
 

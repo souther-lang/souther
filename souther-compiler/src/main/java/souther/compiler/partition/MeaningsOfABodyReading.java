@@ -10,7 +10,6 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
-import souther.compiler.meaning.CasesOfAnAnswer;
 import souther.compiler.meaning.Conclusion;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.MeaningsOfABody;
@@ -69,18 +68,6 @@ public final class MeaningsOfABodyReading {
         return reading.filed.filed();
     }
 
-    /**
-     * Which case the behavior {@code analysis} is the body of answers, over its own parameters
-     * ({@link CasesOfAnAnswer}), its names read as {@code reads} has them — read once, for every
-     * call of it to put in what that call handed.
-     *
-     * @param parameters the names the body reads its parameters by, in the order a call hands them
-     */
-    public static CasesOfAnAnswer answerOf(AnalysisBody analysis, List<String> parameters,
-                                           InputReading read, InputReads reads) {
-        return Pullback.answerOf(analysis.core(), parameters, reads, read);
-    }
-
     private InputReading read() {
         if (read == null) {
             read = reading.get();
@@ -93,28 +80,35 @@ public final class MeaningsOfABodyReading {
         // application, each handing its parameter one of them, and what a site in it states is
         // what it states on the application a run meets it on.
         if (Core.withoutStanding(e) instanceof Core.Block block && !pastTheFigure) {
-            switch (Pullback.applicationsOf(block, reads, symbols, newtypes)) {
-                case InputReads.Applications.Each(var applications, var _) -> {
-                    List<MeaningsOfABody> each = new ArrayList<>();
-                    for (InputReads application : applications) {
-                        MeaningsOfABodyReading inside = inside(false);
-                        inside.walk(block.body(), application);
-                        read = inside.read;
-                        each.add(inside.filed.filed());
-                    }
-                    filed.metOnEachApplication(each);
-                    return;
-                }
-                // More applications than are read: every condition in the body is filed as one
-                // this compiler declined to read, and none is read on fewer of them than it is on.
-                case InputReads.Applications.MoreThanAreRead _ -> {
-                    MeaningsOfABodyReading inside = inside(true);
-                    inside.walk(block.body(), reads);
+            InputReads.Applications applied =
+                    Pullback.applicationsOf(block, reads, symbols, newtypes);
+            // More applications than are read: every condition in the body is filed as one this
+            // compiler declined to read, and none is read on fewer of them than it is on.
+            if (applied instanceof InputReads.Applications.MoreThanAreRead) {
+                MeaningsOfABodyReading inside = inside(true);
+                inside.walk(block.body(), reads);
+                read = inside.read;
+                inside.filed.filed().stated().forEach(filed::met);
+                return;
+            }
+            // Where which of the applications a run makes is not said, what a condition states on
+            // each is said all the same.
+            List<InputReads> applications = switch (applied) {
+                case InputReads.Applications.Each(var made, var _) -> made;
+                case InputReads.Applications.Unsaid(var mayBeMade) -> mayBeMade;
+                case InputReads.Applications.MoreThanAreRead _,
+                     InputReads.Applications.NoneHanded _ -> List.of();
+            };
+            if (!applications.isEmpty()) {
+                List<MeaningsOfABody> each = new ArrayList<>();
+                for (InputReads application : applications) {
+                    MeaningsOfABodyReading inside = inside(false);
+                    inside.walk(block.body(), application);
                     read = inside.read;
-                    inside.filed.filed().stated().forEach(filed::met);
-                    return;
+                    each.add(inside.filed.filed());
                 }
-                case InputReads.Applications.NoneHanded _, InputReads.Applications.Unsaid _ -> { }
+                filed.metOnEachApplication(each);
+                return;
             }
         }
         switch (Core.withoutStanding(e)) {

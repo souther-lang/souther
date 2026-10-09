@@ -3984,13 +3984,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     };
             case WhyUnread.AnInvariantNotReached _ -> "an arm of an attempt, decided by an"
                     + " invariant whose declarations were not all reached";
-            case WhyUnread.InACalledBody(var what) -> "a case of what another behavior answers, "
+            case WhyUnread.InACalledBody(var what) -> "what another behavior answers, "
                     + switch (what) {
-                        case AN_ARGUMENT_AT_NO_POSITION -> "turning on a value it was handed that"
-                                + " stands at no position";
                         case WHAT_ITS_DEPENDENCY_ANSWERS -> "turning on what its own dependency"
                                 + " answers";
-                        case A_VALUE_IT_BINDS -> "turning on a value its body works out";
                         case ITSELF -> "which reaches itself while it is read";
                         case AN_ANSWER_NOT_READ -> "whose body was not read";
                     };
@@ -4006,19 +4003,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     + " different things where the helper is written";
             case WhyUnread.NotMetByTheReading _ -> "a condition the reading of what conditions"
                     + " mean did not meet";
-            // This compiler's: what the condition means follows from rules it has, put together
-            // in a way it does not put them together yet.
-            case WhyUnread.NotYetComposed(WhyUnread.NotYetComposed.Step step) ->
-                    "not yet read: " + switch (step) {
-                        case A_CHOICE_BY_CASES -> "a value chosen by cases inside arithmetic, or"
-                                + " compared as no number";
-                        case VALUES_WRITTEN_OUT -> "a comparison over one of several values"
-                                + " written out";
-                        case A_DEPENDENCY_ASKED_ABOUT_A_COMPUTED_VALUE -> "what a dependency"
-                                + " answered about a value the body computed";
-                        case A_BEHAVIOR_CALLED_BY_NAME -> "what another behavior answers";
-                        case A_CLOSURE_BY_NAME -> "a closure handed by name";
-                    };
         };
     }
 
@@ -4583,9 +4567,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     };
                     case WhyUnread.AnInvariantNotReached _ -> "invariant_not_reached";
                     case WhyUnread.InACalledBody(var what) -> switch (what) {
-                        case AN_ARGUMENT_AT_NO_POSITION -> "called_with_an_argument_at_no_position";
                         case WHAT_ITS_DEPENDENCY_ANSWERS -> "called_body_asks_a_dependency";
-                        case A_VALUE_IT_BINDS -> "called_body_binds_a_value";
                         case ITSELF -> "called_body_reaches_itself";
                         case AN_ANSWER_NOT_READ -> "called_body_not_read";
                     };
@@ -4593,16 +4575,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     case WhyUnread.CopiesStateDifferentThings _ ->
                             "copies_state_different_things";
                     case WhyUnread.NotMetByTheReading _ -> "not_met_by_the_reading";
-                    case WhyUnread.NotYetComposed(WhyUnread.NotYetComposed.Step step) ->
-                            switch (step) {
-                                case A_CHOICE_BY_CASES -> "not_yet_composed_choice_by_cases";
-                                case VALUES_WRITTEN_OUT -> "not_yet_composed_values_written_out";
-                                case A_DEPENDENCY_ASKED_ABOUT_A_COMPUTED_VALUE ->
-                                        "not_yet_composed_dependency_of_a_computed_value";
-                                case A_BEHAVIOR_CALLED_BY_NAME ->
-                                        "not_yet_composed_behavior_called_by_name";
-                                case A_CLOSURE_BY_NAME -> "not_yet_composed_closure_by_name";
-                            };
                 });
             }
             case WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit limit) -> {

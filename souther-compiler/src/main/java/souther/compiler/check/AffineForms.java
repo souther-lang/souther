@@ -131,6 +131,20 @@ public final class AffineForms {
         java.util.List<ReadThrough<E>> alternativesOf(Core.Read read, E at);
 
         /**
+         * The value the environment takes {@code node} as — the answer of the arm a reading is on,
+         * where it is a choice; the body a reading entered, where it is a call — or null where it
+         * takes it as nothing else.
+         *
+         * <p>The environment's answer and not a rule here, for the reason a name's is: this walk
+         * chooses nothing and calls nothing. A caller reading something once for each arm of a
+         * choice inside it, or reading a call through what it calls, hands this walk an environment
+         * that says so, and the node is then one value, as a name the environment reads through is.
+         */
+        default ReadThrough<E> taken(Core node, E at) {
+            return null;
+        }
+
+        /**
          * Whether a field access is a newtype's value read off something that is not a place.
          *
          * <p>What it wraps is what it is, so such a read is the target itself. Whether the target is
@@ -330,6 +344,11 @@ public final class AffineForms {
      */
     private static <A, E> Outcome<A, E> of(Core raw, E at, Reading<A, E> reading,
                                            Walk<A, E> following) {
+        // A value the environment takes as another is that value, read where it is.
+        ReadThrough<E> taken = reading.taken(raw, at);
+        if (taken != null) {
+            return of(taken.value(), taken.at(), reading, following);
+        }
         Core e = Terms.asOperator(raw);
         // Where the reading stopped inside what this walk does compose, kept while the questions
         // below are still asked. A name over an expression nothing reads is still a name the caller
@@ -524,6 +543,11 @@ public final class AffineForms {
         }
 
         @Override
+        public ReadThrough<E> taken(Core node, E at) {
+            return of.taken(node, at);
+        }
+
+        @Override
         public boolean readsThrough(Core.FieldAccess fa, E at) {
             return of.readsThrough(fa, at);
         }
@@ -547,7 +571,9 @@ public final class AffineForms {
      * plurality and there is no rule here for one, which is what keeps a rule about
      * {@code Big { threshold = 100000 }} from being answered for a position where a second
      * construction can stand as well. That boundary is the absence of a rule and not a refusal, so
-     * nothing has to be kept in step with it.
+     * nothing has to be kept in step with it. Where the environment says which arm a reading is on
+     * ({@link Reading#taken}), the choice is that arm's answer, as a name it reads through is the
+     * value it was given: the environment chose, and this follows.
      *
      * <p><b>Closed under its own eliminations.</b> A projection resolves through whatever the target
      * resolves to, so a construction inside a construction is reached the same way a construction
@@ -625,7 +651,11 @@ public final class AffineForms {
                 }
                 yield each;
             }
-            default -> java.util.List.of(new Standing<>(e, at, reading));
+            default -> {
+                ReadThrough<E> taken = reading.taken(e, at);
+                yield taken == null ? List.of(new Standing<>(e, at, reading))
+                        : standing(taken.value(), taken.at(), reading, following);
+            }
         };
     }
 

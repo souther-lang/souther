@@ -5,6 +5,7 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.HeldIn;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -71,6 +72,29 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                            ElementProvenance provenance,
                            Map<BindingId, ElementProjection> projected) {
         this(containers, held, provenance, projected, ValueTemplates.NONE);
+    }
+
+    /**
+     * What this and {@code other} say together, of two bodies that share no binding — a body, and
+     * the body of a behavior it calls read where the call stands.
+     *
+     * <p>A value built in either means what it means wherever it is built, so the values both build
+     * are one meaning each.
+     */
+    public ElementBindings and(ElementBindings other) {
+        if (other.equals(NONE)) {
+            return this;
+        }
+        Map<BindingId, List<HeldIn>> joinedContainers = new LinkedHashMap<>(containers);
+        joinedContainers.putAll(other.containers);
+        Map<BindingId, Core> joinedHeld = new LinkedHashMap<>(held);
+        joinedHeld.putAll(other.held);
+        Map<BindingId, ElementProjection> joinedProjected = new LinkedHashMap<>(projected);
+        joinedProjected.putAll(other.projected);
+        Map<ReachName.Declaration, Core> joinedTemplates = new LinkedHashMap<>(templates.templates());
+        joinedTemplates.putAll(other.templates.templates());
+        return new ElementBindings(joinedContainers, joinedHeld, provenance.and(other.provenance),
+                joinedProjected, new ValueTemplates(joinedTemplates));
     }
 
     /**
@@ -378,6 +402,15 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
     }
 
     /**
+     * A step a container holds the answers of, one for each element of what it walks.
+     *
+     * @param step    the step
+     * @param element the parameter of the step each element arrives on
+     * @param walked  the argument whose elements it is handed
+     */
+    public record StepOnEachElement(Core.Block step, Core.Binder element, Core walked) {}
+
+    /**
      * The step whose answers {@code container} holds, one for each element of what the application
      * hands that step, or null where it holds no such run.
      *
@@ -392,8 +425,8 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
      *
      * @param blockOf the block a closure argument stands for, where the call stands
      */
-    public static Core.Block stepAnsweredOnEachElement(Core container,
-                                                       Function<Core, Core.Block> blockOf) {
+    public static StepOnEachElement stepAnsweredOnEachElement(Core container,
+                                                              Function<Core, Core.Block> blockOf) {
         // What a container holds does not turn on the type it stands as.
         if (!(Core.withoutStanding(container) instanceof Core.PreservedCall call)) {
             return null;
@@ -401,7 +434,8 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         ValueName operation = call.declared().operation();
         Combinators.Handed handed = Combinators.handedTo(operation, call.args(), blockOf);
         return handed != null && answersOnePerElementOf(operation, handed.container(), call.args())
-                ? handed.step() : null;
+                ? new StepOnEachElement(handed.step(), handed.element(), handed.container())
+                : null;
     }
 
     /**

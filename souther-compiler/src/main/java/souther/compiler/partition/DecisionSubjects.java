@@ -6,18 +6,23 @@ import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.Symbols;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.PathResolution;
+import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionArgument;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.InjectedAnswer;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * What a body's expressions name that a row can control.
@@ -82,15 +87,10 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
         if (found == null) {
             return null;
         }
+        // What a report names the answer by is what it was asked about.
         List<DecisionArgument> arguments = new ArrayList<>();
         for (Core argument : found.arguments()) {
-            // An argument this reading cannot say leaves the answer unnamed: what a row pins it by
-            // and a report names it by is what it was asked about.
-            DecisionArgument asked = argumentOf(argument, found.at());
-            if (asked == null) {
-                return null;
-            }
-            arguments.add(asked);
+            arguments.add(argumentOf(argument, found.at()));
         }
         return new DecisionSubject.AnAnswer(new InjectedAnswer(found.evaluation(), arguments),
                 found.steps());
@@ -127,12 +127,13 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
     }
 
     /**
-     * What {@code e} asks the dependency about, or null where this reading cannot say.
+     * What {@code e} asks the dependency about.
      *
      * <p>Something a row controls, or a number the model settles. The second is asked of the same
      * walk the arithmetic folds a call with, so an expression this compiler works out to a number
      * is the number it works out to — the question a body asks by writing it is the question it
-     * asks by writing the answer.
+     * asks by writing the answer. Anything else is a value the model works out, named by how
+     * ({@link DecisionArgument.WorkedOut}).
      */
     private DecisionArgument argumentOf(Core e, InputReads at) {
         DecisionSubject stands = of(e, at);
@@ -142,7 +143,71 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
         return AffineForms.outcome(e, at, aNumberAndNothingElse())
                 instanceof AffineForms.Outcome.Composed<Void, InputReads>(LinearForm<Void> form)
                 && form.coefs().isEmpty()
-                ? new DecisionArgument.OfANumber(form.constant()) : null;
+                ? new DecisionArgument.OfANumber(form.constant())
+                : new DecisionArgument.WorkedOut(workedOut(e, at, new HashSet<>()));
+    }
+
+    /**
+     * How {@code e}, read in {@code at}, is worked out: the expression, each name in it written as
+     * what it stands for there — a subject a row controls as that subject, a name read through as
+     * what it was given, one of several values as all of them, and one that stands for none of these
+     * as itself.
+     *
+     * @param met the bindings already read through on the way here, so a name that came round to
+     *            itself is written as itself
+     */
+    private String workedOut(Core standing, InputReads at, Set<BindingId> met) {
+        Core e = Core.withoutStanding(standing);
+        DecisionSubject subject = of(e, at);
+        if (subject != null) {
+            return subject.spelled();
+        }
+        Denotation taken = at.taken(e);
+        if (taken != null) {
+            return workedOut(taken.value(), taken.at(), met);
+        }
+        return switch (e) {
+            case Core.Read name when met.add(name.binding()) ->
+                    switch (at.meaningOf(name, symbols, newtypes)) {
+                        case ReadMeaning.Through(Denotation denotes) ->
+                                workedOut(denotes.value(), denotes.at(), met);
+                        case ReadMeaning.OneOf(List<Denotation> values) -> {
+                            List<String> each = new ArrayList<>();
+                            values.forEach(value -> each.add(
+                                    workedOut(value.value(), value.at(), new HashSet<>(met))));
+                            yield "one of " + each;
+                        }
+                        case ReadMeaning.Position _, ReadMeaning.Element _,
+                             ReadMeaning.Unknown _ -> name.name();
+                    };
+            case Core.Read name -> name.name();
+            case Core.LetIn let -> workedOut(let.body(), at.and(let.binder(), let.value()), met);
+            // A newtype made of one value is that value wearing a name.
+            case Core.Construct construct when newtypes.of(construct.typeName().key())
+                    && construct.values().size() == 1 ->
+                    workedOut(construct.values().getFirst().value(), at, met);
+            case Core.Int written -> Long.toString(written.value());
+            case Core.Decimal written -> written.value().toPlainString();
+            case Core.Str written -> '"' + written.value() + '"';
+            case Core.Bool written -> Boolean.toString(written.value());
+            case Core.Temporal written -> written.text();
+            default -> {
+                List<String> parts = new ArrayList<>();
+                Core.forEachChild(e, child -> parts.add(workedOut(child, at, met)));
+                yield what(e) + parts;
+            }
+        };
+    }
+
+    /** What kind of expression {@code e} is, or which operation it applies, as a word. */
+    private static String what(Core e) {
+        return switch (e) {
+            case Core.Call call -> call.fn().rendered();
+            case Core.PreservedCall call -> call.declared().operation().toString();
+            case Core.Binary binary -> binary.op().toString();
+            case Core.FieldAccess access -> "." + access.field();
+            default -> e.getClass().getSimpleName();
+        };
     }
 
     /**
@@ -184,6 +249,11 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
             public List<AffineForms.ReadThrough<InputReads>> alternativesOf(Core.Read read,
                                                                            InputReads at) {
                 return NameAnswers.alternativesOf(read, at, symbols, newtypes);
+            }
+
+            @Override
+            public AffineForms.ReadThrough<InputReads> taken(Core node, InputReads at) {
+                return NameAnswers.taken(node, at);
             }
 
             @Override

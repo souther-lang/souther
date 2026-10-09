@@ -12,13 +12,11 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.meaning.Proposition;
-import souther.compiler.meaning.WhyUnread;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.WrittenOwner;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -128,8 +126,8 @@ class AnArmARunEntersStatesWhatChoosesItTest {
         assertEquals(stated("n <= 5"), arms.get(new MeaningsOfABody.Part.OfACase(1)));
     }
 
-    /** The behavior's body is read once over its own parameter, and what this call handed it is put
-     *  in at the call. */
+    /** The behavior's body is read where the call stands, its parameter standing for what the call
+     *  handed. */
     @Test
     void anArmOfAMatchOnABehaviorsAnswerIsWhereItsBodyAnswersItsCaseOfWhatTheCallHanded() {
         Map<MeaningsOfABody.Part.Arm, Proposition> arms = arms(SIZED, null, """
@@ -140,17 +138,16 @@ class AnArmARunEntersStatesWhatChoosesItTest {
         assertEquals(stated("n <= 5"), arms.get(new MeaningsOfABody.Part.OfACase(1)));
     }
 
-    /** A call handing the behavior a value that stands at no position says nothing the body's
-     *  answer turns on, and says why. */
+    /** A call handing the behavior a value worked out of the input is read the same way: the
+     *  body's {@code m > 5} with {@code n + 1} for {@code m}. */
     @Test
-    void aBehaviorHandedAValueAtNoPositionLeavesItsAnswerUnreadForThatReason() {
+    void aBehaviorHandedAValueWorkedOutOfTheInputAnswersItsCaseOfThatValue() {
         Map<MeaningsOfABody.Part.Arm, Proposition> arms = arms(SIZED, null, """
                 match kind(n + 1) with
                     | Big   -> 1
                     | Small -> 2""");
-        assertEquals(List.of(new WhyUnread.InACalledBody(
-                        WhyUnread.InACalledBody.What.AN_ARGUMENT_AT_NO_POSITION)),
-                whysIn(arms.get(new MeaningsOfABody.Part.OfACase(0))));
+        assertEquals(stated("n > 4"), arms.get(new MeaningsOfABody.Part.OfACase(0)));
+        assertEquals(stated("n <= 4"), arms.get(new MeaningsOfABody.Part.OfACase(1)));
     }
 
     private static final String SIZED = """
@@ -163,17 +160,6 @@ class AnArmARunEntersStatesWhatChoosesItTest {
 
     private static MeaningsOfABody.Part.Departed departed(String clause) {
         return new MeaningsOfABody.Part.Departed(Optional.of(new ClauseName(clause)));
-    }
-
-    private static List<WhyUnread> whysIn(Proposition stated) {
-        List<WhyUnread> out = new ArrayList<>();
-        switch (stated) {
-            case Proposition.Unread unread -> out.add(unread.why());
-            case Proposition.All all -> all.parts().forEach(part -> out.addAll(whysIn(part)));
-            case Proposition.Any any -> any.parts().forEach(part -> out.addAll(whysIn(part)));
-            default -> { }
-        }
-        return out;
     }
 
     /** What the condition of {@code f}'s one fork states, its fork written as {@code condition}. */

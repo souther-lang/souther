@@ -12,7 +12,6 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -60,6 +59,46 @@ public sealed interface Derivation {
         @Override
         public Proposition conclusion(Conclusion numbering) {
             return numbering.of(value);
+        }
+    }
+
+    /**
+     * What a behavior a call names answers, read off its body where the call stands: the body's
+     * parameters stand for what the call handed, so what the body states of them is what it states
+     * of the call's arguments.
+     */
+    record ABehaviorsBody(ValueName.Behavior behavior, Derivation inItsBody) implements Derivation {
+
+        public ABehaviorsBody {
+            Objects.requireNonNull(behavior, "a call names a behavior");
+            Objects.requireNonNull(inItsBody, "whose body states something");
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            return numbering.of(inItsBody);
+        }
+    }
+
+    /**
+     * What is read where a name stands for one of the values a container was written with, read once
+     * for each of them: on an application the name is that value, so what is stated is what is
+     * stated on the application handing it each ({@link Proposition.OnAnApplication}).
+     */
+    record OnEachValueWrittenOut(List<Derivation> each) implements Derivation {
+
+        public OnEachValueWrittenOut {
+            each = List.copyOf(each);
+            if (each.isEmpty()) {
+                throw new IllegalArgumentException("a name stands for some values");
+            }
+        }
+
+        @Override
+        public Proposition conclusion(Conclusion numbering) {
+            List<Proposition> stated = new ArrayList<>();
+            each.forEach(one -> stated.add(numbering.of(one)));
+            return Proposition.onAnApplication(stated);
         }
     }
 
@@ -123,7 +162,8 @@ public sealed interface Derivation {
     }
 
     /**
-     * An arm of a {@code match} entered: it selects the value, and no arm written before it does.
+     * An arm of a {@code match} entered, or a case of the definition the library writes an
+     * operation in: it selects the value, and no arm written before it does.
      *
      * @param before whether each arm written before it selects the value, in the order they are
      *               written
@@ -220,31 +260,6 @@ public sealed interface Derivation {
                         numbering.of(arm.states()))));
             }
             return Proposition.any(taken);
-        }
-    }
-
-    /**
-     * What a behavior's body states over its own parameters, at one call of it: each place of its
-     * input moved to the same way into what the call handed that parameter ({@link MovedToACall}).
-     * The body's statement is read once, of the definition; this is the one step that is the
-     * call's.
-     *
-     * @param handed which position of the caller's input each parameter was handed, by the name the
-     *               body reads it by; a parameter handed anything else is not in it
-     */
-    record ABehaviorsAnswerAtACall(ValueName.Behavior behavior, Derivation inItsBody,
-                                   Map<String, TermPath> handed) implements Derivation {
-
-        public ABehaviorsAnswerAtACall {
-            Objects.requireNonNull(behavior, "a call is of some behavior");
-            Objects.requireNonNull(inItsBody, "a body states something");
-            handed = Map.copyOf(handed);
-        }
-
-        @Override
-        public Proposition conclusion(Conclusion numbering) {
-            return MovedToACall.of(numbering.of(inItsBody), handed,
-                    why -> numbering.unread(new Stopped(why, false)));
         }
     }
 

@@ -12,14 +12,14 @@ import java.util.Objects;
 /**
  * Why part of a condition was read as nothing.
  *
- * <p>Three kinds, kept apart because they are owed different things. Most say what the domain the
- * reading is over has no words for at the place it stopped, and nothing written in this reading
- * would read the part. {@link NotYetComposed} says the opposite: the part follows from what the
- * language and the library already say, and the step that would take it is not written. That one
- * is an obligation of this compiler's and not a fact about the model, and naming the step is what
- * lets it be counted and closed. And one says neither: that the part could be read and this compiler
- * declined the work at a figure it holds itself to ({@link MoreReadingsThanAreMade}), which is
- * lifted by raising the figure and by nothing written in the model.
+ * <p>Kept apart by what they are owed. Most say what the domain the reading is over has no words for
+ * at the place it stopped, and nothing written in this reading would read the part. Two say the
+ * opposite, each of what this compiler holds itself to and not of the model: that what is stated
+ * of a library operation is not proved against its body yet ({@link NotProvedOfItsBody}), which is
+ * lifted by a proof; and that the part could be read and this compiler declined the work at a figure
+ * it holds itself to ({@link MoreReadingsThanAreMade}), which is lifted by raising the figure. Where
+ * a part follows from what the language and the library already say, the reading takes it: no part
+ * is left for a step this reading does not take.
  *
  * <p>Only the reading of what a condition means says one of these. That a reader of the proposition
  * has no demand for a part it was handed is that reader's to say in its own words, and putting it
@@ -176,8 +176,8 @@ public sealed interface WhyUnread {
     record AnInvariantNotReached() implements WhyUnread {}
 
     /**
-     * Which case a behavior called by name answers turns, in its body, on something a call is not
-     * the place to say anything about.
+     * What a behavior called by name answers turns, in its body read where the call stands, on
+     * something a call is not the place to say anything about.
      */
     record InACalledBody(What what) implements WhyUnread {
 
@@ -188,18 +188,12 @@ public sealed interface WhyUnread {
         /** What the called body's answer turns on, that the call cannot say. */
         public enum What {
 
-            /** A value the call handed it that stands at no position of the caller's input. */
-            AN_ARGUMENT_AT_NO_POSITION,
-
             /**
              * What one of its own dependencies answers. A row stands in the caller's dependencies
              * and not the called behavior's, and which answer it is was named by an evaluation in
              * that body, which each call makes afresh.
              */
             WHAT_ITS_DEPENDENCY_ANSWERS,
-
-            /** A number of a value the body bound for itself, which each call works out afresh. */
-            A_VALUE_IT_BINDS,
 
             /** The behavior itself, reached again while its own answer is being read. */
             ITSELF,
@@ -231,52 +225,4 @@ public sealed interface WhyUnread {
 
     /** A construct the reading of what a body's conditions mean did not meet. */
     record NotMetByTheReading() implements WhyUnread {}
-
-    /**
-     * A part that follows from what the language and the library already say, through a step this
-     * reading does not take yet.
-     */
-    record NotYetComposed(Step step) implements WhyUnread {
-
-        public NotYetComposed {
-            Objects.requireNonNull(step, "an obligation names the step it is owed");
-        }
-
-        /**
-         * The steps owed. One goes when the rule that takes it is written, so the set says what is
-         * left to write and nothing else.
-         */
-        public enum Step {
-
-            /**
-             * A value chosen by cases where the choice is not a side of a comparison of numbers:
-             * inside arithmetic, where what each case answers has to be carried out through what is
-             * computed from it, or compared as a value no carrier counts — two truths neither
-             * written out, two strings.
-             */
-            A_CHOICE_BY_CASES,
-
-            /**
-             * A comparison over one of several values the source wrote out, each of which the name
-             * stands for on some application, where which value an application hands cannot be said
-             * where the condition is read: one naming a binding of the place it was written, and
-             * standing at no position.
-             */
-            VALUES_WRITTEN_OUT,
-
-            /**
-             * What a dependency answers when asked about a value the model computes from what a row
-             * controls. A row asks it the same thing however it is spelled, so the answer is one the
-             * row stands in; naming it takes naming the value it was asked about, which only a
-             * subject or a number written out is named by so far.
-             */
-            A_DEPENDENCY_ASKED_ABOUT_A_COMPUTED_VALUE,
-
-            /** What a behavior called by name answers, which its body computes. */
-            A_BEHAVIOR_CALLED_BY_NAME,
-
-            /** A closure handed to an operation as a name rather than written where it is handed. */
-            A_CLOSURE_BY_NAME
-        }
-    }
 }

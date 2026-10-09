@@ -183,6 +183,11 @@ record DecisionComparison(InputDomain inputs, RuleReadingSource rules, DecisionS
             }
 
             @Override
+            public AffineForms.ReadThrough<InputReads> taken(Core node, InputReads at) {
+                return NameAnswers.taken(node, at);
+            }
+
+            @Override
             public boolean readsThrough(Core.FieldAccess fa, InputReads at) {
                 boolean stands = switch (at.pathOf(fa.target(), rules.newtypes())) {
                     case PathResolution.At _ -> true;

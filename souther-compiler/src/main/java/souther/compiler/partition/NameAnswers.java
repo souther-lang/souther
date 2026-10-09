@@ -51,6 +51,13 @@ final class NameAnswers {
         return each;
     }
 
+    /** What the reading {@code at} takes {@code node} as, or null where it takes it as nothing
+     *  else ({@link InputReads#taken}). */
+    static AffineForms.ReadThrough<InputReads> taken(Core node, InputReads at) {
+        Denotation as = at.taken(node);
+        return as == null ? null : asked(as);
+    }
+
     /** A value and what to read it in, as the walks spell that pair. */
     private static AffineForms.ReadThrough<InputReads> asked(Denotation stands) {
         return new AffineForms.ReadThrough<>(stands.value(), stands.at());

@@ -148,9 +148,12 @@ class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
                 "the containment is unread at the list, and the answer is filed nowhere");
     }
 
-    /** A behavior nothing stands in is not a dependency, and a fork on its answer is unread. */
+    /**
+     * A behavior nothing stands in is not a dependency: a fork on its answer is read through its
+     * body, where the call stands, and comes to the truth of what the call handed it.
+     */
     @Test
-    void aCallNoRowStandsInIsStillUnread() {
+    void aCallNoRowStandsInIsReadThroughTheBodyItCalls() {
         AdequacyReport report = measured("""
                 module probe.d
                 behavior known : (flag: Bool) -> Bool
@@ -165,7 +168,7 @@ class AConditionOnWhatADependencyAnsweredIsTheDecisionTablesTest {
                     | "unknown" : (false) -> 0
                 """);
 
-        assertEquals(Set.of("flag"), notReadAt(report));
+        assertEquals(Set.of(), notReadAt(report));
     }
 
     /**
