@@ -3,11 +3,13 @@ package souther.compiler.inputs;
 import souther.compiler.check.CalledBody;
 import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.Location;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
@@ -125,17 +127,30 @@ public final class InputReads {
     }
 
     /**
+     * What a reading takes a node as: another value, or a number of the arguments the node, a call,
+     * was given.
+     */
+    private sealed interface TakenAs {
+
+        /** Another value, read where it stands. */
+        record AValue(Denotation value) implements TakenAs {}
+
+        /** A form of the arguments of the call the node is, read where the call stands. */
+        record AFormOfItsArguments(LinearForm<DeclaredArgument> form) implements TakenAs {}
+    }
+
+    /**
      * That a reading here takes {@code node} as {@code as}, and what {@code older} says before it:
      * a choice as the answer of the arm the reading is on, a call of a behavior as the body it
-     * enters.
+     * enters, a call of an operation defined by cases as what the case the reading is on answers.
      *
      * <p>The node, and not one equal to it. A value is one value however often it is read, so two
      * reads of the node are taken alike; two written alike are two values, each taken its own way.
      */
-    private record Taken(Core node, Denotation as, Taken older) {
+    private record Taken(Core node, TakenAs as, Taken older) {
 
         /** What {@code e} is taken as, or null where it is not taken. */
-        Denotation of(Core e) {
+        TakenAs of(Core e) {
             for (Taken at = this; at != null; at = at.older) {
                 if (at.node == e) {
                     return at.as;
@@ -447,16 +462,46 @@ public final class InputReads {
      * that value, wherever it is reached from — through a name, under an access, as an argument.
      */
     public InputReads taking(Core node, Denotation as, int readings) {
+        return taking(node, new TakenAs.AValue(as), readings);
+    }
+
+    /**
+     * The same, taking the call {@code node} as {@code form} of the arguments it was given: a
+     * case of the definition an operation is written in, answering arithmetic over them.
+     */
+    public InputReads takingAForm(Core node, LinearForm<DeclaredArgument> form, int readings) {
+        return taking(node, new TakenAs.AFormOfItsArguments(form), readings);
+    }
+
+    private InputReads taking(Core node, TakenAs as, int readings) {
         return new InputReads(names, alternatives, declared, dependencies,
                 applied.as(applied.readings() * readings,
                         new Taken(Core.withoutStanding(node), as, applied.taken())));
     }
 
     /**
-     * What {@code e} is taken as on the reading here ({@link #taking}), or null where it is not.
+     * What {@code e} is taken as on the reading here ({@link #taking}), where that is another
+     * value — or null where it is not taken, or taken as a form of its arguments.
      */
     public Denotation taken(Core e) {
-        return applied.taken() == null ? null : applied.taken().of(Core.withoutStanding(e));
+        return applied.taken() == null
+                || !(applied.taken().of(Core.withoutStanding(e)) instanceof TakenAs.AValue(var as))
+                ? null : as;
+    }
+
+    /**
+     * The form of its arguments the call {@code e} is taken as on the reading here
+     * ({@link #takingAForm}), or null where it is not taken as one.
+     */
+    public LinearForm<DeclaredArgument> takenAsAForm(Core e) {
+        return applied.taken() == null
+                || !(applied.taken().of(Core.withoutStanding(e))
+                        instanceof TakenAs.AFormOfItsArguments(var form)) ? null : form;
+    }
+
+    /** Whether {@code e} is taken as anything on the reading here, a value or a form. */
+    public boolean isTaken(Core e) {
+        return applied.taken() != null && applied.taken().of(Core.withoutStanding(e)) != null;
     }
 
     /**

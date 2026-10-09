@@ -145,6 +145,16 @@ public final class AffineForms {
         }
 
         /**
+         * The form of its arguments the environment takes the call {@code node} as — what the
+         * case of an operation's definition a reading is on answers — or null where it takes it as
+         * none. The call is then that arithmetic over what it was given, as an operation the
+         * library says answers a form of its arguments is.
+         */
+        default LinearForm<DeclaredArgument> takenAsAForm(Core node, E at) {
+            return null;
+        }
+
+        /**
          * Whether a field access is a newtype's value read off something that is not a place.
          *
          * <p>What it wraps is what it is, so such a read is the target itself. Whether the target is
@@ -548,6 +558,11 @@ public final class AffineForms {
         }
 
         @Override
+        public LinearForm<DeclaredArgument> takenAsAForm(Core node, E at) {
+            return of.takenAsAForm(node, at);
+        }
+
+        @Override
         public boolean readsThrough(Core.FieldAccess fa, E at) {
             return of.readsThrough(fa, at);
         }
@@ -851,10 +866,14 @@ public final class AffineForms {
             // operators, because that is what such an operation is — read at either caller's leaf
             // instead, one of the two would have it and a statement the model makes would be
             // measured by one reader and not the other.
+            // And a call the environment takes as what a case of its operation's definition
+            // answers is that arithmetic, on the reading that is on the case.
+            case Core.PreservedCall _ when reading.takenAsAForm(e, at) != null ->
+                    answered(e, reading.takenAsAForm(e, at), at, reading, following, stopped);
             case Core.PreservedCall _ when formSaidOf(e) != null ->
-                    answered(e, at, reading, following, stopped);
+                    answered(e, formSaidOf(e), at, reading, following, stopped);
             case Core.Call _ when formSaidOf(e) != null ->
-                    answered(e, at, reading, following, stopped);
+                    answered(e, formSaidOf(e), at, reading, following, stopped);
             // A newtype's construction is the value it wraps. Whether the name is one is asked of
             // the reading of the position, which says the names a value is written under: a
             // newtype puts one there and a data of one field does not — that one wraps its value
@@ -1024,17 +1043,18 @@ public final class AffineForms {
     }
 
     /**
-     * {@code call} read as the form the library says it answers, or null where one of the arguments
-     * it is written over does not compose.
+     * {@code call} read as {@code says}, the form of its arguments the library says it answers —
+     * always, or in the case a reading is on — or null where one of the arguments it is written
+     * over does not compose.
      *
      * <p>Over what each argument is counted as, which is the form that argument itself reads as
      * here. So a shift of a position by a written number and a shift of one position by another are
      * one rule with two readings, and neither is a case anybody wrote.
      */
-    private static <A, E> LinearForm<A> answered(Core call, E at, Reading<A, E> reading,
+    private static <A, E> LinearForm<A> answered(Core call, LinearForm<DeclaredArgument> says,
+                                                 E at, Reading<A, E> reading,
                                                  Walk<A, E> following,
                                                  Stop<A, E> stopped) {
-        LinearForm<DeclaredArgument> says = formSaidOf(call);
         java.util.List<Core> args = Terms.argsOf(call);
         // The expansion's own stops, kept off the walk's. What is inside a declared form is not
         // what an author wrote: the arguments stand where they stand because the library says the

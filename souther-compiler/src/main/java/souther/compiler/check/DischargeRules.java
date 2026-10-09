@@ -224,8 +224,22 @@ final class DischargeRules {
         return facts().boundsOnTheResult();
     }
 
-    static Set<ValueName> choosingOperations() {
+    /** The operations whose definition is written in cases over the values they were given. */
+    static Set<ValueName> definedByCases() {
         return facts().isDefinedByCases();
+    }
+
+    /** Those of them whose cases are a choice between the values a call was given
+     *  ({@link DefinitionCase#choosesAnArgument}), which a reading takes as the choice it is. */
+    static Set<ValueName> choosingOperations() {
+        Set<ValueName> out = new LinkedHashSet<>();
+        for (ValueName operation : definedByCases()) {
+            if (facts().isDefinedByCases(operation).stream()
+                    .allMatch(DefinitionCase::choosesAnArgument)) {
+                out.add(operation);
+            }
+        }
+        return out;
     }
 
     /** Those of them the choosing table has, by name, for the test that holds each case to a

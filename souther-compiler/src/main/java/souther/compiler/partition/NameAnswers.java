@@ -2,11 +2,13 @@ package souther.compiler.partition;
 
 import souther.compiler.check.AffineForms;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.ReadMeaning;
+import souther.compiler.numeric.LinearForm;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -56,6 +58,12 @@ final class NameAnswers {
     static AffineForms.ReadThrough<InputReads> taken(Core node, InputReads at) {
         Denotation as = at.taken(node);
         return as == null ? null : asked(as);
+    }
+
+    /** The form of its arguments the reading {@code at} takes the call {@code node} as, or null
+     *  where it takes it as none ({@link InputReads#takenAsAForm}). */
+    static LinearForm<DeclaredArgument> takenAsAForm(Core node, InputReads at) {
+        return at.takenAsAForm(node);
     }
 
     /** A value and what to read it in, as the walks spell that pair. */

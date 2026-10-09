@@ -239,14 +239,24 @@ public record Choice(Kind kind, List<Arm> arms) {
         if (defined.isEmpty()) {
             return null;
         }
+        // An arm is one of the values the call was given, chosen by how two of them stand. A case
+        // answering arithmetic over them, or reached by one standing against a constant, is no
+        // value written at the call, and an operation written in such cases is no choice between
+        // its arguments: it is read case by case where it is read at all.
+        if (!defined.stream().allMatch(DefinitionCase::choosesAnArgument)) {
+            return null;
+        }
         List<Arm> arms = new ArrayList<>(defined.size());
         for (DefinitionCase<DeclaredArgument> one : defined) {
             List<ArgumentRelation> relations = new ArrayList<>(one.given().size());
             for (ArgumentsStand<DeclaredArgument> stands : one.given()) {
-                relations.add(new ArgumentRelation(CallArguments.of(stands.left(), call), stands.rel(),
-                        CallArguments.of(stands.right(), call)));
+                relations.add(new ArgumentRelation(
+                        CallArguments.of(ArgumentsStand.theArgument(stands.left()), call),
+                        stands.rel(),
+                        CallArguments.of(ArgumentsStand.theArgument(stands.right()), call)));
             }
-            arms.add(new Arm(CallArguments.of(one.answers(), call), new Decides.ByArgumentRelations(relations)));
+            arms.add(new Arm(CallArguments.of(ArgumentsStand.theArgument(one.answers()), call),
+                    new Decides.ByArgumentRelations(relations)));
         }
         return new Choice(Kind.THE_ARGUMENTS, arms);
     }

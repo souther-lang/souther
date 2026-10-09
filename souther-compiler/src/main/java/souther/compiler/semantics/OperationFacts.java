@@ -671,7 +671,16 @@ public final class OperationFacts {
             about("Decimal", "clamp", answers(at(1), stands(at(2), Rel.GE, at(0)),
                     stands(at(2), Rel.GT, at(1)))),
             about("Decimal", "clamp", answers(at(2), stands(at(2), Rel.GE, at(0)),
-                    stands(at(2), Rel.LE, at(1)))));
+                    stands(at(2), Rel.LE, at(1)))),
+            // And the ones that answer arithmetic over what they were given, case by case: the
+            // magnitude is the value turned round below nought and the value itself from there.
+            about("Int", "abs", answers(LinearForm.weighing(at(0), ExactRatio.of(-1)),
+                    standsAgainst(at(0), Rel.LT, 0))),
+            about("Int", "abs", answers(LinearForm.atom(at(0)), standsAgainst(at(0), Rel.GE, 0))),
+            about("Decimal", "abs", answers(LinearForm.weighing(at(0), ExactRatio.of(-1)),
+                    standsAgainst(at(0), Rel.LT, 0))),
+            about("Decimal", "abs", answers(LinearForm.atom(at(0)),
+                    standsAgainst(at(0), Rel.GE, 0))));
     }
 
     /** How many whole minutes the first date-time and the last stand apart, which is as far apart as
@@ -707,16 +716,29 @@ public final class OperationFacts {
     @SafeVarargs
     private static OperationFact answers(ArgumentRef argument,
                                          ArgumentsStand<ArgumentRef>... given) {
+        return answers(LinearForm.atom(argument), given);
+    }
+
+    @SafeVarargs
+    private static OperationFact answers(LinearForm<ArgumentRef> form,
+                                         ArgumentsStand<ArgumentRef>... given) {
         List<ArgumentsStand<ArgumentRef>> reached = new ArrayList<>(given.length);
         for (ArgumentsStand<ArgumentRef> stands : given) {
             reached.add(stands);
         }
-        return new OperationFact.IsDefinedByCases(new DefinitionCase<>(argument, reached));
+        return new OperationFact.IsDefinedByCases(new DefinitionCase<>(form, reached));
     }
 
     private static ArgumentsStand<ArgumentRef> stands(ArgumentRef left, Rel rel,
                                                       ArgumentRef right) {
-        return new ArgumentsStand<>(left, rel, right);
+        return ArgumentsStand.of(left, rel, right);
+    }
+
+    /** {@code argument rel constant}. */
+    private static ArgumentsStand<ArgumentRef> standsAgainst(ArgumentRef argument, Rel rel,
+                                                             long constant) {
+        return new ArgumentsStand<>(LinearForm.atom(argument), rel,
+                LinearForm.constant(ExactRatio.of(constant)));
     }
 
     private static OperationFact noSmallerThan(ArgumentRef container) {

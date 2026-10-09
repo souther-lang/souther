@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Location;
@@ -314,6 +315,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             @Override
             public AffineForms.ReadThrough<InputReads> taken(Core node, InputReads at) {
                 return NameAnswers.taken(node, at);
+            }
+
+            @Override
+            public LinearForm<DeclaredArgument> takenAsAForm(Core node, InputReads at) {
+                return NameAnswers.takenAsAForm(node, at);
             }
 
             @Override

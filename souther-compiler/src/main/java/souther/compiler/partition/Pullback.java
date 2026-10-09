@@ -6,6 +6,7 @@ import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.CalledBody;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.BoundOperationFacts;
+import souther.compiler.check.CallArguments;
 import souther.compiler.check.Choice;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.ClausesInOrder;
@@ -46,7 +47,9 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.ArgumentsStand;
 import souther.compiler.semantics.ConditionJoin;
+import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
@@ -1915,6 +1918,11 @@ final class Pullback {
             }
 
             @Override
+            public LinearForm<DeclaredArgument> takenAsAForm(Core node, InputReads at) {
+                return NameAnswers.takenAsAForm(node, at);
+            }
+
+            @Override
             public boolean readsThrough(Core.FieldAccess fa, InputReads at) {
                 // A field of a value that stands nowhere is arithmetic's to walk into, as it is for
                 // the reading of the input's own numbers ({@link AffineReading}).
@@ -2111,6 +2119,15 @@ final class Pullback {
          * application hands it one: {@code values} are what it can be handed.
          */
         record OneOfTheValues(Core.Read name, List<Denotation> values) implements Inside {}
+
+        /**
+         * A call of an operation the library defines in {@code cases} that are no choice between
+         * the values it was given — arithmetic over them, reached by how they stand against a
+         * constant — read where the call stands, {@code at}.
+         */
+        record ACallDefinedByCases(Core call, ValueName.Stdlib operation,
+                                   List<DefinitionCase<DeclaredArgument>> cases, InputReads at)
+                implements Inside {}
     }
 
     /**
@@ -2150,7 +2167,84 @@ final class Pullback {
                 }
                 yield new Derivation.OnEachValueWrittenOut(each);
             }
+            // Once for each case, with the call standing for the arithmetic the case answers, where
+            // the arguments stand as the case says and as none before it does — which is what the
+            // library proved its body answers ({@link DefinitionCase}).
+            case Inside.ACallDefinedByCases(Core call, ValueName.Stdlib operation,
+                                            List<DefinitionCase<DeclaredArgument>> cases,
+                                            InputReads where) -> {
+                if (reads.readings() * cases.size() > READINGS.maximum()) {
+                    yield partOf(at, new Derivation.Stopped(
+                            new WhyUnread.MoreReadingsThanAreMade(), fixed));
+                }
+                List<Derivation.MatchArms.Arm> each = new ArrayList<>();
+                for (DefinitionCase<DeclaredArgument> one : cases) {
+                    each.add(new Derivation.MatchArms.Arm(reachedIn(call, one, where),
+                            again.apply(on -> on.takingAForm(call, one.answers(),
+                                    cases.size()))));
+                }
+                yield new Derivation.AnOperationsCases(operation, each);
+            }
         };
+    }
+
+    /**
+     * The arguments of {@code call} standing as {@code one}, a case of the definition the library
+     * writes its operation in, says they do for it to be reached — each relation read as the
+     * arithmetic over the call's arguments it is, where the call stands.
+     */
+    private Derivation reachedIn(Core call, DefinitionCase<DeclaredArgument> one,
+                                 InputReads where) {
+        Derivation reached = null;
+        for (ArgumentsStand<DeclaredArgument> stands : one.given()) {
+            Derivation relation = overTheArguments(call, stands, where);
+            reached = reached == null ? relation
+                    : new Derivation.Joined(ConditionJoin.BOTH, reached, relation);
+        }
+        if (reached == null) {
+            // A case reached whatever the arguments are is no case of a choice, and the cases after
+            // it would never be reached; the library writes none.
+            throw new IllegalStateException("a case of a library operation is reached by no"
+                    + " standing of its arguments: " + one);
+        }
+        return reached;
+    }
+
+    /** {@code stands}, over the numbers the arguments of {@code call} read as where it stands. */
+    private Derivation overTheArguments(Core call, ArgumentsStand<DeclaredArgument> stands,
+                                        InputReads where) {
+        LinearForm<DeclaredArgument> apart;
+        switch (stands.left().minus(stands.right())) {
+            case ExactAnswer.Held<LinearForm<DeclaredArgument>>(var held) -> apart = held;
+            case ExactAnswer.Unheld<LinearForm<DeclaredArgument>>(UnheldNumber why) -> {
+                return new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why), false);
+            }
+        }
+        AnOperationApplied applied = AnOperationApplied.of(call);
+        LinearForm<Quantity> form = LinearForm.constant(apart.constant());
+        for (Map.Entry<DeclaredArgument, ExactRatio> each : apart.coefs().entrySet()) {
+            int position = CallArguments.positionOf(each.getKey(), applied.operation());
+            switch (AffineForms.outcome(applied.args().get(position), where, quantities())) {
+                case AffineForms.Outcome.Composed<Quantity, InputReads>(var argument) -> {
+                    LinearForm<Quantity> before = form;
+                    switch (argument.times(each.getValue()).flatMap(before::plus)) {
+                        case ExactAnswer.Held<LinearForm<Quantity>>(var held) -> form = held;
+                        case ExactAnswer.Unheld<LinearForm<Quantity>>(UnheldNumber why) -> {
+                            return new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why),
+                                    false);
+                        }
+                    }
+                }
+                case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
+                    return new Derivation.Stopped(noFormOf(stopped), false);
+                }
+            }
+        }
+        if (form.coefs().isEmpty()) {
+            return new Derivation.ACutThatCutsNothing(
+                    stands.rel().holds(form.constant().signum()), Set.of());
+        }
+        return aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, form, stands.rel());
     }
 
     /**
@@ -2167,6 +2261,8 @@ final class Pullback {
                     case Inside.AChoice(Denotation chosen) ->
                             number.at().taken(chosen.value()) != null;
                     case Inside.ACall(Core call, var _, var _) -> number.at().taken(call) != null;
+                    case Inside.ACallDefinedByCases(Core call, var _, var _, var _) ->
+                            number.at().isTaken(call);
                     // A name an application handed a value is that one value, and stops nothing.
                     case Inside.OneOfTheValues _ -> false;
                 };
@@ -2236,7 +2332,28 @@ final class Pullback {
                 found[0] = aWayInto(new Denotation(child, stands.at()), met);
             }
         });
-        return found[0];
+        // A call defined by cases is gone into once what it was handed reads as one number on
+        // each reading, since its cases are relations over those numbers.
+        return found[0] != null ? found[0] : definedByCases(e, stands.at());
+    }
+
+    /**
+     * {@code e}, where it is a call of an operation the library defines in cases that are no choice
+     * between the values it was given ({@link Inside.ACallDefinedByCases}), or null.
+     *
+     * <p>Not one whose cases are such a choice: those are read as the choice it is
+     * ({@link #chosenAt}), and read here as well they would be read twice.
+     */
+    private Inside.ACallDefinedByCases definedByCases(Core e, InputReads at) {
+        if (!(e instanceof Core.PreservedCall call) || Choice.of(call) != null
+                || !(AnOperationApplied.of(call) instanceof AnOperationApplied applied
+                        && applied.operation() instanceof ValueName.Stdlib operation)) {
+            return null;
+        }
+        List<DefinitionCase<DeclaredArgument>> cases =
+                DefaultBoundOperationFacts.get().isDefinedByCases(operation);
+        return cases.isEmpty() ? null
+                : new Inside.ACallDefinedByCases(call, operation, cases, at);
     }
 
     /**

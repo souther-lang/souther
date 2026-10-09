@@ -69,20 +69,20 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
      *
      * <p>{@code Int.abs} has a body, and that body is not what the reading of rules looks at. The
      * tree such a reading is made over keeps the operation standing, so what the author wrote —
-     * a comparison against what an operation answered — is what is there to be read, and the word
-     * is the same word every other operation gets.
+     * a comparison against what an operation answered — is what is there to be read, through what
+     * the library states of the operation, as every other operation is.
      *
      * <p><b>Which is a decision about who owns a partition's contributions, taken here.</b> The
      * comparisons inside {@code Int.abs} are that operation's implementation, and a caller does not
      * owe rows for them: a line at nought came out of the body forking there, and the model that
      * called it never said anything about nought. So the caller's rule is read for what the caller
-     * wrote, and what {@code abs} does to the values is a fact about the operation — one this
-     * compiler may learn to state, and until it does, this is what the reading comes to.
+     * wrote, and what {@code abs} does to the values is a fact about the operation — the cases the
+     * library states of it, proved of its body — and with it the rule is read to the end and
+     * nothing stopped it.
      */
     @Test
     void anOperationWrittenInThisLanguageIsAnOperationLikeAnyOther() {
-        assertEquals(List.of(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE),
-                whyAt(guard("a: Int", "Int.abs(a) > 10"), "a"));
+        assertEquals(List.of(), whyAt(guard("a: Int", "Int.abs(a) > 10"), "a"));
     }
 
     /**

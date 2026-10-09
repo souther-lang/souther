@@ -109,15 +109,30 @@ public final class BoundOperationFacts {
         relations = projected(BoundOperationFact.IsRelated.class, BoundOperationFact.IsRelated::holds);
         Settling settling = settle(awaiting);
         settled = settling.settled();
-        // One the body does not prove is an obligation, held apart, and no reader takes it.
+        // One the body does not prove is an obligation, held apart, and no reader takes it. The
+        // cases a definition is written in stand or fall together: a reader takes them as every
+        // way the operation answers, so they are filed where every one of them is proved and some
+        // one of them is reached however the arguments stand ({@link DefinitionCase#coverEveryWay}),
+        // and otherwise none of them is.
         List<BoundOperationFact> unproved = new ArrayList<>();
+        Map<ValueName, List<BoundOperationFact.IsDefinedByCases>> definitions =
+                new LinkedHashMap<>();
         for (BoundOperationFact fact : awaiting) {
-            if (settling.proving().proves(fact)) {
+            if (fact instanceof BoundOperationFact.IsDefinedByCases one) {
+                definitions.computeIfAbsent(one.operation().operation(), _ -> new ArrayList<>())
+                        .add(one);
+            } else if (settling.proving().proves(fact)) {
                 file(fact);
             } else {
                 unproved.add(fact);
             }
         }
+        definitions.forEach((operation, cases) -> {
+            boolean defined = cases.stream().allMatch(settling.proving()::proves)
+                    && DefinitionCase.coverEveryWay(cases.stream()
+                            .map(BoundOperationFact.IsDefinedByCases::one).toList());
+            cases.forEach(defined ? this::file : unproved::add);
+        });
         notProvedOfTheirBodies = List.copyOf(unproved);
         // What each query over a family answers with, projected once from what was filed.
         noSmallerThan = projected(BoundOperationFact.ResultIsNoSmallerThan.class,

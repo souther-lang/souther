@@ -426,19 +426,27 @@ final class OperationFactBinder {
                 declaredSignature(stdlib, shift.measure()).declaring(), moved, amount, shift.per());
     }
 
-    /** As {@link #holdToTheDeclaration}, for the arguments a case names: the one it answers, and
-     *  the two sides of each condition it is reached under. */
+    /** As {@link #holdToTheDeclaration}, for the arguments a case names: the ones the number it
+     *  answers is written in, and the ones each side of each condition it is reached under is. */
     private static DefinitionCase<DeclaredArgument> holdCase(CompleteSignature declaration,
                                                              DefinitionCase<ArgumentRef> one) {
         holdTheResultToTheDeclaration(declaration, TypeRequirement.NUMBER,
                 "what a case of the definition answers");
-        DeclaredArgument answers = holdCaseArgument(declaration, one.answers());
         List<ArgumentsStand<DeclaredArgument>> given = new ArrayList<>();
         for (ArgumentsStand<ArgumentRef> stands : one.given()) {
-            given.add(new ArgumentsStand<>(holdCaseArgument(declaration, stands.left()),
-                    stands.rel(), holdCaseArgument(declaration, stands.right())));
+            given.add(new ArgumentsStand<>(holdCaseForm(declaration, stands.left()),
+                    stands.rel(), holdCaseForm(declaration, stands.right())));
         }
-        return new DefinitionCase<>(answers, given);
+        return new DefinitionCase<>(holdCaseForm(declaration, one.answers()), given);
+    }
+
+    /** {@code form}, each argument it is written in held to the declaration. */
+    private static LinearForm<DeclaredArgument> holdCaseForm(CompleteSignature declaration,
+                                                             LinearForm<ArgumentRef> form) {
+        Map<DeclaredArgument, ExactRatio> held = new LinkedHashMap<>();
+        form.coefs().forEach((named, weight) ->
+                held.put(holdCaseArgument(declaration, named), weight));
+        return new LinearForm<>(form.constant(), held);
     }
 
     private static DeclaredArgument holdCaseArgument(CompleteSignature declaration,

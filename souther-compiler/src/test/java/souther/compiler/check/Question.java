@@ -577,11 +577,12 @@ enum Question {
     },
 
     /**
-     * Whether it answers one of the values it was given, and in which cases
-     * ({@link DischargeRules#chosenBy}). Asked of an operation answering a number from a number: what
-     * such an operation answers may be one of its arguments, decided by the arguments.
+     * Whether what it answers is written case by case over the values it was given, and in which
+     * cases ({@link DischargeRules#chosenBy}). Asked of an operation answering a number from a
+     * number: what such an operation answers may be one of its arguments, or arithmetic over them,
+     * decided by the arguments.
      */
-    CHOICE("whether it answers one of its arguments, and in which cases") {
+    CHOICE("whether it answers its arguments case by case, and in which cases") {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
             return NumericAnswers.isANumber(signature.result())
@@ -590,26 +591,26 @@ enum Question {
 
         @Override
         boolean answeredFor(Stdlib stdlib, ValueName operation) {
-            return DischargeRules.choosingOperations().contains(operation);
+            return DischargeRules.definedByCases().contains(operation);
         }
 
         @Override
         Set<ValueName> answeredOperations() {
-            return DischargeRules.choosingOperations();
+            return DischargeRules.definedByCases();
         }
 
         @Override
         Set<ValueName> deliberatelyUnanswered() {
-            // They compute a new number rather than answering one they were given: what `a + b`
-            // answers is neither `a` nor `b`, `compare` answers a sign, `floorMod` a remainder,
-            // `abs` a distance, `toInt` a whole number, `round` and `Rational.toDecimal` a value at
-            // another scale. `Decimal.fromInt` answers the number it was given unconditionally,
-            // which is a statement of its own rather than a case.
+            // They compute a new number in one way rather than case by case: what `a + b` answers
+            // is a sum of the two, `compare` answers a sign, `floorMod` a remainder, `toInt` a
+            // whole number, `round` and `Rational.toDecimal` a value at another scale.
+            // `Decimal.fromInt` answers the number it was given unconditionally, which is a
+            // statement of its own rather than a case.
             return Set.of(op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
                     op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"),
                     op("Int", "compare"), op("Decimal", "compare"), op("Int", "floorMod"),
-                    op("Int", "abs"), op("Decimal", "abs"), op("Decimal", "toInt"),
-                    op("Decimal", "round"), op("Decimal", "fromInt"), op("Rational", "toDecimal"));
+                    op("Decimal", "toInt"), op("Decimal", "round"), op("Decimal", "fromInt"),
+                    op("Rational", "toDecimal"));
         }
     },
 

@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -34,6 +35,7 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -415,23 +417,35 @@ final class ProvingTheLibrary {
                 instanceof LibraryProver.Outcome.Proved;
     }
 
-    /** Whether {@code operation}'s body answers the argument {@code one} names wherever its
-     *  arguments stand as the case says. */
+    /** Whether {@code operation}'s body answers the number {@code one} says, of its arguments,
+     *  wherever they stand as the case says. */
     private boolean answersInTheCase(ValueName.Stdlib.Operation operation,
                                      DefinitionCase<DeclaredArgument> one) {
         List<LawProposition<Integer>> given = new ArrayList<>();
         for (ArgumentsStand<DeclaredArgument> stand : one.given()) {
-            given.add(new LawProposition.Compared<>(
-                    LinearForm.difference(numberAt(stand.left()), numberAt(stand.right())),
-                    stand.rel()));
+            switch (numbersOf(stand.left()).minus(numbersOf(stand.right()))) {
+                case ExactAnswer.Held<LinearForm<LawNumber<Integer>>>(var held) ->
+                        given.add(new LawProposition.Compared<>(held, stand.rel()));
+                // A condition with no number is no condition the body can be held to.
+                case ExactAnswer.Unheld<LinearForm<LawNumber<Integer>>> _ -> {
+                    return false;
+                }
+            }
         }
         LawProposition<Integer> where = switch (given.size()) {
             case 0 -> new LawProposition.Always<>(true);
             case 1 -> given.getFirst();
             default -> new LawProposition.All<>(given);
         };
-        return prover.answers(operation, Rel.EQ, LinearForm.atom(numberAt(one.answers())), where)
+        return prover.answers(operation, Rel.EQ, numbersOf(one.answers()), where)
                 instanceof LibraryProver.Outcome.Proved;
+    }
+
+    /** {@code form}, each argument it is written in as the number at its place. */
+    private static LinearForm<LawNumber<Integer>> numbersOf(LinearForm<DeclaredArgument> form) {
+        Map<LawNumber<Integer>, ExactRatio> numbers = new LinkedHashMap<>();
+        form.coefs().forEach((argument, weight) -> numbers.put(numberAt(argument), weight));
+        return new LinearForm<>(form.constant(), numbers);
     }
 
     private static LawNumber<Integer> numberAt(DeclaredArgument argument) {
