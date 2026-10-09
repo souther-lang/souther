@@ -780,15 +780,14 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         boolean holdAt(Level level);
 
         /**
-         * Whether a value stands strictly on the {@code side} of {@code level} — some value past
-         * it, and not the level itself.
+         * Whether a value stands anywhere on the {@code side} of {@code level}: from the level on,
+         * where {@code including} it, and strictly past it where not.
          *
-         * <p>What is asked beside a line on an order that names no value beside it: a decimal below
-         * a line has every value up to it and no greatest one, so there is no one value to ask
-         * {@link #holdAt} about, and asking it of the line asks about the line and not about a
-         * side.
+         * <p>What is asked of one side of a line, which is every value on that side and not the
+         * nearest of them. The nearest may be one the rules leave out — a position held away from
+         * five still has four below a line at five — and a decimal has no nearest value at all.
          */
-        boolean holdBeyond(Level level, Towards side);
+        boolean holdOnSide(Level level, Towards side, boolean including);
 
         /**
          * The values a range of the quantity leaves, as far as a range can say: how far it runs.
@@ -812,9 +811,9 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                 }
 
                 // Over-stated the way {@link #holdAt} is: a range that runs as far as the level is
-                // taken to hold values past it.
+                // taken to hold values on either side of it.
                 @Override
-                public boolean holdBeyond(Level level, Towards side) {
+                public boolean holdOnSide(Level level, Towards side, boolean including) {
                     return extendTo(level);
                 }
             };
@@ -834,14 +833,15 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
     }
 
     /**
-     * Whether a row stands on the {@code side} of the line, and not at the line.
+     * Whether a row stands anywhere on the {@code side} of the line, and not at the line.
      *
-     * <p>Where the order names a value beside the line on that side, a row at that value — asked as
-     * whether one stands there and not whether the values run to it, since a run that stops
-     * strictly short of a value reaches its place and holds no row there. Where it names none, a
-     * row anywhere past the line on that side: a decimal has no nearest value, and the line itself
-     * is on neither side of itself. Asked of the seam's own answer and not of what the seam leaves,
-     * which on such an order is the line.
+     * <p>Every value on that side, and not the nearest one: the nearest may be one the rules leave
+     * out, and the side is still there past it. Said in the two ways the order allows. Where it
+     * names a value beside the line, the side is that value and everything past it — the values a
+     * row can hold there, with nothing between the value and the line for a search to find. Where
+     * it names none, as a decimal does, the side is everything strictly past the line, and the line
+     * itself is on neither side of itself. Asked of the seam's own answer and not of what the seam
+     * leaves, which on such an order is the line.
      *
      * <p>A seam that was not worked out is no proof that nothing stands there.
      */
@@ -852,11 +852,11 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         }
         Level beside = side == Towards.BELOW ? seam.below() : seam.above();
         if (beside == null) {
-            return values.holdBeyond(cut, side);
+            return values.holdOnSide(cut, side, false);
         }
         return switch (seam.at().asWritten(beside)) {
             case ExactAnswer.Unheld<Level> _ -> true;
-            case ExactAnswer.Held<Level>(Level written) -> values.holdAt(written);
+            case ExactAnswer.Held<Level>(Level written) -> values.holdOnSide(written, side, true);
         };
     }
 

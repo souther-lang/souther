@@ -146,11 +146,48 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
             assertTrue(reasonsAt(report, "a").contains("rule_never_turns_on_this_line"),
                     () -> kind[0] + ": the line through a is never crossed: "
                             + reasonsAt(report, "a"));
-            assertTrue(obligationsOfParts(report).stream().noneMatch(each ->
-                            each.path("readings").get(0).path("axis").asString()
-                                    .equals("pick/a")),
-                    () -> kind[0] + ": and no row is owed at it");
+            assertEquals(Set.of("pick/b"), axesOfParts(report),
+                    () -> kind[0] + ": the line through b is owed rows, and the one through a"
+                            + " is not");
         }
+    }
+
+    /**
+     * A side of a line is every value on it, and a value the rules leave out next to the line does
+     * not empty the side.
+     *
+     * <p>{@code a} is anything but five, so {@code max(a, b) <= 5} still turns where {@code a} goes
+     * from four to six: the nearest whole number below the line is left out and four is not. On
+     * decimals there is no nearest value to leave out, and the sides are there either way.
+     */
+    @Test
+    void aValueLeftOutBesideTheLineLeavesTheRestOfThatSide() {
+        for (String[] kind : new String[][] {{"Int", "5", "Int.max"},
+                {"Decimal", "5.0m", "Decimal.max"}}) {
+            JsonNode report = reportOfSource(("""
+                    module probe
+
+                    data Low
+                    data High
+                    data ButFive = KIND
+                        invariant value /= FIVE
+
+                    behavior pick : (a: ButFive, b: KIND) -> Low | High
+                    let pick (a, b) = if MAX(a.value, b) <= FIVE then High else Low
+                    """).replace("KIND", kind[0]).replace("FIVE", kind[1])
+                    .replace("MAX", kind[2]));
+            assertEquals(Set.of("pick/a", "pick/b"), axesOfParts(report),
+                    () -> kind[0] + ": a line through each: " + reasonsAt(report, "a"));
+        }
+    }
+
+    /** The axes the lines of a statement of several are owed rows on. */
+    private static Set<String> axesOfParts(JsonNode report) {
+        Set<String> axes = new TreeSet<>();
+        for (JsonNode obligation : obligationsOfParts(report)) {
+            axes.add(obligation.path("readings").get(0).path("axis").asString());
+        }
+        return axes;
     }
 
     /** And where decimals do run past the line on both sides, the line is crossed and kept. */
@@ -190,7 +227,7 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
             }
 
             @Override
-            public boolean holdBeyond(Level level, Towards side) {
+            public boolean holdOnSide(Level level, Towards side, boolean including) {
                 return false;
             }
         };

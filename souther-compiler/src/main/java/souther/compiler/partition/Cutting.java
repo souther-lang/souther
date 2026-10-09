@@ -557,10 +557,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
 
             @Override
-            public boolean holdBeyond(Level level, Towards side) {
-                // The region with the quantity held strictly past the level, asked whether
+            public boolean holdOnSide(Level level, Towards side, boolean including) {
+                // The region with the quantity held on that side of the level, asked whether
                 // anything is left. A relation it cannot carry is no proof that nothing is there.
-                return against(region, level, side == Towards.ABOVE ? Rel.GT : Rel.LT)
+                Rel past = side == Towards.ABOVE ? (including ? Rel.GE : Rel.GT)
+                        : (including ? Rel.LE : Rel.LT);
+                return against(region, level, past)
                         .map(there -> there.emptiness().isEmpty()).orElse(true);
             }
         };
