@@ -164,10 +164,10 @@ final class DecisionNaming implements Naming<DecisionPath> {
                 yield stated == null ? null : atTheArm(iff, part, stated);
             }
             case Choice.Decides.ItWasBuilt(Core.IfConstructed attempt) -> atAnArm(
-                    meanings.attempting(attempt, part, attempt.then().pos(), numbering),
+                    meanings.attempting(attempt, part, attempt.then().pos(), reads, numbering),
                     attempt.occurrence(), part);
             case Choice.Decides.ItDeparted(Core.IfConstructed attempt, Core.ElseArm on) -> atAnArm(
-                    meanings.attempting(attempt, part, on.body().pos(), numbering),
+                    meanings.attempting(attempt, part, on.body().pos(), reads, numbering),
                     attempt.occurrence(), part);
             // Named by matchCase, which is asked of the match and not of a fork in general.
             case Choice.Decides.ACase _ -> throw new IllegalStateException(

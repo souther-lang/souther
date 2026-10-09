@@ -551,11 +551,24 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     walk(child, in, reads.entering(step, symbols, in.newtypes()),
                             applying.into(block, step, reads, in.read()), flow, assumed, live,
                             out, forks, numbering));
-            // Every other child under what the step into it binds. An attempt's `then` is where its
-            // name stands for what was built, so a comparison written over that name is one over
-            // the positions the construction was given. That the attempt held puts no line on the
-            // account: which way it went is decided by the type's rules, and a row is not steered
-            // by it.
+            // And each arm of an attempt under what the arm states: the clauses of the invariant it
+            // checks, read over what the construction is handed. The built arm is where its name
+            // stands for what was built, so a comparison written over that name is one over the
+            // positions the construction was given.
+            case Core.IfConstructed attempt -> {
+                walk(attempt.construct(), in, reads, applying, flow, assumed, live, out, forks,
+                        numbering);
+                List<Choice.Arm> arms = Choice.of(attempt).arms();
+                for (int part = 0; part < arms.size(); part++) {
+                    Choice.Arm arm = arms.get(part);
+                    walk(arm.answers(), in, reads.choosing(arm.decidedBy(), symbols, in.newtypes()),
+                            applying.choosing(arm.decidedBy(), symbols, in.newtypes()), flow,
+                            past(assumed, ReachingCuts.attempting(attempt, part,
+                                    arm.answers().pos(), in.read(), reads, numbering)),
+                            live, out, forks, numbering);
+                }
+            }
+            // Every other child under what the step into it binds.
             default -> ScopeStep.forEachChild(e, (child, step) ->
                     walk(child, in, reads.entering(step, symbols, in.newtypes()),
                             applying.entering(step, symbols, in.newtypes()), flow, assumed,
@@ -634,9 +647,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     private static List<OnTheWay> entering(Core.Match match, Core.Case arm, int part,
                                            InputReading read, InputReads reads,
                                            List<OnTheWay> assumed, ConditionNumbering numbering) {
-        List<OnTheWay> out = new ArrayList<>(assumed);
-        out.add(ReachingCuts.entering(match, arm, part, read, reads, numbering));
-        return List.copyOf(out);
+        return past(assumed, ReachingCuts.entering(match, arm, part, read, reads, numbering));
     }
 
     /**

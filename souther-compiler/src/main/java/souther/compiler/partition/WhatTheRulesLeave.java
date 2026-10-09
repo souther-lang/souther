@@ -1,8 +1,17 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.NumericMeasures;
 import souther.compiler.flow.AWayThrough;
+import souther.compiler.inputs.Admits;
+import souther.compiler.inputs.Case;
+import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.Distinctions;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Position;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
@@ -16,6 +25,8 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
+import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -32,11 +43,13 @@ import java.util.Map;
  *
  * <p><b>Ruled out is a proof and nothing else is.</b> A way is ruled out only where the rules leave
  * no value behind it. Everything else is not ruled out, and says which parts were not asked of the
- * rules at all: a part nothing read, a quantity of something other than the input, a statement
- * about which case a value is, an element of a container. A conjunction is ruled out where one of
- * its parts is, and a disjunction where every part is — each part asked on its own, which is weaker
- * than asking them together and never wrong the other way. Not ruled out is never a witness that a
- * run takes the way ({@link AWayThrough}).
+ * rules at all, which is a part nothing read. A case, a truth or a value being there is asked of
+ * what the rules leave the position; some element meeting something, of what they leave one element
+ * and the container's size; and a number that is none of the input's — what a dependency answered,
+ * what the body works out — is one the rules range over none of. A conjunction is ruled out where
+ * one of its parts is, and a disjunction where every part is — each part asked on its own, which is
+ * weaker than asking them together and never wrong the other way. Not ruled out is never a witness
+ * that a run takes the way ({@link AWayThrough}).
  */
 public final class WhatTheRulesLeave {
 
@@ -45,40 +58,115 @@ public final class WhatTheRulesLeave {
     private static final AWayThrough LEFT = new AWayThrough.NotRuledOut(List.of());
 
     /** Whether the rules leave some input on which {@code stated} comes out {@code want}. */
-    public static AWayThrough admits(Proposition stated, boolean want, Quantities rules) {
+    public static AWayThrough admits(Proposition stated, boolean want, InputReading read) {
         return switch (stated) {
             case Proposition.Always always -> always.holds() == want ? LEFT
                     : new AWayThrough.RuledOut();
             case Proposition.Compared compared ->
-                    leaves(compared.relation(), compared.holds() == want, rules);
-            case Proposition.All all -> want ? every(all.parts(), true, rules)
-                    : some(all.parts(), false, rules);
-            case Proposition.Any any -> want ? some(any.parts(), true, rules)
-                    : every(any.parts(), false, rules);
+                    leaves(compared.relation(), compared.holds() == want, read.quantities());
+            case Proposition.All all -> want ? every(all.parts(), true, read)
+                    : some(all.parts(), false, read);
+            case Proposition.Any any -> want ? some(any.parts(), true, read)
+                    : every(any.parts(), false, read);
             // On some application, either way: each statement is denied where it stands.
             case Proposition.OnAnApplication applications ->
-                    some(applications.each(), want, rules);
+                    some(applications.each(), want, read);
             case Proposition.Unread unread ->
                     notAsked(new WhyNotTaken.MeaningUnread(unread.why()));
+            // What a dependency answered is what a row stands it in with, and the input's rules
+            // say nothing of that.
             case Proposition.Truth(DecisionSubject.AnAnswer _, boolean _, var _),
                  Proposition.InCases(DecisionSubject.AnAnswer _, var _, boolean _, var _),
-                 Proposition.Present(DecisionSubject.AnAnswer _, boolean _, var _) ->
-                    incomplete(WhyNotTaken.Shape.WHAT_A_DEPENDENCY_ANSWERED);
-            case Proposition.Truth _ -> incomplete(WhyNotTaken.Shape.A_TRUTH_ASKED_OF_THE_RULES);
-            case Proposition.InCases _ -> incomplete(WhyNotTaken.Shape.THE_CASE_OF_A_SUBJECT);
-            case Proposition.Present _ -> incomplete(WhyNotTaken.Shape.A_VALUE_BEING_THERE);
-            case Proposition.SameValue _ -> incomplete(WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE);
-            case Proposition.Some some -> new AWayThrough.NotRuledOut(WhyNotTaken.declinedWhole(
-                    new WhyNotTaken.ProjectionIncomplete(
-                            WhyNotTaken.Shape.SOME_ELEMENT_ASKED_OF_THE_RULES), some));
+                 Proposition.Present(DecisionSubject.AnAnswer _, boolean _, var _) -> LEFT;
+            case Proposition.Truth(DecisionSubject.AnInput(TermPath at), boolean holds, var _) ->
+                    leaves(at, List.of(new Case.Truth(holds == want)), read);
+            case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean holds,
+                                     var _) ->
+                    leaves(at, List.of(new Case.Presence(holds == want)), read);
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
+                                     boolean holds, var _) ->
+                    leaves(at, casesOf(at, cases, holds == want, read), read);
+            // Whether two values are one is no rule of either position alone, so asked of each
+            // on its own, nothing rules it out.
+            case Proposition.SameValue _ -> LEFT;
+            case Proposition.Some some -> someElement(some, some.holds() == want, read);
         };
     }
 
+    /**
+     * Whether the rules leave the value at {@code at} one of {@code cases} — ruled out only where
+     * they refuse every one of them, and not ruled out where they leave one or were not read far
+     * enough to say.
+     */
+    private static AWayThrough leaves(TermPath at, List<Case> cases, InputReading read) {
+        Position position = read.domain().at(at.position());
+        if (position == null) {
+            return LEFT;
+        }
+        for (Case each : cases) {
+            if (!(position.admissionOf(each) instanceof Admits.Refused)) {
+                return LEFT;
+            }
+        }
+        return new AWayThrough.RuledOut();
+    }
+
+    /** The cases of what stands at {@code at} that are among {@code cases} where {@code among},
+     *  and the others where not, out of what its type divides into. */
+    private static List<Case> casesOf(TermPath at, CasesLeft cases, boolean among,
+                                      InputReading read) {
+        Position position = read.domain().at(at.position());
+        if (position == null) {
+            return List.of();
+        }
+        List<Case> out = new ArrayList<>();
+        for (Case each : Distinctions.ofType(position.view().shape(), read.rules().symbols(),
+                read.rules().kinds(), read.rules().sums())) {
+            Refinement one = Refinement.of(each);
+            if (one != null && cases.atoms().contains(one) == among) {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Whether the rules leave some element of the container meeting what is asked of it — or, the
+     * other way round, every element meeting its denial: ruled out where they leave no element any
+     * value meeting it and, for every element, the container no way of holding none.
+     *
+     * <p>The element asked of on its own, as every element is: what the rules leave one element is
+     * what they leave each, and which element it is is no rule's.
+     */
+    private static AWayThrough someElement(Proposition.Some some, boolean someMeets,
+                                           InputReading read) {
+        AWayThrough element = admits(some.ofTheElement(), someMeets, read);
+        if (someMeets) {
+            return element instanceof AWayThrough.RuledOut || mayHold(some.container(), true, read)
+                    ? element : new AWayThrough.RuledOut();
+        }
+        return mayHold(some.container(), false, read) ? LEFT : element;
+    }
+
+    /**
+     * Whether the rules leave the container at {@code at} holding at least one, or none, as its
+     * size: where no size of it is a number of the input they leave it either.
+     */
+    private static boolean mayHold(TermPath at, boolean atLeastOne, InputReading read) {
+        Type container = read.domain().typeAt(at, read.rules());
+        ValueName.Stdlib size = container == null ? null
+                : NumericMeasures.takenOf(container, read.rules().inners());
+        NumericTerm.TakenOf count = size == null ? null : NumericTerm.TakenOf.of(size, at,
+                container, read.rules().inners(), read.rules().symbols());
+        return count == null || someValue(read.quantities().runsBetween(count),
+                atLeastOne ? Rel.GE : Rel.LE, atLeastOne ? Count.of(1) : Count.ZERO);
+    }
+
     /** Every one of {@code parts} coming out {@code want}: ruled out where one of them is. */
-    private static AWayThrough every(List<Proposition> parts, boolean want, Quantities rules) {
+    private static AWayThrough every(List<Proposition> parts, boolean want, InputReading read) {
         List<WhyNotTaken> notAsked = new ArrayList<>();
         for (Proposition part : parts) {
-            switch (admits(part, want, rules)) {
+            switch (admits(part, want, read)) {
                 case AWayThrough.RuledOut out -> {
                     return out;
                 }
@@ -94,11 +182,11 @@ public final class WhatTheRulesLeave {
     }
 
     /** Some one of {@code parts} coming out {@code want}: ruled out where every one is. */
-    private static AWayThrough some(List<Proposition> parts, boolean want, Quantities rules) {
+    private static AWayThrough some(List<Proposition> parts, boolean want, InputReading read) {
         List<WhyNotTaken> notAsked = new ArrayList<>();
         boolean somePartLeft = false;
         for (Proposition part : parts) {
-            if (admits(part, want, rules) instanceof AWayThrough.NotRuledOut(var whys)) {
+            if (admits(part, want, read) instanceof AWayThrough.NotRuledOut(var whys)) {
                 somePartLeft = true;
                 notAsked.addAll(whys);
             }
@@ -110,24 +198,25 @@ public final class WhatTheRulesLeave {
         return new AWayThrough.NotRuledOut(List.of(why));
     }
 
-    private static AWayThrough incomplete(WhyNotTaken.Shape shape) {
-        return notAsked(new WhyNotTaken.ProjectionIncomplete(shape));
-    }
-
-    /** Whether the rules leave a value at which {@code relation} holds, or fails where
-     *  {@code holds} is false. */
+    /**
+     * Whether the rules leave a value at which {@code relation} holds, or fails where
+     * {@code holds} is false.
+     *
+     * <p>Over a number that is no number of the input — what a dependency answered, a value the
+     * body works out, how many elements meet something — the input's rules range over none of it,
+     * so they rule nothing out.
+     */
     private static AWayThrough leaves(Relation relation, boolean holds, Quantities rules) {
         Rel asked = holds ? relation.proposition() : relation.proposition().denied();
         return switch (relation) {
             case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), var at, Rel _) ->
                     someValue(rules.runsBetween(term), asked, at) ? LEFT
                             : new AWayThrough.RuledOut();
-            case Relation.Ordered _ -> incomplete(WhyNotTaken.Shape.A_NUMBER_A_DEPENDENCY_ANSWERED);
+            case Relation.Ordered _ -> LEFT;
             case Relation.Affine affine -> {
                 LinearForm<NumericTerm> form = ofTheInput(affine.form());
                 if (form == null) {
-                    yield new AWayThrough.NotRuledOut(
-                            WhyNotTaken.quantitiesNoRowWrites(affine.form()));
+                    yield LEFT;
                 }
                 yield someValue(rules.runsBetween(form), asked, Count.ZERO) ? LEFT
                         : new AWayThrough.RuledOut();

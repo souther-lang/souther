@@ -179,18 +179,19 @@ class ATruthAsksOfARowWhatTheComparisonItMeansAsksTest {
     /**
      * What every element has to meet is not narrowed on where it is about more than the element:
      * an empty list meets it whatever the rest says. Where it is about nothing of the element at
-     * all, every element meeting it is it or the list holding none, which is one of two things.
+     * all, every element meeting it is it or the list holding none, which is one of two things —
+     * asked as its two alternatives.
      */
     @Test
-    void everyElementMeetingWhatIsNotAboutTheElementIsDeclined() {
+    void everyElementMeetingWhatIsNotAboutTheElementIsNotNarrowedOn() {
         OnTheWay.Declined beside = assertInstanceOf(OnTheWay.Declined.class,
                 only("allAboveTheirFloor", true));
         assertEquals(List.of(new WhyNotTaken.ProjectionIncomplete(
                 WhyNotTaken.Shape.EVERY_ELEMENT_AND_MORE)), beside.whys());
-        OnTheWay.Declined apart = assertInstanceOf(OnTheWay.Declined.class,
+        OnTheWay.OneOf apart = assertInstanceOf(OnTheWay.OneOf.class,
                 only("allAboveTheFloor", true));
-        assertEquals(List.of(new WhyNotTaken.ProjectionIncomplete(
-                WhyNotTaken.Shape.ONE_OF_SEVERAL_THINGS)), apart.whys());
+        assertEquals(2, apart.alternatives().size(),
+                () -> "the list holding none, or the floor above: " + apart);
     }
 
     /**

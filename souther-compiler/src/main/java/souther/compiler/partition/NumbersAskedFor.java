@@ -120,8 +120,8 @@ public record NumbersAskedFor(LevelRegion values, List<JointDemand> onlyTogether
                 // it asks: met here beside the elements, a size another cut holds at one or more
                 // would be left no number by a way that was not the one placed.
                 case RowDemand.ForAll every -> ofTheElement(every.relations(), term, within, on);
-                // Names no number, so the cut was passed over above.
-                case RowDemand.ATruth _ -> ANYTHING;
+                // Name no number, so the cut was passed over above.
+                case RowDemand.ATruth _, RowDemand.OfAWorkedOutValue _ -> ANYTHING;
                 // How many elements meet a statement, which leaves any number it reads free: an
                 // element is chosen to meet it or not against whatever the others stand at.
                 case RowDemand.SoMany _ -> ANYTHING;

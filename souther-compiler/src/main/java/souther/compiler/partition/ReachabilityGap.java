@@ -124,6 +124,7 @@ public sealed interface ReachabilityGap {
                 case Uncomposed(var _, Why.TwoNumbersAtOneLocation _) -> twoAtOneLocation = true;
                 case Uncomposed(var _, Why.NoValueComposedForItsPositions _),
                      Uncomposed(var _, Why.ElementsWrittenAlike _),
+                     Uncomposed(var _, Why.NoPositionHoldsTheValue _),
                      ProvedImpossible _ -> { }
                 case Unstated _ -> throw new IllegalArgumentException(
                         "a way of writing a cut is one the walk stated: " + each);
@@ -217,6 +218,12 @@ public sealed interface ReachabilityGap {
          * positions hold no value.
          */
         record TwoNumbersAtOneLocation() implements Why {}
+
+        /**
+         * The condition is about a value the body works out, which no position of the row holds:
+         * there is nowhere to write it, and only the run says whether it held.
+         */
+        record NoPositionHoldsTheValue() implements Why {}
 
         /**
          * A condition about a container's elements, which no row of elements written alike meets.

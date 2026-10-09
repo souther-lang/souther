@@ -704,6 +704,11 @@ public sealed interface AnotherLineTheRowsAllow {
                     case OnTheWay.Declined _ -> {
                         return false;
                     }
+                    // One of several ways, and which the row took is not followed through a step:
+                    // a step that keeps it on one may move it off it, and nothing here asks which.
+                    case OnTheWay.OneOf _ -> {
+                        return false;
+                    }
                     // Settled for every row: past it whatever a step moves, or past it for none.
                     case OnTheWay.Settled settled -> {
                         if (!settled.thisWay()) {
@@ -765,6 +770,13 @@ public sealed interface AnotherLineTheRowsAllow {
                     // stands there is what the row had.
                     case OnTheWay.TakenIn(var _, RowDemand.ATruth truth) -> {
                         if (movesAnyOf(truth.positions())) {
+                            return false;
+                        }
+                    }
+                    // A value the body works out from the row, which a step moving any number may
+                    // move: what it is worked out from is not followed.
+                    case OnTheWay.TakenIn(var _, RowDemand.OfAWorkedOutValue _) -> {
+                        if (!moved.isEmpty()) {
                             return false;
                         }
                     }

@@ -22,6 +22,7 @@ import java.util.function.BiPredicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -197,18 +198,28 @@ class WhatAWalkTakesInHoldsOfEveryRowItLetsThroughTest {
      * The two ways round a fork's operators say one of two things, and neither is approximated.
      *
      * <p>{@code A && B} coming out false says one of them failed and names neither. Taking either
-     * would narrow a region on something no row here satisfies, which is what the answer being a
-     * decline rather than a cut is for — and it is filed at the whole condition, since neither
-     * operand is what could not be carried.
+     * would narrow a region on something no row here satisfies, so it is put on the way whole, at
+     * the whole condition, as its two alternatives — each a way a row is looked for along — and
+     * what every arriving row met is what it met along one of them.
      */
     @Test
-    void anArmThatStatesOneOfTwoThingsIsDeclinedWhole() {
-        WhyNotTaken oneOfSeveral =
-                new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.ONE_OF_SEVERAL_THINGS);
-        assertEquals(List.of(oneOfSeveral), whys("both", false));
-        assertEquals(List.of(oneOfSeveral), whys("either", true));
+    void anArmThatStatesOneOfTwoThingsIsOnTheWayAsItsAlternatives() {
+        for (List<OnTheWay> stated : List.of(stating("both", false), stating("either", true))) {
+            OnTheWay.OneOf several = assertInstanceOf(OnTheWay.OneOf.class,
+                    assertOne(stated), () -> "one entry, at the whole condition: " + stated);
+            assertEquals(2, several.alternatives().size(), () -> "an alternative per operand: "
+                    + several);
+            assertTrue(several.alternatives().stream().allMatch(each -> each.size() == 1
+                            && each.getFirst() instanceof OnTheWay.TakenIn),
+                    () -> "each operand taken in on its own alternative: " + several);
+        }
         assertEquals(List.of(), whys("both", true), "and both operands are taken in the other way");
         assertEquals(List.of(), whys("either", false));
+    }
+
+    private static OnTheWay assertOne(List<OnTheWay> stated) {
+        assertEquals(1, stated.size(), () -> "one entry: " + stated);
+        return stated.getFirst();
     }
 
     /**

@@ -3740,6 +3740,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                 + " values to together";
                 case DemandGap.WhyNotStated.APlaceOnTheAnswersOwnOrder _ ->
                         "a place on the order an answer's own values stand on";
+                case DemandGap.WhyNotStated.AStatementOfSeveralParts _ ->
+                        "a statement about an answer made of several parts, which is composed"
+                                + " one part at a time";
             };
             case DemandGap.Uncomposed(var _, var why) -> switch (why) {
                 // The term the region named is not said. What it is spelled in is the subject the
@@ -3788,6 +3791,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         case ReachabilityGap.Why.ElementsWrittenAlike _ ->
                                 "a condition on a container's elements that no row of elements"
                                         + " written alike meets";
+                        // Asked of the run and of nothing composed: the value is worked out by
+                        // the body, and no position holds it to write.
+                        case ReachabilityGap.Why.NoPositionHoldsTheValue _ ->
+                                "a condition on a value the body works out, which no position"
+                                        + " of a row holds";
                         // What stopped the looking, and not that nothing was found. An author does
                         // nothing about the first and may do something about the second.
                         // A value it could not hold is said after the figures and apart from them,
@@ -3875,6 +3883,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         + " comes to how many it holds, which no type measures";
                 case A_PATH_KNOWS_NO_ALTERNATIVES -> "a condition that comes to one of several"
                         + " things, or to some element, which no fact a path knows says";
+                case A_POSITION_THE_READING_HOLDS_NO_PLACE_FOR -> "a condition on a position"
+                        + " under a value the reading of the input does not descend into";
             };
             // This compiler's own shortfall, and said as one: the condition was read, and a row
             // could be asked for it, and nothing here asks yet.
@@ -4507,6 +4517,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 out.put("condition", subjectOf(condition.of()));
                 out.put("outcome", to.spelled());
             }
+            // A statement read to the end that no column above is, spelled as the reading spells
+            // what it states — which is what makes it and its denial one column.
+            case DecidedCondition.Held(var condition, var held) -> {
+                out.put("kind", "statement");
+                out.put("condition", condition.statement().key());
+                out.put("outcome", held ? "held" : "denied");
+            }
             // A condition this compiler had no words for, named by the reading that met it. Two
             // such conditions mean nothing to be told apart by, so the occurrence is the identity
             // — which is what the reading already decided and is not a second answer here.
@@ -4586,6 +4603,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     case A_QUANTITY_ON_NO_ORDER -> "quantity_on_no_order";
                     case A_SIZE_NOTHING_MEASURES -> "size_nothing_measures";
                     case A_PATH_KNOWS_NO_ALTERNATIVES -> "path_knows_no_alternatives";
+                    case A_POSITION_THE_READING_HOLDS_NO_PLACE_FOR ->
+                            "position_the_reading_holds_no_place_for";
                 });
             }
             case WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape shape) -> {

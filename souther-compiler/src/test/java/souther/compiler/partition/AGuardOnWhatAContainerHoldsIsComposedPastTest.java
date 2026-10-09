@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.meaning.Proposition;
 import souther.compiler.observe.Limits;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -496,10 +497,14 @@ class AGuardOnWhatAContainerHoldsIsComposedPastTest {
             }
         }
         Map<Boolean, List<String>> rules = new LinkedHashMap<>();
-        filling.rules().byRule().forEach((rule, row) -> rule.consulted().values().stream()
-                .filter(each -> each instanceof DecidedCondition.Unread)
-                .forEach(each -> rules.put(((DecidedCondition.Unread) each).held(),
-                        written(row))));
+        // The column is what the membership states, some element being the value or none being
+        // it — whichever of the two spells first — and the side is whether some element is.
+        filling.rules().byRule().forEach((rule, row) -> rule.consulted().values().forEach(each -> {
+            if (each instanceof DecidedCondition.Held(var column, boolean held)
+                    && column.statement() instanceof Proposition.Some some) {
+                rules.put(held == some.holds(), written(row));
+            }
+        }));
         return new Rows(classes, rules, stops);
     }
 

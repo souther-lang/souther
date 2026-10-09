@@ -66,6 +66,12 @@ public final class CasesLeft {
         return new CasesLeft(List.of(one));
     }
 
+    /** Each of {@code atoms}, which are distinctions of one position; null where there are none,
+     *  since a value left no case is no value. */
+    public static CasesLeft ofEach(List<Refinement> atoms) {
+        return atoms.isEmpty() ? null : new CasesLeft(atoms);
+    }
+
     /** Every distinction selecting {@code selected} covers ({@link Refinement#allOf}). */
     public static CasesLeft of(ResolvedCase selected) {
         return new CasesLeft(Refinement.allOf(selected));

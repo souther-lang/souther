@@ -24,4 +24,4 @@ example judgeHours
 
 example settleOvertime
     | "agreement=Extended" : (Extended, Hours(0)) -> <?>
-    | (Standard, Hours(1))                        -> <?>
+    | (Standard, Hours(199))                      -> <?>

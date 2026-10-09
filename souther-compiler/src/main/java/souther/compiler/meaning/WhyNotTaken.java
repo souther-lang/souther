@@ -119,7 +119,13 @@ public sealed interface WhyNotTaken {
          * knows a set of facts that all hold, and which of several holds, or which element, is no
          * fact of it.
          */
-        A_PATH_KNOWS_NO_ALTERNATIVES
+        A_PATH_KNOWS_NO_ALTERNATIVES,
+
+        /**
+         * A position of the input the reading of it holds no place for: one under a value the
+         * reading does not descend into, so nothing a row writes stands there to be narrowed.
+         */
+        A_POSITION_THE_READING_HOLDS_NO_PLACE_FOR
     }
 
     /** A shape of what a condition means that a reader's domain could state and the reader does

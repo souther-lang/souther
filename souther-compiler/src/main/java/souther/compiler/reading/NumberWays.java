@@ -101,7 +101,8 @@ final class NumberWays implements ComparisonWays {
         MeaningsOfABody.Site site =
                 new MeaningsOfABody.Site(construct.get(), MeaningsOfABody.Part.Asked.CONDITION);
         return Optional.of(meanings.at(site)
-                .map(proposition -> WhatTheRulesLeave.admits(proposition, want, quantities))
+                .map(proposition -> WhatTheRulesLeave.admits(proposition, want,
+                        numbers.reading()))
                 .orElseGet(() -> new AWayThrough.NotRuledOut(List.of(
                         new WhyNotTaken.MeaningUnread(meanings.whyNothingAt(site))))));
     }
@@ -109,8 +110,20 @@ final class NumberWays implements ComparisonWays {
     @Override
     public Predicate<Core.Case> mayTake(Core.Match match) {
         Set<TypeSymbol> written = reads.casesWritten(match.scrutinee(), symbols, newtypes);
-        return written == null ? arm -> true
-                : arm -> InputReads.whetherEveryRowTakes(arm, written).orElse(true);
+        if (written != null) {
+            return arm -> InputReads.whetherEveryRowTakes(arm, written).orElse(true);
+        }
+        // Otherwise an arm is taken where what entering it states can come out true under the
+        // input's rules, as a fork's condition is.
+        Optional<ModelOccurrence> construct = ModelOccurrence.statedAt(match.place().occurrence());
+        if (construct.isEmpty() || meanings == MeaningsOfABody.NONE) {
+            return arm -> true;
+        }
+        return arm -> meanings.at(new MeaningsOfABody.Site(construct.get(),
+                        new MeaningsOfABody.Part.OfACase(match.cases().indexOf(arm))))
+                .map(proposition -> !(WhatTheRulesLeave.admits(proposition, true,
+                        numbers.reading()) instanceof AWayThrough.RuledOut))
+                .orElse(true);
     }
 
     @Override

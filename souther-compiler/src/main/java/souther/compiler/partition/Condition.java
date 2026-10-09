@@ -92,9 +92,12 @@ sealed interface Condition {
      *            and is what a reader asks rather than the operator: a reader holding the operator
      *            reads it again for the same answer, and the two readings can be taught different
      *            ones
+     * @param value the joined truth as written, and {@code reads} the names it is read under:
+     *              what the whole states is read off it once, as any truth is
      */
     record Joined(ConditionOccurrence occurrence, ConditionReportAnchor anchor, ConditionJoin how,
-                  Condition left, Condition right) implements Condition {}
+                  Condition left, Condition right, Core value, InputReads reads)
+            implements Condition {}
 
     /**
      * One comparison, and where the names in it point.
@@ -200,7 +203,7 @@ sealed interface Condition {
                 made = new Joined(met,
                         numbering.anchorOf(binary.origin(), binary.pos(), met), joined,
                         of(binary.left(), reads, symbols, newtypes, numbering),
-                        of(binary.right(), reads, symbols, newtypes, numbering));
+                        of(binary.right(), reads, symbols, newtypes, numbering), binary, reads);
             } else if (comparison != null) {
                 ConditionOccurrence met = numbering.met();
                 made = new Compares(comparison, binary.occurrence(), met,

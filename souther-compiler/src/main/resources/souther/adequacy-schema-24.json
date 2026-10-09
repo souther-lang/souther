@@ -2521,11 +2521,12 @@
             "additionalProperties": false,
             "properties": {
               "kind": {
-                "description": "Which distinction the column is, over whatever the body decided on: a position of the input, or what a dependency answered — the two are written the same way and `condition` says which. `comparison` is a comparison the arithmetic took in, `truth` a value read for whether it holds, `case` a fork read as the case the subject turned out to be, and `not_read` a condition this compiler has no words for — told apart by the occurrence that met it, because two conditions nothing could read mean nothing to be told apart by.",
+                "description": "Which distinction the column is, over whatever the body decided on: a position of the input, or what a dependency answered — the two are written the same way and `condition` says which. `comparison` is a comparison the arithmetic took in, `truth` a value read for whether it holds, `case` a fork read as the case the subject turned out to be, `statement` a condition read to the end that is none of those — some element meeting something, several things asked at once, an arm a computed value decides — written as what it states, and `not_read` a condition this compiler has no words for — told apart by the occurrence that met it, because two conditions nothing could read mean nothing to be told apart by.",
                 "enum": [
                   "comparison",
                   "truth",
                   "case",
+                  "statement",
                   "not_read"
                 ]
               },
@@ -2652,7 +2653,8 @@
                 "enum": [
                   "quantity_on_no_order",
                   "size_nothing_measures",
-                  "path_knows_no_alternatives"
+                  "path_knows_no_alternatives",
+                  "position_the_reading_holds_no_place_for"
                 ]
               }
             }

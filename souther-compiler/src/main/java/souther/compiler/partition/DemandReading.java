@@ -1,8 +1,13 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.inputs.Case;
+import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.Distinctions;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Position;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
@@ -60,6 +65,38 @@ final class DemandReading {
          * past it would be reported as a way this compiler fell short on.
          */
         record Settled(boolean thisWay) implements Read {}
+
+        /**
+         * The value at {@code at} being one of {@code cases}: a position read as some of its
+         * cases, which a composer writes and the walk carries as a narrowing.
+         */
+        record Narrows(TermPath at, CasesLeft cases) implements Read {
+
+            public Narrows {
+                if (at == null || cases == null) {
+                    throw new IllegalArgumentException("a position is read as some of its cases");
+                }
+            }
+        }
+
+        /**
+         * One of several things, each asked whole: a row is past the condition where it meets
+         * every demand of one alternative, and an alternative is no less a way for the others
+         * beside it.
+         *
+         * @param alternatives what each alternative asks, each once and in the order the parts are
+         *                     kept; two or more, since one is no choice
+         */
+        record OneOf(List<List<Read>> alternatives) implements Read {
+
+            public OneOf {
+                alternatives = alternatives.stream().map(List::copyOf).distinct().toList();
+                if (alternatives.size() < 2) {
+                    throw new IllegalArgumentException("one of several things is two or more: "
+                            + alternatives);
+                }
+            }
+        }
 
         /** None, and everything that stopped it, each once. */
         record Unread(List<WhyNotTaken> whys) implements Read {
@@ -129,6 +166,23 @@ final class DemandReading {
         };
     }
 
+    /**
+     * What {@code condition} coming out true states, whole, as the one reading of a truth reads it.
+     *
+     * @param conditions what each part states, read once for every reader of the same reading
+     */
+    static Proposition statedBy(Condition condition, InputReading read,
+                                WhatConditionsState conditions) {
+        return switch (condition) {
+            case Condition.Joined joined ->
+                    conditions.truth(joined.value(), joined.reads(), read).proposition();
+            case Condition.Compares one -> conditions.comparison(one.comparison().stated(),
+                    one.reads(), read).stated().proposition();
+            case Condition.Truth truth ->
+                    conditions.truth(truth.value(), truth.reads(), read).proposition();
+        };
+    }
+
     private static List<Stated> both(List<Stated> left, List<Stated> right) {
         List<Stated> out = new ArrayList<>(left);
         out.addAll(right);
@@ -141,7 +195,9 @@ final class DemandReading {
      * condition written as a denied conjunction say the same.
      *
      * <p>Settled where one of them always comes out the way asked, and the one left where every
-     * other never does. Otherwise it names none of them ({@link #namingNone}).
+     * other never does — or where every other asks the same as it. Otherwise each that could be
+     * what holds is one alternative ({@link Read.OneOf}); one that never comes out the way asked is
+     * none.
      *
      * @param readOf what an entry of a part is read as
      * @param asWhole an entry standing for what the whole asks
@@ -163,26 +219,8 @@ final class DemandReading {
                 }
             }
         }
-        return open.size() <= 1 ? lastOpen : List.of(asWhole.apply(namingNone(open)));
-    }
-
-    /**
-     * One of several things, none of them named, and whatever stopped each of them besides — a part
-     * whose meaning went unread is still unread when the parts are asked as one, and a part this
-     * reading has no words for still has none. Only the parts that could be what holds: one that
-     * never comes out the way asked is not why a row was not asked for.
-     */
-    private static Read.Unread namingNone(List<List<Read>> open) {
-        List<WhyNotTaken> whys = new ArrayList<>();
-        whys.add(new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.ONE_OF_SEVERAL_THINGS));
-        for (List<Read> part : open) {
-            for (Read each : part) {
-                if (each instanceof Read.Unread(List<WhyNotTaken> stopped)) {
-                    whys.addAll(stopped);
-                }
-            }
-        }
-        return new Read.Unread(whys);
+        return open.stream().distinct().count() <= 1 ? lastOpen
+                : List.of(asWhole.apply(new Read.OneOf(open)));
     }
 
     /**
@@ -238,6 +276,28 @@ final class DemandReading {
                 .map(RowDemand.Relational::constraint).toList());
     }
 
+    /**
+     * The value at {@code at} being none of {@code cases}: one of the others its type divides into
+     * ({@link Distinctions#ofType}), which no row is where there are none.
+     */
+    private static Read notOfItsCases(TermPath at, CasesLeft cases, InputReading read) {
+        Position position = read.domain().at(at.position());
+        if (position == null) {
+            return new Read.Unread(new WhyNotTaken.OutsideDomain(
+                    WhyNotTaken.DomainLimit.A_POSITION_THE_READING_HOLDS_NO_PLACE_FOR));
+        }
+        List<Refinement> others = new ArrayList<>();
+        for (Case each : Distinctions.ofType(position.view().shape(), read.rules().symbols(),
+                read.rules().kinds(), read.rules().sums())) {
+            Refinement one = Refinement.of(each);
+            if (one != null && !cases.atoms().contains(one)) {
+                others.add(one);
+            }
+        }
+        CasesLeft left = CasesLeft.ofEach(others);
+        return left == null ? new Read.Settled(false) : new Read.Narrows(at, left);
+    }
+
     private static Proposition holdingAs(Proposition stated, boolean holding) {
         return holding ? stated : stated.denied();
     }
@@ -260,8 +320,13 @@ final class DemandReading {
                  Proposition.InCases(DecisionSubject.AnAnswer _, var _, boolean _, var _),
                  Proposition.Present(DecisionSubject.AnAnswer _, boolean _, var _) ->
                     List.of(incomplete(WhyNotTaken.Shape.WHAT_A_DEPENDENCY_ANSWERED));
-            case Proposition.InCases _ -> List.of(incomplete(WhyNotTaken.Shape.THE_CASE_OF_A_SUBJECT));
-            case Proposition.Present _ -> List.of(incomplete(WhyNotTaken.Shape.A_VALUE_BEING_THERE));
+            case Proposition.InCases(DecisionSubject.AnInput(TermPath at), CasesLeft cases,
+                                     boolean holds, var _) ->
+                    List.of(holds ? new Read.Narrows(at, cases) : notOfItsCases(at, cases, read));
+            // Holding a value or holding none is which of an optional's two carriers stands there.
+            case Proposition.Present(DecisionSubject.AnInput(TermPath at), boolean holds, var _) ->
+                    List.of(new Read.Narrows(at,
+                            CasesLeft.of(Refinement.of(new Case.Presence(holds)))));
             case Proposition.SameValue _ ->
                     List.of(incomplete(WhyNotTaken.Shape.TWO_SUBJECTS_ONE_VALUE));
             case Proposition.Unread unread -> List.of(new Read.Unread(
@@ -274,8 +339,10 @@ final class DemandReading {
             case Proposition.Any any -> oneOf(any.parts().stream()
                     .map(part -> projected(part, read)).toList(), each -> each, each -> each);
             // One of several statements, which one turning on which application a run meets the
-            // condition on: named as none of them, as a disjunction is, and never settled by one
-            // statement, since an application a closure may be handed is not one a run makes.
+            // condition on: one alternative per statement that can hold, as a disjunction is. A
+            // statement of an application no run makes is an alternative too many and never one
+            // too few, so a row is held to none of them alone — and one that holds of every row
+            // settles nothing, since the application may not be one a run makes.
             case Proposition.OnAnApplication applications -> {
                 List<List<Read>> open = new ArrayList<>();
                 for (Proposition each : applications.each()) {
@@ -284,7 +351,11 @@ final class DemandReading {
                         open.add(asked);
                     }
                 }
-                yield List.of(namingNone(open));
+                yield switch ((int) open.stream().distinct().count()) {
+                    case 0 -> List.of(new Read.Settled(false));
+                    case 1 -> open.getFirst();
+                    default -> List.of(new Read.OneOf(open));
+                };
             }
             case Proposition.Some some -> ofSomeElement(some, read);
         };
@@ -348,8 +419,12 @@ final class DemandReading {
                             out.add(incomplete(WhyNotTaken.Shape.A_QUANTIFIER_WITHIN_ONE));
                     // A truth of the element is a value written into one element, which nothing
                     // that composes a container's elements writes.
-                    case Read.Demands(RowDemand.ATruth _) ->
+                    case Read.Demands(RowDemand.ATruth _), Read.Narrows _ ->
                             out.add(incomplete(WhyNotTaken.Shape.A_TRUTH_OF_AN_ELEMENT));
+                    case Read.Demands(RowDemand.OfAWorkedOutValue _) ->
+                            out.add(incomplete(WhyNotTaken.Shape.A_NUMBER_THE_BODY_BOUND));
+                    case Read.OneOf _ ->
+                            out.add(incomplete(WhyNotTaken.Shape.ONE_OF_SEVERAL_THINGS));
                 }
             }
         }
@@ -466,6 +541,11 @@ final class DemandReading {
             }
             case Relation.Affine(LinearForm<Quantity> form, Rel _) -> {
                 LinearForm<NumericTerm> against = WhatTheRulesLeave.ofTheInput(form);
+                // Over a value the body binds, beside numbers of the input: asked of a row as it
+                // stands, and the run says whether it held.
+                if (against == null && overWhatTheBodyWorksOut(form)) {
+                    yield new Read.Demands(new RowDemand.OfAWorkedOutValue(compared));
+                }
                 if (against == null) {
                     yield new Read.Unread(WhyNotTaken.quantitiesNoRowWrites(form));
                 }
@@ -485,6 +565,22 @@ final class DemandReading {
                     incomplete(WhyNotTaken.Shape.A_NUMBER_A_DEPENDENCY_ANSWERED);
             case Relation.Ordered _ -> incomplete(WhyNotTaken.Shape.AN_ORDER_OF_NO_ONE_POSITION);
         };
+    }
+
+    /** Whether every quantity {@code form} is over is a number of the input or of a value the body
+     *  binds, and one of them is the second. */
+    private static boolean overWhatTheBodyWorksOut(LinearForm<Quantity> form) {
+        boolean bound = false;
+        for (Quantity atom : form.coefs().keySet()) {
+            switch (atom) {
+                case DecisionAtom.OfTheInput _ -> { }
+                case Quantity.OfABinding _ -> bound = true;
+                case DecisionAtom.OfAnAnswer _, Quantity.HowManyMeet _, Quantity.HowManyHold _ -> {
+                    return false;
+                }
+            }
+        }
+        return bound;
     }
 
     /**

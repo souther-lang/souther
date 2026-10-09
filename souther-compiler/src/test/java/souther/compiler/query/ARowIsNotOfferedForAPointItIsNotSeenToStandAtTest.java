@@ -6,6 +6,8 @@ import souther.compiler.numeric.Count;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.PointRole;
+import souther.compiler.partition.ReachabilityGap;
+import souther.compiler.partition.RowDemand;
 
 import java.util.List;
 import java.util.Map;
@@ -37,12 +39,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ARowIsNotOfferedForAPointItIsNotSeenToStandAtTest {
 
     /**
-     * A comparison reached past a disjunction, which is the shape nothing can state.
+     * A comparison reached past a condition on a value the body works out, which no composer can
+     * write.
      *
-     * <p>{@code A || B} coming out true says one of them held and names neither, so there is no cut
-     * to narrow a search by. The values the composer then writes at {@code x} and {@code y} are
-     * whatever their own rules leave, which is the bottom of the run and takes the other branch —
-     * so a row carrying the value the inner line is drawn at turns back above it.
+     * <p>What a product of {@code x} and {@code y} comes to is no form over them, so the condition
+     * on it is a condition on a value no position holds, and there is no cut to narrow a search by.
+     * The values the composer then writes at {@code x} and {@code y} are whatever their own rules
+     * leave, which is the bottom of the run and takes the other branch — so a row carrying the value
+     * the inner line is drawn at turns back above it.
      */
     private static final String MODEL = """
             module example.unspoken
@@ -53,15 +57,17 @@ class ARowIsNotOfferedForAPointItIsNotSeenToStandAtTest {
             data Yes
             data No
 
-            behavior f : (x: N, y: N, n: N) -> Yes | No
+            behavior f : (x: Int, y: Int, n: N) -> Yes | No
 
-            let f (x, y, n) =
-                if x > 0 || y > 0
+            let f (x, y, n) = {
+                let area = x * y
+                if area > 4
                 then (if n > 5 then Yes else No)
                 else No
+            }
             """;
 
-    /** Where the line behind the disjunction is drawn, which is the one this is about. */
+    /** Where the line behind the product is drawn, which is the one this is about. */
     private static final Count BEHIND_THE_DISJUNCTION = Count.of(5);
 
     /**
@@ -75,7 +81,7 @@ class ARowIsNotOfferedForAPointItIsNotSeenToStandAtTest {
     @Test
     void noRowIsOfferedWhereTheOneComposedWasNotSeenStandingThere() {
         List<ItemAssessment> owed = pointsOfTheInnerLine();
-        assertFalse(owed.isEmpty(), "the line behind the disjunction is owed rows");
+        assertFalse(owed.isEmpty(), "the line behind the product is owed rows");
         for (ItemAssessment item : owed) {
             assertTrue(((ItemAssessment.Owed) item).searches().rowToOffer().isEmpty(),
                     "nothing composed a row that reaches this point, so none is offered");
@@ -86,18 +92,23 @@ class ARowIsNotOfferedForAPointItIsNotSeenToStandAtTest {
         }
     }
 
-    /** And the way to it is on the account, saying nothing — which is what made the composer guess. */
+    /**
+     * And the way to it is on the account, with the composer saying it placed nothing for the
+     * condition — which is what made it guess.
+     */
     @Test
-    void theWayToItIsDeclinedRatherThanLeftOff() {
+    void theWayToItSaysNothingWasComposedForTheCondition() {
         for (ItemAssessment item : pointsOfTheInnerLine()) {
             ItemAssessment.Attempt.Searched no = assertInstanceOf(
                     ItemAssessment.Attempt.Searched.class,
                     ((ItemAssessment.Owed) item).searches().only());
-            assertFalse(no.way().declined().isEmpty(),
-                    "a disjunction states one of two things and this reading says so: "
-                            + no.way().onTheWay());
-            assertTrue(no.way().takenIn().isEmpty(),
-                    "and it narrowed nothing: " + no.way().onTheWay());
+            assertTrue(no.way().takenIn().stream().allMatch(each ->
+                            each.demand() instanceof RowDemand.OfAWorkedOutValue),
+                    "the condition is a value the body works out: " + no.way().onTheWay());
+            assertTrue(no.uncomposed().onTheWay().stream().anyMatch(each ->
+                            each instanceof ReachabilityGap.Uncomposed(var _,
+                                    ReachabilityGap.Why.NoPositionHoldsTheValue _)),
+                    "and the composer says it wrote nothing for it: " + no.uncomposed());
         }
     }
 
@@ -131,7 +142,7 @@ class ARowIsNotOfferedForAPointItIsNotSeenToStandAtTest {
         });
     }
 
-    /** What was searched for at each point of the line behind the disjunction. */
+    /** What was searched for at each point of the line behind the product. */
     private static List<ItemAssessment> pointsOfTheInnerLine() {
         Compilation compilation = analysed();
         List<BorderAssessment> edges = compilation.db()

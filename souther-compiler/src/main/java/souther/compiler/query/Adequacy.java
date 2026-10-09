@@ -2519,6 +2519,16 @@ public final class Adequacy {
                 souther.compiler.partition.DecisionReading.Ruled ruled, Coverages.Probe probe,
                 souther.compiler.partition.RulesTaken taken,
                 souther.compiler.partition.Reachability.Reaching reaching) {
+            // Where a condition on the way came out one of several ways, a row is composed along
+            // each of them first. A row of one that the run places at the rule is a witness of it;
+            // anything else one of them comes to says nothing of the others, so the rule is then
+            // answered as the way whole answers it.
+            for (souther.compiler.partition.Reachability.Reaching along : reaching.along()) {
+                RuleSettlement one = whatASearchFinds(ruled, probe, taken, along);
+                if (one.requirement() instanceof RuleRequirement.Required) {
+                    return one;
+                }
+            }
             // Every way of standing the dependencies in, and what each of them established. Which
             // case a row carries where the way names none decides where the row goes, so a row
             // that went elsewhere says that of the case it carried and not of the rule.

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
@@ -443,6 +444,41 @@ public sealed interface RowDemand {
 
         /** None: a row held to this writes the container and whatever the statement reads beside
          *  an element. */
+        @Override
+        public Set<TermPath> valuesRead() {
+            return Set.of();
+        }
+    }
+
+    /**
+     * A statement over a value the body works out — a number it binds from what it computes — which
+     * no position of the row holds.
+     *
+     * <p>Asked of a row all the same: a row past the condition is one whose run comes out this way,
+     * whatever it took to compose it. What no composer can do is write the value, so nothing is
+     * placed for it and the row is put to the run, which is what says whether it holds
+     * ({@link ReachabilityGap.Why.NoPositionHoldsTheValue}).
+     *
+     * @param statement what the condition states of the value, coming out the way the row is to
+     */
+    record OfAWorkedOutValue(Proposition statement) implements OfACondition {
+
+        public OfAWorkedOutValue {
+            Objects.requireNonNull(statement, "a statement about some value");
+        }
+
+        /** None the row writes: the value is worked out from them, and which of them is not
+         *  followed. */
+        @Override
+        public Set<NumericTerm> terms() {
+            return Set.of();
+        }
+
+        @Override
+        public Set<TermPath> positions() {
+            return Set.of();
+        }
+
         @Override
         public Set<TermPath> valuesRead() {
             return Set.of();

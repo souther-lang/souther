@@ -7,7 +7,7 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.Requirements;
-import souther.compiler.meaning.WhyNotTaken;
+import souther.compiler.numeric.Rel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -101,23 +101,27 @@ class AnArmOfAForkIsOnTheWayLikeAnyOtherConditionTest {
     }
 
     /**
-     * A fork on something no position holds is declined, and declined is not silence.
+     * A fork on something no position holds is on the way as what entering each arm states: which
+     * case the value it matches is, under what — here the comparison that chose it.
      *
-     * <p>The comparisons inside the arms are reached under something, and this reading cannot say
-     * what. Left off, a search would compose rows for their lines believing nothing stood in the way
-     * — which is the same answer it gets for a comparison at the top of a body.
+     * <p>The comparisons inside the arms are reached under that, and a search composes rows for
+     * their lines held to it. Left off, a search would compose them believing nothing stood in the
+     * way, which is the answer it gets for a comparison at the top of a body.
      */
     @Test
-    void aForkOnSomethingComposedIsDeclinedRatherThanLeftOff() {
-        List<OnTheWay> way = wayOf("onSomethingComposed");
+    void aForkOnSomethingComposedIsOnTheWayAsWhatChoseItsCase() {
+        List<List<OnTheWay>> ways = ways("onSomethingComposed");
         assertTrue(narrowingsIn("onSomethingComposed").isEmpty(),
-                "no position was narrowed: " + way);
-        WhyNotTaken asWritten =
-                new WhyNotTaken.ProjectionIncomplete(WhyNotTaken.Shape.AN_ARM_READ_AS_WRITTEN);
-        assertEquals(List.of(List.of(asWritten), List.of(asWritten)),
-                way.stream().filter(OnTheWay.Declined.class::isInstance)
-                        .map(each -> ((OnTheWay.Declined) each).whys()).toList(),
-                "each arm said so, at the arm");
+                "no position was narrowed: " + ways);
+        assertEquals(List.of(List.of(Rel.GT), List.of(Rel.LE)), ways.stream()
+                        .map(way -> way.stream().map(each -> assertInstanceOf(
+                                OnTheWay.TakenIn.class, each, () -> "each arm is taken in: " + way))
+                                .map(taken -> assertInstanceOf(RowDemand.Relational.class,
+                                        taken.demand()).constraint().rel())
+                                .toList())
+                        .toList(),
+                "the arm of what `p.n > 5` chose is reached where it holds, and the other where"
+                        + " it does not");
     }
 
     /**

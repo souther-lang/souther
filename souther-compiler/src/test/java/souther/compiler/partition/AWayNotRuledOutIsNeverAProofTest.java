@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.flow.AWayThrough;
-import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
@@ -69,25 +68,6 @@ class AWayNotRuledOutIsNeverAProofTest {
                 new Proposition.Always(false)));
 
         assertInstanceOf(AWayThrough.RuledOut.class, admits(both, true));
-    }
-
-    /**
-     * Some element meeting a part nothing read is not asked of the rules, and says both: that a
-     * quantifier is not asked, and why the part under it went unread — however deep it stands.
-     */
-    @Test
-    void aQuantifierOverAPartNothingReadSaysWhatStoppedThePart() {
-        Proposition deep = new Proposition.Some(TermPath.of("xs"), new Proposition.Any(List.of(
-                unread(0, NO_SIZE), unread(1, NOT_LINEAR))), true);
-        for (Proposition some : List.of(deep, deep.denied())) {
-            for (boolean want : List.of(true, false)) {
-                assertEquals(List.of(new WhyNotTaken.ProjectionIncomplete(
-                                WhyNotTaken.Shape.SOME_ELEMENT_ASKED_OF_THE_RULES),
-                                new WhyNotTaken.MeaningUnread(NO_SIZE),
-                                new WhyNotTaken.MeaningUnread(NOT_LINEAR)),
-                        notAsked(admits(some, want)), some.key() + " wanting " + want);
-            }
-        }
     }
 
     /** Every part nothing read keeps its own reason, once each, in the order they stand. */

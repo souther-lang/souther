@@ -740,6 +740,9 @@ public final class Generator {
                              // It stops a reading of what a condition means, and what it stopped
                              // is carried as a part nothing read, naming it.
                              READINGS_OF_ONE_CONDITION,
+                             // Past it the way is looked along whole, and the row is composed
+                             // either way.
+                             WAYS_A_WAY_IS_SPLIT_INTO,
                              // What it stops is the looking for a way past a guard, beside a row
                              // already found, and what it stopped is carried beside that row.
                              RUNS_REPAIRING_A_ROW -> throw new IllegalArgumentException(
@@ -4736,8 +4739,10 @@ public final class Generator {
                         SearchShortfall.NONE, Map.of()));
                 return false;
             }
+            // One way under one choice of cases, which is never split again: the ways a condition
+            // of several ways split this into were each handed here apart.
             Reachability.Reaching thisWay = new Reachability.Reaching(reaching.region(),
-                    way.taken(), truths, reaching.boundedOnTheWay());
+                    way.taken(), truths, reaching.boundedOnTheWay(), List.of());
             ParameterCameToNothing one = new InOrder(subject, order, composed, standing, writes,
                     settled, thisWay, check, way.contents()).from(0, Map.of());
             if (one == null) {
@@ -5130,6 +5135,13 @@ public final class Generator {
                         new CountsAsked(count, many.counts().values(), cut), CountsAsked::and);
                 continue;
             }
+            // A statement over a value the body works out, which no position holds: nothing is
+            // placed for it, and the run is what says whether the row met it.
+            if (cut.demand() instanceof RowDemand.OfAWorkedOutValue) {
+                gaps.add(new ReachabilityGap.Uncomposed(cut,
+                        new ReachabilityGap.Why.NoPositionHoldsTheValue()));
+                continue;
+            }
             // What an element is asked with no relation among it has no number to place: that the
             // element is another position's value is met where the container is composed
             // ({@link ContentsAsked}), and a region has nothing to say about it.
@@ -5308,6 +5320,9 @@ public final class Generator {
             // Taken in beside the rest, as a demand on the container ({@link #alsoOnTheWay}).
             case RowDemand.SoMany many -> throw new IllegalArgumentException(
                     "a count is composed where its container is and placed nowhere: " + many);
+            // Passed over before it is asked, with what the way is owed about it.
+            case RowDemand.OfAWorkedOutValue worked -> throw new IllegalArgumentException(
+                    "a value the body works out is placed nowhere: " + worked);
         };
     }
 
@@ -5355,6 +5370,8 @@ public final class Generator {
             case RowDemand.ATruth _ -> true;
             // A count, which places a count of the container and the numbers beside an element.
             case RowDemand.SoMany _ -> false;
+            // A value the body works out, which stands at no position to place a number at.
+            case RowDemand.OfAWorkedOutValue _ -> true;
         };
     }
 
