@@ -364,12 +364,12 @@ public final class GuardThresholds {
     }
 
     /**
-     * Where the values a comparison is over came from, for a comparison that names no position, and
-     * what stopped the reading at each of those places.
+     * Where the values a side of a comparison that names no position came from, and what stopped
+     * the reading at each of those places.
      *
      * <p>Beside {@link #mentioned} and asking the other question. That one says which positions the
-     * terms <em>are</em>; this says where they came from, which is only ever asked once the first
-     * has come back with nothing.
+     * terms <em>are</em>; this says where they came from, which is only ever asked of a side the
+     * first has come back with nothing for.
      *
      * <p>The reason is decided here, where the answer about the side is in hand, and not by whoever
      * reads the places afterwards. Two things bring a comparison here and they are not the same
@@ -382,6 +382,13 @@ public final class GuardThresholds {
                          DeclarationNewtypes newtypes,
                          SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out) {
         for (Core side : List.of(comparison.left(), comparison.right())) {
+            // A side that names a position is the values there, and what the rule is about at that
+            // position is that place's to say: where a value came from is asked of a side that
+            // names none, which is the only side it is a different question about. A side that may
+            // stand at one of several is not that, and where it came from is which of them.
+            if (reads.pathOf(side, newtypes) instanceof PathResolution.At) {
+                continue;
+            }
             // Where a side's values came from, and nothing where they came from nowhere.
             switch (reads.cameFrom(side, newtypes)) {
                 case PathResolution.At(var at) -> out.putIfAbsent(FilingCoordinate.at(at),

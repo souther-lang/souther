@@ -36,7 +36,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * the reasons, and an expectation repeated twice would go on holding if both fell silent together.
  *
  * <p>The last pair is the one that must not agree by reading through. An operation's answer holding
- * what a closure made of an element is not the element's position, so a name standing for one of
+ * what a closure made of an element, and no one answer per element, is not the element's position,
+ * so a name standing for one of
  * those values is not the expression the closure wrote — put where the name stands, it would draw a
  * line at a position whose values are not the ones the rule is about, which an author cannot tell
  * from a line their model states.
@@ -255,12 +256,13 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
             behavior counted : (people: List<Person>) -> Count
                 constructs Count
             let counted (people) =
-                Count(List.length(List.filter(n -> n >= 18, List.map(p -> p.age, people))))
+                Count(List.length(List.filter(n -> n >= 18,
+                        List.filterMap(p -> List.get(0, [p.age]), people))))
 
             behavior countedNamed : (people: List<Person>) -> Count
                 constructs Count
             let countedNamed (people) = {
-                let ages = List.map(p -> p.age, people)
+                let ages = List.filterMap(p -> List.get(0, [p.age]), people)
                 Count(List.length(List.filter(n -> n >= 18, ages)))
             }
             """;

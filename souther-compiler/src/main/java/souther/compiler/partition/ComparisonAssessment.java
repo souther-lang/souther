@@ -414,12 +414,13 @@ sealed interface ComparisonAssessment {
             case Cutting.Read.Stopped _ when dependencies.comparison(comparison, reads) ->
                     new OnADependencysAnswer();
             // And where the reading stopped, its own answer for having stopped — decided where it
-            // stopped rather than worked out again from the comparison afterwards. Here the walk
+            // stopped rather than worked out again from the comparison afterwards — and where the
+            // values a side holds came from, at each place it did not already answer. Here the walk
             // over the expression is the only account of what the rule is about, which is what it
             // is for.
-            case Cutting.Read.Stopped stopped -> stopped.why().isEmpty()
-                    ? aboutNoPosition(comparison, reads, read.newtypes())
-                    : new Unread(stopped.why());
+            case Cutting.Read.Stopped stopped ->
+                    besideWhereTheValuesCameFrom(stopped.why(), comparison, reads,
+                            read.newtypes());
         };
     }
 
@@ -638,8 +639,29 @@ sealed interface ComparisonAssessment {
     private static ComparisonAssessment aboutNoPosition(StatedComparison comparison,
                                                         InputReads reads,
                                                         DeclarationNewtypes newtypes) {
+        return besideWhereTheValuesCameFrom(new LinkedHashMap<>(), comparison, reads, newtypes);
+    }
+
+    /**
+     * What a reading that stopped comes to: what it left at each place it was filed at, and at each
+     * place the values a side holds came from that it was not.
+     *
+     * <p>Two facts about two places, and neither is asked to say the other. In
+     * {@code c >= atLeast} with {@code c} an element of {@code Set.map(x -> x + 1, cs)}, the
+     * reading is filed at {@code atLeast}, whose own values the rule is about, and what that place
+     * is left with is that place's
+     * ({@link souther.compiler.check.UnreadComparison#whereItStopped}). That the rule is about a
+     * value made from {@code cs} is a fact about {@code cs}, and asked only where the comparison is
+     * filed nowhere, it would be said of no place at all.
+     *
+     * <p>A place already answered keeps its answer: there is one word for a place, and the reading
+     * that stopped there is what decided it.
+     */
+    private static ComparisonAssessment besideWhereTheValuesCameFrom(
+            SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> filed,
+            StatedComparison comparison, InputReads reads, DeclarationNewtypes newtypes) {
         SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why =
-                new LinkedHashMap<>();
+                new LinkedHashMap<>(filed);
         GuardThresholds.cameFrom(comparison, reads, newtypes, why);
         return why.isEmpty() ? new NoInput() : new Unread(why);
     }

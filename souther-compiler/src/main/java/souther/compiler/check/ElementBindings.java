@@ -13,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Which of a body's bindings hold an element of a container, or the key a map files one under, and
@@ -374,6 +375,33 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
                 && each.part() == what.part())) {
             from.add(what);
         }
+    }
+
+    /**
+     * The step whose answers {@code container} holds, one for each element of what the application
+     * hands that step, or null where it holds no such run.
+     *
+     * <p>Of this application and of no other over the same elements. The step is the one this call
+     * was handed and the elements are those of the argument it hands them from, and the operation
+     * answering one value per element of that very argument is what makes each element of the
+     * answer the step's answer on one of them ({@link #answersOnePerElementOf}).
+     *
+     * <p>Only of an operation still standing as itself. Where one has been expanded away, what the
+     * tree holds is a walk the rewrite left, and which of its bindings is the step's answer is
+     * the expansion's to have written down ({@link ElementProvenance}).
+     *
+     * @param blockOf the block a closure argument stands for, where the call stands
+     */
+    public static Core.Block stepAnsweredOnEachElement(Core container,
+                                                       Function<Core, Core.Block> blockOf) {
+        // What a container holds does not turn on the type it stands as.
+        if (!(Core.withoutStanding(container) instanceof Core.PreservedCall call)) {
+            return null;
+        }
+        ValueName operation = call.declared().operation();
+        Combinators.Handed handed = Combinators.handedTo(operation, call.args(), blockOf);
+        return handed != null && answersOnePerElementOf(operation, handed.container(), call.args())
+                ? handed.step() : null;
     }
 
     /**
