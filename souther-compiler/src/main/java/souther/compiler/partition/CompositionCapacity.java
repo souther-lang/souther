@@ -47,7 +47,17 @@ public record CompositionCapacity(Where where, UnheldNumber why) {
         VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO,
 
         /** One element's share of a total a container is split across. */
-        VALUES_A_TOTAL_IS_SPREAD_OVER
+        VALUES_A_TOTAL_IS_SPREAD_OVER,
+
+        /** The least count the conditions on one count of a container's elements leave. */
+        THE_LEAST_COUNT_ASKED_FOR,
+
+        /** A count of a container's elements a point or a side of a line on it is tried at. */
+        COUNTS_AN_ITEM_IS_TRIED_AT,
+
+        /** A place a statement about an element turns over at, which the element's values are
+         *  chosen either side of. */
+        PLACES_AN_ELEMENT_TURNS_AT
     }
 
     /**

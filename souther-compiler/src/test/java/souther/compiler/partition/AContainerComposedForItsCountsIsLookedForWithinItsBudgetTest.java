@@ -34,6 +34,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -69,21 +70,62 @@ class AContainerComposedForItsCountsIsLookedForWithinItsBudgetTest {
     }
 
     /**
+     * The least count a region of counts holds is one of them where there is one, and that there
+     * is none only where the region holds no whole number from nought — never because one could not
+     * be named.
+     */
+    @Test
+    void theLeastCountIsOneOfThemOrAProofThereIsNone() {
+        CountedElements count = aCount(Optional.empty());
+        assertEquals(new CountedElements.Least.At(Count.of(2)),
+                count.leastIn(LevelRegion.of(new LevelInterval(Bound.at(level(2), true), null))));
+        assertEquals(new CountedElements.Least.At(Count.of(1_000_000_000L)),
+                assertTimeoutPreemptively(Duration.ofSeconds(5), () -> count.leastIn(
+                        LevelRegion.of(new LevelInterval(Bound.at(level(1_000_000_000L), true),
+                                null)))),
+                "a count far up is named at once, read off the run and not walked up to");
+        assertEquals(new CountedElements.Least.None(),
+                count.leastIn(LevelRegion.of(new LevelInterval(Bound.at(level(1), false),
+                        Bound.at(level(2), false)))),
+                "nothing whole lies strictly between one and two");
+        assertEquals(new CountedElements.Least.None(),
+                count.leastIn(LevelRegion.of(new LevelInterval(null, Bound.at(level(0), false)))),
+                "and no count is below none");
+    }
+
+    /**
+     * Which count is counted is the container and the statement, whatever a reading worked out
+     * about an element meeting it: two readings of one count are one count to gather demands by.
+     */
+    @Test
+    void aCountIsTheSameCountHoweverFarItsStatementWasRead() {
+        CountedElements read = aCount(Optional.of(List.of()));
+        CountedElements unread = aCount(Optional.empty());
+        assertEquals(read.identity(), unread.identity());
+    }
+
+    private static Level level(long count) {
+        return new Level.OfTheQuantity(ExactRatio.of(count));
+    }
+
+    /** A count of the elements of {@code xs} above nought. */
+    private static CountedElements aCount(Optional<List<TakenConstraint>> anElementMeeting) {
+        Read read = read();
+        NumericTerm element = new NumericTerm.ValueOf(read.xs().element());
+        Proposition meets = new Proposition.Compared(new Relation.Affine(new LinearForm<>(
+                ExactRatio.ZERO, Map.of(new DecisionAtom.OfTheInput(element), ExactRatio.ONE)),
+                Rel.GT), true);
+        return CountedElements.of("counted", new Quantity.HowManyMeet(read.xs(), meets),
+                read.measuring(), anElementMeeting);
+    }
+
+    /**
      * The container for each count of elements above {@code above[i]} at {@code asked[i]}.
      */
     private static TermRealizations.Realization composed(long[] above, long[] asked) {
-        Compilation compilation =
-                Compilation.ofSources(List.of(SOURCE), ModulePath.EMPTY);
-        compilation.answerEverything();
-        String module = compilation.modules().get(0);
-        Map<String, DeclaredSig> sigs =
-                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
-        RuleReadingSource rules = RuleReadings.of(compilation, module);
-        RuleReadingContext reading = RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
-        InputDomain input = InputDomain.of(sigs.get("counted"), reading, Membership.none());
-        Quantities measuring = input.quantities(rules);
-        TermPath xs = input.positions().stream().map(Position::path)
-                .filter(each -> each.toString().equals("xs")).findFirst().orElseThrow();
+        Read read = read();
+        Quantities measuring = read.measuring();
+        TermPath xs = read.xs();
         NumericTerm element = new NumericTerm.ValueOf(xs.element());
 
         List<RealizationTarget.ACount> counts = new ArrayList<>();
@@ -99,6 +141,23 @@ class AContainerComposedForItsCountsIsLookedForWithinItsBudgetTest {
                     new Level.OfTheQuantity(ExactRatio.of(asked[i])))), Count.of(asked[i])));
         }
         return CardinalityComposer.compose(new Type.ListOf(Type.INT), counts, demands, null,
-                List.of(), measuring.region(), reading);
+                List.of(), measuring.region(), read.reading());
+    }
+
+    /** The input of {@link #SOURCE}, read: its numbers, its rules and its container. */
+    private record Read(Quantities measuring, RuleReadingContext reading, TermPath xs) {}
+
+    private static Read read() {
+        Compilation compilation = Compilation.ofSources(List.of(SOURCE), ModulePath.EMPTY);
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        Map<String, DeclaredSig> sigs =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        RuleReadingContext reading = RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES);
+        InputDomain input = InputDomain.of(sigs.get("counted"), reading, Membership.none());
+        TermPath xs = input.positions().stream().map(Position::path)
+                .filter(each -> each.toString().equals("xs")).findFirst().orElseThrow();
+        return new Read(input.quantities(rules), reading, xs);
     }
 }

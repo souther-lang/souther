@@ -15,6 +15,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 
@@ -156,9 +157,10 @@ final class CardinalityComposer {
             turns.addAll(where);
         }
         boolean distinct = holding.kind() == Shape.Sequence.Kind.SET;
+        Set<CompositionCapacity> unheld = new LinkedHashSet<>();
         Groups groups = Groups.of(asked, container, element, written,
                 run == null ? List.of() : valuesAlong(element.carrier(), run, turns,
-                        distinct ? MOST_ELEMENTS : 1));
+                        distinct ? MOST_ELEMENTS : 1, unheld));
         TypeView ofTheElement = TypeView.of(holding.element(), ruleSource.inners(),
                 ruleSource.symbols(), ruleSource.kinds(), ruleSource.sums());
         List<FixtureTemplate> built = new ArrayList<>();
@@ -196,7 +198,7 @@ final class CardinalityComposer {
         CompositionShortfall rest = CompositionShortfall.of(refused,
                 groups.unread().isEmpty() ? Set.of()
                         : Set.of(CompositionRepertoire.ELEMENTS_CHOSEN_FOR_A_COUNT),
-                Set.of());
+                unheld);
         if (!built.isEmpty()) {
             return new TermRealizations.Realization.Built(built, rest);
         }
@@ -366,12 +368,23 @@ final class CardinalityComposer {
      * write. A run bounded on neither side has one value taken, as a place with nothing to be near.
      */
     private static List<Place> valuesAlong(Carrier carrier, NumericDomain.Bounds run,
-                                           List<ExactRatio> turns, int each) {
+                                           List<ExactRatio> turns, int each,
+                                           Set<CompositionCapacity> unheld) {
         List<Place> at = new ArrayList<>();
         for (ExactRatio turn : turns.stream().distinct().sorted().toList()) {
-            if (Count.written(turn) instanceof ExactAnswer.Held<Optional<Count>>(
-                    Optional<Count> written) && written.isPresent()) {
-                at.add(written.get());
+            // A place this could not write is a place the values either side of it are not told
+            // apart at, which is a number not held and is said; the runs beside it are walked as
+            // one.
+            switch (Count.written(turn)) {
+                case ExactAnswer.Held<Optional<Count>>(Optional<Count> written)
+                        when written.isPresent() -> at.add(written.get());
+                case ExactAnswer.Held<Optional<Count>> _ -> unheld.add(new CompositionCapacity(
+                        CompositionCapacity.Where.PLACES_AN_ELEMENT_TURNS_AT,
+                        UnheldNumber.NO_REPRESENTATION_EXISTS));
+                case ExactAnswer.Unheld<Optional<Count>> notHeld ->
+                        unheld.add(new CompositionCapacity(
+                                CompositionCapacity.Where.PLACES_AN_ELEMENT_TURNS_AT,
+                                notHeld.why()));
             }
         }
         List<Place> out = new ArrayList<>();

@@ -8,8 +8,10 @@ import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
-import souther.compiler.numeric.Towards;
+import souther.compiler.numeric.UnheldNumber;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -86,20 +88,69 @@ record CountedElements(String behavior, TermPath container, Proposition meeting,
         return LevelSpace.steppingBy(ExactRatio.ONE);
     }
 
-    /** The least count {@code region} holds, or null where it holds none: a count is from none
-     *  up, and the least of a run of them is where the run starts. */
-    Level leastIn(LevelRegion region) {
+    /**
+     * Which count this is, apart from what reading it worked out.
+     *
+     * <p>Two readings of one count may read its statement to different depths — one finds what an
+     * element meeting it is held to and another does not — and they are still one count. What a
+     * row is asked of a count is gathered by this, and never by what a reading made of it.
+     */
+    record Identity(String behavior, TermPath container, Proposition meeting) {}
+
+    /** Which count this is ({@link Identity}). */
+    Identity identity() {
+        return new Identity(behavior, container, meeting);
+    }
+
+    /**
+     * The least count {@code region} holds: one of them, none at all, or one that could not be
+     * worked out.
+     *
+     * <p>Three answers and not a count or a null. That the region holds no count is a proof — no
+     * container meets what it asks — and that its least count could not be held is nothing of the
+     * kind; folded into one null, a reader proving the first was proving it of the second.
+     */
+    Least leastIn(LevelRegion region) {
         LevelRegion counts = region.meet(LevelRegion.of(new LevelInterval(
                 Bound.at(new Level.OfTheQuantity(ExactRatio.ZERO), true), null)));
         Level least = null;
+        UnheldNumber unheld = null;
         for (LevelInterval part : counts.parts()) {
-            Level first = levels().witness(part, Towards.ABOVE).level();
-            if (first != null && (least == null
-                    || first.asAnExactNumber().compareTo(least.asAnExactNumber()) < 0)) {
-                least = first;
+            switch (levels().inspect(part)) {
+                case Occupancy.Empty _ -> { }
+                case Occupancy.Inhabited(Level first, Level _) -> {
+                    if (least == null
+                            || first.asAnExactNumber().compareTo(least.asAnExactNumber()) < 0) {
+                        least = first;
+                    }
+                }
+                case Occupancy.NotWorkedOut(UnheldNumber why) -> unheld = why;
             }
         }
-        return least;
+        if (least == null) {
+            return unheld == null ? new Least.None() : new Least.NotWorkedOut(unheld);
+        }
+        return switch (Count.written(least.asAnExactNumber())) {
+            case ExactAnswer.Held<Optional<Count>>(Optional<Count> written) ->
+                    written.<Least>map(Least.At::new).orElseGet(
+                            () -> new Least.NotWorkedOut(UnheldNumber.NO_REPRESENTATION_EXISTS));
+            case ExactAnswer.Unheld<Optional<Count>> notHeld ->
+                    new Least.NotWorkedOut(notHeld.why());
+        };
+    }
+
+    /** What the least count of a region came to ({@link #leastIn}). */
+    sealed interface Least {
+
+        /** The least count the region holds. */
+        record At(Count count) implements Least {}
+
+        /** The region holds no count: no container has so many elements meeting the statement. */
+        record None() implements Least {}
+
+        /** A count of the region could not be worked out, which says nothing of whether it holds
+         *  one. */
+        record NotWorkedOut(UnheldNumber why) implements Least {}
     }
 
     /**

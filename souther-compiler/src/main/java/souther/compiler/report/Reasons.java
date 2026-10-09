@@ -234,6 +234,10 @@ final class Reasons {
                 case VALUES_A_POSITION_ON_THE_WAY_IS_WALKED_TO ->
                         "the next value of a position on the way";
                 case VALUES_A_TOTAL_IS_SPREAD_OVER -> "one element's share of a total";
+                case THE_LEAST_COUNT_ASKED_FOR -> "the least count the conditions on a count leave";
+                case COUNTS_AN_ITEM_IS_TRIED_AT -> "a count a line on a count is tried at";
+                case PLACES_AN_ELEMENT_TURNS_AT ->
+                        "a place a statement about an element turns over at";
             };
             out.add(what + switch (each.why()) {
                 case MORE_ROOM_COULD_ANSWER -> ", which this host had no room to work out";

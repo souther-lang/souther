@@ -169,16 +169,31 @@ public final class LevelRealizer {
             stoppedBy.add(CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT);
         }
         for (Level level : offered.levels()) {
-            if (!(Count.written(level.asAnExactNumber())
-                    instanceof ExactAnswer.Held<Optional<Count>>(Optional<Count> written))
-                    || written.isEmpty() || written.get().at().signum() < 0) {
+            // A count is whole and from none, so a level below none is no count at all; one this
+            // could not write as a count is a number not held, and said as that.
+            Count asked;
+            switch (Count.written(level.asAnExactNumber())) {
+                case ExactAnswer.Held<Optional<Count>>(Optional<Count> written)
+                        when written.isPresent() -> asked = written.get();
+                case ExactAnswer.Held<Optional<Count>> _ -> {
+                    unheld.add(new CompositionCapacity(
+                            CompositionCapacity.Where.COUNTS_AN_ITEM_IS_TRIED_AT,
+                            UnheldNumber.NO_REPRESENTATION_EXISTS));
+                    continue;
+                }
+                case ExactAnswer.Unheld<Optional<Count>> notHeld -> {
+                    unheld.add(new CompositionCapacity(
+                            CompositionCapacity.Where.COUNTS_AN_ITEM_IS_TRIED_AT, notHeld.why()));
+                    continue;
+                }
+            }
+            if (asked.at().signum() < 0) {
                 continue;
             }
-            switch (count.count().placesBeside(within, written.get().at().signum() > 0,
-                    looking)) {
+            switch (count.count().placesBeside(within, asked.at().signum() > 0, looking)) {
                 case NumericWitness.Standing.Found beside -> {
                     Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
-                    fixing.put(counted, written.get());
+                    fixing.put(counted, asked);
                     for (NumericWitness.Standing.Found.Placed each : beside.inFixingOrder()) {
                         if (!each.position().subjectPath().insideAContainer()) {
                             fixing.put(RealizationTarget.of(each.position()), each.place());

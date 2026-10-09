@@ -27,7 +27,6 @@ import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
@@ -5109,23 +5108,26 @@ public final class Generator {
             }
             assumed = both;
         }
-        // The count the item itself asks for, which is the one count its level is.
+        // The count the item itself asks for, which is the one count its level is — by which
+        // count it is, so a condition on the way asking for the same count asks it of this one.
+        Map<CountedElements.Identity, RealizationTarget.ACount> itemCounts = new LinkedHashMap<>();
         for (Map.Entry<RealizationTarget, Place> each : fixing.entrySet()) {
             if (each.getKey() instanceof RealizationTarget.ACount count) {
+                itemCounts.put(count.count().identity(), count);
                 counted.put(count, NumbersAskedFor.of(LevelRegion.point(
                         new Level.OfTheQuantity(Count.number(each.getValue()).exactly()))));
             }
         }
         // How many elements of a container meet a statement, as every condition on the way asks
-        // it, gathered before any is taken in: two conditions on one count are met where both
-        // are, and which count that is cannot be read off either of them alone.
-        Map<CountedElements, CountsAsked> countsOnTheWay = new LinkedHashMap<>();
+        // it, gathered by which count it is before any is taken in: two conditions on one count
+        // are met where both are, and which count that is cannot be read off either alone.
+        Map<CountedElements.Identity, CountsAsked> countsOnTheWay = new LinkedHashMap<>();
         for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
             if (cut.demand() instanceof RowDemand.SoMany many) {
                 CountedElements count = CountedElements.of(subject.behavior(), many.count(),
                         subject.quantities(), many.anElementMeeting());
-                countsOnTheWay.merge(count, new CountsAsked(many.counts().values(), cut),
-                        CountsAsked::and);
+                countsOnTheWay.merge(count.identity(),
+                        new CountsAsked(count, many.counts().values(), cut), CountsAsked::and);
                 continue;
             }
             // What an element is asked with no relation among it has no number to place: that the
@@ -5164,24 +5166,37 @@ public final class Generator {
         }
         // Each count the way asks for, taken in whole or not at all: the counts every condition
         // on it leaves, and a place for each number its statement reads beside an element.
-        for (Map.Entry<CountedElements, CountsAsked> each : countsOnTheWay.entrySet()) {
-            CountedElements count = each.getKey();
-            RealizationTarget.ACount target = new RealizationTarget.ACount(count);
+        for (Map.Entry<CountedElements.Identity, CountsAsked> each : countsOnTheWay.entrySet()) {
+            CountedElements count = each.getValue().count();
+            RealizationTarget.ACount itemCount = itemCounts.get(each.getKey());
+            RealizationTarget.ACount target =
+                    itemCount != null ? itemCount : new RealizationTarget.ACount(count);
             OnTheWay.TakenIn cut = each.getValue().first();
             LevelRegion asked = each.getValue().counts();
-            NumbersAskedFor itemAsks = counted.get(target);
-            if (itemAsks != null) {
-                asked = asked.meet(itemAsks.values());
+            if (itemCount != null) {
+                asked = asked.meet(counted.get(itemCount).values());
             }
-            // No count the conditions leave together — and the item's own, where it asks for this
-            // one — is a way no row passes, which the counts settle by themselves.
-            Count least = leastCount(count, asked);
-            if (least == null) {
-                gaps.add(new ReachabilityGap.ProvedImpossible(cut));
-                continue;
+            Count least;
+            switch (count.leastIn(asked)) {
+                case CountedElements.Least.At(Count at) -> least = at;
+                // No count the conditions leave together — and the item's own, where it asks for
+                // this one — is a way no row passes, which the counts settle by themselves.
+                case CountedElements.Least.None _ -> {
+                    gaps.add(new ReachabilityGap.ProvedImpossible(cut));
+                    continue;
+                }
+                // A count that could not be worked out settles nothing about whether one is there.
+                case CountedElements.Least.NotWorkedOut(UnheldNumber why) -> {
+                    gaps.add(new ReachabilityGap.Uncomposed(cut,
+                            ReachabilityGap.Why.TheWalkForItsPositionsWasStopped.by(Set.of(),
+                                    Set.of(new CompositionCapacity(
+                                            CompositionCapacity.Where.THE_LEAST_COUNT_ASKED_FOR,
+                                            why)))));
+                    continue;
+                }
             }
             // The item's own count was placed with the numbers beside it where the item was.
-            if (itemAsks != null) {
+            if (itemCount != null) {
                 counted.put(target, NumbersAskedFor.of(asked));
                 continue;
             }
@@ -5206,10 +5221,16 @@ public final class Generator {
                 }
                 // Not placed, and no proof either: the region was narrowed by the statement here
                 // and not by the rules.
-                case NumericWitness.Standing.ProvedImpossible _,
-                     NumericWitness.Standing.NotFound _ ->
+                case NumericWitness.Standing.ProvedImpossible _ ->
                         gaps.add(new ReachabilityGap.Uncomposed(cut,
                                 new ReachabilityGap.Why.NoValueComposedForItsPositions()));
+                // And where a figure or a number not held is why, that travels.
+                case NumericWitness.Standing.NotFound(var by, var unheld) ->
+                        gaps.add(new ReachabilityGap.Uncomposed(cut,
+                                by.isEmpty() && unheld.isEmpty()
+                                        ? new ReachabilityGap.Why.NoValueComposedForItsPositions()
+                                        : ReachabilityGap.Why.TheWalkForItsPositionsWasStopped
+                                                .by(by, unheld)));
             }
         }
         return new Standing(out, routed, counted, Set.copyOf(someElement),
@@ -5217,23 +5238,16 @@ public final class Generator {
     }
 
     /**
-     * The counts every condition on the way asks of one count, and the first of them, which is the
-     * condition a reader is sent to where they cannot be taken in.
+     * The counts every condition on the way asks of one count, the count as the first of them read
+     * it, and that first condition, which is the one a reader is sent to where they cannot be
+     * taken in.
      */
-    private record CountsAsked(LevelRegion counts, OnTheWay.TakenIn first) {
+    private record CountsAsked(CountedElements count, LevelRegion counts,
+                               OnTheWay.TakenIn first) {
 
         CountsAsked and(CountsAsked other) {
-            return new CountsAsked(counts.meet(other.counts), first);
+            return new CountsAsked(count, counts.meet(other.counts), first);
         }
-    }
-
-    /** The least count {@code asked} holds, as the count a row is named at, or null where it
-     *  holds none. Which count of them the container is composed at is the composing's. */
-    private static Count leastCount(CountedElements count, LevelRegion asked) {
-        Level least = count.leastIn(asked);
-        return least != null && Count.written(least.asAnExactNumber())
-                instanceof ExactAnswer.Held<Optional<Count>>(Optional<Count> written)
-                ? written.orElse(null) : null;
     }
 
     /**
