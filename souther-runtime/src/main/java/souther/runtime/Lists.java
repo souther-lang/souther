@@ -1,6 +1,7 @@
 package souther.runtime;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.Comparator;
 import java.util.List;
 import java.util.ListIterator;
@@ -217,14 +218,35 @@ public final class Lists {
         return sumInt(xs, WorkCheckpoint.NONE);
     }
 
-    /** {@link #sumInt(List)}, passing {@code checkpoint} once for each element. */
+    /**
+     * {@link #sumInt(List)}, passing {@code checkpoint} once for each element.
+     *
+     * <p>The total is what is asked to be an {@code Int}, and not each partial sum on the way to it:
+     * added up wider where a partial sum passes the range, so {@code [max, 1, -1]} is {@code max} as
+     * {@code [max, -1, 1]} is, and only a total past the range aborts.
+     */
     public static long sumInt(List<Long> xs, WorkCheckpoint checkpoint) {
         long acc = 0;
+        BigInteger wide = null;
         for (long x : xs) {
             checkpoint.pass();
-            acc = IntMath.addExact(acc, x);
+            if (wide != null) {
+                wide = wide.add(BigInteger.valueOf(x));
+                continue;
+            }
+            try {
+                acc = Math.addExact(acc, x);
+            } catch (ArithmeticException _) {
+                wide = BigInteger.valueOf(acc).add(BigInteger.valueOf(x));
+            }
         }
-        return acc;
+        if (wide == null) {
+            return acc;
+        }
+        if (wide.bitLength() >= Long.SIZE) {
+            throw new ConstraintViolation("Int overflow: the sum of a list is " + wide);
+        }
+        return wide.longValueExact();
     }
 
     /** The product of a list of {@code Int} (Elm {@code List.product}); the empty list is 1. */
@@ -232,20 +254,44 @@ public final class Lists {
         return productInt(xs, WorkCheckpoint.NONE);
     }
 
-    /** {@link #productInt(List)}, passing {@code checkpoint} once for each element. */
+    /**
+     * {@link #productInt(List)}, passing {@code checkpoint} once for each element.
+     *
+     * <p>The product is what is asked to be an {@code Int}. Every factor but nought is at least one
+     * in size, so a partial product past the range leaves the product past it — unless a later
+     * factor is nought, and then the product is nought: {@code [max, 2, 0]} is nought as
+     * {@code [0, max, 2]} is.
+     */
     public static long productInt(List<Long> xs, WorkCheckpoint checkpoint) {
         long acc = 1;
+        boolean past = false;
         for (long x : xs) {
             checkpoint.pass();
-            acc = IntMath.multiplyExact(acc, x);
+            if (x == 0) {
+                acc = 0;
+                past = false;
+                continue;
+            }
+            if (past || acc == 0) {
+                continue;
+            }
+            try {
+                acc = Math.multiplyExact(acc, x);
+            } catch (ArithmeticException _) {
+                past = true;
+            }
+        }
+        if (past) {
+            // Said of the list and not of the factor it was passed at, which is the order's.
+            throw new ConstraintViolation("Int overflow: the product of a list is past what an Int"
+                    + " holds");
         }
         return acc;
     }
 
-    /** The sum of a list of {@code Decimal}; the empty list is 0. Each step is {@code +}
-     *  ({@link DecimalMath#add}), which keeps the larger scale of its two operands, so the elements'
-     *  own scales carry through the walk and a sum past what a {@code Decimal} holds aborts as
-     *  {@code +} does. */
+    /** The sum of a list of {@code Decimal}; the empty list is 0. What adding them a {@code +} at
+     *  a time comes to ({@link DecimalMath#sum}): at the greatest scale any of them is written at,
+     *  in whatever order they are. */
     public static BigDecimal sumDecimal(List<BigDecimal> xs) {
         return sumDecimal(xs, WorkCheckpoint.NONE);
     }
@@ -253,16 +299,16 @@ public final class Lists {
     /** {@link #sumDecimal(List)}, passing {@code checkpoint} once for each element and paying for
      *  each sum. */
     public static BigDecimal sumDecimal(List<BigDecimal> xs, WorkCheckpoint checkpoint) {
-        BigDecimal acc = BigDecimal.ZERO;
-        for (BigDecimal x : xs) {
+        for (int i = 0; i < xs.size(); i++) {
             checkpoint.pass();
-            acc = DecimalMath.add(acc, x, checkpoint);
         }
-        return acc;
+        // One sum of the elements, so what it costs is theirs and not their order's.
+        return DecimalMath.sum(xs, checkpoint);
     }
 
-    /** The product of a list of {@code Decimal}; the empty list is 1. Each step is {@code *}
-     *  ({@link DecimalMath#multiply}), and aborts where {@code *} does. */
+    /** The product of a list of {@code Decimal}; the empty list is 1. What multiplying them a
+     *  {@code *} at a time comes to ({@link DecimalMath#product}), and refused where its scale —
+     *  their scales added up — is past what a {@code Decimal} holds, in whatever order they are. */
     public static BigDecimal productDecimal(List<BigDecimal> xs) {
         return productDecimal(xs, WorkCheckpoint.NONE);
     }
@@ -270,12 +316,12 @@ public final class Lists {
     /** {@link #productDecimal(List)}, passing {@code checkpoint} once for each element and paying
      *  for each product. */
     public static BigDecimal productDecimal(List<BigDecimal> xs, WorkCheckpoint checkpoint) {
-        BigDecimal acc = BigDecimal.ONE;
-        for (BigDecimal x : xs) {
+        for (int i = 0; i < xs.size(); i++) {
             checkpoint.pass();
-            acc = DecimalMath.multiply(acc, x, checkpoint);
         }
-        return acc;
+        // One product of the elements, so whether its scale is held, and what it costs, is theirs
+        // and not their order's.
+        return DecimalMath.product(xs, checkpoint);
     }
 
     /** The sum of a list of {@code Rational}; the empty list is nought. Exact throughout — the
@@ -304,12 +350,12 @@ public final class Lists {
     /** {@link #productRational(List)}, passing {@code checkpoint} once for each element and paying
      *  for each product. */
     public static Rational productRational(List<Rational> xs, WorkCheckpoint checkpoint) {
-        Rational acc = Rational.ONE;
-        for (Rational x : xs) {
+        for (int i = 0; i < xs.size(); i++) {
             checkpoint.pass();
-            acc = acc.times(x, checkpoint);
         }
-        return acc;
+        // One product of the elements, so whether its exponents are held, and what it costs, is
+        // theirs and not their order's.
+        return Rational.product(xs, checkpoint);
     }
 
     /** Sorts by the elements' natural order (Elm {@code List.sort}). The element type is a

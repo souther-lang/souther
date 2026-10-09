@@ -7,7 +7,6 @@ import java.util.NavigableMap;
 import java.util.NavigableSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.function.BiConsumer;
 import java.util.function.LongConsumer;
 
 /**
@@ -180,6 +179,51 @@ public final class ExactArithmetic {
     }
 
     /**
+     * The product of {@code factors}: one answer for the factors in whatever order they come, refused
+     * only where the product itself has no representation.
+     *
+     * <p>Not a run of {@link #times}, each of which asks its exponents to be held: two factors at the
+     * greatest exponent fail where they meet even where a third brings the product back. A canonical
+     * numerator and denominator hold no two and no five, so neither does their product, and the
+     * product's exponents are the factors' added up — so they are added up, and asked of once. And a
+     * product with a nought among its factors is nought, whatever the others' exponents add to.
+     *
+     * <p>The factors are walked and never gathered, twice: once for their exponents and whether one
+     * is nought, and once to multiply them out.
+     *
+     * @throws ExactRangeExceeded where the exponents the factors add up to are past sixty-four bits
+     */
+    public static ExactParts product(Iterable<ExactParts> factors) {
+        // Added up wider than a long, so that a sum that passes the end and comes back is the sum.
+        BigInteger allTwos = BigInteger.ZERO;
+        BigInteger allFives = BigInteger.ZERO;
+        for (ExactParts each : factors) {
+            if (each.isZero()) {
+                return ExactParts.ZERO;
+            }
+            allTwos = allTwos.add(BigInteger.valueOf(each.twos()));
+            allFives = allFives.add(BigInteger.valueOf(each.fives()));
+        }
+        if (allTwos.bitLength() >= Long.SIZE || allFives.bitLength() >= Long.SIZE) {
+            throw new ExactRangeExceeded("the exponents of a product are past sixty-four bits: "
+                    + allTwos + ", " + allFives);
+        }
+        long twos = allTwos.longValueExact();
+        long fives = allFives.longValueExact();
+        BigInteger numerator = BigInteger.ONE;
+        BigInteger denominator = BigInteger.ONE;
+        try {
+            for (ExactParts each : factors) {
+                numerator = numerator.multiply(each.numerator());
+                denominator = denominator.multiply(each.denominator());
+            }
+        } catch (ArithmeticException e) {
+            throw ExactPowers.hostLimit(e);
+        }
+        return canonical(numerator, denominator, twos, fives);
+    }
+
+    /**
      * The product. The exponents add and are never built, and the common factors of the two fractions are
      * taken off before the numerators and denominators are multiplied, so what is multiplied is no larger
      * than the answer.
@@ -271,64 +315,142 @@ public final class ExactArithmetic {
      *                            than a whole number the host holds
      */
     public static ExactParts sum(Iterable<ExactParts> terms) {
-        return sum(terms, (one, other) -> { });
-    }
-
-    /**
-     * {@link #sum(Iterable)}, with {@code meeting} told each two partial sums before they are
-     * added — which is the work a caller paying for what it does pays for, one meeting at a time as
-     * {@link #plus} would be.
-     *
-     * <p>A partial sum handed to {@code meeting} is in no canonical form: its exponents are some
-     * term's, and the factors of two and five its fraction holds stay in the fraction.
-     *
-     * <p>The terms are walked and never gathered: what is kept is one partial sum for each scale
-     * met, so a sum of as many terms as a collection of the language holds asks for no array of
-     * them. They are walked once more where the sum is made by scale.
-     */
-    public static ExactParts sum(Iterable<ExactParts> terms,
-                                 BiConsumer<ExactParts, ExactParts> meeting) {
         // The terms as they come first, which is the whole of nearly every sum: an exact sum that
         // is held is the sum, whatever order made it. Only a sum that fails this way can turn on the
         // order, so only that one is made again by scale.
         try {
             ExactParts total = ExactParts.ZERO;
             for (ExactParts each : terms) {
-                if (total.isZero()) {
-                    total = each;
-                    continue;
-                }
-                meeting.accept(total, each);
-                total = plus(total, each);
+                total = total.isZero() ? each : plus(total, each);
             }
             return canonical(total.numerator(), total.denominator(), total.twos(), total.fives());
         } catch (ExactFailure _) {
-            return byScale(terms, meeting);
+            return byScale(terms, SumWork.NOBODY_PAYS);
         }
     }
 
-    /** {@link #sum(Iterable, BiConsumer)} made by scale: no partial sum in canonical form, terms of
-     *  one scale first and then the two nearest in scale. */
-    private static ExactParts byScale(Iterable<ExactParts> terms,
-                                      BiConsumer<ExactParts, ExactParts> meeting) {
+    /**
+     * The same sum, made by scale from the first, with {@code work} told what each piece of it
+     * costs before the piece is done — for a caller paying for what it does, to whom what the sum
+     * costs is as much its answer as the sum.
+     *
+     * <p>So what it costs is the terms' and not their order's. The terms are walked twice and never
+     * gathered: once for how much each scale holds, and once to add them up. Each term added at its
+     * scale is told with what every term of that scale holds together, which no partial sum of
+     * them is longer than whichever came first; each meeting of two scales is of partial sums that
+     * are each the exact sum of their scale's terms, in lowest terms, so the same whatever order
+     * they came in; and which two meet is the nearest pair, which the scales decide. A run of
+     * {@link #plus} first, as {@link #sum(Iterable)} makes, would cost what the order makes it —
+     * a fine term and an ordinary one aligned before the fine term's negation cancels it.
+     *
+     * @throws ExactRangeExceeded as {@link #sum(Iterable)} does
+     */
+    public static ExactParts sumByScale(Iterable<ExactParts> terms, SumWork work) {
+        return byScale(terms, work);
+    }
+
+    /**
+     * What a sum made by scale costs, told piece by piece before each piece is done
+     * ({@link #sumByScale}).
+     */
+    public interface SumWork {
+
+        /** Work nobody pays for. */
+        SumWork NOBODY_PAYS = new SumWork() {
+
+            @Override
+            public void atOneScale(ExactParts term, long numeratorAtMost, long denominatorAtMost) {
+            }
+
+            @Override
+            public void across(ExactParts one, ExactParts other) {
+            }
+        };
+
+        /**
+         * {@code term} added into the partial sum of its scale, which aligns nothing.
+         *
+         * <p>Told with how long a partial sum of that scale can be, whichever of its terms came
+         * first: a denominator no longer than every term's denominator multiplied together, and a
+         * numerator no longer than the longest numerator multiplied up to that denominator and
+         * carried once for each term. Of decimals, whose denominators are one, that is the longest
+         * of them and a carry — not every term's length together.
+         *
+         * @param numeratorAtMost   the bits no partial numerator of the scale holds more of
+         * @param denominatorAtMost the bits no partial denominator of the scale holds more of
+         */
+        void atOneScale(ExactParts term, long numeratorAtMost, long denominatorAtMost);
+
+        /** Two partial sums of different scales added, aligned at the lesser of each exponent. */
+        void across(ExactParts one, ExactParts other);
+    }
+
+    /** {@link #sumByScale} made: no partial sum in canonical form, terms of one scale first and
+     *  then the two nearest in scale. */
+    private static ExactParts byScale(Iterable<ExactParts> terms, SumWork work) {
         try {
+            // How long a partial sum of each scale can be, read off the terms without adding any.
+            NavigableMap<Scale, Holds> holds = new TreeMap<>();
+            for (ExactParts each : terms) {
+                if (!each.isZero()) {
+                    holds.merge(Scale.of(each), Holds.of(each), Holds::and);
+                }
+            }
             // Terms of one scale, as one fraction at that scale each. Exact, so it is the same
             // fraction whichever of them came first.
             NavigableMap<Scale, ExactParts> at = new TreeMap<>();
             for (ExactParts each : terms) {
                 if (!each.isZero()) {
-                    at.merge(Scale.of(each), each, (one, other) -> {
-                        meeting.accept(one, other);
-                        return aligned(one, other);
-                    });
+                    Scale scale = Scale.of(each);
+                    Holds scaleHolds = holds.get(scale);
+                    work.atOneScale(each, scaleHolds.numeratorAtMost(),
+                            scaleHolds.denominatorAtMost());
+                    at.merge(scale, each, ExactArithmetic::aligned);
                 }
             }
             at.values().removeIf(ExactParts::isZero);
-            ExactParts only = new NearestFirst(at, meeting).met();
+            ExactParts only = new NearestFirst(at, work).met();
             return only == null ? ExactParts.ZERO
                     : canonical(only.numerator(), only.denominator(), only.twos(), only.fives());
         } catch (ArithmeticException e) {
             throw ExactPowers.hostLimit(e);
+        }
+    }
+
+    /**
+     * What the terms of one scale hold: how many there are, the longest numerator, and the bits
+     * their denominators multiplied together hold beyond one.
+     */
+    private record Holds(long count, long longestNumerator, long denominators) {
+
+        static Holds of(ExactParts term) {
+            return new Holds(1, term.numerator().bitLength(), term.denominator().bitLength() - 1L);
+        }
+
+        Holds and(Holds other) {
+            return new Holds(saturated(count, other.count),
+                    Math.max(longestNumerator, other.longestNumerator),
+                    saturated(denominators, other.denominators));
+        }
+
+        /** No partial denominator of the scale is longer than every denominator multiplied. */
+        long denominatorAtMost() {
+            return saturated(denominators, 1);
+        }
+
+        /** No partial numerator is longer than the longest raised to that denominator, carried
+         *  once for each term. */
+        long numeratorAtMost() {
+            return saturated(saturated(longestNumerator, denominatorAtMost()),
+                    Long.SIZE - Long.numberOfLeadingZeros(count));
+        }
+    }
+
+    private static long saturated(long a, long b) {
+        try {
+            return Math.addExact(a, b);
+        } catch (ArithmeticException _) {
+            return Long.MAX_VALUE;
         }
     }
 
@@ -347,7 +469,7 @@ public final class ExactArithmetic {
     private static final class NearestFirst {
 
         private final NavigableMap<Scale, ExactParts> at;
-        private final BiConsumer<ExactParts, ExactParts> meeting;
+        private final SumWork work;
         /** The scales still here, as the powers of five each power of two stands with. */
         private final NavigableMap<Long, NavigableSet<Long>> byTwos = new TreeMap<>();
         /** Each scale's nearest, least first. */
@@ -375,9 +497,9 @@ public final class ExactArithmetic {
          *
          * @param at the partial sums by their scales, none of them nought
          */
-        NearestFirst(NavigableMap<Scale, ExactParts> at, BiConsumer<ExactParts, ExactParts> meeting) {
+        NearestFirst(NavigableMap<Scale, ExactParts> at, SumWork work) {
             this.at = at;
-            this.meeting = meeting;
+            this.work = work;
             for (Scale each : at.keySet()) {
                 byTwos.computeIfAbsent(each.twos(), _ -> new TreeSet<>()).add(each.fives());
             }
@@ -393,7 +515,7 @@ public final class ExactArithmetic {
                 Scale first = nearest.one().compareTo(nearest.other()) < 0
                         ? nearest.one() : nearest.other();
                 Scale second = first.equals(nearest.one()) ? nearest.other() : nearest.one();
-                meeting.accept(at.get(first), at.get(second));
+                work.across(at.get(first), at.get(second));
                 ExactParts sum = aligned(at.get(first), at.get(second));
                 NavigableSet<Scale> asked = new TreeSet<>();
                 remove(first, asked);
@@ -404,7 +526,7 @@ public final class ExactArithmetic {
                     Scale made = Scale.of(sum);
                     ExactParts there = at.get(made);
                     if (there != null) {
-                        meeting.accept(there, sum);
+                        work.across(there, sum);
                         sum = aligned(there, sum);
                         remove(made, asked);
                     }
@@ -512,14 +634,6 @@ public final class ExactArithmetic {
         private static long distance(long a, long b) {
             try {
                 return Math.absExact(Math.subtractExact(a, b));
-            } catch (ArithmeticException _) {
-                return Long.MAX_VALUE;
-            }
-        }
-
-        private static long saturated(long a, long b) {
-            try {
-                return Math.addExact(a, b);
             } catch (ArithmeticException _) {
                 return Long.MAX_VALUE;
             }

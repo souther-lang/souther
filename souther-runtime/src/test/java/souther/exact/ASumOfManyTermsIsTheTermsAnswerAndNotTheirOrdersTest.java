@@ -76,12 +76,40 @@ class ASumOfManyTermsIsTheTermsAnswerAndNotTheirOrdersTest {
         }
     }
 
-    /** And every meeting is told, so a caller paying for the work pays for each. */
+    /**
+     * Made by scale, what the sum tells a caller paying for it is the terms' and not their
+     * order's: each term with how much its scale holds, and each meeting of two scales with the
+     * same partial sums, whichever order the terms came in.
+     */
     @Test
-    void everyMeetingIsToldBeforeItIsMade() {
-        List<String> met = new ArrayList<>();
-        ExactArithmetic.sum(List.of(ONE, ONE, ONE), (one, other) -> met.add(one + "+" + other));
-        assertEquals(2, met.size(), () -> "two meetings make one sum of three: " + met);
+    void whatASumMadeByScaleTellsIsTheTermsAndNotTheirOrders() {
+        ExactParts three = new ExactParts(BigInteger.valueOf(3), BigInteger.ONE, 0, 0);
+        ExactParts aHalf = new ExactParts(BigInteger.ONE, BigInteger.ONE, -1, 0);
+        List<String> first = null;
+        for (List<ExactParts> order : orders(List.of(FINE, ONE, negated(FINE), three, aHalf))) {
+            List<String> told = new ArrayList<>();
+            ExactParts sum = ExactArithmetic.sumByScale(order, new ExactArithmetic.SumWork() {
+
+                @Override
+                public void atOneScale(ExactParts term, long numeratorAtMost,
+                                       long denominatorAtMost) {
+                    told.add(term + " at " + numeratorAtMost + "/" + denominatorAtMost);
+                }
+
+                @Override
+                public void across(ExactParts one, ExactParts other) {
+                    told.add(one + " + " + other);
+                }
+            });
+            assertEquals(ExactArithmetic.sum(order), sum, () -> "one sum in the order " + order);
+            told.sort(null);
+            if (first == null) {
+                first = told;
+            } else {
+                List<String> expected = first;
+                assertEquals(expected, told, () -> "what is told in the order " + order);
+            }
+        }
     }
 
     private static ExactParts negated(ExactParts of) {

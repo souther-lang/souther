@@ -1,8 +1,13 @@
 package souther.runtime;
 
+import souther.exact.ExactArithmetic;
 import souther.exact.ExactDecimals;
+import souther.exact.ExactFailure;
+import souther.exact.ExactParts;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.List;
 
 /**
  * Every Decimal operation the language has (spec §stdlib-decimal), and the one place
@@ -298,6 +303,81 @@ public final class DecimalMath {
     // What an evaluated class calls: each operation above, paid for to a checkpoint before the host
     // is asked for it (HostWork). Paying is all these add, so what they answer is what the operation
     // answers, refusals included.
+
+    /**
+     * The sum of {@code terms}, at the greatest scale any of them is written at and never less than
+     * nought's — what adding them up a {@code +} at a time comes to, in whatever order.
+     *
+     * <p>Held to no allowance, that is what is done: an exact sum of decimals is held whatever order
+     * makes it. Held to one, what it costs is seen as well, and a run of {@code +} costs what its
+     * order makes it — a fine term raised to an ordinary one's scale before the fine term's negation
+     * cancels it, which is the long way to the same sum. So it is made the way an exact sum of many
+     * is made where its cost is seen ({@link ExactArithmetic#sumByScale}), and written at the scale
+     * last, so what it costs is the terms'.
+     */
+    public static BigDecimal sum(List<BigDecimal> terms, WorkCheckpoint checkpoint) {
+        if (checkpoint == WorkCheckpoint.NONE) {
+            BigDecimal acc = BigDecimal.ZERO;
+            for (BigDecimal each : terms) {
+                acc = add(acc, each);
+            }
+            return acc;
+        }
+        int scale = 0;
+        for (BigDecimal each : terms) {
+            scale = Math.max(scale, each.scale());
+        }
+        Iterable<ExactParts> parts = () -> terms.stream()
+                .map(each -> ExactArithmetic.canonical(each.unscaledValue(), BigInteger.ONE,
+                        -(long) each.scale(), -(long) each.scale()))
+                .iterator();
+        try {
+            ExactParts sum = ExactArithmetic.sumByScale(parts, new Rational.PaidSum(checkpoint));
+            // Written at the scale: as long as the sum is, and longer by the powers of ten the
+            // scale writes it out to.
+            long written = HostWork.bits(sum.numerator()) + HostWork.bitsOfTens(scale);
+            HostWork.pay(checkpoint, written, HostWork.power(HostWork.bitsOfTens(scale))
+                    + HostWork.product(HostWork.bits(sum.numerator()), written));
+            return new BigDecimal(ExactArithmetic.roundedTimesTenTo(sum, scale,
+                    java.math.RoundingMode.UNNECESSARY), scale);
+        } catch (ExactFailure failure) {
+            throw outOfRange("the sum of a list of " + terms.size() + " decimals");
+        }
+    }
+
+    /**
+     * The product of {@code factors}, at the scale their scales add up to — what multiplying them
+     * a {@code *} at a time comes to, in whatever order.
+     *
+     * <p>A product's scale is its factors' scales added up, and is asked to be held once, of the
+     * product: a run of {@code *} asks it of every partial product, and two factors past the range
+     * together refuse where a third brings the scale back. Paid for to {@code checkpoint} before
+     * anything is multiplied, a factor at a time as multiplied into a product as long as every
+     * factor together, which no partial product is longer than — so what it costs is the
+     * factors'.
+     */
+    public static BigDecimal product(List<BigDecimal> factors, WorkCheckpoint checkpoint) {
+        long scale = 0;
+        long all = 0;
+        for (BigDecimal each : factors) {
+            scale += each.scale();
+            long bits = HostWork.bits(each);
+            all = all > Long.MAX_VALUE - bits ? Long.MAX_VALUE : all + bits;
+        }
+        if (scale != (int) scale) {
+            throw outOfRange("the product of a list of " + factors.size() + " decimals");
+        }
+        if (checkpoint != WorkCheckpoint.NONE) {
+            for (BigDecimal each : factors) {
+                checkpoint.spend(HostWork.product(HostWork.bits(each), all));
+            }
+        }
+        BigInteger unscaled = BigInteger.ONE;
+        for (BigDecimal each : factors) {
+            unscaled = unscaled.multiply(each.unscaledValue());
+        }
+        return new BigDecimal(unscaled, (int) scale);
+    }
 
     /** {@link #add(BigDecimal, BigDecimal)}, paid for to {@code checkpoint} first. */
     public static BigDecimal add(BigDecimal a, BigDecimal b, WorkCheckpoint checkpoint) {
