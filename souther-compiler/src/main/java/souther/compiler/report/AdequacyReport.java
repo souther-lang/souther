@@ -4846,10 +4846,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      */
     private static void quantityId(ObjectNode into, BorderQuantity quantity) {
         into.put("shape", word(quantity.shape()));
-        ArrayNode terms = into.putArray("terms");
+        // A quantity that is no form weighs no terms, and is the quantity it names itself as: how
+        // many elements of which container meet what.
         if (!(quantity instanceof LinearQuantity form)) {
+            into.put("counted", quantity.identity());
             return;
         }
+        ArrayNode terms = into.putArray("terms");
         for (Map.Entry<NumericTerm, ExactRatio> each
                 : NumericTerms.entriesInOrder(form.direction().coefs())) {
             ObjectNode weighed = terms.addObject();

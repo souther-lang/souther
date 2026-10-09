@@ -120,6 +120,8 @@ public record BoundaryTarget(BorderQuantity of, QuantityCut cut) {
         /** Two positions holding the same place. */
         BETWEEN_POSITIONS,
         /** An arithmetic form over several positions, at a value of the form. */
-        OVER_A_FORM
+        OVER_A_FORM,
+        /** How many elements of a container meet a statement, at a number of them. */
+        COUNT_OF_ELEMENTS
     }
 }

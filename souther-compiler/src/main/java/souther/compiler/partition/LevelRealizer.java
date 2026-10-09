@@ -136,6 +136,9 @@ public final class LevelRealizer {
             case Standing.OfOneCoordinate one -> ofOne(one, within, runs, looking, tried);
             case Standing.OfTwoOnOneCarrier two -> ofTwo(two, within, runs, looking, tried);
             case Standing.OfAForm over -> ofAForm(over, within, runs, tried);
+            // A count is held by elements and not by a number written somewhere, and composing
+            // so many elements meeting a statement is not a value of a position this realizes.
+            case Standing.OfACount _ -> Realization.Unknown.nothingComposedOne();
         };
     }
 
@@ -146,6 +149,7 @@ public final class LevelRealizer {
             case Standing.OfOneCoordinate one -> List.of(one.term());
             case Standing.OfTwoOnOneCarrier two -> List.of(two.on(), two.against());
             case Standing.OfAForm over -> NumericTerms.inOrder(over.form().coefs().keySet());
+            case Standing.OfACount count -> count.numbers();
         };
     }
 

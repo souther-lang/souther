@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.meaning.Proposition;
 
-import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -74,9 +73,10 @@ public record WhereAPartDecides(PartOfAComparison part, Proposition decides) {
             this.decides = decides;
         }
 
-        /** Every quantity a row is read at to say whether it is somewhere the line decides. */
-        List<LinearQuantity> over() {
-            return decides.over();
+        /** Reads {@code row} the way {@link #at} does, for the walk that finds which containers a
+         *  row has to choose an element of ({@link AStatementAtARow#lookAt}). */
+        void lookAt(BorderQuantity.Observation row) {
+            decides.lookAt(row);
         }
 
         /**

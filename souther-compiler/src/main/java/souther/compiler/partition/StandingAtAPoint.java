@@ -166,8 +166,6 @@ public final class StandingAtAPoint {
         BorderQuantity quantity = line.quantity();
         BehaviorInputs where = line.subject().inputs();
         Optional<WhereAPartDecides.AskedOfRows> decides = whereItDecides(line);
-        List<LinearQuantity> alsoOver =
-                decides.map(WhereAPartDecides.AskedOfRows::over).orElse(List.of());
         Set<ReadingGap> unreadable = new LinkedHashSet<>();
         boolean unwatched = false;
         boolean stoppedShort = false;
@@ -180,7 +178,7 @@ public final class StandingAtAPoint {
             // the readings are tried under each choice of an element of each.
             boolean stands = false;
             Set<ReadingGap> stopped = new LinkedHashSet<>();
-            Readings readings = readings(where, one, quantity, alsoOver);
+            Readings readings = readings(where, one, quantity, decides);
             List<BorderQuantity.Observation> tried = readings.tried();
             for (int which = 0; which < tried.size(); which++) {
                 switch (quantity.standsAt(criterion, tried.get(which))) {
@@ -285,8 +283,6 @@ public final class StandingAtAPoint {
         }
         BehaviorInputs where = line.subject().inputs();
         Optional<WhereAPartDecides.AskedOfRows> decides = whereItDecides(line);
-        List<LinearQuantity> alsoOver =
-                decides.map(WhereAPartDecides.AskedOfRows::over).orElse(List.of());
         List<Map<souther.compiler.inputs.NumericTerm, souther.compiler.numeric.Place>> read =
                 new ArrayList<>();
         Set<ReadingGap> unreadable = new LinkedHashSet<>();
@@ -306,7 +302,7 @@ public final class StandingAtAPoint {
                     }
                 }
             }
-            Readings readings = readings(where, one, quantity, alsoOver);
+            Readings readings = readings(where, one, quantity, decides);
             for (int which = 0; which < readings.tried().size(); which++) {
                 // Only where the statement turns on the line, for a line of a statement of several:
                 // a reading somewhere it does not says nothing about where this line falls.
@@ -626,19 +622,20 @@ public final class StandingAtAPoint {
      */
     static Readings readings(BehaviorInputs where, ObservedInputs observed,
                              BorderQuantity quantity) {
-        return readings(where, observed, quantity, List.of());
+        return readings(where, observed, quantity, Optional.empty());
     }
 
     /**
-     * The same, with the containers {@code alsoOver} are inside chosen in each reading too: a
-     * reading is one choice of an element in every container any of them is read at, so what the
-     * line reads and what is asked beside it are read of the same elements.
+     * The same, with the containers where the line decides is read at chosen in each reading too:
+     * a reading is one choice of an element in every container either is read at, so what the line
+     * reads and what is asked beside it are read of the same elements.
      */
     private static Readings readings(BehaviorInputs where, ObservedInputs observed,
-                                     BorderQuantity quantity, List<LinearQuantity> alsoOver) {
+                                     BorderQuantity quantity,
+                                     Optional<WhereAPartDecides.AskedOfRows> decides) {
         DiscoveringRow discovering = new DiscoveringRow(where, observed);
         quantity.lookAt(discovering);
-        alsoOver.forEach(each -> each.lookAt(discovering));
+        decides.ifPresent(asked -> asked.lookAt(discovering));
         Map<TermPath, Integer> containers = discovering.containers();
         // The walk the containers were found by, where it is also a reading the point is tried
         // against. Where the row's positions are inside no container there is one choice and it is

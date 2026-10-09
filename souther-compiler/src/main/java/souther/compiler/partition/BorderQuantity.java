@@ -8,7 +8,12 @@ import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
+import souther.compiler.meaning.Relation;
+import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -42,7 +47,7 @@ import java.util.Set;
  * what a variant costs is the answers this interface asks for below, and nothing downstream gains
  * an arm.
  */
-public sealed interface BorderQuantity permits LinearQuantity {
+public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.HowMany {
 
     /**
      * The number one position holds, which is the position's own values.
@@ -677,6 +682,202 @@ public sealed interface BorderQuantity permits LinearQuantity {
 
     }
 
+    /**
+     * How many elements of a container meet a statement: a whole number from none to as many as
+     * the container holds.
+     *
+     * <p>No form over a row's numbers. It turns on every element and on whatever else the
+     * statement names — {@code x > limit} reads {@code limit} beside each element — so a row is
+     * read at it whole, element by element, and a line on it divides no position.
+     *
+     * <p>One quantity wherever it is written: the same container and the same statement are the
+     * same count, however the statement's element was named ({@link Quantity.HowManyMeet}).
+     */
+    final class HowMany implements BorderQuantity {
+
+        private final String behavior;
+        private final TermPath container;
+        private final Proposition meeting;
+        private final AStatementAtARow perElement;
+
+        /**
+         * @param container  the container the elements are counted in
+         * @param meeting    what an element is counted for meeting, over the element's own
+         *                   numbers and the input's
+         * @param perElement {@code meeting} put to rows, which is what an element is asked
+         */
+        HowMany(String behavior, TermPath container, Proposition meeting,
+                AStatementAtARow perElement) {
+            if (behavior == null || container == null || meeting == null || perElement == null) {
+                throw new IllegalArgumentException("a count is a behavior's count of the elements"
+                        + " of some container meeting something");
+            }
+            this.behavior = behavior;
+            this.container = container;
+            this.meeting = meeting;
+            this.perElement = perElement;
+        }
+
+        /** The container the elements are counted in. */
+        public TermPath container() {
+            return container;
+        }
+
+        /** What an element is counted for meeting. */
+        public Proposition meeting() {
+            return meeting;
+        }
+
+        @Override
+        public String behavior() {
+            return behavior;
+        }
+
+        /** Every whole number; that none is the least is what the rules leave it
+         *  ({@link #runsWithin}). */
+        @Override
+        public LevelSpace levels() {
+            return LevelSpace.steppingBy(ExactRatio.ONE);
+        }
+
+        /**
+         * Where the count stands at a row, read off every element of the container.
+         *
+         * <p>An element the statement could not be read at is neither counted nor left out: the
+         * count is somewhere between the elements that meet it and those together with every
+         * element nothing could say of. The row stands at the item only where every number in
+         * that run does, and stands away from it only where none does; between the two it could
+         * not be told, and an unread element is never counted as one that fails.
+         */
+        @Override
+        public Stands standsAt(Criterion where, Observation row) {
+            AStatementAtARow.HowManyAtARow counted = perElement.howManyMeetIn(container, row);
+            if (counted == null) {
+                return Stands.couldNotTell(ReadingGap.COULD_NOT_WALK);
+            }
+            return switch (counted.whether(count -> ExactAnswer.held(
+                    where.holds(new Level.OfTheQuantity(ExactRatio.of(count)))))) {
+                case AStatementAtARow.Answer.Holds _ -> Stands.YES;
+                case AStatementAtARow.Answer.Fails _ -> Stands.NO;
+                case AStatementAtARow.Answer.CouldNotTell(var why) -> Stands.couldNotTell(why);
+            };
+        }
+
+        /**
+         * The container, and every number the statement reads beside an element.
+         *
+         * <p>Not the elements one at a time: they are read together for the count, and a walk
+         * finding containers would otherwise take the counted container for one whose elements
+         * are each a reading of the row.
+         */
+        @Override
+        public void lookAt(Observation row) {
+            row.eachElementOf(container);
+            perElement.lookAt(row, Set.of(container));
+        }
+
+        @Override
+        public Standing standingAt(Criterion where) {
+            return new Standing.OfACount(container, meeting, numbers(), where);
+        }
+
+        @Override
+        public String named() {
+            return new AxisId(behavior, left()).toString();
+        }
+
+        /** The count as an author would read it: the container, and what its elements meet. */
+        @Override
+        public String left() {
+            return "#" + container + " [" + said(meeting) + "]";
+        }
+
+        /** A statement over the input's own numbers, written the way a comparison is. */
+        private static String said(Proposition stated) {
+            return switch (stated) {
+                case Proposition.Always(boolean holds) -> String.valueOf(holds);
+                case Proposition.All all -> all.parts().stream().map(HowMany::grouped)
+                        .collect(java.util.stream.Collectors.joining(" && "));
+                case Proposition.Any any -> any.parts().stream().map(HowMany::grouped)
+                        .collect(java.util.stream.Collectors.joining(" || "));
+                case Proposition.Some some -> (some.holds() ? "some " : "no ") + some.container()
+                        + " [" + said(some.ofTheElement()) + "]";
+                case Proposition.Compared compared -> switch (compared.relation()) {
+                    case Relation.Affine affine -> {
+                        LinearForm<NumericTerm> form = WhatTheRulesLeave.ofTheInput(affine.form());
+                        Rel rel = compared.holds() ? affine.proposition()
+                                : affine.proposition().denied();
+                        Quantity.HowManyMeet count = AStatementAtARow.countIn(affine);
+                        // The count's weight is above nought, a relation facing the one way.
+                        if (form == null && count != null) {
+                            ExactRatio weight = affine.form().coefs().get(count);
+                            yield "#" + count.container() + " [" + said(count.ofTheElement())
+                                    + "] " + written(rel) + " "
+                                    + affine.form().constant().negated().dividedBy(weight)
+                                            .map(ExactRatio::spelled).orNull();
+                        }
+                        yield form == null ? stated.key()
+                                : OrderedAffineBoundary.spelled(form.coefs()) + " " + written(rel)
+                                        + " " + form.constant().negated().spelled();
+                    }
+                    case Relation.Ordered ordered -> ordered.term().spelled() + " "
+                            + written(compared.holds() ? ordered.proposition()
+                                    : ordered.proposition().denied())
+                            + " " + ordered.at().spelled();
+                };
+                default -> stated.key();
+            };
+        }
+
+        /** A part of a joined statement, bracketed where it is a join itself. */
+        private static String grouped(Proposition part) {
+            return part instanceof Proposition.All || part instanceof Proposition.Any
+                    ? "(" + said(part) + ")" : said(part);
+        }
+
+        private static String written(Rel rel) {
+            return switch (rel) {
+                case EQ -> "==";
+                case NE -> "/=";
+                case LT -> "<";
+                case LE -> "<=";
+                case GT -> ">";
+                case GE -> ">=";
+            };
+        }
+
+        @Override
+        public String writtenAt(Level level) {
+            if (!(level instanceof Level.OfTheQuantity counted)) {
+                throw new IllegalStateException(
+                        "a count was asked to write a level that is not a number: " + level);
+            }
+            return counted.at().spelled();
+        }
+
+        @Override
+        public BoundaryTarget.Shape shape() {
+            return BoundaryTarget.Shape.COUNT_OF_ELEMENTS;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof HowMany that && behavior.equals(that.behavior)
+                    && container.equals(that.container) && meeting.equals(that.meeting)
+                    && perElement.equals(that.perElement);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(behavior, container, meeting, perElement);
+        }
+
+        @Override
+        public String toString() {
+            return "HowMany[" + behavior + ": " + left() + "]";
+        }
+    }
+
     /** How this quantity's own values are ordered, and which of them it can take. */
     LevelSpace levels();
 
@@ -694,7 +895,9 @@ public sealed interface BorderQuantity permits LinearQuantity {
     default boolean aBoundOnItEndsItsRange() {
         return switch (this) {
             case OfACoordinate _ -> true;
-            case Apart _, OverAForm _ -> false;
+            // What a count runs between is none to as many as the container holds, whatever any
+            // rule about the count says.
+            case Apart _, OverAForm _, HowMany _ -> false;
         };
     }
 
@@ -719,7 +922,7 @@ public sealed interface BorderQuantity permits LinearQuantity {
     default NumbersAskedFor asksOfEachTerm(Criterion where) {
         return switch (this) {
             case OfACoordinate _ -> NumbersAskedFor.of(where.region());
-            case Apart _, OverAForm _ ->
+            case Apart _, OverAForm _, HowMany _ ->
                     NumbersAskedFor.onlyTogether(new QuantityInRegion(this, where.region()));
         };
     }
@@ -759,6 +962,7 @@ public sealed interface BorderQuantity permits LinearQuantity {
                 QuantityKey key = QuantityKey.tryOf(form.direction());
                 yield key == null ? null : key.key();
             }
+            case HowMany count -> count.left();
         };
     }
 
@@ -769,6 +973,7 @@ public sealed interface BorderQuantity permits LinearQuantity {
     default ExactRatio per() {
         return switch (this) {
             case LinearQuantity form -> QuantityKey.per(form.direction());
+            case HowMany _ -> ExactRatio.ONE;
         };
     }
 
@@ -782,6 +987,7 @@ public sealed interface BorderQuantity permits LinearQuantity {
     default List<NumericTerm> numbers() {
         return switch (this) {
             case LinearQuantity form -> form.terms();
+            case HowMany count -> count.perElement.numbers();
         };
     }
 
@@ -790,13 +996,21 @@ public sealed interface BorderQuantity permits LinearQuantity {
     default NumericDomain.Bounds runsWithin(Quantities quantities) {
         return switch (this) {
             case LinearQuantity form -> quantities.runsBetween(form.direction());
+            case HowMany _ -> NONE_OR_MORE;
         };
     }
+
+    /** What a count of elements runs between: none at the least, and no most it is told. */
+    NumericDomain.Bounds NONE_OR_MORE = new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
+            null);
 
     /** What {@code region} leaves this quantity, or that it leaves it nothing. */
     default NumericDomain.FormProjection projectedIn(SearchRegion region) {
         return switch (this) {
             case LinearQuantity form -> region.projectionOf(form.direction());
+            // A region holds relations over a row's numbers, and no relation it holds is about a
+            // count of elements: it leaves the count what a count runs between.
+            case HowMany _ -> new NumericDomain.FormProjection.Within(NONE_OR_MORE);
         };
     }
 
@@ -807,6 +1021,23 @@ public sealed interface BorderQuantity permits LinearQuantity {
     default List<FilingCoordinate> filedAt() {
         return switch (this) {
             case LinearQuantity form -> AffineReading.filedAt(form.direction().coefs().keySet());
+            case HowMany _ -> AffineReading.filedAt(numbers());
+        };
+    }
+
+    /**
+     * Whether a value a rule singles out on this quantity, where no position is divided to hold it
+     * as a class, still has values beside it a row can be owed at.
+     *
+     * <p>A count does: it is one number, and the counts either side of the one named are the
+     * nearest rows that do not meet it, as the values either side of a position's singled value
+     * are. A form over several positions does not: where it comes to the value named is reached
+     * by every way its positions can be written, and the rows either side of it are one class.
+     */
+    default boolean singlesWithSides() {
+        return switch (this) {
+            case LinearQuantity _ -> false;
+            case HowMany _ -> true;
         };
     }
 
@@ -816,6 +1047,7 @@ public sealed interface BorderQuantity permits LinearQuantity {
         return switch (this) {
             case LinearQuantity form -> form.direction().coefs().keySet().stream()
                     .anyMatch(term -> term.atOnePosition() == null);
+            case HowMany _ -> true;
         };
     }
 
@@ -827,6 +1059,7 @@ public sealed interface BorderQuantity permits LinearQuantity {
         return switch (this) {
             case LinearQuantity form -> form.direction().coefs().size() == 1
                     ? form.carrierOf(form.direction().coefs().keySet().iterator().next()) : null;
+            case HowMany _ -> null;
         };
     }
 
@@ -916,6 +1149,8 @@ public sealed interface BorderQuantity permits LinearQuantity {
             // A declaration has no name for it: the rule relates two positions and places no end,
             // so nothing about the pair is kept in the declaration's own terms (ADR-0090).
             case Apart _ -> false;
+            // How many, which is the count's and not a position's.
+            case HowMany _ -> true;
         };
     }
 

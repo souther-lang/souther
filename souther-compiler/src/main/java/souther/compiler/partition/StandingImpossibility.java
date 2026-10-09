@@ -135,6 +135,8 @@ final class StandingImpossibility {
             // A form is arithmetic over positions that add up, so its levels are numbers of its own
             // and the carriers its terms are written back on are no part of what it comes to.
             case Standing.OfAForm over -> new Asked(over.form(), over.where(), null);
+            // A count is no form a region holds relations about, so a region proves nothing of it.
+            case Standing.OfACount _ -> null;
         };
     }
 }

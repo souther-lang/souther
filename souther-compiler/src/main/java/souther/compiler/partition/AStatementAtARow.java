@@ -1,16 +1,22 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Quantities;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.numeric.ExactAnswer;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -19,11 +25,17 @@ import java.util.Set;
 
 /**
  * A statement over a row's own numbers, put to rows: each relation it is over, read as the quantity
- * a row is read at.
+ * a row is read at, and each statement about the elements of a container, read element by element.
  *
  * <p>Read the way a line over the same quantity reads a row ({@link LinearQuantity#valuesOf}), so
  * what a row holds at a position is one answer whether a line, the place it decides, or a count of
  * the elements meeting the statement asks for it.
+ *
+ * <p><b>The elements of a container are read each as one reading of the row.</b> Whether some
+ * element meets something, and how many do, is asked of every element the row wrote, each with that
+ * element chosen ({@link BorderQuantity.Observation#eachElementOf}) — so a statement about an
+ * element inside a statement about another reads the inner container under each element of the
+ * outer one, and nesting is the recursion and nothing besides.
  */
 final class AStatementAtARow {
 
@@ -51,35 +63,50 @@ final class AStatementAtARow {
 
     private final Proposition stated;
     private final Map<Relation, OneRelation> relations;
+    private final Map<String, OverTheElements> elements;
 
-    private AStatementAtARow(Proposition stated, Map<Relation, OneRelation> relations) {
+    private AStatementAtARow(Proposition stated, Map<Relation, OneRelation> relations,
+                             Map<String, OverTheElements> elements) {
         this.stated = stated;
         // In the order the relations were met, which is the order their containers are found in
         // when a row is walked for them.
         this.relations = Collections.unmodifiableMap(new LinkedHashMap<>(relations));
+        this.elements = Collections.unmodifiableMap(new LinkedHashMap<>(elements));
     }
 
     /**
      * Whether a row's own numbers say whether {@code stated} holds at it: relations over the
-     * input's own numbers, joined, or nothing asked at all.
+     * input's own numbers, joined, statements about the elements of a container the input holds —
+     * some element meeting something, or how many do, against a number — or nothing asked at all.
      *
-     * <p>Anything else is no statement a row can be asked about. A truth, a quantifier or something
-     * nobody read is not settled by the numbers a row writes, and a reader that took the statement
-     * without it would count rows it says nothing about.
+     * <p>Anything else is no statement a row can be asked about. A truth, something nobody read, or
+     * a count against another of the input's numbers is not settled by the numbers a row writes
+     * the way a relation is, and a reader that took the statement without it would count rows it
+     * says nothing about.
      */
     static boolean askable(Proposition stated) {
         return switch (stated) {
             case Proposition.Always _ -> true;
             case Proposition.All all -> all.parts().stream().allMatch(AStatementAtARow::askable);
             case Proposition.Any any -> any.parts().stream().allMatch(AStatementAtARow::askable);
+            case Proposition.Some some -> askable(some.ofTheElement());
             case Proposition.Compared compared -> switch (compared.relation()) {
-                case Relation.Affine affine -> WhatTheRulesLeave.ofTheInput(affine.form()) != null;
+                case Relation.Affine affine -> WhatTheRulesLeave.ofTheInput(affine.form()) != null
+                        || countIn(affine) instanceof Quantity.HowManyMeet count
+                                && askable(count.ofTheElement());
                 case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place _, Rel _) ->
                         term.atOnePosition() != null;
                 case Relation.Ordered _ -> false;
             };
             default -> false;
         };
+    }
+
+    /** The one count {@code affine} weighs where it weighs one and nothing else, or null. */
+    static Quantity.HowManyMeet countIn(Relation.Affine affine) {
+        return affine.form().coefs().size() == 1
+                && affine.form().coefs().keySet().iterator().next()
+                        instanceof Quantity.HowManyMeet count ? count : null;
     }
 
     /**
@@ -90,18 +117,28 @@ final class AStatementAtARow {
      */
     static AStatementAtARow of(Proposition stated, String behavior, Quantities quantities) {
         Map<Relation, OneRelation> relations = new LinkedHashMap<>();
-        gather(stated, behavior, quantities, relations);
-        return new AStatementAtARow(stated, relations);
+        Map<String, OverTheElements> elements = new LinkedHashMap<>();
+        gather(stated, behavior, quantities, relations, elements);
+        return new AStatementAtARow(stated, relations, elements);
     }
 
     private static void gather(Proposition stated, String behavior, Quantities quantities,
-                               Map<Relation, OneRelation> into) {
+                               Map<Relation, OneRelation> into,
+                               Map<String, OverTheElements> elements) {
         switch (stated) {
             case Proposition.Always _ -> { }
-            case Proposition.All all ->
-                    all.parts().forEach(part -> gather(part, behavior, quantities, into));
-            case Proposition.Any any ->
-                    any.parts().forEach(part -> gather(part, behavior, quantities, into));
+            case Proposition.All all -> all.parts()
+                    .forEach(part -> gather(part, behavior, quantities, into, elements));
+            case Proposition.Any any -> any.parts()
+                    .forEach(part -> gather(part, behavior, quantities, into, elements));
+            case Proposition.Some some -> elements.computeIfAbsent(keyOf(some),
+                    _ -> new OverTheElements(some.container(),
+                            of(some.ofTheElement(), behavior, quantities)));
+            case Proposition.Compared compared
+                    when compared.relation() instanceof Relation.Affine affine
+                    && countIn(affine) instanceof Quantity.HowManyMeet count ->
+                    elements.computeIfAbsent(keyOf(count), _ -> new OverTheElements(
+                            count.container(), of(count.ofTheElement(), behavior, quantities)));
             case Proposition.Compared compared -> into.computeIfAbsent(compared.relation(),
                     relation -> OneRelation.of(relation, behavior, quantities));
             default -> throw new IllegalStateException("a statement put to rows is over relations"
@@ -109,9 +146,58 @@ final class AStatementAtARow {
         }
     }
 
-    /** Every quantity a row is read at to say whether the statement holds there. */
-    List<LinearQuantity> over() {
-        return relations.values().stream().map(OneRelation::over).toList();
+    /** What some element of a container meeting a statement is read as, whichever way it holds. */
+    private static String keyOf(Proposition.Some some) {
+        return some.container() + " [" + some.ofTheElement().key() + "]";
+    }
+
+    /** What a count of the elements of a container meeting a statement is read as. */
+    private static String keyOf(Quantity.HowManyMeet count) {
+        return count.container() + " [" + count.ofTheElement().key() + "]";
+    }
+
+    /**
+     * Every number of a row the statement is read from, the numbers of each element it reads
+     * among them.
+     */
+    List<NumericTerm> numbers() {
+        Set<NumericTerm> out = new LinkedHashSet<>();
+        relations.values().forEach(each -> out.addAll(each.over().terms()));
+        elements.values().forEach(each -> out.addAll(each.ofTheElement().numbers()));
+        return NumericTerms.inOrder(out);
+    }
+
+    /**
+     * Reads {@code row} the way {@link #at} does and asks nothing of what it read, for the walk
+     * that finds which containers a row has to choose an element of.
+     *
+     * <p>Not the containers a statement reads element by element, nor anything under them: their
+     * elements are read together, and a walk that took one for a container to choose in would
+     * read the statement under one element where it is about all of them.
+     */
+    void lookAt(BorderQuantity.Observation row) {
+        lookAt(row, Set.of());
+    }
+
+    /** The same, beside the containers {@code taken} whose elements are read together. */
+    void lookAt(BorderQuantity.Observation row, Set<TermPath> taken) {
+        for (OneRelation each : relations.values()) {
+            if (each.over().terms().stream().noneMatch(term -> under(term.subjectPath(), taken))) {
+                each.over().lookAt(row);
+            }
+        }
+        for (OverTheElements each : elements.values()) {
+            if (!under(each.container(), taken)) {
+                row.eachElementOf(each.container());
+            }
+            Set<TermPath> wider = new HashSet<>(taken);
+            wider.add(each.container());
+            each.ofTheElement().lookAt(row, wider);
+        }
+    }
+
+    private static boolean under(TermPath path, Set<TermPath> taken) {
+        return taken.stream().anyMatch(path::isAtOrUnder);
     }
 
     /**
@@ -124,6 +210,75 @@ final class AStatementAtARow {
         return at(stated, row);
     }
 
+    /**
+     * How many of the elements of {@code container} the row wrote meet this statement: the least
+     * it can be, and how many more it may be where an element could not be read.
+     *
+     * @return null where the walk could not reach the container
+     */
+    HowManyAtARow howManyMeetIn(TermPath container, BorderQuantity.Observation row) {
+        if (!(row.eachElementOf(container)
+                instanceof WalkResult.Reached<List<BorderQuantity.Observation>> reached)) {
+            return null;
+        }
+        List<BorderQuantity.Observation> each = reached.value();
+        int meet = 0;
+        int unread = 0;
+        Set<ReadingGap> why = new LinkedHashSet<>();
+        for (BorderQuantity.Observation element : each) {
+            switch (at(element)) {
+                case Answer.Holds _ -> meet++;
+                case Answer.Fails _ -> { }
+                case Answer.CouldNotTell(var stopped) -> {
+                    unread++;
+                    why.addAll(stopped);
+                }
+            }
+        }
+        return new HowManyAtARow(meet, unread, why);
+    }
+
+    /**
+     * How many elements meet a statement at one row.
+     *
+     * <p>An element the statement could not be read at is neither counted nor left out: the count
+     * is somewhere from {@code meet} to {@code meet + unread}, and an element nothing could say of
+     * is never one that fails.
+     */
+    record HowManyAtARow(int meet, int unread, Set<ReadingGap> why) {
+
+        public HowManyAtARow {
+            why = Set.copyOf(why);
+        }
+
+        /**
+         * Whether {@code holds} holds of every count it may be, of none, or of some and not others
+         * — which could not be told, and neither can a count {@code holds} could not work out.
+         */
+        Answer whether(java.util.function.IntFunction<ExactAnswer<Boolean>> holds) {
+            boolean some = false;
+            boolean every = true;
+            Set<ReadingGap> stopped = new LinkedHashSet<>(why);
+            for (int count = meet; count <= meet + unread; count++) {
+                switch (holds.apply(count)) {
+                    case ExactAnswer.Held<Boolean>(Boolean here) -> {
+                        some |= here;
+                        every &= here;
+                    }
+                    case ExactAnswer.Unheld<Boolean> unheld -> {
+                        stopped.add(ReadingGap.of(unheld.why()));
+                        every = false;
+                        some = true;
+                    }
+                }
+            }
+            if (every) {
+                return Answer.HOLDS;
+            }
+            return !some ? Answer.FAILS : new Answer.CouldNotTell(stopped);
+        }
+    }
+
     private Answer at(Proposition part, BorderQuantity.Observation row) {
         return switch (part) {
             case Proposition.Always(boolean holds) -> holds ? Answer.HOLDS : Answer.FAILS;
@@ -131,6 +286,29 @@ final class AStatementAtARow {
                     .map(each -> at(each, row)).toList(), true);
             case Proposition.Any any -> joined(any.parts().stream()
                     .map(each -> at(each, row)).toList(), false);
+            case Proposition.Some some -> {
+                OverTheElements over = elements.get(keyOf(some));
+                HowManyAtARow counted = over.ofTheElement().howManyMeetIn(over.container(), row);
+                if (counted == null) {
+                    yield new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
+                }
+                yield counted.whether(count -> ExactAnswer.held(some.holds() == count > 0));
+            }
+            case Proposition.Compared compared
+                    when compared.relation() instanceof Relation.Affine affine
+                    && countIn(affine) instanceof Quantity.HowManyMeet count -> {
+                OverTheElements over = elements.get(keyOf(count));
+                HowManyAtARow counted = over.ofTheElement().howManyMeetIn(over.container(), row);
+                if (counted == null) {
+                    yield new Answer.CouldNotTell(Set.of(ReadingGap.COULD_NOT_WALK));
+                }
+                ExactRatio weight = affine.form().coefs().values().iterator().next();
+                Rel rel = compared.holds() ? affine.proposition()
+                        : affine.proposition().denied();
+                yield counted.whether(n -> weight.times(ExactRatio.of(n))
+                        .flatMap(weighed -> weighed.plus(affine.form().constant()))
+                        .map(sum -> rel.holds(sum.signum())));
+            }
             case Proposition.Compared compared -> {
                 Answer held = heldAt(relations.get(compared.relation()), row);
                 yield compared.holds() || held instanceof Answer.CouldNotTell ? held
@@ -177,6 +355,9 @@ final class AStatementAtARow {
         }
         return every ? Answer.HOLDS : Answer.FAILS;
     }
+
+    /** A statement about the elements of a container: the container, and what each is asked. */
+    private record OverTheElements(TermPath container, AStatementAtARow ofTheElement) {}
 
     /** One relation, as the quantity a row is read at and what its numbers have to come to. */
     private sealed interface OneRelation {
@@ -227,5 +408,28 @@ final class AStatementAtARow {
                         + " to rows is over the input's own numbers: " + ordered);
             };
         }
+    }
+
+    /**
+     * One statement put to rows is another where both state the same and read the same quantities
+     * for it: an answer holding one is compared by what it holds.
+     */
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof AStatementAtARow that && stated.equals(that.stated)
+                && relations.equals(that.relations) && elements.equals(that.elements);
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hash(stated, relations, elements);
+    }
+
+    /** Every relation over the input's own numbers this reads, for the quantities a reader of it
+     *  has to read a row at. */
+    List<LinearQuantity> over() {
+        List<LinearQuantity> out = new ArrayList<>();
+        relations.values().forEach(each -> out.add(each.over()));
+        return List.copyOf(out);
     }
 }

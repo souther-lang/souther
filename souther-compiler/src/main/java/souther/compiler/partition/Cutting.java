@@ -23,6 +23,7 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.meaning.WhereEachLineDecides;
@@ -321,6 +322,41 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return new Read.Several(parts);
     }
 
+    /**
+     * The line a relation over how many elements of a container meet something draws — or null
+     * where the relation is no such thing: a form weighing one count and nothing else, of a
+     * statement a row's own numbers answer.
+     *
+     * <p>The count against a number. Against another of the input's numbers — {@code count == n}
+     * — the line would be where the count and that number meet, which is two numbers held apart
+     * and no line on a count.
+     */
+    private static Read onACount(String behavior, Relation.Affine affine, boolean holds,
+                                 InputReading read) {
+        if (affine.form().coefs().size() != 1) {
+            return null;
+        }
+        Map.Entry<Quantity, ExactRatio> only = affine.form().coefs().entrySet().iterator().next();
+        if (!(only.getKey() instanceof Quantity.HowManyMeet count)
+                || !AStatementAtARow.askable(count.ofTheElement())) {
+            return null;
+        }
+        // The constant over the count's weight is where the line is. The weight is above nought: a
+        // relation faces the one way, its first weight positive, and the count is its only atom.
+        ExactRatio weight = only.getValue();
+        ExactAnswer<ExactRatio> at = affine.form().constant().negated().dividedBy(weight);
+        if (!(at instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level))) {
+            return null;
+        }
+        ComparisonClaim claim = ComparisonClaim.stating(
+                holds ? affine.proposition() : affine.proposition().denied());
+        BorderQuantity.HowMany of = new BorderQuantity.HowMany(behavior, count.container(),
+                count.ofTheElement(),
+                AStatementAtARow.of(count.ofTheElement(), behavior, read.quantities()));
+        Cutting drawn = made(of, new Level.OfTheQuantity(level), claim, read.quantities());
+        return drawn == null ? null : cutsOrRefused(drawn);
+    }
+
     /** What {@code comparison} states read once, in {@code reads}. */
     private static Read readOnce(String behavior, StatedComparison comparison,
                                  InputReading read, InputReads reads, Arrivals answering,
@@ -332,6 +368,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 stated.proposition() instanceof Proposition.Compared(
                         Relation.Affine affine, boolean _, String _)
                         ? WhatTheRulesLeave.ofTheInput(affine.form()) : null;
+        // And a count of the elements meeting something, where what is stated is one over that.
+        Read counted = overTheInput == null && stated.proposition() instanceof Proposition.Compared(
+                Relation.Affine affine, boolean holds, String _)
+                ? onACount(behavior, affine, holds, read) : null;
         return switch (stated.proposition()) {
             case Proposition.Always _ -> new Read.CutsNothing(
                     settledAt(stated, comparison, read, reads, answering));
@@ -340,6 +380,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     realized(behavior, AffineReading.stating(overTheInput,
                             holds ? affine.proposition() : affine.proposition().denied(),
                             comparison.left(), reads, read.rules()), read.quantities());
+            case Proposition.Compared _ when counted != null -> counted;
             case Proposition.Compared(Relation.Ordered(
                     DecisionAtom.OfTheInput(NumericTerm term), Place at, Rel proposition),
                     boolean holds, String _) when term.atOnePosition() != null ->
@@ -384,7 +425,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * no row writes — what a dependency answered — has no line on the input to be, and a truth or a
      * case is no line at all; the lines of the others would be drawn as though the statement were
      * only them. And where a line decides is said over the statement's other parts, so with every
-     * part a line on the input, a row's own values say whether it is somewhere the line decides.
+     * part a line on the input, a row's own values say whether it is somewhere the line decides —
+     * how many elements meet something among them, which a row's elements say.
      */
     private static Read several(String behavior, StatedComparison comparison,
                                 Proposition stated, InputReading read, InputReads reads) {
@@ -444,9 +486,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return switch (line.relation()) {
             case Relation.Affine affine -> {
                 LinearForm<NumericTerm> over = WhatTheRulesLeave.ofTheInput(affine.form());
-                yield over == null ? null : realized(behavior, AffineReading.stating(over,
-                        affine.proposition(), comparison.left(), reads, read.rules()),
-                        read.quantities());
+                // A relation over no form of the input's numbers may be one over how many elements
+                // meet something, which is a line too.
+                yield over == null ? onACount(behavior, affine, true, read)
+                        : realized(behavior, AffineReading.stating(over, affine.proposition(),
+                                comparison.left(), reads, read.rules()), read.quantities());
             }
             case Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm term), Place at, Rel rel)
                     when term.atOnePosition() != null ->
