@@ -9,7 +9,7 @@ import souther.compiler.partition.Border;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.OrderedAffineBoundary;
-import souther.compiler.partition.QuantityKey;
+import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.WayToTheBorder;
@@ -194,7 +194,7 @@ class WhatAWalkShortOfARowMaySayAboutTheLinesBesideOneTest {
     /** One reading per row, each value on the term the quantity reads it at. */
     private static List<Map<NumericTerm, Place>> rowsOf(Border border, int[][] rows) {
         List<NumericTerm> terms = new ArrayList<>(
-                QuantityKey.of(border.cut().of().direction()).direction().keySet());
+                ((LinearQuantity) border.cut().of()).direction().coefs().keySet());
         terms.sort(Comparator.comparing(NumericTerm::toString));
         List<Map<NumericTerm, Place>> out = new ArrayList<>();
         for (int[] row : rows) {

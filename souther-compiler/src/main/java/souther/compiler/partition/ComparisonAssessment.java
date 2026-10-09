@@ -121,8 +121,7 @@ sealed interface ComparisonAssessment {
         /** Whether what it cuts is a number read over a run of values rather than a form over
          *  positions, which is a different thing to tell a reader who found no partition. */
         boolean overARun() {
-            return cutting.quantity().direction().keySet().stream()
-                    .anyMatch(term -> term.atOnePosition() == null);
+            return cutting.of().readOverARun();
         }
     }
 

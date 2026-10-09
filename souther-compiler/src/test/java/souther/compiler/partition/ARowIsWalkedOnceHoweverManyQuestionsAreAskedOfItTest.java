@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * <p>Reading a row costs a walk of the body per position, and the answers wanted of one row are more
  * than one: what its numbers are, and whether they stand at each of the lines a measure drew. Asked
  * of the row, each of those questions walks it; asked of a reading of it, they do not — which is why
- * {@link BorderQuantity#read} hands back what it read rather than an answer about it.
+ * {@link LinearQuantity#read} hands back what it read rather than an answer about it.
  *
  * <p><b>And the control is a second reading.</b> Without it, a quantity that walked nothing at all
  * would pass this: what the count has to tell apart is a walk not made twice from a walk not made.
@@ -98,7 +98,7 @@ class ARowIsWalkedOnceHoweverManyQuestionsAreAskedOfItTest {
     /** A row holding a number at each of the form's positions, recording every walk it is asked
      *  for. */
     private static BorderQuantity.Observation row(List<TermPath> walked) {
-        return new BorderQuantity.Observation() {
+        return new AnObservationOfAForm() {
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {

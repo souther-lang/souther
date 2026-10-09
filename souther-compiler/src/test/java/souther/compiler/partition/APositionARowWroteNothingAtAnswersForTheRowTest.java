@@ -131,7 +131,7 @@ class APositionARowWroteNothingAtAnswersForTheRowTest {
 
     /** The same, recording every position it was asked about. */
     private static BorderQuantity.Observation oneOfEach(Set<TermPath> asked) {
-        return new BorderQuantity.Observation() {
+        return new AnObservationOfAForm() {
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {

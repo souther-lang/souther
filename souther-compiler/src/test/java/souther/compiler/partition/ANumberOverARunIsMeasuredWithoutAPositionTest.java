@@ -154,7 +154,7 @@ class ANumberOverARunIsMeasuredWithoutAPositionTest {
         for (long each : amounts) {
             values.add(whole(each));
         }
-        return new BorderQuantity.Observation() {
+        return new AnObservationOfAForm() {
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {

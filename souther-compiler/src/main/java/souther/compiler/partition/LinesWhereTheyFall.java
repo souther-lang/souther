@@ -239,7 +239,11 @@ public final class LinesWhereTheyFall {
         Quantities quantities = read.quantities();
         Symbols symbols = read.symbols();
         List<FiledName> filed = new ArrayList<>();
-        for (NumericTerm term : line.cuts().of().terms()) {
+        // What moves is a term of a form; a quantity that is no form has none to move, and its line
+        // stays where it was read.
+        List<NumericTerm> terms = line.cuts().of() instanceof LinearQuantity form
+                ? form.terms() : List.of();
+        for (NumericTerm term : terms) {
             switch (standingOf(inputs, term, read.rules().inners(), symbols, line.by())) {
                 // Where the model wrote it, so the line is already about the position it names.
                 case WhereTheNameStands.AsWritten _ -> { }

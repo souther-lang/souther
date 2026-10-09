@@ -28,6 +28,7 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.BorderQuantity;
+import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.BoundaryLine;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.Replacement;
@@ -4833,11 +4834,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * What a line was drawn on, by every part a quantity is equal by, out of what the quantity
      * answers rather than which kind of quantity it is.
      *
-     * <p>Its shape and what it weighs each of its terms by. Every quantity answers as a form over
-     * its terms ({@link BorderQuantity#direction}), which way it runs included, so one position's
-     * own values and a form weighing that position once are told apart only by the shape — and with
-     * the shape beside it the two together are the quantity. The terms in the order a form's terms
-     * are walked in, so one quantity is always written one way.
+     * <p>Its shape and what it weighs each of its terms by. A form answers as a form over its terms
+     * ({@link LinearQuantity#direction}), which way it runs included, so one position's own values
+     * and a form weighing that position once are told apart only by the shape — and with the shape
+     * beside it the two together are the quantity. The terms in the order a form's terms are walked
+     * in, so one quantity is always written one way.
      *
      * <p>And the orders each term stands on. Which order a term's values are read on and which order
      * its number is measured on are part of which quantity it is, so two quantities over one path
@@ -4846,10 +4847,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static void quantityId(ObjectNode into, BorderQuantity quantity) {
         into.put("shape", word(quantity.shape()));
         ArrayNode terms = into.putArray("terms");
+        if (!(quantity instanceof LinearQuantity form)) {
+            return;
+        }
         for (Map.Entry<NumericTerm, ExactRatio> each
-                : NumericTerms.entriesInOrder(quantity.direction().coefs())) {
+                : NumericTerms.entriesInOrder(form.direction().coefs())) {
             ObjectNode weighed = terms.addObject();
-            termOn(weighed, quantity.ordersOf(each.getKey()));
+            termOn(weighed, form.ordersOf(each.getKey()));
             weighed.put("coefficient", each.getValue().spelled());
         }
     }

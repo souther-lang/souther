@@ -41,7 +41,7 @@ class AReadingAnswersOnlyForTheOrdersItWasReadOnTest {
 
     @Test
     void aRowReadOnTheQuantitysOwnOrdersIsAnswered() {
-        BorderQuantity counted = coordinate(HERE, new Carrier.Whole());
+        LinearQuantity counted = coordinate(HERE, new Carrier.Whole());
 
         assertEquals(BorderQuantity.Stands.YES,
                 counted.standsAt(AT_A_HUNDRED, counted.read(row(100))),
@@ -50,8 +50,8 @@ class AReadingAnswersOnlyForTheOrdersItWasReadOnTest {
 
     @Test
     void aReadingOfAnotherPositionIsRefused() {
-        BorderQuantity here = coordinate(HERE, new Carrier.Whole());
-        BorderQuantity there = coordinate(THERE, new Carrier.Whole());
+        LinearQuantity here = coordinate(HERE, new Carrier.Whole());
+        LinearQuantity there = coordinate(THERE, new Carrier.Whole());
 
         assertThrows(IllegalArgumentException.class,
                 () -> here.standsAt(AT_A_HUNDRED, there.read(row(100))),
@@ -63,8 +63,8 @@ class AReadingAnswersOnlyForTheOrdersItWasReadOnTest {
 
     @Test
     void aReadingOfThisPositionOnAnotherOrderIsRefused() {
-        BorderQuantity counted = coordinate(HERE, new Carrier.Whole());
-        BorderQuantity inDays = coordinate(HERE, new Carrier.Days());
+        LinearQuantity counted = coordinate(HERE, new Carrier.Whole());
+        LinearQuantity inDays = coordinate(HERE, new Carrier.Days());
 
         assertThrows(IllegalArgumentException.class,
                 () -> inDays.standsAt(AT_A_HUNDRED, counted.read(row(100))),
@@ -78,7 +78,7 @@ class AReadingAnswersOnlyForTheOrdersItWasReadOnTest {
     /** What the row comes to on the other order, which is what the refusal above keeps out. */
     @Test
     void theTwoOrdersDoNotReadTheRowAlike() {
-        BorderQuantity inDays = coordinate(HERE, new Carrier.Days());
+        LinearQuantity inDays = coordinate(HERE, new Carrier.Days());
 
         assertEquals(BorderQuantity.Stands.NO,
                 inDays.standsAt(AT_A_HUNDRED, inDays.read(row(100))),
@@ -86,13 +86,13 @@ class AReadingAnswersOnlyForTheOrdersItWasReadOnTest {
                         + " answering it from the other reading would have said it stands");
     }
 
-    private static BorderQuantity coordinate(NumericTerm.ValueOf term, Carrier carrier) {
+    private static LinearQuantity coordinate(NumericTerm.ValueOf term, Carrier carrier) {
         return new BorderQuantity.OfACoordinate("decide", term,
                 TermOrdersFixtures.itself(term, carrier));
     }
 
     private static BorderQuantity.Observation row(long value) {
-        return new BorderQuantity.Observation() {
+        return new AnObservationOfAForm() {
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {
