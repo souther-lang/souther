@@ -2,13 +2,17 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.partition.PointRole;
 import souther.compiler.partition.UndividedPosition;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.PartitionEvidence;
 
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -34,6 +38,50 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
         assertEquals(List.of("cs[*] = atLeast - 1"), linesOf("""
                 behavior busy : (cs: List<Int>, atLeast: Int) -> List<Int>
                 let busy (cs, atLeast) = List.filter(c -> c >= atLeast, List.map(x -> x + 1, cs))
+                """));
+    }
+
+    /**
+     * The line is measured where it is drawn: a row whose element is one below {@code atLeast}
+     * meets the ON point and one two below meets OFF, through the walk and not around it.
+     */
+    @Test
+    void aRowMeetsThePointsOfTheLineThroughTheWalk() {
+        String model = """
+                behavior busy : (cs: List<Int>, atLeast: Int) -> List<Int>
+                let busy (cs, atLeast) = List.filter(c -> c >= atLeast, List.map(x -> x + 1, cs))
+
+                example busy
+                ROWS
+                """;
+        assertEquals(Set.of(PointRole.ON, PointRole.OFF), metIn(model.replace("ROWS", """
+                    | "at the line" : ([2], 3) -> [3]
+                    | "just off it" : ([1], 3) -> []
+                """)));
+        assertEquals(Set.of(PointRole.ON), metIn(model.replace("ROWS", """
+                    | "at the line" : ([2], 3) -> [3]
+                """)), "and a row at the line alone meets no OFF point");
+    }
+
+    /** {@code mapIndexed} hands its step the element beside its index, and the element is what
+     *  arrives on the step's element parameter. */
+    @Test
+    void anIndexedWalksElementIsItsStepOnTheElement() {
+        assertEquals(List.of("cs[*] = atLeast - 1"), linesOf("""
+                behavior busy : (cs: List<Int>, atLeast: Int) -> List<Int>
+                let busy (cs, atLeast) =
+                    List.filter(c -> c >= atLeast, List.mapIndexed((i, x) -> x + 1, cs))
+                """));
+    }
+
+    /** A step reading its index is about where the element stands in the list, which no position
+     *  says: no line is drawn as though the index were not there. */
+    @Test
+    void anIndexedStepReadingItsIndexDrawsNoLineWithoutIt() {
+        assertEquals(List.of(), linesOf("""
+                behavior busy : (cs: List<Int>, atLeast: Int) -> List<Int>
+                let busy (cs, atLeast) =
+                    List.filter(c -> c >= atLeast, List.mapIndexed((i, x) -> x + i, cs))
                 """));
     }
 
@@ -134,6 +182,20 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
         return Adequacy.readingsOf(compilation.db(), "probe").get("busy").stream()
                 .map(BorderAssessment::label)
                 .toList();
+    }
+
+    /** Which points of the lines in {@code body} a row of its examples met. */
+    private static Set<PointRole> metIn(String body) {
+        Compilation compilation = compiled(body);
+        Set<PointRole> met = new TreeSet<>();
+        for (BorderAssessment.Point point : BorderAssessment.pointsOf(
+                Adequacy.readingsOf(compilation.db(), "probe").get("busy"))) {
+            if (point.owed() != null && point.owed().coverage().made().orElseThrow()
+                    instanceof ItemAssessment.Coverage.Hit) {
+                met.add(point.role());
+            }
+        }
+        return met;
     }
 
     /** Every place the rules of what was compiled were not read at, with the reason. */
