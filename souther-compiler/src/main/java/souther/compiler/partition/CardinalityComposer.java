@@ -19,8 +19,7 @@ import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 
-import java.math.BigDecimal;
-import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
@@ -29,6 +28,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -391,7 +391,22 @@ final class CardinalityComposer {
         List<Place> out = new ArrayList<>();
         ExactEnd from = low;
         for (int i = 0; i <= inside.size(); i++) {
-            ExactEnd to = i < inside.size() ? new ExactEnd(inside.get(i), false) : high;
+            ExactEnd to = high;
+            if (i < inside.size()) {
+                switch (Count.written(inside.get(i))) {
+                    case ExactAnswer.Held<Optional<Count>>(Optional<Count> written) ->
+                            to = new ExactEnd(inside.get(i), false,
+                                    written.map(Endpoint::exclusive).orElse(null));
+                    // A place the host had no room to write out still parts the run there, as an
+                    // end no decimal is known to be; the value it may be is a number not held and
+                    // is said.
+                    case ExactAnswer.Unheld<Optional<Count>>(UnheldNumber why) -> {
+                        to = new ExactEnd(inside.get(i), false, null);
+                        unheld.add(new CompositionCapacity(
+                                CompositionCapacity.Where.PLACES_AN_ELEMENT_TURNS_AT, why));
+                    }
+                }
+            }
             switch (inward(from, to)) {
                 case Part.Between(Endpoint lo, Endpoint hi) ->
                         out.addAll(walked(carrier, lo, hi, each));
@@ -402,14 +417,13 @@ final class CardinalityComposer {
                         CompositionCapacity.Where.PLACES_AN_ELEMENT_TURNS_AT, why));
             }
             if (i < inside.size()) {
-                switch (Count.written(inside.get(i))) {
-                    case ExactAnswer.Held<Optional<Count>>(Optional<Count> written) -> written
-                            .map(carrier::onTheGrid).ifPresent(out::add);
-                    case ExactAnswer.Unheld<Optional<Count>>(UnheldNumber why) ->
-                            unheld.add(new CompositionCapacity(
-                                    CompositionCapacity.Where.PLACES_AN_ELEMENT_TURNS_AT, why));
+                if (to.written() != null) {
+                    Place value = carrier.onTheGrid(to.written().at());
+                    if (value != null) {
+                        out.add(value);
+                    }
                 }
-                from = new ExactEnd(inside.get(i), false);
+                from = to;
             }
         }
         return out;
@@ -420,12 +434,13 @@ final class CardinalityComposer {
      *
      * @param at        where the part ends
      * @param inclusive whether a value at {@code at} is in the part
+     * @param written   the end as a decimal, where one is {@code at}; null where none is
      */
-    private record ExactEnd(ExactRatio at, boolean inclusive) {
+    private record ExactEnd(ExactRatio at, boolean inclusive, Endpoint written) {
 
         static ExactEnd of(Endpoint end) {
             return end == null ? null
-                    : new ExactEnd(Count.number(end.at()).exactly(), end.inclusive());
+                    : new ExactEnd(Count.number(end.at()).exactly(), end.inclusive(), end);
         }
 
         /** Whether this, as a lower end, leaves {@code turn} inside. */
@@ -456,57 +471,62 @@ final class CardinalityComposer {
 
     /**
      * The part between {@code low} and {@code high}, with each end that no decimal is moved inward
-     * to the nearest decimal at as many digits as the part is narrow, and held there.
+     * to the nearest decimal at as many places as the part is narrow, and held there.
      *
-     * <p>One step of the last digit is less than the part is wide — ten to the power of how many
-     * digits the reciprocal of the width has is more than the reciprocal — so a decimal stands in
-     * it, and every decimal between the moved ends is one of the part's. An end that is a decimal
-     * stays where it is, as open or closed as it was.
+     * <p>An end that is a decimal stays where it is, as open or closed as it was, and a part whose
+     * ends both are is walked between them with no arithmetic at all — however few places apart
+     * they stand. Only an end no decimal is asks how wide the part is: as many places as the width
+     * stands above ten to the minus of ({@link ExactRatio#placesItStandsAbove}), so one step of the
+     * last place is less than the part is wide, a decimal stands in it, and every decimal between
+     * the moved ends is one of the part's. That count is read off the width's order, and the end is
+     * rounded by {@link ExactRatio#asDecimal}; neither forms a number as large as the count says.
      */
     private static Part inward(ExactEnd low, ExactEnd high) {
-        ExactRatio width = ExactRatio.ONE;
+        boolean lowWritten = low == null || low.written() != null;
+        boolean highWritten = high == null || high.written() != null;
+        if (lowWritten && highWritten) {
+            return new Part.Between(low == null ? null : low.written(),
+                    high == null ? null : high.written());
+        }
+        int places = 1;
         if (low != null && high != null) {
             switch (high.at().minus(low.at())) {
-                case ExactAnswer.Held<ExactRatio>(ExactRatio apart) -> {
-                    if (apart.signum() <= 0) {
-                        return apart.signum() == 0 && low.inclusive() && high.inclusive()
-                                ? decimalPart(low, high, 0) : new Part.Empty();
+                case ExactAnswer.Held<ExactRatio>(ExactRatio width) -> {
+                    // One end is no decimal, so the part holds a single place only where that end
+                    // is closed, and no end that no decimal is ever is.
+                    if (width.signum() <= 0) {
+                        return new Part.Empty();
                     }
-                    width = apart;
+                    OptionalInt standsAbove = width.placesItStandsAbove();
+                    if (standsAbove.isEmpty()) {
+                        return new Part.NotWorkedOut(UnheldNumber.MORE_ROOM_COULD_ANSWER);
+                    }
+                    places = standsAbove.getAsInt();
                 }
                 case ExactAnswer.Unheld<ExactRatio>(UnheldNumber why) -> {
                     return new Part.NotWorkedOut(why);
                 }
             }
         }
-        if (!(ExactRatio.ONE.dividedBy(width).flatMap(ExactRatio::ceiling)
-                instanceof ExactAnswer.Held<BigInteger>(BigInteger reciprocal))) {
-            return new Part.NotWorkedOut(UnheldNumber.MORE_ROOM_COULD_ANSWER);
-        }
-        return decimalPart(low, high, reciprocal.toString().length());
-    }
-
-    private static Part decimalPart(ExactEnd low, ExactEnd high, int digits) {
-        ExactAnswer<Endpoint> lo = low == null ? null : decimalEnd(low, digits, true);
-        ExactAnswer<Endpoint> hi = high == null ? null : decimalEnd(high, digits, false);
+        ExactAnswer<Endpoint> lo = lowWritten ? null : roundedIn(low, places, RoundingMode.CEILING);
+        ExactAnswer<Endpoint> hi = highWritten ? null : roundedIn(high, places, RoundingMode.FLOOR);
         for (ExactAnswer<Endpoint> end : Arrays.asList(lo, hi)) {
             if (end instanceof ExactAnswer.Unheld<Endpoint>(UnheldNumber why)) {
                 return new Part.NotWorkedOut(why);
             }
         }
-        return new Part.Between(lo == null ? null : lo.orNull(), hi == null ? null : hi.orNull());
+        return new Part.Between(lo == null ? (low == null ? null : low.written()) : lo.orNull(),
+                hi == null ? (high == null ? null : high.written()) : hi.orNull());
     }
 
-    /** {@code end} as a decimal at {@code digits}, moved up where it is a lower end, down where an
-     *  upper one, wherever no decimal is it. */
-    private static ExactAnswer<Endpoint> decimalEnd(ExactEnd end, int digits, boolean lower) {
-        return Count.written(end.at()).flatMap(written -> {
-            if (written.isPresent()) {
-                return ExactAnswer.held(new Endpoint(written.get(), end.inclusive()));
-            }
-            return end.at().times(ExactRatio.of(BigInteger.TEN.pow(digits)))
-                    .flatMap(lower ? ExactRatio::ceiling : ExactRatio::floor)
-                    .map(whole -> Endpoint.inclusive(Count.of(new BigDecimal(whole, digits))));
+    /** {@code end}, which no decimal is known to be, as the decimal at {@code places} on the side of
+     *  it {@code towards} says — inside the part, and so held, unless that decimal is the end
+     *  itself, which is then as open or closed as the end. */
+    private static ExactAnswer<Endpoint> roundedIn(ExactEnd end, int places, RoundingMode towards) {
+        return end.at().asDecimal(towards, places).map(at -> {
+            Count count = Count.of(at);
+            return count.exactly().compareTo(end.at()) == 0
+                    ? new Endpoint(count, end.inclusive()) : Endpoint.inclusive(count);
         });
     }
 

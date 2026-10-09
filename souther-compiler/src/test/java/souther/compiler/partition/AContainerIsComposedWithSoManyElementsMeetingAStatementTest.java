@@ -242,6 +242,25 @@ class AContainerIsComposedWithSoManyElementsMeetingAStatementTest {
     }
 
     /**
+     * A run however narrow, between two ends that are decimals, is walked between them as it is:
+     * nothing about how few places apart they stand is worked out, and nought, which the run
+     * holds, is chosen at once.
+     */
+    @Test
+    void aRunBetweenTwoDecimalsIsWalkedHoweverNarrow() {
+        NumericDomain.Bounds held = new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(BigDecimal.ZERO)),
+                Endpoint.inclusive(Count.of(new BigDecimal("1E-1000000000"))));
+        ExactRatio half = ExactRatio.of(new BigDecimal("5E-1000000001"));
+        List<ExactRatio> chosen = assertTimeoutPreemptively(Duration.ofSeconds(10), () ->
+                CardinalityComposer.valuesAlong(Carrier.DENSE, held,
+                        List.of(ExactRatio.of(-1), half), 1, new LinkedHashSet<>()).stream()
+                        .map(each -> Count.number(each).exactly()).toList());
+        assertTrue(chosen.contains(ExactRatio.ZERO), () -> "nought is chosen: " + chosen);
+        assertTrue(chosen.contains(half), () -> "and the place it turns at inside: " + chosen);
+    }
+
+    /**
      * And a place it turns at inside them parts them there, however narrow the parts: an element
      * held between 0.33 and 0.34 is below a third or above it, and a value is chosen on each side.
      */
