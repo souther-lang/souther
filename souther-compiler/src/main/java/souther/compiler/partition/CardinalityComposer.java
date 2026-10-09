@@ -418,6 +418,8 @@ final class CardinalityComposer {
     sealed interface Parting {
 
         /**
+         * The runs either side of the place, bounded there.
+         *
          * @param below  the end of the run below the place
          * @param itself the place, where a value can stand there; null where none can
          * @param above  the end of the run above it
@@ -594,7 +596,11 @@ final class CardinalityComposer {
         /** Whether a sharing was in front of the walk when there was no room left for it. */
         private boolean stopped;
 
-        /** @param most how many sharings this looks at, over every size it is asked for */
+        /**
+         * Sharings of the elements among {@code groups} that meet everything {@code asked}.
+         *
+         * @param most how many sharings this looks at, over every size it is asked for
+         */
         Sharing(Groups groups, List<Asked> asked, NumericSet size, boolean distinct, int most) {
             this.groups = groups;
             this.asked = asked;

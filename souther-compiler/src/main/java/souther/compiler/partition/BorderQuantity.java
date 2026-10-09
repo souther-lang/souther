@@ -702,7 +702,11 @@ public sealed interface BorderQuantity permits LinearQuantity, BorderQuantity.Ho
         private final Proposition meeting;
         private final AStatementAtARow perElement;
 
-        /** @param counted what is counted, which is the whole of which count this is */
+        /**
+         * The count of what {@code counted} counts.
+         *
+         * @param counted what is counted, which is the whole of which count this is
+         */
         HowMany(CountedElements counted) {
             this.counted = counted;
             this.behavior = counted.behavior();
