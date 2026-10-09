@@ -812,11 +812,9 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * stands at each value, and not whether the values run to it: a run that stops strictly short
      * of a value reaches its place and holds no row there, and that row is the one asked for.
      */
-    static boolean reachesBothSides(Level cut, ExactAnswer<Seam> parts,
-                                    ComparisonClaim.Cut order, Values values) {
-        Towards kept = order.satisfyingSide();
-        return standsAt(values::holdAt, cut, parts, kept)
-                && standsAt(values::holdAt, cut, parts, kept.opposite());
+    static boolean reachesBothSides(Level cut, ExactAnswer<Seam> parts, Values values) {
+        return standsAt(values::holdAt, cut, parts, Towards.BELOW)
+                && standsAt(values::holdAt, cut, parts, Towards.ABOVE);
     }
 
     /**

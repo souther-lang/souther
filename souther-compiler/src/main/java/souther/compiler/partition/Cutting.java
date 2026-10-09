@@ -512,15 +512,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return false;
         }
         return switch (claim) {
-            case ComparisonClaim.Cut order -> Border.reachesBothSides(at, seam(), order, values);
-            // The value it names and one beside it: a seam drawn with the value on either side
-            // names the nearest value below and the nearest above.
-            case ComparisonClaim.Singled _ -> values.holdAt(at)
-                    && (Border.reachesBothSides(at, seam(),
-                            new ComparisonClaim.Cut(Towards.ABOVE, true), values)
-                            || Border.reachesBothSides(at,
-                                    Seam.where(of, at, new ComparisonClaim.Cut(Towards.BELOW, true)),
-                                    new ComparisonClaim.Cut(Towards.BELOW, true), values));
+            case ComparisonClaim.Cut _ -> Border.reachesBothSides(at, seam(), values);
+            // The value it names and one beside it. With the value put above the seam, the seam
+            // parts it from the nearest value below; put below, from the nearest value above.
+            case ComparisonClaim.Singled _ ->
+                    Border.reachesBothSides(at, Seam.where(of, at, Towards.ABOVE), values)
+                            || Border.reachesBothSides(at, Seam.where(of, at, Towards.BELOW),
+                                    values);
         };
     }
 

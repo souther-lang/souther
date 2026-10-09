@@ -114,6 +114,27 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
     }
 
     /**
+     * A relation that names a value is crossed between that value and one beside it, and is a line
+     * of the statement where a row can stand at both in one case.
+     *
+     * <p>{@code Int.max(a, b.v) == 6} names six of whichever is larger: with {@code b.v} below six,
+     * {@code a} at six and {@code a} at five are answered differently, and so is {@code b.v} with
+     * {@code a} below six.
+     */
+    @Test
+    void aRelationNamingAValueIsALineWhereItsValueAndOneBesideItAreInOneCase() {
+        Set<String> axes = new TreeSet<>();
+        for (JsonNode obligation : obligationsOfParts(reportOf("Int.max(a, b.v) == 6", ""))) {
+            JsonNode reading = obligation.path("readings").get(0);
+            if (reading.path("against").asString().equals("6")) {
+                axes.add(reading.path("axis").asString());
+            }
+        }
+        assertEquals(Set.of("pick/a", "pick/b.v"), axes,
+                "a line at six on each of the two, where the other is below it");
+    }
+
+    /**
      * A clause has nowhere to hold where each of its lines decides — no way leads to it for a
      * condition to be carried on — so it draws none of them and says why, rather than drawing them
      * and owing rows the clause answers alike on both sides.
