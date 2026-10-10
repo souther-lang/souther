@@ -465,7 +465,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // A part the arithmetic met a shape it has no term for in is a stop whose reason was
         // decided where it was met. Which positions it is filed at is still asked of the
         // comparison, and the reason is not asked again of where the values came from.
-        BlockReason.RuleReadingStopped decided = decidedByTheArithmetic(stated);
+        List<WhyUnread> stops = Proposition.stopsIn(stated);
+        BlockReason.RuleReadingStopped decided = decidedByTheArithmetic(stops);
         if (decided != null) {
             List<FilingCoordinate> at = GuardThresholds.filedAt(comparison, read, reads, answering);
             if (!at.isEmpty()) {
@@ -477,7 +478,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             from.replaceAll((place, was) -> decided);
             return new Read.Stopped(from);
         }
-        BlockReason.WhatItStatesIsNoLine said = whatItStates(stated);
+        BlockReason.WhatItStatesIsNoLine said = whatItStates(stated, stops);
         // A number no position holds is all the statement says of what it relates. Which number
         // that is — one the body worked out, what a dependency answered, what an operation did —
         // is what the arithmetic over the input met where it stopped, and the place says it.
@@ -541,15 +542,15 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
-     * What the arithmetic said of a part of {@code stated} it stopped at, where it named arithmetic
-     * no form says — or null where no part stopped for that.
+     * What the arithmetic said of a part it stopped at, among {@code stops} the parts of a
+     * statement stopped for, where it named arithmetic no form says — or null where none did.
      *
      * <p>The first such part in the order the statement lists them. Which of several is the
      * statement's reason is no question a place can answer, and the parts say the same thing about
      * the same operation wherever the closure that holds them is reached from.
      */
-    private static BlockReason.RuleReadingStopped decidedByTheArithmetic(Proposition stated) {
-        for (WhyUnread each : Proposition.stopsIn(stated)) {
+    private static BlockReason.RuleReadingStopped decidedByTheArithmetic(List<WhyUnread> stops) {
+        for (WhyUnread each : stops) {
             if (each instanceof WhyUnread.OutsideTheLinearFragment(var operation)
                     && operation.isArithmetic()) {
                 return new BlockReason.NonAffineArithmetic(operation);
@@ -566,8 +567,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * it before a step this compiler has not taken beside it. Then a part declined at how many
      * readings are made, since a run allowed more may read it, and then any other part.
      */
-    static BlockReason.WhatItStatesIsNoLine whatItStates(Proposition stated) {
-        List<WhyUnread> stops = Proposition.stopsIn(stated);
+    static BlockReason.WhatItStatesIsNoLine whatItStates(Proposition stated,
+                                                         List<WhyUnread> stops) {
         if (stops.stream().anyMatch(Cutting::wordedByThePlace)) {
             return null;
         }
