@@ -175,6 +175,14 @@ public final class TheSignOfAnOrder {
         return null;
     }
 
+    /** The two arguments of {@code operation} whose order its answer is the sign of, the greater
+     *  and then the lesser — or none where it is the sign of no order. */
+    public static List<DeclaredArgument> orderedArguments(ValueName operation) {
+        BoundOperationFact.StatesTheOrderOfItsArguments order =
+                DefaultBoundOperationFacts.get().statesTheOrderOfItsArguments(operation);
+        return order == null ? List.of() : List.of(order.greater(), order.lesser());
+    }
+
     /**
      * The relation the greater argument of {@code operation} stands in to the lesser exactly where
      * its answer, counted at {@code spacing}, stands {@code rel} to {@code against} — or null where

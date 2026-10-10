@@ -47,6 +47,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ConditionJoin;
+import souther.compiler.semantics.LawArguments;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
@@ -921,7 +922,8 @@ final class Pullback {
                     fixed(e, reads)), stopsAt);
             case BoundOperationFacts.Settled.ByALaw(
                     OperationLaw.Observation<DeclaredArgument> law, var _) ->
-                    new Derivation.ByALaw(operation, aspect,
+                    new Derivation.ByALaw(callOf(operation, applied, reads,
+                            LawArguments.named(law.equivalentTo())), aspect,
                             new ALawRead(applied, e, reads).of(law.equivalentTo()));
             case BoundOperationFacts.Settled.ByALaw(OperationLaw.Size<DeclaredArgument> _, var _) ->
                     throw new IllegalStateException(operation + " settles a side of its answer"
@@ -1126,7 +1128,27 @@ final class Pullback {
             };
             arms.add(new Derivation.MatchArms.Arm(reached, there));
         }
-        return new Derivation.ASizeInCases(sized.operation(), arms);
+        Set<DeclaredArgument> named = new HashSet<>();
+        sized.law().cases().forEach(each -> named.addAll(LawArguments.named(each.where())));
+        return new Derivation.ASizeInCases(
+                callOf(sized.operation(), sized.applied(), sized.reads(), named), arms);
+    }
+
+    /**
+     * {@code applied}, a call of {@code operation} read in {@code reads}, with where each of the
+     * arguments {@code named} stands: at the position of the input it is, for those that are one.
+     */
+    private Derivation.TheCall callOf(ValueName.Stdlib operation, AnOperationApplied applied,
+                                      InputReads reads, Set<DeclaredArgument> named) {
+        Map<DeclaredArgument, TermPath> standingAt = new HashMap<>();
+        for (DeclaredArgument each : named) {
+            Core argument = applied.argument(each);
+            if (argument != null && reads.pathOf(argument, read.rules().newtypes())
+                    instanceof PathResolution.At(TermPath at)) {
+                standingAt.put(each, at);
+            }
+        }
+        return new Derivation.TheCall(operation, standingAt);
     }
 
     /** The number a size of the container at {@code held} is, or null where no type measures it. */
@@ -2305,8 +2327,9 @@ final class Pullback {
             case TheSignOfAnOrder.Read.OfTheArguments<InputReads> ordered
                     when !ordered.isTheCondition() -> null;
             case TheSignOfAnOrder.Read.OfTheArguments<InputReads> ordered
-                    when ordered.operation() instanceof ValueName.Stdlib ->
-                    new Derivation.AnOrderOfItsArguments(ordered.sign(), firstThatReadsIt(
+                    when ordered.operation() instanceof ValueName.Stdlib operation ->
+                    new Derivation.AnOrderOfItsArguments(callOfAnOrder(operation, ordered),
+                            ordered.sign(), firstThatReadsIt(
                             rulesFor(ordered.arguments(), null, fixed, ordered.at())));
             case TheSignOfAnOrder.Read.Settled<InputReads> settled
                     when settled.operation() instanceof ValueName.Stdlib ->
@@ -2315,6 +2338,24 @@ final class Pullback {
             case TheSignOfAnOrder.Read.OfTheArguments<InputReads> _,
                  TheSignOfAnOrder.Read.Settled<InputReads> _ -> null;
         };
+    }
+
+    /**
+     * The call of {@code operation} an order of its arguments is read of, with where its greater
+     * and its lesser argument stand: the two sides of what the comparison states of them.
+     */
+    private Derivation.TheCall callOfAnOrder(
+            ValueName.Stdlib operation, TheSignOfAnOrder.Read.OfTheArguments<InputReads> ordered) {
+        List<DeclaredArgument> arguments = TheSignOfAnOrder.orderedArguments(operation);
+        List<Core> terms = List.of(ordered.arguments().left(), ordered.arguments().right());
+        Map<DeclaredArgument, TermPath> standingAt = new HashMap<>();
+        for (int i = 0; i < arguments.size(); i++) {
+            if (ordered.at().pathOf(terms.get(i), read.rules().newtypes())
+                    instanceof PathResolution.At(TermPath at)) {
+                standingAt.put(arguments.get(i), at);
+            }
+        }
+        return new Derivation.TheCall(operation, standingAt);
     }
 
     /**

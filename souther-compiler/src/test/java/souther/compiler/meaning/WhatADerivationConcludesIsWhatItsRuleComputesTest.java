@@ -3,6 +3,7 @@ package souther.compiler.meaning;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.BoundOperationFacts;
+import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.TheSignOfAnOrder;
 import souther.compiler.inputs.TermPath;
@@ -14,10 +15,12 @@ import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
+import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.SideAnswered;
 import souther.compiler.types.ValueName;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +42,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
     private static final TermPath B = TermPath.of("b");
     private static final TermPath C = TermPath.of("c");
     private static final TermPath XS = TermPath.of("xs");
+    private static final TermPath YS = TermPath.of("ys");
 
     private static Derivation truthAt(TermPath at) {
         return new Derivation.ATruthOfASubject(new DecisionSubject.AnInput(at), true);
@@ -95,8 +99,92 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 Optional.empty());
         Proposition someElement = new Proposition.Some(XS, truth(XS.element()), true);
         assertEquals(some.holds() ? someElement : someElement.denied(),
-                concluded(new Derivation.ByALaw(LIST_ANY, AnswerAspect.TRUTH,
-                        new Derivation.ALawQuantifies(some, meeting))));
+                concluded(new Derivation.ByALaw(callOf(LIST_ANY, some.container(), XS),
+                        AnswerAspect.TRUTH, new Derivation.ALawQuantifies(some, meeting))));
+    }
+
+    /**
+     * A reading that holds the law's own part and has the container read at another argument's
+     * position is refused: the quantifier over {@code ys} is no reading of what {@code List.any}
+     * states of {@code xs}. What the closure states of an element is the closure's, which may
+     * name any position, and is held to none.
+     */
+    @Test
+    void aReadingOfALawPartAtAnotherContainerThanTheCallsIsRefused() {
+        LawProposition.SomeElement<?> some =
+                (LawProposition.SomeElement<?>) lawOf(LIST_ANY, AnswerAspect.TRUTH);
+        LawProposition.Observed<?> observed = (LawProposition.Observed<?>) some.ofTheElement();
+        Derivation.TheCall call = callOf(LIST_ANY, some.container(), XS);
+        Derivation overOtherElements = new Derivation.SomeElementMeeting(YS,
+                new Derivation.OnTheSideALawNames(observed, truthAt(YS.element())), true,
+                Optional.empty());
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(call,
+                AnswerAspect.TRUTH, new Derivation.ALawQuantifies(some, overOtherElements)));
+        // The call's own container, and an argument that stands at no position, are readings.
+        new Derivation.ByALaw(call, AnswerAspect.TRUTH, new Derivation.ALawQuantifies(some,
+                new Derivation.SomeElementMeeting(XS, new Derivation.OnTheSideALawNames(observed,
+                        truthAt(XS.element())), true, Optional.empty())));
+        new Derivation.ByALaw(new Derivation.TheCall(LIST_ANY, Map.of()), AnswerAspect.TRUTH,
+                new Derivation.ALawQuantifies(some, overOtherElements));
+    }
+
+    /**
+     * A side observed of an argument is observed of the position the call has it at:
+     * {@code Option.map} answers something where its argument does, and that is no reading of
+     * the argument standing at another position.
+     */
+    @Test
+    void aSideObservedAtAnotherPositionThanTheCallsIsRefused() {
+        LawProposition.Observed<?> law =
+                (LawProposition.Observed<?>) lawOf(OPTION_MAP, AnswerAspect.PRESENCE);
+        Derivation.TheCall call = callOf(OPTION_MAP,
+                ((LawSubject.Argument<?>) law.of()).argument(), XS);
+        new Derivation.ByALaw(call, AnswerAspect.PRESENCE, new Derivation.OnTheSideALawNames(
+                law, new Derivation.PresentInASubject(new DecisionSubject.AnInput(XS))));
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(call,
+                AnswerAspect.PRESENCE, new Derivation.OnTheSideALawNames(law,
+                        new Derivation.PresentInASubject(new DecisionSubject.AnInput(YS)))));
+    }
+
+    /**
+     * A reading that holds the law's own comparison and has an argument's number read as another
+     * argument's is refused: {@code List.get}'s index read as the list's length, or its length as
+     * the index, is no reading of what it states of the call.
+     */
+    @Test
+    void aReadingOfALawsNumbersAtOtherArgumentsThanTheCallsIsRefused() {
+        Derivation.TheCall call = callOfGet();
+        new Derivation.ByALaw(call, AnswerAspect.PRESENCE, readingOfGet(INDEX, LENGTH));
+        for (Derivation swapped : List.of(readingOfGet(LENGTH, INDEX),
+                readingOfGet(INDEX, INDEX), readingOfGet(LENGTH, LENGTH))) {
+            assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(call,
+                    AnswerAspect.PRESENCE, swapped), () -> "refused: " + swapped);
+        }
+    }
+
+    /**
+     * Two values read as a sameness the law states are the call's: the element at one position and
+     * the argument at another, and neither read at the other's.
+     */
+    @Test
+    void aSamenessReadAtOtherPositionsThanTheCallsIsRefused() {
+        LawProposition.SomeElement<?> contains =
+                (LawProposition.SomeElement<?>) lawOf(SET_CONTAINS, AnswerAspect.TRUTH);
+        LawProposition.Same<?> same = (LawProposition.Same<?>) contains.ofTheElement();
+        Derivation.TheCall call = callOf(SET_CONTAINS, contains.container(), XS,
+                ((LawSubject.Argument<?>) same.other()).argument(), A);
+        for (DecisionSubject[] read : List.of(
+                new DecisionSubject[] {new DecisionSubject.AnInput(YS.element()),
+                        new DecisionSubject.AnInput(A)},
+                new DecisionSubject[] {new DecisionSubject.AnInput(XS.element()),
+                        new DecisionSubject.AnInput(B)},
+                new DecisionSubject[] {new DecisionSubject.AnInput(A),
+                        new DecisionSubject.AnInput(XS.element())})) {
+            assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(call,
+                    AnswerAspect.TRUTH, new Derivation.ALawQuantifies(contains,
+                            new Derivation.SomeElementMeeting(XS, new Derivation.TheSameValue(same,
+                                    read[0], read[1]), true, Optional.empty()))));
+        }
     }
 
     /**
@@ -111,7 +199,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         Proposition belowTheLength = compared(new LinearForm<>(ExactRatio.of(-1),
                 Map.of(LENGTH, ExactRatio.ONE, INDEX, ExactRatio.of(-1))), Rel.GE);
         assertEquals(Proposition.all(List.of(atOrAboveNought, belowTheLength)),
-                concluded(new Derivation.ByALaw(LIST_GET, AnswerAspect.PRESENCE, read)));
+                concluded(new Derivation.ByALaw(callOfGet(), AnswerAspect.PRESENCE, read)));
     }
 
     /**
@@ -140,7 +228,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 aChoiceOfAnotherCase, truthAt(A))) {
             Derivation read = new Derivation.ALawJoins(law, List.of(atTheFirst, ofTheSecond));
             assertThrows(IllegalArgumentException.class,
-                    () -> new Derivation.ByALaw(LIST_GET, AnswerAspect.PRESENCE, read),
+                    () -> new Derivation.ByALaw(callOfGet(), AnswerAspect.PRESENCE, read),
                     () -> "refused at the first comparison: " + atTheFirst);
         }
         Map<LawNumber<?>, LinearForm<Quantity>> keyedByTheOther = new LinkedHashMap<>();
@@ -152,7 +240,7 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         Derivation aChoiceOfTheLaws = new Derivation.AComparisonOfAChoice(
                 new Derivation.IfThenElse(truthAt(A), comparison(first, INDEX, LENGTH),
                         new Derivation.Stopped(new WhyUnread.NotMetByTheReading(), false)));
-        new Derivation.ByALaw(LIST_GET, AnswerAspect.PRESENCE,
+        new Derivation.ByALaw(callOfGet(), AnswerAspect.PRESENCE,
                 new Derivation.ALawJoins(law, List.of(aChoiceOfTheLaws, ofTheSecond)));
     }
 
@@ -184,33 +272,37 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 new Derivation.ALawQuantifies(any, readAsTheOtherSide),
                 new Derivation.ALawQuantifies(any, truthAt(XS.element())),
                 truthAt(XS.element()))) {
-            assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(LIST_ANY,
-                    AnswerAspect.TRUTH, notOfIt), () -> "refused: " + notOfIt);
+            assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(
+                    callOf(LIST_ANY, any.container(), XS), AnswerAspect.TRUTH, notOfIt),
+                    () -> "refused: " + notOfIt);
         }
         LawProposition.Same<?> same = (LawProposition.Same<?>) contains.ofTheElement();
         LawProposition.Same<?> notSame = theOtherWay(same);
-        assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(SET_CONTAINS,
+        Derivation.TheCall containsXs = callOf(SET_CONTAINS, contains.container(), XS,
+                ((LawSubject.Argument<?>) same.other()).argument(), A);
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(containsXs,
                 AnswerAspect.TRUTH, new Derivation.ALawQuantifies(contains,
                         new Derivation.SomeElementMeeting(XS, new Derivation.TheSameValue(notSame,
                                 new DecisionSubject.AnInput(XS.element()),
                                 new DecisionSubject.AnInput(A)), true, Optional.empty()))));
-        new Derivation.ByALaw(SET_CONTAINS, AnswerAspect.TRUTH, new Derivation.ALawQuantifies(
+        new Derivation.ByALaw(containsXs, AnswerAspect.TRUTH, new Derivation.ALawQuantifies(
                 contains, new Derivation.SomeElementMeeting(XS, new Derivation.TheSameValue(same,
                         new DecisionSubject.AnInput(XS.element()), new DecisionSubject.AnInput(A)),
                         true, Optional.empty())));
-        new Derivation.ByALaw(LIST_ANY, AnswerAspect.TRUTH, new Derivation.ALawQuantifies(any,
-                new Derivation.Stopped(new WhyUnread.NotMetByTheReading(), false)));
+        new Derivation.ByALaw(callOf(LIST_ANY, any.container(), XS), AnswerAspect.TRUTH,
+                new Derivation.ALawQuantifies(any,
+                        new Derivation.Stopped(new WhyUnread.NotMetByTheReading(), false)));
     }
 
     /** A law is the one the library settles the side by: a side no law settles has none to read. */
     @Test
     void aLawIsTheOneTheLibrarySettlesTheSideBy() {
-        assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(STRING_CONTAINS,
-                AnswerAspect.TRUTH, new Derivation.Stopped(new WhyUnread.NotMetByTheReading(),
-                        false)));
-        assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(LIST_ANY,
-                AnswerAspect.PRESENCE, new Derivation.Stopped(new WhyUnread.NotMetByTheReading(),
-                        false)));
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(
+                new Derivation.TheCall(STRING_CONTAINS, Map.of()), AnswerAspect.TRUTH,
+                new Derivation.Stopped(new WhyUnread.NotMetByTheReading(), false)));
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(
+                new Derivation.TheCall(LIST_ANY, Map.of()), AnswerAspect.PRESENCE,
+                new Derivation.Stopped(new WhyUnread.NotMetByTheReading(), false)));
     }
 
     /**
@@ -223,13 +315,14 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         assertThrows(IllegalArgumentException.class, () -> new Derivation.AnOperationsCases(
                 INT_MIN, List.of(arm)));
         new Derivation.AnOperationsCases(INT_MIN, List.of(arm, arm));
+        Derivation.TheCall insert = new Derivation.TheCall(SET_INSERT, Map.of());
         assertThrows(IllegalArgumentException.class, () -> new Derivation.ASizeInCases(
-                SET_INSERT, List.of(arm)));
+                insert, List.of(arm)));
         assertThrows(IllegalArgumentException.class, () -> new Derivation.ASizeInCases(
-                SET_INSERT, List.of(arm, arm)));
+                insert, List.of(arm, arm)));
         Derivation.MatchArms.Arm stopped = new Derivation.MatchArms.Arm(new Derivation.Stopped(
                 new WhyUnread.NotMetByTheReading(), false), truthAt(B));
-        new Derivation.ASizeInCases(SET_INSERT, List.of(stopped, stopped));
+        new Derivation.ASizeInCases(insert, List.of(stopped, stopped));
     }
 
     /**
@@ -246,8 +339,13 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 Granularity.DISCRETE, Rel.GT, ExactRatio.ONE);
         TheSignOfAnOrder.TheSign atOrAboveLessOne = new TheSignOfAnOrder.TheSign(INT_COMPARE,
                 Granularity.DISCRETE, Rel.GE, ExactRatio.of(-1));
-        assertEquals(truth(A), concluded(new Derivation.AnOrderOfItsArguments(aboveNought,
-                truthAt(A))));
+        List<DeclaredArgument> ordered = TheSignOfAnOrder.orderedArguments(INT_COMPARE);
+        Derivation.TheCall compare = callOf(INT_COMPARE, ordered.get(0), A, ordered.get(1), B);
+        assertEquals(truth(A), concluded(new Derivation.AnOrderOfItsArguments(compare,
+                aboveNought, truthAt(A))));
+        // Of the call's two arguments and no others.
+        assertThrows(IllegalArgumentException.class,
+                () -> new Derivation.AnOrderOfItsArguments(compare, aboveNought, truthAt(C)));
         assertEquals(new Proposition.Always(false),
                 concluded(new Derivation.ASignItsBoundsSettle(aboveOne)));
         assertEquals(new Proposition.Always(true),
@@ -255,11 +353,13 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
         assertThrows(IllegalArgumentException.class,
                 () -> new Derivation.ASignItsBoundsSettle(aboveNought));
         assertThrows(IllegalArgumentException.class,
-                () -> new Derivation.AnOrderOfItsArguments(aboveOne, truthAt(A)));
+                () -> new Derivation.AnOrderOfItsArguments(compare, aboveOne, truthAt(A)));
     }
 
     private static final ValueName.Stdlib LIST_ANY = new ValueName.Stdlib.Operation("List", "any");
     private static final ValueName.Stdlib LIST_GET = new ValueName.Stdlib.Operation("List", "get");
+    private static final ValueName.Stdlib OPTION_MAP =
+            new ValueName.Stdlib.Operation("Option", "map");
     private static final ValueName.Stdlib SET_CONTAINS =
             new ValueName.Stdlib.Operation("Set", "contains");
     private static final ValueName.Stdlib SET_INSERT =
@@ -275,6 +375,38 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
     /** Two quantities standing for what a number of a law was read as. */
     private static final Quantity INDEX = new Quantity.HowManyDifferent(A, A.element());
     private static final Quantity LENGTH = new Quantity.HowManyDifferent(B, B.element());
+
+    /** A call of {@code operation} with the argument {@code argument} of its law at {@code at}. */
+    private static Derivation.TheCall callOf(ValueName.Stdlib operation, Object argument,
+                                             TermPath at) {
+        return new Derivation.TheCall(operation, Map.of((DeclaredArgument) argument, at));
+    }
+
+    /** A call of {@code operation} with two arguments of its law each at a position. */
+    private static Derivation.TheCall callOf(ValueName.Stdlib operation, Object argument,
+                                             TermPath at, Object other, TermPath otherAt) {
+        return new Derivation.TheCall(operation, Map.of((DeclaredArgument) argument, at,
+                (DeclaredArgument) other, otherAt));
+    }
+
+    /** A call of {@code List.get} with the index at {@code a} and the list at {@code b}. */
+    private static Derivation.TheCall callOfGet() {
+        LawProposition.All<?> law = (LawProposition.All<?>) lawOf(LIST_GET, AnswerAspect.PRESENCE);
+        Map<DeclaredArgument, TermPath> standingAt = new HashMap<>();
+        for (LawProposition<?> part : law.parts()) {
+            for (LawNumber<?> number : ((LawProposition.Compared<?>) part).form().coefs()
+                    .keySet()) {
+                switch (number) {
+                    case LawNumber.AnArgument<?> index ->
+                            standingAt.put((DeclaredArgument) index.argument(), A);
+                    case LawNumber.SizeOf<?> size -> standingAt.put((DeclaredArgument)
+                            ((LawSubject.Argument<?>) size.of()).argument(), B);
+                    default -> throw new IllegalStateException("List.get's law names " + number);
+                }
+            }
+        }
+        return new Derivation.TheCall(LIST_GET, standingAt);
+    }
 
     /** The statement the law the library settles {@code aspect} of {@code operation} by makes. */
     private static LawProposition<?> lawOf(ValueName.Stdlib operation, AnswerAspect aspect) {

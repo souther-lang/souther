@@ -14,14 +14,17 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.LawArguments;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
+import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -390,25 +393,27 @@ public sealed interface Derivation {
      * with the answer holding as many as that case says.
      *
      * <p>The law is the one the library settles the operation's size by, and each arm is taken
-     * under a reading of its case ({@link ByALaw#readsTheLaw}), one for each case, in its order.
+     * under a reading of its case ({@link ByALaw#readsTheLaw}) of {@code call}, one for each
+     * case, in its order.
      */
-    record ASizeInCases(ValueName.Stdlib operation, List<MatchArms.Arm> cases)
-            implements Derivation {
+    record ASizeInCases(TheCall call, List<MatchArms.Arm> cases) implements Derivation {
 
         public ASizeInCases {
-            Objects.requireNonNull(operation, "a size is of what an operation answers");
+            Objects.requireNonNull(call, "a size is of what a call of an operation answers");
             cases = List.copyOf(cases);
-            if (!(settled(operation, OperationLaw.Observed.SIZE)
+            if (!(settled(call.operation(), OperationLaw.Observed.SIZE)
                     instanceof OperationLaw.Size<DeclaredArgument> law)
                     || law.cases().size() != cases.size()) {
-                throw new IllegalArgumentException("how many " + operation + " answers is read in "
-                        + cases.size() + " cases, and no law says it in those");
+                throw new IllegalArgumentException("how many " + call.operation()
+                        + " answers is read in " + cases.size() + " cases, and no law says it in"
+                        + " those");
             }
             for (int i = 0; i < cases.size(); i++) {
-                if (!ByALaw.readsTheLaw(law.cases().get(i).where(), cases.get(i).selects())) {
+                if (!ByALaw.readsTheLaw(law.cases().get(i).where(), cases.get(i).selects(),
+                        call)) {
                     throw new IllegalArgumentException(cases.get(i).selects() + " is no reading"
-                            + " of case " + (i + 1) + " of how many " + operation + " answers: "
-                            + law.cases().get(i).where());
+                            + " of case " + (i + 1) + " of how many " + call.operation()
+                            + " answers: " + law.cases().get(i).where());
                 }
             }
         }
@@ -505,6 +510,24 @@ public sealed interface Derivation {
     // The steps a law the library declares licenses.
 
     /**
+     * Where the arguments of one call of {@code operation} stand: the position of the input each
+     * argument a law names stands at, for those that stand at one. An argument that stands at none
+     * is an expression, and is not in the map.
+     *
+     * <p>What a reading of a law is held to. A law names its arguments, and a reading of it says
+     * where each of them is read off; a reading that has one standing at another argument's
+     * position, or at the position of an argument of some other call, says something of a call
+     * that was not made.
+     */
+    record TheCall(ValueName.Stdlib operation, Map<DeclaredArgument, TermPath> standingAt) {
+
+        public TheCall {
+            Objects.requireNonNull(operation, "a call is of an operation");
+            standingAt = Map.copyOf(standingAt);
+        }
+    }
+
+    /**
      * An operation whose answer comes out on {@code aspect}'s holding side exactly where its law
      * says of the arguments, read as {@code ofTheArguments}.
      *
@@ -516,22 +539,29 @@ public sealed interface Derivation {
      * were read as. So a reading is held to be of the law part for part, at every step: a step
      * holding a part of another law, or the right part at the wrong place, is refused where it is
      * made, and no step hands in a relation, a polarity or a container of its own.
+     *
+     * <p>And it is held to the call. Where an argument stands is what {@code call} says, and a step
+     * that reads a position for an argument — the container some element is of, the subject a side
+     * is observed of, what a number is a size of — reads the one the argument stands at, or one
+     * inside it where the law says an element or a key of it. How an argument that stands at no
+     * position is read is the reading rules' own, and is held to nothing here.
      */
-    record ByALaw(ValueName.Stdlib operation, AnswerAspect aspect, Derivation ofTheArguments)
+    record ByALaw(TheCall call, AnswerAspect aspect, Derivation ofTheArguments)
             implements Derivation {
 
         public ByALaw {
-            Objects.requireNonNull(operation, "a law is of an operation");
+            Objects.requireNonNull(call, "a law is of a call of an operation");
             Objects.requireNonNull(aspect, "a law is about one side of what it answers");
             Objects.requireNonNull(ofTheArguments, "and comes to something of its arguments");
-            if (!(settled(operation, OperationLaw.Observed.of(aspect))
+            if (!(settled(call.operation(), OperationLaw.Observed.of(aspect))
                     instanceof OperationLaw.Observation<DeclaredArgument> law)) {
-                throw new IllegalArgumentException(operation + " settles no side "
+                throw new IllegalArgumentException(call.operation() + " settles no side "
                         + aspect + " of its answer by a law");
             }
-            if (!readsTheLaw(law.equivalentTo(), ofTheArguments)) {
+            if (!readsTheLaw(law.equivalentTo(), ofTheArguments, call)) {
                 throw new IllegalArgumentException(ofTheArguments + " is no reading of what the"
-                        + " law of " + operation + " states: " + law.equivalentTo());
+                        + " law of " + call.operation() + " states of " + call.standingAt()
+                        + ": " + law.equivalentTo());
             }
         }
 
@@ -543,77 +573,158 @@ public sealed interface Derivation {
         /**
          * Whether {@code read} is a reading of {@code law}, part for part: a step holding the very
          * part at each place, with the steps under it readings of that part's own parts — or a
-         * place the reading stopped at, which is said rather than read.
+         * place the reading stopped at, which is said rather than read. Each position a step reads
+         * for an argument is the one {@code call} has that argument at.
          */
-        static boolean readsTheLaw(LawProposition<?> law, Derivation read) {
-            if (read instanceof Stopped) {
-                return true;
-            }
-            return switch (law) {
-                case LawProposition.Always<?> _ ->
-                        read instanceof ALawSettles(var part) && part.equals(law);
-                case LawProposition.All<?>(var parts) -> joins(law, parts, read);
-                case LawProposition.Any<?>(var parts) -> joins(law, parts, read);
-                case LawProposition.Observed<?> _ ->
-                        read instanceof OnTheSideALawNames(var part, Derivation _)
-                                && part.equals(law);
-                case LawProposition.Same<?> _ ->
-                        read instanceof TheSameValue(var part, var _, var _) && part.equals(law);
-                case LawProposition.SomeElement<?> some ->
-                        read instanceof ALawQuantifies(var part, Derivation meeting)
-                                && part.equals(law) && meets(some.ofTheElement(), meeting);
-                case LawProposition.Compared<?> _ -> compares(law, read);
-            };
+        static boolean readsTheLaw(LawProposition<DeclaredArgument> law, Derivation read,
+                                   TheCall call) {
+            return new Standing(call, Set.of()).reads(law, read);
         }
 
-        /** Whether {@code read} joins a reading of each of {@code parts}, in order, as
-         *  {@code law} joins them. */
-        private static boolean joins(LawProposition<?> law,
-                                     List<? extends LawProposition<?>> parts, Derivation read) {
-            if (!(read instanceof ALawJoins(var part, List<Derivation> joined)) || !part.equals(law)
-                    || joined.size() != parts.size()) {
-                return false;
+        /**
+         * A call and the containers a reading is inside the written-out values of: the elements of
+         * those are values, and stand at no position of the input.
+         */
+        private record Standing(TheCall call, Set<DeclaredArgument> writtenOut) {
+
+            boolean reads(LawProposition<DeclaredArgument> law, Derivation read) {
+                if (read instanceof Stopped) {
+                    return true;
+                }
+                return switch (law) {
+                    case LawProposition.Always<DeclaredArgument> _ ->
+                            read instanceof ALawSettles(var part) && part.equals(law);
+                    case LawProposition.All<DeclaredArgument>(var parts) ->
+                            joins(law, parts, read);
+                    case LawProposition.Any<DeclaredArgument>(var parts) ->
+                            joins(law, parts, read);
+                    case LawProposition.Observed<DeclaredArgument> observed ->
+                            read instanceof OnTheSideALawNames(var part, Derivation seen)
+                                    && part.equals(law) && observes(observed.of(), seen);
+                    case LawProposition.Same<DeclaredArgument> same ->
+                            read instanceof TheSameValue(var part, var one, var other)
+                                    && part.equals(law) && stands(same.one(), one)
+                                    && stands(same.other(), other);
+                    case LawProposition.SomeElement<DeclaredArgument> some ->
+                            read instanceof ALawQuantifies(var part, Derivation meeting)
+                                    && part.equals(law) && meets(some, meeting);
+                    case LawProposition.Compared<DeclaredArgument> compared ->
+                            compares(compared, read);
+                };
             }
-            for (int i = 0; i < parts.size(); i++) {
-                if (!readsTheLaw(parts.get(i), joined.get(i))) {
+
+            /** Whether {@code read} joins a reading of each of {@code parts}, in order, as
+             *  {@code law} joins them. */
+            private boolean joins(LawProposition<DeclaredArgument> law,
+                                  List<LawProposition<DeclaredArgument>> parts, Derivation read) {
+                if (!(read instanceof ALawJoins(var part, List<Derivation> joined))
+                        || !part.equals(law) || joined.size() != parts.size()) {
                     return false;
                 }
-            }
-            return true;
-        }
-
-        /**
-         * Whether {@code read} is some element meeting a reading of {@code element}: of the
-         * element standing at a container's element, or of each value a container was written
-         * with.
-         */
-        private static boolean meets(LawProposition<?> element, Derivation read) {
-            return switch (read) {
-                case Stopped _ -> true;
-                case SomeElementMeeting(var _, Derivation ofTheElement, boolean holds, var _) ->
-                        holds && readsTheLaw(element, ofTheElement);
-                case OverElementsWrittenOut(List<Derivation> ofEach, boolean holds) ->
-                        holds && ofEach.stream().allMatch(each -> readsTheLaw(element, each));
-                default -> false;
-            };
-        }
-
-        /**
-         * Whether {@code read} is {@code law}'s comparison, read over the arguments: the law's
-         * own comparison, or a step that states what one of the steps under it states — an
-         * argument chosen by cases compared in each, one answered through a body — every one of
-         * which is the law's comparison in its turn.
-         */
-        private static boolean compares(LawProposition<?> law, Derivation read) {
-            if (read instanceof Stopped) {
+                for (int i = 0; i < parts.size(); i++) {
+                    if (!reads(parts.get(i), joined.get(i))) {
+                        return false;
+                    }
+                }
                 return true;
             }
-            if (read instanceof ALawComparison(var part, var _, var _)) {
-                return part.equals(law);
+
+            /**
+             * Whether {@code read} is some element meeting a reading of what {@code some} says it
+             * meets: of the element standing at the container's element, or of each value the
+             * container was written with.
+             */
+            private boolean meets(LawProposition.SomeElement<DeclaredArgument> some,
+                                  Derivation read) {
+                return switch (read) {
+                    case Stopped _ -> true;
+                    case SomeElementMeeting(TermPath container, Derivation ofTheElement,
+                                            boolean holds, var _) ->
+                            holds && standsAt(some.container(), container)
+                                    && reads(some.ofTheElement(), ofTheElement);
+                    case OverElementsWrittenOut(List<Derivation> ofEach, boolean holds) -> {
+                        Set<DeclaredArgument> inside = new HashSet<>(writtenOut);
+                        inside.add(some.container());
+                        Standing within = new Standing(call, inside);
+                        yield holds && ofEach.stream()
+                                .allMatch(each -> within.reads(some.ofTheElement(), each));
+                    }
+                    default -> false;
+                };
             }
-            List<Derivation> oneOf = read.oneOf();
-            return oneOf != null && !oneOf.isEmpty()
-                    && oneOf.stream().allMatch(each -> compares(law, each));
+
+            /**
+             * Whether {@code read} is {@code law}'s comparison, read over the arguments: the law's
+             * own comparison, with each of its numbers read of the argument it names, or a step
+             * that states what one of the steps under it states — an argument chosen by cases
+             * compared in each, one answered through a body — every one of which is the law's
+             * comparison in its turn.
+             */
+            private boolean compares(LawProposition.Compared<DeclaredArgument> law,
+                                     Derivation read) {
+                if (read instanceof Stopped) {
+                    return true;
+                }
+                if (read instanceof ALawComparison(var part, var numbers, var _)) {
+                    return part.equals(law) && law.form().coefs().keySet().stream()
+                            .allMatch(number -> numberStands(number, numbers.get(number)));
+                }
+                List<Derivation> oneOf = read.oneOf();
+                return oneOf != null && !oneOf.isEmpty()
+                        && oneOf.stream().allMatch(each -> compares(law, each));
+            }
+
+            /** Whether the container {@code argument} is, read at {@code container}, stands
+             *  there: at the position the call has it at, where it has it at one. */
+            private boolean standsAt(DeclaredArgument argument, TermPath container) {
+                TermPath at = call.standingAt().get(argument);
+                return at == null || at.equals(container);
+            }
+
+            /**
+             * The positions the arguments {@code named} stand at, or null where a reading of them
+             * is held to none: one stands at no position, or is read as the values it was
+             * written with.
+             */
+            private List<TermPath> rootsOf(Set<DeclaredArgument> named) {
+                List<TermPath> roots = new ArrayList<>();
+                for (DeclaredArgument argument : named) {
+                    TermPath at = call.standingAt().get(argument);
+                    if (at == null || writtenOut.contains(argument)) {
+                        return null;
+                    }
+                    roots.add(at);
+                }
+                return roots.isEmpty() ? null : roots;
+            }
+
+            /** Whether what {@code seen} concludes of {@code subject} is of the position the
+             *  call has it at. What a closure answers is read in the closure's body, which has no
+             *  position of the call's. */
+            private boolean observes(LawSubject<DeclaredArgument> subject, Derivation seen) {
+                if (subject instanceof LawSubject.WhatTheClosureAnswers<DeclaredArgument>) {
+                    return true;
+                }
+                List<TermPath> roots = rootsOf(LawArguments.named(subject));
+                return roots == null || seen.concludes(Optional.empty()).staysWithin(roots);
+            }
+
+            /** Whether {@code read}, the subject {@code subject} was read as, stands at the
+             *  position the call has it at. */
+            private boolean stands(LawSubject<DeclaredArgument> subject, DecisionSubject read) {
+                List<TermPath> roots = rootsOf(LawArguments.named(subject));
+                return roots == null || (read instanceof DecisionSubject.AnInput(TermPath at)
+                        && at.isAtOrUnderAny(roots));
+            }
+
+            /** Whether {@code form}, what {@code number} was read as, is of the positions the
+             *  call has the arguments the number names at. */
+            private boolean numberStands(LawNumber<DeclaredArgument> number,
+                                         LinearForm<Quantity> form) {
+                List<TermPath> roots = rootsOf(LawArguments.named(number));
+                return roots == null || form.coefs().keySet().stream()
+                        .allMatch(quantity -> quantity.staysWithin(roots));
+            }
         }
     }
 
@@ -819,16 +930,35 @@ public sealed interface Derivation {
      * bounds the library states of what the operation answers
      * ({@link TheSignOfAnOrder#betweenTheArguments}). Where the two leave the arguments open, or
      * settle the comparison whatever they are, there is no order to read and the step is refused.
+     *
+     * <p>And it is of the two arguments the call has, as a reading of a law is of the call
+     * ({@link ByALaw}): what it concludes names the positions the greater and the lesser stand at,
+     * and no other, where they stand at positions.
      */
-    record AnOrderOfItsArguments(TheSignOfAnOrder.TheSign sign, Derivation ofTheArguments)
-            implements Derivation {
+    record AnOrderOfItsArguments(TheCall call, TheSignOfAnOrder.TheSign sign,
+                                 Derivation ofTheArguments) implements Derivation {
 
         public AnOrderOfItsArguments {
+            Objects.requireNonNull(call, "an order is of the arguments of a call");
             Objects.requireNonNull(sign, "an order is answered by an operation");
             Objects.requireNonNull(ofTheArguments, "an order is of the arguments");
             if (TheSignOfAnOrder.betweenTheArguments(sign.operation(), sign.spacing(),
-                    sign.written(), sign.against()) == null) {
-                throw new IllegalArgumentException(sign + " states no order of the arguments");
+                    sign.written(), sign.against()) == null
+                    || !call.operation().equals(sign.operation())) {
+                throw new IllegalArgumentException(sign + " states no order of the arguments of "
+                        + call.operation());
+            }
+            List<TermPath> roots = new ArrayList<>();
+            for (DeclaredArgument each : TheSignOfAnOrder.orderedArguments(sign.operation())) {
+                TermPath at = call.standingAt().get(each);
+                if (at != null) {
+                    roots.add(at);
+                }
+            }
+            if (roots.size() == 2
+                    && !ofTheArguments.concludes(Optional.empty()).staysWithin(roots)) {
+                throw new IllegalArgumentException(ofTheArguments + " is no reading of the order of "
+                        + call.standingAt());
             }
         }
 
