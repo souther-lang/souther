@@ -23,6 +23,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.TreeMap;
 import java.util.Map;
+import java.util.function.UnaryOperator;
 
 /**
  * Reads the standard library the compiler ships in the reserved {@code souther} namespace (ADR-0028,
@@ -69,7 +70,17 @@ public final class StdlibLoader {
      *     like the rest of what is checked here.
      */
     public static Stdlib load() {
-        List<Parsed> sources = parseEverything();
+        return load(UnaryOperator.identity());
+    }
+
+    /**
+     * The library with every resource's text passed through {@code rewritten} first.
+     *
+     * <p>For a test that asks what is proved of a body the library does not have: the library as
+     * shipped with one operation written another way, held to the facts declared of it.
+     */
+    static Stdlib load(UnaryOperator<String> rewritten) {
+        List<Parsed> sources = parseEverything(rewritten);
         Map<String, Ast.Def> declares = everythingTheLibraryDeclares(sources);
         Stdlib.Builder building = Stdlib.builder();
         List<Hir.Module> resolved = new ArrayList<>();
@@ -103,11 +114,12 @@ public final class StdlibLoader {
      * <p>The library ships with the compiler and is in no source of any compile that calls it, so
      * its positions say they stand in for code written there from the moment they are made. A reader
      * reaches the module by the name it imports it under. */
-    private static List<Parsed> parseEverything() {
+    private static List<Parsed> parseEverything(UnaryOperator<String> rewritten) {
         List<Parsed> parsed = new ArrayList<>();
         for (Reserved.StdlibModule declared : Reserved.MODULES) {
             String resource = "/" + declared.moduleName().replace('.', '/') + ".sou";
-            Ast.Module module = CstFrontend.parseWhatAModulePublished(read(resource),
+            Ast.Module module = CstFrontend.parseWhatAModulePublished(
+                    rewritten.apply(read(resource)),
                     new SourceProvenance.TheStandardLibrary(declared.moduleName()));
             parsed.add(new Parsed(declared, module, resource, indexed(module, resource)));
         }

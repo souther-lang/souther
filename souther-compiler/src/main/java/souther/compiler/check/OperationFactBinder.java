@@ -33,10 +33,12 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.SequencedSet;
+import java.util.Set;
 import java.util.function.UnaryOperator;
 
 /**
@@ -113,7 +115,34 @@ final class OperationFactBinder {
         // a declaration refused is one nothing should be proved for.
         holdEachNumberToOneReading(stdlib,
                 new BoundOperationFacts(stdlib, bound, LibraryProofs.TAKEN_AS_HOLDING));
+        holdWhereElementsCameFromToOneAccount(bound);
         return new BoundOperationFacts(stdlib, bound, proofs);
+    }
+
+    /**
+     * Refuses an operation that says where its elements came from twice, as a building and as a
+     * lineage declared alone.
+     *
+     * <p>A building says it beside a count and a lineage says it without one, so an operation with
+     * both has two answers to one question and a reader would take whichever it asked first. The
+     * same kind said twice is refused where the facts are filed; two kinds saying one thing are
+     * only seen beside each other.
+     */
+    private static void holdWhereElementsCameFromToOneAccount(List<BoundOperationFact> bound) {
+        Set<ValueName> built = new HashSet<>();
+        for (BoundOperationFact each : bound) {
+            if (each instanceof BoundOperationFact.BuildsItsResultFrom) {
+                built.add(each.operation().operation());
+            }
+        }
+        for (BoundOperationFact each : bound) {
+            if (each instanceof BoundOperationFact.ElementsComeFrom
+                    && built.contains(each.operation().operation())) {
+                throw new IllegalStateException(each.operation().operation()
+                        + " says where its elements came from as a building and again alone;"
+                        + " a building already says it");
+            }
+        }
     }
 
     /** The same, each written operation's facts proved here against its body. */
@@ -693,15 +722,67 @@ final class OperationFactBinder {
             holdTheAnswerTo(declaration, same, Type::elementOfAContainer,
                     Type::elementOfAContainer, "a container of the elements that argument holds");
         }
+        built.outputs().forEach(each -> holdWhatTheClosureAnswered(declaration, each.origin()));
         return built;
     }
 
-    /** Holds the argument a lineage of made elements names to a container the declaration has. */
+    /** Holds the argument a lineage of made elements names to a container the declaration has, and
+     *  the closure it says made them to the signature. */
     private static ElementLineage<DeclaredArgument> holdElementsComeFrom(
             CompleteSignature declaration, OperationFact.ElementsComeFrom comes) {
-        return comes.lineage().withArguments(named -> holdToTheDeclaration(declaration, named,
-                new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
-                "the container something is made from"));
+        ElementLineage<DeclaredArgument> held = comes.lineage()
+                .withArguments(named -> holdToTheDeclaration(declaration, named,
+                        new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
+                        "the container something is made from"));
+        holdWhatTheClosureAnswered(declaration, held);
+        return held;
+    }
+
+    /**
+     * Holds a lineage that says an element is what a closure answered, or is inside it, to the
+     * signature: the operation hands a closure the elements of the argument the lineage names, and
+     * the closure answers what the elements of the result are, or a list or an optional of them.
+     *
+     * <p>Said of the signature and not of the body, because a kernel has none to prove it of. A
+     * lineage nothing here holds to the declaration is a statement about a closure the operation
+     * may not take, and what reads it would trace a value back to an argument it was never made
+     * from.
+     */
+    private static void holdWhatTheClosureAnswered(CompleteSignature declaration,
+                                                   ElementLineage<DeclaredArgument> lineage) {
+        switch (lineage) {
+            case ElementLineage.SameAs<DeclaredArgument> _ -> { }
+            case ElementLineage.ClosureResult<DeclaredArgument> made ->
+                    holdTheClosureAnswerTo(declaration, made.source().argument(), false);
+            case ElementLineage.InsideClosureResult<DeclaredArgument> inside ->
+                    holdTheClosureAnswerTo(declaration, inside.source().argument(), true);
+            case ElementLineage.OneOf<DeclaredArgument>(var alternatives) ->
+                    alternatives.forEach(each -> holdWhatTheClosureAnswered(declaration, each));
+        }
+    }
+
+    private static void holdTheClosureAnswerTo(CompleteSignature declaration,
+                                               DeclaredArgument container, boolean inside) {
+        String name = ((ValueName.Stdlib) declaration.declaring().operation()).qualified();
+        ClosurePositions handed = Combinators.positionsOf(declaration.declaring().operation());
+        if (handed == null || handed.containerArg() != container.position()) {
+            throw new IllegalStateException(name + " is said to answer what a closure made of the"
+                    + " elements of argument " + (container.position() + 1) + ", and its signature"
+                    + " hands no closure those");
+        }
+        Type answered = declaration.params().get(handed.closureArg()) instanceof Type.FnOf fn
+                ? fn.result() : null;
+        Type made = !inside ? answered
+                : answered instanceof Type.ListOf(Type element) ? element
+                : answered instanceof Type.OptionOf(Type element) ? element : null;
+        Type held = Type.elementOf(declaration.result());
+        if (made == null || !made.equals(held)) {
+            throw new IllegalStateException(name + " answers " + Type.show(declaration.result())
+                    + " and its closure answers "
+                    + (answered == null ? "nothing" : Type.show(answered)) + ", which are not "
+                    + (inside ? "a list or an optional of what the result holds"
+                            : "what the result holds"));
+        }
     }
 
     /**
