@@ -2207,9 +2207,14 @@ final class TermRealizations {
         }
         if (kind == counts.length) {
             looked[0]++;
-            String written = writtenWith(counts, separators, plain);
-            if (answersEvery(written, wanted)) {
-                found.add(written);
+            // The numbers are sums of the counts chosen, so most assignments are refused without
+            // a string being written; the string is written and read back only for one that is
+            // not, which is what the sums said and the reading confirms.
+            if (sumsAreAdmitted(counts, separators, wanted)) {
+                String written = writtenWith(counts, separators, plain);
+                if (answersEvery(written, wanted)) {
+                    found.add(written);
+                }
             }
             return;
         }
@@ -2230,6 +2235,34 @@ final class TermRealizations {
         }
         out.append(" ".repeat(counts[counts.length - 1]));
         return out.toString();
+    }
+
+    /**
+     * Whether every demand admits the number the counts chosen come to: the length is all of
+     * them, a class holds the plain code points and every separator it does not leave out.
+     */
+    private static boolean sumsAreAdmitted(int[] counts, List<Integer> separators,
+                                           List<OfAString> wanted) {
+        int whitespace = counts[counts.length - 1];
+        int outsideWhitespace = counts[0];
+        for (int at = 0; at < separators.size(); at++) {
+            outsideWhitespace += counts[at + 1];
+        }
+        for (OfAString each : wanted) {
+            long number;
+            if (each.counted() == null) {
+                number = outsideWhitespace + whitespace;
+            } else if (each.counted() instanceof CodePointClass.NotWhitespaceNorEqualTo apart
+                    && separators.contains(apart.separator())) {
+                number = outsideWhitespace - counts[1 + separators.indexOf(apart.separator())];
+            } else {
+                number = outsideWhitespace;
+            }
+            if (!each.holds().test(Count.of(number))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Whether the string reads back as a number every demand admits. */

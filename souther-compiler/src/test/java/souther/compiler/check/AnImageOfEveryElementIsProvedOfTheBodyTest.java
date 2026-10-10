@@ -35,7 +35,7 @@ class AnImageOfEveryElementIsProvedOfTheBodyTest {
     /** Control: what the library ships is proved, and said of the kernels as they are declared. */
     @Test
     void theLibraryAsShippedHoldsTheImageOfEveryElement() {
-        BoundOperationFacts facts = OperationFactBinder.bindAll(DefaultStdlib.get());
+        BoundOperationFacts facts = DefaultBoundOperationFacts.get();
 
         assertInstanceOf(ElementLineage.ClosureResult.class,
                 facts.holdsTheImageOfEveryElement(SET_MAP),
