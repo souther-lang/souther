@@ -444,6 +444,20 @@ public final class OperationFacts {
             // As many as the first map, and one more for each entry of the second under a key the
             // first does not have: the walk over the second keeps the first's keys and adds the
             // ones it meets, each key of a map met once.
+            about("Map", "union", lemma(sizeIs(0, sizeOf(at(0)), 1,
+                    howManyMeet(at(1), some(at(0), sameKeys(at(0), at(1))).denied()), 1),
+                    equalToTheSum(sizeOf(the(CARRIED)), sizeOf(at(0)),
+                            howManyMeet(WALKED, isTrue(answerOf("Map", "containsKey",
+                                    new LawSubject.KeyOf<>(WALKED), the(at(0)))).denied())),
+                    iff(isTrue(answerOf("Map", "containsKey", the(ANY), the(CARRIED))),
+                            any(isTrue(answerOf("Map", "containsKey", the(ANY), the(at(0)))),
+                                    some(WALKED, alike(new LawSubject.KeyOf<>(WALKED),
+                                            the(ANY))))))),
+            // The same said beside what `Map.containsKey` answers. What is stated of a kernel
+            // beside others is taken where that kernel is applied, and a map holding each key once
+            // — so that of another map's entries no more are under keys it holds than it holds —
+            // is stated of `Map.containsKey`; said in its words, the size is one that count is
+            // taken of.
             about("Map", "union", lemma(related(equalToTheSum(
                     sizeOf(answerOf("Map", "union", the(at(0)), the(at(1)))), sizeOf(at(0)),
                     howManyMeet(at(1), isTrue(answerOf("Map", "containsKey",
@@ -539,6 +553,65 @@ public final class OperationFacts {
                     sized(atLeast(number(at(1)), 1, number(at(0)), -1, 0), number(at(1)),
                             number(at(0)), 1),
                     sized(atLeast(number(at(0)), 1, number(at(1)), -1, -1), 0))),
+
+            // How many a set or a map holds once one value is put in or taken out: one more, or
+            // one fewer, save where it was there already, or was not — a set holds a value once
+            // and a map a key once. And what the algebra of two keeps: one side, and those of the
+            // other it does not hold; or those of one side the other holds, or does not.
+            about("Set", "singleton", sizeInCases(sized(always(true), 1))),
+            about("Map", "singleton", sizeInCases(sized(always(true), 1))),
+            about("Set", "insert", sizeIs(1, sizeOf(at(1)), 1, howManyMeet(at(1),
+                    alike(new LawSubject.ElementOf<>(at(1)), the(at(0)))), -1)),
+            about("Set", "remove", sizeIs(0, sizeOf(at(1)), 1, howManyMeet(at(1),
+                    alike(new LawSubject.ElementOf<>(at(1)), the(at(0)))), -1)),
+            about("Map", "insert", sizeIs(1, sizeOf(at(2)), 1, howManyMeet(at(2),
+                    alike(new LawSubject.KeyOf<>(at(2)), the(at(0)))), -1)),
+            about("Map", "remove", sizeIs(0, sizeOf(at(1)), 1, howManyMeet(at(1),
+                    alike(new LawSubject.KeyOf<>(at(1)), the(at(0)))), -1)),
+            about("Map", "updateOrInsert", lemma(sizeIs(1, sizeOf(CONTAINER), 1,
+                    howManyMeet(CONTAINER, alike(new LawSubject.KeyOf<>(CONTAINER), the(at(0)))),
+                    -1))),
+            about("Set", "union", sizeIs(0, sizeOf(at(0)), 1, howManyMeet(at(1),
+                    some(at(0), sameElements(at(0), at(1))).denied()), 1)),
+            about("Set", "intersection", size(howManyMeet(at(0),
+                    some(at(1), sameElements(at(1), at(0)))))),
+            about("Set", "difference", size(howManyMeet(at(0),
+                    some(at(1), sameElements(at(1), at(0))).denied()))),
+            about("Map", "intersection", lemma(size(howManyMeet(at(0),
+                    some(at(1), sameKeys(at(1), at(0))))))),
+            about("Map", "difference", lemma(size(howManyMeet(at(0),
+                    some(at(1), sameKeys(at(1), at(0))).denied())))),
+            about("Set", "toList", size(sizeOf(at(0)))),
+
+            // How long a string is is how many code points it holds: a slice holds the ones
+            // between its ends, and a string's characters and code points are one each.
+            about("String", "slice", sizeInCases(sized(always(true), number(at(1)), number(at(0)),
+                    0))),
+            about("String", "characters", size(sizeOf(at(0)))),
+            about("String", "codePoints", size(sizeOf(at(0)))),
+            // And what the domain has no words for. What is put together, rewritten or padded is
+            // in its canonical form, which a seam can shorten and a case mapping lengthen.
+            about("String", "trim", sizeUnsaid(Unsayable.WHICH_CHARACTERS_ARE_WHITESPACE)),
+            about("String", "words", sizeUnsaid(Unsayable.WHICH_CHARACTERS_ARE_WHITESPACE)),
+            about("String", "split",
+                    sizeUnsaid(Unsayable.HOW_MANY_TIMES_A_STRING_STANDS_INSIDE_ANOTHER)),
+            about("String", "lines",
+                    sizeUnsaid(Unsayable.HOW_MANY_TIMES_A_STRING_STANDS_INSIDE_ANOTHER)),
+            about("String", "replace",
+                    sizeUnsaid(Unsayable.HOW_MANY_TIMES_A_STRING_STANDS_INSIDE_ANOTHER)),
+            about("String", "append", sizeUnsaid(Unsayable.THE_LENGTH_OF_A_REWRITTEN_TEXT)),
+            about("String", "concat", sizeUnsaid(Unsayable.THE_LENGTH_OF_A_REWRITTEN_TEXT)),
+            about("String", "join", sizeUnsaid(Unsayable.THE_LENGTH_OF_A_REWRITTEN_TEXT)),
+            about("String", "reverse", sizeUnsaid(Unsayable.THE_LENGTH_OF_A_REWRITTEN_TEXT)),
+            about("String", "repeat", sizeUnsaid(Unsayable.THE_LENGTH_OF_A_REWRITTEN_TEXT)),
+            about("String", "padLeft", sizeUnsaid(Unsayable.THE_LENGTH_OF_A_REWRITTEN_TEXT)),
+            about("String", "padRight", sizeUnsaid(Unsayable.THE_LENGTH_OF_A_REWRITTEN_TEXT)),
+            about("String", "lowercase", sizeUnsaid(Unsayable.THE_LENGTH_OF_A_REWRITTEN_TEXT)),
+            about("String", "uppercase", sizeUnsaid(Unsayable.THE_LENGTH_OF_A_REWRITTEN_TEXT)),
+            about("String", "fromInt",
+                    sizeUnsaid(Unsayable.HOW_MANY_CHARACTERS_A_NUMBER_IS_WRITTEN_IN)),
+            about("String", "fromDecimal",
+                    sizeUnsaid(Unsayable.HOW_MANY_CHARACTERS_A_NUMBER_IS_WRITTEN_IN)),
             about("String", "repeat", law(AnswerAspect.EMPTINESS,
                     all(atLeast(number(at(0)), 1, -1), holdsSomething(at(1))))),
             about("String", "padLeft", law(AnswerAspect.EMPTINESS, any(holdsSomething(at(2)),
@@ -888,6 +961,19 @@ public final class OperationFacts {
         }
         return new OperationFact.HasALaw(new OperationLaw.Size<>(
                 new LinearForm<>(ExactRatio.ZERO, coefs)));
+    }
+
+    /** The answer holds {@code constant}, and {@code byA} of {@code a} and {@code byB} of
+     *  {@code b}. */
+    private static OperationFact sizeIs(long constant, LawNumber<ArgumentRef> a, long byA,
+                                        LawNumber<ArgumentRef> b, long byB) {
+        return new OperationFact.HasALaw(new OperationLaw.Size<>(new LinearForm<>(
+                ExactRatio.of(constant), Map.of(a, ExactRatio.of(byA), b, ExactRatio.of(byB)))));
+    }
+
+    /** How many the answer holds comes to {@code why}, which the domain has no words for. */
+    private static OperationFact sizeUnsaid(Unsayable why) {
+        return new OperationFact.LeavesUnsaid(OperationLaw.Observed.SIZE, why);
     }
 
     /** The answer holds as many as the one of {@code cases} the arguments stand as says. */

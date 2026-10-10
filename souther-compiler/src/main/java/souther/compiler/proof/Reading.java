@@ -471,6 +471,7 @@ final class Reading {
                     LinearForm<LawNumber<Integer>> equalTo = size.unconditional();
                     if (equalTo != null) {
                         used.add(Proof.Used.law(operation, OperationLaw.Observed.SIZE));
+                        readByALaw.add(new Value.Made(operation, args));
                         yield form(equalTo, operation, args);
                     }
                     // Which number it is turns on how the arguments stand, so it is the answer's

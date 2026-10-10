@@ -316,6 +316,34 @@ enum Question {
         }
     },
 
+    /**
+     * How many its answer holds, as a number of its arguments. Asked of what {@link
+     * #HOLDING_SOMETHING} is asked of, and settled as it is: whether an answer holds anything and how
+     * many it holds are two observations, and an operation whose answer is empty exactly where its
+     * container is may still answer any number of elements from it.
+     */
+    HOW_MANY_IT_HOLDS("how many its answer holds") {
+        @Override
+        boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
+            return signature.result() != null && hasASize(signature.result());
+        }
+
+        @Override
+        boolean answeredFor(Stdlib stdlib, ValueName operation) {
+            return byALaw(operation, OperationLaw.Observed.SIZE);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return settledBy(OperationLaw.Observed.SIZE, true);
+        }
+
+        @Override
+        Set<ValueName> deliberatelyUnanswered() {
+            return settledBy(OperationLaw.Observed.SIZE, false);
+        }
+    },
+
     /** What its answer holding a value comes to over its arguments. Asked of an operation answering
      *  an optional, and settled as {@link #HOLDING_SOMETHING} is. */
     HOLDING_A_VALUE("what its answer holding a value comes to") {
@@ -906,15 +934,16 @@ enum Question {
     /**
      * The operations {@code observed} of whose answer is settled by a law, where {@code byALaw}, or
      * closed with what the domain has no words for. A closing is held by the facts the compiler
-     * reads and not here, since the reading of a condition stops on it with its reason.
+     * reads and not here, since the reading of a condition stops on it with its reason. What is
+     * stated and not proved is neither: it is open, and settles nothing.
      */
     private static Set<ValueName> settledBy(OperationLaw.Observed observed, boolean byALaw) {
         Set<ValueName> out = new LinkedHashSet<>();
         DefaultBoundOperationFacts.get().settled().forEach((operation, settled) -> {
-            BoundOperationFacts.Settled settling = settled.get(observed);
-            if (settling != null
-                    && (settling instanceof BoundOperationFacts.Settled.ByALaw) == byALaw) {
-                out.add(operation);
+            switch (settled.get(observed)) {
+                case BoundOperationFacts.Settled.ByALaw _ when byALaw -> out.add(operation);
+                case BoundOperationFacts.Settled.Unsaid _ when !byALaw -> out.add(operation);
+                case null, default -> { }
             }
         });
         return out;
