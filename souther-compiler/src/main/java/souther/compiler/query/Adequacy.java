@@ -1754,6 +1754,17 @@ public final class Adequacy {
                         position, named(declared), named(cases)));
             }
 
+            @Override
+            public souther.compiler.diag.Diagnostic.Builder everyWayInIsRuledOut(
+                    List<souther.compiler.reach.Proof> each) {
+                souther.compiler.diag.Diagnostic.Builder out =
+                        said.hint(new DeadBranchMessage.EveryWayInIsRuledOut());
+                for (souther.compiler.reach.Proof way : each) {
+                    out = new DeadBranchProofWords(out).of(way);
+                }
+                return out;
+            }
+
             /** {@code cases} as an author reads them, in the order given. */
             private static String named(List<TypeSymbol> cases) {
                 return String.join(", ", cases.stream().map(TypeSymbol::name).toList());

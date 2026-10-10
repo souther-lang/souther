@@ -63,6 +63,11 @@ final class WhatAnAnswerSays {
                                                                      List<TypeSymbol> cases) {
                 return List.of();
             }
+
+            @Override
+            public List<PathDecision> everyWayInIsRuledOut(List<Proof> each) {
+                return List.of();
+            }
         });
     }
 
@@ -104,6 +109,11 @@ final class WhatAnAnswerSays {
             public List<TypeSymbol> theDeclarationHoldsNothingElse(String position,
                                                                    List<TypeSymbol> declared,
                                                                    List<TypeSymbol> cases) {
+                return List.of();
+            }
+
+            @Override
+            public List<TypeSymbol> everyWayInIsRuledOut(List<Proof> each) {
                 return List.of();
             }
         });
@@ -148,6 +158,11 @@ final class WhatAnAnswerSays {
             public String theDeclarationHoldsNothingElse(String position,
                                                          List<TypeSymbol> declared,
                                                          List<TypeSymbol> cases) {
+                return null;
+            }
+
+            @Override
+            public String everyWayInIsRuledOut(List<Proof> each) {
                 return null;
             }
         });

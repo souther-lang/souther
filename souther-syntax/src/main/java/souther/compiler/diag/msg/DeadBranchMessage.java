@@ -56,6 +56,10 @@ public sealed interface DeadBranchMessage extends Message {
                                                         String cases)
             implements DeadBranchMessage, Supporting {}
 
+    /** The arm is entered by one of several ways, and each of them is ruled out, as the notes after
+     *  this one say. */
+    record EveryWayInIsRuledOut() implements DeadBranchMessage, Supporting {}
+
     /** What to do about it. */
     record TakeItOutOrLetSomethingReachIt() implements DeadBranchMessage, Supporting {}
 }

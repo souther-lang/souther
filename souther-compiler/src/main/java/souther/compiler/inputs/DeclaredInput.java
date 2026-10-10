@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * What a behavior's declaration puts at a path of its input, read off the declarations alone.
@@ -177,6 +178,29 @@ public final class DeclaredInput {
         }
         Type here = typeAt(at);
         return here == null ? null : readingsOf(here);
+    }
+
+    /**
+     * The leaves a value at {@code at} can stand as, once under each name it wears and once under
+     * all of them ({@link #taking}), or empty where the declarations put nothing here that says so.
+     *
+     * <p>The question a statement about which case a value is asks of the declaration, and not the
+     * one {@link Distinctions} answers. That is what a position divides into, so a record divides
+     * into nothing; this is what may stand there, so a record is the one case it is. A statement
+     * naming cases a record is not is about a value that is not there, and reading the first answer
+     * for the second would take "divides into nothing" for "can be anything".
+     *
+     * <p>Empty rather than a reading with no leaves wherever one of the readings has none: a
+     * position narrowed to an optional's carriers, or to something that is no case of a sum, is a
+     * position this says nothing about, and a statement it says nothing about is not ruled out.
+     */
+    public Optional<List<List<TypeSymbol>>> leavesAt(TermPath at) {
+        List<List<TypeSymbol>> readings = readingsAt(at);
+        if (readings == null || readings.isEmpty()
+                || readings.stream().anyMatch(List::isEmpty)) {
+            return Optional.empty();
+        }
+        return Optional.of(readings);
     }
 
     /** The leaves {@code covered} narrows to, or none where it narrows to something that is not a

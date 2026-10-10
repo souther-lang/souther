@@ -6,6 +6,7 @@ import souther.compiler.flow.WhyRuledOut;
 import souther.compiler.inputs.Admits;
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.CasesLeft;
+import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.Distinctions;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
@@ -34,6 +35,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -150,49 +152,41 @@ public final class WhatTheRulesLeave {
      * Whether the value at {@code at} is left one of {@code cases} where {@code among}, or none of
      * them where not.
      *
-     * <p>Asked of the cases its type divides into that are the way asked, and of the rules about
-     * each. Where none of them is, the answer turns on why. A declaration that lists every case of
-     * its sum in the vocabulary the statement names cases in has said the value is always one of
-     * those, so none being the way asked rules the way out. A declaration that lists none — a
-     * record, a collection, a type this reading has nothing to say about — or lists them in another
-     * vocabulary has not said that: an empty list is then this reading finding nothing stated
-     * ({@link Distinctions}), and is no proof of anything.
+     * <p>Two facts, asked in this order, and kept apart because they are about different things.
+     * What the declaration lets a value there be ({@link DeclaredInput#leavesAt}) is what the type
+     * says, whatever the rules are: an arm for a case the type does not hold is ruled out, and an
+     * arm for every case the type holds leaves nothing for a denial of it. Only what the type
+     * leaves is then asked of the rules about the position, a case at a time
+     * ({@link Distinctions}).
+     *
+     * <p>The declaration's answer is read as every name the value may wear says it, so a position
+     * where it is not settled how many names a statement took off is ruled out only where each
+     * reading rules it out. Where the declaration says nothing this can follow, the way is not ruled
+     * out.
      */
     private static AWayThrough amongCases(TermPath at, CasesLeft cases, boolean among,
                                           InputReading read) {
+        List<TypeSymbol> named = namedIn(cases);
+        Optional<List<List<TypeSymbol>>> readings = read.declared().leavesAt(at);
+        if (readings.isPresent() && !named.isEmpty() && readings.get().stream().allMatch(
+                leaves -> among ? leaves.stream().noneMatch(named::contains)
+                        : named.containsAll(leaves))) {
+            return new AWayThrough.RuledOut(new WhyRuledOut.TheDeclarationLeavesNone(at,
+                    readings.get().getLast(), named, among));
+        }
         Position position = read.domain().at(at.position());
         if (position == null) {
             return LEFT;
         }
-        List<Case> declared = Distinctions.ofType(position.view().shape(), read.rules().symbols(),
-                read.rules().kinds(), read.rules().sums());
         List<Case> asked = new ArrayList<>();
-        for (Case each : declared) {
+        for (Case each : Distinctions.ofType(position.view().shape(), read.rules().symbols(),
+                read.rules().kinds(), read.rules().sums())) {
             Refinement one = Refinement.of(each);
             if (one != null && cases.atoms().contains(one) == among) {
                 asked.add(each);
             }
         }
-        if (!asked.isEmpty()) {
-            return leaves(at, asked, read);
-        }
-        List<TypeSymbol> leaves = leavesOf(declared);
-        List<TypeSymbol> named = namedIn(cases);
-        return leaves.isEmpty() || named.isEmpty() ? LEFT
-                : new AWayThrough.RuledOut(
-                        new WhyRuledOut.TheDeclarationLeavesNone(at, leaves, named, among));
-    }
-
-    /** The leaves {@code declared} lists, or none unless it lists nothing but cases of a sum. */
-    private static List<TypeSymbol> leavesOf(List<Case> declared) {
-        List<TypeSymbol> out = new ArrayList<>();
-        for (Case each : declared) {
-            if (!(each instanceof Case.SumCase sum)) {
-                return List.of();
-            }
-            out.add(sum.leaf());
-        }
-        return out;
+        return asked.isEmpty() ? LEFT : leaves(at, asked, read);
     }
 
     /** The leaves {@code cases} names, or none unless it names nothing but cases of a sum. */

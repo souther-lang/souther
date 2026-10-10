@@ -16,16 +16,15 @@ import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.partition.MeaningsOfABodyReading;
 import souther.compiler.partition.WhatTheRulesLeave;
+import souther.compiler.partition.WhatTheRulesLeaveAnArm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Towards;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.OccurrenceLineage;
-import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -129,21 +128,9 @@ final class NumberWays implements ComparisonWays {
 
     @Override
     public Predicate<Core.Case> mayTake(Core.Match match) {
-        Set<TypeSymbol> written = reads.casesWritten(match.scrutinee(), symbols, newtypes);
-        if (written != null) {
-            return arm -> InputReads.whetherEveryRowTakes(arm, written).orElse(true);
-        }
-        // Otherwise an arm is taken where what entering it states can come out true under the
-        // input's rules, as a fork's condition is.
-        Optional<ModelOccurrence> construct = ModelOccurrence.statedAt(match.place().occurrence());
-        if (construct.isEmpty() || meanings == MeaningsOfABody.NONE) {
-            return arm -> true;
-        }
-        return arm -> meanings.at(new MeaningsOfABody.Site(construct.get(),
-                        new MeaningsOfABody.Part.OfACase(match.cases().indexOf(arm))))
-                .map(proposition -> !(WhatTheRulesLeave.admits(proposition, true,
-                        numbers.reading()) instanceof AWayThrough.RuledOut))
-                .orElse(true);
+        WhatTheRulesLeaveAnArm arms = WhatTheRulesLeaveAnArm.of(match, reads, symbols, newtypes,
+                meanings, numbers.reading());
+        return arm -> arms.ruledOut(match.cases().indexOf(arm)).isEmpty();
     }
 
     @Override

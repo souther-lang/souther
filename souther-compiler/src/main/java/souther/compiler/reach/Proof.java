@@ -23,7 +23,8 @@ import java.util.List;
  */
 public sealed interface Proof
         permits ConditionsThatCannotAllHold, OutsideInputDomain, EveryCaseRefused,
-        NoCaseTheValueCanBeIsTaken, TheDeclarationHoldsNoneOf, TheDeclarationHoldsNothingElse {
+        NoCaseTheValueCanBeIsTaken, TheDeclarationHoldsNoneOf, TheDeclarationHoldsNothingElse,
+        EveryWayInIsRuledOut {
 
     /**
      * The sentences a proof can come to, one per arm.
@@ -112,6 +113,17 @@ public sealed interface Proof
          */
         T theDeclarationHoldsNothingElse(String position, List<TypeSymbol> declared,
                                          List<TypeSymbol> cases);
+
+        /**
+         * The arm is entered by one of several ways, and each of them was shown not to be.
+         *
+         * <p>A value the body works out is of a case by whichever helper arm answers it, and the
+         * arm matched on that case is entered where any of them is: so it is ruled out where all of
+         * them are, each for its own reason.
+         *
+         * @param each why each way in is not one, in the order the ways are read; at least two
+         */
+        T everyWayInIsRuledOut(List<Proof> each);
     }
 
     /** What this proof comes to, in {@code words}. */
@@ -150,6 +162,28 @@ public sealed interface Proof
                                             List<TypeSymbol> cases, boolean among) {
         return among ? new TheDeclarationHoldsNoneOf(position, declared, cases)
                 : new TheDeclarationHoldsNothingElse(position, declared, cases);
+    }
+
+    /** Each of several ways into the arm was ruled out; see {@link Words#everyWayInIsRuledOut}.
+     *  One way is that way's own proof. */
+    static Proof everyAlternativeRuledOut(List<Proof> each) {
+        return each.size() == 1 ? each.getFirst() : new EveryWayInIsRuledOut(each);
+    }
+}
+
+record EveryWayInIsRuledOut(List<Proof> each) implements Proof {
+
+    EveryWayInIsRuledOut {
+        each = List.copyOf(each);
+        if (each.size() < 2) {
+            throw new IllegalArgumentException(
+                    "every way in ruled out, of fewer than two ways: one way is its own proof");
+        }
+    }
+
+    @Override
+    public <T> T said(Words<T> words) {
+        return words.everyWayInIsRuledOut(each);
     }
 }
 

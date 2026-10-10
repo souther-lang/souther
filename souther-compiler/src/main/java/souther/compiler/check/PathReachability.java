@@ -5,7 +5,7 @@ import souther.compiler.coverage.NumberingIdentity;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.coverage.ControlPlace;
-import souther.compiler.flow.AWayThrough;
+import souther.compiler.flow.WhyNoValueTakesTheArm;
 import souther.compiler.flow.WhyRuledOut;
 import souther.compiler.inputs.Admits;
 import souther.compiler.inputs.Case;
@@ -14,7 +14,7 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Unsettlement;
-import souther.compiler.partition.WhatTheRulesLeave;
+import souther.compiler.partition.WhatTheRulesLeaveAnArm;
 import souther.compiler.types.ResolvedCase;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
@@ -44,7 +44,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * What the model's own rules say arrives at each place in a behavior's body.
@@ -416,9 +415,9 @@ public final class PathReachability {
     /** What the declarations leave each position, which is what a {@code match} arm is held
      *  against. A condition narrows a path; a case is refused or left by the rules themselves. */
     private final InputDomain read;
-    /** The same input with what its rules leave the numbers there, which is what a way through an
-     *  arm is asked of ({@link WhatTheRulesLeave}) — the one reading {@code NumberWays} asks it of
-     *  too, so the two cannot answer about different inputs. */
+    /** The same input with what its rules leave the numbers there, which is what an arm is asked
+     *  of ({@link WhatTheRulesLeaveAnArm}) — the one reading {@code NumberWays} asks it of too, so
+     *  the two cannot answer about different inputs. */
     private final InputReading reading;
     private final Symbols symbols;
 
@@ -930,31 +929,25 @@ public final class PathReachability {
         if (arms == null) {
             return;
         }
-        // Not a position of this input, or not one this reading reached: either way nothing here
-        // has rules about it to carry. What it may still be is a value the source wrote, and an
-        // arm none of its cases takes is one nothing arrives at, whatever the rules leave.
+        // Whether any value arrives at an arm is decided in one place, which every reader of an arm
+        // asks, wherever the scrutinee stands: a position of the input, a value the source wrote,
+        // or a value the body works out whose cases are read off the input. What this adds is the
+        // witness, which only a scrutinee at a position of the input can have.
+        WhatTheRulesLeaveAnArm ruling =
+                WhatTheRulesLeaveAnArm.of(match, reads, symbols, newtypes, meanings, reading);
         TermPath path = positionOf(match.scrutinee(), reads);
-        if (path == null) {
-            Set<TypeSymbol> written =
-                    reads.casesWritten(match.scrutinee(), symbols, newtypes);
-            for (int i = 0; written != null && i < match.cases().size() && i < arms.length; i++) {
-                Core.Case arm = match.cases().get(i);
-                if (InputReads.whetherEveryRowTakes(arm, written).equals(Optional.of(false))) {
-                    out.put(arms[i], new Reachability.Unreachable(Proof.noCaseTheValueCanBeIsTaken(
-                            List.copyOf(written), arm.caseTypes())));
-                }
-            }
-            return;
-        }
         // The reading this walk was given, which is the one held here. Which location the name
         // stands for is the environment's answer and what the rules leave there is the reading's,
         // and neither is asked of the other.
-        Position at = read.at(path);
+        Position at = path == null ? null : read.at(path);
         for (int i = 0; i < match.cases().size() && i < arms.length; i++) {
             Core.Case arm = match.cases().get(i);
-            Optional<Proof> proof = ruledOut(match, i, at, path, arm);
+            Optional<Proof> proof = ruling.ruledOut(i).flatMap(why -> proofOf(why, arm));
             if (proof.isPresent()) {
                 out.put(arms[i], new Reachability.Unreachable(proof.get()));
+                continue;
+            }
+            if (path == null) {
                 continue;
             }
             // A position this reading never got to — deeper than it reads into what a parameter
@@ -972,57 +965,25 @@ public final class PathReachability {
     }
 
     /**
-     * How it was shown that no value arrives at the arm {@code index} of {@code match}, or empty
-     * where it was not.
-     *
-     * <p>What entering the arm states is the model's statement about it, read once
-     * ({@link MeaningsOfABody}), and whether the input leaves any value meeting it is asked the
-     * way every reader of a way through asks it ({@link WhatTheRulesLeave}). An arm of a helper
-     * is read where the call handed the helper its argument, so the statement is about the
-     * position of the input the call passed and the cases its declaration leaves.
-     *
-     * <p>A body with no reading of what its conditions mean has its arms read as they stand here:
-     * every case the arm is written for refused by the rules of the position. That is the one
-     * reading such a body has. A body that has one and states nothing about an arm is not read a
-     * second way, and a match in a copy of one of the language's operations is no statement of
-     * the model.
-     */
-    private Optional<Proof> ruledOut(Core.Match match, int index, Position at, TermPath path,
-                                     Core.Case arm) {
-        Optional<ModelOccurrence> construct =
-                ModelOccurrence.statedAt(match.place().occurrence());
-        if (construct.isEmpty()) {
-            return Optional.empty();
-        }
-        if (meanings == MeaningsOfABody.NONE) {
-            return at == null ? Optional.empty() : everyCaseRefused(at, path, arm);
-        }
-        return meanings.at(new MeaningsOfABody.Site(construct.get(),
-                        new MeaningsOfABody.Part.OfACase(index)))
-                .map(stated -> WhatTheRulesLeave.admits(stated, true, reading))
-                .flatMap(answer -> answer instanceof AWayThrough.RuledOut(var why)
-                        ? proofOf(why, arm) : Optional.empty());
-    }
-
-    /** Every case {@code arm} is written for refused by the rules of the position, where they all
-     *  are: an arm goes only where all of them go. */
-    private static Optional<Proof> everyCaseRefused(Position at, TermPath path, Core.Case arm) {
-        List<Refinement> reaches = reachedBy(arm);
-        return !arm.caseTypes().isEmpty()
-                && reaches.stream().allMatch(each -> at.admissionOf(each) instanceof Admits.Refused)
-                ? Optional.of(Proof.everyCaseRefused(path.toString(), arm.caseTypes()))
-                : Optional.empty();
-    }
-
-    /**
      * {@code why} as a proof an author reads, or empty where it has no words.
      *
-     * <p>An arm is ruled out by what the declaration or the rules leave the position it matches
-     * on, and those are the proofs said here. What else can rule a way out — the numbers a
-     * comparison is over, a container that holds nothing — is not what a {@code match} arm states,
-     * and an arm ruled out by one is left as one nothing was shown about rather than given a
-     * sentence written for something else. Owing a row there is the fail-open answer.
+     * <p>What rules a way out is what the declaration or the rules leave the value matched on, and
+     * a composite is ruled out where every way in it is: those are the proofs said here. The
+     * numbers a comparison is over, a container that holds nothing, and a statement that never
+     * holds are what a {@code match} arm does not state — an arm selects by the cases of a value —
+     * so there is no sentence for them, and an arm ruled out by one would be left as one nothing
+     * was shown about rather than given a sentence written for something else.
      */
+    private static Optional<Proof> proofOf(WhyNoValueTakesTheArm why, Core.Case arm) {
+        return switch (why) {
+            case WhyNoValueTakesTheArm.ByWhatIsWritten(var canBe, var cases) ->
+                    Optional.of(Proof.noCaseTheValueCanBeIsTaken(canBe, cases));
+            case WhyNoValueTakesTheArm.ByTheRulesOfThePosition(var at, var cases) ->
+                    Optional.of(Proof.everyCaseRefused(at.toString(), cases));
+            case WhyNoValueTakesTheArm.ByWhatItStates(var stated) -> proofOf(stated, arm);
+        };
+    }
+
     private static Optional<Proof> proofOf(WhyRuledOut why, Core.Case arm) {
         return switch (why) {
             case WhyRuledOut.TheDeclarationLeavesNone(var at, var declared, var asked,
@@ -1041,8 +1002,19 @@ public final class PathReachability {
                 }
                 yield Optional.of(Proof.everyCaseRefused(at.toString(), leaves));
             }
+            case WhyRuledOut.EveryWay(var each) -> {
+                List<Proof> proofs = new ArrayList<>();
+                for (WhyRuledOut one : each) {
+                    Optional<Proof> proof = proofOf(one, arm);
+                    if (proof.isEmpty()) {
+                        yield Optional.empty();
+                    }
+                    proofs.add(proof.get());
+                }
+                yield Optional.of(Proof.everyAlternativeRuledOut(proofs));
+            }
             case WhyRuledOut.ItNeverComesOutSo _, WhyRuledOut.TheNumbersLeaveNone _,
-                 WhyRuledOut.NothingIsHeldIn _, WhyRuledOut.EveryWay _ -> Optional.empty();
+                 WhyRuledOut.NothingIsHeldIn _ -> Optional.empty();
         };
     }
 
