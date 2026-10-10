@@ -2,10 +2,14 @@ package souther.compiler.meaning;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.check.ScopedDeclarations;
+import souther.compiler.check.Symbols;
 import souther.compiler.check.TheSignOfAnOrder;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
@@ -18,6 +22,7 @@ import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.SideAnswered;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.HashMap;
@@ -141,9 +146,16 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 ((LawSubject.Argument<?>) law.of()).argument(), XS);
         new Derivation.ByALaw(call, AnswerAspect.PRESENCE, new Derivation.OnTheSideALawNames(
                 law, new Derivation.PresentInASubject(new DecisionSubject.AnInput(XS))));
-        assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(call,
-                AnswerAspect.PRESENCE, new Derivation.OnTheSideALawNames(law,
-                        new Derivation.PresentInASubject(new DecisionSubject.AnInput(YS)))));
+        // Of the argument itself and of what the law observes of it: not another position, not a
+        // position inside it, not another thing observed of it.
+        for (Derivation notOfIt : List.of(
+                new Derivation.PresentInASubject(new DecisionSubject.AnInput(YS)),
+                new Derivation.PresentInASubject(new DecisionSubject.AnInput(XS.element())),
+                truthAt(XS))) {
+            assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(call,
+                    AnswerAspect.PRESENCE, new Derivation.OnTheSideALawNames(law, notOfIt)),
+                    () -> "refused: " + notOfIt);
+        }
     }
 
     /**
@@ -159,6 +171,25 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 readingOfGet(INDEX, INDEX), readingOfGet(LENGTH, LENGTH))) {
             assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(call,
                     AnswerAspect.PRESENCE, swapped), () -> "refused: " + swapped);
+        }
+    }
+
+    /**
+     * A reading that has an argument's number at the argument's own position and as a number of
+     * another kind is refused: {@code List.get}'s length read as how many different values the
+     * list's elements come to, which is fewer where two are the same, or as the list's elements
+     * counted, or the index read as that count of its own position.
+     */
+    @Test
+    void aReadingOfANumberOfAnotherKindThanTheLawsIsRefused() {
+        Derivation.TheCall call = callOfGet();
+        Quantity differentInTheList = new Quantity.HowManyDifferent(B, B.element());
+        Quantity metInTheList = new Quantity.HowManyMeet(B, truth(B.element()));
+        Quantity differentAtTheIndex = new Quantity.HowManyDifferent(A, A.element());
+        for (Derivation ofAnotherKind : List.of(readingOfGet(INDEX, differentInTheList),
+                readingOfGet(INDEX, metInTheList), readingOfGet(differentAtTheIndex, LENGTH))) {
+            assertThrows(IllegalArgumentException.class, () -> new Derivation.ByALaw(call,
+                    AnswerAspect.PRESENCE, ofAnotherKind), () -> "refused: " + ofAnotherKind);
         }
     }
 
@@ -341,19 +372,39 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
                 Granularity.DISCRETE, Rel.GE, ExactRatio.of(-1));
         List<DeclaredArgument> ordered = TheSignOfAnOrder.orderedArguments(INT_COMPARE);
         Derivation.TheCall compare = callOf(INT_COMPARE, ordered.get(0), A, ordered.get(1), B);
-        assertEquals(truth(A), concluded(new Derivation.AnOrderOfItsArguments(compare,
-                aboveNought, truthAt(A))));
-        // Of the call's two arguments and no others.
-        assertThrows(IllegalArgumentException.class,
-                () -> new Derivation.AnOrderOfItsArguments(compare, aboveNought, truthAt(C)));
+        Derivation greaterThanTheLesser = relationOf(NUMBER_AT_A, NUMBER_AT_B, Rel.GT);
+        assertEquals(concluded(greaterThanTheLesser), concluded(
+                new Derivation.AnOrderOfItsArguments(compare, aboveNought, greaterThanTheLesser)));
+        // The greater against the lesser as the sign says, and no other statement of them: not
+        // the other way round, not the other relation, not either against nought, not a number
+        // of the same position of another kind.
+        for (Derivation notTheOrder : List.of(
+                relationOf(NUMBER_AT_A, NUMBER_AT_B, Rel.LT),
+                relationOf(NUMBER_AT_A, NUMBER_AT_B, Rel.GE),
+                relationOf(NUMBER_AT_B, NUMBER_AT_A, Rel.GT),
+                new Derivation.AComparisonRead(Derivation.ComparisonReading.BY_A_LAW,
+                        new Relation.Affine(LinearForm.atom(NUMBER_AT_A), Rel.GT), true),
+                relationOf(NUMBER_AT_A, LENGTH, Rel.GT),
+                truthAt(A))) {
+            assertThrows(IllegalArgumentException.class, () -> new Derivation.AnOrderOfItsArguments(
+                    compare, aboveNought, notTheOrder), () -> "refused: " + notTheOrder);
+        }
         assertEquals(new Proposition.Always(false),
                 concluded(new Derivation.ASignItsBoundsSettle(aboveOne)));
         assertEquals(new Proposition.Always(true),
                 concluded(new Derivation.ASignItsBoundsSettle(atOrAboveLessOne)));
         assertThrows(IllegalArgumentException.class,
                 () -> new Derivation.ASignItsBoundsSettle(aboveNought));
-        assertThrows(IllegalArgumentException.class,
-                () -> new Derivation.AnOrderOfItsArguments(compare, aboveOne, truthAt(A)));
+        assertThrows(IllegalArgumentException.class, () -> new Derivation.AnOrderOfItsArguments(
+                compare, aboveOne, greaterThanTheLesser));
+    }
+
+    /** {@code first - second states 0}, read as a comparison of the numbers it is over. */
+    private static Derivation relationOf(Quantity first, Quantity second, Rel states) {
+        Relation.OneWay<Quantity> one = Relation.OneWay.of(new LinearForm<>(ExactRatio.ZERO,
+                Map.of(first, ExactRatio.ONE, second, ExactRatio.of(-1))), states);
+        return new Derivation.AComparisonRead(Derivation.ComparisonReading.BY_A_LAW,
+                new Relation.Affine(one.form(), one.proposition()), one.holds());
     }
 
     private static final ValueName.Stdlib LIST_ANY = new ValueName.Stdlib.Operation("List", "any");
@@ -373,8 +424,16 @@ class WhatADerivationConcludesIsWhatItsRuleComputesTest {
             new ValueName.Stdlib.Operation("Int", "compare");
 
     /** Two quantities standing for what a number of a law was read as. */
-    private static final Quantity INDEX = new Quantity.HowManyDifferent(A, A.element());
-    private static final Quantity LENGTH = new Quantity.HowManyDifferent(B, B.element());
+    private static final Symbols SYMBOLS = Symbols.none(DefaultStdlib.get());
+    private static final ValueName.Stdlib LIST_LENGTH =
+            new ValueName.Stdlib.Operation("List", "length");
+    private static final Quantity NUMBER_AT_A =
+            new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(A));
+    private static final Quantity NUMBER_AT_B =
+            new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(B));
+    private static final Quantity INDEX = NUMBER_AT_A;
+    private static final Quantity LENGTH = new DecisionAtom.OfTheInput(NumericTerm.TakenOf.of(
+            LIST_LENGTH, B, Type.list(Type.INT), ScopedDeclarations.wrapsOf(SYMBOLS), SYMBOLS));
 
     /** A call of {@code operation} with the argument {@code argument} of its law at {@code at}. */
     private static Derivation.TheCall callOf(ValueName.Stdlib operation, Object argument,

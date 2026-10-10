@@ -4,32 +4,18 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
- * Which arguments of an operation a number, a subject or a statement of its law names.
+ * Which arguments of an operation a statement of its law names.
  *
- * <p>Asked where a reading of a law is held to the call it was read at: a part of a law reads
- * exactly the arguments it names, and a reading of it that has them standing anywhere but where the
- * call has them is not a reading of that call.
+ * <p>Asked where a reading of a law is held to the call it was read at: the call says where each
+ * argument the law names stands.
  */
 public final class LawArguments {
 
     private LawArguments() {
     }
 
-    /** Every argument {@code subject} names, down to those of the answers it holds. */
-    public static <A> Set<A> named(LawSubject<A> subject) {
-        Set<A> out = new LinkedHashSet<>();
-        into(subject, out);
-        return out;
-    }
-
-    /** Every argument {@code number} names, down to those of the statements it counts by. */
-    public static <A> Set<A> named(LawNumber<A> number) {
-        Set<A> out = new LinkedHashSet<>();
-        into(number, out);
-        return out;
-    }
-
-    /** Every argument {@code statement} names, in the parts it joins and the elements it is about. */
+    /** Every argument {@code statement} names, in the parts it joins, the elements it is about
+     *  and the numbers it compares. */
     public static <A> Set<A> named(LawProposition<A> statement) {
         Set<A> out = new LinkedHashSet<>();
         into(statement, out);

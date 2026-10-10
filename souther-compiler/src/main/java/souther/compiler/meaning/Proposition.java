@@ -9,7 +9,6 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.types.ModelOccurrence;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -106,42 +105,6 @@ public sealed interface Proposition {
     /** Whether {@code at} is an element of {@code container}, or a key of it, or under one. */
     private static boolean isAnElementOf(TermPath at, TermPath container) {
         return at.isAtOrUnder(container.element()) || at.isAtOrUnder(container.key());
-    }
-
-    /**
-     * Whether every position this reads a subject or a count off is at or under one of
-     * {@code roots}.
-     *
-     * <p>A value a body bound or a dependency answered is computed from something nothing here
-     * names, and what a count meets or a quantifier holds of its element is the closure's, so
-     * neither is held against {@code roots}: the position a count is of, and the container a
-     * quantifier is over, are.
-     */
-    default boolean staysWithin(Collection<TermPath> roots) {
-        return switch (this) {
-            case Always _, Unread _ -> true;
-            case Compared compared -> switch (compared.relation()) {
-                case Relation.Affine affine -> affine.form().coefs().keySet().stream()
-                        .allMatch(quantity -> quantity.staysWithin(roots));
-                case Relation.Ordered ordered -> ordered.term().staysWithin(roots);
-            };
-            case Truth truth -> staysWithin(truth.of(), roots);
-            case InCases cases -> staysWithin(cases.of(), roots);
-            case Present present -> staysWithin(present.of(), roots);
-            case SameValue same -> staysWithin(same.one(), roots) && staysWithin(same.other(), roots);
-            case All all -> all.parts().stream().allMatch(part -> part.staysWithin(roots));
-            case Any any -> any.parts().stream().allMatch(part -> part.staysWithin(roots));
-            case OnAnApplication applications -> applications.each().stream()
-                    .allMatch(one -> one.staysWithin(roots));
-            case Some some -> some.container().isAtOrUnderAny(roots);
-        };
-    }
-
-    private static boolean staysWithin(DecisionSubject subject, Collection<TermPath> roots) {
-        return switch (subject) {
-            case DecisionSubject.AnInput(TermPath at) -> at.isAtOrUnderAny(roots);
-            case DecisionSubject.AnAnswer _ -> true;
-        };
     }
 
     /** Comes out {@code holds} for every row. */

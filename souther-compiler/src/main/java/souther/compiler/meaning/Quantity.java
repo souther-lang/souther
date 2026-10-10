@@ -5,7 +5,6 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -21,24 +20,6 @@ import java.util.Optional;
  */
 public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         Quantity.HowManyMeet, Quantity.HowManyHold, Quantity.HowManyDifferent, Quantity.SumOver {
-
-    /**
-     * Whether every position this is read off is at or under one of {@code roots}: the position a
-     * number is of, and the container a count or a sum is over. A value a body bound or a
-     * dependency answered is computed from something nothing here names, and what a count meets
-     * is the closure's, so neither is held against {@code roots}.
-     */
-    default boolean staysWithin(Collection<TermPath> roots) {
-        return switch (this) {
-            case DecisionAtom.OfTheInput(var term) -> term.subjectPath().isAtOrUnderAny(roots);
-            case DecisionAtom.OfAnAnswer _, OfABinding _, HowManyHold _ -> true;
-            case HowManyMeet(TermPath counted, var _) -> counted.isAtOrUnderAny(roots);
-            case HowManyDifferent(TermPath counted, TermPath each) ->
-                    counted.isAtOrUnderAny(roots) && each.isAtOrUnderAny(roots);
-            case SumOver(TermPath summed, var each) -> summed.isAtOrUnderAny(roots)
-                    && each.coefs().keySet().stream().allMatch(one -> one.staysWithin(roots));
-        };
-    }
 
     /**
      * How many different values stand at {@code ofTheElement} over the elements of the container

@@ -14,11 +14,11 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.AnswerAspect;
-import souther.compiler.semantics.LawArguments;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ValueName;
 
@@ -540,11 +540,17 @@ public sealed interface Derivation {
      * holding a part of another law, or the right part at the wrong place, is refused where it is
      * made, and no step hands in a relation, a polarity or a container of its own.
      *
-     * <p>And it is held to the call. Where an argument stands is what {@code call} says, and a step
-     * that reads a position for an argument — the container some element is of, the subject a side
-     * is observed of, what a number is a size of — reads the one the argument stands at, or one
-     * inside it where the law says an element or a key of it. How an argument that stands at no
-     * position is read is the reading rules' own, and is held to nothing here.
+     * <p>And it is held to the call, in two things that are each their own obligation. Which
+     * argument a step is of: where an argument stands is what {@code call} says, and a step that
+     * reads a position for one — the container some element is of, the subject a side is observed
+     * of — reads exactly the position the argument stands at, the position of an element of it or
+     * of the key one is filed under where the law says so. And what is read of it: a side observed
+     * is that side observed, and a number the law names is the number of its own kind — the
+     * argument's own number, how many it holds, how many different values its elements come to,
+     * how many meet a statement, what a number of each adds up to — so that one kind of an
+     * argument's number is never taken for another of the same position. How an argument that
+     * stands at no position is read, and what a closure states of an element, are the reading
+     * rules' own and are held to nothing here.
      */
     record ByALaw(TheCall call, AnswerAspect aspect, Derivation ofTheArguments)
             implements Derivation {
@@ -600,7 +606,7 @@ public sealed interface Derivation {
                             joins(law, parts, read);
                     case LawProposition.Observed<DeclaredArgument> observed ->
                             read instanceof OnTheSideALawNames(var part, Derivation seen)
-                                    && part.equals(law) && observes(observed.of(), seen);
+                                    && part.equals(law) && observes(observed, seen);
                     case LawProposition.Same<DeclaredArgument> same ->
                             read instanceof TheSameValue(var part, var one, var other)
                                     && part.equals(law) && stands(same.one(), one)
@@ -682,48 +688,125 @@ public sealed interface Derivation {
             }
 
             /**
-             * The positions the arguments {@code named} stand at, or null where a reading of them
-             * is held to none: one stands at no position, or is read as the values it was
-             * written with.
+             * The position {@code argument} stands at, or null where a reading of it is held to
+             * none: it stands at no position, or is read as the values it was written with.
              */
-            private List<TermPath> rootsOf(Set<DeclaredArgument> named) {
-                List<TermPath> roots = new ArrayList<>();
-                for (DeclaredArgument argument : named) {
-                    TermPath at = call.standingAt().get(argument);
-                    if (at == null || writtenOut.contains(argument)) {
-                        return null;
-                    }
-                    roots.add(at);
-                }
-                return roots.isEmpty() ? null : roots;
+            private TermPath positionOf(DeclaredArgument argument) {
+                return writtenOut.contains(argument) ? null : call.standingAt().get(argument);
             }
 
-            /** Whether what {@code seen} concludes of {@code subject} is of the position the
-             *  call has it at. What a closure answers is read in the closure's body, which has no
-             *  position of the call's. */
-            private boolean observes(LawSubject<DeclaredArgument> subject, Derivation seen) {
-                if (subject instanceof LawSubject.WhatTheClosureAnswers<DeclaredArgument>) {
+            /**
+             * The position {@code subject} is, exactly: the argument's, an element of it, or the
+             * key an element is filed under — or null where a reading of it is held to none. What a
+             * closure answers is read in the closure's body, which stands at no position of the
+             * call's.
+             */
+            private TermPath positionOf(LawSubject<DeclaredArgument> subject) {
+                return switch (subject) {
+                    case LawSubject.Argument<DeclaredArgument>(var argument) ->
+                            positionOf(argument);
+                    case LawSubject.ElementOf<DeclaredArgument>(var container) -> {
+                        TermPath at = positionOf(container);
+                        yield at == null ? null : at.element();
+                    }
+                    case LawSubject.KeyOf<DeclaredArgument>(var container) -> {
+                        TermPath at = positionOf(container);
+                        yield at == null ? null : at.key();
+                    }
+                    case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _,
+                         LawSubject.AnswerOf<DeclaredArgument> _ -> null;
+                };
+            }
+
+            /**
+             * Whether {@code seen} is exactly what observing the subject of {@code observed} on
+             * its side says of the position the call has it at: that it is true, that it is
+             * present, that it holds something.
+             */
+            private boolean observes(LawProposition.Observed<DeclaredArgument> observed,
+                                     Derivation seen) {
+                TermPath at = positionOf(observed.of());
+                if (at == null) {
                     return true;
                 }
-                List<TermPath> roots = rootsOf(LawArguments.named(subject));
-                return roots == null || seen.concludes(Optional.empty()).staysWithin(roots);
+                Proposition concluded = seen.concludes(Optional.empty());
+                if (Proposition.leavesSomethingUnread(concluded)) {
+                    return true;
+                }
+                DecisionSubject subject = new DecisionSubject.AnInput(at);
+                return switch (observed.side().aspect()) {
+                    case TRUTH -> concluded.equals(
+                            new ATruthOfASubject(subject, true).concludes(Optional.empty()));
+                    case PRESENCE -> concluded.equals(
+                            new PresentInASubject(subject).concludes(Optional.empty()));
+                    case EMPTINESS -> concluded instanceof Proposition.Compared(
+                            Relation.Affine(var form, var rel), boolean holds, var _)
+                            && holds && rel == Rel.GT && howManyAt(soleAtom(form), at);
+                };
             }
 
-            /** Whether {@code read}, the subject {@code subject} was read as, stands at the
-             *  position the call has it at. */
+            /** Whether {@code read}, the subject {@code subject} was read as, is the position the
+             *  call has it at. */
             private boolean stands(LawSubject<DeclaredArgument> subject, DecisionSubject read) {
-                List<TermPath> roots = rootsOf(LawArguments.named(subject));
-                return roots == null || (read instanceof DecisionSubject.AnInput(TermPath at)
-                        && at.isAtOrUnderAny(roots));
+                TermPath at = positionOf(subject);
+                return at == null || read.equals(new DecisionSubject.AnInput(at));
             }
 
-            /** Whether {@code form}, what {@code number} was read as, is of the positions the
-             *  call has the arguments the number names at. */
+            /**
+             * Whether {@code form}, what {@code number} was read as, is the number the law means
+             * of the argument it names: the argument's own number, how many it holds, how many
+             * different values its elements come to, how many of them meet a statement, what a
+             * number of each adds up to. Each is a number of its own kind, and one kind read as
+             * another is no reading of the law even where both are of the same position.
+             */
             private boolean numberStands(LawNumber<DeclaredArgument> number,
                                          LinearForm<Quantity> form) {
-                List<TermPath> roots = rootsOf(LawArguments.named(number));
-                return roots == null || form.coefs().keySet().stream()
-                        .allMatch(quantity -> quantity.staysWithin(roots));
+                Quantity atom = soleAtom(form);
+                return switch (number) {
+                    case LawNumber.AnArgument<DeclaredArgument>(var argument) -> {
+                        TermPath at = positionOf(argument);
+                        yield at == null || new DecisionAtom.OfTheInput(
+                                new NumericTerm.ValueOf(at)).equals(atom);
+                    }
+                    case LawNumber.SizeOf<DeclaredArgument>(var of) -> {
+                        TermPath at = positionOf(of);
+                        yield at == null || howManyAt(atom, at);
+                    }
+                    case LawNumber.HowManyDifferent<DeclaredArgument>(var container, var each) -> {
+                        TermPath at = positionOf(container);
+                        TermPath element = positionOf(each);
+                        yield at == null || element == null
+                                || new Quantity.HowManyDifferent(at, element).equals(atom);
+                    }
+                    case LawNumber.SumOver<DeclaredArgument>(var container, var each) -> {
+                        TermPath at = positionOf(container);
+                        yield at == null
+                                || (atom instanceof Quantity.SumOver(TermPath summed, var ofEach)
+                                && summed.equals(at) && numberStands(each, ofEach));
+                    }
+                    case LawNumber.HowManyMeet<DeclaredArgument>(var container, var _) -> {
+                        TermPath at = positionOf(container);
+                        yield at == null || (atom instanceof Quantity.HowManyMeet(
+                                TermPath counted, var _) && counted.equals(at));
+                    }
+                };
+            }
+
+            /** The one quantity {@code form} is, once, or null where it is anything else. */
+            private static Quantity soleAtom(LinearForm<Quantity> form) {
+                if (form.coefs().size() != 1 || form.constant().signum() != 0) {
+                    return null;
+                }
+                Map.Entry<Quantity, ExactRatio> only = form.coefs().entrySet().iterator().next();
+                return ExactRatio.ONE.equals(only.getValue()) ? only.getKey() : null;
+            }
+
+            /** Whether {@code atom} is how many what stands at {@code at} holds. */
+            private static boolean howManyAt(Quantity atom, TermPath at) {
+                return atom instanceof DecisionAtom.OfTheInput(
+                        NumericTerm.TakenOf taken) && taken.position().equals(at)
+                        && DefaultBoundOperationFacts.get().takenAs(taken.operation())
+                        instanceof TakenAs.HowManyItHolds;
             }
         }
     }
@@ -931,9 +1014,10 @@ public sealed interface Derivation {
      * ({@link TheSignOfAnOrder#betweenTheArguments}). Where the two leave the arguments open, or
      * settle the comparison whatever they are, there is no order to read and the step is refused.
      *
-     * <p>And it is of the two arguments the call has, as a reading of a law is of the call
-     * ({@link ByALaw}): what it concludes names the positions the greater and the lesser stand at,
-     * and no other, where they stand at positions.
+     * <p>And what it concludes is that order of the two arguments the call has, as a reading of a
+     * law is of the call ({@link ByALaw}): the greater standing as the sign says to the lesser,
+     * where both stand at positions, and no other relation between them or of either to anything
+     * else.
      */
     record AnOrderOfItsArguments(TheCall call, TheSignOfAnOrder.TheSign sign,
                                  Derivation ofTheArguments) implements Derivation {
@@ -942,24 +1026,39 @@ public sealed interface Derivation {
             Objects.requireNonNull(call, "an order is of the arguments of a call");
             Objects.requireNonNull(sign, "an order is answered by an operation");
             Objects.requireNonNull(ofTheArguments, "an order is of the arguments");
-            if (TheSignOfAnOrder.betweenTheArguments(sign.operation(), sign.spacing(),
-                    sign.written(), sign.against()) == null
-                    || !call.operation().equals(sign.operation())) {
+            Rel between = TheSignOfAnOrder.betweenTheArguments(sign.operation(), sign.spacing(),
+                    sign.written(), sign.against());
+            if (between == null || !call.operation().equals(sign.operation())) {
                 throw new IllegalArgumentException(sign + " states no order of the arguments of "
                         + call.operation());
             }
-            List<TermPath> roots = new ArrayList<>();
-            for (DeclaredArgument each : TheSignOfAnOrder.orderedArguments(sign.operation())) {
-                TermPath at = call.standingAt().get(each);
-                if (at != null) {
-                    roots.add(at);
+            List<DeclaredArgument> ordered = TheSignOfAnOrder.orderedArguments(sign.operation());
+            TermPath greater = call.standingAt().get(ordered.get(0));
+            TermPath lesser = call.standingAt().get(ordered.get(1));
+            if (greater != null && lesser != null && !greater.equals(lesser)) {
+                Proposition read = ofTheArguments.concludes(Optional.empty());
+                if (!Proposition.leavesSomethingUnread(read)
+                        && !read.equals(theGreaterAgainstTheLesser(greater, lesser, between))) {
+                    throw new IllegalArgumentException(ofTheArguments + " is not the order the"
+                            + " library states of " + call.standingAt() + ": the greater " + between
+                            + " the lesser");
                 }
             }
-            if (roots.size() == 2
-                    && !ofTheArguments.concludes(Optional.empty()).staysWithin(roots)) {
-                throw new IllegalArgumentException(ofTheArguments + " is no reading of the order of "
-                        + call.standingAt());
-            }
+        }
+
+        /**
+         * What the order says of the numbers at the two positions: the one at {@code greater}
+         * standing {@code between} to the one at {@code lesser}.
+         */
+        private static Proposition theGreaterAgainstTheLesser(TermPath greater, TermPath lesser,
+                                                               Rel between) {
+            LinearForm<Quantity> apart = new LinearForm<>(ExactRatio.ZERO, Map.of(
+                    new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(greater)), ExactRatio.ONE,
+                    new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(lesser)),
+                    ExactRatio.of(-1)));
+            Relation.OneWay<Quantity> one = Relation.OneWay.of(apart, between);
+            return Proposition.compared(new Relation.Affine(one.form(), one.proposition()),
+                    one.holds());
         }
 
         @Override

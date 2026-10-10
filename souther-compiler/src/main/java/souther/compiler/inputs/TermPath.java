@@ -3,7 +3,6 @@ package souther.compiler.inputs;
 import souther.compiler.check.RuleKey;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -363,11 +362,6 @@ public record TermPath(String head, List<Step> steps) {
             return false;
         }
         return steps.subList(0, other.steps.size()).equals(other.steps);
-    }
-
-    /** Whether this path is at or under any of {@code roots}. */
-    public boolean isAtOrUnderAny(Collection<TermPath> roots) {
-        return roots.stream().anyMatch(this::isAtOrUnder);
     }
 
     /**
