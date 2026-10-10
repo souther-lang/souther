@@ -98,7 +98,7 @@ public final class TheSignOfAnOrder {
 
         /**
          * The same whatever the arguments: every answer the operation can give comes out one way
-         * ({@link #settledByItsBounds}), so the comparison states no order of them.
+         * ({@link TheSignOfAnOrder#settledByItsBounds}), so the comparison states no order of them.
          */
         record Settled<E>(TheSign sign) implements Read<E> {
 

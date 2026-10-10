@@ -207,7 +207,7 @@ final class Pullback {
     private Map<Quantity.HowManyMeet, Derivation.AComparisonRead.Counted> counting;
     /**
      * How many each answer an operation sized by cases holds, in the case of it the comparison
-     * being read is read in ({@link #bySizedCases}): a number of the input, where the arguments
+     * being read is read in ({@link #inEachCaseOf}): a number of the input, where the arguments
      * stand as that case says.
      */
     private final Map<Core, LinearForm<Quantity>> sizedInACase = new HashMap<>();
