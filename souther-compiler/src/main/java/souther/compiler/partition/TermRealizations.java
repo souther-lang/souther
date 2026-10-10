@@ -7,6 +7,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.TypeView;
+import souther.compiler.evaluate.BoundUnderEvaluation;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.SearchRegion;
@@ -39,7 +40,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.TreeSet;
@@ -1948,11 +1948,16 @@ final class TermRealizations {
         Set<String> candidates = new LinkedHashSet<>(
                 admittedStrings(holder, reading, lengthsFrom(many)));
         candidates.addAll(plainStringsHolding(counted, many));
-        List<FixtureTemplate> out = new ArrayList<>();
+        Set<String> held = new LinkedHashSet<>();
         for (String each : candidates) {
-            if (countIn(counted, each) == many) {
-                out.add(RepresentativeSource.under(worn.names(), FixtureTemplate.string(each)));
+            String text = asTheLanguageHoldsIt(each);
+            if (text != null && countIn(counted, text) == many) {
+                held.add(text);
             }
+        }
+        List<FixtureTemplate> out = new ArrayList<>();
+        for (String each : held) {
+            out.add(RepresentativeSource.under(worn.names(), FixtureTemplate.string(each)));
         }
         if (out.isEmpty()) {
             return new Realization.None(
@@ -2004,49 +2009,69 @@ final class TermRealizations {
      * leaves out. Each is a string some value holds, and none is claimed to be the only one.
      */
     private static List<String> plainStringsHolding(CodePointClass counted, int many) {
-        int member = counted instanceof CodePointClass.NotWhitespaceNorEqualTo(int separator)
-                ? aCodePointOutside(Set.of(separator)) : aCodePointOutside(Set.of());
-        String held = new String(Character.toChars(member)).repeat(many);
+        Set<Integer> apart = counted instanceof CodePointClass.NotWhitespaceNorEqualTo(
+                int separator) ? Set.of(separator) : Set.of();
         List<String> out = new ArrayList<>();
         // A string of none is offered as whitespace before it is offered as nothing: a row at
         // nothing is a row that passes with whatever trimming did to it.
         if (many == 0) {
             out.add(" ");
         }
-        out.add(held);
-        out.add(held + " ");
-        if (counted instanceof CodePointClass.NotWhitespaceNorEqualTo(int separator)) {
-            out.add(held + new String(Character.toChars(separator)));
-            out.add(held + new String(Character.toChars(separator)) + " ");
+        for (int member : codePointsOutside(apart)) {
+            String held = new String(Character.toChars(member)).repeat(many);
+            out.add(held);
+            out.add(held + " ");
+            if (counted instanceof CodePointClass.NotWhitespaceNorEqualTo(int separator)) {
+                out.add(held + new String(Character.toChars(separator)));
+                out.add(held + new String(Character.toChars(separator)) + " ");
+            }
         }
         return out;
     }
 
     /**
-     * A code point that is not whitespace and is none of {@code excluded}: what a class that leaves
-     * out some separators counts wherever it stands.
+     * Code points that are not whitespace and are none of {@code excluded}, which a class that
+     * leaves out some separators counts wherever they stand: the first plain letter there is
+     * outside the set, and the first ideograph of the block that has no gaps.
      *
      * <p>Chosen from outside the set rather than from a list written for the purpose, so that no
      * set of separators — however many a model writes for one string — leaves nothing to choose.
-     * The plain letters come first, since a row is read by a person; past them the ideographs of
-     * the block that has no gaps, each a code point of its own that no normalization joins to
-     * what is beside it. A set that covers all of those is not one a model writes, and is refused
-     * as the contradiction it would be rather than answered with a code point it holds.
+     * The letter is first since a row is read by a person. The ideograph is there for the string
+     * the letter cannot be written into: a letter beside a combining separator is one code point
+     * once the text is let in, and no primary composite is made of an ideograph and a mark, so a
+     * string written with it keeps its code points. A set covering every plain letter and every
+     * ideograph is not one a model writes, and is refused as the contradiction it would be.
      */
-    private static int aCodePointOutside(Set<Integer> excluded) {
-        OptionalInt letter = PLAIN_LETTERS_FIRST.codePoints()
-                .filter(each -> !excluded.contains(each)).findFirst();
-        if (letter.isPresent()) {
-            return letter.getAsInt();
-        }
+    private static List<Integer> codePointsOutside(Set<Integer> excluded) {
+        List<Integer> out = new ArrayList<>();
+        PLAIN_LETTERS_FIRST.codePoints().filter(each -> !excluded.contains(each)).findFirst()
+                .ifPresent(out::add);
         for (char each = FIRST_IDEOGRAPH; each <= LAST_IDEOGRAPH; each++) {
             int codePoint = each;
             if (!excluded.contains(codePoint)) {
-                return codePoint;
+                out.add(codePoint);
+                break;
             }
         }
-        throw new IllegalArgumentException(
-                "every plain letter and every ideograph of the block is a separator");
+        if (out.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "every plain letter and every ideograph of the block is a separator");
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * {@code text} as the language holds it, which is the text a row written from it reads as, or
+     * null where no {@code String} is that text.
+     *
+     * <p>The one place a string this composes becomes the string it offers. Text is canonicalized
+     * when it is let in, so a string made of code points laid side by side — a letter and the
+     * combining mark after it — is not the string the row spelled with them reads back as: it is
+     * the composite, one code point where two were laid. Every count, every length and every
+     * string offered is of the text as held, so a number read here is the number the row has.
+     */
+    private static String asTheLanguageHoldsIt(String text) {
+        return BoundUnderEvaluation.heldAs(text);
     }
 
     /** The letters a row is written with, in the order they are preferred. */
@@ -2148,7 +2173,7 @@ final class TermRealizations {
                 separators.add(apart.separator());
             }
         }
-        int plain = aCodePointOutside(Set.copyOf(separators));
+        List<Integer> plains = codePointsOutside(Set.copyOf(separators));
         // Plain code points, each separator and whitespace: how many of each kind a string holds.
         int kindsOfCodePoint = separators.size() + 2;
         int steps = CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.maximum();
@@ -2162,11 +2187,12 @@ final class TermRealizations {
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                     ((WornNames.Unwritable) wears).why());
         }
-        Set<String> found = new LinkedHashSet<>();
-        int[] looked = {0};
+        StringSearch search = new StringSearch(separators, plains, wanted,
+                CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum(), steps);
         // The strings the type admits come first and are the only ones offered where any of them
-        // answers every demand: a string the type refuses is no value of the position, however
-        // well it reads back. Written ones stand in only where the type admits none that answers.
+        // answers every demand. Written ones stand in only where the type admits none that
+        // answers, and are proposals like the rest: whether the type's construction takes them is
+        // its answer to give afterwards, and a refusal there is said as that.
         TypeView holder = TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums());
         TreeSet<Integer> lengths = new TreeSet<>(lengthsFrom(0));
@@ -2174,18 +2200,14 @@ final class TermRealizations {
             lengths.addAll(lengthsFrom(each));
         }
         for (String each : admittedStrings(holder, reading, lengths)) {
-            if (answersEvery(each, wanted)
-                    && found.size() < CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum()) {
-                found.add(each);
-            }
+            search.adopt(each);
         }
-        if (found.isEmpty()) {
-            searchStrings(0, new int[kindsOfCodePoint], kinds, separators, plain, wanted, found,
-                    looked, steps, CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
+        if (search.found().isEmpty()) {
+            search.over(0, new int[kindsOfCodePoint], kinds);
         }
-        if (!found.isEmpty()) {
+        if (!search.found().isEmpty()) {
             List<FixtureTemplate> out = new ArrayList<>();
-            for (String each : found) {
+            for (String each : search.found()) {
                 out.add(RepresentativeSource.under(worn.names(), FixtureTemplate.string(each)));
             }
             return Realization.Built.whole(out);
@@ -2193,7 +2215,8 @@ final class TermRealizations {
         // A search that looked at every way of writing a string there is, for every number the
         // demands admit, found no string: the one answer here that is about the demands and not
         // about this compiler.
-        boolean everyWayLookedAt = inFull && kinds.size() == largest + 1 && looked[0] < steps;
+        boolean everyWayLookedAt = inFull && kinds.size() == largest + 1
+                && search.looked() < steps && !search.leftUnwritten();
         if (everyWayLookedAt) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
@@ -2209,7 +2232,7 @@ final class TermRealizations {
             met = met.and(CompositionShortfall.of(
                     Set.of(CompositionBudget.CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL)));
         }
-        if (looked[0] >= steps || (inFull && kinds.size() < largest + 1)) {
+        if (search.looked() >= steps || (inFull && kinds.size() < largest + 1)) {
             met = met.and(CompositionShortfall.of(
                     Set.of(CompositionBudget.STEPS_A_SEARCH_MAY_TAKE)));
         }
@@ -2257,35 +2280,95 @@ final class TermRealizations {
     }
 
     /**
-     * Every way of writing how many code points of each kind a string holds, in the order the
-     * smaller counts come first, where the string they write answers every demand.
+     * The strings found for a group of numbers asked of one string, and how far the looking went.
      *
-     * <p>The kinds are the plain ones, each separator and whitespace. The string is written and
-     * the numbers read off it, and a string whose reading is not one the demands admit is not kept.
+     * <p>Every string comes in through {@link #adopt}, whether the type offered it or this wrote it
+     * out of counts: it is let in as text is, and it is kept where the text as held reads back as
+     * a number every demand admits. A string kept is therefore the one a row spells, and not the
+     * code points it was made of laid side by side.
      */
-    private static void searchStrings(int kind, int[] counts, List<Integer> kinds,
-                                      List<Integer> separators, int plain, List<OfAString> wanted,
-                                      Set<String> found, int[] looked, int steps, int most) {
-        if (looked[0] >= steps || found.size() >= most) {
-            return;
+    private static final class StringSearch {
+
+        private final List<Integer> separators;
+        private final List<Integer> plains;
+        private final List<OfAString> wanted;
+        private final int most;
+        private final int steps;
+        private final Set<String> found = new LinkedHashSet<>();
+        private int looked;
+        private boolean leftUnwritten;
+
+        StringSearch(List<Integer> separators, List<Integer> plains, List<OfAString> wanted,
+                     int most, int steps) {
+            this.separators = separators;
+            this.plains = plains;
+            this.wanted = wanted;
+            this.most = most;
+            this.steps = steps;
         }
-        if (kind == counts.length) {
-            looked[0]++;
-            // The numbers are sums of the counts chosen, so most assignments are refused without
-            // a string being written; the string is written and read back only for one that is
-            // not, which is what the sums said and the reading confirms.
-            if (sumsAreAdmitted(counts, separators, wanted)) {
-                String written = writtenWith(counts, separators, plain);
-                if (answersEvery(written, wanted)) {
-                    found.add(written);
-                }
+
+        Set<String> found() {
+            return found;
+        }
+
+        /** How many ways of writing a string were looked at. */
+        int looked() {
+            return looked;
+        }
+
+        /**
+         * Whether some way of writing a string was said by its counts to answer every demand and
+         * no string written that way did, which is a way of writing this did not find a string
+         * for, and not a way there is none.
+         */
+        boolean leftUnwritten() {
+            return leftUnwritten;
+        }
+
+        /** Keeps {@code candidate}, as the language holds it, where it answers every demand. */
+        boolean adopt(String candidate) {
+            String text = asTheLanguageHoldsIt(candidate);
+            if (text == null || !answersEvery(text, wanted)) {
+                return false;
             }
-            return;
+            if (found.size() < most) {
+                found.add(text);
+            }
+            return true;
         }
-        for (int each : kinds) {
-            counts[kind] = each;
-            searchStrings(kind + 1, counts, kinds, separators, plain, wanted, found, looked, steps,
-                    most);
+
+        /**
+         * Every way of writing how many code points of each kind a string holds, in the order the
+         * smaller counts come first, where the string they write answers every demand.
+         *
+         * <p>The kinds are the plain ones, each separator and whitespace. The numbers are sums of
+         * the counts chosen, so most assignments are refused without a string being written; one
+         * that is not is written with each plain code point in turn, since which of them the
+         * separators stand beside decides whether the text keeps the code points it was written
+         * with, and is read back as the language holds it.
+         */
+        void over(int kind, int[] counts, List<Integer> kinds) {
+            if (looked >= steps || found.size() >= most) {
+                return;
+            }
+            if (kind == counts.length) {
+                looked++;
+                if (sumsAreAdmitted(counts, separators, wanted)) {
+                    boolean written = false;
+                    for (int plain : plains) {
+                        written = adopt(writtenWith(counts, separators, plain));
+                        if (written) {
+                            break;
+                        }
+                    }
+                    leftUnwritten |= !written;
+                }
+                return;
+            }
+            for (int each : kinds) {
+                counts[kind] = each;
+                over(kind + 1, counts, kinds);
+            }
         }
     }
 

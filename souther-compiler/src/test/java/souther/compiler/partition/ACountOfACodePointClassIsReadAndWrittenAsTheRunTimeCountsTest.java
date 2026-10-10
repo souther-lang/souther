@@ -21,6 +21,7 @@ import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.types.Type;
+import souther.runtime.Strings;
 import souther.compiler.values.AsACompilationAllows;
 
 import java.util.ArrayList;
@@ -167,6 +168,32 @@ class ACountOfACodePointClassIsReadAndWrittenAsTheRunTimeCountsTest {
             }
         }
         assertTrue(checked > 0, "nothing was built, so nothing was read back");
+    }
+
+    /**
+     * A separator that combines with the code point before it. Laid beside a letter it is one code
+     * point once the text is let in, so what is offered is the text as held and its count is the
+     * count of that text.
+     */
+    @Test
+    void aStringOfferedForACombiningSeparatorIsTheTextAsHeld() {
+        CodePointClass apart = new CodePointClass.NotWhitespaceNorEqualTo(0x0307);
+        TermOrders orders = ordersOf(apart);
+        String composed = Strings.admit("ẋ");
+        assertEquals(1, composed.codePointCount(0, composed.length()),
+                "the letter and the mark are one code point as held");
+        for (long each : new long[] {0, 1, 2}) {
+            TermRealizations.Realization.Built built = assertInstanceOf(
+                    TermRealizations.Realization.Built.class,
+                    TermRealizations.at(Type.STRING, orders, Count.of(each),
+                            NothingTheRulesSay.REGION, READING));
+            for (FixtureTemplate value : built.values()) {
+                String offered = ((Hir.StringLit) value.value()).value();
+                assertEquals(Strings.admit(offered), offered, "offered as held");
+                assertEquals(new NumericTerm.Reading.Number(Count.of(each)),
+                        orders.read(observed(value)), show(offered));
+            }
+        }
     }
 
     /** None of them, written both ways a string of whitespace and separators is. */

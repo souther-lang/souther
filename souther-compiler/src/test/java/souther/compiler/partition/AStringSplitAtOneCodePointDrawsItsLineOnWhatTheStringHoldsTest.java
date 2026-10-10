@@ -136,6 +136,45 @@ class AStringSplitAtOneCodePointDrawsItsLineOnWhatTheStringHoldsTest {
                 () -> "a text one code point long, which the type refuses: " + offered);
     }
 
+    private static final String DIGITS = """
+            module example.digits
+
+            data Digits = String
+                invariant String.matches("[0-9]{2}", value)
+
+            let labelsOf (text: Digits): Set<String> =
+                text.value
+                    |> String.split(",")
+                    |> Set.fromList
+                    |> Set.map(piece -> piece |> String.trim |> String.lowercase)
+                    |> Set.filter(piece -> Bool.not(String.isEmpty(piece)))
+
+            behavior hasLabels : (text: Digits) -> Bool
+            let hasLabels (text) = Set.size(labelsOf(text)) >= 1
+            """;
+
+    /**
+     * Where no text the type admits holds none of what a label is made of, no row is offered at
+     * that point. What the counts are written as is a proposal and the type's own construction
+     * decides it, so a text of blanks that reads back as the counts is refused there, and the
+     * point says it was refused at construction and not that nothing is there.
+     */
+    @Test
+    void aTextTheTypeRefusesIsNotOfferedAtAPointNoTextOfTheTypeIsAt() {
+        Compilation compilation = measured(DIGITS);
+        assertEquals(List.of(), compilation.errors(), "the model compiles");
+        String offered = GeneratedRows.of(
+                Adequacy.offeredFor(compilation.db(),
+                        OfferingRequest.overTheModule("example.digits")),
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
+                compilation.db()).text();
+
+        assertTrue(!offered.contains("Digits(\"  \")") && !offered.contains("Digits(\", \")"),
+                () -> "a text of blanks, which the type refuses: " + offered);
+        assertTrue(offered.contains("every value tried was refused at construction"),
+                () -> "said as refused, not as nothing to offer: " + offered);
+    }
+
     private static Compilation measured(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());

@@ -19,6 +19,7 @@ import souther.compiler.semantics.CodePointClass;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.AsACompilationAllows;
+import souther.runtime.Strings;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -155,6 +156,33 @@ class AStringIsWrittenForEveryCountAskedOfItAtOnceTest {
             for (NumericTerm.CodePointClassCount counted : classes) {
                 assertEquals(3, each.codePoints().filter(counted.counted()::contains).count(), each);
             }
+        }
+    }
+
+    /**
+     * A separator that combines with the code point before it: a letter and the mark are one code
+     * point once the text is let in. Two code points not whitespace, one of them not the mark, and
+     * two long is a string that exists — an ideograph and the mark — and the one written with a
+     * letter is not it, so what is offered is what the text reads as and not what was laid out.
+     */
+    @Test
+    void aStringIsOfferedAsTheLanguageHoldsItWhereASeparatorCombines() {
+        int mark = 0x0307;
+        NumericTerm.CodePointClassCount apart = counting(new CodePointClass.NotWhitespaceNorEqualTo(mark));
+        String composed = Strings.admit("ẋ");
+        assertEquals(1, composed.codePointCount(0, composed.length()),
+                "a letter and the mark are one code point as held");
+
+        List<String> strings = offered(new Demands()
+                .exactly(NOT_WHITESPACE, 2)
+                .exactly(apart, 1)
+                .exactly(LENGTH, 2).written());
+        assertEquals(true, !strings.isEmpty());
+        for (String each : strings) {
+            assertEquals(each, Strings.admit(each), "offered as held");
+            assertEquals(2, notWhitespaceIn(each), each);
+            assertEquals(1, each.codePoints().filter(apart.counted()::contains).count(), each);
+            assertEquals(2, lengthOf(each), each);
         }
     }
 
