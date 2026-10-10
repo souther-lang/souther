@@ -7,6 +7,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.CodePointClass;
@@ -87,48 +88,66 @@ final class TermReading {
      * place, which is how the language holds a decimal's amount and the value inside a newtype,
      * and so what a fold that files a counter under each key files them by. Read as the
      * observation's own equality, two decimals of one amount written to different scales would be
-     * two values. A value the order has no place for — a value with parts, which the order holds
-     * nothing of — is no number here, and nothing is guessed of whether it is the same as another.
+     * two values. A value the order puts nowhere, or one that was not read whole at any depth of
+     * the newtypes around it, is not counted as the same or as another: no one number is read of
+     * it, which is a reading that could not be made and not a statement that there is no number.
      * {@code every} holds {@code own} among them, since an element is one of the elements, so the
      * number is at least one.
      */
     static Reading among(TermOrders on, ObservedValue own, List<ObservedValue> every) {
         Objects.requireNonNull(own, "a term is read at a value the walk came to");
         Objects.requireNonNull(every, "and among the values a walk came to");
-        Membership.Incomplete unreadOwn = Membership.unread(own);
-        if (unreadOwn != null) {
-            return new Reading.Missing(unreadOwn.code());
-        }
-        Carrier observed = on.observed();
-        Place ownPlace = observed == null ? null : observed.placeOf(withoutNewtype(own));
-        if (ownPlace == null) {
-            return new Reading.NotNumber();
+        Where ownWhere = whereTheOrderPuts(on.observed(), own);
+        if (!(ownWhere instanceof Where.At(Place ownPlace))) {
+            return ((Where.Nowhere) ownWhere).why();
         }
         long same = 0;
         for (ObservedValue each : every) {
             Objects.requireNonNull(each, "every value the walk came to is a value");
-            Membership.Incomplete unread = Membership.unread(each);
-            if (unread != null) {
-                return new Reading.Missing(unread.code());
-            }
-            Place place = observed.placeOf(withoutNewtype(each));
-            if (place == null) {
-                return new Reading.NotNumber();
-            }
-            if (place.sameAs(ownPlace)) {
-                same++;
+            switch (whereTheOrderPuts(on.observed(), each)) {
+                case Where.At(Place place) -> {
+                    if (place.sameAs(ownPlace)) {
+                        same++;
+                    }
+                }
+                case Where.Nowhere nowhere -> {
+                    return nowhere.why();
+                }
             }
         }
         return new Reading.Number(Count.of(same));
     }
 
-    /** What a newtype wraps, as {@link #at} reads it: the value inside, however deep. */
-    private static ObservedValue withoutNewtype(ObservedValue value) {
+    /** Where an order puts a value, or why it puts it nowhere. */
+    private sealed interface Where {
+
+        record At(Place place) implements Where {}
+
+        record Nowhere(Reading why) implements Where {}
+    }
+
+    /**
+     * Where {@code observed} puts {@code value}, read through each newtype around it as {@link
+     * #at} reads one: whether what stands at each depth was read whole is asked again at that
+     * depth, since a newtype that was read may hold a value that was not.
+     */
+    private static Where whereTheOrderPuts(Carrier observed, ObservedValue value) {
         ObservedValue at = value;
-        while (at instanceof ObservedValue.Constructed c && c.field("value") != null) {
-            at = c.field("value");
+        while (true) {
+            Membership.Incomplete unread = Membership.unread(at);
+            if (unread != null) {
+                return new Where.Nowhere(new Reading.Missing(unread.code()));
+            }
+            if (at instanceof ObservedValue.Constructed c && c.field("value") != null) {
+                at = c.field("value");
+            } else {
+                break;
+            }
         }
-        return at;
+        Place place = observed == null ? null : observed.placeOf(at);
+        return place == null
+                ? new Where.Nowhere(new Reading.Missing(Incompleteness.Code.VALUE_UNREADABLE))
+                : new Where.At(place);
     }
 
     /**
