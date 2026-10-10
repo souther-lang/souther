@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Whether some input the rules admit brings what a condition states out one way.
@@ -59,8 +60,40 @@ public final class WhatTheRulesLeave {
 
     private static final AWayThrough LEFT = new AWayThrough.NotRuledOut(List.of());
 
+    /**
+     * What this reading has already answered, by the statement and the way asked.
+     *
+     * <p>Kept with the reading because the answer is a function of it and the question is asked
+     * many times: every arm of a {@code match} states the denial of the arms before it, so one
+     * part is asked once per arm after it, and the readers of a way through and of the branch count
+     * ask the same arm of the same reading. Not held across a recursive ask, so a part answered
+     * while its whole is being answered is filed on its own.
+     */
+    private static final class Answered {
+
+        private record Asked(Proposition stated, boolean want) {}
+
+        private final Map<Asked, AWayThrough> filed = new ConcurrentHashMap<>();
+    }
+
     /** Whether the rules leave some input on which {@code stated} comes out {@code want}. */
     public static AWayThrough admits(Proposition stated, boolean want, InputReading read) {
+        // A statement no part of which is about the input is answered without one, and has nothing
+        // to be kept with.
+        if (read == null) {
+            return answer(stated, want, null);
+        }
+        Answered answered = read.derived(Answered.class, _ -> new Answered());
+        Answered.Asked asked = new Answered.Asked(stated, want);
+        AWayThrough kept = answered.filed.get(asked);
+        if (kept == null) {
+            kept = answer(stated, want, read);
+            answered.filed.put(asked, kept);
+        }
+        return kept;
+    }
+
+    private static AWayThrough answer(Proposition stated, boolean want, InputReading read) {
         return switch (stated) {
             case Proposition.Always always -> always.holds() == want ? LEFT
                     : new AWayThrough.RuledOut(new WhyRuledOut.ItNeverComesOutSo());
