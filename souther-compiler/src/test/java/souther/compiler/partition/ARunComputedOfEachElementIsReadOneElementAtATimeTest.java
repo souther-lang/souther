@@ -19,6 +19,7 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -130,6 +131,54 @@ class ARunComputedOfEachElementIsReadOneElementAtATimeTest {
         // The flag is set where q is negative, so the first two are negated and the third is not.
         assertEquals(Count.of(1 + 2 + 3), number(ordersOf(total(signed), Q, DEBIT)
                 .readOverElements(List.of(element(-1, 0), element(-2, 0), element(3, 0)))));
+    }
+
+    /**
+     * A field only the branch not taken reads is not asked for.
+     *
+     * <p>What the row holds there, or fails to, says nothing about an element whose own choice
+     * does not reach it.
+     */
+    @Test
+    void aFieldTheChoiceDoesNotReachIsNotAskedFor() {
+        ElementValue chosen = new ElementValue.Choose(DEBIT,
+                form(ExactRatio.ZERO, Map.of(Q, ExactRatio.ONE)),
+                form(ExactRatio.ZERO, Map.of(P, ExactRatio.ONE)));
+        TermOrders orders = ordersOf(total(chosen), Q, P, DEBIT);
+
+        Map<ElementProjection, ObservedValue> taken = Map.of(DEBIT, new ObservedValue.Bool(true),
+                Q, new ObservedValue.Integer(3));
+        Function<ElementProjection, ObservedValue> asked = field -> {
+            assertNotEquals(P, field, "the flag is set, so the field the other branch reads is not"
+                    + " asked for");
+            return taken.get(field);
+        };
+        assertEquals(Count.of(3), number(orders.readOverElements(List.of(asked))),
+                "and what the row holds there, or fails to, does not matter");
+
+        Map<ElementProjection, ObservedValue> other = Map.of(DEBIT, new ObservedValue.Bool(false),
+                Q, new ObservedValue.Integer(3));
+        assertInstanceOf(NumericTerm.Reading.NotNumber.class,
+                orders.readOverElements(List.of(other::get)),
+                "while with the flag clear it is the field that was never written that is needed");
+    }
+
+    /** A number the exact arithmetic could not hold is said as that, and not as a value missing. */
+    @Test
+    void aNumberTheArithmeticCannotHoldIsNotAMissingValue() {
+        // A number and a constant spaced as far apart in scale as the arithmetic is asked to add.
+        BigDecimal huge = BigDecimal.ONE.scaleByPowerOfTen(Integer.MAX_VALUE - 10);
+        BigDecimal tiny = BigDecimal.ONE.scaleByPowerOfTen(-(Integer.MAX_VALUE - 10));
+        NumericTerm.TakenOver wide =
+                total(form(ExactRatio.of(tiny), Map.of(Q, ExactRatio.ONE)));
+        TermOrders orders = TermOrdersFixtures.computed(wide, new Carrier.Dense(),
+                new Carrier.Dense(), Map.of(Q, new Carrier.Dense()));
+
+        Map<ElementProjection, ObservedValue> element = Map.of(Q, new ObservedValue.Decimal(huge));
+        assertInstanceOf(NumericTerm.Reading.NotWorkedOut.class,
+                orders.readOverElements(List.of(element::get)),
+                "the sum is past what the exact arithmetic writes, which is not a row missing a"
+                        + " field");
     }
 
     /** What makes two of these one number is the computation as well as the elements. */

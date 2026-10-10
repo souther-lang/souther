@@ -11,11 +11,8 @@ import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -100,9 +97,10 @@ sealed interface WhatATermRead {
      * What {@code on} reads of a run computed of each element of the container {@code row} wrote.
      *
      * <p>Element by element, each read as the row with that element chosen, so the fields one
-     * computation reads are the fields of one element. A field the row wrote nothing at is a row
-     * that has no value for the run, which is the row's own answer and outranks any element read
-     * before it.
+     * computation reads are the fields of one element. A field is looked at only where the
+     * computation asks for it: a field the row wrote nothing at is a row that has no value for the
+     * run where the computation needs it, and says nothing where the element's own choice does not
+     * reach it. What stopped the first element that could not be read is what the row is told.
      */
     static WhatATermRead overElements(TermOrders on, RunSource.ComputedOccurrences computed,
                                       BorderQuantity.Observation row) {
@@ -111,32 +109,53 @@ sealed interface WhatATermRead {
                 instanceof WalkResult.Reached<List<BorderQuantity.Observation>> reached)) {
             return new CameToNothing(ReadingGap.COULD_NOT_WALK);
         }
+        WhatRowsLeft left = new WhatRowsLeft();
         List<Function<ElementProjection, ObservedValue>> each = new ArrayList<>();
-        Set<ElementProjection> fields = computed.computation().reads();
         for (BorderQuantity.Observation element : reached.value()) {
-            Map<ElementProjection, ObservedValue> held = new HashMap<>();
-            for (ElementProjection field : fields) {
-                switch (element.at(field.from(computed.elements()))) {
-                    case WalkResult.CouldNotWalk<ObservationAtPoint> _ -> {
-                        return new CameToNothing(ReadingGap.COULD_NOT_WALK);
-                    }
-                    case WalkResult.Reached(ObservationAtPoint standing) -> {
-                        switch (standing) {
-                            case ObservationAtPoint.Value(ObservedValue value) ->
-                                    held.put(field, value);
-                            case ObservationAtPoint.WroteNothing _ -> {
-                                return new NothingWrittenThere();
-                            }
-                            case ObservationAtPoint.BelongsToAnotherReading _ -> {
-                                return new CameToNothing(ReadingGap.NO_VALUE);
-                            }
+            each.add(field -> left.at(element, field.from(computed.elements())));
+        }
+        NumericTerm.Reading read = on.readOverElements(each);
+        return left.stopped() != null ? left.stopped() : of(read);
+    }
+
+    /**
+     * Why the row could not be read at a field, for the first one it could not.
+     *
+     * <p>Kept beside the reading and not inside it, which answers a field it cannot use as no value
+     * and goes no further: what the row did there is in this layer's words.
+     */
+    final class WhatRowsLeft {
+
+        private WhatATermRead stopped;
+
+        /** The value at {@code path}, or null with why recorded where the row gives none. */
+        ObservedValue at(BorderQuantity.Observation element, TermPath path) {
+            switch (element.at(path)) {
+                case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
+                        stop(new CameToNothing(ReadingGap.COULD_NOT_WALK));
+                case WalkResult.Reached(ObservationAtPoint standing) -> {
+                    switch (standing) {
+                        case ObservationAtPoint.Value(ObservedValue value) -> {
+                            return value;
                         }
+                        case ObservationAtPoint.WroteNothing _ -> stop(new NothingWrittenThere());
+                        case ObservationAtPoint.BelongsToAnotherReading _ ->
+                                stop(new CameToNothing(ReadingGap.NO_VALUE));
                     }
                 }
             }
-            each.add(held::get);
+            return null;
         }
-        return of(on.readOverElements(each));
+
+        private void stop(WhatATermRead why) {
+            if (stopped == null) {
+                stopped = why;
+            }
+        }
+
+        WhatATermRead stopped() {
+            return stopped;
+        }
     }
 
     /** What a term's own reading of a value comes to here. */

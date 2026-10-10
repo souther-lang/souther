@@ -6,6 +6,7 @@ import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.types.BindingId;
@@ -48,10 +49,39 @@ public sealed interface ElementValue {
 
     /**
      * What this comes to for one element, given the number each field of it holds and which flags
-     * are set; or null where a field it reads is one the element has no number or flag at.
+     * are set; or null where a field it needs is one the element has no number or flag at.
+     *
+     * <p>Asks for a field only where the answer needs it. A choice asks for its flag and then for
+     * the fields of the branch the flag picked, so a field only the other branch reads is never
+     * asked for and whatever the row holds there says nothing about this element. The answers are
+     * the caller's to give lazily for that reason.
+     *
+     * <p>A number the exact arithmetic could not hold is said as that and not as a field that was
+     * not there: the first is about this compiler's room and the second about the row.
      */
-    ExactRatio at(Function<ElementProjection, ExactRatio> numberAt,
-                  Function<ElementProjection, Boolean> flagAt);
+    ExactAnswer<ExactRatio> at(Function<ElementProjection, ExactRatio> numberAt,
+                               Function<ElementProjection, Boolean> flagAt);
+
+    /**
+     * The field this is, where it is that field and nothing made of it, or null.
+     *
+     * <p>A number made of the element by weighing one field once and adding nothing is the field.
+     * Such a computation is the place and is read as the place, so that one number is not two
+     * terms by the way its closure happened to be spelled.
+     */
+    ElementProjection asAPlace();
+
+    /**
+     * The choice of {@code whenSet} or {@code otherwise} by {@code flag}, with a choice between
+     * two answers that are one answer being that answer.
+     *
+     * <p>The one way a choice is made, so that what a choice comes to is not two values by whether
+     * its flag was asked about. A flag the answer does not turn on is no field the number reads.
+     */
+    static ElementValue choosing(ElementProjection flag, ElementValue whenSet,
+                                 ElementValue otherwise) {
+        return whenSet.equals(otherwise) ? whenSet : new Choose(flag, whenSet, otherwise);
+    }
 
     /** {@code const + Σ coef·field}. */
     record Affine(LinearForm<ElementProjection> form) implements ElementValue {
@@ -68,21 +98,28 @@ public sealed interface ElementValue {
         }
 
         @Override
-        public ExactRatio at(Function<ElementProjection, ExactRatio> numberAt,
-                             Function<ElementProjection, Boolean> flagAt) {
-            ExactRatio total = form.constant();
+        public ExactAnswer<ExactRatio> at(Function<ElementProjection, ExactRatio> numberAt,
+                                          Function<ElementProjection, Boolean> flagAt) {
+            ExactAnswer<ExactRatio> total = ExactAnswer.held(form.constant());
             for (Map.Entry<ElementProjection, ExactRatio> each : form.coefs().entrySet()) {
                 ExactRatio held = numberAt.apply(each.getKey());
                 if (held == null) {
                     return null;
                 }
-                ExactRatio weighed = each.getValue().times(held).orNull();
-                total = weighed == null ? null : total.plus(weighed).orNull();
-                if (total == null) {
-                    return null;
-                }
+                total = total.flatMap(
+                        sofar -> each.getValue().times(held).flatMap(sofar::plus));
             }
             return total;
+        }
+
+        @Override
+        public ElementProjection asAPlace() {
+            if (!form.constant().isZero() || form.coefs().size() != 1) {
+                return null;
+            }
+            Map.Entry<ElementProjection, ExactRatio> only =
+                    form.coefs().entrySet().iterator().next();
+            return only.getValue().equals(ExactRatio.ONE) ? only.getKey() : null;
         }
 
         @Override
@@ -118,11 +155,17 @@ public sealed interface ElementValue {
         }
 
         @Override
-        public ExactRatio at(Function<ElementProjection, ExactRatio> numberAt,
-                             Function<ElementProjection, Boolean> flagAt) {
+        public ExactAnswer<ExactRatio> at(Function<ElementProjection, ExactRatio> numberAt,
+                                          Function<ElementProjection, Boolean> flagAt) {
             Boolean set = flagAt.apply(flag);
             return set == null ? null
                     : (set ? whenSet : otherwise).at(numberAt, flagAt);
+        }
+
+        /** A choice is made of the element and is not a field of it. */
+        @Override
+        public ElementProjection asAPlace() {
+            return null;
         }
 
         @Override
@@ -159,24 +202,37 @@ public sealed interface ElementValue {
             this.source = source;
         }
 
-        private ElementValue value(Core answer, Set<BindingId> met) {
+        /**
+         * @param expanding the names being read through at this point of the walk. The names on the
+         *                  way down to here and no others: a name read in one branch and again in
+         *                  the other is one definition met twice, which is no cycle, so a name is
+         *                  taken out when its reading returns
+         */
+        private ElementValue value(Core answer, Set<BindingId> expanding) {
             Core e = Core.withoutStanding(answer);
             if (e instanceof Core.LetIn let) {
-                return value(let.body(), met);
+                return value(let.body(), expanding);
             }
             // A name given a branch is the branch, and a name given arithmetic is read by the
             // arithmetic's own walk below.
             if (e instanceof Core.Read read && !element.equals(read.binding())
                     && held.get(read.binding()) != null
                     && Core.withoutStanding(held.get(read.binding())) instanceof Core.If) {
-                return met.add(read.binding()) ? value(held.get(read.binding()), met) : null;
+                if (!expanding.add(read.binding())) {
+                    return null;
+                }
+                try {
+                    return value(held.get(read.binding()), expanding);
+                } finally {
+                    expanding.remove(read.binding());
+                }
             }
             if (e instanceof Core.If branch) {
                 ElementProjection flag =
                         ElementProjection.read(branch.cond(), element, held, source.newtypes());
-                ElementValue yes = flag == null ? null : value(branch.then(), met);
-                ElementValue no = yes == null ? null : value(branch.els(), met);
-                return no == null ? null : new Choose(flag, yes, no);
+                ElementValue yes = flag == null ? null : value(branch.then(), expanding);
+                ElementValue no = yes == null ? null : value(branch.els(), expanding);
+                return no == null ? null : ElementValue.choosing(flag, yes, no);
             }
             LinearForm<ElementProjection> form = AffineForms.of(e, held, atoms());
             return form == null ? null : new Affine(form);

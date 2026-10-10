@@ -102,6 +102,62 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
         assertFalse(chosen.contains("not read"), chosen);
     }
 
+    /**
+     * A closure that is the field and nothing made of it is the place, whichever way it is spelled.
+     *
+     * <p>One number is one term. Held as a computation of the field in one spelling and as the
+     * field in another, a rule on each would be about two numbers and no relation between the two
+     * rules could be drawn.
+     */
+    @Test
+    void aClosureThatIsTheFieldIsTheFieldWhateverItIsSpelledAs() {
+        for (String spelled : List.of("a.q", "a.q * 1", "a.q + 0", "if a.debit then a.q else a.q")) {
+            String report = report(model(spelled, 4));
+            assertTrue(report.contains("List.sum(xs[*].q)"), () -> spelled + ": " + report);
+            assertFalse(report.contains("List.sum({"), () -> spelled + ": " + report);
+        }
+    }
+
+    /**
+     * A name read in two branches is one definition met twice, and no cycle.
+     *
+     * <p>What is read is the choice with the name's own choice inside it on both sides.
+     */
+    @Test
+    void aNameReadInTwoBranchesIsNotACycle() {
+        String report = report("""
+                module example.computed
+
+                data Many
+                data Few
+
+                data A = { q: Int, debit: Bool, first: Bool, second: Bool }
+
+                behavior decide : (xs: List<A>) -> Many | Few
+
+                let decide (xs) =
+                    if List.sum(List.map(a -> {
+                            let s = if a.debit then a.q else 0 - a.q
+                            if a.first then s else if a.second then s else 0
+                        }, xs)) >= 3
+                    then Many else Few
+                """);
+        assertTrue(report.contains("List.sum({if first then if debit then 1·q + 0 else -1·q + 0"
+                + " else if second then if debit then 1·q + 0 else -1·q + 0 else 0 | xs[*]})"),
+                report);
+        assertFalse(report.contains("not read"), report);
+    }
+
+    /** A weight below nought is solved for the way any other is: the fields come to minus the rest. */
+    @Test
+    void aNegativeWeightIsSolvedForAndReadBack() {
+        List<Long> totals = totalsOf(rowsOf(model("0 - a.q * 2", 4)), -2, 0);
+
+        assertTrue(totals.contains(4L), () -> "the point on the line: " + totals);
+        assertTrue(totals.stream().anyMatch(each -> each > 4), () -> "one inside: " + totals);
+        assertTrue(totals.stream().anyMatch(each -> each < 3), () -> "one outside: " + totals);
+    }
+
     /** A product of two fields is no form of them, and stays a rule nothing read. */
     @Test
     void aProductOfTwoFieldsStaysUnread() {
@@ -119,7 +175,7 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
      */
     @Test
     void theRowsWrittenComeToTheTotalsThePointsAskFor() {
-        List<Long> totals = totalsOf(rowsOf(model("a.q + 1", 5)));
+        List<Long> totals = totalsOf(rowsOf(model("a.q + 1", 5)), 1, 1);
 
         assertTrue(totals.contains(5L), () -> "the point on the line: " + totals);
         assertTrue(totals.contains(4L), () -> "the point just off it: " + totals);
@@ -152,7 +208,7 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
                     if List.sum(List.map(a -> a.q + 1, c.lines)) >= 8
                     then Many else Few
                 """);
-        List<Long> totals = totalsOf(rows);
+        List<Long> totals = totalsOf(rows, 1, 1);
 
         assertTrue(totals.contains(8L), () -> "the point on the line: " + totals);
         assertTrue(totals.contains(7L), () -> "the point just off it: " + totals);
@@ -164,7 +220,8 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
         String rows = rowsOf(model("a.q * 2", 4));
         assertTrue(rows.contains("no row for `List.sum({2·q + 0 | xs[*]}) = 3`"), rows);
         assertTrue(rows.contains("untried"), rows);
-        assertEquals(3, totalsOf(rows).size(), () -> "the other three points have rows: " + rows);
+        assertEquals(3, totalsOf(rows, 2, 0).size(),
+                () -> "the other three points have rows: " + rows);
     }
 
     /** What chooses more than one field of an element is a way this compiler writes none of. */
@@ -177,7 +234,8 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
         assertTrue(rows.contains("no row for"), rows);
     }
 
-    private static List<Long> totalsOf(String rows) {
+    /** What each row's elements come to, each weighing its {@code q} and adding the constant. */
+    private static List<Long> totalsOf(String rows, long weight, long constant) {
         List<Long> totals = new ArrayList<>();
         Pattern element = Pattern.compile("A \\{ q = (-?\\d+)");
         // One chunk per row, which is written over as many lines as its value needs.
@@ -186,7 +244,7 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
             long total = 0;
             boolean any = false;
             while (found.find()) {
-                total += Long.parseLong(found.group(1)) + 1;
+                total += weight * Long.parseLong(found.group(1)) + constant;
                 any = true;
             }
             if (any) {

@@ -102,7 +102,8 @@ public final class InputNumber {
      * with it, so what is read of the walk afterwards is read where the walk stands.
      *
      * <p>Where the answer is no place of the element but something made of its fields, the run is
-     * over what was computed of each element instead ({@link #overWhatWasComputed}).
+     * over what was computed of each element instead ({@link #overWhatWasComputed}), and is the run
+     * over a place where what was computed is that place.
      *
      * <p>Null wherever any of the three is missing, which is a rule this compiler did not read
      * rather than a rule the model does not state — and is reported as one. Null too where the three
@@ -143,8 +144,19 @@ public final class InputNumber {
         if (at == null) {
             return null;
         }
+        ElementValue computed = null;
         if (answered == null) {
-            return overWhatWasComputed(measured, where, element, at, source);
+            computed = computedOf(measured, where, element, source);
+            if (computed == null) {
+                return null;
+            }
+            // What was computed may be the element's own field and nothing made of it, as a closure
+            // that weighs a field once and adds nothing is. That is the place, and one number has
+            // one term whichever way its closure was spelled.
+            answered = computed.asAPlace();
+        }
+        if (answered == null) {
+            return overWhatWasComputed(measured, where.answerAt(element), computed, at, source);
         }
         TermPath under = answered.from(at);
         // Whether what is read from there is one run is the run's own question, and it is asked
@@ -171,25 +183,32 @@ public final class InputNumber {
      * rewritten, so what is asked here is only what the closure came to.
      */
     private static NumericTerm overWhatWasComputed(NumericMeasures.Measured measured,
-                                                   InputReads where, BindingId element,
+                                                   ElementAnswer closure, ElementValue computed,
                                                    TermPath at, RuleReadingSource source) {
-        // Only a total. What a run computed of each element is read for is the sum of those numbers;
-        // a count of a walk's answers is a count of the container it walked, and is read as that.
-        if (!(DefaultBoundOperationFacts.get().takenAs(measured.operation())
-                instanceof TakenAs.TheSumOfWhatItHolds)) {
-            return null;
-        }
-        ElementAnswer closure = where.answerAt(element);
-        ElementValue computed =
-                closure == null ? null : ElementValue.read(closure, where.heldByTheBody(), source);
-        if (computed == null) {
-            return null;
-        }
         Type each = closure.body().type();
         RunSource over = RunSource.computedOverTheElementsAt(at, computed, each);
         return over == null ? null
                 : NumericTerm.TakenOver.of(measured.operation(), over, each, source.inners(),
                         source.symbols());
+    }
+
+    /**
+     * What the closure the walk handed {@code element} to computed of it, or null where there is no
+     * such closure or this reads none of it.
+     *
+     * <p>Only for a total. What is read of a run computed of each element is the sum of those
+     * numbers; a count of a walk's answers is a count of the container it walked, and is read as
+     * that.
+     */
+    private static ElementValue computedOf(NumericMeasures.Measured measured, InputReads where,
+                                           BindingId element, RuleReadingSource source) {
+        if (!(DefaultBoundOperationFacts.get().takenAs(measured.operation())
+                instanceof TakenAs.TheSumOfWhatItHolds)) {
+            return null;
+        }
+        ElementAnswer closure = where.answerAt(element);
+        return closure == null ? null
+                : ElementValue.read(closure, where.heldByTheBody(), source);
     }
 
 }

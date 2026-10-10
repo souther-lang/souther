@@ -15,12 +15,9 @@ import souther.compiler.semantics.TakenAs;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Function;
 
 import souther.compiler.inputs.NumericTerm.Reading;
@@ -142,45 +139,91 @@ final class TermReading {
             return new Reading.NotNumber();
         }
         List<ExactRatio> terms = new ArrayList<>();
-        Set<ElementProjection> fields = computed.computation().reads();
         for (Function<ElementProjection, ObservedValue> element : each) {
-            Map<ElementProjection, ExactRatio> numbers = new HashMap<>();
-            Map<ElementProjection, Boolean> flags = new HashMap<>();
-            for (ElementProjection field : fields) {
-                ObservedValue at = element.apply(field);
-                // A field the element holds no value at is an element this is no number of, as an
-                // observation of the wrong shape is.
-                if (at == null) {
-                    return new Reading.NotNumber();
-                }
-                Membership.Incomplete unread = Membership.unread(at);
-                if (unread != null) {
-                    return new Reading.Missing(unread.code());
-                }
-                if (at instanceof ObservedValue.Bool flag) {
-                    flags.put(field, flag.value());
-                    continue;
-                }
-                Carrier held = on.fieldCarrier(field);
-                Place place = held == null ? null : held.placeOf(at);
-                if (!(place instanceof Count count)) {
-                    return new Reading.NotNumber();
-                }
-                numbers.put(field, count.exactly());
-            }
-            ExactRatio made = computed.computation().at(numbers::get, flags::get);
+            // The fields are asked for as the computation needs them, so what a row holds at a
+            // field the element's own choice does not reach is no part of this element's number.
+            OneElement fields = new OneElement(on, element);
+            ExactAnswer<ExactRatio> made =
+                    computed.computation().at(fields::number, fields::flag);
             if (made == null) {
-                return new Reading.NotNumber();
+                return fields.stopped != null ? fields.stopped : new Reading.NotNumber();
+            }
+            if (!(made instanceof ExactAnswer.Held<ExactRatio> exact)) {
+                return new Reading.NotWorkedOut(
+                        ((ExactAnswer.Unheld<ExactRatio>) made).why());
             }
             // The one the program computes, which is what the carrier of the answer holds.
-            if (!(made.writtenDecimal() instanceof ExactAnswer.Held<Optional<BigDecimal>> written)
-                    || written.value().isEmpty()
-                    || answeredPerElement.onTheGrid(new Count(written.value().get())) == null) {
-                return new Reading.NotNumber();
+            switch (exact.value().writtenDecimal()) {
+                case ExactAnswer.Unheld<Optional<BigDecimal>> unheld -> {
+                    return new Reading.NotWorkedOut(unheld.why());
+                }
+                case ExactAnswer.Held<Optional<BigDecimal>> written -> {
+                    if (written.value().isEmpty()) {
+                        return new Reading.NotWorkedOut(UnheldNumber.NO_REPRESENTATION_EXISTS);
+                    }
+                    if (answeredPerElement.onTheGrid(new Count(written.value().get())) == null) {
+                        return new Reading.NotNumber();
+                    }
+                }
             }
-            terms.add(made);
+            terms.add(exact.value());
         }
         return sumOf(terms);
+    }
+
+    /**
+     * What one element holds at the fields a computation asks it for, and why it stopped where it
+     * did.
+     *
+     * <p>A field answered as nothing records why no number came of it and says nothing to the
+     * computation, which gives up on that element; the reading is then what was recorded and not a
+     * guess at what a field with no value would have meant.
+     */
+    private static final class OneElement {
+
+        private final TermOrders on;
+        private final Function<ElementProjection, ObservedValue> element;
+        private Reading stopped;
+
+        OneElement(TermOrders on, Function<ElementProjection, ObservedValue> element) {
+            this.on = on;
+            this.element = element;
+        }
+
+        ExactRatio number(ElementProjection field) {
+            ObservedValue at = held(field);
+            Carrier carrier = at == null ? null : on.fieldCarrier(field);
+            Place place = carrier == null ? null : carrier.placeOf(at);
+            if (at != null && !(place instanceof Count)) {
+                stopped = new Reading.NotNumber();
+            }
+            return place instanceof Count count ? count.exactly() : null;
+        }
+
+        Boolean flag(ElementProjection field) {
+            ObservedValue at = held(field);
+            if (at != null && !(at instanceof ObservedValue.Bool)) {
+                stopped = new Reading.NotNumber();
+            }
+            return at instanceof ObservedValue.Bool set ? set.value() : null;
+        }
+
+        /** The value at the field, or null with the reason recorded where there is none to use. */
+        private ObservedValue held(ElementProjection field) {
+            ObservedValue at = element.apply(field);
+            // A field the element holds no value at is an element this is no number of, as an
+            // observation of the wrong shape is.
+            if (at == null) {
+                stopped = new Reading.NotNumber();
+                return null;
+            }
+            Membership.Incomplete unread = Membership.unread(at);
+            if (unread != null) {
+                stopped = new Reading.Missing(unread.code());
+                return null;
+            }
+            return at;
+        }
     }
 
     /** The number the term is, where the term is what the location holds. */
