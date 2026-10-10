@@ -1726,8 +1726,8 @@ final class Pullback {
                     read.rules().newtypes());
             if (!(Core.withoutStanding(separator.value()) instanceof Core.Str written)
                     || written.value().codePointCount(0, written.value().length()) != 1
-                    || Character.isSurrogate(written.value().charAt(0))
-                            && written.value().length() == 1) {
+                    || (written.value().length() == 1
+                            && Character.isSurrogate(written.value().charAt(0)))) {
                 return null;
             }
             Denotation string = container.at().standing(
