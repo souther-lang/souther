@@ -765,8 +765,29 @@ final class OperationFactBinder {
             holdTheAnswerTo(declaration, same, Type::elementOfAContainer,
                     Type::elementOfAContainer, "a container of the elements that argument holds");
         }
+        // And an answer holding a component of the tuples an argument holds holds values of that
+        // component's type.
+        ElementLineage.TupleComponent<DeclaredArgument> part = built.componentOfTheElementsOf();
+        if (part != null) {
+            holdTheAnswerTo(declaration, part.source().argument(), Type::elementOfAContainer,
+                    container -> componentOfTheElement(container, part.index()),
+                    "a container of the component of the tuples that argument holds");
+            // And the component it is filed under is what the answer is keyed by: the place an
+            // entry takes is the one its key names, or the claim of which entry is left is about
+            // something else.
+            holdTheAnswerTo(declaration, part.source().argument(), Type::keyOf,
+                    container -> componentOfTheElement(container, part.filedUnder()),
+                    "a map keyed by the component of the tuples that argument holds");
+        }
         built.outputs().forEach(each -> holdWhatTheClosureAnswered(declaration, each.origin()));
         return built;
+    }
+
+    /** The type of component {@code index} of the tuples a container holds, or null where it holds
+     *  no tuples or they have no such component. */
+    private static Type componentOfTheElement(Type container, int index) {
+        return Type.elementOfAContainer(container) instanceof Type.TupleOf(var components)
+                && index < components.size() ? components.get(index) : null;
     }
 
     /** Holds the argument whose elements the answer holds an image of to a container the
@@ -813,6 +834,7 @@ final class OperationFactBinder {
                                                    ElementLineage<DeclaredArgument> lineage) {
         switch (lineage) {
             case ElementLineage.SameAs<DeclaredArgument> _ -> { }
+            case ElementLineage.TupleComponent<DeclaredArgument> _ -> { }
             case ElementLineage.ClosureResult<DeclaredArgument> made ->
                     holdTheClosureAnswerTo(declaration, made.source().argument(), false);
             case ElementLineage.InsideClosureResult<DeclaredArgument> inside ->

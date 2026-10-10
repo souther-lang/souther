@@ -418,6 +418,9 @@ public final class WhereTheElementsCameFrom {
                                 && handsOnTheClosure(called, args)
                                 && explained(inner, asTheyStand) != null
                                 ? Accounts.ANY_NUMBER : null;
+                // A component of what the source holds is no element the walk was handed, so
+                // nothing this reads explains it.
+                case ElementLineage.TupleComponent<Integer> _ -> null;
                 case ElementLineage.OneOf<Integer> _ -> null;
             };
         }
@@ -492,6 +495,7 @@ public final class WhereTheElementsCameFrom {
                 case ElementLineage.InsideClosureResult<Integer> _ ->
                         put instanceof Value.PayloadOf(Value answer)
                                 && theClosuresAnswer(answer, element);
+                case ElementLineage.TupleComponent<Integer> _ -> false;
                 case ElementLineage.OneOf<Integer>(var alternatives) -> alternatives.stream()
                         .anyMatch(each -> allows(put, element, each));
             };
@@ -549,6 +553,7 @@ public final class WhereTheElementsCameFrom {
             case ElementLineage.ClosureResult<Integer> _ -> kind == Kind.THE_CLOSURES_ANSWER;
             case ElementLineage.InsideClosureResult<Integer> _ ->
                     kind == Kind.INSIDE_THE_CLOSURES_ANSWER;
+            case ElementLineage.TupleComponent<Integer> _ -> false;
             case ElementLineage.OneOf<Integer>(var alternatives) -> alternatives.stream()
                     .anyMatch(each -> permits(each, kind));
         };

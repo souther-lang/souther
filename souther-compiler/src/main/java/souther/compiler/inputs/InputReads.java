@@ -1380,6 +1380,19 @@ public final class InputReads {
     private static ReadMeaning answerOnEachElement(Denotation standing, Symbols symbols,
                                                    DeclarationNewtypes newtypes,
                                                    Set<BindingId> met) {
+        AnsweredByAWalk answered = answeredByAWalk(standing, symbols, newtypes, met);
+        return answered != null ? answered.meaning()
+                : componentOfAnAnsweredElement(standing, symbols, newtypes, met);
+    }
+
+    /** What a walk's answers are read as, and the walk that answered them. */
+    private record AnsweredByAWalk(ElementBindings.StepOnEachElement walk, ReadMeaning meaning) {}
+
+    /** {@link #answerOnEachElement} for a container that is one walk's answers, or null where it
+     *  is not one. */
+    private static AnsweredByAWalk answeredByAWalk(Denotation standing, Symbols symbols,
+                                                   DeclarationNewtypes newtypes,
+                                                   Set<BindingId> met) {
         InputReads at = standing.at();
         ElementBindings.StepOnEachElement walk = ElementBindings.stepAnsweredOnEachElement(
                 standing.value(), closure -> Core.withoutStanding(
@@ -1393,14 +1406,84 @@ public final class InputReads {
                 : writtenElementsOf(standing(new Denotation(walk.walked(), at), symbols, newtypes,
                         new HashSet<>(met)));
         if (walked == null) {
-            return new ReadMeaning.Through(new Denotation(walk.step().body(), at));
+            return new AnsweredByAWalk(walk,
+                    new ReadMeaning.Through(new Denotation(walk.step().body(), at)));
         }
         List<Denotation> each = new ArrayList<>();
         for (Denotation value : walked) {
             each.add(new Denotation(walk.step().body(),
                     at.handing(walk.element().binding(), value, newtypes)));
         }
-        return new ReadMeaning.OneOf(each);
+        return new AnsweredByAWalk(walk, new ReadMeaning.OneOf(each));
+    }
+
+    /**
+     * The component {@code standing} holds at each element, where it is a component of the tuples
+     * a walk answered, or null where it is not.
+     *
+     * <p>{@code Map.fromList(List.map(x -> (x, 1), xs))} holds {@code 1}: each value is the second
+     * component of an entry, and the entry is what the step answered on an element. Some entry and
+     * not each, since a key filed twice keeps the later value; so what this licenses is where a
+     * value came from, which is all the reading of an element asks.
+     *
+     * <p>Only where the entries are one step's answer on an element, and where that value is no
+     * less the value of the entry that is left. Entries filed under one key leave the last, so a
+     * value an earlier entry carried is compared with nothing, and a line drawn on it would be met
+     * by a row that never runs the comparison there. What makes the loss harmless is that entries
+     * under one key carry one value ({@link #fixedByTheKey}); where that is not shown the element
+     * is an element. Entries written out would make each value one of the components written, and
+     * the one left is only some of them, so a list of alternatives would name values the map does
+     * not hold.
+     */
+    private static ReadMeaning componentOfAnAnsweredElement(Denotation standing, Symbols symbols,
+                                                            DeclarationNewtypes newtypes,
+                                                            Set<BindingId> met) {
+        ElementBindings.Projection part = ElementBindings.componentOfTheElementsOf(
+                standing.value());
+        if (part == null) {
+            return null;
+        }
+        Denotation entries = standing(new Denotation(part.of(), standing.at()), symbols, newtypes,
+                met);
+        AnsweredByAWalk answered = answeredByAWalk(entries, symbols, newtypes, met);
+        if (answered == null || !(answered.meaning() instanceof ReadMeaning.Through through)
+                || answered.walk().element() == null
+                || answered.walk().element().binding() == null) {
+            return null;
+        }
+        Denotation written = standing(through.denotes(), symbols, newtypes, met);
+        if (!(Core.withoutStanding(written.value()) instanceof Core.Tuple tuple)
+                || Math.max(part.index(), part.filedUnder()) >= tuple.elements().size()) {
+            return null;
+        }
+        Core value = tuple.elements().get(part.index());
+        return fixedByTheKey(tuple.elements().get(part.filedUnder()), value,
+                answered.walk().element().binding(), written.at())
+                ? new ReadMeaning.Through(new Denotation(value, written.at())) : null;
+    }
+
+    /**
+     * Whether two entries of one walk that are filed under the same key carry the same value, so
+     * that the entry which is left holds what the one it replaced held.
+     *
+     * <p>Shown for the two forms that need no argument about the step: a value that does not read
+     * the element at all, which is one value whichever element it is, and a value that reads only
+     * the element where the key is that element itself, so that entries under one key are entries
+     * of equal elements. Every name the value reads is the element, or a parameter of the
+     * behavior, which is the same one for every element. Whatever else it reads — a name bound in
+     * the step, or by a let above it — is a name this does not know to be one value per key, and
+     * the answer is no.
+     */
+    private static boolean fixedByTheKey(Core key, Core value, BindingId element,
+                                         InputReads at) {
+        boolean keyIsTheElement = Core.withoutStanding(key) instanceof Core.Read read
+                && read.binding().equals(element);
+        Set<BindingId> made = new HashSet<>();
+        Set<BindingId> read = new HashSet<>();
+        walkNames(value, made, read);
+        read.removeAll(made);
+        return read.stream().allMatch(binding -> (keyIsTheElement && binding.equals(element))
+                || at.names.roleOf(binding) instanceof BindingRole.Root);
     }
 
     /**

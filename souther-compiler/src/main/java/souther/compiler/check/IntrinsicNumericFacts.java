@@ -91,13 +91,13 @@ final class IntrinsicNumericFacts {
         // name more than one — `a ++ b` is as long as either half — so this is a loop where the
         // building below is one answer.
         for (Core added : DischargeRules.noSmallerThan(container)) {
-            standing(size, atom, added, Rel.GE, at, terms, out);
+            standing(atom, added, Rel.GE, at, terms, out);
         }
         if (Core.withoutStanding(container) instanceof Core.PreservedCall call) {
             DischargeRules.Source built = DischargeRules.builtFrom(call);
             Rel rel = built == null ? null : relationOf(built.size());
             if (rel != null) {
-                standing(size, atom, built.container(), rel, at, terms, out);
+                standing(atom, built.container(), rel, at, terms, out);
             }
         }
         return out;
@@ -187,9 +187,13 @@ final class IntrinsicNumericFacts {
     /** States how {@code atom} stands to the size of {@code source}, where that size is one this can
      * name. A container nothing names is one nothing is stated about, which leaves the size bounded
      * by what else is known of it rather than by half a rule. */
-    private static void standing(ValueName size, FactSubject atom, Core source, Rel rel,
+    private static void standing(FactSubject atom, Core source, Rel rel,
                                  Denotations at, Terms terms, List<NumericConstraint> out) {
-        FactSubject there = terms.sizeAtomFor(size, source, at);
+        // Counted the way the source is counted, which is not the way the answer is where a
+        // construction answers a container of another kind: a map made of a list holds no more
+        // than the list's length.
+        ValueName counting = NumericMeasures.takenOf(source.type(), terms.newtypeInners());
+        FactSubject there = counting == null ? null : terms.sizeAtomFor(counting, source, at);
         if (there != null && !there.equals(atom)) {
             out.add(new NumericConstraint(LinearForm.difference(atom, there), rel));
         }

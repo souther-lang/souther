@@ -280,6 +280,13 @@ class EveryAxiomAboutAKernelHoldsOfWhatItComputesTest {
                 made = new LawSubject.WhatTheClosureAnswers<>(
                         new Slot.Place(positions.closureArg()));
             }
+            // A component of an entry is something no statement here names, so what is run is how
+            // many there are; where a value came from is held to the signature by
+            // OperationFactBinder and read by the walk tests.
+            case ElementLineage.TupleComponent<DeclaredArgument>(var from, var _, var _) -> {
+                return compared(Rel.LE, 0, size(ANSWER),
+                        size(at(new Slot.Place(from.argument().position()))).negate());
+            }
             case ElementLineage.InsideClosureResult<DeclaredArgument> _,
                  ElementLineage.OneOf<DeclaredArgument> _ -> throw new IllegalStateException(
                     operation + " builds " + built + ", which no run here checks");
