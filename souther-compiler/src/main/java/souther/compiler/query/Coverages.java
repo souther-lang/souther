@@ -951,8 +951,11 @@ final class Coverages {
                                 border.border().label(point)))
                         : item);
             }
-            out.add(new BorderAssessment(border.border(), items, border.beside(),
-                    tellingApart(border, search)));
+            AnotherLineTheRowsAllow beside = border.beside() instanceof
+                    AnotherLineTheRowsAllow.OneDoes named ? search.notRefuted(named)
+                    : border.beside();
+            out.add(new BorderAssessment(border.border(), items, beside,
+                    tellingApart(border.border(), beside, search)));
         }
         return new LineReadings(out);
     }
@@ -984,18 +987,19 @@ final class Coverages {
      * not moved and says nothing about which way it runs, which is what raised this question: the
      * points being met is what makes the question due rather than what answers it.
      */
-    private static ARowTellingTheLinesApart tellingApart(BorderAssessment border,
+    private static ARowTellingTheLinesApart tellingApart(Border border,
+                                                         AnotherLineTheRowsAllow beside,
                                                          OneSearchOfABorder search) {
-        if (!(border.beside() instanceof AnotherLineTheRowsAllow.OneDoes named)) {
+        if (!(beside instanceof AnotherLineTheRowsAllow.OneDoes named)) {
             return ARowTellingTheLinesApart.notAsked();
         }
-        Criterion refused = refuses(border.border());
+        Criterion refused = refuses(border);
         if (refused == null) {
             // The rules leave nothing outside this line, so there is nowhere a row could stand that
             // the model refuses — and every input the two lines part company at is one of those.
             return ARowTellingTheLinesApart.notAsked();
         }
-        return search.tellingApart(refused, border.border().label(), named);
+        return search.tellingApart(refused, border.label(), named);
     }
 
     /**
@@ -1096,6 +1100,19 @@ final class Coverages {
          */
         ARowTellingTheLinesApart tellingApart(Criterion criterion, String label,
                                               AnotherLineTheRowsAllow.OneDoes beside);
+
+        /**
+         * {@code beside} without the input it names where the region the way to the border leaves
+         * is shown to hold nothing at it.
+         *
+         * <p>The input is worked out by stepping along the line, which knows the arithmetic and
+         * nothing of what each position's type refuses, so a step can land on a negative amount.
+         * The region is the one thing here that knows every declaration, and it is an
+         * over-approximation: an input it is shown to leave nothing at is dropped, and one it is
+         * not shown to refuse is kept without being claimed writable. Only the input goes — which
+         * line the rows leave standing is read off the rows and is not this question's.
+         */
+        AnotherLineTheRowsAllow.OneDoes notRefuted(AnotherLineTheRowsAllow.OneDoes beside);
     }
 
     /**
@@ -1286,6 +1303,19 @@ final class Coverages {
                                                          AnotherLineTheRowsAllow.OneDoes beside) {
                 Looked looked = looked(criterion, label, beside::tellingThemApart);
                 return ARowTellingTheLinesApart.of(border, looked.composed(), looked.outcomes());
+            }
+
+            @Override
+            public AnotherLineTheRowsAllow.OneDoes notRefuted(
+                    AnotherLineTheRowsAllow.OneDoes beside) {
+                if (beside.tellsApartAt() == null) {
+                    return beside;
+                }
+                if (!(reaching instanceof Reachability.Reaching way)) {
+                    return beside.withoutTellsApartAt();
+                }
+                return way.region().given(beside.tellsApartAt()).emptiness().isPresent()
+                        ? beside.withoutTellsApartAt() : beside;
             }
 
             /**

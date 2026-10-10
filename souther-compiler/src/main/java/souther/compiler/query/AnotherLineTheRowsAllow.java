@@ -126,6 +126,11 @@ public sealed interface AnotherLineTheRowsAllow {
                     keptOn == Towards.BELOW ? Rel.LE : Rel.GE).taken();
         }
 
+        /** This line with no input named, for where the one worked out is not one a row can be at. */
+        public OneDoes withoutTellsApartAt() {
+            return new OneDoes(direction, cut, keptOn, null);
+        }
+
         /**
          * Whether this line keeps a row whose positions read as {@code values}.
          *
