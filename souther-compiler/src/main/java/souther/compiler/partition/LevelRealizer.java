@@ -604,10 +604,12 @@ public final class LevelRealizer {
      * The rules with the form's own equation at {@code target} taken in, or null where they are
      * then left nothing.
      *
-     * <p>Each position's run is read from a region that already carries the relation between the
-     * positions, so what the walk offers a position is a value the others can still complete.
-     * Narrowing, and only for this level: the region is no statement about the side. Where the
-     * region cannot carry the equation, the walk is handed what it had.
+     * <p>Each position's run is read from a region that carries the equation and the rules it was
+     * already held to, so it is narrower wherever a rule relates the positions. A run is a bound
+     * and not a set: it can still hold values the other positions cannot complete, which is why
+     * the walk puts every whole assignment to the rules at its end. Narrowing, and only for this
+     * level: the region is no statement about the side. Where the region cannot carry the
+     * equation, the walk is handed what it had.
      */
     private static AtTheLevel atTheLevel(LinearForm<NumericTerm> form, ExactRatio target,
                                          SearchRegion within,

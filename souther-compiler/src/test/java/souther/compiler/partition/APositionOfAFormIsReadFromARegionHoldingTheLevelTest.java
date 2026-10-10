@@ -5,22 +5,27 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.GeneratedRows;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A position of a form is offered values out of a region that already holds the form at the level.
+ * A line of a form over several positions is offered a row standing on it.
  *
  * <p>A gross that is a sum of several pay fields, an allowance capped by a ceiling, and a guard
- * holding the gross against what is subtracted from it. The lines of that sum are met by rows that
- * put the allowance at a small value, or put two fields at large values that move together, and
- * every position of the form is unbounded above.
+ * holding the gross against what is subtracted from it. Each of the lines the guard draws over that
+ * sum is met by a row that puts the allowance at a small value, or puts several fields at large
+ * values that move together, and every position of the form is unbounded above.
  *
- * <p>Read from the region as it stood before the level was asked for, each field runs over the
- * whole of its range and the relation between the fields reaches the walk only as often as the
- * search is willing to pay for, so the walk is out of steps before it is at the row. Read from a
- * region that has the equation taken in, a field's run is already what the others leave it.
+ * <p>The claim is about the rows offered and not about what the report leaves out: a sentence the
+ * report no longer says is true of a search that composed nothing as well. Each row is read back
+ * as the number it adds up to, which is what a line of the form is a point of.
  */
 class APositionOfAFormIsReadFromARegionHoldingTheLevelTest {
 
@@ -66,16 +71,55 @@ class APositionOfAFormIsReadFromARegionHoldingTheLevelTest {
                     -> Amount { v = 270000 }
             """;
 
-    @Test
-    void aLineOfASumOfSeveralFieldsIsNotLeftUntriedForTheStepsItWalked() {
-        String report = report(A_CAPPED_ALLOWANCE);
+    /** The ceiling the allowance is capped at, which is where the guard's gross - subtracted
+     *  stops being the whole of the gross less the premiums. */
+    private static final BigInteger CEILING = BigInteger.valueOf(150000);
 
-        assertFalse(report.contains("this compiler stopped at"), report);
+    /**
+     * The guard compares the gross with the exempt allowance plus the premiums. Over the fields
+     * and the premiums alone, that is the sum of the fields, the uplift and the allowance, less the
+     * premiums: a row is on the line of the guard's capped side where that comes to the ceiling and
+     * one below it where it comes to one less.
+     */
+    @Test
+    void theLinesOfTheSumAreEachOfferedARowThatStandsOnThem() {
+        List<BigInteger> sums = sumsOfTheRowsOffered(A_CAPPED_ALLOWANCE);
+
+        assertTrue(sums.contains(CEILING),
+                () -> "a row at the line the capped side's guard is met at: " + sums);
+        assertTrue(sums.contains(CEILING.subtract(BigInteger.ONE)),
+                () -> "a row at the point beside it: " + sums);
+        assertTrue(sums.stream().anyMatch(sum -> sum.compareTo(CEILING.subtract(BigInteger.ONE)) < 0),
+                () -> "a row inside the region the line bounds: " + sums);
     }
 
-    private static String report(String model) {
+    /**
+     * Each row as {@code base + scheduled + commuting + excluded + variable + uplift - insurance},
+     * in the order the rows are offered. The values are read in the order the block writes them,
+     * which is the order of the model's fields and then of the behavior's parameters.
+     */
+    private static List<BigInteger> sumsOfTheRowsOffered(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        return AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
+        compilation.answerEverything();
+        String block = GeneratedRows.of(compilation, null, null,
+                new SourceRendering(id -> "pay.sou", compilation.texts())).text();
+        Pattern yen = Pattern.compile("Yen\\((\\d+)\\)");
+        List<BigInteger> sums = new ArrayList<>();
+        for (String row : block.split("-> <\\?>")) {
+            Matcher found = yen.matcher(row);
+            List<BigInteger> values = new ArrayList<>();
+            while (found.find()) {
+                values.add(new BigInteger(found.group(1)));
+            }
+            if (values.size() == 7) {
+                BigInteger fields = BigInteger.ZERO;
+                for (int i = 0; i < 6; i++) {
+                    fields = fields.add(values.get(i));
+                }
+                sums.add(fields.subtract(values.get(6)));
+            }
+        }
+        return sums;
     }
 }
