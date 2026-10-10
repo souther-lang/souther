@@ -312,13 +312,6 @@ final class Pullback {
         return AnEmptinessCheck.checked(comparison) != null;
     }
 
-    /** What {@code container} holding something states. */
-    static Pulled ofHoldingSomething(Core container, InputReads reads, InputReading read,
-                                     Optional<ModelOccurrence> where) {
-        Pullback reading = new Pullback(read, where);
-        return reading.pulled(reading.observe(container, AnswerAspect.EMPTINESS, reads));
-    }
-
     /**
      * What {@code stated} concludes, with every part met as what it came to.
      *
