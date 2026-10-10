@@ -91,6 +91,12 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
                     DeclaredArgument amount, BigDecimal per)
             implements OneAboutAnOperation {}
 
+    /** The operation answers how many whole units, of {@code perUnit} steps each, lie from
+     *  {@code from} to {@code to}, truncated toward zero. */
+    record CountsWholeUnitsBetween(DeclaredOperation operation, DeclaredArgument from,
+                                   DeclaredArgument to, long perUnit)
+            implements OneAboutAnOperation {}
+
     /** The operation builds a container out of another, and this says where its elements came from
      *  and how many of them there are. */
     record BuildsItsResultFrom(DeclaredOperation operation, BuiltFrom<DeclaredArgument> built)
@@ -280,13 +286,14 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
          * is not. Declared beside the arithmetic instead, one operation would carry two accounts of
          * one number and the library would be refused where it was written.
          *
-         * <p>Only the truncating quotient. What the operator arithmetic computes is a number of two
-         * values and stays one when one of them is written down — {@code x + 2} is arithmetic the
-         * affine walk composes rather than a number taken of {@code x} — so nothing is derived for
-         * it: the walk that reads a form already reads those, and a term beside it would be a second
-         * reader of one expression. A remainder is the quotient's companion and has an account of
-         * its own to be written when something asks for it; a quotient rounded to a scale answers
-         * on a grid the call chooses, which is not this arm.
+         * <p>Only the truncating quotient and the floor remainder. What the operator arithmetic
+         * computes is a number of two values and stays one when one of them is written down —
+         * {@code x + 2} is arithmetic the affine walk composes rather than a number taken of
+         * {@code x} — so nothing is derived for it: the walk that reads a form already reads those,
+         * and a term beside it would be a second reader of one expression. The truncating remainder
+         * keeps the dividend's sign, so its residue class is not one the divisor alone names and it
+         * has no account here; a quotient rounded to a scale answers on a grid the call chooses,
+         * which is not this arm.
          *
          * <p><b>And only where the call names a quotient there is.</b> Such an operation answers
          * its number at one case and something else at another, and what a call of it takes is not
@@ -295,6 +302,10 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
          * nought, since nothing is divided by nought.
          */
         public TakenAs takenAs(TakenArguments arguments) {
+            if (result.computes() instanceof Arithmetic.AFloorRemainder remainder) {
+                TakenAs.TheFloorRemainder how = new TakenAs.TheFloorRemainder(remainder.divisor());
+                return how.settledBy(arguments) ? how : null;
+            }
             if (!(result.computes() instanceof Arithmetic.ATruncatingQuotient quotient)) {
                 return null;
             }

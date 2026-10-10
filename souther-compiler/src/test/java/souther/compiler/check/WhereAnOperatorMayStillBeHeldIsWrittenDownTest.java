@@ -281,6 +281,14 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.Pullback.joined",
                     "the composition of what a condition states, joined as the proposition the"
                             + " two halves make"),
+            new Held("souther.compiler.check.RemainderOfAShiftedValue.SumOrDifference.of",
+                    "asks whether a value is a sum or a difference, as written or as the library's"
+                            + " operation that computes the same, so a place moved by a number is"
+                            + " read however the moving was spelled"),
+            new Held("souther.compiler.partition.Pullback.ofACountOfWholeUnits",
+                    "writes the steps from one value to another as the difference of the two, so"
+                            + " that a comparison of a count of whole units is read where any"
+                            + " comparison of a difference is"),
             new Held("souther.compiler.partition.ClauseStatements.walk",
                     "walks into both halves, and stops where the connective composes either of"
                             + " them because what such a rule states is neither of its sides"),

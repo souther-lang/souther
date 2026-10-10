@@ -15,19 +15,25 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultRange;
 import souther.compiler.semantics.TakenArguments;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -324,8 +330,49 @@ final class MeaningAssumptions {
                 }
                 yield size;
             }
+            // What a division leaves of the value at a place, named as the call that takes it is, so
+            // a guard on the remainder here and one on the value a body bound the call to are about
+            // one number. It carries both ends its operation bounds it to by this divisor.
+            case NumericTerm.TakenOf taken
+                    when taken.takenAs() instanceof TakenAs.TheFloorRemainder remainder
+                    && remainder.read(taken.arguments()) instanceof BigDecimal divisor
+                    && isAWholeNumberOfALong(divisor) -> {
+                FactSubject left = terms.remainderAtPlace(taken.operation(),
+                        placeOf(taken.position()), divisor.longValue());
+                if (left != null) {
+                    carryingBothEnds(left, taken.operation(), taken.arguments());
+                }
+                yield left;
+            }
             default -> null;
         };
+    }
+
+    /** Whether {@code number} is a whole number other than nought that a signed 64-bit number holds,
+     *  the least one and the greatest included. */
+    private static boolean isAWholeNumberOfALong(BigDecimal number) {
+        BigInteger whole = Arithmetic.AFloorRemainder.wholeDivisorOf(number);
+        return whole != null && whole.bitLength() < Long.SIZE;
+    }
+
+    /** {@code atom} held between the ends {@code operation} bounds what it answers to, for the
+     *  arguments it was given beside the value. */
+    private void carryingBothEnds(FactSubject atom, ValueName operation, TakenArguments given) {
+        NumericDomain.Bounds range = ResultRange.of(
+                DefaultBoundOperationFacts.get().boundsOnTheResult(operation),
+                argument -> Optional.ofNullable(given.at(argument.position())));
+        if (range.min() != null) {
+            ExactRatio at = Count.number(range.min().at()).exactly();
+            known = known.taking(LinearForm.atomMinusConstant(atom, at),
+                    range.min().inclusive() ? Rel.GE : Rel.GT, Known.Held.OF_THE_VALUE,
+                    terms.kindsOf(LinearForm.atom(atom)));
+        }
+        if (range.max() != null) {
+            ExactRatio at = Count.number(range.max().at()).exactly();
+            known = known.taking(LinearForm.atomMinusConstant(atom, at),
+                    range.max().inclusive() ? Rel.LE : Rel.LT, Known.Held.OF_THE_VALUE,
+                    terms.kindsOf(LinearForm.atom(atom)));
+        }
     }
 
     /**

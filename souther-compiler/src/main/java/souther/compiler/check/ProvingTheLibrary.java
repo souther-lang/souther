@@ -181,6 +181,7 @@ final class ProvingTheLibrary implements LibraryProofs {
             case BoundOperationFact.AnswersAFormOfItsArguments _ -> false;
             case BoundOperationFact.StatesTheOrderOfItsArguments _ -> false;
             case BoundOperationFact.ShiftsBy _ -> false;
+            case BoundOperationFact.CountsWholeUnitsBetween _ -> false;
             case BoundOperationFact.AnswersANumberTakenOfAValueItIsGiven _ -> false;
             case BoundOperationFact.EveryAnswerItCanGiveHasASourceValue _ -> false;
             case BoundOperationFact.ComputesANumber _ -> false;
@@ -410,6 +411,8 @@ final class ProvingTheLibrary implements LibraryProofs {
             case ResultBound.Provided.Always<DeclaredArgument> _ -> new LawProposition.Always<>(true);
             case ResultBound.Provided.ConstantAboveZero<DeclaredArgument>(var argument) ->
                     new LawProposition.Compared<>(LinearForm.atom(numberAt(argument)), Rel.GT);
+            case ResultBound.Provided.ConstantBelowZero<DeclaredArgument>(var argument) ->
+                    new LawProposition.Compared<>(LinearForm.atom(numberAt(argument)), Rel.LT);
         };
         return prover.answers(operation, bound.rel(), against, where)
                 instanceof LibraryProver.Outcome.Proved;

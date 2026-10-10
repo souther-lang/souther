@@ -2,11 +2,13 @@ package souther.compiler.semantics;
 
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.types.BinOp;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Which arithmetic an operation of the language computes.
@@ -155,6 +157,77 @@ public sealed interface Arithmetic {
         @Override
         public List<Reads> reads() {
             return TWO_OF_ITS_OWN;
+        }
+    }
+
+    /**
+     * What a division of whole numbers leaves where its quotient is floored, which takes the sign of
+     * the divisor. Answered directly: a divisor of nought aborts rather than coming back as a case.
+     */
+    record AFloorRemainder() implements Arithmetic {
+
+        @Override
+        public List<Reads> reads() {
+            return TWO_OF_ITS_OWN;
+        }
+
+        /** Which of the numbers it reads is the one it divides by, which is the second of them. */
+        public int divisor() {
+            return 1;
+        }
+
+        /**
+         * What is left of {@code value} divided by {@code by}: {@code value - by * floor(value / by)}.
+         *
+         * <p>Here because it is this arithmetic's own answer, and every direction reads it: a row's
+         * remainder read off an observation and a value written for a remainder are the same
+         * division asked twice. The answer is one whole number from nought up to the divisor, not
+         * reaching it, where the divisor is above nought, and from the divisor up to nought, not
+         * reaching it, where it is below. Divided as numbers, so a pair far apart in scale is a
+         * whole number said with which way it was not held rather than a throw.
+         */
+        public static ExactAnswer<BigDecimal> remainderOf(BigDecimal value, BigDecimal by) {
+            if (by.signum() == 0) {
+                throw new IllegalArgumentException(
+                        "a floor remainder's divisor of nought is refused where the term is made,"
+                                + " and is never one this reads");
+            }
+            ExactRatio dividend = ExactRatio.of(value);
+            ExactRatio divisor = ExactRatio.of(by);
+            ExactAnswer<Optional<BigDecimal>> left = dividend.dividedBy(divisor)
+                    .flatMap(ExactRatio::floor)
+                    .flatMap(floor -> divisor.times(ExactRatio.of(floor)))
+                    .flatMap(product -> dividend.minus(product))
+                    .flatMap(ExactRatio::writtenDecimal);
+            return switch (left) {
+                case ExactAnswer.Held<Optional<BigDecimal>> held -> held.value().isPresent()
+                        ? ExactAnswer.held(held.value().get())
+                        : ExactAnswer.unheld(UnheldNumber.NO_REPRESENTATION_EXISTS);
+                case ExactAnswer.Unheld<Optional<BigDecimal>> unheld ->
+                        ExactAnswer.unheld(unheld.why());
+            };
+        }
+
+        /**
+         * {@code divisor} where it is a whole number other than nought, with its sign, or null where
+         * it is none: a divisor that is not one names no residue class, and nought is a call that
+         * aborts.
+         *
+         * <p>The sign is part of the answer, because the remainder takes the divisor's side of
+         * nought. What a reader that only has room for a signed 64-bit number asks is whether this
+         * value fits, and not whether its magnitude does: the least such number is a divisor, and
+         * its magnitude is one more than the greatest is.
+         */
+        public static BigInteger wholeDivisorOf(BigDecimal divisor) {
+            ExactRatio ratio = ExactRatio.of(divisor);
+            return ratio.isWhole() && ratio.floor() instanceof ExactAnswer.Held<BigInteger> held
+                    && held.value().signum() != 0 ? held.value() : null;
+        }
+
+        /** The magnitude of {@link #wholeDivisorOf the divisor}, or null where there is none. */
+        public static BigInteger magnitudeOf(BigDecimal divisor) {
+            BigInteger whole = wholeDivisorOf(divisor);
+            return whole == null ? null : whole.abs();
         }
     }
 

@@ -376,6 +376,23 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/TermRealizations$Tried;",
                     "names the figure as what left more of the set untried, where the walk filled"
                             + " what it was allowed before the window ran out"),
+            // The number of a run that leaves the remainders asked for, solved for. A figure bounds
+            // how many remainders of each demand and how many combinations of them are tried, and
+            // what it hands over is the answer that says a figure stopped it.
+            Map.entry("souther.compiler.partition.RemainderSolutions#solve("
+                            + "Ljava/util/List;"
+                            + "Lsouther/compiler/partition/RemainderSolutions$Value;"
+                            + "Lsouther/compiler/check/Carrier;)"
+                            + "Lsouther/compiler/partition/RemainderSolutions$Answer;",
+                    "names the figure as what left remainders or combinations untried, as an"
+                            + " answer apart from there being no number"),
+            Map.entry("souther.compiler.partition.RemainderSolutions#choicesOf("
+                            + "Lsouther/compiler/partition/RemainderSolutions$Demand;"
+                            + "Ljava/math/BigInteger;Lsouther/compiler/check/Carrier;)"
+                            + "Lsouther/compiler/partition/RemainderSolutions$Choices;",
+                    "holds how many of a demand's remainders are tried, and says whether they were"
+                            + " every one it admits, which is what the answer above says it stopped"
+                            + " at"),
             // The numbers a place may be where several of its quotients are asked for. The run the
             // demands leave is walked as whole numbers, so the figure bounds how many of them are
             // tried — and what it hands over is that walk's own answer.

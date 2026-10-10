@@ -8,6 +8,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.Choice;
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.check.ConstantComparison;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.DeclarationAccess;
@@ -17,9 +18,11 @@ import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.check.RemainderOfAShiftedValue;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TheSignOfAnOrder;
+import souther.compiler.check.WholeUnitsBetween;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Denotation;
@@ -58,13 +61,16 @@ import souther.compiler.semantics.LawSubject;
 import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.semantics.Unsayable;
+import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.Year;
 import java.util.ArrayList;
@@ -493,6 +499,8 @@ final class Pullback {
                 () -> partOf(at, asACut(stated, arithmetic.get(), fixed)),
                 () -> partOf(at, onAnOrder(stated, arithmetic.get(), reads)),
                 () -> ofTheYearOfADate(stated, at, fixed, reads),
+                () -> ofACountOfWholeUnits(stated, at, fixed, reads),
+                () -> ofAShiftedRemainder(stated, at, fixed, reads),
                 () -> partOf(at, ofItsArguments(stated, fixed, reads)),
                 () -> ofASizeInCases(stated, at, reads),
                 () -> ofAChoice(stated, at, reads),
@@ -3169,6 +3177,78 @@ final class Pullback {
             case NE -> new Derivation.Joined(ConditionJoin.EITHER,
                     comparedWithTheStartOf(from, Rel.LT, taking, at, fixed, reads),
                     comparedWithTheStartOf(from + 1, Rel.GE, taking, at, fixed, reads));
+        };
+    }
+
+    /**
+     * A comparison of a count of whole units between two values, read as the comparison of the steps
+     * between them it states ({@link WholeUnitsBetween}) — or null where it is no such comparison.
+     *
+     * <p>The count drops what is left of a unit toward zero, so it is no form of the two values and
+     * the walk over arithmetic has nothing to say of it. What it states is exact all the same, and
+     * is read here as the difference of the two against the steps it comes to: a count of minutes
+     * above five is a difference of six minutes' seconds or more. Equality is the steps between two
+     * thresholds, which is a stretch of both signs around nought and not the two values being equal,
+     * and a difference is the steps outside it.
+     */
+    private Derivation ofACountOfWholeUnits(StatedComparison stated, Denotation at, boolean fixed,
+                                            InputReads reads) {
+        WholeUnitsBetween.Read<InputReads> counted =
+                WholeUnitsBetween.read(stated, reads, sides());
+        if (counted == null) {
+            return null;
+        }
+        Core to = counted.to();
+        Core difference = new Core.Binary(BinOp.SUB, to, counted.from(),
+                Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(), Type.INT,
+                to.pos());
+        return theStatementStands(counted.statement(), difference, at, fixed, counted.at());
+    }
+
+    /**
+     * A comparison of what a division leaves of a place moved by a number, read as the comparison of
+     * what it leaves of the place ({@link RemainderOfAShiftedValue}) — or null where it is no such
+     * comparison.
+     *
+     * <p>What a rule over {@code Int.floorMod(x + 1, 7)} states of {@code x} is exactly what a rule
+     * over {@code Int.floorMod(x, 7)} states of it, over the one stretch of remainders or the other.
+     * The call is read as it is written when its first argument is the place, which is the number
+     * taken of a place, and the moving is peeled off here and nowhere else.
+     */
+    private Derivation ofAShiftedRemainder(StatedComparison stated, Denotation at, boolean fixed,
+                                           InputReads reads) {
+        RemainderOfAShiftedValue.Read<InputReads> shifted =
+                RemainderOfAShiftedValue.read(stated, reads, sides());
+        if (shifted == null) {
+            return null;
+        }
+        return theStatementStands(shifted.statement(), shifted.remainder(), at, fixed,
+                shifted.at());
+    }
+
+    /**
+     * What {@code statement} says of {@code subject}, read as the comparisons of it that it is.
+     *
+     * <p>Each comparison is read as any comparison is, so a rule that turns one thing into another
+     * hands over the tree of what the other states and nothing of how it is read. A comparison the
+     * range of the number settles is the same for every value and has nothing to be written against.
+     */
+    private Derivation theStatementStands(ConstantComparison statement, Core subject,
+                                          Denotation at, boolean fixed, InputReads reads) {
+        return switch (statement) {
+            case ConstantComparison.Settled(boolean holds) -> new Derivation.WrittenOut(holds);
+            case ConstantComparison.Both(var first, var second) ->
+                    new Derivation.Joined(ConditionJoin.BOTH,
+                            theStatementStands(first, subject, at, fixed, reads),
+                            theStatementStands(second, subject, at, fixed, reads));
+            case ConstantComparison.Either(var first, var second) ->
+                    new Derivation.Joined(ConditionJoin.EITHER,
+                            theStatementStands(first, subject, at, fixed, reads),
+                            theStatementStands(second, subject, at, fixed, reads));
+            case ConstantComparison.Against(Rel rel, BigInteger against) -> comparison(
+                    new StatedComparison(ComparisonClaim.stating(rel), subject,
+                            new Core.Int(against.longValue(), Type.INT, subject.pos()),
+                            Core.BinaryReading.AS_THEY_STAND), at, fixed, reads);
         };
     }
 

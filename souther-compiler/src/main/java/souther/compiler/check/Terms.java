@@ -1857,6 +1857,16 @@ final class Terms {
         return atom;
     }
 
+    /** What {@code remainder} leaves of what stands at {@code place} when divided by
+     *  {@code divisor}, named as the call that takes it is: the call over the place and the number
+     *  written, so a guard on it and a body's name for the call are about one number. */
+    FactSubject remainderAtPlace(ValueName remainder, FactSubject place, long divisor) {
+        return place == null ? null
+                : named(interned.called(remainder,
+                        List.of(place.identity(), interned.written(divisor))),
+                        Granularity.DISCRETE);
+    }
+
     /** The size {@code size} takes of what stands at {@code place}, named as {@link #sizeKeyOf}
      *  names it, so a guard on the size here and a proposition about it are about one atom. */
     FactSubject sizeAtPlace(ValueName size, FactSubject place) {

@@ -351,13 +351,13 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 let run (x) = Ok
                 """));
         // A rule about a value an operation made of the positions. Where the value came from is
-        // known; what the rule says about the values at either position is not, because the minutes
-        // between two moments are not the difference of the two counts.
+        // known; what the rule says about the values at either position is not, because a remainder
+        // by a divisor no constant gives is no period the positions can be told apart by.
         out.put(UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE, of("""
                 module m
                 %s
-                behavior f : (a: DateTime, b: DateTime) -> Answer
-                let f (a, b) = if DateTime.minutesBetween(a, b) > 10 then Yes else No
+                behavior f : (a: Int, b: Int) -> Answer
+                let f (a, b) = if Int.floorMod(a, b) > 10 then Yes else No
                 """.formatted(ANSWER)));
         // One block written once and handed to two walks. The name it reads the element under
         // holds an element of a different container on each run, so the rule inside it is about one

@@ -39,6 +39,7 @@ import souther.compiler.observe.AnswerObservation;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -5621,7 +5622,8 @@ public final class Generator {
         private Placed witnessed(Requirements trying,
                                  Map<NumericTerm.FromOnePosition, RealizationTarget> routes,
                                  SequencedMap<RealizationTarget, NumericTerm.FromOnePosition> owing) {
-            NumericWitness.Standing found = NumericWitness.of(here,
+            NumericWitness.Standing found = NumericWitness.of(
+                    here.given(remaindersStanding(alreadyStanding)),
                     List.copyOf(new LinkedHashSet<>(owing.values())),
                     term -> carrierOf(term, subject.quantities()), looking);
             // What the rules settle before what this compiler managed, because a reader may act on
@@ -6183,6 +6185,30 @@ public final class Generator {
             }
         }
         return region;
+    }
+
+    /**
+     * The remainders the row already stands at, each at its number.
+     *
+     * <p>A position's value is placed after the item's numbers are, and a remainder of it is one of
+     * those: left out of what the place is chosen in, the value goes where the run begins and the
+     * remainder fixed beside it is refused afterwards. Said to the region first, the run the value
+     * is chosen in is the one the remainder leaves ({@code inputs.ReadQuantities}).
+     *
+     * <p>Only these. Any other number standing beside the value is read off it and not chosen
+     * before it, which is how it has been placed and is not what this changes.
+     */
+    private static Map<NumericTerm, Place> remaindersStanding(
+            Map<RealizationTarget, Place> standing) {
+        Map<NumericTerm, Place> remainders = new LinkedHashMap<>();
+        standing.forEach((target, at) -> {
+            if (target instanceof RealizationTarget.OfANumber number
+                    && number.term() instanceof NumericTerm.TakenOf taken
+                    && taken.takenAs() instanceof TakenAs.TheFloorRemainder) {
+                remainders.put(taken, at);
+            }
+        });
+        return remainders;
     }
 
     /**

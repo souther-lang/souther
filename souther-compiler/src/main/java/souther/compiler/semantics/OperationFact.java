@@ -117,6 +117,32 @@ public sealed interface OperationFact {
     }
 
     /**
+     * The operation answers how many whole units lie between its two arguments, counting forward
+     * from {@code from} to {@code to}, where one unit is {@code perUnit} steps of the order the
+     * arguments are counted on.
+     *
+     * <p>The count is truncated toward zero: a {@code to} fifty-nine steps before {@code from} is no
+     * unit before it, and the answer is nought. So the answer is no form of the two arguments, and
+     * what is stated of it is stated through the difference of the two. With {@code d} the number of
+     * steps from {@code from} to {@code to}, the count is at least {@code n} exactly where
+     * {@code d} is at least {@code perUnit * n} for a positive {@code n}, and where {@code d} is at
+     * least {@code perUnit * n - (perUnit - 1)} for any other.
+     */
+    record CountsWholeUnitsBetween(ArgumentRef from, ArgumentRef to, long perUnit)
+            implements OperationFact {
+
+        public CountsWholeUnitsBetween {
+            Objects.requireNonNull(from, "a count of units starts somewhere");
+            Objects.requireNonNull(to, "and ends somewhere");
+            if (perUnit < 2) {
+                throw new IllegalArgumentException(
+                        "a unit is more than one step of the order, or the count is the difference"
+                                + " and states a form instead: " + perUnit);
+            }
+        }
+    }
+
+    /**
      * Something that holds of the number the operation answers, wherever it is called.
      *
      * <p>One fact per bound rather than a list in one: an operation with two bounds carries two

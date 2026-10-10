@@ -127,7 +127,8 @@ final class TermReading {
         return switch (term.takenAs()) {
             case TakenAs.TheSumOfWhatItHolds _ -> addedUp(values, on);
             case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _,
-                    TakenAs.TheTruncatingQuotient _ -> new Reading.NotNumber();
+                    TakenAs.TheTruncatingQuotient _, TakenAs.TheFloorRemainder _ ->
+                    new Reading.NotNumber();
         };
     }
 
@@ -277,6 +278,32 @@ final class TermReading {
             case TakenAs.PartOfDate taken -> partOfDate(taken.part(), at, on.observed());
             case TakenAs.TheTruncatingQuotient taken ->
                     quotient(taken.read(arguments), at, on.observed());
+            case TakenAs.TheFloorRemainder taken ->
+                    remainder(taken.read(arguments), at, on.observed());
+        };
+    }
+
+    /**
+     * The remainder of an observed value by the divisor the term carries, floored.
+     *
+     * <p>Divided the way the operation divides, so what is read off a row is the number that row's
+     * run computes. Both ends are the order the value is written on, as a quotient's are. No divisor
+     * is a term nothing built, and is answered as an observation of the wrong shape is.
+     */
+    private static Reading remainder(BigDecimal by, ObservedValue at, Carrier observed) {
+        if (observed == null || by == null || by.signum() == 0) {
+            return new Reading.NotNumber();
+        }
+        Place read = observed.placeOf(at);
+        if (!(read instanceof Count count)) {
+            return new Reading.NotNumber();
+        }
+        return switch (Arithmetic.AFloorRemainder.remainderOf(count.at(), by)) {
+            case ExactAnswer.Unheld<BigDecimal> unheld -> new Reading.NotWorkedOut(unheld.why());
+            case ExactAnswer.Held<BigDecimal> held -> {
+                Place remainder = observed.onTheGrid(new Count(held.value()));
+                yield remainder == null ? new Reading.NotNumber() : new Reading.Number(remainder);
+            }
         };
     }
 

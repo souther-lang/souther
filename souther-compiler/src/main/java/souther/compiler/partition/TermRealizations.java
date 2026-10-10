@@ -309,6 +309,7 @@ final class TermRealizations {
         SequencedMap<RealizationTarget.OfANumber, TakenAs.TimePart> times = new LinkedHashMap<>();
         SequencedMap<RealizationTarget.OfANumber, TakenAs.DatePart> dates = new LinkedHashMap<>();
         SequencedMap<RealizationTarget.OfANumber, BigDecimal> quotients = new LinkedHashMap<>();
+        SequencedMap<RealizationTarget.OfANumber, BigDecimal> remainders = new LinkedHashMap<>();
         // What stands at the place, where the group asks for it as well as for numbers taken of
         // it. One group has at most one of these: what a number of a place is taken of is the
         // place, so a second value asked for is a second place and is another group's.
@@ -358,6 +359,16 @@ final class TermRealizations {
                             }
                             quotients.put(target, divisor);
                         }
+                        // A remainder is no place in the spelling of a number either. Asked for
+                        // beside the place's own value it is read off each value offered; asked for
+                        // alone, or beside remainders by other divisors, it is solved for below.
+                        case TakenAs.TheFloorRemainder by -> {
+                            BigDecimal divisor = by.read(taken.arguments());
+                            if (divisor == null || divisor.signum() == 0) {
+                                return nothingSolvesAGroup();
+                            }
+                            remainders.put(target, divisor);
+                        }
                         // How much a container holds, which is what a container is composed out of
                         // rather than a place in the spelling of one: what answers a length and a
                         // total together is a container built to have both, and the arm below is
@@ -396,6 +407,17 @@ final class TermRealizations {
             RealizationTarget.OfANumber total = whatItComesTo;
             return wholly(targets, List.of(many, total),
                     () -> new JointBuilder.HoldingThatManyAndAddingUpToThat(many, total));
+        }
+        // The remainders of one place by their divisors, with nothing else asked of it. A value
+        // that is none of them is nothing these write, so a quotient or a part beside them is a
+        // group nothing here solves.
+        if (!remainders.isEmpty()) {
+            if (!quotients.isEmpty() || !times.isEmpty() || !dates.isEmpty()
+                    || manyItHolds != null || whatItComesTo != null) {
+                return nothingSolvesAGroup();
+            }
+            return wholly(targets, remainders.keySet(),
+                    () -> new JointBuilder.SolvingForTheirRemainders(remainders));
         }
         // A quotient of a place beside a part of it is a value that is both a number and a moment,
         // and what would write one is neither arm here.
@@ -741,6 +763,72 @@ final class TermRealizations {
         }
 
         /**
+         * One number of the place whose remainders by those divisors are the numbers asked for,
+         * solved for ({@link RemainderSolutions}).
+         *
+         * <p><b>Solved and not walked.</b> What several remainders of one number ask is a class of
+         * whole numbers, or nothing where they disagree, and the number is the class's member nearest
+         * the end of the run the rules leave the place. How far apart the members are is the product
+         * of the divisors, which is why no walk through them is a way to find one.
+         *
+         * <p>What is read of each demand is the remainders it admits, as many as a figure allows, so
+         * a solving that did not try every one of them says it stopped and is never read as the rules
+         * leaving no number.
+         */
+        record SolvingForTheirRemainders(SequencedMap<RealizationTarget.OfANumber, BigDecimal> by)
+                implements JointBuilder {
+
+            public SolvingForTheirRemainders {
+                if (by.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a solving for some remainders says which divisors they are by");
+                }
+                by = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(by));
+            }
+
+            @Override
+            public Realization from(Type sourceType,
+                                    SequencedMap<RealizationTarget, AskedAt> demands,
+                                    Quantities measuring, SearchRegion within,
+                                    RuleReadingContext reading, DemandsInside inside) {
+                nothingInside(inside);
+                Carrier observed = rootOf(by.keySet(), measuring);
+                if (observed == null) {
+                    return new Realization.None(
+                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                }
+                // Every remainder is of one place, so the run the rules leave its value is the one
+                // run every demand is solved in.
+                NumericDomain.Bounds run = NumericDomain.Bounds.OPEN;
+                switch (valueOfThePlace(by.firstEntry().getKey().term(), within)) {
+                    case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) ->
+                            run = held;
+                    case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                        return new Realization.None(
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    }
+                    case null -> { }
+                }
+                List<RemainderSolutions.Demand> asked = new ArrayList<>();
+                for (Map.Entry<RealizationTarget.OfANumber, BigDecimal> each : by.entrySet()) {
+                    AskedAt of = demands.get(each.getKey());
+                    if (of == null) {
+                        return new Realization.None(
+                                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                    }
+                    asked.add(new RemainderSolutions.Demand(each.getValue(), of.walking(),
+                            of.named()));
+                }
+                RuleReadingSource ruleSource = reading.source();
+                return firstThatBuilds(walkIsOfTheWholeQuestion(demands.values()),
+                        offeredBy(RemainderSolutions.solve(asked,
+                                valueOfThePlaceHeldTo(by.firstEntry().getKey().term(), run, within),
+                                observed)),
+                        at -> writtenAt(at, sourceType, observed, ruleSource));
+            }
+        }
+
+        /**
          * The value the place is asked to stand at, with the numbers taken of it read off it.
          *
          * <p><b>Offered and read back, not solved for.</b> A group asking what stands at a place
@@ -1024,6 +1112,7 @@ final class TermRealizations {
             case JointBuilder.StringsHoldingTheirCounts _,
                  JointBuilder.AtThoseTimeParts _, JointBuilder.OnThoseDateParts _,
                  JointBuilder.SolvingForTheirQuotients _,
+                 JointBuilder.SolvingForTheirRemainders _,
                  JointBuilder.ItsOwnValueAndWhatIsTakenOfIt _ -> false;
         };
     }
@@ -1213,6 +1302,10 @@ final class TermRealizations {
             case TakenAs.TheTruncatingQuotient taken ->
                     atThatQuotient(taken.read(arguments), sourceType, orders, asked,
                             within, ruleSource);
+            // And this one writes the residue itself, which is its own remainder.
+            case TakenAs.TheFloorRemainder taken ->
+                    atThatRemainder(taken.read(arguments), sourceType, orders, asked,
+                            within, ruleSource);
         };
     }
 
@@ -1352,6 +1445,79 @@ final class TermRealizations {
         return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                 onTheOrder(asked.walking(), orders, asked.named(), within),
                 quotient -> multipliedBack(by, sourceType, observed, quotient, ruleSource));
+    }
+
+    /**
+     * A value whose remainder by that divisor is one of the numbers asked for, found by solving for
+     * it ({@link RemainderSolutions}).
+     *
+     * <p><b>A right inverse, as the product is for a quotient.</b> Every value of a residue class
+     * answers the residue; which of them to write is the one the rules leave the place, and that is
+     * the member of the class nearest the end of the run, and the residue itself where the run is
+     * open. What it owes is that what it writes reads back as the number it was asked for.
+     */
+    private static Realization atThatRemainder(BigDecimal by, Type sourceType, TermOrders orders,
+                                               AskedAt asked, SearchRegion within,
+                                               RuleReadingSource ruleSource) {
+        Carrier observed = orders.observed();
+        // A divisor that is not there, or is nought, is a term nothing built.
+        if (observed == null || by == null || by.signum() == 0) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        NumericDomain.Bounds run = NumericDomain.Bounds.OPEN;
+        switch (valueOfThePlace(orders.term(), within)) {
+            case NumericDomain.FormProjection.Within(NumericDomain.Bounds held) -> run = held;
+            case NumericDomain.FormProjection.NothingIsLeft _ -> {
+                return new Realization.None(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            }
+            case null -> { }
+        }
+        return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
+                offeredBy(RemainderSolutions.solve(
+                        List.of(new RemainderSolutions.Demand(by, asked.walking(), asked.named())),
+                        valueOfThePlaceHeldTo(orders.term(), run, within), observed)),
+                at -> writtenAt(at, sourceType, observed, ruleSource));
+    }
+
+    /** The value standing at the place {@code taking} is a number of, as far as the rules leave it:
+     *  where it runs, the class the remainders fixed beside it hold it to, and whether the rules
+     *  leave nothing where it stands at a number — which is how a hole is read, whatever rule made
+     *  it. */
+    private static RemainderSolutions.Value valueOfThePlaceHeldTo(
+            NumericTerm taking, NumericDomain.Bounds run, SearchRegion within) {
+        if (within == null || !(taking instanceof NumericTerm.TakenOf taken)) {
+            return new RemainderSolutions.Value(run, null, at -> false);
+        }
+        NumericTerm.ValueOf value = new NumericTerm.ValueOf(taken.position());
+        return new RemainderSolutions.Value(run, within.valueClassAt(value),
+                at -> within.given(value, at).emptiness().isPresent());
+    }
+
+    /** What the rules leave of the value standing at the place {@code taking} is a number of, or
+     *  null where they say nothing of it. */
+    private static NumericDomain.FormProjection valueOfThePlace(NumericTerm taking,
+                                                                SearchRegion within) {
+        return within == null || !(taking instanceof NumericTerm.TakenOf taken) ? null
+                : within.projectionOf(new NumericTerm.ValueOf(taken.position()));
+    }
+
+    /**
+     * The number a solving found as the numbers to try, or none and why there are none.
+     *
+     * <p>A search that stopped at a figure hands over nothing and says which, which is a different
+     * thing from the numbers there are being none: the first is what a reader may raise a figure for
+     * and the second is a proof about the rules.
+     */
+    private static Tried offeredBy(RemainderSolutions.Answer answer) {
+        return switch (answer) {
+            case RemainderSolutions.Answer.Found(BigInteger value) ->
+                    Tried.theOne(new Count(new BigDecimal(value)));
+            case RemainderSolutions.Answer.NoneThere _ -> Tried.allOf(List.of());
+            case RemainderSolutions.Answer.Undecided(CompositionBudget figure) ->
+                    new Tried(List.of(), new Remainder.StoppedAt(figure));
+        };
     }
 
     /**
@@ -1876,7 +2042,7 @@ final class TermRealizations {
             case TakenAs.TheSumOfWhatItHolds _ -> addingUp(asked, sourceType, orders,
                     within, reading, inside);
             case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _,
-                    TakenAs.TheTruncatingQuotient _ -> {
+                    TakenAs.TheTruncatingQuotient _, TakenAs.TheFloorRemainder _ -> {
                 nothingInside(inside);
                 yield new Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);

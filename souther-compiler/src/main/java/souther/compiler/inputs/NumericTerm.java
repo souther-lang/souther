@@ -21,6 +21,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.UnaryOperator;
 
 /**
@@ -538,19 +539,17 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
      * (#1016). Nor is it read off what the operation takes: every operation sharing an account of
      * what it takes would carry one bound, which is the same defect one level along.
      *
-     * <p>Read with nothing said about the arguments, because a term of this kind carries none: what
-     * a size is taken of is a container and what a magnitude is taken of is the one number, and a
-     * bound may only name an argument that is a number ({@code check.OperationFactBinder}), so
-     * an operation like these declares no row that names one. A term whose operation does take
-     * numbers would have to answer them here rather than be read the same way and quietly come back
-     * wider.
+     * <p>A taking is read with what it was given beside the value, which is what a bound stated
+     * under a divisor reads: a remainder by seven lies from nought up to seven, and by an unknown
+     * divisor lies nowhere in particular. A taking over a run carries none, because what a total is
+     * taken of is a container, and an operation like that declares no row that names one.
      */
     default NumericDomain.Bounds intrinsicBounds() {
         return switch (this) {
             case ValueOf _ -> NumericDomain.Bounds.OPEN;
             case TakenOf taken -> ResultRange.of(
                     DefaultBoundOperationFacts.get().boundsOnTheResult(taken.operation()),
-                    ConstantArguments.none());
+                    argument -> Optional.ofNullable(taken.arguments().at(argument.position())));
             // A count of some of a string's code points is never negative, as how many it holds is
             // not. What it is at most is the string's own length, which is another number of the
             // same place and is held where the two are realized together.
