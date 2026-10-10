@@ -1065,10 +1065,12 @@ final class Pullback {
      * The same, walking each value once however many names stand for it: {@code walked} holds
      * each value this search has walked already, with each reading it was walked in.
      *
-     * <p>By identity, the node and the reading both. What is asked is whether this search has been
-     * here, and the place is the node itself; told by its contents, every visit hashed the whole
-     * tree under it and the reading round it, and a search over a value of many choices spent its
-     * time doing that.
+     * <p>The value by identity and the reading by what it holds. A name stands for the very node
+     * its binding was given, so one value reached by two names is one node; the reading round it
+     * is made again each time a name is followed, and two of those that hold the same are one
+     * place to have been. Told by the node's contents, every visit hashed the tree under it; told
+     * by the reading's identity, a chain of names each using the one before it twice was walked
+     * once for every way down it.
      */
     private SizedByCases measuredByCases(Denotation value,
                                          Map<Core, Set<InputReads>> walked) {
@@ -1077,7 +1079,7 @@ final class Pullback {
         Core e = Core.withoutStanding(stands.value());
         // A closure's body is read where it is applied, and is no part of this value.
         if (e instanceof Core.Block || !walked.computeIfAbsent(stands.value(),
-                _ -> Collections.newSetFromMap(new IdentityHashMap<>())).add(stands.at())) {
+                _ -> new HashSet<>()).add(stands.at())) {
             return null;
         }
         SizedByCases[] inner = {null};

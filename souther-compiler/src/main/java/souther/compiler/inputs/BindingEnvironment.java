@@ -61,6 +61,10 @@ final class BindingEnvironment {
     private final ElementBindings elements;
     private final boolean callsStand;
     private volatile Map<BindingId, Core> boundAsATable;
+    /** {@link #hashCode}, worked out the first time it is asked: nothing here changes, and what
+     *  it is worked out from is every value bound, which a reader asking it of one environment
+     *  many times would otherwise walk each time. Nought where it has not been. */
+    private int hash;
 
     BindingEnvironment(Map<BindingId, TermPath> roots, Map<BindingId, Core> bound,
                        ElementBindings elements, boolean callsStand) {
@@ -256,7 +260,12 @@ final class BindingEnvironment {
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(roots, handed, bound(), elements, callsStand);
+        int h = hash;
+        if (h == 0) {
+            h = java.util.Objects.hash(roots, handed, bound(), elements, callsStand);
+            hash = h;
+        }
+        return h;
     }
 
     @Override

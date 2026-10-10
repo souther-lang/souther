@@ -475,7 +475,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "Ljava/util/Set;)L" + c + "partition/Pullback$Inside;", Reading.STRUCTURE,
                 CHOICES_AND_CALLS);
         row(out, c + "partition/Pullback", "measuredByCases", "(L" + c + "inputs/Denotation;"
-                + "Ljava/util/Set;)L" + c + "partition/Pullback$SizedByCases;", Reading.STRUCTURE,
+                + "Ljava/util/Map;)L" + c + "partition/Pullback$SizedByCases;", Reading.STRUCTURE,
                 CHOICES_AND_CALLS);
         row(out, c + "partition/DecisionSubjects", "workedOut", "(" + core + reads
                 + "Ljava/util/Set;)Ljava/lang/String;", Reading.NAMES,

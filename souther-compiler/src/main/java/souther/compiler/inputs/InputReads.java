@@ -90,6 +90,9 @@ public final class InputReads {
     private final DeclaredInput declared;
     private final souther.compiler.carrier.Membership<ValueName.Behavior> dependencies;
     private final Applied applied;
+    /** {@link #hashCode}, worked out the first time it is asked: nothing here changes, and what it
+     *  is worked out from holds every value bound on the way here. Nought where it has not been. */
+    private int hash;
 
     /**
      * The applications of closures, the arms of choices and the calls of behaviors a reading here is
@@ -1489,7 +1492,12 @@ public final class InputReads {
 
     @Override
     public int hashCode() {
-        return Objects.hash(names, alternatives, declared, dependencies, applied);
+        int h = hash;
+        if (h == 0) {
+            h = Objects.hash(names, alternatives, declared, dependencies, applied);
+            hash = h;
+        }
+        return h;
     }
 
     @Override
