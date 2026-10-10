@@ -289,10 +289,6 @@ class OnlyTheBinderReadsTheAuthoringVocabularyTest {
                             + " none, so the closure's own position is asked to count past it —"
                             + " about the expansion's bindings, and not about which argument a fact"
                             + " names"),
-            new Reader("souther.compiler.check.HelperTable",
-                    "whether a library operation takes a closure at all, for keeping those a"
-                            + " reader of closures holds as themselves standing as calls — about the"
-                            + " operation and not about which argument a fact names"),
             new Reader("souther.compiler.check.ElementBindings",
                     "what a call hands its closure, for the value a closure parameter is bound to"),
             new Reader("souther.compiler.check.Reductions",

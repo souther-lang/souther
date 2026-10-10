@@ -109,19 +109,71 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
         assertTrue(lineAbout(report, "border ").contains("borders 1"), report);
     }
 
+    /**
+     * What the helper's own match owes is nothing of the model's.
+     *
+     * <p>Every point of the line the comparison draws, and the optional absent, are rows here; if
+     * reading the helper through put an arm or a rule in the model that nobody wrote, something
+     * would be owed that these rows do not answer.
+     */
     @Test
-    void theHelperStandingInsideTheModelAddsNoRuleOfItsOwn() {
+    void theRowsTheModelStatesAnswerEverythingTheReadingOwes() {
+        Compilation compilation = Compilation.ofSource("""
+                module m
+
+                data H = { qty: Option<Int>, q: Int }
+
+                behavior f : (h: H) -> Bool
+                let f (h) = Option.withDefault(0, h.qty) >= 3
+
+                example f
+                    | "on the line" : (H { qty = 3, q = 0 }) -> true
+                    | "off the line" : (H { qty = 2, q = 0 }) -> false
+                    | "in" : (H { qty = 10, q = 0 }) -> true
+                    | "out" : (H { qty = -4, q = 0 }) -> false
+                    | "absent" : (H { qty = None, q = 0 }) -> false
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        String report = AdequacyReport.of(compilation)
+                .human(SourceRendering.namedByIdentity(compilation.texts()));
+
+        assertEquals(0, compilation.errors().size(), report);
+        assertFalse(report.contains("!"), report);
+        assertTrue(report.contains("adequacy: satisfied"), report);
+    }
+
+    /**
+     * The ways through what the helper does are the helper's and not the body's.
+     *
+     * <p>The match the helper is written as is read through for what the comparison says of the
+     * input, and is no decision the model states: the body has the one rule it has with the call
+     * standing, and a row is not owed at the optional's two cases.
+     */
+    @Test
+    void theHelpersOwnMatchIsNoDecisionOfTheModel() {
         String report = report("""
                 behavior f : (h: H) -> Bool
                 let f (h) = Option.withDefault(5, h.qty) >= 3
-
-                behavior g : (h: H) -> Bool
-                let g (h) = h.q >= 3
                 """);
 
-        // A comparison that is read states two decision rules, whichever way it is written.
-        assertEquals(2, report.lines().filter(line -> line.contains("decision    rules 2"))
-                .count(), report);
+        assertTrue(report.contains("decision    rules 1"), report);
+        assertTrue(report.contains("branch      not measured (no row names this behavior)"),
+                report);
+    }
+
+    /** One that the model writes is a decision of the model, read the way it always was. */
+    @Test
+    void aMatchTheModelWritesIsStillTwoDecisionRules() {
+        String report = report("""
+                behavior f : (h: H) -> Bool
+                let f (h) =
+                    (match h.qty with
+                        | Some v -> v
+                        | None -> 5) >= 3
+                """);
+
+        assertTrue(report.contains("decision    rules 2"), report);
     }
 
     private static String measurement(String report) {

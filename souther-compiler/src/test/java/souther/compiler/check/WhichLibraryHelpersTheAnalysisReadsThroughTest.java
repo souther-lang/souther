@@ -9,7 +9,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Which operations the library writes are read through their body where the analysis reads a tree
@@ -23,15 +23,25 @@ class WhichLibraryHelpersTheAnalysisReadsThroughTest {
 
     @Test
     void onlyAnOptionConsumedInOneMatchIsReadThrough() {
-        Set<String> readThrough = HelperTable.transparentIn(DefaultStdlib.get()).stream()
+        Set<String> readThrough = LibraryReadThrough.shipped().stream()
                 .map(ValueName.Stdlib.Operation::toString).collect(Collectors.toSet());
 
         assertEquals(Set.of("Option.withDefault"), readThrough);
     }
 
+    /** The shipped table is the function of the shipped library and facts, and no more. */
     @Test
-    void theSetIsWorkedOutOncePerLibrary() {
-        assertSame(HelperTable.transparentIn(DefaultStdlib.get()),
-                HelperTable.transparentIn(DefaultStdlib.get()));
+    void theShippedTableIsWhatTheLibraryAndItsFactsComeTo() {
+        assertEquals(LibraryReadThrough.shipped(), LibraryReadThrough.of(DefaultStdlib.get(),
+                DefaultBoundOperationFacts.get()));
+    }
+
+    /** What a fact is stated of is held as a call, whatever its body is. */
+    @Test
+    void anOperationWithAFactStaysACall() {
+        ValueName.Stdlib.Operation max = ValueName.Stdlib.operation("Int", "max");
+
+        assertTrue(DefaultBoundOperationFacts.get().statesAnythingOf(max));
+        assertTrue(!LibraryReadThrough.shipped().contains(max));
     }
 }
