@@ -763,9 +763,18 @@ final class TermRealizations {
                     case null, default -> { }
                 }
                 RuleReadingSource ruleSource = reading.source();
-                return firstThatBuilds(walkIsOfTheWholeQuestion(demands.values()),
-                        throughOnePeriod(window, period,
-                                at -> readsBackIntoEveryRemainder(at, by, demands, observed)),
+                // Solved as the congruences they are first, which is arithmetic. Stepping through
+                // the period is for what that cannot settle: numbers of the demands it did not
+                // try, and runs it holds no number of the first class in.
+                BigInteger solved = solvedAsCongruences(by, demands,
+                        window == firstPeriod ? NumericDomain.Bounds.OPEN : window);
+                Place found = solved == null ? null : new Count(new BigDecimal(solved));
+                Tried offered = found != null
+                        && readsBackIntoEveryRemainder(found, by, demands, observed)
+                        ? Tried.allOf(List.of(found))
+                        : throughOnePeriod(window, period,
+                                at -> readsBackIntoEveryRemainder(at, by, demands, observed));
+                return firstThatBuilds(walkIsOfTheWholeQuestion(demands.values()), offered,
                         at -> writtenAt(at, sourceType, observed, ruleSource));
             }
         }
@@ -1457,17 +1466,19 @@ final class TermRealizations {
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         // Where the rules leave the value itself, which is what the place's other lines say of it.
-        // A bounded run is stepped through for a value answering the remainder, because the
-        // residue is a value of the place only where the run reaches it.
-        NumericSet wanted = asked.walking();
+        // The residue is a value of the place only where the run reaches it, so inside a bounded run
+        // the value is the member of the residue's class that the run's end gives.
+        BigInteger size = Arithmetic.AFloorRemainder.magnitudeOf(by);
         switch (valueOfThePlace(orders.term(), within)) {
             case NumericDomain.FormProjection.Within(NumericDomain.Bounds held)
-                    when (held.min() != null || held.max() != null)
-                    && Arithmetic.AFloorRemainder.magnitudeOf(by) != null -> {
+                    when (held.min() != null || held.max() != null) && size != null -> {
+                // A residue the run holds no member of is no number to try: the walk is over what the
+                // run can answer, and an empty one over the whole question is the rules leaving none.
                 return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
-                        throughOnePeriod(held, Arithmetic.AFloorRemainder.magnitudeOf(by),
-                                at -> remainderIsWanted(at, by, wanted, observed)),
-                        at -> writtenAt(at, sourceType, observed, ruleSource));
+                        admitting(onTheOrder(asked.walking(), orders, asked.named(), within),
+                                residue -> memberOfTheRun(size, held, residue) != null),
+                        residue -> writtenInTheRunAtItsClass(by, size, held, residue, sourceType,
+                                observed, ruleSource));
             }
             case NumericDomain.FormProjection.NothingIsLeft _ -> {
                 return new Realization.None(
@@ -1489,16 +1500,107 @@ final class TermRealizations {
                 : within.projectionOf(new NumericTerm.ValueOf(taken.position()));
     }
 
-    /** Whether the remainder of {@code at} by {@code by} is one of the numbers {@code wanted} holds. */
-    private static boolean remainderIsWanted(Place at, BigDecimal by, NumericSet wanted,
-                                             Carrier observed) {
-        if (!(at instanceof Count count)
-                || !(Arithmetic.AFloorRemainder.remainderOf(count.at(), by)
-                        instanceof ExactAnswer.Held<BigDecimal> read)) {
-            return false;
+    /**
+     * The value of a bounded run that leaves {@code residue} by {@code by}: the member of its class
+     * nearest the end the run has, found by arithmetic and not by stepping to it.
+     *
+     * <p>Nothing composed where the run holds no member, or where the number is no remainder by the
+     * divisor. What is written reads back as the number it was asked for, which is checked by
+     * dividing it.
+     */
+    private static Realization writtenInTheRunAtItsClass(BigDecimal by, BigInteger size,
+                                                         NumericDomain.Bounds run, Place residue,
+                                                         Type sourceType, Carrier observed,
+                                                         RuleReadingSource ruleSource) {
+        BigInteger member = memberOfTheRun(size, run, residue);
+        if (member == null
+                || !(Arithmetic.AFloorRemainder.remainderOf(new BigDecimal(member), by)
+                        instanceof ExactAnswer.Held<BigDecimal> read)
+                || read.value().compareTo(((Count) residue).at()) != 0) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        Place remainder = observed.onTheGrid(new Count(read.value()));
-        return remainder != null && wanted.holds(remainder, observed);
+        return writtenAt(new Count(new BigDecimal(member)), sourceType, observed, ruleSource);
+    }
+
+    /** The member of the class {@code residue} is of, by a divisor of {@code size}, that the run
+     *  holds nearest its end — or null where the number is no whole number or the run holds none. */
+    private static BigInteger memberOfTheRun(BigInteger size, NumericDomain.Bounds run,
+                                             Place residue) {
+        return residue instanceof Count wanted && wanted.exactly().isWhole()
+                && wanted.exactly().floor() instanceof ExactAnswer.Held<BigInteger> whole
+                ? inTheRun(new Congruences(whole.value(), size), run) : null;
+    }
+
+    /** The member of {@code members} nearest the end {@code run} has, or null where it holds none. */
+    private static BigInteger inTheRun(Congruences members, NumericDomain.Bounds run) {
+        BigInteger low = lowestWholeNumberOf(run.min());
+        BigInteger high = highestWholeNumberOf(run.max());
+        if (low != null) {
+            BigInteger member = members.leastAtOrAbove(low);
+            return high != null && member.compareTo(high) > 0 ? null : member;
+        }
+        return high != null ? members.greatestAtOrBelow(high) : members.residue();
+    }
+
+    /** The first whole number {@code end} admits, or null where it has none to name. */
+    private static BigInteger lowestWholeNumberOf(Endpoint end) {
+        if (end == null || !(end.at() instanceof Count count)
+                || !(count.exactly().ceiling() instanceof ExactAnswer.Held<BigInteger> edge)) {
+            return null;
+        }
+        return !end.inclusive() && count.exactly().isWhole()
+                ? edge.value().add(BigInteger.ONE) : edge.value();
+    }
+
+    /** The last whole number {@code end} admits, or null where it has none to name. */
+    private static BigInteger highestWholeNumberOf(Endpoint end) {
+        if (end == null || !(end.at() instanceof Count count)
+                || !(count.exactly().floor() instanceof ExactAnswer.Held<BigInteger> edge)) {
+            return null;
+        }
+        return !end.inclusive() && count.exactly().isWhole()
+                ? edge.value().subtract(BigInteger.ONE) : edge.value();
+    }
+
+    /**
+     * The one value that leaves the remainders asked for by every divisor, solved as the congruences
+     * they are, or null where the first number each demand leaves is a set of congruences that
+     * disagree or a demand leaves no run to take one from.
+     *
+     * <p>A null is no answer about the model: another number of the same demand may agree where this
+     * one did not, and the search steps through one period for it.
+     */
+    private static BigInteger solvedAsCongruences(
+            SequencedMap<RealizationTarget.OfANumber, BigDecimal> by,
+            SequencedMap<RealizationTarget, AskedAt> demands, NumericDomain.Bounds run) {
+        Congruences met = null;
+        for (Map.Entry<RealizationTarget.OfANumber, BigDecimal> each : by.entrySet()) {
+            AskedAt asked = demands.get(each.getKey());
+            BigInteger size = Arithmetic.AFloorRemainder.magnitudeOf(each.getValue());
+            NumericDomain.Bounds leaves = asked == null ? null : asked.walking().asOneRun();
+            if (leaves == null || size == null) {
+                return null;
+            }
+            // A remainder lies from nought up to the divisor, not reaching it, and from the divisor
+            // up to nought, not reaching it, for a divisor below nought.
+            BigInteger least = each.getValue().signum() > 0 ? BigInteger.ZERO
+                    : size.subtract(BigInteger.ONE).negate();
+            BigInteger most = each.getValue().signum() > 0 ? size.subtract(BigInteger.ONE)
+                    : BigInteger.ZERO;
+            BigInteger low = lowestWholeNumberOf(leaves.min());
+            BigInteger high = highestWholeNumberOf(leaves.max());
+            BigInteger residue = low == null || low.compareTo(least) < 0 ? least : low;
+            if (residue.compareTo(most) > 0 || high != null && residue.compareTo(high) > 0) {
+                return null;
+            }
+            Congruences here = new Congruences(residue, size);
+            met = met == null ? here : met.meet(here);
+            if (met == null) {
+                return null;
+            }
+        }
+        return inTheRun(met, run);
     }
 
     /** The one value that is its own remainder by that divisor, or nothing composed where the

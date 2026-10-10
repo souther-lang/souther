@@ -133,6 +133,19 @@ class AFloorRemainderIsAnOrdinaryNumberOfThePositionItIsTakenOfTest {
                 "Int.floorMod(x, 2) = 0"));
     }
 
+    /**
+     * Divisors as wide as these have a period no walk is allowed, so a row is only there where the
+     * class is solved for and not stepped to.
+     */
+    @Test
+    void remaindersByWideDivisorsAreSolvedAndNotSteppedTo() {
+        assertEquals(1, rowsAt("x: Int, y: Int",
+                "Int.floorMod(x, 100003) == 3 && Int.floorMod(x, 100019) == 4",
+                "Int.floorMod(x, 100003) = 3").size());
+        assertEquals(List.of("7"), rowsAt("x: Int, y: Int",
+                "x >= 1 && Int.floorMod(x, 1000003) == 7", "Int.floorMod(x, 1000003) = 7"));
+    }
+
     /** One number cannot leave two remainders by one divisor: the second comparison is never
      *  reached. */
     @Test
