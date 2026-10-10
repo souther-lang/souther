@@ -23,7 +23,7 @@ import java.util.List;
  */
 public sealed interface Proof
         permits ConditionsThatCannotAllHold, OutsideInputDomain, EveryCaseRefused,
-        NoCaseTheValueCanBeIsTaken {
+        NoCaseTheValueCanBeIsTaken, TheDeclarationHoldsNoneOf, TheDeclarationHoldsNothingElse {
 
     /**
      * The sentences a proof can come to, one per arm.
@@ -84,6 +84,34 @@ public sealed interface Proof
          * @param cases the cases the arm names
          */
         T noCaseTheValueCanBeIsTaken(List<TypeSymbol> canBe, List<TypeSymbol> cases);
+
+        /**
+         * The position matched on is declared as a sum none of whose cases is one the arm is for.
+         *
+         * <p>About the type the input declares at the position and not about any rule: what a
+         * shared helper matches on can be wider than what the behavior calling it takes, and the
+         * cases the behavior's input leaves out are ones no value of it is.
+         *
+         * @param position how the position is spelled
+         * @param declared every case the position's type holds
+         * @param cases    the cases the arm needs a value to be, none of them among {@code declared}
+         */
+        T theDeclarationHoldsNoneOf(String position, List<TypeSymbol> declared,
+                                    List<TypeSymbol> cases);
+
+        /**
+         * The position matched on is declared as a sum every case of which this arm needs a value
+         * not to be.
+         *
+         * <p>The other side of the same fact: the arms before this one take every case the input
+         * declares at the position, so what is left for this one is a case no value of it is.
+         *
+         * @param position how the position is spelled
+         * @param declared every case the position's type holds
+         * @param cases    the cases the arm needs a value not to be, {@code declared} among them
+         */
+        T theDeclarationHoldsNothingElse(String position, List<TypeSymbol> declared,
+                                         List<TypeSymbol> cases);
     }
 
     /** What this proof comes to, in {@code words}. */
@@ -111,6 +139,54 @@ public sealed interface Proof
      *  {@link Words#noCaseTheValueCanBeIsTaken}. */
     static Proof noCaseTheValueCanBeIsTaken(List<TypeSymbol> canBe, List<TypeSymbol> cases) {
         return new NoCaseTheValueCanBeIsTaken(canBe, cases);
+    }
+
+    /**
+     * The position's declared cases are none of the ones the arm needs a value to be, where
+     * {@code among}, or all among the ones it needs a value not to be, where not; see
+     * {@link Words#theDeclarationHoldsNoneOf} and {@link Words#theDeclarationHoldsNothingElse}.
+     */
+    static Proof theDeclarationLeavesNoCase(String position, List<TypeSymbol> declared,
+                                            List<TypeSymbol> cases, boolean among) {
+        return among ? new TheDeclarationHoldsNoneOf(position, declared, cases)
+                : new TheDeclarationHoldsNothingElse(position, declared, cases);
+    }
+}
+
+record TheDeclarationHoldsNoneOf(String position, List<TypeSymbol> declared,
+                                 List<TypeSymbol> cases) implements Proof {
+
+    TheDeclarationHoldsNoneOf {
+        declared = List.copyOf(declared);
+        cases = List.copyOf(cases);
+        if (declared.isEmpty() || cases.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "a declaration holding none of an arm's cases, with no case either way");
+        }
+    }
+
+    @Override
+    public <T> T said(Words<T> words) {
+        return words.theDeclarationHoldsNoneOf(position, declared, cases);
+    }
+}
+
+record TheDeclarationHoldsNothingElse(String position, List<TypeSymbol> declared,
+                                      List<TypeSymbol> cases) implements Proof {
+
+    TheDeclarationHoldsNothingElse {
+        declared = List.copyOf(declared);
+        cases = List.copyOf(cases);
+        if (declared.isEmpty() || cases.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "a declaration holding nothing but what an arm is past, with no case either"
+                            + " way");
+        }
+    }
+
+    @Override
+    public <T> T said(Words<T> words) {
+        return words.theDeclarationHoldsNothingElse(position, declared, cases);
     }
 }
 

@@ -120,7 +120,7 @@ class WhoMaySayThisCheckMetALimitIsWrittenDownTest {
             new Licence("souther.compiler.check.PathReachability"
                     + ".of(Lsouther/compiler/core/Core;Lsouther/compiler/check/Scope;"
                     + "Lsouther/compiler/coverage/CoverageSites$Plan;"
-                    + "Lsouther/compiler/inputs/InputDomain;"
+                    + "Lsouther/compiler/inputs/InputReading;"
                     + "Lsouther/compiler/check/RuleReadingContext;"
                     + "Lsouther/compiler/meaning/MeaningsOfABody;"
                     + "Lsouther/compiler/check/ElementBindings;)",

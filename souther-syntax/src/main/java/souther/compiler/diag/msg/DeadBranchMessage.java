@@ -46,6 +46,16 @@ public sealed interface DeadBranchMessage extends Message {
     record TheValueMatchedOnIsNeverItsCase(String canBe, String cases)
             implements DeadBranchMessage, Supporting {}
 
+    /** The position matched on is declared as cases none of which the arm is for. */
+    record ItsDeclarationHoldsNoneOfTheCases(String position, String declared, String cases)
+            implements DeadBranchMessage, Supporting {}
+
+    /** The position matched on is declared as cases every one of which the arms before this one
+     *  take. */
+    record ItsDeclarationHoldsNothingTheArmsBeforeLeave(String position, String declared,
+                                                        String cases)
+            implements DeadBranchMessage, Supporting {}
+
     /** What to do about it. */
     record TakeItOutOrLetSomethingReachIt() implements DeadBranchMessage, Supporting {}
 }
