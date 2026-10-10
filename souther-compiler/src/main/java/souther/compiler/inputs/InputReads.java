@@ -360,25 +360,29 @@ public final class InputReads {
     }
 
     /**
-     * The container every element-taking parameter of {@code block} takes its elements from, read
-     * here, or empty where there is no such parameter or they take them from different containers.
+     * For each parameter of {@code block} that an operation hands something a container holds, the
+     * containers it may be handed it from, read here. A parameter handed nothing is not in it, and
+     * two taking from the same containers are one.
      *
-     * <p>A body entered by an application of the closure is entered only where the container holds
-     * something, so what the container holds is what a run needs to reach it.
+     * <p>A body entered by an application of the closure is entered only where each of these
+     * parameters is handed something, so each needs one of its containers to hold something. More
+     * than one container is a closure shared by several operations, and a run is inside it by any
+     * one of them.
      */
-    public Optional<Denotation> containerHandingTheElements(Core.Block block) {
-        Core only = null;
+    public List<List<Denotation>> containersHandingTheElements(Core.Block block) {
+        List<List<Denotation>> out = new ArrayList<>();
         for (Core.Binder param : block.params()) {
-            if (param == null || param.binding() == null
-                    || !(names.roleOf(param.binding()) instanceof BindingRole.Element(var held))) {
+            if (param == null || param.binding() == null) {
                 continue;
             }
-            if (only != null && !only.equals(held.container())) {
-                return Optional.empty();
+            List<Denotation> containers = names.roleOf(param.binding()).containers().stream()
+                    .map(held -> new Denotation(held.container(), this))
+                    .toList();
+            if (!containers.isEmpty() && !out.contains(containers)) {
+                out.add(containers);
             }
-            only = held.container();
         }
-        return Optional.ofNullable(only).map(container -> new Denotation(container, this));
+        return List.copyOf(out);
     }
 
     /**

@@ -65,14 +65,25 @@ public final class WhereAnApplicationIsMade {
     }
 
     /**
-     * What has to hold for a run to be inside a closure handed the elements of the container at
-     * {@code container}, under {@code outer}: that the container holds something. Said where the
-     * values it holds are not written out, and so no application is said; an operation may stop
-     * before it makes any, so this is necessary for an application and not enough for one.
+     * What has to hold for a run to be inside a closure whose parameters are handed what
+     * containers hold, under {@code outer}: each parameter is handed something, from one of the
+     * containers it may be handed it from, which then holds something. Said where the values they
+     * hold are not written out, and so no application is said; an operation may stop before it
+     * makes any, so this is necessary for an application and not enough for one.
+     *
+     * @param takenFrom for each parameter, the positions of the containers it may be handed
+     *                  something from, none of them empty
      */
-    public static Proposition whereTheContainerHoldsSomething(Proposition outer,
-                                                              TermPath container) {
-        return past(outer, new Proposition.Some(container, nothingAsked(), true));
+    public static Proposition whereTheContainersHoldSomething(Proposition outer,
+                                                              List<List<TermPath>> takenFrom) {
+        List<Proposition> each = new ArrayList<>();
+        each.add(outer);
+        for (List<TermPath> containers : takenFrom) {
+            each.add(Proposition.any(containers.stream()
+                    .<Proposition>map(at -> new Proposition.Some(at, nothingAsked(), true))
+                    .toList()));
+        }
+        return Proposition.all(each);
     }
 
     /** Whether {@code cases} say a line decides wherever a row is. */

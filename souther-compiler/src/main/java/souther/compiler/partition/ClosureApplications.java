@@ -5,6 +5,7 @@ import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.TermPath;
@@ -118,14 +119,11 @@ sealed interface ClosureApplications {
                     }
                 }
                 case InputReads.Applications.NoneHanded _ -> {
-                    Optional<TermPath> container = around.reads()
-                            .containerHandingTheElements(block)
-                            .flatMap(held -> Pullback.positionHoldingWhatItHolds(held, read));
-                    asked |= container.isPresent();
+                    List<List<TermPath>> takenFrom = containersHeld(block, around.reads(), read);
+                    asked |= !takenFrom.isEmpty();
                     out.add(new Application(around.reads().entering(step, symbols, newtypes),
-                            container.map(held -> WhereAnApplicationIsMade
-                                            .whereTheContainerHoldsSomething(around.reached(), held))
-                                    .orElse(around.reached())));
+                            WhereAnApplicationIsMade.whereTheContainersHoldSomething(
+                                    around.reached(), takenFrom)));
                 }
                 case InputReads.Applications.Unsaid _,
                      InputReads.Applications.MoreThanAreRead _ -> {
@@ -134,6 +132,34 @@ sealed interface ClosureApplications {
             }
         }
         return handed || asked || !outside ? new Each(out) : OUTSIDE;
+    }
+
+    /**
+     * For each parameter of {@code block} an operation hands something a container holds, the
+     * positions of the input those containers stand at.
+     *
+     * <p>A parameter is left out where some container it may be handed something from stands at no
+     * position: a run may be inside the closure by that one with every other empty, so saying the
+     * rest hold something would be saying more than is known.
+     */
+    private static List<List<TermPath>> containersHeld(Core.Block block, InputReads reads,
+                                                       InputReading read) {
+        List<List<TermPath>> out = new ArrayList<>();
+        for (List<Denotation> containers : reads.containersHandingTheElements(block)) {
+            List<TermPath> positions = new ArrayList<>();
+            for (Denotation container : containers) {
+                Optional<TermPath> at = Pullback.positionHoldingWhatItHolds(container, read);
+                if (at.isEmpty()) {
+                    positions = null;
+                    break;
+                }
+                positions.add(at.get());
+            }
+            if (positions != null) {
+                out.add(List.copyOf(positions));
+            }
+        }
+        return out;
     }
 
     /**
