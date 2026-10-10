@@ -5,6 +5,7 @@ import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeOps;
 import souther.compiler.check.WalkElements;
 import souther.compiler.core.Core;
 import souther.compiler.semantics.TakenAs;
@@ -153,7 +154,7 @@ public final class InputNumber {
             // What was computed may be the element's own field and nothing made of it, as a closure
             // that weighs a field once and adds nothing is. That is the place, and one number has
             // one term whichever way its closure was spelled.
-            answered = computed.asAPlace();
+            answered = placeStanding(computed, where.answerAt(element), at, inputs, source);
         }
         if (answered == null) {
             return overWhatWasComputed(measured, where.answerAt(element), computed, at, source);
@@ -171,6 +172,28 @@ public final class InputNumber {
         return stands == null ? null
                 : NumericTerm.TakenOver.of(measured.operation(), over, stands, source.inners(),
                         symbols);
+    }
+
+    /**
+     * The field {@code computed} is, where it is that field as the same kind of number, or null.
+     *
+     * <p>The same number is not the same term. What a total is counted as is part of it, and a call
+     * that changes only that — whole numbers as decimals — computes the field's number and is not
+     * the field: two lines of the largest whole number come to a decimal and to no whole number.
+     * So a form that is a field is the place only where what the closure answers stands as what the
+     * field stands as, with the names either is written under taken off, which is the account the
+     * term is made under ({@link NumericTerm.TakenOver#of}).
+     */
+    private static ElementProjection placeStanding(ElementValue computed, ElementAnswer closure,
+                                                   TermPath at, InputDomain inputs,
+                                                   RuleReadingSource source) {
+        ElementProjection place = computed.asAPlace();
+        if (place == null) {
+            return null;
+        }
+        Type fieldType = inputs.typeAt(place.from(at), source);
+        return fieldType != null && TypeOps.base(closure.body().type(), source.inners())
+                .equals(TypeOps.base(fieldType, source.inners())) ? place : null;
     }
 
     /**

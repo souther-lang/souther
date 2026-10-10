@@ -119,6 +119,56 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
     }
 
     /**
+     * A closure that changes what a number is counted as is not the field, though it is the same
+     * number.
+     *
+     * <p>A total of whole numbers and a total of the same numbers as decimals are not one total:
+     * two lines of the largest whole number come to a decimal and to no whole number. Read as the
+     * place, the second would be measured as the first.
+     */
+    @Test
+    void aClosureThatChangesTheTypeOfTheFieldIsNotTheField() {
+        String report = report(model("Decimal.fromInt(a.q)", 4).replace(">= 4", ">= 4.0m"));
+        assertTrue(report.contains("List.sum({1·q + 0 | xs[*]})"), report);
+        assertFalse(report.contains("List.sum(xs[*].q)"), report);
+    }
+
+    /**
+     * A total of decimals made of whole numbers is written with whole numbers and counted as
+     * decimals: no whole number is a half, and the point at one is said as one nothing was written
+     * for rather than as one nothing reaches.
+     */
+    @Test
+    void aTotalOfDecimalsMadeOfWholeNumbersIsWrittenWithWholeNumbers() {
+        String rows = rowsOf(model("Decimal.fromInt(a.q)", 4).replace(">= 4", ">= 4.5m"));
+        assertTrue(totalsOf(rows, 1, 0).stream().anyMatch(each -> each > 4),
+                () -> "a row past the line, written with whole numbers: " + rows);
+        assertTrue(rows.contains("no row for `List.sum({1·q + 0 | xs[*]}) = 4.5`"), rows);
+    }
+
+    /** The names a number is written under are not what it is counted as. */
+    @Test
+    void aClosureThroughANewtypeIsStillTheField() {
+        String report = report("""
+                module example.computed
+
+                data Many
+                data Few
+
+                data Amount = Int
+                data A = { amount: Amount }
+
+                behavior decide : (xs: List<A>) -> Many | Few
+
+                let decide (xs) =
+                    if List.sum(List.map(a -> a.amount.value * 1, xs)) >= 4
+                    then Many else Few
+                """);
+        assertTrue(report.contains("List.sum(xs[*].amount)"), report);
+        assertFalse(report.contains("List.sum({"), report);
+    }
+
+    /**
      * A name read in two branches is one definition met twice, and no cycle.
      *
      * <p>What is read is the choice with the name's own choice inside it on both sides.
