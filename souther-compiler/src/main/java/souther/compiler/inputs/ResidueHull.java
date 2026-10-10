@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
@@ -26,12 +27,10 @@ final class ResidueHull {
     private ResidueHull() {
     }
 
-    /**
-     * {@code runs} narrowed to the numbers that leave {@code residue} when divided by
-     * {@code modulus}, which is the divisor's magnitude and is above nought.
-     */
-    static NumericDomain.Bounds of(NumericDomain.Bounds runs, BigInteger residue,
-                                   BigInteger modulus) {
+    /** {@code runs} narrowed to the numbers of {@code members}. */
+    static NumericDomain.Bounds of(NumericDomain.Bounds runs, Congruences members) {
+        BigInteger residue = members.residue();
+        BigInteger modulus = members.modulus();
         Endpoint low = runs.min() == null ? null : lowest(runs.min(), residue, modulus);
         Endpoint high = runs.max() == null ? null : highest(runs.max(), residue, modulus);
         // An end the exact arithmetic could not hold stays where it was: a run left as wide as it

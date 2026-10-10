@@ -8,6 +8,7 @@ import souther.compiler.check.FieldDomains;
 import souther.compiler.check.RuleKey;
 import souther.compiler.numeric.CanonicalOrder;
 import souther.compiler.numeric.ClosedStates;
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
@@ -1693,14 +1694,35 @@ final class ReadQuantities implements Quantities {
      * leaves one remainder by each, and a remainder chosen without asking is one no value leaves
      * beside the first.
      *
-     * <p>Only a remainder fixed at one number, and only of a value counted by whole numbers. A
-     * remainder asked for as one of several, or left to the rules, says nothing of where a number
-     * of the place runs.
+     * <p>Only a remainder held at one number, whether fixed there or taken in as equal to it, and
+     * only of a value counted by whole numbers. A remainder asked for as one of several, or left to
+     * the rules, says nothing of where a number of the place runs.
      */
     private NumericDomain.Bounds withinTheResiduesFixedOf(NumericTerm term,
                                                           NumericDomain.Bounds runs) {
-        if (fixed.isEmpty() || !(term instanceof NumericTerm.FromOnePosition here)) {
-            return runs;
+        Congruences together = residuesFixedAt(term);
+        return together == null ? runs : ResidueHull.of(runs, together);
+    }
+
+    /**
+     * The class of whole numbers the remainders fixed beside the value at {@code place} leave it in
+     * together — or null where none is fixed, or no number leaves them all.
+     *
+     * <p>What a search that chooses the value is held to besides the run it is chosen in: the
+     * run's ends are of the class, and a number of the run is of it only where it is looked for in
+     * it.
+     */
+    public Congruences valueClassAt(NumericTerm.ValueOf place) {
+        return residuesFixedAt(place);
+    }
+
+    /**
+     * What the remainders fixed at the position of {@code term} leave {@code term} in, which is the
+     * class the number it is of is held to.
+     */
+    private Congruences residuesFixedAt(NumericTerm term) {
+        if (!(term instanceof NumericTerm.FromOnePosition here)) {
+            return null;
         }
         // The divisor this term is a remainder by, or null where it is the value itself or any
         // other number of the place: the two are told apart because what each is held to is not the
@@ -1710,22 +1732,20 @@ final class ReadQuantities implements Quantities {
         if (term instanceof NumericTerm.TakenOf taken) {
             own = divisorOfARemainder(taken);
             if (own == null) {
-                return runs;
+                return null;
             }
         } else if (!(term instanceof NumericTerm.ValueOf)) {
-            return runs;
+            return null;
         }
-        NumericDomain.Bounds out = runs;
-        for (Map.Entry<NumericTerm, Fixed> each : fixed.entrySet()) {
-            if (!(each.getKey() instanceof NumericTerm.TakenOf other)
-                    || each.getKey().equals(term)
-                    || !other.position().equals(here.position())
-                    || !each.getValue().isOne()
-                    || !(each.getValue().least() instanceof Count residue)
-                    || !residue.exactly().isWhole()
-                    || !(residue.exactly().floor() instanceof ExactAnswer.Held<BigInteger> left)) {
+        // The class every fixed remainder leaves the value in together: narrowing by each in turn
+        // would name an end of the run that is of one class and not of the other.
+        Congruences together = null;
+        for (Map.Entry<NumericTerm.TakenOf, BigInteger> each : remaindersPinned().entrySet()) {
+            NumericTerm.TakenOf other = each.getKey();
+            if (other.equals(term) || !other.position().equals(here.position())) {
                 continue;
             }
+            BigInteger left = each.getValue();
             BigInteger size = divisorOfARemainder(other);
             if (size == null) {
                 continue;
@@ -1735,10 +1755,50 @@ final class ReadQuantities implements Quantities {
             // remainder theorem. Two divisors with nothing in common say nothing of each other.
             BigInteger shared = own == null ? size : own.gcd(size);
             if (shared.compareTo(BigInteger.ONE) > 0) {
-                out = ResidueHull.of(out, left.value(), shared);
+                Congruences leaves = new Congruences(left, shared);
+                together = together == null ? leaves : together.meet(leaves);
+                // Remainders that no number leaves together are a contradiction `emptiness` says,
+                // and nothing is claimed of the class here.
+                if (together == null) {
+                    return null;
+                }
             }
         }
-        return out;
+        return together;
+    }
+
+    /**
+     * The remainders held at one whole number each, by a value fixed there or by a comparison taken
+     * in that says no more than {@code remainder == number}.
+     *
+     * <p>Both are the same fact about the value the remainder is of, and a row reached through the
+     * line of one remainder is as much held to it as a row for which it was fixed.
+     */
+    private Map<NumericTerm.TakenOf, BigInteger> remaindersPinned() {
+        Map<NumericTerm.TakenOf, BigInteger> pinned = new LinkedHashMap<>();
+        for (Map.Entry<NumericTerm, Fixed> each : fixed.entrySet()) {
+            if (each.getKey() instanceof NumericTerm.TakenOf of && each.getValue().isOne()
+                    && each.getValue().least() instanceof Count residue
+                    && residue.exactly().isWhole()
+                    && residue.exactly().floor() instanceof ExactAnswer.Held<BigInteger> whole) {
+                pinned.put(of, whole.value());
+            }
+        }
+        for (Assumed taken : assumed) {
+            if (!(taken instanceof Assumed.OverAForm over) || over.rel() != Rel.EQ
+                    || over.form().coefs().size() != 1) {
+                continue;
+            }
+            Map.Entry<NumericTerm, ExactRatio> only =
+                    over.form().coefs().entrySet().iterator().next();
+            ExactRatio at = over.form().constant().negated();
+            if (only.getKey() instanceof NumericTerm.TakenOf of
+                    && only.getValue().equals(ExactRatio.ONE) && at.isWhole()
+                    && at.floor() instanceof ExactAnswer.Held<BigInteger> whole) {
+                pinned.putIfAbsent(of, whole.value());
+            }
+        }
+        return pinned;
     }
 
     /** The magnitude of the divisor {@code taken} is a remainder by, or null where it is no

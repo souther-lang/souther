@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactAnswer;
@@ -12,6 +13,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
 
 /**
  * The whole number a run holds that leaves the remainders asked for, found by solving for it.
@@ -69,9 +71,29 @@ final class RemainderSolutions {
      */
     private record Choices(List<BigInteger> remainders, CompositionBudget stoppedBy) {}
 
-    /** The number of {@code run} that leaves what {@code demands} ask, where {@code carrier} is the
-     *  order the numbers are counted on. */
-    static Answer solve(List<Demand> demands, NumericDomain.Bounds run, Carrier carrier) {
+    /**
+     * What the rules leave of the value the remainders are of.
+     *
+     * @param run      where the value runs
+     * @param standing the class the remainders already fixed beside it hold it to, or null where
+     *                 there is none
+     * @param refuses  whether the rules leave nothing where the value stands at a number, which a
+     *                 run does not say: a class has another member to offer where its nearest one
+     *                 is a number the rules refuse
+     */
+    record Value(NumericDomain.Bounds run, Congruences standing, Predicate<Place> refuses) {}
+
+    /**
+     * The number of the value's run that leaves what {@code demands} ask, where {@code carrier} is
+     * the order the numbers are counted on.
+     *
+     * <p>The class the value is already held to is one more thing the number must leave, met with
+     * the demands' as theirs are with each other: a number named for the demands alone is one the
+     * fixed remainders refuse. And a member of the class the rules refuse, as a hole in the run
+     * does, is stepped past to the next member, so that what stands in the way of the nearest
+     * member is not taken for the class having none.
+     */
+    static Answer solve(List<Demand> demands, Value value, Carrier carrier) {
         List<Choices> choices = new ArrayList<>();
         List<BigInteger> sizes = new ArrayList<>();
         CompositionBudget stopped = null;
@@ -85,17 +107,11 @@ final class RemainderSolutions {
             choices.add(here);
             sizes.add(size);
         }
-        // A remainder is a number of the place when the run is open, and the number nearest to nought
-        // in its class is the remainder itself: a row for a remainder of nought up to seven is the
-        // number it asks for and not one seven above it.
-        boolean open = run.min() == null && run.max() == null;
         // How many combinations of the demands' choices are tried: the compiler's one figure for the
         // steps of a search, which numbers of a set looked at below are counted against as well.
         int steps = CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.maximum();
         int[] tried = {0};
-        BigInteger found = open && demands.size() == 1
-                ? firstOf(choices.getFirst())
-                : search(choices, sizes, 0, null, run, tried, steps);
+        BigInteger found = search(choices, sizes, 0, value.standing(), value, tried, steps, null);
         if (found != null) {
             return new Answer.Found(found);
         }
@@ -105,25 +121,33 @@ final class RemainderSolutions {
         return stopped == null ? new Answer.NoneThere() : new Answer.Undecided(stopped);
     }
 
-    private static BigInteger firstOf(Choices choices) {
-        return choices.remainders().isEmpty() ? null : choices.remainders().getFirst();
-    }
-
     /** The first number of the run that leaves a remainder of each demand from {@code at} on, given
      *  the class {@code met} the earlier ones left, or null where there is none. */
     private static BigInteger search(List<Choices> choices, List<BigInteger> sizes, int at,
-                                     Congruences met, NumericDomain.Bounds run, int[] tried,
-                                     int steps) {
+                                     Congruences met, Value value, int[] tried, int steps,
+                                     BigInteger last) {
         if (at == choices.size()) {
-            return ++tried[0] > steps ? null : inTheRun(met, run);
+            // A remainder is a number of the place when the run is open, and the number nearest to
+            // nought in its class is the remainder itself: a row for a remainder of nought up to
+            // seven is the number it asks for and not one seven above it. Which holds where one
+            // remainder is asked and nothing else holds the value to a class.
+            BigInteger own = choices.size() == 1 && value.standing() == null
+                    ? last : null;
+            return ++tried[0] > steps ? null : inTheRun(met, value, own, tried, steps);
         }
         for (BigInteger remainder : choices.get(at).remainders()) {
+            // Every choice looked at is a step, the ones that disagree with an earlier choice
+            // included: a demand whose choices never agree with the last demand's would otherwise
+            // be walked in full and counted as nothing.
+            if (++tried[0] > steps) {
+                return null;
+            }
             Congruences here = new Congruences(remainder, sizes.get(at));
             Congruences next = met == null ? here : met.meet(here);
             if (next == null) {
                 continue;
             }
-            BigInteger found = search(choices, sizes, at + 1, next, run, tried, steps);
+            BigInteger found = search(choices, sizes, at + 1, next, value, tried, steps, remainder);
             if (found != null || tried[0] > steps) {
                 return found;
             }
@@ -187,16 +211,30 @@ final class RemainderSolutions {
      *
      * <p>Found by arithmetic: the least member at or above the run's lower end, the greatest at or
      * below its upper end where it has no lower one, and where it has neither the class's own least
-     * non-negative member.
+     * non-negative member — or {@code own}, a member the caller would have first where the run is
+     * open.
+     *
+     * <p>The members the rules refuse are passed over, each a step of the search, so that a figure
+     * stops a class that has nothing else to offer and does not leave it said to hold nothing.
      */
-    static BigInteger inTheRun(Congruences members, NumericDomain.Bounds run) {
-        BigInteger low = lowestWholeNumberOf(run.min());
-        BigInteger high = highestWholeNumberOf(run.max());
-        if (low != null) {
-            BigInteger member = members.leastAtOrAbove(low);
-            return high != null && member.compareTo(high) > 0 ? null : member;
+    static BigInteger inTheRun(Congruences members, Value value, BigInteger own, int[] tried,
+                               int steps) {
+        BigInteger low = lowestWholeNumberOf(value.run().min());
+        BigInteger high = highestWholeNumberOf(value.run().max());
+        boolean upward = low != null || high == null;
+        BigInteger member = low != null ? members.leastAtOrAbove(low)
+                : high != null ? members.greatestAtOrBelow(high)
+                : own != null ? own : members.residue();
+        while (value.refuses().test(new Count(new BigDecimal(member)))) {
+            if (++tried[0] > steps) {
+                return null;
+            }
+            member = upward ? member.add(members.modulus()) : member.subtract(members.modulus());
+            if (upward && high != null && member.compareTo(high) > 0) {
+                return null;
+            }
         }
-        return high != null ? members.greatestAtOrBelow(high) : members.residue();
+        return upward && high != null && member.compareTo(high) > 0 ? null : member;
     }
 
     /** The first whole number {@code end} admits, or null where it has none to name. */

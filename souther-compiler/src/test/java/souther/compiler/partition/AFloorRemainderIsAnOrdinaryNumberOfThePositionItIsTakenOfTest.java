@@ -137,6 +137,51 @@ class AFloorRemainderIsAnOrdinaryNumberOfThePositionItIsTakenOfTest {
     }
 
     /**
+     * Two remainders that share a factor leave one class between them, and a run is held to that
+     * class and not to each in turn: 1 by 6 and 3 by 4 is 7 by 12, whose first member from 10 is 19
+     * where the first of 1 by 6 from 10 is 13 and the first of 3 by 4 from 13 is 15.
+     */
+    @Test
+    void remaindersWithAFactorInCommonHoldTheRunToTheClassTheyShare() {
+        // The row for the second line is reached through the first, so it is held to the first
+        // remainder as a value fixed there would be.
+        assertEquals(List.of("19"), rowsAt("x: Int, y: Int",
+                "x >= 10 && Int.floorMod(x, 6) == 1 && Int.floorMod(x, 4) == 3",
+                "Int.floorMod(x, 4) = 3"));
+        assertEquals(List.of("16"), rowsAt("x: Int, y: Int",
+                "x >= 11 && Int.floorMod(x, 2) == 0 && Int.floorMod(x, 3) == 1",
+                "Int.floorMod(x, 3) = 1"));
+    }
+
+    /**
+     * A number the rules leave a hole at is no row, and the class it is in has another member to
+     * try: the remainder's own representative, nought, is the hole here.
+     */
+    @Test
+    void aMemberOfTheClassThatIsAHoleIsStepPastToTheNextMember() {
+        assertEquals(List.of("7"), rowsAt("x: Int, y: Int",
+                "x /= 0 && Int.floorMod(x, 7) == 0", "Int.floorMod(x, 7) = 0"));
+        assertEquals(List.of("14"), rowsAt("x: Int, y: Int",
+                "x /= 0 && x /= 7 && Int.floorMod(x, 7) == 0", "Int.floorMod(x, 7) = 0"));
+        // Held above, the members are those the run holds and the hole is one of them.
+        assertEquals(List.of("21"), rowsAt("x: Int, y: Int",
+                "x >= 14 && x /= 14 && Int.floorMod(x, 7) == 0", "Int.floorMod(x, 7) = 0"));
+        // And held below, the member after the hole is the one beneath it.
+        assertEquals(List.of("-7"), rowsAt("x: Int, y: Int",
+                "x <= 0 && x /= 0 && Int.floorMod(x, 7) == 0", "Int.floorMod(x, 7) = 0"));
+    }
+
+    /** A remainder no number leaves beside the one the path holds is a point the rules leave nothing
+     *  at, which is a proof and not a witness that failed to certify. */
+    @Test
+    void aRemainderTheRemaindersBeforeItRefuseIsOneTheRulesLeaveNothingAt() {
+        assertEquals(List.of(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE),
+                unresolvedAt("x: Int, y: Int",
+                        "x >= 10 && Int.floorMod(x, 6) == 1 && Int.floorMod(x, 4) == 3",
+                        "Int.floorMod(x, 4) = 2"));
+    }
+
+    /**
      * Divisors as wide as these have a period no walk is allowed, so a row is only there where the
      * class is solved for and not stepped to.
      */
@@ -252,6 +297,39 @@ class AFloorRemainderIsAnOrdinaryNumberOfThePositionItIsTakenOfTest {
                 assertEquals(Set.of(false, true), sides, condition);
             }
         }
+    }
+
+    /**
+     * The remainder of a moved place, named before it is compared, is read as what it is named
+     * for and not as a remainder of the place: the comparison is of a value the position's own
+     * path holds as that number, and a remainder moved round the divisor is two stretches of the
+     * place's, which that path cannot take in a name's stead. It is said not to be read, and the
+     * same comparison written out is.
+     */
+    @Test
+    void theRemainderOfAMovedPlaceNamedBeforeItIsComparedIsNotRead() {
+        String model = """
+                module demo
+
+                data Ok
+                data No
+
+                behavior f : (x: Int) -> Ok | No
+                let f (x) = {
+                    let rest = Int.floorMod(x + 1, 7)
+                    guard rest == 0 else No
+                    Ok
+                }
+                """;
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        List<String> named = Adequacy.readingsOf(compilation.db(), "demo").get("f").stream()
+                .map(BorderAssessment::value).toList();
+        assertEquals(List.of(), named);
+        assertFalse(compilation.db().ask(new Adequacy.Coverage("demo")).value()
+                .get("f").notRead().isEmpty());
+        assertFalse(bordersOf("x: Int", "Int.floorMod(x + 1, 7) == 0").isEmpty());
     }
 
     /** The place moved by a number, named before its remainder is compared, is the same rule. */

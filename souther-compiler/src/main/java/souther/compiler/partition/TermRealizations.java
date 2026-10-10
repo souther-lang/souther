@@ -821,7 +821,9 @@ final class TermRealizations {
                 }
                 RuleReadingSource ruleSource = reading.source();
                 return firstThatBuilds(walkIsOfTheWholeQuestion(demands.values()),
-                        offeredBy(RemainderSolutions.solve(asked, run, observed)),
+                        offeredBy(RemainderSolutions.solve(asked,
+                                valueOfThePlaceHeldTo(by.firstEntry().getKey().term(), run, within),
+                                observed)),
                         at -> writtenAt(at, sourceType, observed, ruleSource));
             }
         }
@@ -1475,8 +1477,22 @@ final class TermRealizations {
         return firstThatBuilds(asked.walkIsOfTheWholeQuestion(),
                 offeredBy(RemainderSolutions.solve(
                         List.of(new RemainderSolutions.Demand(by, asked.walking(), asked.named())),
-                        run, observed)),
+                        valueOfThePlaceHeldTo(orders.term(), run, within), observed)),
                 at -> writtenAt(at, sourceType, observed, ruleSource));
+    }
+
+    /** The value standing at the place {@code taking} is a number of, as far as the rules leave it:
+     *  where it runs, the class the remainders fixed beside it hold it to, and whether the rules
+     *  leave nothing where it stands at a number — which is how a hole is read, whatever rule made
+     *  it. */
+    private static RemainderSolutions.Value valueOfThePlaceHeldTo(
+            NumericTerm taking, NumericDomain.Bounds run, SearchRegion within) {
+        if (within == null || !(taking instanceof NumericTerm.TakenOf taken)) {
+            return new RemainderSolutions.Value(run, null, at -> false);
+        }
+        NumericTerm.ValueOf value = new NumericTerm.ValueOf(taken.position());
+        return new RemainderSolutions.Value(run, within.valueClassAt(value),
+                at -> within.given(value, at).emptiness().isPresent());
     }
 
     /** What the rules leave of the value standing at the place {@code taking} is a number of, or

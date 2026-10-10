@@ -380,7 +380,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // how many remainders of each demand and how many combinations of them are tried, and
             // what it hands over is the answer that says a figure stopped it.
             Map.entry("souther.compiler.partition.RemainderSolutions#solve("
-                            + "Ljava/util/List;Lsouther/compiler/numeric/NumericDomain$Bounds;"
+                            + "Ljava/util/List;"
+                            + "Lsouther/compiler/partition/RemainderSolutions$Value;"
                             + "Lsouther/compiler/check/Carrier;)"
                             + "Lsouther/compiler/partition/RemainderSolutions$Answer;",
                     "names the figure as what left remainders or combinations untried, as an"

@@ -1,4 +1,4 @@
-package souther.compiler.partition;
+package souther.compiler.numeric;
 
 import org.junit.jupiter.api.Test;
 
