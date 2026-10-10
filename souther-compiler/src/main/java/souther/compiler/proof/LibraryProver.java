@@ -678,7 +678,7 @@ public final class LibraryProver {
         /** The obligation of the induction that is not met, or null where both are. */
         Failed prove() {
             LawProposition<Value> base = carried(seed(), view(new Value.NothingYet()),
-                    anyValue());
+                    Induction::anyValue);
             if (!follows(reading, List.of(), base, spacing(operation, Map.of()))) {
                 return new Failed(Unproved.Obligation.THE_SEED, base);
             }
@@ -691,7 +691,7 @@ public final class LibraryProver {
             Value step = walk.args().get(shape.step());
             for (Reading.Case each : reading.applied(step, handed)) {
                 LawProposition<Value> goal = carried(each.is(),
-                        view(new Value.OneMore(walked, next)), anyValue());
+                        view(new Value.OneMore(walked, next)), Induction::anyValue);
                 List<LawProposition<Value>> given = new ArrayList<>();
                 given.add(each.when());
                 LawProposition<Value> different = neverTwice(walked, next);
@@ -749,9 +749,10 @@ public final class LibraryProver {
             }, Reading.Elements.none());
         }
 
-        /** A value standing for any one, for a statement of every value to be shown of. */
-        private Function<Integer, Value> anyValue() {
-            return which -> new Value.Fresh(100 + which, "any value");
+        /** A value standing for any one, the {@code which}th of a statement of every value to be
+         *  shown of. */
+        private static Value anyValue(int which) {
+            return new Value.Fresh(100 + which, "any value");
         }
 
         /**
