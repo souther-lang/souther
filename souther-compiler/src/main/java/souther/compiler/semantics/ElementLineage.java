@@ -149,6 +149,8 @@ public sealed interface ElementLineage<A> {
             case ClosureResult<A> made -> new ClosureResult<>(made.source().withArgument(word));
             case InsideClosureResult<A> inside ->
                     new InsideClosureResult<>(inside.source().withArgument(word));
+            case TupleComponent<A> part ->
+                    new TupleComponent<>(part.source().withArgument(word), part.index());
             case OneOf<A> one -> new OneOf<>(one.alternatives().stream()
                     .map(each -> each.withArguments(word)).toList());
         };
@@ -205,6 +207,32 @@ public sealed interface ElementLineage<A> {
      * with, which its own signature already says.
      */
     record InsideClosureResult<A>(Source<A> source) implements ElementLineage<A> {
+
+        @Override
+        public Source<A> source() {
+            return source;
+        }
+    }
+
+    /**
+     * The element is one component of an element of the source, which is a tuple.
+     *
+     * <p>{@code Map.fromList}: every value in the answer is the second component of some entry of
+     * the list. It is not one per entry, and it is not every entry's — a later entry under a key
+     * replaces an earlier one, so a component of the source may be in no element of the answer. The
+     * implication runs from the answer to the source and never back, which is why this says where
+     * a value came from and leaves how many there are to {@link SizeAgainstItsSource}.
+     *
+     * @param source the argument whose elements are tuples
+     * @param index the component, counted from zero as a tuple counts them
+     */
+    record TupleComponent<A>(Source<A> source, int index) implements ElementLineage<A> {
+
+        public TupleComponent {
+            if (index < 0) {
+                throw new IllegalArgumentException("a tuple has no component " + index);
+            }
+        }
 
         @Override
         public Source<A> source() {

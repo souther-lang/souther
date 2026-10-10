@@ -247,6 +247,12 @@ public final class OperationFacts {
                     new ElementLineage.InsideClosureResult<>(
                             new ElementLineage.Source<>(CONTAINER, 1)), SizeAgainstItsSource.AT_MOST))),
             about("Set", "map", maps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
+            // Every value is the second component of some entry. A later entry under a key
+            // replaces an earlier one, so not every entry's is there.
+            about("Map", "fromList", new OperationFact.BuildsItsResultFrom(new BuiltFrom<>(
+                    new ElementLineage.TupleComponent<>(
+                            new ElementLineage.Source<>(at(0), 1), 1),
+                    SizeAgainstItsSource.AT_MOST))),
 
             // Which keys a map an operation answers is keyed by, where they are keys of a map it
             // was given. A rewrite of the values keeps every key, and taking entries out keeps the

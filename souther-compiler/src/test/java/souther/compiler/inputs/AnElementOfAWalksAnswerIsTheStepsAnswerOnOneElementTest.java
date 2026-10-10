@@ -173,6 +173,69 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
                 () -> "the position the rule is about keeps its own word: " + notRead);
     }
 
+    @Test
+    void aValueOfAMapMadeOfAListsMapIsTheSecondComponentOfTheStep() {
+        assertEquals(List.of("atLeast = 1"), linesOf("""
+                behavior busy : (xs: List<String>, atLeast: Int) -> Map<String, Int>
+                let busy (xs, atLeast) =
+                    Map.filterEntries((_, c) -> c >= atLeast,
+                        Map.fromList(List.map(x -> (x, 1), xs)))
+                """));
+    }
+
+    /** The line is measured through the map: a row at the line meets ON and one a step off meets
+     *  OFF, which is the comparison being run on both sides. */
+    @Test
+    void aRowMeetsThePointsOfALineDrawnThroughAMapMadeOfAListsMap() {
+        String model = """
+                behavior busy : (xs: List<String>, atLeast: Int) -> Map<String, Int>
+                let busy (xs, atLeast) =
+                    Map.filterEntries((_, c) -> c >= atLeast,
+                        Map.fromList(List.map(x -> (x, 1), xs)))
+
+                example busy
+                ROWS
+                """;
+        assertEquals(Set.of(PointRole.ON, PointRole.OFF), metIn(model.replace("ROWS", """
+                    | "at the line" : (["a"], 1) -> [("a", 1)]
+                    | "just off it" : (["a"], 2) -> []
+                """)));
+    }
+
+    /** The second component is an expression like any other, and the line is drawn on what it
+     *  reads. */
+    @Test
+    void theSecondComponentIsReadAsAnyExpressionIs() {
+        assertEquals(List.of("String.length(xs[*]) = atLeast - 1"), linesOf("""
+                behavior busy : (xs: List<String>, atLeast: Int) -> Map<String, Int>
+                let busy (xs, atLeast) =
+                    Map.filterEntries((_, c) -> c >= atLeast,
+                        Map.fromList(List.map(x -> (x, String.length(x) + 1), xs)))
+                """));
+    }
+
+    /** What the key is filed under is the first component and is no part of what is read. */
+    @Test
+    void theKeyOfAMapMadeOfAListsMapIsNotTheValue() {
+        assertEquals(List.of(), linesOf("""
+                behavior busy : (xs: List<String>, atLeast: Int) -> Map<String, Int>
+                let busy (xs, atLeast) =
+                    Map.filterEntries((k, _) -> String.length(k) >= atLeast,
+                        Map.fromList(List.map(x -> (x, 1), xs)))
+                """));
+    }
+
+    /** Entries that are not the answer of one walk give no step to read the value as. */
+    @Test
+    void entriesNoSingleWalkMadeLeaveAnElement() {
+        assertEquals(List.of(), linesOf("""
+                behavior busy : (xs: List<String>, atLeast: Int) -> Map<String, Int>
+                let busy (xs, atLeast) =
+                    Map.filterEntries((_, c) -> c >= atLeast,
+                        Map.fromList(List.append([("a", 1)], List.map(x -> (x, 2), xs))))
+                """));
+    }
+
     /** Every line the comparison in {@code body} draws, as its label. */
     private static List<String> linesOf(String body) {
         return linesOf(compiled(body));

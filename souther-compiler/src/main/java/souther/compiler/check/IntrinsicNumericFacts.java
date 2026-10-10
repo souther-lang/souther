@@ -104,7 +104,11 @@ final class IntrinsicNumericFacts {
      * by what else is known of it rather than by half a rule. */
     private static void standing(ValueName size, FactSubject atom, Core source, Rel rel,
                                  Denotations at, Terms terms, List<NumericConstraint> out) {
-        FactSubject there = terms.sizeAtomFor(size, source, at);
+        // Counted the way the source is counted, which is not the way the answer is where a
+        // construction answers a container of another kind: a map made of a list holds no more
+        // than the list's length.
+        ValueName counting = NumericMeasures.takenOf(source.type(), terms.newtypeInners());
+        FactSubject there = counting == null ? null : terms.sizeAtomFor(counting, source, at);
         if (there != null && !there.equals(atom)) {
             out.add(new NumericConstraint(LinearForm.difference(atom, there), rel));
         }

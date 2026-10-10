@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.semantics.BuiltFrom;
+import souther.compiler.semantics.ElementLineage;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.HeldIn;
@@ -403,6 +404,34 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         return handed != null && answersOnePerElementOf(operation, handed.container(), call.args())
                 ? handed.step() : null;
     }
+
+    /**
+     * The argument whose elements are tuples a component of which every element of {@code
+     * container} is, or null where {@code container} is no such application.
+     *
+     * <p>Which argument is the declaration's ({@link BuiltFrom#componentOfTheElementsOf}); this
+     * finds it in the call. A value of the answer is a component of some element of it, and which
+     * element is not said, so a reader takes it as it takes the elements of a walk and no more.
+     */
+    public static Projection componentOfTheElementsOf(Core container) {
+        if (!(Core.withoutStanding(container) instanceof Core.PreservedCall call)) {
+            return null;
+        }
+        ValueName operation = call.declared().operation();
+        BuiltFrom<DeclaredArgument> built =
+                DefaultBoundOperationFacts.get().buildsItsResultFrom(operation);
+        ElementLineage.TupleComponent<DeclaredArgument> part =
+                built == null ? null : built.componentOfTheElementsOf();
+        if (part == null) {
+            return null;
+        }
+        int at = CallArguments.positionOf(part.source().argument(), operation);
+        return at >= 0 && at < call.args().size()
+                ? new Projection(call.args().get(at), part.index()) : null;
+    }
+
+    /** A component of the elements of {@code of}, which hold tuples. */
+    public record Projection(Core of, int index) {}
 
     /**
      * Whether {@code operation} answers exactly one value per element of what it hands its closure.

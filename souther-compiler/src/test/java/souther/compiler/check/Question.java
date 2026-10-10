@@ -208,7 +208,8 @@ enum Question {
             // is a reason about what a shape can say, not about the operation being uninteresting.
             //
             // They answer something other than what they read. A map's keys and its entry pairs
-            // are not its values, `fromList` takes the values out of pairs, `groupBy` answers lists
+            // are not its values, `Set.fromList` is the same elements in a container of another kind
+            // and `groupBy` answers lists
             // of the elements rather than the elements, `concat` reads the lists inside its
             // argument, `zipShortest` pairs two lists, and `flatMap` makes any number of elements
             // from each.
@@ -219,7 +220,7 @@ enum Question {
             // They answer the same elements in a container of another kind. That is true and
             // unsayable: every statement names the kind it is about, so nothing said of a list is
             // a statement about a set, and a rule between them would carry nothing.
-            return Set.of(op("Map", "keys"), op("Map", "toList"), op("Map", "fromList"),
+            return Set.of(op("Map", "keys"), op("Map", "toList"),
                     op("List", "groupBy"), op("List", "concat"), op("List", "zipShortest"),
                     op("List", "flatMap"), op("Map", "insert"), op("Set", "insert"),
                     op("Map", "union"), op("Set", "union"), op("List", "append"),

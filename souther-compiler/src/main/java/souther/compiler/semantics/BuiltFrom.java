@@ -136,6 +136,20 @@ public record BuiltFrom<A>(List<ElementLineage.OutputLineage<A>> outputs,
     }
 
     /**
+     * The component of the elements of an argument that every element of the answer is, or null
+     * where the answer is not that.
+     *
+     * <p>Provenance of a value and not a correspondence of runs: a reader that reached an element
+     * of the answer has reached a component of some element of the argument, and which one is not
+     * said.
+     */
+    public ElementLineage.TupleComponent<A> componentOfTheElementsOf() {
+        return outputs.size() == 1
+                && lineage() instanceof ElementLineage.TupleComponent<A> part
+                && part.source().elements() == 1 ? part : null;
+    }
+
+    /**
      * What the building keeps of the elements it was built from, in four words.
      *
      * <p>A projection and the one place it happens. What survives a construction is decided by
@@ -167,6 +181,9 @@ public record BuiltFrom<A>(List<ElementLineage.OutputLineage<A>> outputs,
             // of it, and there may be any number of them. No word of the four is about that,
             // and the nearest is the one for elements nothing was kept of.
             case ElementLineage.InsideClosureResult<A> _ -> ElementShape.COLLAPSES;
+            // A part of what was stated of a source element says nothing of it as a whole, and
+            // what a tuple's component is, is not what the source held.
+            case ElementLineage.TupleComponent<A> _ -> ElementShape.COLLAPSES;
             case ElementLineage.OneOf<A> one -> {
                 if (one.source() == null) {
                     throw new IllegalStateException(

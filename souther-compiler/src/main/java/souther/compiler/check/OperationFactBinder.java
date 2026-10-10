@@ -11,6 +11,7 @@ import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.Combinator;
 import souther.compiler.semantics.DefinitionCase;
+import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
@@ -413,7 +414,22 @@ final class OperationFactBinder {
             holdTheAnswerTo(declaration, same, Type::elementOfAContainer,
                     Type::elementOfAContainer, "a container of the elements that argument holds");
         }
+        // And an answer holding a component of the tuples an argument holds holds values of that
+        // component's type.
+        ElementLineage.TupleComponent<DeclaredArgument> part = built.componentOfTheElementsOf();
+        if (part != null) {
+            holdTheAnswerTo(declaration, part.source().argument(), Type::elementOfAContainer,
+                    container -> componentOfTheElement(container, part.index()),
+                    "a container of the component of the tuples that argument holds");
+        }
         return built;
+    }
+
+    /** The type of component {@code index} of the tuples a container holds, or null where it holds
+     *  no tuples or they have no such component. */
+    private static Type componentOfTheElement(Type container, int index) {
+        return Type.elementOfAContainer(container) instanceof Type.TupleOf(var components)
+                && index < components.size() ? components.get(index) : null;
     }
 
     /**

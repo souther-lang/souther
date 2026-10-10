@@ -1120,7 +1120,39 @@ public final class InputReads {
                 closure -> Core.withoutStanding(
                         standing(new Denotation(closure, at), symbols, newtypes, met).value())
                         instanceof Core.Block block ? block : null);
-        return step == null ? null : new Denotation(step.body(), at);
+        if (step != null) {
+            return new Denotation(step.body(), at);
+        }
+        return componentOfAnAnsweredElement(standing, symbols, newtypes, met);
+    }
+
+    /**
+     * The component {@code standing} holds at each element, where it is a component of the tuples
+     * a walk answered, or null where it is not.
+     *
+     * <p>{@code Map.fromList(List.map(x -> (x, 1), xs))} holds {@code 1}: each value is the second
+     * component of an entry, and the entry is what the step answered on an element. Some entry and
+     * not each, since a key filed twice keeps the later value; so what this licenses is where a
+     * value came from, which is all the reading of an element asks.
+     */
+    private static Denotation componentOfAnAnsweredElement(Denotation standing, Symbols symbols,
+                                                           DeclarationNewtypes newtypes,
+                                                           Set<BindingId> met) {
+        ElementBindings.Projection part = ElementBindings.componentOfTheElementsOf(
+                standing.value());
+        if (part == null) {
+            return null;
+        }
+        Denotation entries = standing(new Denotation(part.of(), standing.at()), symbols, newtypes,
+                met);
+        Denotation entry = answerOnEachElement(entries, symbols, newtypes, met);
+        if (entry == null) {
+            return null;
+        }
+        Denotation written = standing(entry, symbols, newtypes, met);
+        return Core.withoutStanding(written.value()) instanceof Core.Tuple tuple
+                && part.index() < tuple.elements().size()
+                ? new Denotation(tuple.elements().get(part.index()), written.at()) : null;
     }
 
     /**
