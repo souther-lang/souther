@@ -1058,17 +1058,23 @@ final class Pullback {
      * own — or null where it takes none.
      */
     private SizedByCases measuredByCases(Denotation value) {
+        return measuredByCases(value, new HashSet<>());
+    }
+
+    /** The same, walking each value once however many names stand for it: {@code walked} holds
+     *  what this search has walked already. */
+    private SizedByCases measuredByCases(Denotation value, Set<Denotation> walked) {
         Denotation stands = value.at().standing(value.value(), read.rules().symbols(),
                 read.rules().newtypes());
         Core e = Core.withoutStanding(stands.value());
         // A closure's body is read where it is applied, and is no part of this value.
-        if (e instanceof Core.Block) {
+        if (e instanceof Core.Block || !walked.add(stands)) {
             return null;
         }
         SizedByCases[] inner = {null};
         Core.forEachChild(e, child -> {
             if (inner[0] == null) {
-                inner[0] = measuredByCases(new Denotation(child, stands.at()));
+                inner[0] = measuredByCases(new Denotation(child, stands.at()), walked);
             }
         });
         if (inner[0] != null) {
