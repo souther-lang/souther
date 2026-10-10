@@ -31,6 +31,7 @@ import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Conclusion;
 import souther.compiler.meaning.DecisionAtom;
@@ -2596,6 +2597,12 @@ final class Pullback {
         }
         NumericTerm.Multiplicity occurrences = NumericTerm.Multiplicity.of(held, place);
         if (occurrences == null) {
+            return null;
+        }
+        // Which values are the same is the order the key stands on, so a key on none is a key
+        // nothing here can count: it is left unread rather than read as a number nothing reads.
+        TermOrders orders = read.quantities().ordersOf(occurrences);
+        if (orders == null || orders.observed() == null) {
             return null;
         }
         if (filed.step().signum() == 0) {
