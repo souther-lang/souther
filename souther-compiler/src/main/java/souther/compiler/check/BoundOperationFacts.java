@@ -306,20 +306,15 @@ public final class BoundOperationFacts {
     }
 
     /**
-     * The argument whose elements the answer of {@code operation} is made from, or null where its
-     * elements are not made from an argument's.
+     * The argument whose elements the answer of {@code operation} is made from where that is all
+     * the operation says, or null where it says more or says nothing.
      *
-     * <p>Asked of the building where the operation has one and of the lineage declared alone where
-     * it has none, so a reader following a value back to where it was made from gets the same
-     * answer for an operation that states its count and one that does not. The building is the
-     * only part of this that says what the answer keeps of the source's elements, and it is not
-     * read here.
+     * <p>An operation with a building says it there ({@link BuiltFrom#derivesItsElementsFrom}), and
+     * a reader that has already fetched the building asks it and comes here only without one. This
+     * is the lineage declared apart from a count, which is what an operation answering any number
+     * for each element states.
      */
-    public DeclaredArgument derivesItsElementsFrom(ValueName operation) {
-        BuiltFrom<DeclaredArgument> built = buildsItsResultFrom(operation);
-        if (built != null) {
-            return built.derivesItsElementsFrom();
-        }
+    public DeclaredArgument elementsMadeFromAlone(ValueName operation) {
         BoundOperationFact.ElementsComeFrom held =
                 one(BoundOperationFact.ElementsComeFrom.class, operation);
         return held == null ? null : held.lineage().source().argument();

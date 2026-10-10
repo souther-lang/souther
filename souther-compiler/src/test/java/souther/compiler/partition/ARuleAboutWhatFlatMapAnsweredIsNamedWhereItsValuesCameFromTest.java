@@ -95,7 +95,7 @@ class ARuleAboutWhatFlatMapAnsweredIsNamedWhereItsValuesCameFromTest {
         BoundOperationFacts facts = DefaultBoundOperationFacts.get();
         ValueName flatMap = ValueName.Stdlib.operation("List", "flatMap");
 
-        assertNotNull(facts.derivesItsElementsFrom(flatMap),
+        assertNotNull(facts.elementsMadeFromAlone(flatMap),
                 "where a flatMap's elements came from is answered");
         assertNull(facts.buildsItsResultFrom(flatMap),
                 "a flatMap answers any number for each element, which no building states");
