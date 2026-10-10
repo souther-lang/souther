@@ -150,7 +150,8 @@ public sealed interface ElementLineage<A> {
             case InsideClosureResult<A> inside ->
                     new InsideClosureResult<>(inside.source().withArgument(word));
             case TupleComponent<A> part ->
-                    new TupleComponent<>(part.source().withArgument(word), part.index());
+                    new TupleComponent<>(part.source().withArgument(word), part.index(),
+                            part.filedUnder());
             case OneOf<A> one -> new OneOf<>(one.alternatives().stream()
                     .map(each -> each.withArguments(word)).toList());
         };
@@ -237,14 +238,24 @@ public sealed interface ElementLineage<A> {
      * implication runs from the answer to the source and never back, which is why this says where
      * a value came from and leaves how many there are to {@link SizeAgainstItsSource}.
      *
+     * <p>Which entry is left is {@code filedUnder}'s. Entries that agree on that component are one
+     * place in the answer and the last of them is what stands there, so a reader that wants every
+     * value the source's elements carry to be among the answer's is owed more than this: the
+     * entries it knows agree on the component are ones whose other components agree too, and that is
+     * the reader's to show of the entries it reads.
+     *
      * @param source the argument whose elements are tuples
      * @param index the component, counted from zero as a tuple counts them
+     * @param filedUnder the component that tells one place in the answer from another, counted the
+     *                   same way, and not {@code index}
      */
-    record TupleComponent<A>(Source<A> source, int index) implements ElementLineage<A> {
+    record TupleComponent<A>(Source<A> source, int index, int filedUnder)
+            implements ElementLineage<A> {
 
         public TupleComponent {
-            if (index < 0) {
-                throw new IllegalArgumentException("a tuple has no component " + index);
+            if (index < 0 || filedUnder < 0 || index == filedUnder) {
+                throw new IllegalArgumentException("a component and the one it is filed under are"
+                        + " two components of a tuple: " + index + ", " + filedUnder);
             }
         }
 

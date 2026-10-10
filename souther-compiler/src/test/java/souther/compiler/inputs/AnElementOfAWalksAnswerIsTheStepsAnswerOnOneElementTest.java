@@ -234,6 +234,49 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
                 """));
     }
 
+    /**
+     * Entries filed under one key leave the last of them, so a value an earlier entry carried is
+     * compared with nothing. A row whose first element sits on the line has not put the comparison
+     * on it, and no line is drawn on a value the map may not hold.
+     */
+    @Test
+    void anEntryAnotherReplacedIsNotTheValueTheComparisonRuns() {
+        String model = """
+                behavior busy : (xs: List<Int>, atLeast: Int) -> Map<String, Int>
+                let busy (xs, atLeast) =
+                    Map.filterEntries((_, c) -> c >= atLeast,
+                        Map.fromList(List.map(x -> ("fixed", x), xs)))
+
+                example busy
+                    | "the first is replaced" : ([3, 1], 3) -> []
+                """;
+        assertEquals(List.of(), linesOf(model));
+        assertEquals(Set.of(), metIn(model));
+    }
+
+    /** One value for every element, whatever the key is. */
+    @Test
+    void aValueNoElementChangesIsReadWhateverTheKeyIs() {
+        assertEquals(List.of("atLeast = 1"), linesOf("""
+                behavior busy : (xs: List<String>, atLeast: Int) -> Map<String, Int>
+                let busy (xs, atLeast) =
+                    Map.filterEntries((_, c) -> c >= atLeast,
+                        Map.fromList(List.map(x -> (String.trim(x), 1), xs)))
+                """));
+    }
+
+    /** Elements that differ may be filed under one key while carrying different values, and
+     *  nothing here shows the key to be what fixes the value. */
+    @Test
+    void aValueAKeyThatIsNotTheElementDoesNotFixIsNotRead() {
+        assertEquals(List.of(), linesOf("""
+                behavior busy : (xs: List<String>, atLeast: Int) -> Map<String, Int>
+                let busy (xs, atLeast) =
+                    Map.filterEntries((_, c) -> c >= atLeast,
+                        Map.fromList(List.map(x -> (String.trim(x), String.length(x)), xs)))
+                """));
+    }
+
     /** The line is measured through the map: a row at the line meets ON and one a step off meets
      *  OFF, which is the comparison being run on both sides. */
     @Test

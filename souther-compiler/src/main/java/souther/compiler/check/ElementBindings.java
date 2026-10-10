@@ -526,11 +526,14 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         }
         int at = CallArguments.positionOf(part.source().argument(), operation);
         return at >= 0 && at < call.args().size()
-                ? new Projection(call.args().get(at), part.index()) : null;
+                ? new Projection(call.args().get(at), part.index(), part.filedUnder()) : null;
     }
 
-    /** A component of the elements of {@code of}, which hold tuples. */
-    public record Projection(Core of, int index) {}
+    /**
+     * A component of the elements of {@code of}, which hold tuples, and the component they are
+     * filed under: elements that agree on it leave one of them in the answer.
+     */
+    public record Projection(Core of, int index, int filedUnder) {}
 
     /**
      * Whether {@code operation} answers exactly one value per element of what it hands its closure.

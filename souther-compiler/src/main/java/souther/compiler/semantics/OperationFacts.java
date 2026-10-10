@@ -275,11 +275,11 @@ public final class OperationFacts {
                     new ElementLineage.InsideClosureResult<>(
                             new ElementLineage.Source<>(CONTAINER, 1)))),
             about("Set", "map", maps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
-            // Every value is the second component of some entry. A later entry under a key
-            // replaces an earlier one, so not every entry's is there.
+            // Every value is the second component of some entry, filed under the first. A later
+            // entry under a key replaces an earlier one, so not every entry's is there.
             about("Map", "fromList", new OperationFact.BuildsItsResultFrom(new BuiltFrom<>(
                     new ElementLineage.TupleComponent<>(
-                            new ElementLineage.Source<>(at(0), 1), 1),
+                            new ElementLineage.Source<>(at(0), 1), 1, 0),
                     SizeAgainstItsSource.AT_MOST))),
             // And what holds each value of what it was handed, though not each as often. A set made
             // of a list, or of what a closure made of a set's elements, holds one of every value
