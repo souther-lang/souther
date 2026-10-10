@@ -122,7 +122,9 @@ public final class HelperTable {
     /**
      * The table a body of {@code module} is expanded against, built from the three sources apart:
      * what the module declared, what it took on to emit, what the modules it imports publish to it —
-     * and, under {@link InliningPolicy#FULL}, the standard library underneath all three.
+     * and the standard library underneath all three: every helper it writes under
+     * {@link InliningPolicy#FULL}, and under {@link InliningPolicy#DISCHARGE} those nothing states a
+     * fact of ({@link #isTransparentToTheAnalysis}).
      *
      * <p>Apart, because what a name reaches and what this module holds are two relations and one of
      * them cannot be recovered from the other. Handed a single joined map, a table answered that the
@@ -162,13 +164,13 @@ public final class HelperTable {
             emits.put(entry.address(), entry);
         }
         SequencedMap<ReachName.Declaration, HelperEntry> reached = new LinkedHashMap<>();
-        if (policy == InliningPolicy.FULL) {
-            stdlib.helpers().forEach((operation, body) -> {
+        stdlib.helpers().forEach((operation, body) -> {
+            if (policy == InliningPolicy.FULL || isTransparentToTheAnalysis(operation, body)) {
                 HelperEntry entry =
                         HelperEntry.reached(new ReachName.OfLibrary(operation), body);
                 reached.put(entry.reachedAs(), entry);
-            });
-        }
+            }
+        });
         for (Hir.FnDef fn : imported.definitions().values()) {
             HelperEntry entry = HelperEntry.reached(takenOnAs(fn), fn);
             reached.put(entry.reachedAs(), entry);
@@ -178,6 +180,34 @@ public final class HelperTable {
         }
         return built(module, policy, Collections.unmodifiableSequencedMap(reached),
                 Collections.unmodifiableMap(own), Collections.unmodifiableMap(emits), stdlib);
+    }
+
+    /**
+     * Whether a library operation written in the language is read through its body where the
+     * analysis reads a tree of meanings ({@link InliningPolicy#DISCHARGE}).
+     *
+     * <p>The body is the only account the analysis has of an operation that nothing states a fact
+     * of and that no reader of closures holds as itself, so it stands as the choice or the sum it
+     * is written as. One that has a fact stays a call, which is what the reader of that fact looks
+     * for.
+     */
+    static boolean isTransparentToTheAnalysis(ValueName.Stdlib.Operation operation, Hir.FnDef body) {
+        return !DefaultBoundOperationFacts.get().statesAnythingOf(operation)
+                && Combinators.of(operation) == null
+                && Combinators.positionsOf(operation) == null
+                && callsNothingAndWalksNothing(body.writtenBody());
+    }
+
+    /** Whether {@code e} is written in the language's own constructs alone: no call of another
+     * operation and no closure, so reading it through is reading one choice or one sum and never a
+     * walk. */
+    private static boolean callsNothingAndWalksNothing(Hir.Expr e) {
+        if (e instanceof Hir.Apply || e instanceof Hir.Block) {
+            return false;
+        }
+        boolean[] plain = {true};
+        Hir.forEachChild(e, child -> plain[0] &= callsNothingAndWalksNothing(child));
+        return plain[0];
     }
 
     /**
