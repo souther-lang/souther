@@ -133,6 +133,12 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                             + "RealizationTarget$OfANumber;Ljava/util/List;L" + INPUTS
                             + "SearchRegion;" + CONTEXT + ")" + REALIZATION,
                     THE_POSITION),
+            row(PARTITION + "CardinalityComposer", "composeAlike",
+                    "(" + TYPE + "L" + PARTITION + "RealizationTarget$OfANumber;L" + PARTITION
+                            + "RealizationTarget$OfANumber;Ljava/util/SequencedMap;L" + INPUTS
+                            + "Quantities;L" + INPUTS + "SearchRegion;" + CONTEXT + ")"
+                            + REALIZATION,
+                    THE_POSITION),
             row(PARTITION + "ConstructionPlan", "applying",
                     "(L" + PARTITION + "ConstructionPlan$Settled;L" + INPUTS + "Refinement;" + INNERS
                             + SYMBOLS + KINDS + SUMS + ")L" + PARTITION

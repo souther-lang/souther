@@ -1635,6 +1635,7 @@ final class ReadQuantities implements Quantities {
                     NumberAt.takenOf(at.named(), taken.operation(), taken.arguments());
             case NumericTerm.CodePointClassCount count ->
                     NumberAt.countOf(at.named(), count.counted());
+            case NumericTerm.Multiplicity _ -> NumberAt.multiplicityOf(at.named());
             case NumericTerm.TakenOver over ->
                     NumberAt.takenOf(at.named(), over.operation());
         };
@@ -1869,6 +1870,9 @@ final class ReadQuantities implements Quantities {
             case NumericTerm.FromOnePosition one -> ownOf(one);
             case NumericTerm.TakenOver over ->
                     RunReach.of(over, ordersOf(over), typeAt, ruleReading);
+            // Nothing the rules of the elements say bounds how often one of them occurs besides
+            // the term's own floor, which every term is read with.
+            case NumericTerm.Multiplicity _ -> null;
         };
     }
 

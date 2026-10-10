@@ -19,6 +19,8 @@ import souther.compiler.numeric.Rel;
 import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.values.ValueSet;
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -138,7 +140,92 @@ public final class LevelRealizer {
             case Standing.OfTwoOnOneCarrier two -> ofTwo(two, within, runs, looking, tried);
             case Standing.OfAForm over -> ofAForm(over, within, runs, tried);
             case Standing.OfACount count -> ofACount(count, within, looking, tried);
+            case Standing.OfACountAndAForm both ->
+                    ofACountAndAForm(both, within, runs, looking, tried);
         };
+    }
+
+    /**
+     * A count the item asks the sum of, with a form of the input's numbers added to it, and a
+     * place for each number of the form and for each number the statement reads beside an element.
+     *
+     * <p>The count and the form are met together: a count is chosen, the form is asked to come to
+     * what is left of the level, and the numbers that come of it are fixed before the elements are
+     * chosen against them. Which counts to try is the same {@link #ofACount} walks, from none up;
+     * a level is reached by many of them and by none, and which a row is built at is the first
+     * that a place can be found for.
+     *
+     * <p>Never a proof. That no count and no place of the form add up to the level is no
+     * statement about the counts the walk did not look at, so the walk that finds none leaves the
+     * item open, as a form does when the walk of it is spent.
+     */
+    private Realization ofACountAndAForm(Standing.OfACountAndAForm over, SearchRegion within,
+                                         Map<NumericTerm, NumericDomain.Bounds> runs,
+                                         WitnessSearch looking, ValuesTried tried) {
+        RealizationTarget.ACount counted = new RealizationTarget.ACount(over.count());
+        List<Map.Entry<RealizationTarget.OfANumber, ExactRatio>> terms = new ArrayList<>();
+        for (Map.Entry<NumericTerm, ExactRatio> each : AffineReading.ordered(over.form())) {
+            terms.add(Map.entry(RealizationTarget.of(each.getKey()), each.getValue()));
+        }
+        Set<CompositionBudget> stoppedBy = EnumSet.noneOf(CompositionBudget.class);
+        Set<CompositionCapacity> unheld = new HashSet<>();
+        LevelCandidateSource.Offered offered =
+                LevelCandidateSource.forItem(over.where(), over.levels());
+        if (offered.stoppedShort()) {
+            stoppedBy.add(CompositionBudget.LEVELS_A_SIDE_IS_ASKED_AT);
+        }
+        int most = CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH.maximum();
+        for (Level level : offered.levels()) {
+            for (int many = 0; many <= most; many++) {
+                // What the form is left to come to once this many elements are counted.
+                if (!(level.asAnExactNumber().minus(ExactRatio.of(many))
+                        instanceof ExactAnswer.Held<ExactRatio>(ExactRatio rest))) {
+                    unheld.add(new CompositionCapacity(
+                            CompositionCapacity.Where.COUNTS_AN_ITEM_IS_TRIED_AT,
+                            UnheldNumber.NO_REPRESENTATION_EXISTS));
+                    continue;
+                }
+                Search search = new Search(terms, over.on(), within, runs, tried);
+                Reached reached = search.solve(rest);
+                stoppedBy.addAll(search.stoppedBy());
+                unheld.addAll(search.unheld());
+                if (reached != Reached.FOUND) {
+                    continue;
+                }
+                Map<RealizationTarget, Place> fixing = new LinkedHashMap<>(search.fixing());
+                SearchRegion placed = within;
+                for (Map.Entry<RealizationTarget, Place> each : fixing.entrySet()) {
+                    if (each.getKey() instanceof RealizationTarget.OfANumber number) {
+                        placed = placed.given(number.term(), each.getValue());
+                    }
+                }
+                switch (over.count().placesBeside(placed, many > 0, looking)) {
+                    case NumericWitness.Standing.Found beside -> {
+                        fixing.put(counted, Count.of(many));
+                        for (NumericWitness.Standing.Found.Placed each : beside.inFixingOrder()) {
+                            if (!each.position().subjectPath().insideAContainer()) {
+                                fixing.putIfAbsent(RealizationTarget.of(each.position()),
+                                        each.place());
+                            }
+                        }
+                        Realization made = found(fixing, within, tried);
+                        if (made instanceof Realization.Found) {
+                            return made;
+                        }
+                    }
+                    case NumericWitness.Standing.ProvedImpossible _ -> { }
+                    case NumericWitness.Standing.NotFound(var figures, var held) -> {
+                        stoppedBy.addAll(figures);
+                        unheld.addAll(held);
+                    }
+                }
+            }
+        }
+        // The counts past the last tried are counts left untried, and no proof about them.
+        stoppedBy.add(CompositionBudget.ELEMENTS_A_COUNT_IS_COMPOSED_WITH);
+        return Realization.Unknown.leftOpen(
+                Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
+                stoppedBy, Set.of(), unheld);
     }
 
     /**
@@ -232,6 +319,15 @@ public final class LevelRealizer {
             case Standing.OfAForm over -> NumericTerms.inOrder(over.form().coefs().keySet());
             case Standing.OfACount count -> count.numbers().stream()
                     .filter(term -> !term.subjectPath().insideAContainer()).toList();
+            case Standing.OfACountAndAForm both -> {
+                List<NumericTerm> out = new ArrayList<>(NumericTerms.inOrder(
+                        both.form().coefs().keySet()));
+                both.count().numbers().stream()
+                        .filter(term -> !term.subjectPath().insideAContainer()
+                                && !out.contains(term))
+                        .forEach(out::add);
+                yield List.copyOf(out);
+            }
         };
     }
 
@@ -243,7 +339,7 @@ public final class LevelRealizer {
         Place at = placeMeeting(one.where(), one.term(), one.of(), runs.get(one.term()),
                 looking, tried, Map.of());
         return at == null ? Realization.Unknown.nothingComposedOne()
-                : found(Map.of(new RealizationTarget.AtOnePosition(one.term()), at), within, tried);
+                : found(Map.of(RealizationTarget.of(one.term()), at), within, tried);
     }
 
     /**
@@ -330,14 +426,13 @@ public final class LevelRealizer {
                 Criterion here = related.where();
                 Place at = here == null ? null
                         : placeMeeting(here, reading.settles(), two.of(), settled, looking, tried,
-                                Map.of(new RealizationTarget.AtOnePosition(reading.anchors()),
-                                        common));
+                                Map.of(RealizationTarget.of(reading.anchors()), common));
                 if (at == null) {
                     continue;
                 }
                 Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
-                fixing.put(new RealizationTarget.AtOnePosition(reading.settles()), at);
-                fixing.put(new RealizationTarget.AtOnePosition(reading.anchors()), common);
+                fixing.put(RealizationTarget.of(reading.settles()), at);
+                fixing.put(RealizationTarget.of(reading.anchors()), common);
                 if (found(fixing, within, tried) instanceof Realization.Found made) {
                     return made;
                 }
@@ -1458,7 +1553,7 @@ public final class LevelRealizer {
                                       Carrier carrier, NumericDomain.Bounds bounds,
                                       WitnessSearch looking, ValuesTried tried,
                                       Map<RealizationTarget, Place> given) {
-        PlacesApart apart = tried.apartFor(new RealizationTarget.AtOnePosition(term), given);
+        PlacesApart apart = tried.apartFor(RealizationTarget.of(term), given);
         Place offered = switch (where) {
             // The level itself, and the set is not asked. A point on a line stands where the rule
             // wrote it; held to what the declarations admit, a line drawn at a value they refuse

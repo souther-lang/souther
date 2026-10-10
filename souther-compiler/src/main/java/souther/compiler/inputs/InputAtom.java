@@ -141,6 +141,7 @@ sealed interface InputAtom {
                                 : "|" + at + "|";
                 case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn count ->
                         "#(" + count.counted() + ")(" + at + ")";
+                case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + at + ")";
             };
         }
     }

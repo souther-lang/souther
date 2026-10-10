@@ -51,7 +51,8 @@ import java.util.function.UnaryOperator;
  * operation. An operation added to the language is read by everything here without a line being
  * written for it.
  */
-public sealed interface NumericTerm permits NumericTerm.FromOnePosition, NumericTerm.TakenOver {
+public sealed interface NumericTerm
+        permits NumericTerm.FromOnePosition, NumericTerm.TakenOver, NumericTerm.Multiplicity {
 
     /**
      * A number a row can be asked for at one place, because one value stands there.
@@ -344,6 +345,83 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
     }
 
     /**
+     * How many elements of a container hold, at one place inside the element, the value the
+     * element under consideration holds there.
+     *
+     * <p>A number of an element, read off the container it stands in: every element of a list of
+     * keys is a key, and it occurs as many times as the list holds that key. What a fold that files
+     * a counter under each key answers for the key of an element is this number, shifted and scaled
+     * by what the fold starts the counter at and adds to it. Nothing the language declares takes
+     * it of a value — it is a quantity the reading works out — so it is kept apart from
+     * {@link TakenOf}, which is only ever an operation's answer.
+     *
+     * <p>The element is whichever one a statement about some element of the container is about, so
+     * this is one number for each element and no number of the container. Two elements holding the
+     * same value at {@code place} read the same number, and every element reads at least one, since
+     * it is one of those it counts.
+     */
+    final class Multiplicity implements NumericTerm {
+
+        private final TermPath container;
+        private final TermPath place;
+
+        private Multiplicity(TermPath container, TermPath place) {
+            this.container = Objects.requireNonNull(container, "counted among a container's elements");
+            this.place = Objects.requireNonNull(place, "by the value standing at a place");
+        }
+
+        /**
+         * The number of times the value at {@code place} occurs among the elements of
+         * {@code container}, or null where {@code place} is not inside an element of it.
+         *
+         * @param container the container whose elements are counted
+         * @param place     where, inside an element of {@code container}, the value compared stands
+         */
+        public static Multiplicity of(TermPath container, TermPath place) {
+            return container != null && place != null && place.isAtOrUnder(container.element())
+                    ? new Multiplicity(container, place) : null;
+        }
+
+        /** The container whose elements are counted. */
+        public TermPath container() {
+            return container;
+        }
+
+        /** Where the value compared stands, inside an element of {@link #container()}. */
+        public TermPath place() {
+            return place;
+        }
+
+        /** Where the value compared stands, which is where a reader is sent and no place the
+         *  number stands at. */
+        @Override
+        public TermPath subjectPath() {
+            return place;
+        }
+
+        @Override
+        public Multiplicity movedTo(UnaryOperator<TermPath> moved) {
+            return new Multiplicity(moved.apply(container), moved.apply(place));
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Multiplicity that
+                    && container.equals(that.container) && place.equals(that.place);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(container, place);
+        }
+
+        @Override
+        public String toString() {
+            return "multiplicity(" + place + ")";
+        }
+    }
+
+    /**
      * A number an operation took over a run of values, which no single position answers.
      *
      * <p>The dual of {@link TakenOf} and named for it: one takes a number of the value at a place,
@@ -488,6 +566,9 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
             // A run of values is answered by no single place, which is the whole of what this term
             // is. Every reader that goes on to draw a line or ask for a value gets the answer here.
             case TakenOver _ -> null;
+            // And how often a value occurs among its neighbours is read off all of them, so no
+            // value standing at one place is it.
+            case Multiplicity _ -> null;
         };
     }
 
@@ -521,6 +602,9 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
             // container's. Answered as "not there" rather than by rebuilding the run at a
             // location, which would be this reading inventing where a walk got its values.
             case TakenOver _ -> null;
+            // How often a value occurs is read off the container it stands in, so a place moved
+            // alone is a count of some other container's elements.
+            case Multiplicity _ -> null;
         };
     }
 
@@ -555,6 +639,9 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
             // same place and is held where the two are realized together.
             case CodePointClassCount _ ->
                     new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)), null);
+            // An element is one of the elements it counts, so there is always at least one.
+            case Multiplicity _ ->
+                    new NumericDomain.Bounds(Endpoint.inclusive(Count.of(1)), null);
             // Asked of the operation, as a taking is. That a total of non-negative amounts is
             // itself non-negative is not among the answers: it follows from what the values the run
             // walks guarantee, together with the value the operation starts from and the step it

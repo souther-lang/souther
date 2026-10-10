@@ -86,6 +86,12 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
         return new NumberAt<>(position, new OfWhatNumber.OfHowManyCodePointsAreIn(counted));
     }
 
+    /** How many elements of the container {@code position} stands inside hold there what the
+     *  element under consideration holds. */
+    public static <P> NumberAt<P> multiplicityOf(P position) {
+        return new NumberAt<>(position, new OfWhatNumber.OfItsMultiplicity());
+    }
+
     /**
      * The same number with the place spelled {@code position}.
      *
@@ -143,6 +149,16 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
                 Objects.requireNonNull(counted, "this one names the code points");
             }
         }
+
+        /**
+         * How many elements of the container the place stands inside hold at it what the element
+         * under consideration holds there.
+         *
+         * <p>A number of an element read off the elements beside it, so nothing the place holds
+         * says it: two elements holding one value are one number, and a place holding the same
+         * value is another number when what is counted is the elements around it.
+         */
+        record OfItsMultiplicity() implements OfWhatNumber {}
     }
 
     /**
@@ -163,6 +179,7 @@ public record NumberAt<P>(P position, NumberAt.OfWhatNumber of) {
                     taken.operation() + taken.arguments().writtenWith(position.toString());
             case OfWhatNumber.OfHowManyCodePointsAreIn count ->
                     "#(" + count.counted() + ")(" + position + ")";
+            case OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + position + ")";
         };
     }
 }

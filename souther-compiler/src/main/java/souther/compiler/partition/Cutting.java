@@ -375,7 +375,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     private static Read onACount(String behavior, Relation.Affine affine, boolean holds,
                                  InputReading read) {
         if (affine.form().coefs().size() != 1) {
-            return null;
+            return onACountAndNumbers(behavior, affine, holds, read);
         }
         Map.Entry<Quantity, ExactRatio> only = affine.form().coefs().entrySet().iterator().next();
         if (!(only.getKey() instanceof Quantity.HowManyMeet count)
@@ -394,6 +394,64 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         BorderQuantity.HowMany of = new BorderQuantity.HowMany(CountedElements.of(behavior, count,
                 read.quantities(), DemandReading.anElementMeeting(count, read)));
         Cutting drawn = made(of, new Level.OfTheQuantity(level), claim, read.quantities());
+        return drawn == null ? null : cutsOrRefused(drawn);
+    }
+
+    /**
+     * The line a relation over how many elements of a container meet something and numbers of the
+     * input draws — or null where the relation is no such thing: one count, and nothing but numbers
+     * of the input beside it.
+     *
+     * <p>The sum of the count and the form is the quantity, weighed once. A relation is written
+     * with whatever weight on the count, and its sign and size say nothing about where the rows
+     * fall, so it is scaled to weigh the count by one — turned over where that takes a negative —
+     * and then {@code count >= n}, {@code 2 * count >= 2 * n} and {@code n <= count} are one
+     * quantity and one line.
+     */
+    private static Read onACountAndNumbers(String behavior, Relation.Affine affine,
+                                           boolean holds, InputReading read) {
+        Quantity.HowManyMeet count = null;
+        ExactRatio weight = null;
+        for (Map.Entry<Quantity, ExactRatio> each : affine.form().coefs().entrySet()) {
+            if (each.getKey() instanceof Quantity.HowManyMeet counted) {
+                if (count != null) {
+                    return null;
+                }
+                count = counted;
+                weight = each.getValue();
+            } else if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
+                TermOrders orders = read.quantities().ordersOf(term);
+                if (orders == null || orders.answered() == null || !orders.answered().counts()) {
+                    return null;
+                }
+            } else {
+                return null;
+            }
+        }
+        if (count == null || !AStatementAtARow.askable(count.ofTheElement())) {
+            return null;
+        }
+        if (!(ExactRatio.ONE.dividedBy(weight) instanceof ExactAnswer.Held<ExactRatio>(
+                ExactRatio scale))
+                || !(affine.form().times(scale) instanceof ExactAnswer.Held<LinearForm<Quantity>>(
+                        LinearForm<Quantity> scaled))) {
+            return null;
+        }
+        Map<NumericTerm, ExactRatio> added = new LinkedHashMap<>();
+        Map<NumericTerm, TermOrders> on = new LinkedHashMap<>();
+        for (Map.Entry<Quantity, ExactRatio> each : scaled.coefs().entrySet()) {
+            if (each.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term)) {
+                added.put(term, each.getValue());
+                on.put(term, read.quantities().ordersOf(term));
+            }
+        }
+        ComparisonClaim claim = ComparisonClaim.stating(
+                holds ? affine.proposition() : affine.proposition().denied());
+        BorderQuantity.HowMany of = new BorderQuantity.HowMany(CountedElements.of(behavior, count,
+                read.quantities(), DemandReading.anElementMeeting(count, read)),
+                new LinearForm<>(ExactRatio.ZERO, added), on);
+        Cutting drawn = made(of, new Level.OfTheQuantity(scaled.constant().negated()),
+                scale.signum() < 0 ? claim.turned() : claim, read.quantities());
         return drawn == null ? null : cutsOrRefused(drawn);
     }
 

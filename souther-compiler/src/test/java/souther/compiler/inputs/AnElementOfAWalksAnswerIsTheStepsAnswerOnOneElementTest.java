@@ -182,15 +182,36 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
     }
 
     /**
-     * A count a fold worked out is no step on an element of the list folded, and where it came from
-     * is not said here: the position it is compared with keeps its own word and is told nothing
-     * about a value made from it.
+     * A value a fold files under a key is no step on an element of the list folded, but how often
+     * the key occurs among them: the line is drawn on that and the position it is compared with is
+     * read against it.
+     */
+    @Test
+    void aCounterAFoldFilesUnderEachKeyIsHowOftenTheKeyOccurs() {
+        Compilation compilation = compiled("""
+                let countsOf (xs: List<String>): Map<String, Int> =
+                    List.fold((acc, x) -> Map.updateOrInsert(x, 1, n -> n + 1, acc), Map.empty, xs)
+
+                behavior busy : (xs: List<String>, atLeast: Int) -> Map<String, Int>
+                let busy (xs, atLeast) =
+                    Map.filterEntries((_, count) -> count >= atLeast, countsOf(xs))
+                """);
+        assertEquals(List.of("atLeast - multiplicity(xs[*]) = 0"), linesOf(compilation));
+        assertEquals(List.of("atLeast " + UndividedPosition.Reason.RULE_ABOUT_A_RUN),
+                notReadIn(compilation).stream().filter(each -> each.startsWith("atLeast ")).toList(),
+                "the position the rule is about is divided by none of its own values");
+    }
+
+    /**
+     * A value a fold worked out that is no counter is no step on an element of the list folded, and
+     * where it came from is not said here: the position it is compared with keeps its own word and
+     * is told nothing about a value made from it.
      */
     @Test
     void aValueAFoldWorkedOutIsNoStep() {
         Compilation compilation = compiled("""
                 let countsOf (xs: List<String>): Map<String, Int> =
-                    List.fold((acc, x) -> Map.updateOrInsert(x, 1, n -> n + 1, acc), Map.empty, xs)
+                    List.fold((acc, x) -> Map.updateOrInsert(x, 0, n -> 127 - n, acc), Map.empty, xs)
 
                 behavior busy : (xs: List<String>, atLeast: Int) -> Map<String, Int>
                 let busy (xs, atLeast) =

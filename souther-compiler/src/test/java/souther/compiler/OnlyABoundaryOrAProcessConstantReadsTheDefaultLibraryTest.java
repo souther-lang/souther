@@ -45,6 +45,8 @@ class OnlyABoundaryOrAProcessConstantReadsTheDefaultLibraryTest {
     /** Rule tables derived from the shipped library and from nothing else. */
     private static final Set<String> PROCESS_CONSTANTS = Set.of(
             "check/Combinators.java",
+            // Which library operations file one value under one key, read off their bodies.
+            "check/KeyedAccumulation.java",
             "check/LibraryReadThrough.java",
             "check/Preserved.java",
             "check/Reductions.java",
@@ -54,7 +56,7 @@ class OnlyABoundaryOrAProcessConstantReadsTheDefaultLibraryTest {
     /** What building a library must not need, because it is what building one produces. */
     private static final List<String> WHAT_THE_LOADER_MAY_NOT_READ = List.of(
             "DefaultStdlib", "Combinators", "LibraryReadThrough", "Preserved", "Accumulations",
-            "Reductions",
+            "Reductions", "KeyedAccumulation",
             "DischargeRules", "DefaultBoundOperationFacts", "OperationFactBinder");
 
     @Test

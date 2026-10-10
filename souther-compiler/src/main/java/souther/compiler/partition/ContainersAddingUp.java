@@ -750,6 +750,10 @@ final class ContainersAddingUp {
         return switch (target.term()) {
             case NumericTerm.FromOnePosition one -> one.position().element();
             case NumericTerm.TakenOver over -> over.source().subjectPath();
+            // How often a value occurs is no total of what the elements hold, and is composed by
+            // choosing which elements repeat ({@link CardinalityComposer#composeAlike}).
+            case NumericTerm.Multiplicity among -> throw new IllegalStateException(
+                    among + " is composed by repeating elements, and nothing here adds it up");
         };
     }
 

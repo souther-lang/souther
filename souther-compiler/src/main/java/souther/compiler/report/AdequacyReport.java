@@ -4943,6 +4943,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     }
                 }
             }
+            // How often the value at the place occurs among the elements of its container.
+            case NumericTerm.Multiplicity it -> {
+                into.put("kind", "multiplicity");
+                into.put("position", it.place().discriminated());
+            }
             case NumericTerm.TakenOver it -> {
                 into.put("kind", "taken_over");
                 operationId(into.putObject("operation"), it.operation());

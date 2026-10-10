@@ -84,6 +84,30 @@ sealed interface WhatATermRead {
         };
     }
 
+    /**
+     * What {@code on} reads at the place the element {@code row} has chosen stands at, among every
+     * value the elements of its container hold there: how often the element's own value occurs.
+     */
+    static WhatATermRead among(TermOrders on, BorderQuantity.Observation row, TermPath place) {
+        return switch (row.at(place)) {
+            case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
+                    new CameToNothing(ReadingGap.COULD_NOT_WALK);
+            case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
+                case ObservationAtPoint.Value(ObservedValue own) -> {
+                    yield switch (row.everyValueAt(place)) {
+                        case WalkResult.CouldNotWalk<List<ObservedValue>> _ ->
+                                new CameToNothing(ReadingGap.COULD_NOT_WALK);
+                        case WalkResult.Reached(List<ObservedValue> every) ->
+                                of(on.readAmong(own, every));
+                    };
+                }
+                case ObservationAtPoint.WroteNothing _ -> new NothingWrittenThere();
+                case ObservationAtPoint.BelongsToAnotherReading _ ->
+                        new CameToNothing(ReadingGap.NO_VALUE);
+            };
+        };
+    }
+
     /** The same over the values of a run, which a walk that was not taken has none of. */
     static WhatATermRead over(TermOrders on, WalkResult<List<ObservedValue>> answered) {
         return switch (answered) {

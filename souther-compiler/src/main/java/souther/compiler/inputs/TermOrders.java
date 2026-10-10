@@ -104,6 +104,17 @@ public final class TermOrders {
     }
 
     /**
+     * The number of times the value {@code own} an element holds occurs among {@code every} value
+     * the elements of its container hold there, for a term that counts them.
+     */
+    public NumericTerm.Reading readAmong(ObservedValue own, List<ObservedValue> every) {
+        if (!(term instanceof NumericTerm.Multiplicity)) {
+            throw new IllegalArgumentException(term + " is not a count of an element's equals");
+        }
+        return TermReading.among(this, own, every);
+    }
+
+    /**
      * The same, over the values of a run.
      *
      * <p>Which rows there are and how many values stand at a place in one are the measure's; a term

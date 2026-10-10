@@ -16,6 +16,7 @@ import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementBindings;
+import souther.compiler.check.KeyedAccumulation;
 import souther.compiler.check.Location;
 import souther.compiler.check.NonAffineOperation;
 import souther.compiler.check.NumericMeasures;
@@ -34,6 +35,7 @@ import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
+import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.Conclusion;
 import souther.compiler.meaning.DecisionAtom;
@@ -987,6 +989,14 @@ final class Pullback {
 
         /** One of the pieces of a string a split leaves, whichever one the statement is about. */
         record APiece(Pieces of) implements ElementAt {}
+
+        /**
+         * An entry of a map a fold built by filing a counter under the key of each element of a
+         * list ({@link KeyedAccumulation}): whichever element's key the entry is for. It is no
+         * value of the input and stands at no position, so what a statement about it is about is
+         * how often its key occurs.
+         */
+        record AnEntry() implements ElementAt {}
     }
 
     /**
@@ -1280,9 +1290,11 @@ final class Pullback {
                                     observe(value, aspect, in);
                             case ElementAt.AtAPosition(TermPath container) ->
                                     observedAt(container.element(), aspect);
-                            // A piece stands at no position of the input to be observed there.
-                            case ElementAt.APiece _ -> unread(e, reads, new WhyUnread.AtNoPosition(
-                                    WhyUnread.AtNoPosition.Place.SUBJECT));
+                            // A piece, and an entry filed by a fold, stand at no position of the
+                            // input to be observed there.
+                            case ElementAt.APiece _, ElementAt.AnEntry _ -> unread(e, reads,
+                                    new WhyUnread.AtNoPosition(
+                                            WhyUnread.AtNoPosition.Place.SUBJECT));
                         };
                 case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(DeclaredArgument at) -> {
                     Denotation closure = reads.denotes(applied.argument(at),
@@ -1344,7 +1356,7 @@ final class Pullback {
                                             instanceof PathResolution.At(TermPath held)
                                             ? new DecisionSubject.AnInput(held)
                                             : answerAt(value, in);
-                            case ElementAt.APiece _ -> null;
+                            case ElementAt.APiece _, ElementAt.AnEntry _ -> null;
                         };
                 case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _ -> null;
                 case LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument at) -> {
@@ -1689,6 +1701,16 @@ final class Pullback {
                             blockIn(at));
                     answers = walk != null;
                 }
+                // A map filed under the key of each element of a list: an entry is there for
+                // some element of the list, so some entry is some element's. How many entries
+                // meet a statement is not how many elements do — two elements of one key are one
+                // entry — so only whether some one does is asked of them.
+                if (walk == null && !counting) {
+                    Located entries = entriesOf(at, pending, located, outerEach, outerHanded);
+                    if (entries != null) {
+                        return entries;
+                    }
+                }
                 if (walk == null) {
                     return null;
                 }
@@ -1764,6 +1786,28 @@ final class Pullback {
             return piecesOf(beneath == null ? whole : beneath.at());
         }
 
+        /**
+         * Where the entries of {@code container} stand, where it is a map filed under the key of
+         * each element of a list standing at a position — or null where it is not.
+         */
+        private Located entriesOf(Denotation container, List<Kept> pending, List<Kept> located,
+                                 ElementAt outerEach, Denotation outerHanded) {
+            KeyedAccumulation filed = KeyedAccumulation.of(container.value(), blockIn(container));
+            if (filed == null) {
+                return null;
+            }
+            Denotation walked = container.at().standing(filed.walked(), read.rules().symbols(),
+                    read.rules().newtypes());
+            if (!(walked.at().pathOf(walked.value(), read.rules().newtypes())
+                    instanceof PathResolution.At(TermPath held))) {
+                return null;
+            }
+            ElementAt each = new ElementAt.AnEntry();
+            settle(pending, each, null, located);
+            return outerEach == null ? new Located(held, each, null, located, null)
+                    : new Located(held, outerEach, outerHanded, located, null);
+        }
+
         /** What was kept at one level of a container, as the elements of that level are read. */
         private static void settle(List<Kept> pending, ElementAt each, Denotation handed,
                                    List<Kept> into) {
@@ -1780,9 +1824,7 @@ final class Pullback {
 
         /** The block a closure is, read where {@code container} stands. */
         private Function<Core, Core.Block> blockIn(Denotation container) {
-            return closure -> Core.withoutStanding(container.at().standing(closure,
-                    read.rules().symbols(), read.rules().newtypes()).value())
-                    instanceof Core.Block block ? block : null;
+            return blocksAt(container);
         }
 
         /**
@@ -2084,8 +2126,8 @@ final class Pullback {
                                                 sizeOf(value, in);
                                         case ElementAt.AtAPosition(TermPath container) ->
                                                 sizedAt(container.element());
-                                        case ElementAt.APiece _ -> new Sized.NotSized(
-                                                new WhyUnread.AtNoPosition(
+                                        case ElementAt.APiece _, ElementAt.AnEntry _ ->
+                                                new Sized.NotSized(new WhyUnread.AtNoPosition(
                                                         WhyUnread.AtNoPosition.Place.SUBJECT));
                                     };
                             case LawSubject.WhatTheClosureAnswers<DeclaredArgument> _ ->
@@ -2524,6 +2566,64 @@ final class Pullback {
                 new Relation.Affine(one.form(), one.proposition()), one.holds(), named);
     }
 
+    /** The block a closure is, read where {@code container} stands. */
+    private Function<Core, Core.Block> blocksAt(Denotation container) {
+        return closure -> Core.withoutStanding(container.at().standing(closure,
+                read.rules().symbols(), read.rules().newtypes()).value())
+                instanceof Core.Block block ? block : null;
+    }
+
+    /**
+     * The value filed under the key of an entry, where {@code node} is the value a walk hands its
+     * closure for each entry of a map built by filing a counter under the key of each element of a
+     * list ({@link KeyedAccumulation}) — or null where it is no such value.
+     *
+     * <p>How often the key occurs among the elements, shifted and scaled by what the fold starts
+     * the counter at and adds to it: the first element of a key files {@code first} and each
+     * further one adds {@code step}, so the value is {@code first + step * (occurrences - 1)}. The
+     * key of an element is one number of it, and the elements' own is the number the entry is
+     * about.
+     */
+    private LinearForm<Quantity> valueOfAnEntry(Core node, InputReads at) {
+        Core container = at.containerOfTheElement(node);
+        if (container == null) {
+            return null;
+        }
+        Denotation whole = at.standing(container, read.rules().symbols(), read.rules().newtypes());
+        KeyedAccumulation filed = KeyedAccumulation.of(whole.value(), blocksAt(whole));
+        if (filed == null) {
+            return null;
+        }
+        Denotation walked = whole.at().standing(filed.walked(), read.rules().symbols(),
+                read.rules().newtypes());
+        Denotation key = whole.at().standing(filed.key(), read.rules().symbols(),
+                read.rules().newtypes());
+        if (!(walked.at().pathOf(walked.value(), read.rules().newtypes())
+                instanceof PathResolution.At(TermPath held))
+                || !(whole.at().pathOf(key.value(), read.rules().newtypes())
+                instanceof PathResolution.At(TermPath place))) {
+            return null;
+        }
+        NumericTerm.Multiplicity occurrences = NumericTerm.Multiplicity.of(held, place);
+        if (occurrences == null) {
+            return null;
+        }
+        // Which values are the same is the order the key stands on, so a key on none is a key
+        // nothing here can count: it is left unread rather than read as a number nothing reads.
+        TermOrders orders = read.quantities().ordersOf(occurrences);
+        if (orders == null || orders.observed() == null) {
+            return null;
+        }
+        if (filed.step().signum() == 0) {
+            return LinearForm.constant(filed.first());
+        }
+        return filed.first().plus(filed.step().negated())
+                instanceof ExactAnswer.Held<ExactRatio>(ExactRatio constant)
+                ? new LinearForm<>(constant, Map.of(
+                        new DecisionAtom.OfTheInput(occurrences), filed.step()))
+                : null;
+    }
+
     /**
      * What this reading calls an atom of a number: a number of the input where the expression is
      * one, a number a dependency answered where the call is written, and otherwise a number of a
@@ -2556,6 +2656,10 @@ final class Pullback {
             public LinearForm<Quantity> leafOf(
                     Core node, InputReads at,
                     AffineForms.Outcome.StoppedAt<Quantity, InputReads> inside) {
+                LinearForm<Quantity> filedUnder = valueOfAnEntry(node, at);
+                if (filedUnder != null) {
+                    return filedUnder;
+                }
                 NumericTerm term = InputNumber.of(node, read.domain(), at, read.rules());
                 if (term != null) {
                     return LinearForm.atom(new DecisionAtom.OfTheInput(term));

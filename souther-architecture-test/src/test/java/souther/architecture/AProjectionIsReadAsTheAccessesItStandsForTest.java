@@ -388,6 +388,11 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "core/BlockReaches$Accumulator;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/Evaluated", "inOrder", "(" + core + ")Ljava/util/List;",
                 Reading.STRUCTURE, EVALUATION);
+        row(out, c + "core/WhatABodyReads", "binding",
+                "(" + core + "Lsouther/compiler/types/BindingId;)Z",
+                Reading.THE_TREE_THAT_RUNS, RUNS);
+        row(out, c + "check/KeyedAccumulation", "sameValue", "(" + core + core + ")Z",
+                Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/GrowingFold", "adds", "(" + core + ")I",
                 Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "core/GrowingFold", "count", "(" + core + "Ljava/util/function/Predicate;[I)V",

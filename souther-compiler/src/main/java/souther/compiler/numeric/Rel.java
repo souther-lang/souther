@@ -63,6 +63,25 @@ public enum Rel {
     }
 
     /**
+     * The relation that holds between two numbers exactly where this one holds between their
+     * negatives: the same comparison with its sides exchanged.
+     *
+     * <p>Which is what a relation says of a form that was multiplied by a negative number to weigh
+     * one of its terms by one. {@code -c + n >= 0} and {@code c - n <= 0} are one statement, and an
+     * equality or its denial reads the same either way round.
+     */
+    public Rel turned() {
+        return switch (this) {
+            case GE -> LE;
+            case GT -> LT;
+            case LE -> GE;
+            case LT -> GT;
+            case EQ -> EQ;
+            case NE -> NE;
+        };
+    }
+
+    /**
      * The one of this relation and its denial that stands for the pair.
      *
      * <p>Here because the pair is here. A reader that has to write one proposition down once —

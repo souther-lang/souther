@@ -1762,6 +1762,11 @@ public final class InputDomain {
             case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn count ->
                     NumericTerm.CodePointClassCount.of(path, count.counted(), type,
                             source.inners());
+            // No clause of a declaration states how often a value occurs among the elements
+            // beside it, so none is read at a position here.
+            case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> throw new IllegalStateException(
+                    "a clause of a declaration was read as a rule about how often the value at "
+                            + path + " occurs");
         };
         if (term == null) {
             throw new IllegalStateException(
@@ -1810,7 +1815,8 @@ public final class InputDomain {
         return switch (kind) {
             case NumberAt.OfWhatNumber.OfItsOwnValue _ -> carried;
             case NumberAt.OfWhatNumber.OfWhatAnOperationAnswers _,
-                 NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _ -> Carrier.WHOLE;
+                 NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn _,
+                 NumberAt.OfWhatNumber.OfItsMultiplicity _ -> Carrier.WHOLE;
         };
     }
 
@@ -1894,6 +1900,16 @@ public final class InputDomain {
                             + "` was asked for, and what stands there is no string");
                 }
                 yield counted;
+            }
+            case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> {
+                List<TermPath> holding = path.containersHoldingIt();
+                NumericTerm.Multiplicity multiplicity = holding.isEmpty() ? null
+                        : NumericTerm.Multiplicity.of(holding.getLast(), path);
+                if (multiplicity == null) {
+                    throw new IllegalStateException("the multiplicity of `" + path + "` was asked"
+                            + " for, and nothing holds it as an element");
+                }
+                yield multiplicity;
             }
         };
     }

@@ -83,6 +83,7 @@ public sealed interface Owed {
                         taken.operation() + taken.arguments().writtenWith(where);
                 case NumberAt.OfWhatNumber.OfHowManyCodePointsAreIn count ->
                         "#(" + count.counted() + ")(" + where + ")";
+                case NumberAt.OfWhatNumber.OfItsMultiplicity _ -> "multiplicity(" + where + ")";
             };
         }
     }
