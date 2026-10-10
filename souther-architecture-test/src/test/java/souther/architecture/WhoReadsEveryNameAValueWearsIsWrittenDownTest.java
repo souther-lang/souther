@@ -202,6 +202,11 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     "(Lsouther/compiler/semantics/CodePointClass;" + TYPE
                             + "Lsouther/compiler/numeric/Place;" + CONTEXT + ")" + REALIZATION,
                     THE_POSITION),
+            row(PARTITION + "TermRealizations", "stringsHoldingTheirCounts",
+                    "(Ljava/util/Map;" + TYPE + "Ljava/util/SequencedMap;"
+                            + "Lsouther/compiler/inputs/SearchRegion;" + CONTEXT + ")"
+                            + REALIZATION,
+                    THE_POSITION),
             row(PARTITION + "ValuesCarryingANumber", "at",
                     "(L" + PARTITION + "ConstructionPlan$Slot;)L" + PARTITION + "FixtureTemplate;",
                     THE_POSITION),

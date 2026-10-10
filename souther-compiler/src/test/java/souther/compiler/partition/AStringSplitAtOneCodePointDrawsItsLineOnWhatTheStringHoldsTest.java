@@ -95,6 +95,47 @@ class AStringSplitAtOneCodePointDrawsItsLineOnWhatTheStringHoldsTest {
         assertEquals(List.of(), compilation.errors(), "the rows hold");
     }
 
+    private static final String TAGGED = """
+            module example.tagged
+
+            data Text = String
+                invariant String.length(value) >= 2 && String.length(value) <= 6
+
+            let labelsOf (text: Text): Set<String> =
+                text.value
+                    |> String.split(",")
+                    |> Set.fromList
+                    |> Set.map(piece -> piece |> String.trim |> String.lowercase)
+                    |> Set.filter(piece -> Bool.not(String.isEmpty(piece)))
+
+            behavior hasLabels : (text: Text) -> Bool
+            let hasLabels (text) = Set.size(labelsOf(text)) >= 1
+            """;
+
+    /**
+     * A text that the type refuses is no row of the model, however the counts it holds read: the
+     * rows offered for the two counts that line is drawn on — the code points that are not
+     * whitespace, and those that are not whitespace nor a comma — are all of the type's lengths.
+     */
+    @Test
+    void theRowsOfferedAreTextsTheTypeAdmits() {
+        Compilation compilation = measured(TAGGED);
+        assertEquals(List.of(), compilation.errors(), "the model compiles");
+        String offered = GeneratedRows.of(
+                Adequacy.offeredFor(compilation.db(),
+                        OfferingRequest.overTheModule("example.tagged")),
+                Map.of(), SourceRendering.namedByIdentity(compilation.texts()),
+                compilation.db()).text();
+
+        assertTrue(offered.contains("3 rows to fill what nothing covers"), offered);
+        assertTrue(offered.contains("Text(\", \")"),
+                () -> "a text with no code point a label is made of: " + offered);
+        assertTrue(offered.contains("Text(\"x \")"),
+                () -> "a text with one: " + offered);
+        assertTrue(!offered.contains("Text(\" \")") && !offered.contains("Text(\"x\")"),
+                () -> "a text one code point long, which the type refuses: " + offered);
+    }
+
     private static Compilation measured(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());

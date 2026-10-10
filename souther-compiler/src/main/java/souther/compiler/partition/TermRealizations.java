@@ -1944,16 +1944,8 @@ final class TermRealizations {
         }
         TypeView holder = TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
                 ruleSource.kinds(), ruleSource.sums());
-        Set<String> candidates = new LinkedHashSet<>();
-        int longest = many
-                + CompositionBudget.CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR.maximum();
-        for (int length = many; length <= longest; length++) {
-            for (FixtureTemplate each : Partitions.admittedStringOfSize(holder, reading, length)) {
-                if (each.value() instanceof Hir.StringLit written) {
-                    candidates.add(written.value());
-                }
-            }
-        }
+        Set<String> candidates = new LinkedHashSet<>(
+                admittedStrings(holder, reading, lengthsFrom(many)));
         candidates.addAll(plainStringsHolding(counted, many));
         List<FixtureTemplate> out = new ArrayList<>();
         for (String each : candidates) {
@@ -1969,12 +1961,50 @@ final class TermRealizations {
     }
 
     /**
+     * The lengths a string the type admits is looked for at, for a string holding {@code least}
+     * code points of a class: that many, which is as short as it can be, and a few more, for the
+     * whitespace and separators that stand beside them.
+     */
+    private static List<Integer> lengthsFrom(int least) {
+        int longest = least
+                + CompositionBudget.CODE_POINTS_BEYOND_A_COUNT_A_STRING_IS_LOOKED_FOR.maximum();
+        List<Integer> out = new ArrayList<>();
+        for (int length = least; length <= longest; length++) {
+            out.add(length);
+        }
+        return out;
+    }
+
+    /**
+     * The strings of those lengths that the rules on the position admit, as text, in the order the
+     * lengths are given.
+     *
+     * <p>The one place a string the type admits is asked for, whichever number of a string is being
+     * written: a string answering a count or several of them is first of all a string of its type,
+     * and a writer that chose its strings apart from this would offer ones the type refuses where
+     * another would have offered ones it accepts.
+     */
+    private static List<String> admittedStrings(TypeView holder, RuleReadingContext reading,
+                                                Collection<Integer> lengths) {
+        List<String> out = new ArrayList<>();
+        for (int length : lengths) {
+            for (FixtureTemplate each : Partitions.admittedStringOfSize(holder, reading, length)) {
+                if (each.value() instanceof Hir.StringLit written) {
+                    out.add(written.value());
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
      * Strings written for the number alone: {@code many} code points of the class, and the ones
      * that stand beside them where nothing is written — whitespace, and the separator the class
      * leaves out. Each is a string some value holds, and none is claimed to be the only one.
      */
     private static List<String> plainStringsHolding(CodePointClass counted, int many) {
-        int member = aMemberOf(counted);
+        int member = counted instanceof CodePointClass.NotWhitespaceNorEqualTo(int separator)
+                ? aCodePointOutside(Set.of(separator)) : aCodePointOutside(Set.of());
         String held = new String(Character.toChars(member)).repeat(many);
         List<String> out = new ArrayList<>();
         // A string of none is offered as whitespace before it is offered as nothing: a row at
@@ -1991,15 +2021,42 @@ final class TermRealizations {
         return out;
     }
 
-    /** A code point of the class, the first of a few plain ones. */
-    private static int aMemberOf(CodePointClass counted) {
-        for (int each : new int[] {'x', 'y', 'z', 'a'}) {
-            if (counted.contains(each)) {
+    /**
+     * A code point that is not whitespace and is none of {@code excluded}: what a class that leaves
+     * out some separators counts wherever it stands.
+     *
+     * <p>Chosen from outside the set rather than from a list written for the purpose, so that no
+     * set of separators — however many a model writes for one string — leaves nothing to choose.
+     * The plain letters come first, since a row is read by a person; past them the ideographs of
+     * the block that has no gaps, each a code point of its own that no normalization joins to
+     * what is beside it. A set that covers all of those is not one a model writes, and is refused
+     * as the contradiction it would be rather than answered with a code point it holds.
+     */
+    private static int aCodePointOutside(Set<Integer> excluded) {
+        for (int each : PLAIN_LETTERS_FIRST.toCharArray()) {
+            if (!excluded.contains(each)) {
                 return each;
             }
         }
-        throw new IllegalStateException(counted + " holds none of the plain letters");
+        for (char each = FIRST_IDEOGRAPH; each <= LAST_IDEOGRAPH; each++) {
+            int codePoint = each;
+            if (!excluded.contains(codePoint)) {
+                return codePoint;
+            }
+        }
+        throw new IllegalArgumentException(
+                "every plain letter and every ideograph of the block is a separator");
     }
+
+    /** The letters a row is written with, in the order they are preferred. */
+    private static final String PLAIN_LETTERS_FIRST =
+            "xyzabcdefghijklmnopqrstuvwXYZABCDEFGHIJKLMNOPQRSTUVW";
+
+    /** The block of unified ideographs, which every code point of is assigned and none is
+     *  whitespace. */
+    private static final char FIRST_IDEOGRAPH = '一';
+
+    private static final char LAST_IDEOGRAPH = '鿿';
 
     /** How many code points of {@code text} are in the class: the number a reading of the string
      *  comes to, which is what a string offered for a count is held to. */
@@ -2090,7 +2147,7 @@ final class TermRealizations {
                 separators.add(apart.separator());
             }
         }
-        int plain = aPlainCodePointOutside(separators);
+        int plain = aCodePointOutside(Set.copyOf(separators));
         // Plain code points, each separator and whitespace: how many of each kind a string holds.
         int kindsOfCodePoint = separators.size() + 2;
         int steps = CompositionBudget.STEPS_A_SEARCH_MAY_TAKE.maximum();
@@ -2106,8 +2163,25 @@ final class TermRealizations {
         }
         Set<String> found = new LinkedHashSet<>();
         int[] looked = {0};
-        searchStrings(0, new int[kindsOfCodePoint], kinds, separators, plain, wanted, found,
-                looked, steps, CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
+        // The strings the type admits come first and are the only ones offered where any of them
+        // answers every demand: a string the type refuses is no value of the position, however
+        // well it reads back. Written ones stand in only where the type admits none that answers.
+        TypeView holder = TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(),
+                ruleSource.kinds(), ruleSource.sums());
+        TreeSet<Integer> lengths = new TreeSet<>(lengthsFrom(0));
+        for (int each : numbers) {
+            lengths.addAll(lengthsFrom(each));
+        }
+        for (String each : admittedStrings(holder, reading, lengths)) {
+            if (answersEvery(each, wanted)
+                    && found.size() < CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum()) {
+                found.add(each);
+            }
+        }
+        if (found.isEmpty()) {
+            searchStrings(0, new int[kindsOfCodePoint], kinds, separators, plain, wanted, found,
+                    looked, steps, CompositionBudget.NUMBERS_OF_A_SET_TRIED.maximum());
+        }
         if (!found.isEmpty()) {
             List<FixtureTemplate> out = new ArrayList<>();
             for (String each : found) {
@@ -2181,17 +2255,6 @@ final class TermRealizations {
         return out.size() > most ? List.copyOf(out.subList(0, most)) : List.copyOf(out);
     }
 
-    /** A plain letter that is none of the separators, which the class counts wherever it is
-     *  placed. */
-    private static int aPlainCodePointOutside(List<Integer> separators) {
-        for (int each : new int[] {'x', 'y', 'z', 'a'}) {
-            if (!separators.contains(each)) {
-                return each;
-            }
-        }
-        throw new IllegalStateException("every plain letter is a separator");
-    }
-
     /**
      * Every way of writing how many code points of each kind a string holds, in the order the
      * smaller counts come first, where the string they write answers every demand.
@@ -2243,8 +2306,8 @@ final class TermRealizations {
      */
     private static boolean sumsAreAdmitted(int[] counts, List<Integer> separators,
                                            List<OfAString> wanted) {
-        int whitespace = counts[counts.length - 1];
-        int outsideWhitespace = counts[0];
+        long whitespace = counts[counts.length - 1];
+        long outsideWhitespace = counts[0];
         for (int at = 0; at < separators.size(); at++) {
             outsideWhitespace += counts[at + 1];
         }

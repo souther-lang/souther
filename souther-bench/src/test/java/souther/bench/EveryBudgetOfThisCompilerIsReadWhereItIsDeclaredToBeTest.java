@@ -351,12 +351,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "how many counts a string is asked to hold of a class, and whether they were"
                             + " all the set admits"),
-            Map.entry("souther.compiler.partition.TermRealizations#stringsHoldingThatManyOf("
-                            + "Lsouther/compiler/semantics/CodePointClass;"
-                            + "Lsouther/compiler/types/Type;"
-                            + "Lsouther/compiler/numeric/Place;"
-                            + "Lsouther/compiler/check/RuleReadingContext;)"
-                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
+            Map.entry("souther.compiler.partition.TermRealizations#lengthsFrom(I)"
+                            + "Ljava/util/List;",
                     "how far past a count a string the type admits is looked for; a plain string"
                             + " is offered whichever is found, so reaching it gives up no count"),
             Map.entry("souther.compiler.partition.TermRealizations#stringsHoldingTheirCounts("

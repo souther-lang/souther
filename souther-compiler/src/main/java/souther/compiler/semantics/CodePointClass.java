@@ -37,8 +37,9 @@ public sealed interface CodePointClass {
     record NotWhitespaceNorEqualTo(int separator) implements CodePointClass {
 
         public NotWhitespaceNorEqualTo {
-            if (!Character.isValidCodePoint(separator)) {
-                throw new IllegalArgumentException(separator + " is no code point");
+            if (!Character.isValidCodePoint(separator)
+                    || separator >= Character.MIN_SURROGATE && separator <= Character.MAX_SURROGATE) {
+                throw new IllegalArgumentException(separator + " is no code point a string holds");
             }
         }
 

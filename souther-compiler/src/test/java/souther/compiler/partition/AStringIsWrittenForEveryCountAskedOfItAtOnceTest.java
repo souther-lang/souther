@@ -30,6 +30,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * The counts of one string's code points and how long it is are tied to each other, and a string
@@ -130,6 +131,38 @@ class AStringIsWrittenForEveryCountAskedOfItAtOnceTest {
             assertEquals(3, notWhitespaceIn(each), each);
             assertEquals(5, lengthOf(each), each);
         }
+    }
+
+    /**
+     * A string is written for any number of separators a model sets apart, among them the ones a
+     * plain letter would be taken from: the letter that stands for the rest is chosen from outside
+     * all of them rather than from a list they can cover.
+     */
+    @Test
+    void aStringIsWrittenWhateverSeparatorsAreSetApart() {
+        List<NumericTerm.CodePointClassCount> classes = new ArrayList<>();
+        for (char each : new char[] {'x', 'y', 'z', 'a'}) {
+            classes.add(counting(new CodePointClass.NotWhitespaceNorEqualTo(each)));
+        }
+        Demands demands = new Demands();
+        for (NumericTerm.CodePointClassCount each : classes) {
+            demands.exactly(each, 3);
+        }
+        List<String> strings = offered(demands.exactly(NOT_WHITESPACE, 4).written());
+        assertEquals(true, !strings.isEmpty());
+        for (String each : strings) {
+            assertEquals(4, notWhitespaceIn(each), each);
+            for (NumericTerm.CodePointClassCount counted : classes) {
+                assertEquals(3, each.codePoints().filter(counted.counted()::contains).count(), each);
+            }
+        }
+    }
+
+    /** A separator that is half of a surrogate pair is no code point a string holds. */
+    @Test
+    void aLoneSurrogateIsNoSeparator() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new CodePointClass.NotWhitespaceNorEqualTo(0xD800));
     }
 
     /** One of nought and the other not, which is a string of nothing but separators. */
