@@ -1482,7 +1482,7 @@ public final class InputReads {
         Set<BindingId> read = new HashSet<>();
         walkNames(value, made, read);
         read.removeAll(made);
-        return read.stream().allMatch(binding -> keyIsTheElement && binding.equals(element)
+        return read.stream().allMatch(binding -> (keyIsTheElement && binding.equals(element))
                 || at.names.roleOf(binding) instanceof BindingRole.Root);
     }
 

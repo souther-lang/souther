@@ -277,6 +277,34 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
                 """));
     }
 
+    /** The key being the element is not enough: the index differs between equal elements, so the
+     *  entry that is left holds a value the replaced one did not. */
+    @Test
+    void aValueTheIndexDecidesIsNotFixedByTheKey() {
+        assertEquals(List.of(), linesOf("""
+                behavior busy : (xs: List<String>, atLeast: Int) -> Map<String, Int>
+                let busy (xs, atLeast) =
+                    Map.filterEntries((_, c) -> c >= atLeast,
+                        Map.fromList(List.mapIndexed((i, x) -> (x, i), xs)))
+                """));
+    }
+
+    /** Equal elements are filed under one key and carry one value, so a row of them still meets
+     *  both sides of the line. */
+    @Test
+    void equalElementsFiledUnderOneKeyStillMeetBothSidesOfTheLine() {
+        assertEquals(Set.of(PointRole.ON, PointRole.OFF), metIn("""
+                behavior busy : (xs: List<String>, atLeast: Int) -> Map<String, Int>
+                let busy (xs, atLeast) =
+                    Map.filterEntries((_, c) -> c >= atLeast,
+                        Map.fromList(List.map(x -> (x, 1), xs)))
+
+                example busy
+                    | "twice at the line" : (["a", "a"], 1) -> [("a", 1)]
+                    | "twice just off it" : (["a", "a"], 2) -> []
+                """));
+    }
+
     /** The line is measured through the map: a row at the line meets ON and one a step off meets
      *  OFF, which is the comparison being run on both sides. */
     @Test
