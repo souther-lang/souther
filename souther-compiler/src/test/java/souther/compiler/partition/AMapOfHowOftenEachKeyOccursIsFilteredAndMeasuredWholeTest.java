@@ -90,7 +90,8 @@ class AMapOfHowOftenEachKeyOccursIsFilteredAndMeasuredWholeTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().toString()).toList(), "the source compiles");
+                .map(each -> each.diagnostic().code().toString()).toList(),
+                "the source compiles");
         return compilation;
     }
 }

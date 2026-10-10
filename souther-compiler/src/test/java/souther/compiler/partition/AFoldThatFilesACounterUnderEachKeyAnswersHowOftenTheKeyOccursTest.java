@@ -423,7 +423,7 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().toString()).toList(),
+                .map(each -> each.diagnostic().code().toString()).toList(),
                 () -> "the source compiles: " + source);
         return compilation;
     }
